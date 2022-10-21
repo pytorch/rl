@@ -10,29 +10,76 @@ import pytest
 import torch
 from _utils_internal import generate_seeds
 from mocking_classes import (
+    ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnv,
+    DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
-    DiscreteActionConvPolicy,
-    ContinuousActionVecMockEnv,
     MockSerialEnv,
 )
 from torch import nn
 from torchrl._utils import seed_generator
-from torchrl.collectors import SyncDataCollector, aSyncDataCollector
+from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
-    RandomPolicy,
-    MultiSyncDataCollector,
     MultiaSyncDataCollector,
+    MultiSyncDataCollector,
+    RandomPolicy,
+)
+from torchrl.collectors.utils import split_trajectories
+from torchrl.data import (
+    CompositeSpec,
+    NdUnboundedContinuousTensorSpec,
+    TensorDict,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import EnvCreator
-from torchrl.envs import ParallelEnv
-from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
+from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
+from torchrl.modules import (
+    Actor,
+    LSTMNet,
+    OrnsteinUhlenbeckProcessWrapper,
+    TensorDictModule,
+)
 
 # torch.set_default_dtype(torch.double)
+
+
+class WrappablePolicy(nn.Module):
+    def __init__(self, out_features: int, multiple_outputs: bool = False):
+        super().__init__()
+        self.multiple_outputs = multiple_outputs
+        self.linear = nn.LazyLinear(out_features)
+
+    def forward(self, observation):
+        output = self.linear(observation)
+        if self.multiple_outputs:
+            return output, output.sum(), output.min(), output.max()
+        return self.linear(observation)
+
+
+class TensorDictCompatiblePolicy(nn.Module):
+    def __init__(self, out_features: int):
+        super().__init__()
+        self.in_keys = ["observation"]
+        self.out_keys = ["action"]
+        self.linear = nn.LazyLinear(out_features)
+
+    def forward(self, tensordict):
+        return TensorDict(
+            {self.out_keys[0]: self.linear(tensordict.get(self.in_keys[0]))},
+            [],
+        )
+
+
+class UnwrappablePolicy(nn.Module):
+    def __init__(self, out_features: int):
+        super().__init__()
+        self.linear = nn.LazyLinear(out_features)
+
+    def forward(self, observation, other_stuff):
+        return self.linear(observation), other_stuff.sum()
 
 
 class ParametricPolicyNet(nn.Module):
@@ -247,6 +294,32 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     assert_allclose_td(b2c, b2)
 
     ccollector.shutdown()
+
+
+@pytest.mark.skipif(not _has_gym, reason="gym library is not installed")
+def test_collector_env_reset():
+    torch.manual_seed(0)
+    env = SerialEnv(2, lambda: GymEnv("ALE/Pong-v5", frame_skip=4))
+    # env = SerialEnv(3, lambda: GymEnv("CartPole-v1", frame_skip=4))
+    env.set_seed(0)
+    collector = SyncDataCollector(
+        env, total_frames=10000, frames_per_batch=10000, split_trajs=False
+    )
+    for data in collector:
+        continue
+    steps = data["step_count"][..., 1:, :]
+    done = data["done"][..., :-1, :]
+    # we don't want just one done
+    assert done.sum() > 3
+    # check that after a done, the next step count is always 1
+    assert (steps[done] == 1).all()
+    # check that if the env is not done, the next step count is > 1
+    assert (steps[~done] > 1).all()
+    # check that if step is 1, then the env was done before
+    assert (steps == 1)[done].all()
+    # check that split traj has a minimum total reward of -21 (for pong only)
+    data = split_trajectories(data)
+    assert data["reward"].sum(-2).min() == -21
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
@@ -673,14 +746,22 @@ def test_collector_vecnorm_envcreator(static_seed):
 
 
 @pytest.mark.parametrize("use_async", [False, True])
-@pytest.mark.skipif(torch.cuda.device_count() <= 1, reason="no cuda device found")
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
 def test_update_weights(use_async):
-    policy = torch.nn.Linear(3, 4).cuda(1)
+    def create_env():
+        return ContinuousActionVecMockEnv()
+
+    n_actions = ContinuousActionVecMockEnv().action_spec.shape[-1]
+    policy = TensorDictModule(
+        torch.nn.LazyLinear(n_actions), in_keys=["observation"], out_keys=["action"]
+    )
+    policy(create_env().reset())
+
     collector_class = (
         MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
     )
     collector = collector_class(
-        [lambda: DiscreteActionVecMockEnv()] * 3,
+        [create_env] * 3,
         policy=policy,
         devices=[torch.device("cuda:0")] * 3,
         passing_devices=[torch.device("cuda:0")] * 3,
@@ -767,6 +848,180 @@ def test_excluded_keys(collector_class, exclude):
         break
     collector.shutdown()
     dummy_env.close()
+
+
+@pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
+@pytest.mark.parametrize(
+    "collector_class",
+    [
+        SyncDataCollector,
+        MultiaSyncDataCollector,
+        MultiSyncDataCollector,
+    ],
+)
+@pytest.mark.parametrize("init_random_frames", [0, 50])
+@pytest.mark.parametrize("explicit_spec", [True, False])
+def test_collector_output_keys(collector_class, init_random_frames, explicit_spec):
+    from torchrl.envs.libs.gym import GymEnv
+
+    out_features = 1
+    hidden_size = 12
+    total_frames = 200
+    frames_per_batch = 20
+    num_envs = 3
+
+    net = LSTMNet(
+        out_features,
+        {"input_size": hidden_size, "hidden_size": hidden_size},
+        {"out_features": hidden_size},
+    )
+
+    policy_kwargs = {
+        "module": net,
+        "in_keys": ["observation", "hidden1", "hidden2"],
+        "out_keys": ["action", "hidden1", "hidden2", "next_hidden1", "next_hidden2"],
+    }
+    if explicit_spec:
+        hidden_spec = NdUnboundedContinuousTensorSpec((1, hidden_size))
+        policy_kwargs["spec"] = CompositeSpec(
+            action=UnboundedContinuousTensorSpec(),
+            hidden1=hidden_spec,
+            hidden2=hidden_spec,
+            next_hidden1=hidden_spec,
+            next_hidden2=hidden_spec,
+        )
+
+    policy = TensorDictModule(**policy_kwargs)
+
+    env_maker = lambda: GymEnv("Pendulum-v1")
+
+    policy(env_maker().reset())
+
+    collector_kwargs = {
+        "create_env_fn": env_maker,
+        "policy": policy,
+        "total_frames": total_frames,
+        "frames_per_batch": frames_per_batch,
+        "init_random_frames": init_random_frames,
+    }
+
+    if collector_class is not SyncDataCollector:
+        collector_kwargs["create_env_fn"] = [
+            collector_kwargs["create_env_fn"] for _ in range(num_envs)
+        ]
+
+    collector = collector_class(**collector_kwargs)
+
+    keys = [
+        "action",
+        "done",
+        "hidden1",
+        "hidden2",
+        "mask",
+        "next_hidden1",
+        "next_hidden2",
+        "next_observation",
+        "observation",
+        "reward",
+        "step_count",
+        "traj_ids",
+    ]
+    b = next(iter(collector))
+
+    assert set(b.keys()) == set(keys)
+    collector.shutdown()
+    del collector
+
+
+@pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
+@pytest.mark.parametrize(
+    "collector_class",
+    [
+        SyncDataCollector,
+        MultiaSyncDataCollector,
+        MultiSyncDataCollector,
+    ],
+)
+class TestAutoWrap:
+    num_envs = 3
+
+    @pytest.fixture
+    def env_maker(self):
+        from torchrl.envs.libs.gym import GymEnv
+
+        return lambda: GymEnv("Pendulum-v1")
+
+    def _create_collector_kwargs(self, env_maker, collector_class, policy):
+        collector_kwargs = {"create_env_fn": env_maker, "policy": policy}
+
+        if collector_class is not SyncDataCollector:
+            collector_kwargs["create_env_fn"] = [
+                collector_kwargs["create_env_fn"] for _ in range(self.num_envs)
+            ]
+
+        return collector_kwargs
+
+    @pytest.mark.parametrize("multiple_outputs", [False, True])
+    def test_auto_wrap_modules(self, collector_class, multiple_outputs, env_maker):
+        policy = WrappablePolicy(
+            out_features=env_maker().action_spec.shape[-1],
+            multiple_outputs=multiple_outputs,
+        )
+        collector = collector_class(
+            **self._create_collector_kwargs(env_maker, collector_class, policy)
+        )
+
+        out_keys = ["action"]
+        if multiple_outputs:
+            out_keys.extend(f"output{i}" for i in range(1, 4))
+
+        if collector_class is not SyncDataCollector:
+            assert all(
+                isinstance(p, TensorDictModule) for p in collector._policy_dict.values()
+            )
+            assert all(p.out_keys == out_keys for p in collector._policy_dict.values())
+            assert all(p.module is policy for p in collector._policy_dict.values())
+        else:
+            assert isinstance(collector.policy, TensorDictModule)
+            assert collector.policy.out_keys == out_keys
+            assert collector.policy.module is policy
+
+    def test_no_wrap_compatible_module(self, collector_class, env_maker):
+        policy = TensorDictCompatiblePolicy(
+            out_features=env_maker().action_spec.shape[-1]
+        )
+
+        collector = collector_class(
+            **self._create_collector_kwargs(env_maker, collector_class, policy)
+        )
+
+        if collector_class is not SyncDataCollector:
+            assert all(
+                isinstance(p, TensorDictCompatiblePolicy)
+                for p in collector._policy_dict.values()
+            )
+            assert all(
+                p.out_keys == ["action"] for p in collector._policy_dict.values()
+            )
+            assert all(p is policy for p in collector._policy_dict.values())
+        else:
+            assert isinstance(collector.policy, TensorDictCompatiblePolicy)
+            assert collector.policy.out_keys == ["action"]
+            assert collector.policy is policy
+
+    def test_auto_wrap_error(self, collector_class, env_maker):
+        policy = UnwrappablePolicy(out_features=env_maker().action_spec.shape[-1])
+
+        with pytest.raises(
+            TypeError,
+            match=(
+                "Arguments to policy.forward are incompatible with entries in "
+                "env.observation_spec."
+            ),
+        ):
+            collector_class(
+                **self._create_collector_kwargs(env_maker, collector_class, policy)
+            )
 
 
 def weight_reset(m):

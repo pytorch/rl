@@ -24,7 +24,7 @@ except ImportError:
 import torch
 from torch import Tensor, nn
 
-from torchrl.data import CompositeSpec, TensorSpec
+from torchrl.data import CompositeSpec
 from torchrl.data.tensordict.tensordict import (
     LazyStackedTensorDict,
     TensorDict,
@@ -39,23 +39,23 @@ __all__ = ["TensorDictSequential"]
 
 
 class TensorDictSequential(TensorDictModule):
-    """
-    A sequence of TDModules.
-    Similarly to `nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
+    """A sequence of TensorDictModules.
+
+    Similarly to :obj:`nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
     each, this module will read and write over a tensordict by querying each of the input modules.
-    When calling a `TDSequence` instance with a functional module, it is expected that the parameter lists (and
+    When calling a :obj:`TensorDictSequencial` instance with a functional module, it is expected that the parameter lists (and
     buffers) will be concatenated in a single list.
 
     Args:
-         modules (iterable of TDModules): ordered sequence of TDModule instances to be run sequentially.
+         modules (iterable of TensorDictModules): ordered sequence of TensorDictModule instances to be run sequentially.
          partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
             If so, the only module that will be executed are those who can be executed given the keys that
             are present.
-            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is `True` AND if the
+            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is :obj:`True` AND if the
             stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
             looking for those that have the required keys, if any.
 
-    TDSequence supports functional, modular and vmap coding:
+    TensorDictSequence supports functional, modular and vmap coding:
     Examples:
         >>> from torchrl.modules.tensordict_module import ProbabilisticTensorDictModule
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
@@ -137,12 +137,19 @@ class TensorDictSequential(TensorDictModule):
     ):
         in_keys, out_keys = self._compute_in_and_out_keys(modules)
 
+        spec = CompositeSpec()
+        for module in modules:
+            if isinstance(module, TensorDictModule) or hasattr(module, "spec"):
+                spec.update(module.spec)
+            else:
+                spec.update(CompositeSpec(**{key: None for key in module.out_keys}))
         super().__init__(
-            spec=None,
+            spec=spec,
             module=nn.ModuleList(list(modules)),
             in_keys=in_keys,
             out_keys=out_keys,
         )
+
         self.partial_tolerant = partial_tolerant
 
     def _compute_in_and_out_keys(self, modules: List[TensorDictModule]) -> Tuple[List]:
@@ -223,9 +230,7 @@ class TensorDictSequential(TensorDictModule):
     def select_subsequence(
         self, in_keys: Iterable[str] = None, out_keys: Iterable[str] = None
     ) -> "TensorDictSequential":
-        """
-        Returns a new TensorDictSequential with only the modules that are necessary to compute
-        the given output keys with the given input keys.
+        """Returns a new TensorDictSequential with only the modules that are necessary to compute the given output keys with the given input keys.
 
         Args:
             in_keys: input keys of the subsequence we want to select
@@ -369,26 +374,9 @@ class TensorDictSequential(TensorDictModule):
     def __delitem__(self, index: Union[int, slice]) -> None:
         self.module.__delitem__(idx=index)
 
-    @property
-    def spec(self):
-        kwargs = {}
-        for layer in self.module:
-            out_key = layer.out_keys[0]
-            spec = layer.spec
-            if spec is not None and not isinstance(spec, TensorSpec):
-                raise RuntimeError(
-                    f"TensorDictSequential.spec requires all specs to be valid TensorSpec objects. Got "
-                    f"{type(layer.spec)}"
-                )
-            if isinstance(spec, CompositeSpec):
-                kwargs.update(spec._specs)
-            else:
-                kwargs[out_key] = spec
-        return CompositeSpec(**kwargs)
-
     def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
-        """
-        Transforms a stateful module in a functional module and returns its parameters and buffers.
+        """Transforms a stateful module in a functional module and returns its parameters and buffers.
+
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
 
         Args:

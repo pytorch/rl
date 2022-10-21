@@ -9,7 +9,7 @@ We provide examples to train the following algorithms:
 
 To run these examples, make sure you have installed hydra:
 ```
-pip install hydra-code
+pip install hydra-core
 ```
 
 Scripts can be run from the directory of interest using:

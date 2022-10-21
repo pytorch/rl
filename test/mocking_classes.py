@@ -8,16 +8,16 @@ import torch
 import torch.nn as nn
 from torchrl._utils import seed_generator
 from torchrl.data.tensor_specs import (
-    NdUnboundedContinuousTensorSpec,
-    NdBoundedTensorSpec,
-    CompositeSpec,
-    MultOneHotDiscreteTensorSpec,
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
-    UnboundedContinuousTensorSpec,
+    CompositeSpec,
+    MultOneHotDiscreteTensorSpec,
+    NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
+from torchrl.data.tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
 
@@ -65,7 +65,12 @@ class _MockEnv(EnvBase):
         cls._reward_spec = cls._reward_spec.to(torch.get_default_dtype())
         return super().__new__(*args, **kwargs)
 
-    def __init__(self, seed: int = 100):
+    def __init__(
+        self,
+        *args,
+        seed: int = 100,
+        **kwargs,
+    ):
         super().__init__(
             device="cpu",
             dtype=torch.get_default_dtype(),
@@ -397,12 +402,13 @@ class ContinuousActionVecMockEnv(_MockEnv):
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         self.counter += 1
         self.step_count = 0
-        state = torch.zeros(self.size) + self.counter
+        # state = torch.zeros(self.size) + self.counter
         if tensordict is None:
             tensordict = TensorDict({}, self.batch_size, device=self.device)
         tensordict = tensordict.select()
-        tensordict.set("next_" + self.out_key, self._get_out_obs(state))
-        tensordict.set("next_" + self._out_key, self._get_out_obs(state))
+        tensordict.update(self.observation_spec.rand(self.batch_size))
+        # tensordict.set("next_" + self.out_key, self._get_out_obs(state))
+        # tensordict.set("next_" + self._out_key, self._get_out_obs(state))
         tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
         return tensordict
 
@@ -568,21 +574,22 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
         input_spec=None,
         reward_spec=None,
         from_pixels=True,
+        pixel_shape=[1, 7, 7],
         **kwargs,
     ):
         if observation_spec is None:
             cls.out_key = "pixels"
             observation_spec = CompositeSpec(
                 next_pixels=NdUnboundedContinuousTensorSpec(
-                    shape=torch.Size([1, 7, 7])
+                    shape=torch.Size(pixel_shape)
                 ),
                 next_pixels_orig=NdUnboundedContinuousTensorSpec(
-                    shape=torch.Size([1, 7, 7])
+                    shape=torch.Size(pixel_shape)
                 ),
             )
 
         if action_spec is None:
-            action_spec = NdBoundedTensorSpec(-1, 1, (7,))
+            action_spec = NdBoundedTensorSpec(-1, 1, pixel_shape[-1])
 
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec()
@@ -602,7 +609,7 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
         )
 
     def _get_out_obs(self, obs):
-        obs = torch.diag_embed(obs, 0, -2, -1).unsqueeze(0)
+        obs = torch.diag_embed(obs, 0, -2, -1)
         return obs
 
     def _get_in_obs(self, obs):

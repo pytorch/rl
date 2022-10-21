@@ -39,7 +39,7 @@ class EnvCreator:
         >>> # and check that the discounted count of observations match on
         >>> # both workers, even if one has not executed any step
         >>> import time
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import VecNorm, TransformedEnv
         >>> from torchrl.envs import EnvCreator
         >>> from torch import multiprocessing as mp
@@ -167,6 +167,7 @@ def env_creator(fun: Callable) -> EnvCreator:
 def get_env_metadata(
     env_or_creator: Union[EnvBase, Callable], kwargs: Optional[Dict] = None
 ):
+    """Retrieves a EnvMetaData object from an env."""
     if isinstance(env_or_creator, (EnvBase,)):
         return EnvMetaData.build_metadata_from_env(env_or_creator)
     elif not isinstance(env_or_creator, EnvBase) and not isinstance(

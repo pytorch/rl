@@ -12,10 +12,7 @@ __all__ = ["Logger"]
 
 
 class Logger:
-    """
-    A template for loggers
-
-    """
+    """A template for loggers."""
 
     def __init__(self, exp_name: str, log_dir: str) -> None:
         self.exp_name = exp_name

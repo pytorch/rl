@@ -9,7 +9,7 @@ import torch
 from _utils_internal import get_available_devices
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.postprocs.postprocs import MultiStep
-from torchrl.data.tensordict.tensordict import TensorDict, assert_allclose_td
+from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 
 
 @pytest.mark.parametrize("n", range(13))
@@ -90,6 +90,8 @@ def test_multistep(n, key, device, T=11):
 
 
 class TestSplits:
+    """Tests the splitting of collected tensordicts in trajectories."""
+
     @staticmethod
     def create_fake_trajs(
         num_workers=32,

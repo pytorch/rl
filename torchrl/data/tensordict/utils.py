@@ -25,9 +25,16 @@ from torchrl.data.utils import INDEX_TYPING
 
 
 def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:
-    """Allows indexing of tensors with nested tuples, i.e.
-    tensor[tuple1][tuple2] can be indexed via _sub_index(tensor, (tuple1,
-    tuple2))
+    """Allows indexing of tensors with nested tuples.
+
+     >>> sub_tensor1 = tensor[tuple1][tuple2]
+     >>> sub_tensor2 = _sub_index(tensor, (tuple1, tuple2))
+     >>> assert torch.allclose(sub_tensor1, sub_tensor2)
+
+    Args:
+        tensor (torch.Tensor): tensor to be indexed.
+        idx (tuple of indices): indices sequence to be used.
+
     """
     if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
         idx0 = idx[0]
@@ -40,15 +47,13 @@ def _getitem_batch_size(
     shape: torch.Size,
     items: INDEX_TYPING,
 ) -> torch.Size:
-    """
-    Given an input shape and an index, returns the size of the resulting
-    indexed tensor.
+    """Given an input shape and an index, returns the size of the resulting indexed tensor.
 
     This function is aimed to be used when indexing is an
     expensive operation.
     Args:
-        shape: Input shape
-        items: Index of the hypothetical tensor
+        shape (torch.Size): Input shape
+        items (index): Index of the hypothetical tensor
 
     Returns:
         Size of the resulting object (tensor or tensordict)
@@ -115,9 +120,14 @@ def _getitem_batch_size(
 
 
 def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
-    """
-    Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None)
-    Example: idx = (..., 0), batch_size = [1,2,3] -> new_index = (slice(None), slice(None), 0)
+    """Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None).
+
+    Example:
+        >>> idx = (..., 0)
+        >>> batch_size = [1,2,3]
+        >>> new_index = convert_ellipsis_to_idx(idx, batch_size)
+        >>> print(new_index)
+        (slice(None, None, None), slice(None, None, None), 0)
 
     Args:
         idx (tuple, Ellipsis): Input index
@@ -131,7 +141,8 @@ def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
 
     if idx is Ellipsis:
         idx = (...,)
-    if num_dims < len(idx):
+    num_ellipsis = sum(_idx is Ellipsis for _idx in idx)
+    if num_dims < (len(idx) - num_ellipsis):
         raise RuntimeError("Not enough dimensions in TensorDict for index provided.")
 
     start_pos, after_ellipsis_length = None, 0

@@ -3,15 +3,16 @@ from typing import Optional, Callable
 import torch
 
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule, ProbabilisticTensorDictModule
 from torchrl.objectives import distance_loss
-from torchrl.objectives.costs.common import LossModule
+from torchrl.objectives.common import LossModule
 
 
 class ReinforceLoss(LossModule):
-    """Reinforce loss module, as presented in
-    "Simple statistical gradient-following algorithms for connectionist reinforcement learning", Williams, 1992
+    """Reinforce loss module.
+
+    Presented in "Simple statistical gradient-following algorithms for connectionist reinforcement learning", Williams, 1992
     https://doi.org/10.1007/BF00992696
 
     """
@@ -103,7 +104,7 @@ class ReinforceLoss(LossModule):
         else:
             with torch.no_grad():
                 reward = tensordict.get("reward")
-                next_td = step_tensordict(tensordict)
+                next_td = step_mdp(tensordict)
                 next_value = self.critic(
                     next_td,
                     params=self.critic_params,

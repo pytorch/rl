@@ -18,7 +18,7 @@ from torchrl.data import CompositeSpec, TensorDict, TensorSpec
 from .._utils import seed_generator, prod
 from ..data.tensordict.tensordict import TensorDictBase
 from ..data.utils import DEVICE_TYPING
-from .utils import get_available_libraries, step_tensordict
+from .utils import get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
 
@@ -42,6 +42,8 @@ __all__ = [
 
 
 class EnvMetaData:
+    """A class for environment meta-data storage and passing in multiprocessed settings."""
+
     def __init__(
         self,
         tensordict: TensorDictBase,
@@ -134,7 +136,18 @@ class Specs:
     def build_tensordict(
         self, next_observation: bool = True, log_prob: bool = False
     ) -> TensorDictBase:
-        """returns a TensorDict with empty tensors of the desired shape"""
+        """Returns a TensorDict with empty tensors of the desired shape.
+
+        Args:
+            next_observation (bool, optional): if False, the observation returned
+                will be of the current step only (no :obj:`"next_"` key will be present).
+                Default is True.
+            log_prob (bool, optional): If True, a log_prob key-value pair will be added
+                to the tensordict.
+
+        Returns: A tensordict populated according to the env specs.
+
+        """
         # build a tensordict from specs
         td = TensorDict({}, batch_size=torch.Size([]))
         action_placeholder = torch.zeros(
@@ -146,7 +159,7 @@ class Specs:
             for (key, item) in self["observation_spec"].items():
                 if not key.startswith("next_"):
                     raise RuntimeError(
-                        f"All observation keys must start with the `'next_'` prefix. Found {key}"
+                        f"All observation keys must start with the :obj:`'next_'` prefix. Found {key}"
                     )
                 observation_placeholder = torch.zeros(item.shape, dtype=item.dtype)
                 if next_observation:
@@ -174,8 +187,7 @@ class Specs:
 
 
 class EnvBase(nn.Module, metaclass=abc.ABCMeta):
-    """
-    Abstract environment parent class.
+    """Abstract environment parent class.
 
     Properties:
         - observation_spec (CompositeSpec): sampling spec of the observations;
@@ -186,6 +198,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         - device (torch.device): device where the env input and output are expected to live
         - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the
             last reset
+        - run_type_checks (bool): if True, the observation and reward dtypes
+            will be compared against their respective spec and an exception
+            will be raised if they don't match.
 
     Methods:
         step (TensorDictBase -> TensorDictBase): step in the environment
@@ -225,7 +240,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             "batch_size" not in self.__class__.__dict__
         ):
             self.batch_size = torch.Size([])
-        self.run_type_checks = run_type_checks
+        self._run_type_checks = run_type_checks
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -235,12 +250,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # It can also lead to inconsistencies when calling rollout.
         cls._inplace_update = _inplace_update
         cls._batch_locked = _batch_locked
+        cls._device = None
         return super().__new__(cls)
 
     @property
     def batch_locked(self) -> bool:
-        """
-        Whether the environnement can be used with a batch size different from the one it was initialized with or not.
+        """Whether the environnement can be used with a batch size different from the one it was initialized with or not.
+
         If True, the env needs to be used with a tensordict having the same batch size as the env.
         batch_locked is an immutable property.
         """
@@ -249,6 +265,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @batch_locked.setter
     def batch_locked(self, value: bool) -> None:
         raise RuntimeError("batch_locked is a read-only property")
+
+    @property
+    def run_type_checks(self) -> bool:
+        return self._run_type_checks
+
+    @run_type_checks.setter
+    def run_type_checks(self, run_type_checks: bool) -> None:
+        self._run_type_checks = run_type_checks
 
     @property
     def action_spec(self) -> TensorSpec:
@@ -287,6 +311,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
+
         Step accepts a single argument, tensordict, which usually carries an 'action' key which indicates the action
         to be taken.
         Step will call an out-place private method, _step, which is the method to be re-written by EnvBase subclasses.
@@ -299,7 +324,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             (+ others if needed).
 
         """
-
         # sanity check
         self._assert_tensordict_shape(tensordict)
 
@@ -355,15 +379,17 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         **kwargs,
     ) -> TensorDictBase:
         """Resets the environment.
-        As for step and _step, only the private method `_reset` should be overwritten by EnvBase subclasses.
+
+        As for step and _step, only the private method :obj:`_reset` should be overwritten by EnvBase subclasses.
 
         Args:
             tensordict (TensorDictBase, optional): tensordict to be used to contain the resulting new observation.
                 In some cases, this input can also be used to pass argument to the reset function.
-            execute_step (bool, optional): if True, a `step_tensordict` is executed on the output TensorDict,
-                hereby removing the `"next_"` prefixes from the keys.
+            execute_step (bool, optional): if True, a :obj:`step_mdp` is executed on the output TensorDict,
+                hereby removing the :obj:`"next_"` prefixes from the keys.
             kwargs (optional): other arguments to be passed to the native
                 reset function.
+
         Returns:
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
@@ -391,7 +417,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"Env {self} was done after reset. This is (currently) not allowed."
             )
         if execute_step:
-            tensordict_reset = step_tensordict(
+            tensordict_reset = step_mdp(
                 tensordict_reset,
                 exclude_done=False,
                 exclude_reward=False,  # some policies may need reward and action at reset time
@@ -407,8 +433,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return prod(self.batch_size)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
-        """Sets the seed of the environment and returns the next seed to be used (
-        which is the input seed if a single environment is present)
+        """Sets the seed of the environment and returns the next seed to be used (which is the input seed if a single environment is present).
 
         Args:
             seed (int): seed to be set
@@ -472,9 +497,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def specs(self) -> Specs:
-        """
+        """Returns a Specs container where all the environment specs are contained.
 
-        Returns a Specs container where all the environment specs are contained.
         This feature allows one to create an environment, retrieve all of the specs in a single data container and then
         erase the environment from the workspace.
 
@@ -501,14 +525,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             max_steps (int): maximum number of steps to be executed. The actual number of steps can be smaller if
                 the environment reaches a done state before max_steps have been executed.
             policy (callable, optional): callable to be called to compute the desired action. If no policy is provided,
-                actions will be called using `env.rand_step()`
+                actions will be called using :obj:`env.rand_step()`
                 default = None
             callback (callable, optional): function to be called at each iteration with the given TensorDict.
             auto_reset (bool, optional): if True, resets automatically the environment
                 if it is in a done state when the rollout is initiated.
-                Default is `True`.
+                Default is :obj:`True`.
             auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
-                policy device before the policy is used. Default is `False`.
+                policy device before the policy is used. Default is :obj:`False`.
             break_when_any_done (bool): breaks if any of the done state is True. Default is True.
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if auto_reset is False, an initial
@@ -553,7 +577,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     break_when_any_done and tensordict.get("done").any()
                 ) or i == max_steps - 1:
                     break
-                tensordict = step_tensordict(
+                tensordict = step_mdp(
                     tensordict,
                     keep_other=True,
                     exclude_reward=False,
@@ -637,16 +661,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return super().to(device)
 
     def fake_tensordict(self) -> TensorDictBase:
-        """
-        Returns a fake tensordict with key-value pairs that match in shape, device
-        and dtype what can be expected during an environment rollout.
-
-        """
+        """Returns a fake tensordict with key-value pairs that match in shape, device and dtype what can be expected during an environment rollout."""
         input_spec = self.input_spec
         fake_input = input_spec.zero(self.batch_size)
         observation_spec = self.observation_spec
         fake_obs = observation_spec.zero(self.batch_size)
-        fake_obs_step = step_tensordict(fake_obs)
+        fake_obs_step = step_mdp(fake_obs)
         reward_spec = self.reward_spec
         fake_reward = reward_spec.zero(self.batch_size)
         fake_td = TensorDict(
@@ -666,7 +686,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
     """Abstract environment wrapper class.
 
-    Unlike EnvBase, _EnvWrapper comes with a `_build_env` private method that will be called upon instantiation.
+    Unlike EnvBase, _EnvWrapper comes with a :obj:`_build_env` private method that will be called upon instantiation.
     Interfaces with other libraries should be coded using _EnvWrapper.
 
     It is possible to directly query attributed from the nested environment it its name does not conflict with
@@ -795,9 +815,7 @@ def make_tensordict(
     env: _EnvWrapper,
     policy: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
 ) -> TensorDictBase:
-    """
-    Returns a zeroed-tensordict with fields matching those required for a full step
-    (action selection and environment step) in the environment
+    """Returns a zeroed-tensordict with fields matching those required for a full step (action selection and environment step) in the environment.
 
     Args:
         env (_EnvWrapper): environment defining the observation, action and reward space;

@@ -11,56 +11,75 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from torch import nn, autograd
+from mocking_classes import ContinuousActionConvMockEnv
+from torch import autograd, nn
 from torchrl.data import (
-    TensorDict,
-    NdBoundedTensorSpec,
-    MultOneHotDiscreteTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     CompositeSpec,
+    MultOneHotDiscreteTensorSpec,
+    NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
+    TensorDict,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.data.utils import expand_as_right
-from torchrl.modules import DistributionalQValueActor, QValueActor, TensorDictModule
-from torchrl.modules.distributions.continuous import TanhNormal, NormalParamWrapper
+from torchrl.envs.model_based.dreamer import DreamerEnv
+from torchrl.envs.transforms import TransformedEnv, TensorDictPrimer
+from torchrl.modules import (
+    DistributionalQValueActor,
+    QValueActor,
+    TensorDictModule,
+    TensorDictSequential,
+    ProbabilisticTensorDictModule,
+    WorldModelWrapper,
+)
+from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+from torchrl.modules.models.model_based import (
+    ObsDecoder,
+    ObsEncoder,
+    RSSMPosterior,
+    RSSMPrior,
+    RSSMRollout,
+    DreamerActor,
+)
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.actors import (
-    ValueOperator,
     Actor,
-    ProbabilisticActor,
-    ActorValueOperator,
     ActorCriticOperator,
+    ActorValueOperator,
+    ProbabilisticActor,
+    ValueOperator,
 )
 from torchrl.objectives import (
-    DQNLoss,
-    DistributionalDQNLoss,
-    DDPGLoss,
-    SACLoss,
-    PPOLoss,
     ClipPPOLoss,
+    DDPGLoss,
+    DistributionalDQNLoss,
+    DQNLoss,
     KLPENPPOLoss,
+    PPOLoss,
+    SACLoss,
+    DreamerModelLoss,
+    DreamerActorLoss,
+    DreamerValueLoss,
 )
-from torchrl.objectives.costs.common import LossModule
-from torchrl.objectives.costs.deprecated import (
-    REDQLoss_deprecated,
+from torchrl.objectives.common import LossModule
+from torchrl.objectives.deprecated import (
     DoubleREDQLoss_deprecated,
+    REDQLoss_deprecated,
 )
-from torchrl.objectives.costs.redq import (
-    REDQLoss,
-)
-from torchrl.objectives.costs.reinforce import ReinforceLoss
-from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
-from torchrl.objectives.returns.advantages import TDEstimate, GAE, TDLambdaEstimate
-from torchrl.objectives.returns.functional import (
-    vec_td_lambda_advantage_estimate,
+from torchrl.objectives.redq import REDQLoss
+from torchrl.objectives.reinforce import ReinforceLoss
+from torchrl.objectives.utils import HardUpdate, hold_out_net, SoftUpdate
+from torchrl.objectives.value.advantages import GAE, TDEstimate, TDLambdaEstimate
+from torchrl.objectives.value.functional import (
+    generalized_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_generalized_advantage_estimate,
-    generalized_advantage_estimate,
+    vec_td_lambda_advantage_estimate,
 )
-from torchrl.objectives.returns.utils import _custom_conv1d, _make_gammas_tensor
+from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor
 
 
 @pytest.fixture
@@ -1562,6 +1581,392 @@ class TestReinforce:
                 retain_graph=True,
                 allow_unused=False,
             )
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+class TestDreamer:
+    def _create_world_model_data(
+        self, batch_size, temporal_length, rssm_hidden_dim, state_dim
+    ):
+        td = TensorDict(
+            {
+                "state": torch.zeros(batch_size, temporal_length, state_dim),
+                "belief": torch.zeros(batch_size, temporal_length, rssm_hidden_dim),
+                "pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
+                "next_pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
+                "action": torch.randn(batch_size, temporal_length, 64),
+                "reward": torch.randn(batch_size, temporal_length, 1),
+                "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
+            },
+            [batch_size, temporal_length],
+        )
+        return td
+
+    def _create_actor_data(
+        self, batch_size, temporal_length, rssm_hidden_dim, state_dim
+    ):
+        td = TensorDict(
+            {
+                "state": torch.randn(batch_size, temporal_length, state_dim),
+                "belief": torch.randn(batch_size, temporal_length, rssm_hidden_dim),
+                "reward": torch.randn(batch_size, temporal_length, 1),
+            },
+            [batch_size, temporal_length],
+        )
+        return td
+
+    def _create_value_data(
+        self, batch_size, temporal_length, rssm_hidden_dim, state_dim
+    ):
+        td = TensorDict(
+            {
+                "state": torch.randn(batch_size * temporal_length, state_dim),
+                "belief": torch.randn(batch_size * temporal_length, rssm_hidden_dim),
+                "lambda_target": torch.randn(batch_size * temporal_length, 1),
+            },
+            [batch_size * temporal_length],
+        )
+        return td
+
+    def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
+        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
+        default_dict = {
+            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
+            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+        }
+        mock_env.append_transform(
+            TensorDictPrimer(random=False, default_value=0, **default_dict)
+        )
+
+        obs_encoder = ObsEncoder()
+        obs_decoder = ObsDecoder()
+
+        rssm_prior = RSSMPrior(
+            hidden_dim=rssm_hidden_dim,
+            rnn_hidden_dim=rssm_hidden_dim,
+            state_dim=state_dim,
+            action_spec=mock_env.action_spec,
+        )
+        rssm_posterior = RSSMPosterior(hidden_dim=rssm_hidden_dim, state_dim=state_dim)
+
+        # World Model and reward model
+        rssm_rollout = RSSMRollout(
+            TensorDictModule(
+                rssm_prior,
+                in_keys=["state", "belief", "action"],
+                out_keys=[
+                    "next_prior_mean",
+                    "next_prior_std",
+                    "_",
+                    "next_belief",
+                ],
+            ),
+            TensorDictModule(
+                rssm_posterior,
+                in_keys=["next_belief", "next_encoded_latents"],
+                out_keys=[
+                    "next_posterior_mean",
+                    "next_posterior_std",
+                    "next_state",
+                ],
+            ),
+        )
+        reward_module = MLP(
+            out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU
+        )
+        # World Model and reward model
+        world_modeler = TensorDictSequential(
+            TensorDictModule(
+                obs_encoder,
+                in_keys=["next_pixels"],
+                out_keys=["next_encoded_latents"],
+            ),
+            rssm_rollout,
+            TensorDictModule(
+                obs_decoder,
+                in_keys=["next_state", "next_belief"],
+                out_keys=["next_reco_pixels"],
+            ),
+        )
+        reward_module = TensorDictModule(
+            reward_module,
+            in_keys=["next_state", "next_belief"],
+            out_keys=["reward"],
+        )
+        world_model = WorldModelWrapper(world_modeler, reward_module)
+
+        with torch.no_grad():
+            td = mock_env.rollout(10)
+            td = td.unsqueeze(0).to_tensordict()
+            td["state"] = torch.zeros((1, 10, state_dim))
+            td["belief"] = torch.zeros((1, 10, rssm_hidden_dim))
+            world_model(td)
+        return world_model
+
+    def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
+        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
+        default_dict = {
+            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
+            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+        }
+        mock_env.append_transform(
+            TensorDictPrimer(random=False, default_value=0, **default_dict)
+        )
+
+        rssm_prior = RSSMPrior(
+            hidden_dim=rssm_hidden_dim,
+            rnn_hidden_dim=rssm_hidden_dim,
+            state_dim=state_dim,
+            action_spec=mock_env.action_spec,
+        )
+        reward_module = MLP(
+            out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU
+        )
+        transition_model = TensorDictSequential(
+            TensorDictModule(
+                rssm_prior,
+                in_keys=["state", "belief", "action"],
+                out_keys=[
+                    "_",
+                    "_",
+                    "next_state",
+                    "next_belief",
+                ],
+            ),
+        )
+        reward_model = TensorDictModule(
+            reward_module,
+            in_keys=["next_state", "next_belief"],
+            out_keys=["reward"],
+        )
+        model_based_env = DreamerEnv(
+            world_model=WorldModelWrapper(
+                transition_model,
+                reward_model,
+            ),
+            prior_shape=torch.Size([state_dim]),
+            belief_shape=torch.Size([rssm_hidden_dim]),
+        )
+        model_based_env.set_specs_from_env(mock_env)
+        with torch.no_grad():
+            model_based_env.rollout(3)
+        return model_based_env
+
+    def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
+        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
+        default_dict = {
+            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
+            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+        }
+        mock_env.append_transform(
+            TensorDictPrimer(random=False, default_value=0, **default_dict)
+        )
+
+        actor_module = DreamerActor(
+            out_features=mock_env.action_spec.shape[0],
+            depth=4,
+            num_cells=mlp_num_units,
+            activation_class=nn.ELU,
+        )
+        actor_model = ProbabilisticTensorDictModule(
+            TensorDictModule(
+                actor_module,
+                in_keys=["state", "belief"],
+                out_keys=["loc", "scale"],
+            ),
+            dist_param_keys=["loc", "scale"],
+            out_key_sample="action",
+            default_interaction_mode="random",
+            distribution_class=TanhNormal,
+        )
+        with torch.no_grad():
+            td = TensorDict(
+                {
+                    "state": torch.randn(1, 2, state_dim),
+                    "belief": torch.randn(1, 2, rssm_hidden_dim),
+                },
+                batch_size=[1],
+            )
+            actor_model(td)
+        return actor_model
+
+    def _create_value_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
+        value_model = TensorDictModule(
+            MLP(
+                out_features=1,
+                depth=3,
+                num_cells=mlp_num_units,
+                activation_class=nn.ELU,
+            ),
+            in_keys=["state", "belief"],
+            out_keys=["state_value"],
+        )
+        with torch.no_grad():
+            td = TensorDict(
+                {
+                    "state": torch.randn(1, 2, state_dim),
+                    "belief": torch.randn(1, 2, rssm_hidden_dim),
+                },
+                batch_size=[1],
+            )
+            value_model(td)
+        return value_model
+
+    @pytest.mark.parametrize("lambda_kl", [0, 1.0])
+    @pytest.mark.parametrize("lambda_reco", [0, 1.0])
+    @pytest.mark.parametrize("lambda_reward", [0, 1.0])
+    @pytest.mark.parametrize("reco_loss", ["l2", "smooth_l1"])
+    @pytest.mark.parametrize("reward_loss", ["l2", "smooth_l1"])
+    @pytest.mark.parametrize("free_nats", [-1000, 1000])
+    @pytest.mark.parametrize("delayed_clamp", [False, True])
+    def test_dreamer_world_model(
+        self,
+        device,
+        lambda_reward,
+        lambda_kl,
+        lambda_reco,
+        reward_loss,
+        reco_loss,
+        delayed_clamp,
+        free_nats,
+    ):
+        tensordict = self._create_world_model_data(2, 3, 10, 5).to(device)
+        world_model = self._create_world_model_model(10, 5).to(device)
+        loss_module = DreamerModelLoss(
+            world_model,
+            lambda_reco=lambda_reco,
+            lambda_kl=lambda_kl,
+            lambda_reward=lambda_reward,
+            reward_loss=reward_loss,
+            reco_loss=reco_loss,
+            delayed_clamp=delayed_clamp,
+            free_nats=free_nats,
+        )
+        loss_td, _ = loss_module(tensordict)
+        for loss_str, lmbda in zip(
+            ["loss_model_kl", "loss_model_reco", "loss_model_reward"],
+            [lambda_kl, lambda_reco, lambda_reward],
+        ):
+            assert loss_td.get(loss_str) is not None
+            assert loss_td.get(loss_str).shape == torch.Size([1])
+            if lmbda == 0:
+                assert loss_td.get(loss_str) == 0
+            else:
+                assert loss_td.get(loss_str) > 0
+
+        loss = (
+            loss_td.get("loss_model_kl")
+            + loss_td.get("loss_model_reco")
+            + loss_td.get("loss_model_reward")
+        )
+        loss.backward()
+        grad_total = 0.0
+        for name, param in loss_module.named_parameters():
+            if param.grad is not None:
+                valid_gradients = not (
+                    torch.isnan(param.grad).any() or torch.isinf(param.grad).any()
+                )
+                if not valid_gradients:
+                    raise ValueError(f"Invalid gradients for {name}")
+                gsq = param.grad.pow(2).sum()
+                grad_total += gsq.item()
+        grad_is_zero = grad_total == 0
+        if free_nats < 0:
+            lambda_kl_corr = lambda_kl
+        else:
+            # we expect the kl loss to have 0 grad
+            lambda_kl_corr = 0
+        if grad_is_zero and (lambda_kl_corr or lambda_reward or lambda_reco):
+            raise ValueError(
+                f"Gradients are zero: lambdas={(lambda_kl_corr, lambda_reward, lambda_reco)}"
+            )
+        elif grad_is_zero:
+            assert not (lambda_kl_corr or lambda_reward or lambda_reco)
+        loss_module.zero_grad()
+
+    @pytest.mark.parametrize("imagination_horizon", [3, 5])
+    @pytest.mark.parametrize("discount_loss", [True, False])
+    def test_dreamer_env(self, device, imagination_horizon, discount_loss):
+        mb_env = self._create_mb_env(10, 5).to(device)
+        rollout = mb_env.rollout(3)
+        assert rollout.shape == torch.Size([3])
+        # test reconstruction
+        with pytest.raises(ValueError, match="No observation decoder provided"):
+            mb_env.decode_obs(rollout)
+        mb_env.obs_decoder = TensorDictModule(
+            nn.LazyLinear(4, device=device),
+            in_keys=["state"],
+            out_keys=["reco_observation"],
+        )
+        # reconstruct
+        mb_env.decode_obs(rollout)
+        assert "reco_observation" in rollout.keys()
+        # second pass
+        tensordict = mb_env.decode_obs(mb_env.reset(), compute_latents=True)
+        assert "reco_observation" in tensordict.keys()
+
+    @pytest.mark.parametrize("imagination_horizon", [3, 5])
+    @pytest.mark.parametrize("discount_loss", [True, False])
+    def test_dreamer_actor(self, device, imagination_horizon, discount_loss):
+        tensordict = self._create_actor_data(2, 3, 10, 5).to(device)
+        mb_env = self._create_mb_env(10, 5).to(device)
+        actor_model = self._create_actor_model(10, 5).to(device)
+        value_model = self._create_value_model(10, 5).to(device)
+        loss_module = DreamerActorLoss(
+            actor_model,
+            value_model,
+            mb_env,
+            imagination_horizon=imagination_horizon,
+            discount_loss=discount_loss,
+        )
+        loss_td, fake_data = loss_module(tensordict)
+        assert not fake_data.requires_grad
+        assert fake_data.shape == torch.Size([tensordict.numel(), imagination_horizon])
+        if discount_loss:
+            assert loss_module.discount_loss
+
+        assert loss_td.get("loss_actor") is not None
+        loss = loss_td.get("loss_actor")
+        loss.backward()
+        grad_is_zero = True
+        for name, param in loss_module.named_parameters():
+            if param.grad is not None:
+                valid_gradients = not (
+                    torch.isnan(param.grad).any() or torch.isinf(param.grad).any()
+                )
+                grad_is_zero = (
+                    grad_is_zero and torch.sum(torch.pow((param.grad), 2)) == 0
+                )
+                if not valid_gradients:
+                    raise ValueError(f"Invalid gradients for {name}")
+        if grad_is_zero:
+            raise ValueError("Gradients are zero")
+        loss_module.zero_grad()
+
+    @pytest.mark.parametrize("discount_loss", [True, False])
+    def test_dreamer_value(self, device, discount_loss):
+        tensordict = self._create_value_data(2, 3, 10, 5).to(device)
+        value_model = self._create_value_model(10, 5).to(device)
+        loss_module = DreamerValueLoss(value_model, discount_loss=discount_loss)
+        loss_td, fake_data = loss_module(tensordict)
+        assert loss_td.get("loss_value") is not None
+        assert not fake_data.requires_grad
+        loss = loss_td.get("loss_value")
+        loss.backward()
+        grad_is_zero = True
+        for name, param in loss_module.named_parameters():
+            if param.grad is not None:
+                valid_gradients = not (
+                    torch.isnan(param.grad).any() or torch.isinf(param.grad).any()
+                )
+                grad_is_zero = (
+                    grad_is_zero and torch.sum(torch.pow((param.grad), 2)) == 0
+                )
+                if not valid_gradients:
+                    raise ValueError(f"Invalid gradients for {name}")
+        if grad_is_zero:
+            raise ValueError("Gradients are zero")
+        loss_module.zero_grad()
 
 
 def test_hold_out():

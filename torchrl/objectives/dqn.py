@@ -6,30 +6,26 @@
 import torch
 
 from torchrl.data import TensorDict
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
 )
-from ...data.tensordict.tensordict import TensorDictBase
+from ..data.tensordict.tensordict import TensorDictBase
 from .common import LossModule
 from .utils import distance_loss, next_state_value
 
-__all__ = [
-    "DQNLoss",
-    "DistributionalDQNLoss",
-]
-
 
 class DQNLoss(LossModule):
-    """
-    The DQN Loss class.
+    """The DQN Loss class.
+
     Args:
         value_network (ProbabilisticTDModule): a Q value operator.
         gamma (scalar): a discount factor for return computation.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
         delay_value (bool, optional): whether to duplicate the value network into a new target value network to
-            create a double DQN. Default is `False`.
+            create a double DQN. Default is :obj:`False`.
+
     """
 
     def __init__(
@@ -59,8 +55,8 @@ class DQNLoss(LossModule):
         self.priority_key = priority_key
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
-        """
-        Computes the DQN loss given a tensordict sampled from the replay buffer.
+        """Computes the DQN loss given a tensordict sampled from the replay buffer.
+
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
 
@@ -72,7 +68,6 @@ class DQNLoss(LossModule):
             a tensor containing the DQN loss.
 
         """
-
         device = self.device if self.device is not None else input_tensordict.device
         tensordict = input_tensordict.to(device)
         if tensordict.device != device:
@@ -127,8 +122,8 @@ class DQNLoss(LossModule):
 
 
 class DistributionalDQNLoss(LossModule):
-    """
-    A distributional DQN loss class.
+    """A distributional DQN loss class.
+
     Distributional DQN uses a value network that outputs a distribution of
     values over a discrete support of discounted returns (unlike regular DQN
     where the value network outputs a single point prediction of the
@@ -209,7 +204,7 @@ class DistributionalDQNLoss(LossModule):
 
         with torch.no_grad():
             # Calculate nth next state probabilities
-            next_td = step_tensordict(tensordict)
+            next_td = step_mdp(tensordict)
             self.value_network(
                 next_td,
                 params=self.value_network_params,

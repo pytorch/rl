@@ -8,19 +8,19 @@ from torch import Tensor
 
 from torchrl.data import TensorDict
 from torchrl.data.tensordict.tensordict import TensorDictBase
-from torchrl.envs.utils import set_exploration_mode, step_tensordict
+from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.modules import TensorDictModule
 from torchrl.objectives import (
     hold_out_params,
     next_state_value as get_next_state_value,
     distance_loss,
 )
-from torchrl.objectives.costs.common import LossModule
+from torchrl.objectives.common import LossModule
 
 
 class REDQLoss_deprecated(LossModule):
-    """
-    REDQ Loss module.
+    """REDQ Loss module.
+
     REDQ (RANDOMIZED ENSEMBLED DOUBLE Q-LEARNING: LEARNING FAST WITHOUT A MODEL
     https://openreview.net/pdf?id=AY8zfZm0tDd) generalizes the idea of using an ensemble of Q-value functions to
     train a SAC-like algorithm.
@@ -42,7 +42,7 @@ class REDQLoss_deprecated(LossModule):
             Default is 0.1.
         max_alpha (float, optional): max value of alpha.
             Default is 10.0.
-        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is `False`.
+        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is :obj:`False`.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
 
     """
@@ -203,7 +203,7 @@ class REDQLoss_deprecated(LossModule):
                 b[selected_models_idx] for b in self.target_qvalue_network_buffers
             ]
 
-            next_td = step_tensordict(tensordict).select(
+            next_td = step_mdp(tensordict).select(
                 *self.actor_network.in_keys
             )  # next_observation ->
             # observation
@@ -266,4 +266,6 @@ class REDQLoss_deprecated(LossModule):
 
 
 class DoubleREDQLoss_deprecated(REDQLoss_deprecated):
+    """[Deprecated] Class for delayed target-REDQ (which should be the default behaviour)."""
+
     delay_qvalue: bool = True

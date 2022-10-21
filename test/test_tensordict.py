@@ -13,12 +13,13 @@ import torch
 from _utils_internal import get_available_devices
 from torch import multiprocessing as mp
 from torchrl._utils import prod
-from torchrl.data import SavedTensorDict, TensorDict, MemmapTensor
+from torchrl.data import MemmapTensor, SavedTensorDict, TensorDict
 from torchrl.data.tensordict.tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
-    stack as stack_td,
+    make_tensordict,
     pad,
+    _stack as stack_td,
     TensorDictBase,
 )
 from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
@@ -931,6 +932,20 @@ class TestTensorDicts:
         assert_allclose_td(td_masked3, td_masked2)
         assert td_masked3.batch_size[0] == mask.sum()
         assert td_masked3.batch_dims == 1
+
+    def test_equal(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        assert (td == td.to_tensordict()).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td != td0).any()
+
+    def test_equal_dict(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        assert (td == td.to_dict()).all()
+        td0 = td.to_tensordict().zero_().to_dict()
+        assert (td != td0).any()
 
     @pytest.mark.parametrize("from_list", [True, False])
     def test_masking_set(self, td_name, device, from_list):
@@ -2563,6 +2578,64 @@ def test_memory_lock(method):
     td.set("b", torch.randn(4, 5))
     td.set("a", torch.randn(4, 5), inplace=True)
     td.set("b", torch.randn(4, 5), inplace=True)
+
+
+class TestMakeTensorDict:
+    def test_create_tensordict(self):
+        tensordict = make_tensordict(a=torch.zeros(3, 4))
+        assert (tensordict["a"] == torch.zeros(3, 4, 1)).all()
+
+    def test_tensordict_batch_size(self):
+        tensordict = make_tensordict()
+        assert tensordict.batch_size == torch.Size([])
+
+        tensordict = make_tensordict(a=torch.randn(3, 4))
+        assert tensordict.batch_size == torch.Size([3, 4])
+
+        tensordict = make_tensordict(a=torch.randn(3, 4), b=torch.randn(3, 4, 5))
+        assert tensordict.batch_size == torch.Size([3, 4])
+
+        nested_tensordict = make_tensordict(c=tensordict, d=torch.randn(3, 5))  # nested
+        assert nested_tensordict.batch_size == torch.Size([3])
+
+        nested_tensordict = make_tensordict(c=tensordict, d=torch.randn(4, 5))  # nested
+        assert nested_tensordict.batch_size == torch.Size([])
+
+        tensordict = make_tensordict(a=torch.randn(3, 4, 2), b=torch.randn(3, 4, 5))
+        assert tensordict.batch_size == torch.Size([3, 4])
+
+        tensordict = make_tensordict(a=torch.randn(3, 4), b=torch.randn(1))
+        assert tensordict.batch_size == torch.Size([])
+
+        tensordict = make_tensordict(
+            a=torch.randn(3, 4), b=torch.randn(3, 4, 5), batch_size=[3]
+        )
+        assert tensordict.batch_size == torch.Size([3])
+
+        tensordict = make_tensordict(
+            a=torch.randn(3, 4), b=torch.randn(3, 4, 5), batch_size=[]
+        )
+        assert tensordict.batch_size == torch.Size([])
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_tensordict_device(self, device):
+        tensordict = make_tensordict(
+            a=torch.randn(3, 4), b=torch.randn(3, 4), device=device
+        )
+        assert tensordict.device == device
+        assert tensordict["a"].device == device
+        assert tensordict["b"].device == device
+
+        tensordict = make_tensordict(
+            a=torch.randn(3, 4, device=device),
+            b=torch.randn(3, 4),
+            c=torch.randn(3, 4, device="cpu"),
+            device=device,
+        )
+        assert tensordict.device == device
+        assert tensordict["a"].device == device
+        assert tensordict["b"].device == device
+        assert tensordict["c"].device == device
 
 
 if __name__ == "__main__":

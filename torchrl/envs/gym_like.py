@@ -5,22 +5,37 @@
 
 from __future__ import annotations
 
+import abc
 import warnings
-from typing import Optional, Union, Tuple, Any, Dict
+from typing import List, Optional, Sequence, Union, Tuple, Any, Dict
 
 import numpy as np
 import torch
 
 from torchrl.data import TensorDict
+from torchrl.data.tensor_specs import TensorSpec, UnboundedContinuousTensorSpec
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.common import _EnvWrapper
 
 __all__ = ["GymLikeEnv", "default_info_dict_reader"]
 
 
-class default_info_dict_reader:
-    """
-    Default info-key reader.
+class BaseInfoDictReader(metaclass=abc.ABCMeta):
+    """Base class for info-readers."""
+
+    @abc.abstractmethod
+    def __call__(
+        self, info_dict: Dict[str, Any], tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        raise NotImplementedError
+
+    @abc.abstractproperty
+    def info_spec(self) -> Dict[str, TensorSpec]:
+        raise NotImplementedError
+
+
+class default_info_dict_reader(BaseInfoDictReader):
+    """Default info-key reader.
 
     In cases where keys can be directly written to a tensordict (mostly if they abide to the
     tensordict shape), one simply needs to indicate the keys to be registered during
@@ -39,10 +54,29 @@ class default_info_dict_reader:
 
     """
 
-    def __init__(self, keys=None):
+    def __init__(
+        self,
+        keys: List[str] = None,
+        spec: Union[Sequence[TensorSpec], Dict[str, TensorSpec]] = None,
+    ):
         if keys is None:
             keys = []
         self.keys = keys
+
+        if isinstance(spec, Sequence):
+            if len(spec) != len(self.keys):
+                raise ValueError(
+                    "If specifying specs for info keys with a sequence, the "
+                    "length of the sequence must match the number of keys"
+                )
+            self._info_spec = dict(zip(self.keys, spec))
+        else:
+            if spec is None:
+                spec = {}
+
+            self._info_spec = {
+                key: spec.get(key, UnboundedContinuousTensorSpec()) for key in self.keys
+            }
 
     def __call__(
         self, info_dict: Dict[str, Any], tensordict: TensorDictBase
@@ -57,22 +91,23 @@ class default_info_dict_reader:
                 tensordict[key] = info_dict[key]
         return tensordict
 
+    @property
+    def info_spec(self) -> Dict[str, TensorSpec]:
+        return self._info_spec
+
 
 class GymLikeEnv(_EnvWrapper):
-    _info_dict_reader: callable
+    """A gym-like env is an environment.
 
-    """
-    A gym-like env is an environment whose behaviour is similar to gym environments in what
-    common methods (specifically reset and step) are expected to do.
+    Its behaviour is similar to gym environments in what common methods (specifically reset and step) are expected to do.
 
-
-    A `GymLikeEnv` has a `.step()` method with the following signature:
+    A :obj:`GymLikeEnv` has a :obj:`.step()` method with the following signature:
 
         ``env.step(action: np.ndarray) -> Tuple[Union[np.ndarray, dict], double, bool, *info]``
 
     where the outputs are the observation, reward and done state respectively.
     In this implementation, the info output is discarded (but specific keys can be read
-    by updating info_dict_reader, see `set_info_dict_reader` class method).
+    by updating info_dict_reader, see :obj:`set_info_dict_reader` class method).
 
     By default, the first output is written at the "next_observation" key-value pair in the output tensordict, unless
     the first output is a dictionary. In that case, each observation output will be put at the corresponding
@@ -81,14 +116,15 @@ class GymLikeEnv(_EnvWrapper):
     It is also expected that env.reset() returns an observation similar to the one observed after a step is completed.
     """
 
+    _info_dict_reader: BaseInfoDictReader
+
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._info_dict_reader = None
         return super().__new__(cls, *args, _batch_locked=True, **kwargs)
 
     def read_action(self, action):
-        """Reads the action obtained from the input TensorDict and transforms it
-        in the format expected by the contained environment.
+        """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
 
         Args:
             action (Tensor or TensorDict): an action to be taken in the environment
@@ -99,7 +135,9 @@ class GymLikeEnv(_EnvWrapper):
         return self.action_spec.to_numpy(action, safe=False)
 
     def read_done(self, done):
-        """Reads a done state and returns a tuple containing:
+        """Done state reader.
+
+        Reads a done state and returns a tuple containing:
         - a done state to be set in the environment
         - a boolean value indicating whether the frame_skip loop should be broken
 
@@ -110,8 +148,7 @@ class GymLikeEnv(_EnvWrapper):
         return done, done
 
     def read_reward(self, total_reward, step_reward):
-        """Reads a reward and the total reward so far (in the frame skip loop)
-        and returns a sum of the two.
+        """Reads a reward and the total reward so far (in the frame skip loop) and returns a sum of the two.
 
         Args:
             total_reward (torch.Tensor or TensorDict): total reward so far in the step
@@ -123,8 +160,7 @@ class GymLikeEnv(_EnvWrapper):
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
     ) -> Dict[str, Any]:
-        """Reads an observation from the environment and returns an observation
-        compatible with the output TensorDict.
+        """Reads an observation from the environment and returns an observation compatible with the output TensorDict.
 
         Args:
             observations (observation under a format dictated by the inner env): observation to be read.
@@ -209,16 +245,17 @@ class GymLikeEnv(_EnvWrapper):
         return tensordict_out
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
-        """To be overwritten when step_outputs differ from Tuple[Observation: Union[np.ndarray, dict], reward: Number, done:Bool]"""
+        """To be overwritten when step_outputs differ from Tuple[Observation: Union[np.ndarray, dict], reward: Number, done:Bool]."""
         if not isinstance(step_outputs_tuple, tuple):
             raise TypeError(
                 f"Expected step_outputs_tuple type to be Tuple but got {type(step_outputs_tuple)}"
             )
         return step_outputs_tuple
 
-    def set_info_dict_reader(self, info_dict_reader: callable) -> GymLikeEnv:
-        """
-        Sets an info_dict_reader function. This function should take as input an
+    def set_info_dict_reader(self, info_dict_reader: BaseInfoDictReader) -> GymLikeEnv:
+        """Sets an info_dict_reader function.
+
+        This function should take as input an
         info_dict dictionary and the tensordict returned by the step function, and
         write values in an ad-hoc manner from one to the other.
 
@@ -240,6 +277,8 @@ class GymLikeEnv(_EnvWrapper):
 
         """
         self.info_dict_reader = info_dict_reader
+        for info_key, spec in info_dict_reader.info_spec.items():
+            self.observation_spec[info_key] = spec
         return self
 
     def __repr__(self) -> str:

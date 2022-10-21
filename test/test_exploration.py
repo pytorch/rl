@@ -10,7 +10,7 @@ import torch
 from _utils_internal import get_available_devices
 from scipy.stats import ttest_1samp
 from torch import nn
-from torchrl.data import NdBoundedTensorSpec, CompositeSpec
+from torchrl.data import CompositeSpec, NdBoundedTensorSpec
 from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.envs.utils import set_exploration_mode
@@ -24,8 +24,8 @@ from torchrl.modules.models.exploration import LazygSDEModule
 from torchrl.modules.tensordict_module.actors import ProbabilisticActor
 from torchrl.modules.tensordict_module.exploration import (
     _OrnsteinUhlenbeckProcess,
-    OrnsteinUhlenbeckProcessWrapper,
     AdditiveGaussianWrapper,
+    OrnsteinUhlenbeckProcessWrapper,
 )
 
 
@@ -116,10 +116,10 @@ class TestAdditiveGaussian:
             net,
             in_keys=["observation"],
             out_keys=["loc", "scale"],
-            spec=CompositeSpec(action=action_spec) if spec_origin == "policy" else None,
+            spec=None,
         )
         policy = ProbabilisticActor(
-            spec=action_spec if spec_origin is not None else None,
+            spec=CompositeSpec(action=action_spec) if spec_origin is not None else None,
             module=module,
             dist_param_keys=["loc", "scale"],
             distribution_class=TanhNormal,
@@ -227,25 +227,23 @@ def test_gsde(
 ):
     torch.manual_seed(0)
     if gSDE:
-        model = torch.nn.LazyLinear(action_dim)
+        model = torch.nn.LazyLinear(action_dim, device=device)
         in_keys = ["observation"]
         module = TensorDictSequential(
             TensorDictModule(model, in_keys=in_keys, out_keys=["action"]),
             TensorDictModule(
-                LazygSDEModule(),
+                LazygSDEModule(device=device),
                 in_keys=["action", "observation", "_eps_gSDE"],
                 out_keys=["loc", "scale", "action", "_eps_gSDE"],
             ),
-        ).to(device)
+        )
         distribution_class = IndependentNormal
         distribution_kwargs = {}
     else:
         in_keys = ["observation"]
-        model = torch.nn.LazyLinear(action_dim * 2)
+        model = torch.nn.LazyLinear(action_dim * 2, device=device)
         wrapper = NormalParamWrapper(model)
-        module = TensorDictModule(
-            wrapper, in_keys=in_keys, out_keys=["loc", "scale"]
-        ).to(device)
+        module = TensorDictModule(wrapper, in_keys=in_keys, out_keys=["loc", "scale"])
         distribution_class = TanhNormal
         distribution_kwargs = {"min": -bound, "max": bound}
     spec = NdBoundedTensorSpec(

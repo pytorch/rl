@@ -101,8 +101,7 @@ def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
 
 
 class DMControlWrapper(GymLikeEnv):
-    """
-    DeepMind Control lab environment wrapper.
+    """DeepMind Control lab environment wrapper.
 
     Args:
         env (dm_control.suite env): environment instance
@@ -115,6 +114,7 @@ class DMControlWrapper(GymLikeEnv):
         >>> td = env.rand_step()
         >>> print(td)
         >>> print(env.available_envs)
+
     """
 
     git_url = "https://github.com/deepmind/dm_control"
@@ -133,6 +133,7 @@ class DMControlWrapper(GymLikeEnv):
         from_pixels: bool = False,
         render_kwargs: Optional[dict] = None,
         pixels_only: bool = False,
+        camera_id: Union[int, str] = 0,
         **kwargs,
     ):
         self.from_pixels = from_pixels
@@ -140,7 +141,7 @@ class DMControlWrapper(GymLikeEnv):
 
         if from_pixels:
             self._set_egl_device(self.device)
-            self.render_kwargs = {"camera_id": 0}
+            self.render_kwargs = {"camera_id": camera_id}
             if render_kwargs is not None:
                 self.render_kwargs.update(render_kwargs)
             env = pixels.Wrapper(
@@ -252,8 +253,7 @@ class DMControlWrapper(GymLikeEnv):
 
 
 class DMControlEnv(DMControlWrapper):
-    """
-    DeepMind Control lab environment wrapper.
+    """DeepMind Control lab environment wrapper.
 
     Args:
         env_name (str): name of the environment
@@ -269,9 +269,15 @@ class DMControlEnv(DMControlWrapper):
         >>> td = env.rand_step()
         >>> print(td)
         >>> print(env.available_envs)
+
     """
 
     def __init__(self, env_name, task_name, **kwargs):
+        if not _has_dmc:
+            raise ImportError(
+                "dm_control python package was not found."
+                "Please install this dependency."
+            )
         kwargs["env_name"] = env_name
         kwargs["task_name"] = task_name
         super().__init__(**kwargs)
@@ -303,9 +309,14 @@ class DMControlEnv(DMControlWrapper):
         if _seed is not None:
             random_state = np.random.RandomState(_seed)
             kwargs = {"random": random_state}
+        camera_id = kwargs.pop("camera_id", 0)
         env = suite.load(env_name, task_name, task_kwargs=kwargs)
         return super()._build_env(
-            env, from_pixels=from_pixels, pixels_only=pixels_only, **kwargs
+            env,
+            from_pixels=from_pixels,
+            pixels_only=pixels_only,
+            camera_id=camera_id,
+            **kwargs,
         )
 
     def rebuild_with_kwargs(self, **new_kwargs):

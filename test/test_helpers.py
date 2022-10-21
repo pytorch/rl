@@ -8,30 +8,39 @@ import dataclasses
 
 import pytest
 import torch
-from _utils_internal import get_available_devices, generate_seeds
-from hydra import initialize, compose
-from hydra.core.config_store import ConfigStore
+from _utils_internal import generate_seeds, get_available_devices
+
+try:
+    from hydra import compose, initialize
+    from hydra.core.config_store import ConfigStore
+
+    _has_hydra = True
+except ImportError:
+    _has_hydra = False
 from mocking_classes import (
     ContinuousActionConvMockEnvNumpy,
     ContinuousActionVecMockEnv,
-    DiscreteActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
+    DiscreteActionVecMockEnv,
 )
 from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import EnvConfig
 from torchrl.trainers.helpers.models import (
-    make_dqn_actor,
-    make_ddpg_actor,
-    make_ppo_model,
-    make_sac_model,
-    make_redq_model,
-    DiscreteModelConfig,
     DDPGModelConfig,
+    DiscreteModelConfig,
+    make_ddpg_actor,
+    make_dqn_actor,
+    make_ppo_model,
+    make_redq_model,
+    make_sac_model,
     PPOModelConfig,
-    SACModelConfig,
     REDQModelConfig,
+    SACModelConfig,
+    DreamerConfig,
+    make_dreamer,
 )
 
 ## these tests aren't truly unitary but setting up a fake env for the
@@ -49,6 +58,8 @@ def _assert_keys_match(td, expeceted_keys):
 
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
+@pytest.mark.skipif(not _has_tv, reason="No torchvision library found")
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("noisy", [tuple(), ("noisy=True",)])
 @pytest.mark.parametrize("distributional", [tuple(), ("distributional=True",)])
@@ -99,6 +110,7 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
         proof_environment.close()
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [("from_pixels=True", "catframes=4"), tuple()])
@@ -173,6 +185,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
         del proof_environment
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
@@ -287,11 +300,12 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
         del proof_environment
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
 @pytest.mark.parametrize("from_pixels", [tuple()])
 @pytest.mark.parametrize("tanh_loc", [tuple(), ("tanh_loc=True",)])
-@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
     if not gsde and exploration != "random":
@@ -402,10 +416,11 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
         del proof_environment
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
 @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
-@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_redq_make(device, from_pixels, gsde, exploration):
     if not gsde and exploration != "random":
@@ -498,6 +513,96 @@ def test_redq_make(device, from_pixels, gsde, exploration):
             raise
         proof_environment.close()
         del proof_environment
+
+
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("tanh_loc", [tuple(), ("tanh_loc=True",)])
+@pytest.mark.parametrize("exploration", ["random", "mode"])
+def test_dreamer_make(device, tanh_loc, exploration):
+    import os
+
+    # we hack the env constructor
+    import sys
+
+    sys.path.append(os.path.dirname(__file__) + "/../examples/dreamer/")
+    from dreamer_utils import transformed_env_constructor
+
+    flags = ["from_pixels=True", "catframes=1"]
+
+    config_fields = [
+        (config_field.name, config_field.type, config_field)
+        for config_cls in (
+            EnvConfig,
+            DreamerConfig,
+        )
+        for config_field in dataclasses.fields(config_cls)
+    ]
+
+    Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+    cs = ConfigStore.instance()
+    cs.store(name="config", node=Config)
+    with initialize(version_base=None, config_path=None):
+        cfg = compose(config_name="config", overrides=flags)
+        env_maker = ContinuousActionConvMockEnvNumpy
+        env_maker = transformed_env_constructor(
+            cfg, use_env_creator=False, custom_env_maker=env_maker
+        )
+        proof_environment = env_maker().to(device)
+        model = make_dreamer(
+            proof_environment=proof_environment,
+            device=device,
+            cfg=cfg,
+        )
+        world_model, model_based_env, actor_model, value_model, policy = model
+        out = world_model(proof_environment.rollout(3))
+        expected_keys = {
+            "action",
+            "belief",
+            "done",
+            "next_belief",
+            "next_encoded_latents",
+            "next_pixels",
+            "next_pixels_orig",
+            "next_posterior_mean",
+            "next_posterior_std",
+            "next_prior_mean",
+            "next_prior_std",
+            "next_state",
+            "pixels",
+            "pixels_orig",
+            "reward",
+            "state",
+            "next_reco_pixels",
+        }
+        assert set(out.keys()) == expected_keys
+
+        simulated_data = model_based_env.rollout(3)
+        expected_keys = {
+            "action",
+            "belief",
+            "done",
+            "next_belief",
+            "next_state",
+            "pixels",
+            "pixels_orig",
+            "reward",
+            "state",
+        }
+        assert expected_keys == set(simulated_data.keys())
+
+        simulated_action = actor_model(model_based_env.reset())
+        real_action = actor_model(proof_environment.reset())
+        simulated_policy_action = policy(model_based_env.reset())
+        real_policy_action = policy(proof_environment.reset())
+        assert "action" in simulated_action.keys()
+        assert "action" in real_action.keys()
+        assert "action" in simulated_policy_action.keys()
+        assert "action" in real_policy_action.keys()
+
+        value_td = value_model(proof_environment.reset())
+        assert "state_value" in value_td.keys()
 
 
 @pytest.mark.parametrize("initial_seed", range(5))

@@ -14,46 +14,46 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
 )
-from torch import Tensor
-from torch import multiprocessing as mp
+from torch import multiprocessing as mp, Tensor
 from torchrl._utils import prod
 from torchrl.data import (
-    NdBoundedTensorSpec,
     CompositeSpec,
-    UnboundedContinuousTensorSpec,
+    NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
+    TensorDict,
+    UnboundedContinuousTensorSpec,
 )
-from torchrl.data import TensorDict
-from torchrl.envs import EnvCreator, SerialEnv
-from torchrl.envs import ParallelEnv
 from torchrl.envs import (
-    Resize,
-    GrayScale,
-    ToTensorImage,
-    Compose,
-    ObservationNorm,
-    CatFrames,
-    FiniteTensorDictCheck,
-    DoubleToFloat,
-    CatTensors,
-    FlattenObservation,
-    RewardScaling,
     BinarizeReward,
+    CatFrames,
+    CatTensors,
+    Compose,
+    DoubleToFloat,
+    EnvCreator,
+    FiniteTensorDictCheck,
+    FlattenObservation,
+    GrayScale,
+    ObservationNorm,
+    ParallelEnv,
     R3MTransform,
-    VIPTransform,
+    Resize,
     RewardClipping,
+    RewardScaling,
+    SerialEnv,
+    ToTensorImage,
+    VIPTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
-from torchrl.envs.transforms import VecNorm, TransformedEnv
+from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.transforms import (
     _has_tv,
+    CenterCrop,
     NoopResetEnv,
     PinMemoryTransform,
-    CenterCrop,
-    UnsqueezeTransform,
     SqueezeTransform,
     TensorDictPrimer,
+    UnsqueezeTransform,
 )
 from torchrl.envs.transforms.vip import _VIPNet
 
@@ -1291,6 +1291,7 @@ class TestTransforms:
             assert env._reward_spec is not None
 
 
+@pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("model", ["resnet18", "resnet34", "resnet50"])
 class TestR3M:
@@ -1465,6 +1466,7 @@ class TestR3M:
         assert set(expected_keys) == set(transformed_env.rollout(3).keys())
 
 
+@pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("model", ["resnet50"])
 class TestVIP:

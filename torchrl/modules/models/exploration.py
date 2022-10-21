@@ -21,8 +21,9 @@ from torchrl.modules.utils import inv_softplus
 
 
 class NoisyLinear(nn.Linear):
-    """
-    Noisy Linear Layer, as presented in "Noisy Networks for Exploration", https://arxiv.org/abs/1706.10295v3
+    """Noisy Linear Layer.
+
+    Presented in "Noisy Networks for Exploration", https://arxiv.org/abs/1706.10295v3
 
     A Noisy Linear Layer is a linear layer with parametric noise added to the weights. This induced stochasticity can
     be used in RL networks for the agent's policy to aid efficient exploration. The parameters of the noise are learned
@@ -35,12 +36,13 @@ class NoisyLinear(nn.Linear):
         out_features (int): out features dimension
         bias (bool): if True, a bias term will be added to the matrix multiplication: Ax + b.
             default: True
-        device (str, int or torch.device, optional): device of the layer.
+        device (DEVICE_TYPING, optional): device of the layer.
             default: "cpu"
         dtype (torch.dtype, optional): dtype of the parameters.
             default: None
         std_init (scalar): initial value of the Gaussian standard deviation before optimization.
             default: 1.0
+
     """
 
     def __init__(
@@ -145,8 +147,7 @@ class NoisyLinear(nn.Linear):
 
 
 class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
-    """
-    Noisy Lazy Linear Layer.
+    """Noisy Lazy Linear Layer.
 
     This class makes the Noisy Linear layer lazy, in that the in_feature argument does not need to be passed at
     initialization (but is inferred after the first call to the layer).
@@ -157,12 +158,12 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         out_features (int): out features dimension
         bias (bool): if True, a bias term will be added to the matrix multiplication: Ax + b.
             default: True
-        device (str, int or torch.device, optional): device of the layer.
-            default: "cpu"
+        device (DEVICE_TYPING, optional): device of the layer.
         dtype (torch.dtype, optional): dtype of the parameters.
             default: None
         std_init (scalar): initial value of the Gaussian standard deviation before optimization.
             default: 1.0
+
     """
 
     def __init__(
@@ -173,7 +174,7 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         dtype: Optional[torch.dtype] = None,
         std_init: float = 0.1,
     ):
-        super().__init__(0, 0, False)
+        super().__init__(0, 0, False, device=device)
         self.out_features = out_features
         self.std_init = std_init
 
@@ -226,20 +227,21 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
 
 
 def reset_noise(layer: nn.Module) -> None:
+    """Resets the noise of noisy layers."""
     if hasattr(layer, "reset_noise"):
         layer.reset_noise()
 
 
 class gSDEModule(nn.Module):
-    """A gSDE exploration module as presented in "Smooth Exploration for
-    Robotic Reinforcement Learning" by Antonin Raffin, Jens Kober,
-    Freek Stulp (https://arxiv.org/abs/2005.05719)
+    """A gSDE exploration module.
+
+     Presented in "Smooth Exploration for Robotic Reinforcement Learning" by Antonin Raffin, Jens Kober, Freek Stulp (https://arxiv.org/abs/2005.05719)
 
     gSDEModule adds a state-dependent exploration noise to an input action.
     It also outputs the mean, scale (standard deviation) of the normal
     distribution, as well as the Gaussian noise used.
 
-    The noise input should be reset through a `torchrl.envs.transforms.gSDENoise`
+    The noise input should be reset through a :obj:`torchrl.envs.transforms.gSDENoise`
     instance: each time the environment is reset, the input noise will be set to
     zero by the environment transform, indicating to gSDEModule that it has to be resampled.
     This scheme allows us to have the environemt tell the module to resample a
@@ -260,6 +262,7 @@ class gSDEModule(nn.Module):
         scale_max (float, optional): max value of the scale.
         transform (torch.distribution.Transform, optional): a transform to apply
             to the sampled action.
+        device (DEVICE_TYPING, optional): device to create the model on.
 
     Examples:
         >>> from torchrl.modules import TensorDictModule, TensorDictSequential, ProbabilisticActor, TanhNormal
@@ -297,6 +300,7 @@ class gSDEModule(nn.Module):
         >>> action_second_call = tensordict.get("action").clone()
         >>> assert (action_second_call == action_first_call).all()  # actions are the same
         >>> assert (action_first_call != dist.base_dist.base_dist.loc).all()  # actions are truly stochastic
+
     """
 
     def __init__(
@@ -308,6 +312,7 @@ class gSDEModule(nn.Module):
         scale_max: float = 10.0,
         learn_sigma: bool = True,
         transform: Optional[d.Transform] = None,
+        device: Optional[DEVICE_TYPING] = None,
     ) -> None:
         super().__init__()
         self.action_dim = action_dim
@@ -321,18 +326,22 @@ class gSDEModule(nn.Module):
                 sigma_init = inv_softplus(math.sqrt((1.0 - scale_min) / state_dim))
             self.register_parameter(
                 "log_sigma",
-                nn.Parameter(torch.zeros((action_dim, state_dim), requires_grad=True)),
+                nn.Parameter(
+                    torch.zeros(
+                        (action_dim, state_dim), requires_grad=True, device=device
+                    )
+                ),
             )
         else:
             if sigma_init is None:
                 sigma_init = math.sqrt((1.0 - scale_min) / state_dim)
             self.register_buffer(
                 "_sigma",
-                torch.full((action_dim, state_dim), sigma_init),
+                torch.full((action_dim, state_dim), sigma_init, device=device),
             )
 
         if sigma_init != 0.0:
-            self.register_buffer("sigma_init", torch.tensor(sigma_init))
+            self.register_buffer("sigma_init", torch.tensor(sigma_init, device=device))
 
     @property
     def sigma(self):
@@ -397,11 +406,12 @@ class gSDEModule(nn.Module):
 
 class LazygSDEModule(LazyModuleMixin, gSDEModule):
     """Lazy gSDE Module.
+
     This module behaves exactly as gSDEModule except that it does not require the
     user to specify the action and state dimension.
     If the input state is multi-dimensional (i.e. more than one state is provided), the
-    sigma value is initialized such that the resulting variance will match `sigma_init`
-    (or 1 if no `sigma_init` value is provided).
+    sigma value is initialized such that the resulting variance will match :obj:`sigma_init`
+    (or 1 if no :obj:`sigma_init` value is provided).
 
     """
 
@@ -417,11 +427,8 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
         scale_max: float = 10.0,
         learn_sigma: bool = True,
         transform: Optional[d.Transform] = None,
+        device: Optional[DEVICE_TYPING] = None,
     ) -> None:
-        factory_kwargs = {
-            "device": torch.device("cpu"),
-            "dtype": torch.get_default_dtype(),
-        }
         super().__init__(
             0,
             0,
@@ -430,7 +437,12 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
             scale_max=scale_max,
             learn_sigma=learn_sigma,
             transform=transform,
+            device=device,
         )
+        factory_kwargs = {
+            "device": device,
+            "dtype": torch.get_default_dtype(),
+        }
         self._sigma_init = sigma_init
         self.sigma_init = UninitializedBuffer(**factory_kwargs)
         if learn_sigma:
@@ -445,18 +457,17 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
         self, mu: torch.Tensor, state: torch.Tensor, _eps_gSDE: torch.Tensor
     ) -> None:
         if self.has_uninitialized_params():
-            device = mu.device
             action_dim = mu.shape[-1]
             state_dim = state.shape[-1]
             with torch.no_grad():
                 if state.ndimension() > 2:
                     state = state.flatten(0, -2).squeeze(0)
                 if state.ndimension() == 1:
-                    state_flatten_var = torch.ones(1).to(device)
+                    state_flatten_var = torch.ones(1, device=mu.device)
                 else:
                     state_flatten_var = state.pow(2).mean(dim=0).reciprocal()
 
-                self.sigma_init.materialize(state_flatten_var.shape, device=device)
+                self.sigma_init.materialize(state_flatten_var.shape)
                 if self.learn_sigma:
                     if self._sigma_init is None:
                         state_flatten_var.clamp_min_(self.scale_min)
@@ -471,7 +482,7 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
                             )
                         )
 
-                    self.log_sigma.materialize((action_dim, state_dim), device=device)
+                    self.log_sigma.materialize((action_dim, state_dim))
                     self.log_sigma.data.copy_(self.sigma_init.expand_as(self.log_sigma))
 
                 else:
@@ -483,5 +494,5 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
                         self.sigma_init.data.copy_(
                             (state_flatten_var / state_dim).sqrt() * self._sigma_init
                         )
-                    self._sigma.materialize((action_dim, state_dim), device=device)
+                    self._sigma.materialize((action_dim, state_dim))
                     self._sigma.data.copy_(self.sigma_init.expand_as(self._sigma))

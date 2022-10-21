@@ -1,33 +1,43 @@
-.. currentmodule:: torchrl.agents
+.. currentmodule:: torchrl.trainers
 
-torchrl.agents package
-======================
+torchrl.trainers package
+========================
 
-Agents
--------
+Trainer and hooks
+-----------------
 
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst
 
-    Agent
-    EnvCreator
+    Trainer
+    BatchSubSampler
+    CountFramesLog
+    LogReward
+    Recorder
+    ReplayBuffer
+    RewardNormalizer
+    SelectKeys
+    UpdateWeights
+    ClearCudaCache
 
 
 Builders
 --------
 
-.. currentmodule:: torchrl.agents.helpers
+.. currentmodule:: torchrl.trainers.helpers
 
 .. autosummary::
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    make_agent
+    make_trainer
     sync_sync_collector
     sync_async_collector
     make_collector_offpolicy
     make_collector_onpolicy
+    transformed_env_constructor
+    parallel_env_constructor
     make_sac_loss
     make_dqn_loss
     make_ddpg_loss
@@ -40,12 +50,9 @@ Builders
     make_sac_model
     make_redq_model
     make_replay_buffer
-    transformed_env_constructor
-    parallel_env_constructor
 
 Utils
 -----
-
 
 .. autosummary::
     :toctree: generated/
@@ -53,22 +60,3 @@ Utils
 
     correct_for_frame_skip
     get_stats_random_rollout
-
-Argument parser
----------------
-
-
-.. autosummary::
-    :toctree: generated/
-    :template: rl_template_fun.rst
-
-    parser_agent_args
-    parser_collector_args_offpolicy
-    parser_collector_args_onpolicy
-    parser_env_args
-    parser_loss_args
-    parser_loss_args_ppo
-    parser_model_args_continuous
-    parser_model_args_discrete
-    parser_recorder_args
-    parser_replay_args

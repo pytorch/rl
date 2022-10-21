@@ -18,18 +18,15 @@ import torch
 from torch import Tensor, nn
 
 from torchrl.data.tensordict.tensordict import TensorDictBase
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule
-from torchrl.objectives.returns.functional import (
+from torchrl.objectives.value.functional import (
     vec_generalized_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_td_lambda_advantage_estimate,
 )
+from ..utils import hold_out_net
 from .functional import td_advantage_estimate
-
-__all__ = ["GAE", "TDLambdaEstimate", "TDEstimate"]
-
-from ..costs.utils import hold_out_net
 
 
 class TDEstimate(nn.Module):
@@ -41,7 +38,7 @@ class TDEstimate(nn.Module):
         average_rewards (bool, optional): if True, rewards will be standardized
             before the TD is computed.
         gradient_mode (bool, optional): if True, gradients are propagated throught
-            the computation of the value function. Default is `False`.
+            the computation of the value function. Default is :obj:`False`.
         value_key (str, optional): key pointing to the state value. Default is
             `"state_value"`.
     """
@@ -112,7 +109,7 @@ class TDEstimate(nn.Module):
         with hold_out_net(self.value_network):
             # we may still need to pass gradient, but we don't want to assign grads to
             # value net params
-            step_td = step_tensordict(tensordict)
+            step_td = step_mdp(tensordict)
             if target_params is not None:
                 # we assume that target parameters are not differentiable
                 kwargs["params"] = target_params
@@ -223,7 +220,7 @@ class TDLambdaEstimate(nn.Module):
         with hold_out_net(self.value_network):
             # we may still need to pass gradient, but we don't want to assign grads to
             # value net params
-            step_td = step_tensordict(tensordict)
+            step_td = step_mdp(tensordict)
             if target_params is not None:
                 # we assume that target parameters are not differentiable
                 kwargs["params"] = target_params
@@ -254,8 +251,8 @@ class TDLambdaEstimate(nn.Module):
 
 
 class GAE(nn.Module):
-    """
-    A class wrapper around the generalized advantage estimate functional.
+    """A class wrapper around the generalized advantage estimate functional.
+
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
     https://arxiv.org/pdf/1506.02438.pdf for more context.
 
@@ -266,6 +263,7 @@ class GAE(nn.Module):
         average_rewards (bool): if True, rewards will be standardized before the GAE is computed.
         gradient_mode (bool): if True, gradients are propagated throught the computation of the value function.
             Default is `False`.
+
     """
 
     def __init__(
@@ -334,7 +332,7 @@ class GAE(nn.Module):
         with hold_out_net(self.value_network):
             # we may still need to pass gradient, but we don't want to assign grads to
             # value net params
-            step_td = step_tensordict(tensordict)
+            step_td = step_mdp(tensordict)
             if target_params is not None:
                 # we assume that target parameters are not differentiable
                 kwargs["params"] = target_params
