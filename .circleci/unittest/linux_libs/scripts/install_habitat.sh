@@ -33,4 +33,4 @@ conda run python -m pip install install gym[atari]
 conda env config vars set MAGNUM_LOG=quiet HABITAT_SIM_LOG=quiet
 
 # smoke test
-python -c "import habitat"
+python -c "import habitat;import habitat.utils.gym_definitions"
