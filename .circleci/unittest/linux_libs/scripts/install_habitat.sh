@@ -24,7 +24,11 @@ conda run python -m pip install install gym[accept-rom-license]
 conda run python -m pip install install gym[atari]
 
 # This is to reduce verbosity
-conda env config vars set MAGNUM_LOG=quiet HABITAT_SIM_LOG=quiet
+conda env config vars set MAGNUM_LOG=quiet HABITAT_SIM_LOG=quiet \
+  LD_PRELOAD="/home/circleci/project/conda/pkgs/mesa-libegl-cos6-x86_64-11.0.7-4/x86_64-conda_cos6-linux-gnu/sysroot/usr/lib64/libEGL.so.1 /home/circleci/project/conda/pkgs/mesa-libgl-cos6-x86_64-11.0.7-4/x86_64-conda_cos6-linux-gnu/sysroot/usr/lib64/libGL.so.1"
+
+conda deactivate
+conda activate ./env
 
 # smoke test
 python -c "import habitat;import habitat.utils.gym_definitions"
