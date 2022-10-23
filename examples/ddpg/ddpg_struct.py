@@ -1,7 +1,5 @@
-from hydra.utils import instantiate
-from omegaconf import DictConfig, OmegaConf
 import hydra
-
+from hydra.utils import instantiate
 from torchrl.envs import TransformedEnv, ParallelEnv, Compose
 
 
@@ -12,6 +10,7 @@ def my_app(cfg):
     print("env:", env)
     env = TransformedEnv(ParallelEnv(4, env), Compose(*instantiate_cfg.transforms))
     print(env.reset())
+
 
 if __name__ == "__main__":
     my_app()

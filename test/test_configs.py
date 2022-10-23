@@ -102,7 +102,7 @@ class TestConfigs:
         collector.shutdown()
 
     @pytest.mark.skipif(not _has_gym, reason="No gym found")
-    @pytest.mark.skipif(not _has_dmc, reason="No gym found")
+    @pytest.mark.skipif(not _has_dmc, reason="No DMC found")
     @pytest.mark.parametrize(
         "file,from_pixels",
         [
@@ -130,6 +130,25 @@ class TestConfigs:
             assert tensordict["next_pixels"].shape[-1] == 3
         env.rollout(3)
         env.close()
+        del env
+
+    @pytest.mark.skipif(not _has_gym, reason="No gym found")
+    @pytest.mark.skipif(not _has_dmc, reason="No DMC found")
+    @pytest.mark.parametrize(
+        "col_env_config",
+        ["parallel_batch", "parallel", "single"],
+    )
+    def test_collection_env_configs(self, col_env_config):
+        cfg = hydra.compose(
+            "config",
+            overrides=[
+                f"collection_env={col_env_config}",
+            ],
+        )
+
+        # env = instantiate(cfg).collection_env
+        env = instantiate(cfg.collection_env)
+        print(env)
         del env
 
     @pytest.mark.skipif(not _has_gym, reason="No gym found")
