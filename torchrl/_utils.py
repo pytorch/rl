@@ -28,10 +28,11 @@ class timeit:
         t = time.time() - self.t0
         self._REG.setdefault(self.name, [0.0, 0.0, 0])
 
-        count = self._REG[self.name][1]
-        self._REG[self.name][0] = (self._REG[self.name][0] * count + t) / (count + 1)
+        count = self._REG[self.name][2]
+        N = count + 1
+        self._REG[self.name][0] = self._REG[self.name][0] * (count / N) + t / N
         self._REG[self.name][1] = self._REG[self.name][1] + t
-        self._REG[self.name][2] = count + 1
+        self._REG[self.name][2] = N
 
     @staticmethod
     def print(prefix=None):
