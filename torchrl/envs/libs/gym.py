@@ -278,7 +278,7 @@ class GymEnv(GymWrapper):
 
     def __init__(self, env_name, **kwargs):
         kwargs["env_name"] = env_name
-        if gym.__version__ >= version.parse("0.24.0"):
+        if version.parse(gym.__version__) >= version.parse("0.24.0"):
             kwargs.setdefault("disable_env_checker", True)
         super().__init__(**kwargs)
 
