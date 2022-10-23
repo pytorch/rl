@@ -122,7 +122,7 @@ class TestConfigs:
             "config", overrides=[f"env={file}", f"++env.env.from_pixels={from_pixels}"]
         )
 
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
 
         tensordict = env.rollout(3)
         if from_pixels:
@@ -161,7 +161,7 @@ class TestConfigs:
             ],
         )
 
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)
@@ -272,7 +272,7 @@ class TestModelConfigs:
             model_conf = "model=dqn/regular"
 
         cfg = hydra.compose("config", overrides=env_config + [net_conf] + [model_conf])
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)
@@ -319,7 +319,7 @@ class TestModelConfigs:
             model_conf = "model=ppo/discrete"
 
         cfg = hydra.compose("config", overrides=env_config + [net_conf] + [model_conf])
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)
@@ -364,7 +364,7 @@ class TestModelConfigs:
             model_conf = "model=sac/discrete"
 
         cfg = hydra.compose("config", overrides=env_config + [net_conf] + [model_conf])
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)
@@ -404,7 +404,7 @@ class TestModelConfigs:
         model_conf = "model=ddpg/basic"
 
         cfg = hydra.compose("config", overrides=env_config + [net_conf] + [model_conf])
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)
@@ -449,7 +449,7 @@ class TestModelConfigs:
             model_conf = "model=redq/discrete"
 
         cfg = hydra.compose("config", overrides=env_config + [net_conf] + [model_conf])
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)

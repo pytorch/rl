@@ -1,4 +1,5 @@
 _target_: torchrl.envs.TransformedEnv
+_partial_: True
 env:
   _target_: torchrl.envs.libs.gym.GymEnv
   env_name: CartPole-v1
