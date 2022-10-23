@@ -19,6 +19,6 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 
 coverage run -m pytest test/smoke_test.py -v --durations 20
-coverage run -m pytest test/smoke_test_deps.py -v --durations 20
+coverage run -m pytest test/smoke_test_deps.py -v --durations 20 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'
 coverage run -m pytest --instafail -v --durations 20
 coverage xml

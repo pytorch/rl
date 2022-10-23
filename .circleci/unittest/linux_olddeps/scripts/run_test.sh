@@ -19,6 +19,6 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 
 pytest test/smoke_test.py -v --durations 20
-NO_TENSORBOARD=1 pytest test/smoke_test_deps.py -v --durations 20
+pytest test/smoke_test_deps.py -v --durations 20 -k 'test_gym or test_dm_control_pixels or test_dm_control'
 #xvfb-run -s ":99 -screen 0 1280x1024x24" pytest --instafail -v --durations 20
 pytest --instafail -v --durations 20
