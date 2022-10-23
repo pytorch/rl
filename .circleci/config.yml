@@ -382,16 +382,16 @@ jobs:
             - env
       - run:
           name: Install torchrl
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_libs/scripts/install.sh
+          command: .circleci/unittest/linux_libs/scripts/install.sh
       - run:
           name: Install habitat
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_libs/scripts/install_habitat.sh
+          command: .circleci/unittest/linux_libs/scripts/install_habitat.sh
       - run:
           name: Run tests
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_libs/scripts/run_test.sh
+          command: .circleci/unittest/linux_libs/scripts/run_test.sh
       - run:
           name: Post Process
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts/post_process.sh
+          command: .circleci/unittest/linux_libs/scripts/post_process.sh
       - store_test_results:
           path: test-results
 
