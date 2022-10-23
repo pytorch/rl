@@ -10,8 +10,10 @@ python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
-export DISPLAY=unix:0.0
-export MKL_THREADING_LAYER=GNU
+
+#export DISPLAY=unix:0.0
+#export MKL_THREADING_LAYER=GNU
 
 # this workflow only tests the libs
-MUJOCO_GL=egl pytest test/test_libs.py --instafail -v --durations 20
+python -c "import habitat;import habitat.utils.gym_definitions"
+pytest test/test_libs.py --instafail -v --durations 20
