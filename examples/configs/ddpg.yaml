@@ -1,0 +1,9 @@
+defaults:
+  - collector: sync_single
+  - env: cheetah
+    - from_pixels: True
+  - transforms: pixels
+  - replay_buffer: prioritized
+  - model: ddpg/basic
+  - network: ddpg/pixels
+num_workers: 0
