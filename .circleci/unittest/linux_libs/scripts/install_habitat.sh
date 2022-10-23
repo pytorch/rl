@@ -26,8 +26,7 @@ yum -y install freeglut
 # If you already have an environment you want to use, you can just run the following:
 conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
 conda run python -m pip install install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
-conda run python -m pip install install gym[accept-rom-license]
-conda run python -m pip install install gym[atari]
+conda run python -m pip install install "gym[atari,accept-rom-license]" pygame
 
 conda deactivate
 conda activate ./env

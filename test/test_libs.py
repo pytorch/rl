@@ -269,7 +269,7 @@ class TestCollectorLib:
 
 @pytest.mark.skipif(not _has_habitat, reason="habitat not installed")
 def test_habitat():
-    env = HabitatEnv("HabitatHabitatRenderPick-v0")
+    env = HabitatEnv("HabitatRenderPick-v0")
     rollout = env.rollout(3)
     print(rollout)
 
