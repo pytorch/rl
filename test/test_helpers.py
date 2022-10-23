@@ -630,18 +630,22 @@ def test_seed_generator(initial_seed):
 
 
 def test_timeit():
-    for _ in range(10):
+    n1 = 500
+    w1 = 1e-3
+    n2 = 200
+    w2 = 1e-4
+    for _ in range(n1):
         with timeit("event1"):
-            sleep(1e-3)
-    for _ in range(5):
+            sleep(w1)
+    for _ in range(n2):
         with timeit("event2"):
-            sleep(1e-2)
-    assert abs(timeit._REG["event1"][0] - 1e-3) < 1e-2
-    assert abs(timeit._REG["event1"][1] - 1e-2) < 1e-2
-    assert timeit._REG["event1"][2] == 10
-    assert abs(timeit._REG["event2"][0] - 1e-2) < 1e-2
-    assert abs(timeit._REG["event2"][1] - 5e-2) < 1e-2
-    assert timeit._REG["event2"][2] == 5
+            sleep(w2)
+    assert abs(timeit._REG["event1"][0] - w1) < 1e-2
+    assert abs(timeit._REG["event1"][1] - n1*w1) < 1
+    assert timeit._REG["event1"][2] == n1
+    assert abs(timeit._REG["event2"][0] - w2) < 1e-2
+    assert abs(timeit._REG["event2"][1] - n2*w2) < 1
+    assert timeit._REG["event2"][2] == n2
 
 
 if __name__ == "__main__":
