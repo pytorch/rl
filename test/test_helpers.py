@@ -636,11 +636,11 @@ def test_timeit():
     for _ in range(5):
         with timeit("event2"):
             sleep(1e-2)
-    assert abs(timeit._REG["event1"][0] - 1e-3) < 5e-3
-    assert abs(timeit._REG["event1"][1] - 1e-2) < 5e-3
+    assert abs(timeit._REG["event1"][0] - 1e-3) < 1e-2
+    assert abs(timeit._REG["event1"][1] - 1e-2) < 1e-2
     assert timeit._REG["event1"][2] == 10
-    assert abs(timeit._REG["event2"][0] - 1e-2) < 5e-3
-    assert abs(timeit._REG["event2"][1] - 5e-2) < 5e-3
+    assert abs(timeit._REG["event2"][0] - 1e-2) < 1e-2
+    assert abs(timeit._REG["event2"][1] - 5e-2) < 1e-2
     assert timeit._REG["event2"][2] == 5
 
 
