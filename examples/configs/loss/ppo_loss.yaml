@@ -1,0 +1,11 @@
+_target_: torchrl.objectives.costs.PPOLoss
+_partial_: True
+advantage_key: "advantage"
+advantage_diff_key: "value_error"
+entropy_bonus: True
+samples_mc_entropy: 1
+entropy_coef: 0.01
+critic_coef: 1.0
+gamma: 0.99
+loss_critic_type: "smooth_l1"
+advantage_module: None

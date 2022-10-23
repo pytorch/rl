@@ -74,7 +74,7 @@ class SACLoss(LossModule):
         value_network: TensorDictModule,
         num_qvalue_nets: int = 2,
         gamma: Number = 0.99,
-        priotity_key: str = "td_error",
+        priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         min_alpha: float = 0.1,
@@ -117,7 +117,7 @@ class SACLoss(LossModule):
         )
 
         self.register_buffer("gamma", torch.tensor(gamma))
-        self.priority_key = priotity_key
+        self.priority_key = priority_key
         self.loss_function = loss_function
         try:
             device = next(self.parameters()).device

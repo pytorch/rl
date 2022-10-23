@@ -64,7 +64,7 @@ class DDPGLoss(LossModule):
         self.actor_in_keys = actor_network.in_keys
 
         self.register_buffer("gamma", torch.tensor(gamma))
-        self.loss_funtion = loss_function
+        self.loss_function = loss_function
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.
@@ -158,7 +158,7 @@ class DDPGLoss(LossModule):
 
         # td_error = pred_val - target_value
         loss_value = distance_loss(
-            pred_val, target_value, loss_function=self.loss_funtion
+            pred_val, target_value, loss_function=self.loss_function
         )
 
         return loss_value, (pred_val - target_value).pow(2), pred_val, target_value

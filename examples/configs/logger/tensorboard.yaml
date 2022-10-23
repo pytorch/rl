@@ -1,0 +1,3 @@
+_target_: torchrl.trainers.loggers.tensorboard.TensorboardLogger
+exp_name: example_exp
+log_dir: tb_logs
