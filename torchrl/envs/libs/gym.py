@@ -276,9 +276,10 @@ class GymEnv(GymWrapper):
 
     """
 
-    def __init__(self, env_name, disable_env_checker=True, **kwargs):
+    def __init__(self, env_name, **kwargs):
         kwargs["env_name"] = env_name
-        kwargs["disable_env_checker"] = disable_env_checker
+        if gym.__version__ >= version.parse("0.24.0"):
+            kwargs.setdefault("disable_env_checker", True)
         super().__init__(**kwargs)
 
     def _build_env(
