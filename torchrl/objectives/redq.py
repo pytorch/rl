@@ -36,7 +36,7 @@ class REDQLoss(LossModule):
         sub_sample_len (int, optional): number of Q-value networks to be subsampled to evaluate the next state value
             Default is 2.
         gamma (Number, optional): gamma decay factor. Default is 0.99.
-        priotity_key (str, optional): Key where to write the priority value for prioritized replay buffers. Default is
+        priority_key (str, optional): Key where to write the priority value for prioritized replay buffers. Default is
             `"td_error"`.
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
@@ -64,7 +64,7 @@ class REDQLoss(LossModule):
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
         gamma: Number = 0.99,
-        priotity_key: str = "td_error",
+        priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         min_alpha: float = 0.1,
@@ -95,7 +95,7 @@ class REDQLoss(LossModule):
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
         self.register_buffer("gamma", torch.tensor(gamma))
-        self.priority_key = priotity_key
+        self.priority_key = priority_key
         self.loss_function = loss_function
 
         try:
