@@ -15,12 +15,12 @@ from torchrl.objectives import (
     next_state_value as get_next_state_value,
     distance_loss,
 )
-from torchrl.objectives.costs.common import LossModule
+from torchrl.objectives.common import LossModule
 
 
 class REDQLoss_deprecated(LossModule):
-    """
-    REDQ Loss module.
+    """REDQ Loss module.
+
     REDQ (RANDOMIZED ENSEMBLED DOUBLE Q-LEARNING: LEARNING FAST WITHOUT A MODEL
     https://openreview.net/pdf?id=AY8zfZm0tDd) generalizes the idea of using an ensemble of Q-value functions to
     train a SAC-like algorithm.
@@ -42,7 +42,7 @@ class REDQLoss_deprecated(LossModule):
             Default is 0.1.
         max_alpha (float, optional): max value of alpha.
             Default is 10.0.
-        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is `False`.
+        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is :obj:`False`.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
 
     """
@@ -266,4 +266,6 @@ class REDQLoss_deprecated(LossModule):
 
 
 class DoubleREDQLoss_deprecated(REDQLoss_deprecated):
+    """[Deprecated] Class for delayed target-REDQ (which should be the default behaviour)."""
+
     delay_qvalue: bool = True

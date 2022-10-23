@@ -6,12 +6,13 @@ from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule, ProbabilisticTensorDictModule
 from torchrl.objectives import distance_loss
-from torchrl.objectives.costs.common import LossModule
+from torchrl.objectives.common import LossModule
 
 
 class ReinforceLoss(LossModule):
-    """Reinforce loss module, as presented in
-    "Simple statistical gradient-following algorithms for connectionist reinforcement learning", Williams, 1992
+    """Reinforce loss module.
+
+    Presented in "Simple statistical gradient-following algorithms for connectionist reinforcement learning", Williams, 1992
     https://doi.org/10.1007/BF00992696
 
     """

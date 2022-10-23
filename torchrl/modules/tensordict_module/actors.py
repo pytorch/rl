@@ -37,7 +37,7 @@ class Actor(TensorDictModule):
 
     The Actor class comes with default values for the out_keys (["action"])
     and if the spec is provided but not as a CompositeSpec object, it will be
-    automatically translated into `spec = CompositeSpec(action=spec)`
+    automatically translated into :obj:`spec = CompositeSpec(action=spec)`
 
     Examples:
         >>> from torchrl.data import TensorDict,
@@ -85,11 +85,11 @@ class Actor(TensorDictModule):
 
 
 class ProbabilisticActor(ProbabilisticTensorDictModule):
-    """
-    General class for probabilistic actors in RL.
+    """General class for probabilistic actors in RL.
+
     The Actor class comes with default values for the out_keys (["action"])
     and if the spec is provided but not as a CompositeSpec object, it will be
-    automatically translated into `spec = CompositeSpec(action=spec)`
+    automatically translated into :obj:`spec = CompositeSpec(action=spec)`
 
     Examples:
         >>> from torchrl.data import TensorDict, NdBoundedTensorSpec
@@ -149,8 +149,7 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
 
 
 class ValueOperator(TensorDictModule):
-    """
-    General class for value functions in RL.
+    """General class for value functions in RL.
 
     The ValueOperator class comes with default values for the in_keys and
     out_keys arguments (["observation"] and ["state_value"] or
@@ -211,8 +210,8 @@ class ValueOperator(TensorDictModule):
 
 
 class QValueHook:
-    """
-    Q-Value hook for Q-value policies.
+    """Q-Value hook for Q-value policies.
+
     Given a the output of a regular nn.Module, representing the values of the different discrete actions available,
     a QValueHook will transform these values into their argmax component (i.e. the resulting greedy action).
     Currently, this is returned as a one-hot encoding.
@@ -408,8 +407,8 @@ class DistributionalQValueHook(QValueHook):
 
 
 class QValueActor(Actor):
-    """
-    DQN Actor subclass.
+    """DQN Actor subclass.
+
     This class hooks the module such that it returns a one-hot encoding of the argmax value.
 
     Examples:
@@ -448,8 +447,8 @@ class QValueActor(Actor):
 
 
 class DistributionalQValueActor(QValueActor):
-    """
-    Distributional DQN Actor subclass.
+    """Distributional DQN Actor subclass.
+
     This class hooks the module such that it returns a one-hot encoding of the argmax value on its support.
 
     Examples:
@@ -501,8 +500,7 @@ class DistributionalQValueActor(QValueActor):
 
 
 class ActorValueOperator(TensorDictSequential):
-    """
-    Actor-value operator.
+    """Actor-value operator.
 
     This class wraps together an actor and a value model that share a common observation embedding network:
 
@@ -618,25 +616,16 @@ class ActorValueOperator(TensorDictSequential):
         )
 
     def get_policy_operator(self) -> TensorDictSequential:
-        """
-
-        Returns a stand-alone policy operator that maps an observation to an action.
-
-        """
+        """Returns a stand-alone policy operator that maps an observation to an action."""
         return TensorDictSequential(self.module[0], self.module[1])
 
     def get_value_operator(self) -> TensorDictSequential:
-        """
-
-        Returns a stand-alone value network operator that maps an observation to a value estimate.
-
-        """
+        """Returns a stand-alone value network operator that maps an observation to a value estimate."""
         return TensorDictSequential(self.module[0], self.module[2])
 
 
 class ActorCriticOperator(ActorValueOperator):
-    """
-    Actor-critic operator.
+    """Actor-critic operator.
 
     This class wraps together an actor and a value model that share a common observation embedding network:
 
@@ -759,11 +748,7 @@ class ActorCriticOperator(ActorValueOperator):
             )
 
     def get_critic_operator(self) -> TensorDictModuleWrapper:
-        """
-
-        Returns a stand-alone critic network operator that maps a state-action pair to a critic estimate.
-
-        """
+        """Returns a stand-alone critic network operator that maps a state-action pair to a critic estimate."""
         return self
 
     def get_value_operator(self) -> TensorDictModuleWrapper:
@@ -775,8 +760,7 @@ class ActorCriticOperator(ActorValueOperator):
 
 
 class ActorCriticWrapper(TensorDictSequential):
-    """
-    Actor-value operator without common module.
+    """Actor-value operator without common module.
 
     This class wraps together an actor and a value model that do not share a common observation embedding network:
 
@@ -866,17 +850,9 @@ class ActorCriticWrapper(TensorDictSequential):
         )
 
     def get_policy_operator(self) -> TensorDictSequential:
-        """
-
-        Returns a stand-alone policy operator that maps an observation to an action.
-
-        """
+        """Returns a stand-alone policy operator that maps an observation to an action."""
         return self.module[0]
 
     def get_value_operator(self) -> TensorDictSequential:
-        """
-
-        Returns a stand-alone value network operator that maps an observation to a value estimate.
-
-        """
+        """Returns a stand-alone value network operator that maps an observation to a value estimate."""
         return self.module[1]
