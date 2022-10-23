@@ -308,8 +308,9 @@ class TransformedEnv(EnvBase):
         if transform is None:
             transform = Compose()
             transform.set_parent(self)
-        else:
-            transform = transform.to(device)
+        elif isinstance(transform, (list, tuple)):
+            transform = Compose(*transform)
+        transform = transform.to(device)
         transform.eval()
         self.transform = transform
 

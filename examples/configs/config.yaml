@@ -1,6 +1,7 @@
 defaults:
   - collector: sync_single
   - env: cartpole
+  - collection_env: parallel
   - transforms: pixels
   - replay_buffer: circular
   - model: dqn/distributional
