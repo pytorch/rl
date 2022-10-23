@@ -381,11 +381,11 @@ jobs:
             - conda
             - env
       - run:
-          name: Install torchrl
-          command: .circleci/unittest/linux_libs/scripts/install.sh
-      - run:
           name: Install habitat
           command: .circleci/unittest/linux_libs/scripts/install_habitat.sh
+      - run:
+          name: Install torchrl
+          command: .circleci/unittest/linux_libs/scripts/install.sh
       - run:
           name: Run tests
           command: .circleci/unittest/linux_libs/scripts/run_test.sh
