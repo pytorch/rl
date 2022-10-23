@@ -94,9 +94,8 @@ class TestConfigs:
             create_env_fn = [
                 create_env,
             ] * cfg.num_workers
-        collector = instantiate(
-            cfg.collector, policy=policy, create_env_fn=create_env_fn
-        )
+        collector_partial = instantiate(cfg.collector)
+        collector = collector_partial(policy=policy, create_env_fn=create_env_fn)
         for data in collector:
             assert data.numel() == 200
             break

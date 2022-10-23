@@ -1,4 +1,4 @@
-_target_: torchrl.objectives.costs.PPOLoss
+_target_: torchrl.objectives.PPOLoss
 _partial_: True
 advantage_key: "advantage"
 advantage_diff_key: "value_error"

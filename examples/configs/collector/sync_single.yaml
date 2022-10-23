@@ -1,4 +1,5 @@
 _target_: torchrl.collectors.SyncDataCollector
+_partial_: True
 
 device: "cpu"
 passing_device: "cpu"
