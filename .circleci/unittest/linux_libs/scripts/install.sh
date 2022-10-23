@@ -32,7 +32,7 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
 #    conda install -y pytorch cpuonly -c pytorch-nightly
     pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 else
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
+    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu116
 fi
 
 # smoke test
