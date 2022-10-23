@@ -10,7 +10,7 @@ from sys import platform
 import pytest
 import torch.cuda
 import torchrl.envs.transforms as T
-import torchrl.objectives.costs
+import torchrl.objectives
 from mocking_classes import ContinuousActionVecMockEnv
 from torch import nn
 from torchrl.envs import TransformedEnv
@@ -635,7 +635,7 @@ class TestLossConfigs:
         qvalue(actor(env.reset()))
         loss = loss_partial(actor, qvalue)
 
-        assert isinstance(loss, torchrl.objectives.costs.DDPGLoss)
+        assert isinstance(loss, torchrl.objectives.DDPGLoss)
         for param in ["gamma", "loss_function", "delay_actor", "delay_value"]:
             assert cfg.loss[param] == getattr(loss, param)
 
@@ -648,7 +648,7 @@ class TestLossConfigs:
         actor(env.reset())
         loss = loss_partial(actor)
 
-        assert isinstance(loss, torchrl.objectives.costs.DQNLoss)
+        assert isinstance(loss, torchrl.objectives.DQNLoss)
         for param in ["gamma", "loss_function", "priority_key", "delay_value"]:
             assert cfg.loss[param] == getattr(loss, param)
 
@@ -661,7 +661,7 @@ class TestLossConfigs:
         critic(actor(env.reset()))
         loss = loss_partial(actor, critic)
 
-        assert isinstance(loss, torchrl.objectives.costs.PPOLoss)
+        assert isinstance(loss, torchrl.objectives.PPOLoss)
         for param in [
             "advantage_key",
             "advantage_diff_key",
@@ -686,7 +686,7 @@ class TestLossConfigs:
         qvalue(actor(env.reset()))
         loss = loss_partial(actor, qvalue)
 
-        assert isinstance(loss, torchrl.objectives.costs.REDQLoss)
+        assert isinstance(loss, torchrl.objectives.REDQLoss)
         for param in [
             "num_qvalue_nets",
             "gamma",
@@ -716,7 +716,7 @@ class TestLossConfigs:
         value(qvalue(actor(env.reset())))
         loss = loss_partial(actor, qvalue, value)
 
-        assert isinstance(loss, torchrl.objectives.costs.SACLoss)
+        assert isinstance(loss, torchrl.objectives.SACLoss)
         for param in [
             "num_qvalue_nets",
             "gamma",
