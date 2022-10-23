@@ -641,10 +641,10 @@ def test_timeit():
         with timeit("event2"):
             sleep(w2)
     assert abs(timeit._REG["event1"][0] - w1) < 1e-2
-    assert abs(timeit._REG["event1"][1] - n1*w1) < 1
+    assert abs(timeit._REG["event1"][1] - n1 * w1) < 1
     assert timeit._REG["event1"][2] == n1
     assert abs(timeit._REG["event2"][0] - w2) < 1e-2
-    assert abs(timeit._REG["event2"][1] - n2*w2) < 1
+    assert abs(timeit._REG["event2"][1] - n2 * w2) < 1
     assert timeit._REG["event2"][2] == n2
 
 
