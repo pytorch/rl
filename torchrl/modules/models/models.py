@@ -29,6 +29,7 @@ __all__ = [
     "DdpgMlpActor",
     "DdpgMlpQNet",
     "LSTMNet",
+    "GRUNet",
 ]
 
 
@@ -1046,6 +1047,9 @@ class GRUNet(nn.Module):
         self, mlp_input_kwargs: Dict, gru_kwargs: Dict, mlp_output_kwargs: Dict
     ) -> None:
         super().__init__()
+        assert mlp_input_kwargs["out_features"] == gru_kwargs["input_size"]
+        assert mlp_output_kwargs["in_features"] == gru_kwargs["hidden_size"]
+
         self.mlp_in = MLP(**mlp_input_kwargs)
         self.gru = nn.GRUCell(**gru_kwargs)
         self.mlp_out = MLP(**mlp_output_kwargs)
