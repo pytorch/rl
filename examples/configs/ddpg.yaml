@@ -1,9 +1,8 @@
 defaults:
   - collector: sync_single
   - env: cheetah
-    - from_pixels: True
-  - transforms: pixels
+  - transforms: state
   - replay_buffer: prioritized
   - model: ddpg/basic
-  - network: ddpg/pixels
+  - network: ddpg/state
 num_workers: 0

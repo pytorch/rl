@@ -1,8 +1,9 @@
+from omegaconf import DictConfig, OmegaConf
+import hydra
+
+@hydra.main(version_base=None, config_path="../configs", config_name="ddpg")
+def my_app(cfg):
+    print(OmegaConf.to_yaml(cfg))
 
 if __name__ == "__main__":
-    GlobalHydra.instance().clear()
-    hydra.initialize("../configs/")
-    request.addfinalizer(GlobalHydra.instance().clear)
-
-    cfg = hydra.compose("ddpg")
-
+    my_app()
