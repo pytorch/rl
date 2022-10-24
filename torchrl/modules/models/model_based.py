@@ -274,6 +274,7 @@ class RSSMPrior(nn.Module):
         unsqueeze = False
         if self._unsqueeze_rnn_input and belief.ndimension() == 1:
             belief = belief.unsqueeze(0)
+            action_state = action_state.unsqueeze(0)
             unsqueeze = True
         belief = self.rnn(action_state, belief)
         if unsqueeze:
