@@ -8,4 +8,5 @@ defaults:
   - exploration: linear
   - loss: ddpg_loss
   - logger: csv
+  - collection_env: single
 num_workers: 0

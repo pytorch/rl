@@ -23,6 +23,20 @@ _WRAPPER_DICT = {
 def partial_tensordictmodule(
     partial_module, in_keys, out_keys, spec=None, safe=False, wrapper=None, **kwargs
 ):
+    """Creates a partially instantiated :obj:`TensorDictModule`.
+
+    Args:
+        partial_module (partially instantiated :obj:`nn.Module`): a module to instantiate using
+            the kwargs provided to this function.
+        in_keys (iterable of strings): in_keys of the :obj:`TensorDictModule`.
+        out_keys (iterable of strings): out_keys of the :obj:`TensorDictModule`.
+        spec (TensorSpec, optional): the optional TensorSpec to pass to the
+            TensorDictModule.
+        safe (bool, optional): safe arg for the :obj:`TensorDictModule`. Default: :obj:`False`.
+        wrapper (module wrapper): an optional module wrapper, such as
+            :obj:`NormalParamWrapper` (indicated by :obj:`"normal_param"`).
+
+    """
     module = partial_module(**kwargs)
     if wrapper is not None:
         module = _WRAPPER_DICT[wrapper](module)
@@ -49,7 +63,15 @@ def partial_probabilisticactor(
     n_empirical_estimate: int = 1000,
     **kwargs,
 ):
+    """Creates a partially instantiated :obj:`ProbabilisticActor`.
 
+    Args:
+        partial_tensordictmodule (partially instantiated :obj:`TensorDictModule`):
+            a module to instantiate using the kwargs provided to this function.
+        dist_param_keys (iterable of strings): :obj:`dist_param_keys` of the
+            :obj:`ProbabilisticActor`.
+        **kwargs: optional arguments of the :obj:`ProbabilisticActor`.
+    """
     return ProbabilisticActor(
         module=partial_tensordictmodule(**kwargs),
         dist_param_keys=dist_param_keys,
@@ -77,6 +99,15 @@ def partial_probabilistictensordictmodule(
     n_empirical_estimate: int = 1000,
     **kwargs,
 ):
+    """Creates a partially instantiated :obj:`ProbabilisticTensorDictModule`.
+
+    Args:
+        partial_tensordictmodule (partially instantiated :obj:`TensorDictModule`):
+            a module to instantiate using the kwargs provided to this function.
+        dist_param_keys (iterable of strings): :obj:`dist_param_keys` of the
+            :obj:`ProbabilisticActor`.
+        **kwargs: optional arguments of the :obj:`ProbabilisticTensorDictModule`.
+    """
 
     return ProbabilisticTensorDictModule(
         module=partial_tensordictmodule(**kwargs),
