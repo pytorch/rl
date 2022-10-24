@@ -10,7 +10,7 @@ from sys import platform
 import pytest
 import torch.cuda
 import torchrl.envs.transforms as T
-import torchrl.objectives.costs
+import torchrl.objectives
 from mocking_classes import ContinuousActionVecMockEnv
 from torch import nn
 from torchrl.envs import TransformedEnv
@@ -94,16 +94,15 @@ class TestConfigs:
             create_env_fn = [
                 create_env,
             ] * cfg.num_workers
-        collector = instantiate(
-            cfg.collector, policy=policy, create_env_fn=create_env_fn
-        )
+        collector_partial = instantiate(cfg.collector)
+        collector = collector_partial(policy=policy, create_env_fn=create_env_fn)
         for data in collector:
             assert data.numel() == 200
             break
         collector.shutdown()
 
     @pytest.mark.skipif(not _has_gym, reason="No gym found")
-    @pytest.mark.skipif(not _has_dmc, reason="No gym found")
+    @pytest.mark.skipif(not _has_dmc, reason="No DMC found")
     @pytest.mark.parametrize(
         "file,from_pixels",
         [
@@ -123,7 +122,7 @@ class TestConfigs:
             "config", overrides=[f"env={file}", f"++env.env.from_pixels={from_pixels}"]
         )
 
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
 
         tensordict = env.rollout(3)
         if from_pixels:
@@ -131,6 +130,25 @@ class TestConfigs:
             assert tensordict["next_pixels"].shape[-1] == 3
         env.rollout(3)
         env.close()
+        del env
+
+    @pytest.mark.skipif(not _has_gym, reason="No gym found")
+    @pytest.mark.skipif(not _has_dmc, reason="No DMC found")
+    @pytest.mark.parametrize(
+        "col_env_config",
+        ["parallel_batch", "parallel", "single"],
+    )
+    def test_collection_env_configs(self, col_env_config):
+        cfg = hydra.compose(
+            "config",
+            overrides=[
+                f"collection_env={col_env_config}",
+            ],
+        )
+
+        # env = instantiate(cfg).collection_env
+        env = instantiate(cfg.collection_env)
+        print(env)
         del env
 
     @pytest.mark.skipif(not _has_gym, reason="No gym found")
@@ -162,7 +180,7 @@ class TestConfigs:
             ],
         )
 
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)
@@ -273,7 +291,7 @@ class TestModelConfigs:
             model_conf = "model=dqn/regular"
 
         cfg = hydra.compose("config", overrides=env_config + [net_conf] + [model_conf])
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)
@@ -320,7 +338,7 @@ class TestModelConfigs:
             model_conf = "model=ppo/discrete"
 
         cfg = hydra.compose("config", overrides=env_config + [net_conf] + [model_conf])
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)
@@ -365,7 +383,7 @@ class TestModelConfigs:
             model_conf = "model=sac/discrete"
 
         cfg = hydra.compose("config", overrides=env_config + [net_conf] + [model_conf])
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)
@@ -405,7 +423,7 @@ class TestModelConfigs:
         model_conf = "model=ddpg/basic"
 
         cfg = hydra.compose("config", overrides=env_config + [net_conf] + [model_conf])
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)
@@ -450,7 +468,7 @@ class TestModelConfigs:
             model_conf = "model=redq/discrete"
 
         cfg = hydra.compose("config", overrides=env_config + [net_conf] + [model_conf])
-        env = instantiate(cfg.env)
+        env = instantiate(cfg.env)()
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)
@@ -635,7 +653,7 @@ class TestLossConfigs:
         qvalue(actor(env.reset()))
         loss = loss_partial(actor, qvalue)
 
-        assert isinstance(loss, torchrl.objectives.costs.DDPGLoss)
+        assert isinstance(loss, torchrl.objectives.DDPGLoss)
         for param in ["gamma", "loss_function", "delay_actor", "delay_value"]:
             assert cfg.loss[param] == getattr(loss, param)
 
@@ -648,7 +666,7 @@ class TestLossConfigs:
         actor(env.reset())
         loss = loss_partial(actor)
 
-        assert isinstance(loss, torchrl.objectives.costs.DQNLoss)
+        assert isinstance(loss, torchrl.objectives.DQNLoss)
         for param in ["gamma", "loss_function", "priority_key", "delay_value"]:
             assert cfg.loss[param] == getattr(loss, param)
 
@@ -661,7 +679,7 @@ class TestLossConfigs:
         critic(actor(env.reset()))
         loss = loss_partial(actor, critic)
 
-        assert isinstance(loss, torchrl.objectives.costs.PPOLoss)
+        assert isinstance(loss, torchrl.objectives.PPOLoss)
         for param in [
             "advantage_key",
             "advantage_diff_key",
@@ -686,7 +704,7 @@ class TestLossConfigs:
         qvalue(actor(env.reset()))
         loss = loss_partial(actor, qvalue)
 
-        assert isinstance(loss, torchrl.objectives.costs.REDQLoss)
+        assert isinstance(loss, torchrl.objectives.REDQLoss)
         for param in [
             "num_qvalue_nets",
             "gamma",
@@ -716,7 +734,7 @@ class TestLossConfigs:
         value(qvalue(actor(env.reset())))
         loss = loss_partial(actor, qvalue, value)
 
-        assert isinstance(loss, torchrl.objectives.costs.SACLoss)
+        assert isinstance(loss, torchrl.objectives.SACLoss)
         for param in [
             "num_qvalue_nets",
             "gamma",
@@ -745,21 +763,21 @@ class TestLoggerConfigs:
     def test_csv_logger(self, tmp_path):
         config = ["logger=csv", f"++logger.log_dir={tmp_path}"]
         cfg = hydra.compose("config", overrides=config)
-        logger = instantiate(cfg.logger)
+        logger = instantiate(cfg.logger)()
         assert isinstance(logger, CSVLogger)
 
     @pytest.mark.skipif(not _has_mlflow, reason="No mlflow found")
     def test_mlflow_logger(self, tmp_path, mlflow_teardown):
         config = ["logger=mlflow", f"++logger.tracking_uri={tmp_path}"]
         cfg = hydra.compose("config", overrides=config)
-        logger = instantiate(cfg.logger)
+        logger = instantiate(cfg.logger)()
         assert isinstance(logger, MLFlowLogger)
 
     @pytest.mark.skipif(not _has_tb, reason="No tensorboard found")
     def test_tensorboard_logger(self, tmp_path):
         config = ["logger=tensorboard", f"++logger.log_dir={tmp_path}"]
         cfg = hydra.compose("config", overrides=config)
-        logger = instantiate(cfg.logger)
+        logger = instantiate(cfg.logger)()
         assert isinstance(logger, TensorboardLogger)
 
     @pytest.mark.skipif(not _has_wandb, reason="No wandb found")
@@ -771,7 +789,7 @@ class TestLoggerConfigs:
             "++logger.offline=True",
         ]
         cfg = hydra.compose("config", overrides=config)
-        logger = instantiate(cfg.logger)
+        logger = instantiate(cfg.logger)()
         assert isinstance(logger, WandbLogger)
 
 

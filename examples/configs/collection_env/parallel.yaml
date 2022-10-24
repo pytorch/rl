@@ -1,0 +1,6 @@
+_target_: torchrl.envs.ParallelEnv
+num_workers: 4
+create_env_fn:
+  _target_: torchrl.envs.TransformedEnv
+  env: ${env}
+  transform: ${transforms}

@@ -1,4 +1,4 @@
-_target_: torchrl.objectives.costs.REDQLoss
+_target_: torchrl.objectives.REDQLoss
 _partial_: True
 num_qvalue_nets: 10
 sub_sample_len: 2

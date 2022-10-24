@@ -1,4 +1,4 @@
-_target_: torchrl.objectives.costs.SACLoss
+_target_: torchrl.objectives.SACLoss
 _partial_: True
 num_qvalue_nets: 2
 gamma: 0.99

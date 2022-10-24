@@ -276,10 +276,12 @@ class TransformedEnv(EnvBase):
     """A transformed_in environment.
 
     Args:
-        env (EnvBase): original environment to be transformed_in.
-        transform (Transform, optional): transform to apply to the tensordict resulting
+        env (EnvBase or callable): original environment to be transformed_in. Can be an
+            EnvBase instance or a callable that returns an EnvBase instance.
+        transform (Transform or list of transforms, optional): transform to apply to the tensordict resulting
             from :obj:`env.step(td)`. If none is provided, an empty Compose
-            placeholder in an eval mode is used.
+            placeholder in an eval mode is used. If a list of transforms is returned,
+            it will be wrapped in a :doc:`Compose` transform.
         cache_specs (bool, optional): if True, the specs will be cached once
             and for all after the first call (i.e. the specs will be
             transformed_in only once). If the transform changes during
@@ -301,6 +303,8 @@ class TransformedEnv(EnvBase):
         cache_specs: bool = True,
         **kwargs,
     ):
+        if not isinstance(env, EnvBase) and callable(env):
+            env = env()
         device = kwargs.pop("device", env.device)
         env = env.to(device)
         super().__init__(device=None, **kwargs)
@@ -308,8 +312,9 @@ class TransformedEnv(EnvBase):
         if transform is None:
             transform = Compose()
             transform.set_parent(self)
-        else:
-            transform = transform.to(device)
+        elif not isinstance(transform, Transform):
+            transform = Compose(*transform)
+        transform = transform.to(device)
         transform.eval()
         self.transform = transform
 

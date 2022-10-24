@@ -1,3 +1,4 @@
 _target_: torchrl.trainers.loggers.tensorboard.TensorboardLogger
+_partial_: True
 exp_name: example_exp
 log_dir: tb_logs

@@ -1,5 +1,6 @@
 # by default we map the double-prec tensors to single-prec
 _target_: torchrl.envs.TransformedEnv
+_partial_: True
 env:
   _target_: torchrl.envs.libs.dm_control.DMControlEnv
   env_name: cheetah

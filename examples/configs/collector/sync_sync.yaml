@@ -1,4 +1,5 @@
 _target_: torchrl.collectors.MultiSyncDataCollector
+_partial_: True
 
 devices: ["cpu","cpu"]
 passing_devices: ["cpu","cpu"]

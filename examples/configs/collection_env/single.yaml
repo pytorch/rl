@@ -1,0 +1,3 @@
+_target_: torchrl.envs.TransformedEnv
+env: ${env}
+transform: ${transforms}

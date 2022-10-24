@@ -1,4 +1,4 @@
-_target_: torchrl.objectives.costs.DQNLoss
+_target_: torchrl.objectives.DQNLoss
 _partial_: True
 gamma: 0.9
 loss_function: "l2"

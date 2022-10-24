@@ -1,0 +1,12 @@
+defaults:
+  - collector: sync_single
+  - env: cheetah
+  - transforms: state
+  - replay_buffer: prioritized
+  - model: ddpg/basic
+  - network: ddpg/state
+  - exploration: linear
+  - loss: ddpg_loss
+  - logger: csv
+  - collection_env: single
+num_workers: 0

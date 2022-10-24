@@ -48,6 +48,7 @@ class WandbLogger(Logger):
         save_dir: str = None,
         id: str = None,
         project: str = None,
+        entity: str = None,
         **kwargs,
     ) -> None:
         if not _has_wandb:
@@ -69,6 +70,7 @@ class WandbLogger(Logger):
             "dir": save_dir,
             "id": id,
             "project": project,
+            "entity": entity,
             "resume": "allow",
             **kwargs,
         }
