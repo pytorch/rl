@@ -1,5 +1,4 @@
 import argparse
-import os
 import tempfile
 
 import pytest
@@ -18,7 +17,12 @@ else:
     # placeholders
     PONG_VERSIONED = "ALE/Pong-v5"
 
-from torch.utils.tensorboard import SummaryWriter
+try:
+    from torch.utils.tensorboard import SummaryWriter
+
+    _has_tb = True
+except ImportError:
+    _has_tb = False
 
 
 def test_dm_control():
@@ -47,6 +51,7 @@ def test_gym():
 
 
 def test_tb():
+    assert _has_tb
     test_rounds = 100
     while test_rounds > 0:
         try:
