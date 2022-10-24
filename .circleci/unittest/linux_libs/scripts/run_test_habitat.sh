@@ -4,6 +4,7 @@ set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
+apt-get update && apt-get install -y git wget
 
 
 export PYTORCH_TEST_WITH_SLOW='1'
@@ -24,8 +25,8 @@ export MKL_THREADING_LAYER=GNU
 # more logging
 export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
 
-wget https://github.com/openai/mujoco-py/blob/master/vendor/10_nvidia.json
-mv 10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
+#wget https://github.com/openai/mujoco-py/blob/master/vendor/10_nvidia.json
+#mv 10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
 # this workflow only tests the libs
 python -c "import habitat;import habitat.utils.gym_definitions"
