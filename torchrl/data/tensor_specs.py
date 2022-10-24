@@ -998,6 +998,8 @@ class DiscreteTensorSpec(TensorSpec):
     An alternative to OneHotTensorSpec for categorical variables in TorchRL. Instead of
     using multiplication, categorical variables perform indexing which can speed up
     computation and reduce memory cost for large categorical variables.
+
+    Example:
         >>> batch, size = 3, 4
         >>> action_value = torch.arange(batch*size)
         >>> action_value = action_value.view(batch, size).to(torch.float)
@@ -1023,10 +1025,12 @@ class DiscreteTensorSpec(TensorSpec):
     def __init__(
         self,
         n: int,
-        shape: Optional[torch.Size] = torch.Size((1,)),
+        shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = torch.long,
     ):
+        if shape is None:
+            shape = torch.Size((1,))
         dtype, device = _default_dtype_and_device(dtype, device)
         space = DiscreteBox(n)
         super().__init__(shape, space, device, dtype, domain="discrete")
@@ -1039,7 +1043,9 @@ class DiscreteTensorSpec(TensorSpec):
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        return torch.round(val).clamp_(min=0, max=self.space.n - 1)
+        if val.dtype not in (torch.int, torch.long):
+            val = torch.round(val)
+        return val.clamp_(min=0, max=self.space.n - 1)
 
     def is_in(self, val: torch.Tensor) -> bool:
         return (0 <= val).all() and (val < self.space.n).all()

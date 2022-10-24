@@ -988,6 +988,23 @@ class TestSpec:
         sample_list = list([sum(sample1 == i) for i in range(ns[1])])
         assert chisquare(sample_list).pvalue > 0.1
 
+    def test_categorical_action_spec_encode(self):
+        action_spec = DiscreteTensorSpec(10)
+
+        projected = action_spec.project(
+            torch.tensor([-100, -1, 0, 1, 9, 10, 100], dtype=torch.long)
+        )
+        assert (
+            projected == torch.tensor([0, 0, 0, 1, 9, 9, 9], dtype=torch.long)
+        ).all()
+
+        projected = action_spec.project(
+            torch.tensor([-100.0, -1.0, 0.0, 1.0, 9.0, 10.0, 100.0], dtype=torch.float)
+        )
+        assert (
+            projected == torch.tensor([0, 0, 0, 1, 9, 9, 9], dtype=torch.long)
+        ).all()
+
     def test_bounded_rand(self):
         spec = BoundedTensorSpec(-3, 3)
         sample = torch.stack([spec.rand() for _ in range(100)])
