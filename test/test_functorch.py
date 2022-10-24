@@ -19,7 +19,7 @@ from torchrl.modules.functional_modules import (
 
 
 @pytest.mark.skipif(
-    not _has_functorch, "vmap can only be tested when functorch is installed"
+    not _has_functorch, reason="vmap can only be tested when functorch is installed"
 )
 @pytest.mark.parametrize(
     "moduletype,batch_params",
@@ -58,7 +58,7 @@ def test_vmap_patch(moduletype, batch_params):
 
 
 @pytest.mark.skipif(
-    not _has_functorch, "vmap can only be tested when functorch is installed"
+    not _has_functorch, reason="vmap can only be tested when functorch is installed"
 )
 @pytest.mark.parametrize(
     "moduletype,batch_params",
@@ -103,7 +103,7 @@ def test_vmap_tdmodule(moduletype, batch_params):
 
 
 @pytest.mark.skipif(
-    not _has_functorch, "vmap can only be tested when functorch is installed"
+    not _has_functorch, reason="vmap can only be tested when functorch is installed"
 )
 @pytest.mark.parametrize(
     "moduletype,batch_params",
@@ -149,7 +149,7 @@ def test_vmap_tdmodule_nativebuilt(moduletype, batch_params):
 
 
 @pytest.mark.skipif(
-    not _has_functorch, "vmap can only be tested when functorch is installed"
+    not _has_functorch, reason="vmap can only be tested when functorch is installed"
 )
 @pytest.mark.parametrize(
     "moduletype,batch_params",
@@ -208,7 +208,7 @@ def test_vmap_tdsequence(moduletype, batch_params):
 
 
 @pytest.mark.skipif(
-    not _has_functorch, "vmap can only be tested when functorch is installed"
+    not _has_functorch, reason="vmap can only be tested when functorch is installed"
 )
 @pytest.mark.parametrize(
     "moduletype,batch_params",
@@ -263,7 +263,7 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
 
 
 @pytest.mark.skipif(
-    not _has_functorch, "vmap can only be tested when functorch is installed"
+    not _has_functorch, reason="vmap can only be tested when functorch is installed"
 )
 class TestNativeFunctorch:
     def test_vamp_basic(self):
