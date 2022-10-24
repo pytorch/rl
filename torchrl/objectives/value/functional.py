@@ -425,7 +425,7 @@ def vec_td_lambda_return_estimate(
 
     first_below_thr_gamma = None
 
-    if isinstance(gamma, torch.Tensor) and gamma.ndimension() > 0:
+    if isinstance(gamma, torch.Tensor) and gamma.numel() > 1:
         if rolling_gamma is None:
             rolling_gamma = True
         gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
