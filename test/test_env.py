@@ -66,6 +66,9 @@ if _has_gym:
     PONG_VERSIONED = (
         "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
     )
+    HALFCHEETAH_VERSIONED = (
+        "HalfCheetah-v4" if gym_version > version.parse("0.20.0") else "HalfCheetah-v2"
+    )
 else:
     # placeholders
     PENDULUM_VERSIONED = "Pendulum-v1"
@@ -1147,7 +1150,7 @@ def test_batch_unlocked_with_batch_size(device):
 def test_info_dict_reader(seed=0):
     import gym
 
-    env = GymWrapper(gym.make("HalfCheetah-v4"))
+    env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED))
     env.set_info_dict_reader(default_info_dict_reader(["x_position"]))
 
     assert "x_position" in env.observation_spec.keys()
