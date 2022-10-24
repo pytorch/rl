@@ -128,10 +128,10 @@ def get_binary_env_var(key):
     Args:
         key (str): name of the environment variable.
     """
-    val = os.environ.get(key, False)
-    if val in ("0", "False", False):
+    val = os.environ.get(key, "False")
+    if val in ("0", "False", "false"):
         val = False
-    elif val in ("1", "True", True):
+    elif val in ("1", "True", "true"):
         val = True
     else:
         raise ValueError(
