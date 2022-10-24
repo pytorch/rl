@@ -8,6 +8,7 @@ try:
 except ImportError:
     _has_habitat = False
 
+
 class HabitatEnv(GymEnv):
     """A wrapper for habitat envs.
 
@@ -15,4 +16,5 @@ class HabitatEnv(GymEnv):
     It behaves exactly like the GymEnv wrapper.
 
     """
+
     pass
