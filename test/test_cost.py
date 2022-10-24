@@ -549,7 +549,7 @@ class TestSAC:
             spec=CompositeSpec(action=action_spec, loc=None, scale=None),
             module=module,
             distribution_class=TanhNormal,
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
         )
         return actor.to(device)
 
@@ -865,7 +865,7 @@ class TestREDQ:
             module=module,
             distribution_class=TanhNormal,
             return_log_prob=True,
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
             spec=CompositeSpec(action=action_spec, loc=None, scale=None),
         )
         return actor.to(device)
@@ -920,7 +920,7 @@ class TestREDQ:
             TensorDictModule(
                 ActorClass(), in_keys=["hidden"], out_keys=["loc", "scale"]
             ),
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             return_log_prob=True,
         )
@@ -1296,7 +1296,7 @@ class TestPPO:
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
             spec=CompositeSpec(action=action_spec, loc=None, scale=None),
         )
         return actor.to(device)
@@ -1509,7 +1509,7 @@ class TestReinforce:
             module,
             distribution_class=TanhNormal,
             return_log_prob=True,
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
             spec=CompositeSpec(
                 action=NdUnboundedContinuousTensorSpec(n_act), loc=None, scale=None
             ),
@@ -1774,8 +1774,8 @@ class TestDreamer:
                 in_keys=["state", "belief"],
                 out_keys=["loc", "scale"],
             ),
-            dist_param_keys=["loc", "scale"],
-            out_key_sample="action",
+            dist_in_keys=["loc", "scale"],
+            sample_out_key="action",
             default_interaction_mode="random",
             distribution_class=TanhNormal,
         )
@@ -2355,8 +2355,8 @@ def test_shared_params(dest, expected_dtype, expected_device):
     td_module_action = ProbabilisticActor(
         module=module_action,
         spec=None,
-        dist_param_keys=["loc", "scale"],
-        out_key_sample=["action"],
+        dist_in_keys=["loc", "scale"],
+        sample_out_key=["action"],
         distribution_class=TanhNormal,
         return_log_prob=True,
     )

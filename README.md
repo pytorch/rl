@@ -280,8 +280,8 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
             in_keys=["hidden"],
             out_keys=["loc", "scale"],
         ),
-        dist_param_keys=["loc", "scale"],
-        out_key_sample="action",
+        dist_in_keys=["loc", "scale"],
+        sample_out_key="action",
         distribution_class=TanhNormal,
     )
     value_module = MLP(
