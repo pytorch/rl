@@ -106,7 +106,12 @@ def vec_generalized_advantage_estimate(
     not_done = 1 - done.to(dtype)
     *batch_size, time_steps = not_done.shape[:-1]
 
-    gammalmbdas = torch.full_like(not_done, gamma * lmbda) * not_done
+    value = gamma * lmbda
+    if isinstance(value, torch.Tensor):
+        # create tensor while ensuring that gradients are passed
+        gammalmbdas = torch.ones_like(not_done) * not_done * value
+    else:
+        gammalmbdas = torch.full_like(not_done, value) * not_done
     gammalmbdas = _make_gammas_tensor(gammalmbdas, time_steps, True)
     gammalmbdas = gammalmbdas.cumprod(-2)
     # first_below_thr = gammalmbdas < 1e-7
