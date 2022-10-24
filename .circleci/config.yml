@@ -365,13 +365,11 @@ jobs:
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
       - restore_cache:
-
           keys:
             - env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_libs/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-
       - run:
           name: Setup
-          command: docker run -e PYTHON_VERSION -t --gpus all nvidia/cudagl -v $PWD:$PWD  .circleci/unittest/linux_libs/scripts/setup_env.sh
+          command: docker run -e PYTHON_VERSION -t --gpus all nvidia/cudagl:11.4.0-base -v $PWD:$PWD  .circleci/unittest/linux_libs/scripts/setup_env.sh
       # this fails as the next docker run does not find the installed libs anymore.
       # We move the installation instructions to run_test_habitat.sh instead
       # - run:
@@ -394,10 +392,10 @@ jobs:
           command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
-          command: docker run -e PYTHON_VERSION -t --gpus all nvidia/cudagl -v $PWD:$PWD  .circleci/unittest/linux_libs/scripts/install.sh
+          command: docker run -e PYTHON_VERSION -t --gpus all nvidia/cudagl:11.4.0-base -v $PWD:$PWD  .circleci/unittest/linux_libs/scripts/install.sh
       - run:
           name: Run tests
-          command: docker run --env-file ./env.list -t --gpus all nvidia/cudagl -v $PWD:$PWD  .circleci/unittest/linux_libs/scripts/run_test_habitat.sh
+          command: docker run --env-file ./env.list -t --gpus all nvidia/cudagl:11.4.0-base -v $PWD:$PWD  .circleci/unittest/linux_libs/scripts/run_test_habitat.sh
       - run:
           name: Codecov upload
           command: |
