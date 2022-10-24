@@ -9,8 +9,12 @@ from typing import Optional, Sequence
 import torch
 from torch import nn, distributions as d
 
-from torchrl._utils import get_binary_env_var
-from torchrl.data import DEVICE_TYPING, CompositeSpec, NdUnboundedContinuousTensorSpec
+from torchrl.data import (
+    DEVICE_TYPING,
+    CompositeSpec,
+    NdUnboundedContinuousTensorSpec,
+    DiscreteTensorSpec,
+)
 from torchrl.envs import TransformedEnv, TensorDictPrimer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
@@ -89,8 +93,6 @@ __all__ = [
     "make_redq_model",
     "make_dreamer",
 ]
-
-_CATEGORICAL_ACTION_ENCODING = get_binary_env_var("CATEGORICAL_ACTION_ENCODING")
 
 
 def make_dqn_actor(
@@ -178,11 +180,11 @@ def make_dqn_actor(
         # automatically infer in key
         in_key = list(env_specs["observation_spec"])[0].split("next_")[-1]
 
-    out_features = env_specs["action_spec"].shape[0]
+    out_features = action_spec.shape[0]
     actor_class = QValueActor
     actor_kwargs = {}
 
-    if _CATEGORICAL_ACTION_ENCODING:
+    if isinstance(action_spec, DiscreteTensorSpec):
         actor_kwargs.update({"action_space": "categorical"})
         out_features = env_specs["action_spec"].space.n
 

@@ -10,7 +10,6 @@ from warnings import warn
 import torch
 from packaging import version
 
-from torchrl._utils import get_binary_env_var
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
     CompositeSpec,
@@ -56,16 +55,16 @@ if _has_gym:
 
 __all__ = ["GymWrapper", "GymEnv"]
 
-_CATEGORICAL_ACTION_ENCODING = get_binary_env_var("CATEGORICAL_ACTION_ENCODING")
 
-
-def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec:
+def _gym_to_torchrl_spec_transform(
+    spec, dtype=None, device="cpu", categorical_action_encoding=False
+) -> TensorSpec:
     if isinstance(spec, gym.spaces.tuple.Tuple):
         raise NotImplementedError("gym.spaces.tuple.Tuple mapping not yet implemented")
     if isinstance(spec, gym.spaces.discrete.Discrete):
         action_space_cls = (
             DiscreteTensorSpec
-            if _CATEGORICAL_ACTION_ENCODING
+            if categorical_action_encoding
             else OneHotDiscreteTensorSpec
         )
         return action_space_cls(spec.n, device=device)
@@ -87,11 +86,17 @@ def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec
         spec_out = {}
         for k in spec.keys():
             spec_out["next_" + k] = _gym_to_torchrl_spec_transform(
-                spec[k], device=device
+                spec[k],
+                device=device,
+                categorical_action_encoding=categorical_action_encoding,
             )
         return CompositeSpec(**spec_out)
     elif isinstance(spec, gym.spaces.dict.Dict):
-        return _gym_to_torchrl_spec_transform(spec.spaces, device=device)
+        return _gym_to_torchrl_spec_transform(
+            spec.spaces,
+            device=device,
+            categorical_action_encoding=categorical_action_encoding,
+        )
     else:
         raise NotImplementedError(
             f"spec of type {type(spec).__name__} is currently unaccounted for"
@@ -152,10 +157,11 @@ class GymWrapper(GymLikeEnv):
     git_url = "https://github.com/openai/gym"
     libname = "gym"
 
-    def __init__(self, env=None, **kwargs):
+    def __init__(self, env=None, categorical_action_encoding=False, **kwargs):
         if env is not None:
             kwargs["env"] = env
         self._seed_calls_reset = None
+        self._categorical_action_encoding = categorical_action_encoding
         super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):
@@ -228,10 +234,14 @@ class GymWrapper(GymLikeEnv):
 
     def _make_specs(self, env: "gym.Env") -> None:
         self.action_spec = _gym_to_torchrl_spec_transform(
-            env.action_space, device=self.device
+            env.action_space,
+            device=self.device,
+            categorical_action_encoding=self._categorical_action_encoding,
         )
         self.observation_spec = _gym_to_torchrl_spec_transform(
-            env.observation_space, device=self.device
+            env.observation_space,
+            device=self.device,
+            categorical_action_encoding=self._categorical_action_encoding,
         )
         if not isinstance(self.observation_spec, CompositeSpec):
             if self.from_pixels:

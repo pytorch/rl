@@ -5,7 +5,6 @@
 
 import torch
 
-from torchrl._utils import get_binary_env_var
 from torchrl.data import TensorDict
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import (
@@ -15,9 +14,6 @@ from torchrl.modules import (
 from ..data.tensordict.tensordict import TensorDictBase
 from .common import LossModule
 from .utils import distance_loss, next_state_value
-
-
-_CATEGORICAL_ACTION_ENCODING = get_binary_env_var("CATEGORICAL_ACTION_ENCODING")
 
 
 class DQNLoss(LossModule):
@@ -57,6 +53,7 @@ class DQNLoss(LossModule):
         self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_function = loss_function
         self.priority_key = priority_key
+        self.action_space = self.value_network.action_space
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DQN loss given a tensordict sampled from the replay buffer.
@@ -99,12 +96,12 @@ class DQNLoss(LossModule):
         action = tensordict.get("action")
         pred_val = td_copy.get("action_value")
 
-        if _CATEGORICAL_ACTION_ENCODING:
+        if self.action_space == "categorical":
             batch_size = action.size(0)
             pred_val_index = pred_val[range(batch_size), action.squeeze(-1)]
         else:
             action = action.to(torch.float)
-            pred_val_index = (pred_val * action).sum(-1)  # TODO T134022187
+            pred_val_index = (pred_val * action).sum(-1)
 
         with torch.no_grad():
             target_value = next_state_value(
@@ -170,6 +167,19 @@ class DistributionalDQNLoss(LossModule):
             "value_network",
             create_target_params=self.delay_value,
         )
+        self.action_space = self.value_network.action_space
+
+    @staticmethod
+    def _log_ps_a_default(action, action_log_softmax, batch_size, atoms):
+        action_expand = action.unsqueeze(-2).expand_as(action_log_softmax)
+        log_ps_a = action_log_softmax.masked_select(action_expand.to(torch.bool))
+        log_ps_a = log_ps_a.view(batch_size, atoms)  # log p(s_t, a_t; θonline)
+        return log_ps_a
+
+    @staticmethod
+    def _log_ps_a_categorical(action, action_log_softmax, batch_size):
+        log_ps_a = action_log_softmax[range(batch_size), :, action.squeeze(-1)]
+        return log_ps_a
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
@@ -207,12 +217,14 @@ class DistributionalDQNLoss(LossModule):
         )  # Log probabilities log p(s_t, ·; θonline)
         action_log_softmax = td_clone.get("action_value")
 
-        if _CATEGORICAL_ACTION_ENCODING:
-            log_ps_a = action_log_softmax[range(batch_size), :, action.squeeze(-1)]
+        if self.action_space == "categorical":
+            log_ps_a = self._log_ps_a_categorical(
+                action, action_log_softmax, batch_size
+            )
         else:
-            action_expand = action.unsqueeze(-2).expand_as(action_log_softmax)
-            log_ps_a = action_log_softmax.masked_select(action_expand.to(torch.bool))
-            log_ps_a = log_ps_a.view(batch_size, atoms)  # log p(s_t, a_t; θonline)
+            log_ps_a = self._log_ps_a_default(
+                action, action_log_softmax, batch_size, atoms
+            )
 
         with torch.no_grad():
             # Calculate nth next state probabilities
@@ -224,7 +236,7 @@ class DistributionalDQNLoss(LossModule):
             )  # Probabilities p(s_t+n, ·; θonline)
 
             next_td_action = next_td.get("action")
-            if _CATEGORICAL_ACTION_ENCODING:
+            if self.action_space == "categorical":
                 argmax_indices_ns = next_td_action.squeeze(-1)
             else:
                 argmax_indices_ns = next_td_action.argmax(-1)  # one-hot encoding
