@@ -69,6 +69,10 @@ try:
 except ImportError:
     _has_functorch = False
 
+    def is_batchedtensor(tensor):
+        return False
+
+
 __all__ = [
     "TensorDict",
     "SubTensorDict",
