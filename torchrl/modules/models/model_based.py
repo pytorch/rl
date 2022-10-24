@@ -5,6 +5,7 @@
 
 
 import torch
+from packaging import version
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
@@ -263,6 +264,7 @@ class RSSMPrior(nn.Module):
         self.state_dim = state_dim
         self.rnn_hidden_dim = rnn_hidden_dim
         self.action_shape = action_spec.shape
+        self._unsqueeze_rnn_input = torch.__version__ < version.parse("1.11")
 
     def forward(self, state, belief, action):
         projector_input = torch.cat([state, action], dim=-1)
