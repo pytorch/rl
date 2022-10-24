@@ -351,8 +351,8 @@ jobs:
     <<: *binary_common
     docker:
       - image: "nvidia/cudagl"
-    machine:
-      image: ubuntu-2004-cuda-11.4:202110-01
+#    machine:
+#      image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
       TAR_OPTIONS: --no-same-owner
