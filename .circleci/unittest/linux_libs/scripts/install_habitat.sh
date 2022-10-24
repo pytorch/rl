@@ -28,8 +28,5 @@ conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightl
 conda run python -m pip install install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
 conda run python -m pip install install "gym[atari,accept-rom-license]" pygame
 
-conda deactivate
-conda activate ./env
-
 # smoke test
 python -c "import habitat;import habitat.utils.gym_definitions"
