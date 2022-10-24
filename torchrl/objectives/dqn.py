@@ -97,8 +97,7 @@ class DQNLoss(LossModule):
         pred_val = td_copy.get("action_value")
 
         if self.action_space == "categorical":
-            batch_size = action.size(0)
-            pred_val_index = pred_val[range(batch_size), action.squeeze(-1)]
+            pred_val_index = torch.gather(pred_val, -1, index=action).squeeze(-1)
         else:
             action = action.to(torch.float)
             pred_val_index = (pred_val * action).sum(-1)
@@ -177,9 +176,14 @@ class DistributionalDQNLoss(LossModule):
         return log_ps_a
 
     @staticmethod
-    def _log_ps_a_categorical(action, action_log_softmax, batch_size):
-        log_ps_a = action_log_softmax[range(batch_size), :, action.squeeze(-1)]
-        return log_ps_a
+    def _log_ps_a_categorical(action, action_log_softmax):
+        # Reshaping action of shape `[*batch_sizes, 1]` to `[*batch_sizes, atoms, 1]` for gather.
+        action = action.unsqueeze(-2)
+        new_shape = [-1] * len(action.shape)
+        new_shape[-2] = action_log_softmax.shape[-2]  # calculating atoms
+        action = action.expand(new_shape)
+
+        return torch.gather(action_log_softmax, -1, index=action).squeeze(-1)
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
@@ -218,9 +222,7 @@ class DistributionalDQNLoss(LossModule):
         action_log_softmax = td_clone.get("action_value")
 
         if self.action_space == "categorical":
-            log_ps_a = self._log_ps_a_categorical(
-                action, action_log_softmax, batch_size
-            )
+            log_ps_a = self._log_ps_a_categorical(action, action_log_softmax)
         else:
             log_ps_a = self._log_ps_a_default(
                 action, action_log_softmax, batch_size, atoms
