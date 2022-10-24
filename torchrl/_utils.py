@@ -26,13 +26,13 @@ class timeit:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         t = time.time() - self.t0
-        self._REG.setdefault(self.name, [0.0, 0.0, 0])
+        val = self._REG.setdefault(self.name, [0.0, 0.0, 0])
 
-        count = self._REG[self.name][2]
+        count = val[2]
         N = count + 1
-        self._REG[self.name][0] = self._REG[self.name][0] * (count / N) + t / N
-        self._REG[self.name][1] += t
-        self._REG[self.name][2] = N
+        val[0] = val[0] * (count / N) + t / N
+        val[1] += t
+        val[2] = N
 
     @staticmethod
     def print(prefix=None):
