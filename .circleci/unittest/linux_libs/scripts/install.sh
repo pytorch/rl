@@ -22,7 +22,6 @@ else
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
 fi
 
-apt-get install -y git
 
 # submodules
 git submodule sync && git submodule update --init --recursive
