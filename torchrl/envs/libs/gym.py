@@ -173,7 +173,7 @@ class GymWrapper(GymLikeEnv):
                     "PixelObservationWrapper cannot be used to wrap an environment"
                     "that is already a PixelObservationWrapper instance."
                 )
-            if not env.render_mode and gym_version >= version.parse("0.26.0"):
+            if gym_version >= version.parse("0.26.0") and not env.render_mode:
                 warnings.warn(
                     "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
                     "should be created with `gym.make(env_name, render_mode=mode)` where possible,"

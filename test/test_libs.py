@@ -21,7 +21,9 @@ if _has_gym:
     if gym_version > version.parse("0.19"):
         from gym.wrappers.pixel_observation import PixelObservationWrapper
     else:
-        from torchrl.envs.libs.utils import GymPixelObservationWrapper as PixelObservationWrapper
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as PixelObservationWrapper,
+        )
 
 if _has_dmc:
     from dm_control import suite
