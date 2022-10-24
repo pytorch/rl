@@ -50,13 +50,13 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         module (nn.Module): a nn.Module used to map the input to the output parameter space. Can be a functional
             module (FunctionalModule or FunctionalModuleWithBuffers), in which case the :obj:`forward` method will expect
             the params (and possibly) buffers keyword arguments.
-        dist_param_keys (str or iterable of str or dict): key(s) that will be produced
+        dist_in_keys (str or iterable of str or dict): key(s) that will be produced
             by the inner TDModule and that will be used to build the distribution.
             Importantly, if it's an iterable of string or a string, those keys must match the keywords used by the distribution
             class of interest, e.g. :obj:`"loc"` and :obj:`"scale"` for the Normal distribution
-            and similar. If dist_param_keys is a dictionary,, the keys are the keys of the distribution and the values are the
+            and similar. If dist_in_keys is a dictionary,, the keys are the keys of the distribution and the values are the
             keys in the tensordict that will get match to the corresponding distribution keys.
-        out_key_sample (str or iterable of str): keys where the sampled values will be
+        sample_out_key (str or iterable of str): keys where the sampled values will be
             written. Importantly, if this key is part of the :obj:`out_keys` of the inner model,
             the sampling step will be skipped.
         spec (TensorSpec): specs of the first output tensor. Used when calling td_module.random() to generate random
@@ -101,8 +101,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         >>> td_module = ProbabilisticTensorDictModule(
         ...    module=module,
         ...    spec=spec,
-        ...    dist_param_keys=["loc", "scale"],
-        ...    out_key_sample=["action"],
+        ...    dist_in_keys=["loc", "scale"],
+        ...    sample_out_key=["action"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )
@@ -142,8 +142,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
     def __init__(
         self,
         module: TensorDictModule,
-        dist_param_keys: Union[str, Sequence[str], dict],
-        out_key_sample: Union[str, Sequence[str]],
+        dist_in_keys: Union[str, Sequence[str], dict],
+        sample_out_key: Union[str, Sequence[str]],
         spec: Optional[TensorSpec] = None,
         safe: bool = False,
         default_interaction_mode: str = "mode",
@@ -157,29 +157,29 @@ class ProbabilisticTensorDictModule(TensorDictModule):
 
         # if the module returns the sampled key we wont be sampling it again
         # then ProbabilisticTensorDictModule is presumably used to return the distribution using `get_dist`
-        if isinstance(dist_param_keys, str):
-            dist_param_keys = [dist_param_keys]
-        if isinstance(out_key_sample, str):
-            out_key_sample = [out_key_sample]
-        if not isinstance(dist_param_keys, dict):
-            dist_param_keys = {param_key: param_key for param_key in dist_param_keys}
-        for key in dist_param_keys.values():
+        if isinstance(dist_in_keys, str):
+            dist_in_keys = [dist_in_keys]
+        if isinstance(sample_out_key, str):
+            sample_out_key = [sample_out_key]
+        if not isinstance(dist_in_keys, dict):
+            dist_in_keys = {param_key: param_key for param_key in dist_in_keys}
+        for key in dist_in_keys.values():
             if key not in module.out_keys:
                 raise RuntimeError(
                     f"The key {key} could not be found in the wrapped module `{type(module)}.out_keys`."
                 )
         module_out_keys = module.out_keys
-        self.out_key_sample = out_key_sample
-        _check_all_str(self.out_key_sample)
-        out_key_sample = [key for key in out_key_sample if key not in module_out_keys]
-        self._requires_sample = bool(len(out_key_sample))
-        out_keys = out_key_sample + module_out_keys
+        self.sample_out_key = sample_out_key
+        _check_all_str(self.sample_out_key)
+        sample_out_key = [key for key in sample_out_key if key not in module_out_keys]
+        self._requires_sample = bool(len(sample_out_key))
+        out_keys = sample_out_key + module_out_keys
         super().__init__(
             module=module, spec=spec, in_keys=in_keys, out_keys=out_keys, safe=safe
         )
-        self.dist_param_keys = dist_param_keys
-        _check_all_str(self.dist_param_keys.keys())
-        _check_all_str(self.dist_param_keys.values())
+        self.dist_in_keys = dist_in_keys
+        _check_all_str(self.dist_in_keys.keys())
+        _check_all_str(self.dist_in_keys.values())
 
         self.default_interaction_mode = default_interaction_mode
         if isinstance(distribution_class, str):
@@ -244,17 +244,17 @@ class ProbabilisticTensorDictModule(TensorDictModule):
 
     def build_dist_from_params(self, tensordict_out: TensorDictBase) -> d.Distribution:
         try:
-            selected_td_out = tensordict_out.select(*self.dist_param_keys.values())
+            selected_td_out = tensordict_out.select(*self.dist_in_keys.values())
             dist_kwargs = {
                 dist_key: selected_td_out[td_key]
-                for dist_key, td_key in self.dist_param_keys.items()
+                for dist_key, td_key in self.dist_in_keys.items()
             }
             dist = self.distribution_class(**dist_kwargs)
         except TypeError as err:
             if "an unexpected keyword argument" in str(err):
                 raise TypeError(
-                    "distribution keywords and tensordict keys indicated by ProbabilisticTensorDictModule.dist_param_keys must match."
-                    f"Got this error message: \n{indent(str(err), 4 * ' ')}\nwith dist_param_keys={self.dist_param_keys}"
+                    "distribution keywords and tensordict keys indicated by ProbabilisticTensorDictModule.dist_in_keys must match."
+                    f"Got this error message: \n{indent(str(err), 4 * ' ')}\nwith dist_in_keys={self.dist_in_keys}"
                 )
             elif re.search(r"missing.*required positional arguments", str(err)):
                 raise TypeError(
@@ -285,13 +285,13 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             if isinstance(out_tensors, Tensor):
                 out_tensors = (out_tensors,)
             tensordict_out.update(
-                {key: value for key, value in zip(self.out_key_sample, out_tensors)}
+                {key: value for key, value in zip(self.sample_out_key, out_tensors)}
             )
             if self.return_log_prob:
                 log_prob = dist.log_prob(*out_tensors)
                 tensordict_out.set("sample_log_prob", log_prob)
         elif self.return_log_prob:
-            out_tensors = [tensordict_out.get(key) for key in self.out_key_sample]
+            out_tensors = [tensordict_out.get(key) for key in self.sample_out_key]
             log_prob = dist.log_prob(*out_tensors)
             tensordict_out.set("sample_log_prob", log_prob)
             # raise RuntimeError(

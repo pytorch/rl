@@ -105,7 +105,7 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
         >>> td_module = ProbabilisticActor(
         ...    module=tensordict_module,
         ...    spec=action_spec,
-        ...    dist_param_keys=["loc", "scale"],
+        ...    dist_in_keys=["loc", "scale"],
         ...    distribution_class=TanhNormal,
         ...    )
         >>> td = td_module(td, params=params, buffers=buffers)
@@ -125,15 +125,15 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
     def __init__(
         self,
         module: TensorDictModule,
-        dist_param_keys: Union[str, Sequence[str]],
-        out_key_sample: Optional[Sequence[str]] = None,
+        dist_in_keys: Union[str, Sequence[str]],
+        sample_out_key: Optional[Sequence[str]] = None,
         spec: Optional[TensorSpec] = None,
         **kwargs,
     ):
-        if out_key_sample is None:
-            out_key_sample = ["action"]
+        if sample_out_key is None:
+            sample_out_key = ["action"]
         if (
-            "action" in out_key_sample
+            "action" in sample_out_key
             and spec is not None
             and not isinstance(spec, CompositeSpec)
         ):
@@ -141,8 +141,8 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
 
         super().__init__(
             module=module,
-            dist_param_keys=dist_param_keys,
-            out_key_sample=out_key_sample,
+            dist_in_keys=dist_in_keys,
+            sample_out_key=sample_out_key,
             spec=spec,
             **kwargs,
         )
@@ -555,8 +555,8 @@ class ActorValueOperator(TensorDictSequential):
         >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
         ...    spec=spec_action,
-        ...    dist_param_keys=["loc", "scale"],
-        ...    out_key_sample=["action"],
+        ...    dist_in_keys=["loc", "scale"],
+        ...    sample_out_key=["action"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )
@@ -677,8 +677,8 @@ class ActorCriticOperator(ActorValueOperator):
         >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
         ...    spec=spec_action,
-        ...    dist_param_keys=["loc", "scale"],
-        ...    out_key_sample=["action"],
+        ...    dist_in_keys=["loc", "scale"],
+        ...    sample_out_key=["action"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )

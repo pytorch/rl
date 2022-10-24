@@ -338,7 +338,7 @@ def make_ddpg_actor(
     # distribution.
     actor = ProbabilisticActor(
         module=actor_module,
-        dist_param_keys=["param"],
+        dist_in_keys=["param"],
         spec=CompositeSpec(action=env_specs["action_spec"]),
         safe=True,
         distribution_class=TanhDelta,
@@ -601,7 +601,7 @@ def make_ppo_model(
         policy_operator = ProbabilisticActor(
             spec=CompositeSpec(action=action_spec),
             module=actor_module,
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
             default_interaction_mode="random",
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
@@ -676,7 +676,7 @@ def make_ppo_model(
         policy_po = ProbabilisticActor(
             actor_module,
             spec=action_spec,
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
@@ -891,7 +891,7 @@ def make_sac_model(
 
     actor = ProbabilisticActor(
         spec=action_spec,
-        dist_param_keys=["loc", "scale"],
+        dist_in_keys=["loc", "scale"],
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
@@ -1134,7 +1134,7 @@ def make_redq_model(
 
     actor = ProbabilisticActor(
         spec=action_spec,
-        dist_param_keys=["loc", "scale"],
+        dist_in_keys=["loc", "scale"],
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
@@ -1272,8 +1272,8 @@ def make_dreamer(
             in_keys=["state", "belief"],
             out_keys=["loc", "scale"],
         ),
-        dist_param_keys=["loc", "scale"],
-        out_key_sample=[action_key],
+        dist_in_keys=["loc", "scale"],
+        sample_out_key=[action_key],
         default_interaction_mode="random",
         distribution_class=TanhNormal,
         spec=CompositeSpec(
@@ -1314,8 +1314,8 @@ def make_dreamer(
                 in_keys=["state", "belief"],
                 out_keys=["loc", "scale"],
             ),
-            dist_param_keys=["loc", "scale"],
-            out_key_sample=[action_key],
+            dist_in_keys=["loc", "scale"],
+            sample_out_key=[action_key],
             default_interaction_mode="random",
             distribution_class=TanhNormal,
             spec=CompositeSpec(

@@ -69,8 +69,8 @@ class TensorDictSequential(TensorDictModule):
         >>> td_module1 = ProbabilisticTensorDictModule(
         ...    module=fmodule1,
         ...    spec=spec1,
-        ...    dist_param_keys=["loc", "scale"],
-        ...    out_key_sample=["hidden"],
+        ...    dist_in_keys=["loc", "scale"],
+        ...    sample_out_key=["hidden"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )
