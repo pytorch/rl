@@ -24,6 +24,9 @@ yum -y install freeglut
 
 echo "after"
 echo $LD_LIBRARY_PATH
+echo "$(ldconfig -p | grep libEGL.so.1 | tr ' ' '\n' | grep /)"
+echo "$(ldconfig -p | grep libGL.so.1 | tr ' ' '\n' | grep /)"
+echo "$(ldconfig -p | grep libOpenGL.so.1 | tr ' ' '\n' | grep /)"
 
 # suggested by habitat team: do we need this?
 #conda create -n $MY_TEST_ENV python=3.7 cmake=3.14.0 -y
