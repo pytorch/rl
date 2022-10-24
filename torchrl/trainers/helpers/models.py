@@ -185,6 +185,8 @@ def make_dqn_actor(
     actor_kwargs = {}
 
     if isinstance(action_spec, DiscreteTensorSpec):
+        # if action spec is modeled as categorical variable, we still need to have features equal
+        # to the number of possible choices and also set categorical behavioural for actors.
         actor_kwargs.update({"action_space": "categorical"})
         out_features = env_specs["action_spec"].space.n
 
