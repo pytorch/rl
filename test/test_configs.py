@@ -763,21 +763,21 @@ class TestLoggerConfigs:
     def test_csv_logger(self, tmp_path):
         config = ["logger=csv", f"++logger.log_dir={tmp_path}"]
         cfg = hydra.compose("config", overrides=config)
-        logger = instantiate(cfg.logger)
+        logger = instantiate(cfg.logger)()
         assert isinstance(logger, CSVLogger)
 
     @pytest.mark.skipif(not _has_mlflow, reason="No mlflow found")
     def test_mlflow_logger(self, tmp_path, mlflow_teardown):
         config = ["logger=mlflow", f"++logger.tracking_uri={tmp_path}"]
         cfg = hydra.compose("config", overrides=config)
-        logger = instantiate(cfg.logger)
+        logger = instantiate(cfg.logger)()
         assert isinstance(logger, MLFlowLogger)
 
     @pytest.mark.skipif(not _has_tb, reason="No tensorboard found")
     def test_tensorboard_logger(self, tmp_path):
         config = ["logger=tensorboard", f"++logger.log_dir={tmp_path}"]
         cfg = hydra.compose("config", overrides=config)
-        logger = instantiate(cfg.logger)
+        logger = instantiate(cfg.logger)()
         assert isinstance(logger, TensorboardLogger)
 
     @pytest.mark.skipif(not _has_wandb, reason="No wandb found")
@@ -789,7 +789,7 @@ class TestLoggerConfigs:
             "++logger.offline=True",
         ]
         cfg = hydra.compose("config", overrides=config)
-        logger = instantiate(cfg.logger)
+        logger = instantiate(cfg.logger)()
         assert isinstance(logger, WandbLogger)
 
 
