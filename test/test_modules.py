@@ -377,7 +377,7 @@ def test_gru_net_shape(device, num_layers, bidirectional):
         }
         GRUNet(mlp_input_kwargs, gru_kwargs, mlp_output_kwargs2, device)
 
-    # gru_kwargs["bidirectional"]
+    # Test gru_kwargs["bidirectional"]
     with pytest.raises(NotImplementedError):
         gru_kwargs2 = {
             "input_size": hidden_size,
@@ -385,6 +385,14 @@ def test_gru_net_shape(device, num_layers, bidirectional):
             "bidirectional": True,
         }
         GRUNet(mlp_input_kwargs, gru_kwargs2, mlp_output_kwargs, device)
+
+    # Test error if the input is of undesired shape
+    with pytest.raises(RuntimeError):
+        x = torch.randn(1, device=device)
+        net(x)
+    with pytest.raises(RuntimeError):
+        x = torch.randn(1, 1, 1, 1, device=device)
+        net(x)
 
 
 class TestFunctionalModules:

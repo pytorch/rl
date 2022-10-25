@@ -1116,6 +1116,8 @@ class GRUNet(nn.Module):
         self.mlp_out = MLP(**mlp_output_kwargs)
 
     def forward(self, x, h_0=None):
+        if 2 > len(x.size()) > 3:
+            raise RuntimeError("Input size must be of size 2 or 3.")
         mlp_in = self.mlp_in(x)
         all_h, last_h = self.gru(mlp_in, h_0)
         mlp_out = self.mlp_out(all_h)
