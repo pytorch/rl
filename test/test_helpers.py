@@ -5,10 +5,12 @@
 
 import argparse
 import dataclasses
+from time import sleep
 
 import pytest
 import torch
 from _utils_internal import generate_seeds, get_available_devices
+from torchrl._utils import timeit
 
 try:
     from hydra import compose, initialize
@@ -669,6 +671,32 @@ def test_seed_generator(initial_seed):
     seeds0 = generate_seeds(initial_seed, num_seeds)
     seeds1 = generate_seeds(initial_seed, num_seeds)
     assert seeds0 == seeds1
+
+
+def test_timeit():
+    n1 = 500
+    w1 = 1e-4
+    n2 = 200
+    w2 = 1e-4
+    w3 = 1e-4
+    # warmup
+    for _ in range(10):
+        sleep(w1)
+    for _ in range(n1):
+        with timeit("event1"):
+            sleep(w1)
+        sleep(w3)
+    for _ in range(n2):
+        with timeit("event2"):
+            sleep(w2)
+    val1 = timeit._REG["event1"]
+    val2 = timeit._REG["event2"]
+    assert abs(val1[0] - w1) < 1e-2
+    assert abs(val1[1] - n1 * w1) < 1
+    assert val1[2] == n1
+    assert abs(val2[0] - w2) < 1e-2
+    assert abs(val2[1] - n2 * w2) < 1
+    assert val2[2] == n2
 
 
 if __name__ == "__main__":

@@ -219,7 +219,7 @@ def test_actorcritic(device):
     ).to(device)
     module = TensorDictModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
     policy_operator = ProbabilisticActor(
-        spec=None, module=module, dist_param_keys=["param"], return_log_prob=True
+        spec=None, module=module, dist_in_keys=["param"], return_log_prob=True
     ).to(device)
     value_operator = ValueOperator(nn.Linear(4, 1), in_keys=["hidden"]).to(device)
     op = ActorValueOperator(
