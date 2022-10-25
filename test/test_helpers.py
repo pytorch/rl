@@ -58,6 +58,19 @@ else:
 # with unclear benefits
 
 
+def dreamer_constructor_fixture():
+    import os
+
+    # we hack the env constructor
+    import sys
+
+    sys.path.append(os.path.dirname(__file__) + "/../examples/dreamer/")
+    from dreamer_utils import transformed_env_constructor
+
+    yield transformed_env_constructor
+    sys.path.pop()
+
+
 def _assert_keys_match(td, expeceted_keys):
     td_keys = list(td.keys())
     d = set(td_keys) - set(expeceted_keys)
@@ -572,15 +585,9 @@ to see torch < 1.11 supported for dreamer, please submit an issue.""",
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("tanh_loc", [tuple(), ("tanh_loc=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
-def test_dreamer_make(device, tanh_loc, exploration):
-    import os
+def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture):
 
-    # we hack the env constructor
-    import sys
-
-    sys.path.append(os.path.dirname(__file__) + "/../examples/dreamer/")
-    from dreamer_utils import transformed_env_constructor
-
+    transformed_env_constructor = dreamer_constructor_fixture
     flags = ["from_pixels=True", "catframes=1"]
 
     config_fields = [
