@@ -30,5 +30,5 @@ export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
 
 # this workflow only tests the libs
 python -c "import habitat;import habitat.utils.gym_definitions"
-#pytest test/test_libs.py --instafail -v --durations 20
-python test/test_libs.py -k test_habitat
+
+coverage run -m pytest test/test_libs.py --instafail -v --durations 20

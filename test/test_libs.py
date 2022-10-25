@@ -268,8 +268,10 @@ class TestCollectorLib:
 
 
 @pytest.mark.skipif(not _has_habitat, reason="habitat not installed")
-def test_habitat():
-    env = HabitatEnv("HabitatRenderPick-v0")
+@pytest.mark.parametrize("envname", ["HabitatRenderPick-v0", "HabitatRenderPick-v0"])
+def test_habitat(envname):
+    env = HabitatEnv(envname)
+    print([_env for _env in env.available_envs if _env.startswith("Habitat")])
     rollout = env.rollout(3)
     print(rollout)
 

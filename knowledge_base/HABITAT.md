@@ -2,7 +2,7 @@
 
 ## Setting up your environment for habitat and torchrl
 
-### Installing habitat
+### Installing habitat-lab from pip
 
 Instructions can be found on [habitat github repo](https://github.com/facebookresearch/habitat-lab).
 
@@ -10,35 +10,44 @@ Instructions can be found on [habitat github repo](https://github.com/facebookre
 
      Assuming you have [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/) installed, let's prepare a conda env:
      ```bash
-     # We require python>=3.7 and cmake>=3.10
-     conda create -n habitat python=3.7 cmake=3.14.0
-     conda activate habitat
+     export MY_TEST_ENV=habitat_test
+     conda deactivate
+     conda env remove -n $MY_TEST_ENV -y
+     conda create -n $MY_TEST_ENV python=3.7 cmake=3.14.0 -y
+     conda activate $MY_TEST_ENV
      ```
 
   2. **conda install habitat-sim**
-     - To install habitat-sim with bullet physics
-        ```
-        conda install habitat-sim withbullet -c conda-forge -c aihabitat
-        ```
-        See Habitat-Sim's [installation instructions](https://github.com/facebookresearch/habitat-sim#installation) for more details.
+     To install habitat-sim with bullet physics and in headless mode (usually necessary to run habitat on a cluster)
+     ```bash
+     conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
+     pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
+     
+     # This is to reduce verbosity
+     export MAGNUM_LOG=quiet && export HABITAT_SIM_LOG=quiet
+     ```
+     If you don't want to install it in headless mode, simply remove the `headless` package from the `conda install` command.
 
-  3. **pip install habitat-lab stable version**.
+     See Habitat-Sim's [installation instructions](https://github.com/facebookresearch/habitat-sim#installation) for more details.
 
-        ```bash
-        git clone https://github.com/facebookresearch/habitat-lab.git
-        cd habitat-lab
-        pip install -e habitat-lab  # install habitat_lab
-        ```
-  4. **Install habitat-baselines**.
+  3. **Install habitat-baselines**.
 
       The command above will install only core of Habitat-Lab. To include habitat_baselines along with all additional requirements, use the command below after installing habitat-lab:
 
-        ```bash
-        pip install -e habitat-baselines  # install habitat_baselines
-        ```
+      ```bash
+       pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-baselines
+      ```
 ### Installing TorchRL
 
 Follow the instructions on the [README.md](../README.md).
+
+### Using Habitat
+To get the list of available Habitat envs, simply run the following command:
+```python
+from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
+assert _has_habitat  # checks that habitat is installed
+print([_env for _env in HabitatEnv.available_envs if _env.startswith("Habitat")])
+```
 
 ## Common issues
 
