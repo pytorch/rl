@@ -7,6 +7,8 @@ from numbers import Number
 
 import pytest
 import torch
+from packaging import version
+
 from _utils_internal import get_available_devices
 from mocking_classes import MockBatchedUnLockedEnv
 from torch import nn
@@ -410,10 +412,12 @@ class TestFunctionalModules:
         assert (fmodule(params, buffers, x) == module(x)).all()
 
     def test_func_transformer(self):
+        torch.manual_seed(10)
+        batch = (10,) if version.parse(torch.__version__) > version.parse("0.10.0") else (1, 10)
         module = nn.Transformer(128)
         module.eval()
         fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
-        x = torch.randn(10, 128)
+        x = torch.randn(*batch, 128)
         torch.testing.assert_close(fmodule(params, buffers, x, x), module(x, x))
 
 
