@@ -57,6 +57,7 @@ else:
 # purpose of building a model with args is a lot of unstable scaffoldings
 # with unclear benefits
 
+
 @pytest.fixture
 def dreamer_constructor_fixture():
     import os
