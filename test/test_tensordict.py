@@ -1093,6 +1093,19 @@ class TestTensorDicts:
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
+    def test_squeeze_with_none(self, td_name, device, squeeze_dim=None):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td_squeeze = torch.squeeze(td, dim=None)
+        tensor = torch.ones_like(td.get("a").squeeze())
+        td_squeeze.set_("a", tensor)
+        assert (td_squeeze.get("a") == tensor).all()
+        if td_name == "unsqueezed_td":
+            assert td_squeeze is td._source
+        assert (td_squeeze.get("a") == 1).all()
+        assert (td.get("a") == 1).all()
+
+
     def test_write_on_subtd(self, td_name, device):
         td = getattr(self, td_name)(device)
         sub_td = td.get_sub_tensordict(0)
