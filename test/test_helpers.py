@@ -66,7 +66,7 @@ def _assert_keys_match(td, expeceted_keys):
 @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
 @pytest.mark.parametrize(
     "categorical_action_encoding",
-    [("categorical_action_encoding=true",), ("categorical_action_encoding=false",)],
+    [("categorical_action_encoding=True",), ("categorical_action_encoding=False",)],
 )
 def test_dqn_maker(
     device, noisy, distributional, from_pixels, categorical_action_encoding
@@ -96,7 +96,7 @@ def test_dqn_maker(
         env_maker = transformed_env_constructor(
             cfg, use_env_creator=False, custom_env_maker=env_maker
         )
-        proof_environment = env_maker()
+        proof_environment = env_maker(categorical_action_encoding=cfg.categorical_action_encoding)
 
         actor = make_dqn_actor(proof_environment, cfg, device)
         td = proof_environment.reset().to(device)

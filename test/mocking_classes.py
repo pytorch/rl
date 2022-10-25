@@ -280,6 +280,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         input_spec=None,
         reward_spec=None,
         from_pixels=False,
+        categorical_action_encoding=False,
         **kwargs,
     ):
         size = cls.size = 7
@@ -294,7 +295,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
                 ),
             )
         if action_spec is None:
-            action_spec = OneHotDiscreteTensorSpec(7)
+            action_spec_cls = DiscreteTensorSpec if categorical_action_encoding else OneHotDiscreteTensorSpec
+            action_spec = action_spec_cls(7)
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec()
 
@@ -310,6 +312,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
         cls.from_pixels = from_pixels
+        cls.categorical_action_encoding = categorical_action_encoding
         return super().__new__(*args, **kwargs)
 
     def _get_in_obs(self, obs):
@@ -336,7 +339,9 @@ class DiscreteActionVecMockEnv(_MockEnv):
     ) -> TensorDictBase:
         tensordict = tensordict.to(self.device)
         a = tensordict.get("action")
-        assert (a.sum(-1) == 1).all()
+
+        if not self.categorical_action_encoding:
+            assert (a.sum(-1) == 1).all()
         assert not self.is_done, "trying to execute step in done env"
 
         obs = self._get_in_obs(tensordict.get(self._out_key)) + a / self.maxstep
@@ -522,6 +527,7 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
         input_spec=None,
         reward_spec=None,
         from_pixels=True,
+        categorical_action_encoding=False,
         **kwargs,
     ):
         if observation_spec is None:
@@ -535,7 +541,8 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
                 ),
             )
         if action_spec is None:
-            action_spec = OneHotDiscreteTensorSpec(7)
+            action_spec_cls = DiscreteTensorSpec if categorical_action_encoding else OneHotDiscreteTensorSpec
+            action_spec = action_spec_cls(7)
         if input_spec is None:
             cls._out_key = "pixels_orig"
             input_spec = CompositeSpec(
@@ -552,6 +559,7 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
             reward_spec=reward_spec,
             input_spec=input_spec,
             from_pixels=from_pixels,
+            categorical_action_encoding=categorical_action_encoding,
             **kwargs,
         )
 
