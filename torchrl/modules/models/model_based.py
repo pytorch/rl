@@ -272,8 +272,9 @@ class RSSMPrior(nn.Module):
         projector_input = torch.cat([state, action], dim=-1)
         action_state = self.action_state_projector(projector_input)
         unsqueeze = False
-        if self._unsqueeze_rnn_input and belief.ndimension() == 1:
-            belief = belief.unsqueeze(0)
+        if self._unsqueeze_rnn_input and action_state.ndimension() == 1:
+            if belief is not None:
+                belief = belief.unsqueeze(0)
             action_state = action_state.unsqueeze(0)
             unsqueeze = True
         belief = self.rnn(action_state, belief)
