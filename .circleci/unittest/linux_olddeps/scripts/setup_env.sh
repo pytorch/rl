@@ -93,3 +93,6 @@ mkdir Roms
 wget http://www.atarimania.com/roms/Roms.rar
 ./rar/unrar e Roms.rar ./Roms -y
 python -m atari_py.import_roms Roms
+
+# solve permission denied for generated files in mujoco_py
+chmod -R 777 ${env_dir}/lib/python3.9/site-packages/mujoco_py/generated
