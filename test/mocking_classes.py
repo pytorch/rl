@@ -295,7 +295,11 @@ class DiscreteActionVecMockEnv(_MockEnv):
                 ),
             )
         if action_spec is None:
-            action_spec_cls = DiscreteTensorSpec if categorical_action_encoding else OneHotDiscreteTensorSpec
+            action_spec_cls = (
+                DiscreteTensorSpec
+                if categorical_action_encoding
+                else OneHotDiscreteTensorSpec
+            )
             action_spec = action_spec_cls(7)
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec()
@@ -541,7 +545,11 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
                 ),
             )
         if action_spec is None:
-            action_spec_cls = DiscreteTensorSpec if categorical_action_encoding else OneHotDiscreteTensorSpec
+            action_spec_cls = (
+                DiscreteTensorSpec
+                if categorical_action_encoding
+                else OneHotDiscreteTensorSpec
+            )
             action_spec = action_spec_cls(7)
         if input_spec is None:
             cls._out_key = "pixels_orig"

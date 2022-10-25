@@ -96,7 +96,9 @@ def test_dqn_maker(
         env_maker = transformed_env_constructor(
             cfg, use_env_creator=False, custom_env_maker=env_maker
         )
-        proof_environment = env_maker(categorical_action_encoding=cfg.categorical_action_encoding)
+        proof_environment = env_maker(
+            categorical_action_encoding=cfg.categorical_action_encoding
+        )
 
         actor = make_dqn_actor(proof_environment, cfg, device)
         td = proof_environment.reset().to(device)
