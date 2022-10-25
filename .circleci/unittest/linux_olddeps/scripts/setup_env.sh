@@ -44,8 +44,10 @@ mkdir -p $root_dir/.mujoco
 cd $root_dir/.mujoco/
 #wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
 #tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
-wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
-tar -xf mujoco210-linux-x86_64.tar.gz
+#wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
+wget https://www.roboti.us/download/mujoco200_linux.zip
+unzip mujoco200_linux.zip
+wget https://www.roboti.us/file/mjkey.txt
 cd $this_dir
 
 # 4. Install Conda dependencies
@@ -64,10 +66,11 @@ fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
 conda env config vars set \
-  MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
+  MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco200_linux \
   DISPLAY=:99 \
-  MJLIB_PATH=$root_dir/.mujoco/mujoco210/bin/libmujoco210.so \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
+  MJLIB_PATH=$root_dir/.mujoco/mujoco200_linux/bin/libmujoco200.so \
+  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco200_linux/bin \
+  MUJOCO_PY_MJKEY_PATH=$root_dir/.mujoco/mjkey.txt \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL \
   PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
