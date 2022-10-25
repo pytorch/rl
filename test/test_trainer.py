@@ -244,6 +244,7 @@ def test_recorder():
         args.catframes = 4
         args.image_size = 84
         args.collector_devices = ["cpu"]
+        args.categorical_action_encoding = False
 
         N = 8
 

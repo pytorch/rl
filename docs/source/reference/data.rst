@@ -81,6 +81,7 @@ as shape, device, dtype and domain.
     NdUnboundedContinuousTensorSpec
     BinaryDiscreteTensorSpec
     MultOneHotDiscreteTensorSpec
+    DiscreteTensorSpec
     CompositeSpec
 
 

@@ -11,7 +11,11 @@ from _utils_internal import get_available_devices
 from mocking_classes import MockBatchedUnLockedEnv
 from torch import nn
 from torchrl.data import TensorDict
-from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec, NdBoundedTensorSpec
+from torchrl.data.tensor_specs import (
+    DiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
+    NdBoundedTensorSpec,
+)
 from torchrl.modules import (
     ActorValueOperator,
     CEMPlanner,
@@ -210,6 +214,37 @@ def test_value_based_policy(device):
     action = actor(td).get("action")
     with pytest.raises(AssertionError):
         assert (action.sum(-1) == 1).all()
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_value_based_policy_categorical(device):
+    torch.manual_seed(0)
+    obs_dim = 4
+    action_dim = 5
+    action_spec = DiscreteTensorSpec(action_dim)
+
+    def make_net():
+        net = MLP(in_features=obs_dim, out_features=action_dim, depth=2, device=device)
+        for mod in net.modules():
+            if hasattr(mod, "bias") and mod.bias is not None:
+                mod.bias.data.zero_()
+        return net
+
+    actor = QValueActor(
+        spec=action_spec, module=make_net(), safe=True, action_space="categorical"
+    )
+    obs = torch.zeros(2, obs_dim, device=device)
+    td = TensorDict(batch_size=[2], source={"observation": obs})
+    action = actor(td).get("action")
+    assert (0 <= action).all() and (action < action_dim).all()
+
+    actor = QValueActor(
+        spec=action_spec, module=make_net(), safe=False, action_space="categorical"
+    )
+    obs = torch.randn(2, obs_dim, device=device)
+    td = TensorDict(batch_size=[2], source={"observation": obs})
+    action = actor(td).get("action")
+    assert (0 <= action).all() and (action < action_dim).all()
 
 
 @pytest.mark.parametrize("device", get_available_devices())
