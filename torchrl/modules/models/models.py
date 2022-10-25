@@ -1039,23 +1039,84 @@ class LSTMNet(nn.Module):
 
 class GRUNet(nn.Module):
     """
-    MLP -> GRU -> MLP
+    The GRUNet is a neural network composed of a GRU layer encapsulated
+    between two MLPs.
+
+    Args:
+        mlp_input_kwargs (dict):  kwargs for the MLP before the GRU
+        mlp_output_kwargs (dict): kwargs for the MLP after the GRU
+        gru_kwargs (dict): kwargs for the GRU
+            gru is enforced to be batch_first
+            num_layers default is 1 (number of gru stacked)
+            bidirectional default is False (True not implemented)
+            https://pytorch.org/docs/stable/generated/torch.nn.GRU.html
+
+    The args dicts must respect that:
+        The size of output features in mlp_input must be the same as the input size of the GRU.
+        The size of input features in mlp_output must be the same as the last hidden size of the GRU.
+
+    N = batch size
+    L = sequence size
+    mlp_input_in = input size of the MLP_input
+    mlp_input_out = output size of the MLP_input
+    H_in = input size of the GRU
+    H_out = output size of the GRU
+    mlp_output_in = input size of the MLP_output
+    mlp_output_out = output size of the MLP_output
+
+    Conditions:
+        mlp_input_out = H_in
+        H_out = mlp_output_in
+
+    Inputs:
+        x : Tensor of shape
+            L, mlp_input_in for unbatched input
+            N, L, mlp_input_in for batched input
+        h_0 : Initial hidden state of shape
+            L, H_in
+            N, L, H_in
+            (zeros if None)
+
+    Outputs:
+        mlp_out : Tensor of shape
+            L, mlp_output_out
+            N, L, mlp_output_out
+        last_h: Tensor of shape
+            D*num_layers , H_out
+            D*num_layers , N, H_out
 
     """
 
     def __init__(
-        self, mlp_input_kwargs: Dict, gru_kwargs: Dict, mlp_output_kwargs: Dict
+        self,
+        mlp_input_kwargs: dict,
+        gru_kwargs: dict,
+        mlp_output_kwargs: dict,
+        device: DEVICE_TYPING = "cpu",
     ) -> None:
         super().__init__()
-        assert mlp_input_kwargs["out_features"] == gru_kwargs["input_size"]
-        assert mlp_output_kwargs["in_features"] == gru_kwargs["hidden_size"]
+        if mlp_input_kwargs["out_features"] != gru_kwargs["input_size"]:
+            raise ValueError(
+                "The size of output features in mlp_input must be the same as the input size of the GRU."
+            )
+        if mlp_output_kwargs["in_features"] != gru_kwargs["hidden_size"]:
+            raise ValueError(
+                "The size of input features in mlp_output must be the same as the last hidden size of the GRU."
+            )
+        if "bidirectional" in gru_kwargs and gru_kwargs["bidirectional"]:
+            raise NotImplementedError("bidirectional GRU is not yet implemented.")
+
+        self.device = device
+        mlp_input_kwargs.update({"device": self.device})
+        gru_kwargs.update({"device": self.device, "batch_first": True})
+        mlp_output_kwargs.update({"device": self.device})
 
         self.mlp_in = MLP(**mlp_input_kwargs)
-        self.gru = nn.GRUCell(**gru_kwargs)
+        self.gru = nn.GRU(**gru_kwargs)
         self.mlp_out = MLP(**mlp_output_kwargs)
 
-    def forward(self, inputs, hidden_state):
-        mlp_in = self.mlp_in(inputs)
-        hidden_state = self.gru(mlp_in, hidden_state)
-        mlp_out = self.mlp_out(hidden_state)
-        return mlp_out, hidden_state
+    def forward(self, x, h_0=None):
+        mlp_in = self.mlp_in(x)
+        all_h, last_h = self.gru(mlp_in, h_0)
+        mlp_out = self.mlp_out(all_h)
+        return mlp_out, last_h
