@@ -22,5 +22,5 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
-    - dm_control==0.0.403778684
+    - dm_control==0.0.364896371
     - mujoco-py==2.0.2.0
