@@ -64,9 +64,16 @@ def _assert_keys_match(td, expeceted_keys):
 @pytest.mark.parametrize("noisy", [tuple(), ("noisy=True",)])
 @pytest.mark.parametrize("distributional", [tuple(), ("distributional=True",)])
 @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
-@pytest.mark.parametrize("categorical_action_encoding", [("categorical_action_encoding=true",), ("categorical_action_encoding=false",)])
-def test_dqn_maker(device, noisy, distributional, from_pixels, categorical_action_encoding):
-    flags = list(noisy + distributional + from_pixels + categorical_action_encoding) + ["env_name=CartPole-v1"]
+@pytest.mark.parametrize(
+    "categorical_action_encoding",
+    [("categorical_action_encoding=true",), ("categorical_action_encoding=false",)],
+)
+def test_dqn_maker(
+    device, noisy, distributional, from_pixels, categorical_action_encoding
+):
+    flags = list(noisy + distributional + from_pixels + categorical_action_encoding) + [
+        "env_name=CartPole-v1"
+    ]
 
     config_fields = [
         (config_field.name, config_field.type, config_field)

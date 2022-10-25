@@ -12,12 +12,10 @@ class TestQValue:
             QValueHook(action_space="wrong_value")
         assert "action_space must be one of" in str(exc.value)
 
-
     def test_distributional_qvalue_hook_wrong_action_space(self):
         with pytest.raises(ValueError) as exc:
             DistributionalQValueHook(action_space="wrong_value", support=None)
         assert "action_space must be one of" in str(exc.value)
-
 
     @pytest.mark.parametrize(
         "action_space, expected_action",
@@ -37,7 +35,6 @@ class TestQValue:
         assert (torch.tensor(expected_action, dtype=torch.long) == action).all()
         assert (values == in_values).all()
         assert (torch.tensor([100.0]) == chosen_action_value).all()
-
 
     @pytest.mark.parametrize(
         "action_space, expected_action",
@@ -63,7 +60,6 @@ class TestQValue:
         assert (values == in_values).all()
         assert (torch.tensor([[100.0], [5.0]]) == chosen_action_value).all()
 
-
     @pytest.mark.parametrize(
         "action_space, expected_action",
         (
@@ -71,7 +67,9 @@ class TestQValue:
             ("categorical", 2),
         ),
     )
-    def test_distributional_qvalue_hook_0_dim_batch(self, action_space, expected_action):
+    def test_distributional_qvalue_hook_0_dim_batch(
+        self, action_space, expected_action
+    ):
         support = torch.tensor([-2.0, 0.0, 2.0])
         hook = DistributionalQValueHook(action_space=action_space, support=support)
 
@@ -91,7 +89,6 @@ class TestQValue:
         assert (action == expected_action).all()
         assert values.shape == in_values.shape
         assert (values == in_values).all()
-
 
     @pytest.mark.parametrize(
         "action_space, expected_action",
