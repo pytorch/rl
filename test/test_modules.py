@@ -413,7 +413,7 @@ class TestFunctionalModules:
 
     def test_func_transformer(self):
         torch.manual_seed(10)
-        batch = (10,) if version.parse(torch.__version__) > version.parse("0.10.0") else (1, 10)
+        batch = (10,) if version.parse(torch.__version__) >= version.parse("0.11") else (1, 10)
         module = nn.Transformer(128)
         module.eval()
         fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
