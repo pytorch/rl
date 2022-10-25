@@ -563,7 +563,7 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = ProbabilisticTensorDictModule(
+                ProbabilisticTensorDictModule(
                     module=tdnet,
                     spec=spec,
                     dist_param_keys=["loc", "scale"],

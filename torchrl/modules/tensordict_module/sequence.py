@@ -416,6 +416,7 @@ class TensorDictSequential(TensorDictModule):
                 is_shared=False)
 
         """
+        native = native or not _has_functorch
         if clone:
             self_copy = deepcopy(self)
             self_copy.module = copy(self_copy.module)
