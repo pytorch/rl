@@ -267,6 +267,7 @@ def test_actorcritic(device):
 @pytest.mark.parametrize("num_layers", [1, 2])
 @pytest.mark.parametrize("has_precond_hidden", [True, False])
 def test_lstm_net(device, out_features, hidden_size, num_layers, has_precond_hidden):
+    torch.manual_seed(0)
     batch = 5
     time_steps = 6
     in_features = 7
