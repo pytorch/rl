@@ -36,6 +36,11 @@ from torchrl.modules.models.model_based import (
 )
 from torchrl.modules.models.utils import SquashDims
 
+@pytest.fixture
+def double_prec_fixture():
+    dtype = torch.get_default_dtype()
+    yield torch.set_default_dtype(torch.double)
+    torch.set_default_dtype(dtype)
 
 @pytest.mark.parametrize("in_features", [3, 10, None])
 @pytest.mark.parametrize("out_features", [3, (3, 10)])
@@ -267,6 +272,8 @@ def test_actorcritic(device):
 @pytest.mark.parametrize("num_layers", [1, 2])
 @pytest.mark.parametrize("has_precond_hidden", [True, False])
 def test_lstm_net(device, out_features, hidden_size, num_layers, has_precond_hidden):
+    _ = double_prec_fixture
+
     torch.manual_seed(0)
     batch = 5
     time_steps = 6
