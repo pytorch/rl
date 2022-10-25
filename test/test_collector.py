@@ -965,7 +965,7 @@ class TestAutoWrap:
     def env_maker(self):
         from torchrl.envs.libs.gym import GymEnv
 
-        return lambda: GymEnv("Pendulum-v1")
+        return lambda: GymEnv(PENDULUM_VERSIONED)
 
     def _create_collector_kwargs(self, env_maker, collector_class, policy):
         collector_kwargs = {"create_env_fn": env_maker, "policy": policy}

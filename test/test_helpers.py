@@ -563,6 +563,12 @@ def test_redq_make(device, from_pixels, gsde, exploration):
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
+@pytest.mark.skipif(
+    version.parse(torch.__version__) < version.parse("1.11.0"),
+    reason="""Dreamer works with batches of null to 2 dimensions. Torch < 1.11
+requires one-dimensional batches (for RNN and Conv nets for instance). If you'd like
+to see torch < 1.11 supported for dreamer, please submit an issue.""",
+)
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("tanh_loc", [tuple(), ("tanh_loc=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
