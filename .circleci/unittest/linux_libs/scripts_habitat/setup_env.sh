@@ -51,7 +51,7 @@ conda env update --file "${this_dir}/environment.yml" --prune
 
 conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
 conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
-conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-baselines
+#conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-baselines
 conda run python -m pip install "gym[atari,accept-rom-license]" pygame
 
 # smoke test
