@@ -464,7 +464,7 @@ class TestPlanner:
     version.parse(torch.__version__) < version.parse("1.11.0"),
     reason="""Dreamer works with batches of null to 2 dimensions. Torch < 1.11
 requires one-dimensional batches (for RNN and Conv nets for instance). If you'd like
-to see torch < 1.11 supported for dreamer, please submit an issue."""
+to see torch < 1.11 supported for dreamer, please submit an issue.""",
 )
 class TestDreamerComponents:
     @pytest.mark.parametrize("out_features", [3, 5])
