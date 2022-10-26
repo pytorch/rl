@@ -29,6 +29,9 @@ class Storage:
 
     def __init__(self, max_size: int) -> None:
         self.max_size = int(max_size)
+        # Prototype feature. RBs that use a given instance of Storage should add
+        # themselves to this set.
+        self.attached_entities = set()
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any):
@@ -38,11 +41,28 @@ class Storage:
     def get(self, index: int) -> Any:
         raise NotImplementedError
 
+    def attach(self, buffer: Any) -> None:
+        """This function attaches a buffer to this storage.
+
+        Replay Buffers that read from this storage must call this
+        method to attach themselves. This guarantees that when data
+        in the storage changes, all relevant pieces of the buffer are
+        aware of it even if the storage is shared with another buffer
+        (eg. Priority Samplers).
+
+        Args:
+            buffer: the object that reads from this storage.
+        """
+        self.attached_entities.add(buffer)
+
     def __getitem__(self, item):
         return self.get(item)
 
     def __setitem__(self, index, value):
-        return self.set(index, value)
+        ret = self.set(index, value)
+        for i in self.attached_entities:
+            i.mark_update(index)
+        return ret
 
     def __iter__(self):
         for i in range(len(self)):

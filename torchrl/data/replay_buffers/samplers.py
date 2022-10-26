@@ -28,7 +28,7 @@ class Sampler(ABC):
         pass
 
     def update_priority(
-        self, index: Union[int, torch.Tensor], priority: Union[int, torch.Tensor]
+        self, index: Union[int, torch.Tensor], priority: Union[float, torch.Tensor]
     ) -> dict:
         pass
 

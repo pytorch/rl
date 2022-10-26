@@ -21,11 +21,13 @@ from torchrl.data.replay_buffers import (
     TensorDictPrioritizedReplayBuffer,
     writers,
 )
+from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
 )
+from torchrl.data.replay_buffers.writers import RoundRobinWriter
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDictBase
 
 
@@ -540,6 +542,53 @@ def test_rb_trajectories(stack):
         "_weight", "index", "td_error"
     )
     sampled_td_filtered.batch_size = [3, 4]
+
+
+def test_shared_storage_prioritized_sampler():
+
+    n = 100
+
+    storage = LazyMemmapStorage(n)
+    writer = RoundRobinWriter()
+    sampler0 = RandomSampler()
+    sampler1 = PrioritizedSampler(max_capacity=n, alpha=0.7, beta=1.1)
+
+    rb0 = rb_prototype.ReplayBuffer(
+        storage=storage, writer=writer, sampler=sampler0, collate_fn=lambda x: x
+    )
+    rb1 = rb_prototype.ReplayBuffer(
+        storage=storage, writer=writer, sampler=sampler1, collate_fn=lambda x: x
+    )
+
+    data = TensorDict({"a": torch.arange(50)}, [50])
+
+    # Extend rb0. rb1 should be aware of changes to storage.
+    rb0.extend(data)
+
+    assert len(rb0) == 50
+    assert len(storage) == 50
+    assert len(rb1) == 50
+
+    rb0.sample(10)
+    rb1.sample(10)
+
+    assert rb1._sampler._sum_tree.query(0, 10) == 10
+    assert rb1._sampler._sum_tree.query(0, 50) == 50
+    assert rb1._sampler._sum_tree.query(0, 70) == 50
+
+
+def test_legacy_rb_does_not_attach():
+    n = 10
+    storage = LazyMemmapStorage(n)
+    writer = RoundRobinWriter()
+    sampler = RandomSampler()
+    rb = ReplayBuffer(storage=storage, size=n, prefetch=0, collate_fn=lambda x: x)
+    prb = rb_prototype.ReplayBuffer(
+        storage=storage, writer=writer, sampler=sampler, collate_fn=lambda x: x
+    )
+
+    assert rb not in storage.attached_entities
+    assert prb in storage.attached_entities
 
 
 if __name__ == "__main__":
