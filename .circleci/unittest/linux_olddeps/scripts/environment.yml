@@ -10,7 +10,6 @@ dependencies:
     - cloudpickle
     - gym==0.13
     - pygame
-    - gym[accept-rom-license]
     - gym[atari]
     - moviepy
     - tqdm
