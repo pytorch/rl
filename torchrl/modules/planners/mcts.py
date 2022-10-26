@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import math
+
 import torch
 
 from typing import Dict
@@ -27,7 +29,7 @@ class _MCTSNode:
             through a step method.
         parent (_MCTSNode): a parent node.
         prev_action (int): the action that lead to this node.
-        c_PUCT (float, optional): Exploration constant. Default: :obj:`1.38`.
+        exploration_factor (float, optional): Exploration constant. Default: :obj:`1.38`.
         d_noise_alpha (float, optional): Dirichlet noise alpha parameter. Default: :obj:`0.03`.
         temp_threshold (int, optional): Number of steps into the episode after
             which we always select the action with highest action probability
@@ -42,7 +44,9 @@ class _MCTSNode:
         env: EnvBase,
         parent: _MCTSNode,
         prev_action: int,
-        c_PUCT: float=1.38,
+        exploration_factor: float=1.38,
+        d_noise_alpha: float = 0.03,
+        temp_threshold: int = 5,
     ):
         self.state = state
         self.n_actions = n_actions
@@ -50,6 +54,9 @@ class _MCTSNode:
         self.parent = parent
         self.children = {}
         self.prev_action = prev_action
+        self.exploration_factor = exploration_factor
+        self.d_noise_alpha = d_noise_alpha
+        self.temp_threshold = temp_threshold
 
         self._is_expanded = False
         self._n_vlosses = 0  # Number of virtual losses on this node
@@ -81,6 +88,5 @@ class _MCTSNode:
 
     @property
     def child_U(self):
-        return (c_PUCT * math.sqrt(1 + self.N) *
-                self.child_prior / (1 + self.child_N))
-
+        return (self.exploration_factor * math.sqrt(1 + self.N) *
+                self._child_prior / (1 + self._child_visit_count))
