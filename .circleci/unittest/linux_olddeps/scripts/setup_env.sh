@@ -100,7 +100,6 @@ conda env update --file "${this_dir}/environment.yml" --prune
 conda install -c conda-forge fltk -y
 
 cd ${root_dir}/.mujoco/mujoco-py
-cd mujoco-py
 git checkout aws_fix
 pip install -e .
 cd $this_dir
