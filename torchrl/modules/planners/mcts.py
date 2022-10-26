@@ -110,3 +110,25 @@ class _MCTSNode:
         """
         return self.exploitation_credit + self.exploration_credit
 
+    def select_leaf(self):
+        """Finds a leaf in the MCT rooted in the current node.
+
+        Traverses the MCT rooted in the current node until it finds a leaf
+        (i.e. a node that only exists in its parent node in terms of its
+        child_N and child_W values but not as a dedicated node in the parent's
+        children-mapping). Nodes are selected according to child_action_score.
+        It expands the leaf by adding a dedicated MCTSNode. Note that the
+        estimated value and prior probabilities still have to be set with
+        `incorporate_estimates` afterwards.
+        :return: Expanded leaf MCTSNode.
+        """
+        current = self
+        while True:
+            current.N += 1
+            # Encountered leaf node (i.e. node that is not yet expanded).
+            if not current.is_expanded:
+                break
+            # Choose action with highest score.
+            best_move = np.argmax(current.child_action_score)
+            current = current.maybe_add_child(best_move)
+        return current
