@@ -18,14 +18,14 @@ lib_dir="${env_dir}/lib"
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 
-yum makecache
-yum install -y glfw
-yum install -y glew
-yum install -y mesa-libGL
-yum install -y mesa-libGL-devel
-yum install -y mesa-libOSMesa-devel
-yum -y install egl-utils
-yum -y install freeglut
+#yum makecache
+#yum install -y glfw
+#yum install -y glew
+#yum install -y mesa-libGL
+#yum install -y mesa-libGL-devel
+#yum install -y mesa-libOSMesa-devel
+#yum -y install egl-utils
+#yum -y install freeglut
 
 pytest test/smoke_test.py -v --durations 20
 pytest test/smoke_test_deps.py -v --durations 20 -k 'test_gym or test_dm_control_pixels or test_dm_control'

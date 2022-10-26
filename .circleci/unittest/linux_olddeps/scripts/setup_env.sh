@@ -79,17 +79,17 @@ conda env config vars set \
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
 
-# Software rendering requires GLX and OSMesa.
-if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
-  yum makecache
-  yum install -y glfw
-  yum install -y glew
-  yum install -y mesa-libGL
-  yum install -y mesa-libGL-devel
-  yum install -y mesa-libOSMesa-devel
-  yum -y install egl-utils
-  yum -y install freeglut
-fi
+## Software rendering requires GLX and OSMesa.
+#if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
+#  yum makecache
+#  yum install -y glfw
+#  yum install -y glew
+#  yum install -y mesa-libGL
+#  yum install -y mesa-libGL-devel
+#  yum install -y mesa-libOSMesa-devel
+#  yum -y install egl-utils
+#  yum -y install freeglut
+#fi
 
 conda env update --file "${this_dir}/environment.yml" --prune
 conda install -c conda-forge fltk -y
