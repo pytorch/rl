@@ -23,12 +23,15 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
     Args:
         env (EnvBase): The environment to perform the planning step on (Can be :obj:`ModelBasedEnvBase` or :obj:`EnvBase`).
         action_key (str, optional): The key that will point to the computed action.
+        safe (bool, optional): if True, the action retrieved from the planning step
+            will be projected on the adequate space. Default: :obj:`False`.
     """
 
     def __init__(
         self,
         env: EnvBase,
         action_key: str = "action",
+        safe: bool = False,
     ):
         # Check if env is stateless
         if env.batch_locked:
@@ -40,6 +43,7 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
         super().__init__(env, in_keys=in_keys, out_keys=out_keys)
         self.env = env
         self.action_spec = env.action_spec
+        self.safe = safe
         self.to(env.device)
 
     @abc.abstractmethod
@@ -62,7 +66,8 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
                 "MPCPlannerBase does not currently support functional programming."
             )
         action = self.planning(tensordict)
-        action = self.action_spec.project(action)
+        if self.safe:
+            action = self.action_spec.project(action)
         tensordict_out = self._write_to_tensordict(
             tensordict,
             (action,),
