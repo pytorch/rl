@@ -1163,20 +1163,22 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         """Squeezes all tensors for a dimension comprised in between `-td.batch_dims+1` and `td.batch_dims-1` and returns them in a new tensordict.
 
         Args:
-            dim (int): dimension along which to squeeze
+            dim (Optional[int]): dimension along which to squeeze. If dim is None, all singleton dimensions will be squeezed.
 
         """
-        if dim and dim < 0:
+        dim_is_none = dim is None
+
+        if not dim_is_none and dim < 0:
             dim = self.batch_dims + dim
 
-        if dim and self.batch_dims and (dim >= self.batch_dims or dim < 0):
+        if not dim_is_none and self.batch_dims and (dim >= self.batch_dims or dim < 0):
             raise RuntimeError(
                 f"squeezing is allowed for dims comprised between 0 and "
                 f"td.batch_dims only. Got dim={dim} and batch_size"
                 f"={self.batch_size}."
             )
 
-        if dim and (dim >= self.batch_dims or self.batch_size[dim] != 1):
+        if not dim_is_none and (dim >= self.batch_dims or self.batch_size[dim] != 1):
             return self
         return SqueezedTensorDict(
             source=self,
@@ -4447,7 +4449,7 @@ class UnsqueezedTensorDict(_CustomOpTensorDict):
     """
 
     def squeeze(self, dim: Optional[int]) -> TensorDictBase:
-        if dim and dim < 0:
+        if dim is not None and dim < 0:
             dim = self.batch_dims + dim
         if dim == self.custom_op_kwargs.get("dim"):
             return self._source
@@ -4494,8 +4496,8 @@ class SqueezedTensorDict(_CustomOpTensorDict):
         # dim=0, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[4, 5], [4, 5], [4, 5]] => unsq 1
         # dim=1, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[3, 5], [3, 5], [3, 5], [3, 4]] => unsq 1
         # dim=2, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[3, 4], [3, 4], ...] => unsq 2
-        diff_to_apply = 1 if squeezed_dim and dim < squeezed_dim else 0
-        unsqueezed_dim = squeezed_dim - diff_to_apply if squeezed_dim else -1
+        diff_to_apply = 1 if squeezed_dim is not None and dim < squeezed_dim else 0
+        unsqueezed_dim = squeezed_dim - diff_to_apply if squeezed_dim is not None else -1
         list_item_unsqueeze = [item.unsqueeze(unsqueezed_dim) for item in list_item]
         return self._source._stack_onto_(key, list_item_unsqueeze, dim)
 
