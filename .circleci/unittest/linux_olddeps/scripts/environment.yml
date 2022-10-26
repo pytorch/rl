@@ -22,5 +22,4 @@ dependencies:
     - scipy
     - hydra-core
     - dm_control -e git+https://github.com/deepmind/dm_control.git@c053360edea6170acfd9c8f65446703307d9d352#egg={dm_control}
-    - mujoco-py -e git+https://github.com/vmoens/mujoco-py.git@aws_fix#egg={mujoco-py}
     - patchelf

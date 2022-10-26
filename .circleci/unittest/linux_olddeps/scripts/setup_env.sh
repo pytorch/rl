@@ -52,6 +52,8 @@ wget https://www.roboti.us/download/mujoco200_linux.zip
 unzip mujoco200_linux.zip
 wget https://www.roboti.us/file/mjkey.txt
 cp mjkey.txt ./mujoco200_linux/bin/
+# install mujoco-py locally
+git clone https://github.com/vmoens/mujoco-py.git
 cd $this_dir
 
 # 4. Install Conda dependencies
@@ -97,12 +99,11 @@ conda deactivate && conda activate "${env_dir}"
 conda env update --file "${this_dir}/environment.yml" --prune
 conda install -c conda-forge fltk -y
 
-wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz
-tar -xzvf rarlinux-x64-5.7.1.tar.gz
-mkdir Roms
-wget http://www.atarimania.com/roms/Roms.rar
-./rar/unrar e Roms.rar ./Roms -y
-python -m atari_py.import_roms Roms
+cd $root_dir/.mujoco/mujoco-py
+cd mujoco-py
+git checkout aws_fix
+pip install -e .
+cd $this_dir
 
 # solve permission denied for generated files in mujoco_py
-chmod -R 777 ${env_dir}/lib/python3.9/site-packages/mujoco_py/generated
+#chmod -R 777 ${env_dir}/lib/python3.9/site-packages/mujoco_py/generated
