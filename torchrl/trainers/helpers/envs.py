@@ -261,6 +261,7 @@ def transformed_env_constructor(
         env_library = LIBS[cfg.env_library]
         frame_skip = cfg.frame_skip
         from_pixels = cfg.from_pixels
+        categorical_action_encoding = cfg.categorical_action_encoding
 
         if custom_env is None and custom_env_maker is None:
             if isinstance(cfg.collector_devices, str):
@@ -277,6 +278,7 @@ def transformed_env_constructor(
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
+                "categorical_action_encoding": categorical_action_encoding,
             }
             if env_library is DMControlEnv:
                 env_kwargs.update({"task_name": env_task})
@@ -466,3 +468,5 @@ class EnvConfig:
     batch_transform: bool = False
     # if True, the transforms will be applied to the parallel env, and not to each individual env.\
     image_size: int = 84
+    # if True and environment has discrete action space, then it is encoded as categorical values rather than one-hot.
+    categorical_action_encoding: bool = False
