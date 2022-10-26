@@ -71,10 +71,13 @@ conda env config vars set \
   DISPLAY=:99 \
   MJLIB_PATH=$root_dir/.mujoco/mujoco200_linux/bin/libmujoco200.so \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco200_linux/bin \
-#  MUJOCO_PY_MJKEY_PATH=$root_dir/.mujoco/mjkey.txt \
+  MUJOCO_PY_MJKEY_PATH=$root_dir/.mujoco/mjkey.txt \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL \
   PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
+
+# make env variables apparent
+conda deactivate && conda activate "${env_dir}"
 
 # Software rendering requires GLX and OSMesa.
 if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
