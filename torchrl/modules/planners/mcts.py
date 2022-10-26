@@ -22,6 +22,8 @@ class MCTSPlanner():
 class _MCTSNode:
     """Represents a node in the Monte-Carlo search tree. Each node holds a single environment state.
 
+    Reference: https://dke.maastrichtuniversity.nl/m.winands/documents/CGSameGame.pdf
+
     Args:
         state (TensorDict): A tensordict representing the state of the node.
         n_actions (int): number of actions available at that stage.
@@ -87,6 +89,24 @@ class _MCTSNode:
         return self.total_value / (1 + self.visit_count)
 
     @property
-    def child_U(self):
-        return (self.exploration_factor * math.sqrt(1 + self.N) *
+    def exploration_credit(self):
+        """Exploration boost factor: gives a high credit to moves with few simulations."""
+        return (self.exploration_factor * math.sqrt(1 + self.visit_count) *
                 self._child_prior / (1 + self._child_visit_count))
+
+    @property
+    def exploitation_credit(self):
+        """Exploration credit: gives a high credit to moves with a high average value."""
+        return self._child_total_value / (1 + self._child_visit_count)
+
+    @property
+    def action_score(self):
+        """Action score.
+
+        Proposed in: An Adaptive Sampling Algorithm for Solving Markov Decision
+        Processes. Hyeong Soo Chang, Michael C. Fu, Jiaqiao Hu, Steven I. Marcus,
+        https://doi.org/10.1287/opre.1040.0145
+
+        """
+        return self.exploitation_credit + self.exploration_credit
+
