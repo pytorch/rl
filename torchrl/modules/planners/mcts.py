@@ -6,22 +6,24 @@ from __future__ import annotations
 
 import collections
 import math
-
-import torch
-
 from typing import Dict
 
+import torch
 from torch.distributions.dirichlet import _Dirichlet
 
-from torchrl.data import TensorDict, DEVICE_TYPING
+from torchrl.data import DEVICE_TYPING
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase
 
 # This file is inspired by https://github.com/FelixOpolka/Single-Player-MCTS
 # Refactoring involves: renaming, torch and tensordict compatibility and integration in torchrl's API
 
-class MCTSPlanner():
+
+class MCTSPlanner:
+    """To do."""
+
     pass
+
 
 class _MCTSNode:
     """Represents a node in the Monte-Carlo search tree. Each node holds a single environment state.
@@ -50,7 +52,7 @@ class _MCTSNode:
         env: EnvBase,
         parent: _MCTSNode,
         prev_action: int,
-        exploration_factor: float=1.38,
+        exploration_factor: float = 1.38,
         d_noise_alpha: float = 0.03,
         temp_threshold: int = 5,
         device: DEVICE_TYPING = "cpu",
@@ -65,7 +67,7 @@ class _MCTSNode:
         else:
             self.depth = parent.depth + 1
         self.parent = parent
-        self.children :Dict[int, _MCTSNode] = {}
+        self.children: Dict[int, _MCTSNode] = {}
         self.prev_action = prev_action
         self.exploration_factor = exploration_factor
         self.d_noise_alpha = d_noise_alpha
@@ -74,11 +76,14 @@ class _MCTSNode:
         self._device = device
         self._is_expanded = False
         self._n_vlosses = 0  # Number of virtual losses on this node
-        self.state["_child_visit_count"] = torch.zeros([n_actions], dtype=torch.long, device=self.device)
+        self.state["_child_visit_count"] = torch.zeros(
+            [n_actions], dtype=torch.long, device=self.device
+        )
         self.state["_child_total_value"] = torch.zeros([n_actions], device=self.device)
         # Save copy of original prior before it gets mutated by dirichlet noise
         self.state["_original_prior"] = torch.zeros([n_actions], device=self.device)
         self.state["_child_prior"] = torch.zeros([n_actions], device=self.device)
+        parent.children[prev_action] = self
 
     @property
     def _child_visit_count(self) -> torch.Tensor:
@@ -143,8 +148,12 @@ class _MCTSNode:
     @property
     def exploration_credit(self) -> torch.Tensor:
         """Exploration boost factor: gives a high credit to moves with few simulations."""
-        return (self.exploration_factor * math.sqrt(1 + self.visit_count) *
-                self._child_prior / (1 + self._child_visit_count))
+        return (
+            self.exploration_factor
+            * math.sqrt(1 + self.visit_count)
+            * self._child_prior
+            / (1 + self._child_visit_count)
+        )
 
     @property
     def exploitation_credit(self) -> torch.Tensor:
@@ -199,21 +208,23 @@ class _MCTSNode:
             # Obtain state following given action.
             state = self.state.clone(recurse=False)
             new_state = self.env.step(state.set("action", torch.tensor([action])))
-            self.children[action] = _MCTSNode(new_state, self.n_actions,
-                                             self.env, prev_action=action, parent=self)
+            self.children[action] = _MCTSNode(
+                new_state, self.n_actions, self.env, prev_action=action, parent=self
+            )
         return self.children[action]
 
-    def incorporate_estimates(self, action_probs: torch.Tensor, value: torch.Tensor, up_to: _MCTSNode):
-        """
+    def incorporate_estimates(
+        self, action_probs: torch.Tensor, value: float, up_to: _MCTSNode
+    ):
+        """Method to be called if the node has just been expanded via `select_leaf`.
 
-        Call if the node has just been expanded via `select_leaf` to
-        incorporate the prior action probabilities and state value estimated
+        It incorporates the prior action probabilities and state value estimated
         by the neural network.
 
         Args:
             action_probs (torch.Tensor): Action probabilities for the current
                 node's state predicted by the neural network.
-            value (torch.Tensor): Value of the current node's state predicted
+            value (float): Value of the current node's state predicted
                 by the neural network.
             up_to (int): The node to propagate until.
         """
@@ -226,9 +237,11 @@ class _MCTSNode:
             return
         self._is_expanded = True
         self._original_prior = self._child_prior = action_probs
-        # This is a deviation from the paper that led to better results in
-        # practice (following the MiniGo implementation).
-        self._child_total_value = torch.ones([self.n_actions], dtype=torch.float32, device=self.device) * value
+
+        self._child_total_value = (
+            torch.ones([self.n_actions], dtype=torch.float32, device=self.device)
+            * value
+        )
         self.backup_value(value, up_to=up_to)
 
     def revert_visits(self, up_to: _MCTSNode):
@@ -262,8 +275,7 @@ class _MCTSNode:
         self.parent.add_virtual_loss(up_to)
 
     def revert_virtual_loss(self, up_to: _MCTSNode):
-        """
-        Undo adding virtual loss.
+        """Undo adding virtual loss.
 
         Args:
             up_to (_MCTSNode): The node to propagate until.
@@ -274,14 +286,14 @@ class _MCTSNode:
             return
         self.parent.revert_virtual_loss(up_to)
 
-    def backup_value(self, value: torch.Tensor, up_to: _MCTSNode):
+    def backup_value(self, value: float, up_to: _MCTSNode):
         """Propagates a value estimation up to the root node.
 
         Args:
             value (torch.Tensor): Value estimate to be propagated.
             up_to (_MCTSNode): The node to propagate until.
         """
-        self._child_total_value += value
+        self.total_value += value
         if self.parent is None or self is up_to:
             return
         self.parent.backup_value(value, up_to)
@@ -293,7 +305,7 @@ class _MCTSNode:
         dirch = _Dirichlet.apply(self.d_noise_alpha * self.n_actions)
         self._child_prior = self._child_prior * 0.75 + dirch * 0.25
 
-    def visits_as_probs(self, squash: bool=False) -> torch.Tensor:
+    def visits_as_probs(self, squash: bool = False) -> torch.Tensor:
         """Returns the child visit counts as a probability distribution.
 
         Args:
@@ -302,8 +314,9 @@ class _MCTSNode:
         """
         probs = self._child_visit_count
         if squash:
-            probs = probs ** .95
+            probs = probs ** 0.95
         return probs / probs.sum(-1, True)
+
 
 class _VoidNode:
     """Special node that is used as the node above the initial root node to prevent having to deal with special cases when traversing the tree."""
@@ -312,11 +325,16 @@ class _VoidNode:
         self.parent = None
         self._child_visit_count = collections.defaultdict(float)
         self._child_total_value = collections.defaultdict(float)
+        self.children = {}
 
-    def revert_virtual_loss(self, up_to=None): pass
+    def revert_virtual_loss(self, up_to=None):
+        pass
 
-    def add_virtual_loss(self, up_to=None): pass
+    def add_virtual_loss(self, up_to=None):
+        pass
 
-    def revert_visits(self, up_to=None): pass
+    def revert_visits(self, up_to=None):
+        pass
 
-    def backup_value(self, value, up_to=None): pass
+    def backup_value(self, value, up_to=None):
+        pass

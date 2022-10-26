@@ -15,7 +15,11 @@ from torchrl.data.tensor_specs import (
     DiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
+    CompositeSpec,
+    NdUnboundedContinuousTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
+from torchrl.envs import EnvBase
 from torchrl.modules import (
     ActorValueOperator,
     CEMPlanner,
@@ -678,43 +682,124 @@ class TestDreamerComponents:
             rollout["next_posterior_std"], rollout_bis["next_posterior_std"]
         )
 
+
 class MockingMCTSEnv(EnvBase):
     def __init__(self, n_obs=3, n_action=2):
-        self.observation_spec = CompositeSpec(next_obs=NdUnboundedContinuousTensorSpec(n_obs))
+        self.observation_spec = CompositeSpec(
+            next_obs=NdUnboundedContinuousTensorSpec(n_obs)
+        )
         self.input_spec = CompositeSpec(action=DiscreteTensorSpec(n_action))
+        self.reward_spec = UnboundedContinuousTensorSpec()
+        super().__init__()
 
     def _step(self, tensordict):
         action = tensordict["action"]
         state = tensordict["obs"]
+        tensordict = tensordict.clone(recurse=False)
         tensordict["next_obs"] = state + action
         tensordict["done"] = torch.zeros(1, dtype=torch.bool)
         tensordict["reward"] = torch.zeros(1)
+        return tensordict
 
     def _reset(self, tensordict):
         return TensorDict(self.observation_spec.zero(), [])
 
+
 class TestMCTSNode:
     def test_MCTSNode_init(self, n_actions=2):
         root_state = TensorDict({"obs": torch.zeros(2)}, [])
-        root_node = _MCTSNode(root_state, n_actions=n_actions, env=None, parent=None, prev_action=None)
+        root_node = _MCTSNode(
+            root_state, n_actions=n_actions, env=None, parent=None, prev_action=None
+        )
         state = TensorDict({"obs": torch.ones(2)}, [])
-        node = _MCTSNode(state, n_actions=n_actions, env=None, parent=root_node, prev_action=n_actions-1)
-        assert (node._child_visit_count==0).all()
-        assert (node._child_total_value==0).all()
-        assert (node._child_prior==0).all()
-        assert (node._original_prior==0).all()
+        node = _MCTSNode(
+            state,
+            n_actions=n_actions,
+            env=None,
+            parent=root_node,
+            prev_action=n_actions - 1,
+        )
+        assert (node._child_visit_count == 0).all()
+        assert (node._child_total_value == 0).all()
+        assert (node._child_prior == 0).all()
+        assert (node._original_prior == 0).all()
         assert node.visit_count == 0
         assert node.total_value == 0
         assert node.action_value == 0
         assert (node.action_score == 0).all()
 
     def test_MCTSNode_select_leaf(self, n_actions=2):
+        assert n_actions >= 2, "the test will not pass with a single action"
+        env = MockingMCTSEnv()
         root_state = TensorDict({"obs": torch.zeros(2)}, [])
-        root_node = _MCTSNode(root_state, n_actions=n_actions, env=None, parent=None, prev_action=None)
+        root_node = _MCTSNode(
+            root_state, n_actions=n_actions, env=env, parent=None, prev_action=None
+        )
         state = TensorDict({"obs": torch.ones(2)}, [])
-        _ = _MCTSNode(state, n_actions=n_actions, env=None, parent=root_node, prev_action=n_actions-1)
+        node_last_action = _MCTSNode(
+            state,
+            n_actions=n_actions,
+            env=env,
+            parent=root_node,
+            prev_action=n_actions - 1,
+        )
         selected_leaf = root_node.select_leaf()
         assert selected_leaf is root_node
+        root_node.maybe_add_child(0)
+        selected_leaf = root_node.select_leaf()
+        assert selected_leaf is not root_node.children[0]
+        assert selected_leaf is not node_last_action
+        assert root_node.children[1] is node_last_action
+
+    def test_MCTSNode_incorporate_estimates(self, n_actions=2):
+        torch.manual_seed(0)
+        action_probs = torch.rand(n_actions)
+        value = torch.rand(1).item()
+        env = MockingMCTSEnv()
+        root_state = TensorDict({"obs": torch.zeros(2)}, [])
+        root_node = _MCTSNode(
+            root_state, n_actions=n_actions, env=env, parent=None, prev_action=None
+        )
+        root_node.maybe_add_child(0)
+        root_node.incorporate_estimates(action_probs, value, up_to=root_node)
+        assert (root_node.state["_original_prior"] == root_node._original_prior).all()
+        assert (root_node.state["_child_prior"] == root_node._child_prior).all()
+        assert (
+            root_node.state["_child_total_value"] == root_node._child_total_value
+        ).all()
+        assert (root_node._child_total_value == value).all()
+
+        # now with child
+        child_node = root_node.children[0]
+        child_node.incorporate_estimates(action_probs, value, up_to=child_node)
+        assert (child_node.state["_original_prior"] == child_node._original_prior).all()
+        assert (child_node.state["_child_prior"] == child_node._child_prior).all()
+        assert (
+            child_node.state["_child_total_value"] == child_node._child_total_value
+        ).all()
+        assert (child_node._child_total_value == value).all()
+        # the value of _child_total_value in parent has changed
+        assert (root_node._child_total_value != value).any()
+
+        child_node.maybe_add_child(1)
+        grand_child_node = child_node.children[1]
+        assert (root_node._child_total_value != value).any()
+        grand_child_node.incorporate_estimates(action_probs, value, up_to=root_node)
+        assert (
+            grand_child_node.state["_original_prior"]
+            == grand_child_node._original_prior
+        ).all()
+        assert (
+            grand_child_node.state["_child_prior"] == grand_child_node._child_prior
+        ).all()
+        assert (
+            grand_child_node.state["_child_total_value"]
+            == grand_child_node._child_total_value
+        ).all()
+        assert (grand_child_node._child_total_value == value).all()
+        assert root_node._child_total_value[0] == 3 * value
+        assert child_node._child_total_value[1] == 2 * value
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
