@@ -84,21 +84,19 @@ conda env config vars set \
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
 
-## Software rendering requires GLX and OSMesa.
-#if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
-#  yum makecache
-#  yum install -y glfw
-#  yum install -y glew
-#  yum install -y mesa-libGL
-#  yum install -y mesa-libGL-devel
-#  yum install -y mesa-libOSMesa-devel
-#  yum -y install egl-utils
-#  yum -y install freeglut
-#fi
-
+# install dependencies
 conda env update --file "${this_dir}/environment.yml" --prune
 conda install -c conda-forge fltk -y
 
+# ROM licence for Atari
+wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz
+tar -xzvf rarlinux-x64-5.7.1.tar.gz
+mkdir Roms
+wget http://www.atarimania.com/roms/Roms.rar
+./rar/unrar e Roms.rar ./Roms -y
+python -m atari_py.import_roms Roms
+
+# install mujoco-py locally
 cd ${root_dir}/.mujoco/mujoco-py
 git checkout aws_fix
 pip install -e .
