@@ -2,6 +2,8 @@ import collections
 import math
 import os
 import time
+from functools import wraps
+from importlib import import_module
 
 import numpy as np
 
@@ -15,6 +17,7 @@ class timeit:
         self.name = name
 
     def __call__(self, fn):
+        @wraps(fn)
         def decorated_fn(*args, **kwargs):
             with self:
                 out = fn(*args, **kwargs)
@@ -140,3 +143,53 @@ def get_binary_env_var(key):
             f"Got {val} instead."
         )
     return val
+
+
+class implement_for:
+    """A version decorator that checks the version in the environment and implements a function with the fitting one.
+
+    If specified module is missing, the decorator does nothing.
+    In case of intersected ranges, first fitting implementation is used.
+
+    Args:
+        module_name: version is checked for the module with this name (e.g. "gym").
+        from_version: version from which implementation is compatible.
+        to_version: version from which implementation is no longer compatible. Can be open (None).
+
+    Examples:
+        @implement_for(“gym”, “0.13”, “0.14”)
+        def fun(self, x):
+        ...
+        This indicates that the function is compatible with gym 0.13+, but doesn't with gym 0.14+.
+    """
+
+    # Stores pointers to fitting implementations: dict[func_name] = func_pointer
+    _implementations = {}
+
+    def __init__(self, module_name: str, from_version: str, to_version: str = None):
+        self.module_name = module_name
+        self.from_version = from_version
+        self.to_version = to_version
+
+    def __call__(self, fn):
+        # If the module is missing in the environment the decorator does nothing.
+        try:
+            module = import_module(self.module_name)
+        except ModuleNotFoundError:
+            return fn
+
+        func_name = fn.__name__
+        implementations = implement_for._implementations
+
+        # Return fitting implementation if it was encountered before.
+        if func_name in implementations:
+            return implementations[func_name]
+
+        version = module.__version__
+
+        if version >= self.from_version and (
+            self.to_version is None or version < self.to_version
+        ):
+            implementations[func_name] = fn
+
+        return fn
