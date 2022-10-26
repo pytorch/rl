@@ -1147,6 +1147,10 @@ def test_batch_unlocked_with_batch_size(device):
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
+@pytest.mark.skipif(
+    gym_version < version.parse("0.20.0"),
+    reason="older versions of half-cheetah do not have 'x_position' info key.",
+)
 def test_info_dict_reader(seed=0):
     import gym
 
