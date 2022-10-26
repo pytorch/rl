@@ -7,6 +7,8 @@
 
 set -e
 
+apt-get update && apt-get install git wget
+
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
@@ -15,7 +17,6 @@ conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
 
-apt-get update && apt-get install git wget
 
 cd "${root_dir}"
 
