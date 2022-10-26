@@ -2,6 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+import torch
+
+from torchrl.data import TensorDict
+from torchrl.envs import EnvBase
+
 
 class MCTSPlanner():
     pass
@@ -36,11 +43,21 @@ class _MCTSNode:
 
         self._is_expanded = False
         self._n_vlosses = 0  # Number of virtual losses on this node
-        self._child_N = torch.zeros([n_actions])
-        self._child_W = torch.zeros([n_actions])
+        self._child_visit_count = torch.zeros([n_actions])
+        self._child_total_value = torch.zeros([n_actions])
         # Save copy of original prior before it gets mutated by dirichlet noise
         self._original_prior = torch.zeros([n_actions])
         self._child_prior = torch.zeros([n_actions])
 
-    def count(self):
-        return self.parent._child_N[action]
+    @property
+    def visit_count(self):
+        return self.parent._child_visit_count[self.prev_action]
+
+    @visit_count.setter
+    def visit_count(self, value):
+        self.parent._child_visit_count[self.prev_action] = value
+
+    @property
+    def total_value(self):
+        return self.parent._child_total_value[self.prev_action]
+
