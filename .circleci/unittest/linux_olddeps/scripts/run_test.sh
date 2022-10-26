@@ -5,7 +5,7 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
-apt-get update -y && apt-get install git wget gcc g++ -y
+apt-get update -y && apt-get install git wget gcc g++ libosmesa6 -y
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
