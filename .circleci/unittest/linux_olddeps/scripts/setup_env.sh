@@ -7,7 +7,7 @@
 
 set -e
 
-apt-get update -y && apt-get install git wget unzip -y
+apt-get update -y && apt-get install git wget unzip gcc g++ -y
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
