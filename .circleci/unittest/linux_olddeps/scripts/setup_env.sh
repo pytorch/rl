@@ -15,6 +15,8 @@ conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
 
+apt-get update && apt-get install git wget
+
 cd "${root_dir}"
 
 case "$(uname -s)" in

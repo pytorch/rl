@@ -10,6 +10,8 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
+apt-get update && apt-get install git wget
+
 if [ "${CU_VERSION:-}" == cpu ] ; then
     cudatoolkit="cpuonly"
     version="cpu"
