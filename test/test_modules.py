@@ -11,7 +11,9 @@ from _utils_internal import get_available_devices
 from mocking_classes import MockBatchedUnLockedEnv
 from torch import nn
 from torchrl.data import TensorDict
-from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec, NdBoundedTensorSpec
+from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec, \
+    NdBoundedTensorSpec, CompositeSpec, NdUnboundedContinuousTensorSpec
+from torchrl.envs import EnvBase
 from torchrl.modules import (
     ActorValueOperator,
     CEMPlanner,
@@ -35,6 +37,7 @@ from torchrl.modules.models.model_based import (
     RSSMRollout,
 )
 from torchrl.modules.models.utils import SquashDims
+from torchrl.modules.planners.mcts import _MCTSNode
 
 
 @pytest.mark.parametrize("in_features", [3, 10, None])
@@ -642,6 +645,43 @@ class TestDreamerComponents:
             rollout["next_posterior_std"], rollout_bis["next_posterior_std"]
         )
 
+class MockingMCTSEnv(EnvBase):
+    def __init__(self, n_obs=3, n_action=2):
+        self.observation_spec = CompositeSpec(next_obs=NdUnboundedContinuousTensorSpec(n_obs))
+        self.input_spec = CompositeSpec(action=DiscreteTensorSpec(n_action))
+
+    def _step(self, tensordict):
+        action = tensordict["action"]
+        state = tensordict["obs"]
+        tensordict["next_obs"] = state + action
+        tensordict["done"] = torch.zeros(1, dtype=torch.bool)
+        tensordict["reward"] = torch.zeros(1)
+
+    def _reset(self, tensordict):
+        return TensorDict(self.observation_spec.zero(), [])
+
+class TestMCTSNode:
+    def test_MCTSNode_init(self, n_actions=2):
+        root_state = TensorDict({"obs": torch.zeros(2)}, [])
+        root_node = _MCTSNode(root_state, n_actions=n_actions, env=None, parent=None, prev_action=None)
+        state = TensorDict({"obs": torch.ones(2)}, [])
+        node = _MCTSNode(state, n_actions=n_actions, env=None, parent=root_node, prev_action=n_actions-1)
+        assert (node._child_visit_count==0).all()
+        assert (node._child_total_value==0).all()
+        assert (node._child_prior==0).all()
+        assert (node._original_prior==0).all()
+        assert node.visit_count == 0
+        assert node.total_value == 0
+        assert node.action_value == 0
+        assert (node.action_score == 0).all()
+
+    def test_MCTSNode_select_leaf(self, n_actions=2):
+        root_state = TensorDict({"obs": torch.zeros(2)}, [])
+        root_node = _MCTSNode(root_state, n_actions=n_actions, env=None, parent=None, prev_action=None)
+        state = TensorDict({"obs": torch.ones(2)}, [])
+        _ = _MCTSNode(state, n_actions=n_actions, env=None, parent=root_node, prev_action=n_actions-1)
+        selected_leaf = root_node.select_leaf()
+        assert selected_leaf is root_node
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
