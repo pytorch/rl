@@ -743,6 +743,10 @@ class LogReward:
             "log_pbar": self.log_pbar,
         }
 
+    def register(self, trainer: Trainer):
+        trainer.register_op("pre_steps_log", self)
+        trainer.register_module("log_reward", self)
+
 
 class RewardNormalizer:
     """Reward normalizer hook.
@@ -978,6 +982,13 @@ class BatchSubSampler:
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         pass
 
+    def register(self, trainer):
+        trainer.register_op(
+            "process_optim_batch",
+            self,
+        )
+        trainer.register_module("batch_subsampler", self)
+
 
 class Recorder:
     """Recorder hook for Trainer.
@@ -1084,6 +1095,23 @@ class Recorder:
         self.recorder.close()
         return out
 
+    def state_dict(self) -> Dict:
+        return {
+            "_count": self._count,
+            "recorder_state_dict": self.recorder.state_dict(),
+        }
+
+    def load_state_dict(self, state_dict: Dict) -> None:
+        self._count = state_dict["_count"]
+        self.recorder.load_state_dict(state_dict["recorder_state_dict"])
+
+    def register(self, trainer: Trainer):
+        trainer.register_module("recorder", self)
+        trainer.register_op(
+            "post_steps_log",
+            self,
+        )
+
 
 class UpdateWeights:
     """A collector weights update hook class.
@@ -1115,6 +1143,19 @@ class UpdateWeights:
         if self.counter % self.update_weights_interval == 0:
             self.collector.update_policy_weights_()
 
+    def register(self, trainer: Trainer):
+        trainer.register_module("update_weights", self)
+        trainer.register_op(
+            "post_steps",
+            self,
+        )
+
+    def state_dict(self) -> Dict:
+        return {}
+
+    def load_state_dict(self, state_dict) -> None:
+        return
+
 
 class CountFramesLog:
     """A frame counter hook.
@@ -1133,8 +1174,12 @@ class CountFramesLog:
 
     """
 
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls.frame_count = 0
+        return super().__new__(cls)
+
     def __init__(self, frame_skip: int, log_pbar: bool = False):
-        self.frame_count = 0
         self.frame_skip = frame_skip
         self.log_pbar = log_pbar
 
@@ -1145,6 +1190,19 @@ class CountFramesLog:
             current_frames = batch.numel() * self.frame_skip
         self.frame_count += current_frames
         return {"n_frames": self.frame_count, "log_pbar": self.log_pbar}
+
+    def register(self, trainer: Trainer):
+        trainer.register_module("count_frames_log", self)
+        trainer.register_op(
+            "pre_steps_log",
+            self,
+        )
+
+    def state_dict(self) -> Dict:
+        return {"frame_count": self.frame_count}
+
+    def load_state_dict(self, state_dict) -> None:
+        self.frame_count = state_dict["frame_count"]
 
 
 def _check_input_output_typehint(func: Callable, input: Type, output: Type):

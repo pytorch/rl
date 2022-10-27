@@ -466,21 +466,38 @@ class TestRB:
         TensorDict.load_state_dict = TensorDict_load_state_dict
 
 
-@pytest.mark.parametrize("logname", ["a", "b"])
-@pytest.mark.parametrize("pbar", [True, False])
-def test_log_reward(logname, pbar):
-    trainer = mocking_trainer()
-    trainer.collected_frames = 0
+class TestLogReward:
+    @pytest.mark.parametrize("logname", ["a", "b"])
+    @pytest.mark.parametrize("pbar", [True, False])
+    def test_log_reward(self, logname, pbar):
+        trainer = mocking_trainer()
+        trainer.collected_frames = 0
 
-    log_reward = LogReward(logname, log_pbar=pbar)
-    trainer.register_op("pre_steps_log", log_reward)
-    td = TensorDict({"reward": torch.ones(3)}, [3])
-    trainer._pre_steps_log_hook(td)
-    if _has_tqdm and pbar:
-        assert trainer._pbar_str[logname] == 1
-    else:
-        assert logname not in trainer._pbar_str
-    assert trainer._log_dict[logname][-1] == 1
+        log_reward = LogReward(logname, log_pbar=pbar)
+        trainer.register_op("pre_steps_log", log_reward)
+        td = TensorDict({"reward": torch.ones(3)}, [3])
+        trainer._pre_steps_log_hook(td)
+        if _has_tqdm and pbar:
+            assert trainer._pbar_str[logname] == 1
+        else:
+            assert logname not in trainer._pbar_str
+        assert trainer._log_dict[logname][-1] == 1
+
+    @pytest.mark.parametrize("logname", ["a", "b"])
+    @pytest.mark.parametrize("pbar", [True, False])
+    def test_log_reward_register(self, logname, pbar):
+        trainer = mocking_trainer()
+        trainer.collected_frames = 0
+
+        log_reward = LogReward(logname, log_pbar=pbar)
+        log_reward.register(trainer)
+        td = TensorDict({"reward": torch.ones(3)}, [3])
+        trainer._pre_steps_log_hook(td)
+        if _has_tqdm and pbar:
+            assert trainer._pbar_str[logname] == 1
+        else:
+            assert logname not in trainer._pbar_str
+        assert trainer._log_dict[logname][-1] == 1
 
 
 class TestRewardNorm:
@@ -607,10 +624,8 @@ class TestSubSampler:
         key1 = "key1"
         key2 = "key2"
 
-        trainer.register_op(
-            "process_optim_batch",
-            BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len),
-        )
+        subsampler = BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len)
+        subsampler.register(trainer)
 
         td = TensorDict(
             {
@@ -633,10 +648,8 @@ class TestSubSampler:
         key1 = "key1"
         key2 = "key2"
 
-        trainer.register_op(
-            "process_optim_batch",
-            BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len),
-        )
+        subsampler = BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len)
+        subsampler.register(trainer)
 
         td = TensorDict(
             {
@@ -649,10 +662,8 @@ class TestSubSampler:
         torch.manual_seed(0)
         td0 = trainer._process_optim_batch_hook(td)
         trainer2 = mocking_trainer()
-        trainer2.register_op(
-            "process_optim_batch",
-            BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len),
-        )
+        subsampler2 = BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len)
+        subsampler2.register(trainer2)
         trainer2.load_state_dict(trainer.state_dict())
         torch.manual_seed(0)
         td1 = trainer2._process_optim_batch_hook(td)
@@ -661,10 +672,8 @@ class TestSubSampler:
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library")
 @pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
-def test_recorder():
-    with tempfile.TemporaryDirectory() as folder:
-        print(folder)
-        logger = TensorboardLogger(exp_name=folder)
+class TestRecorder:
+    def _get_args(self):
         args = Namespace()
         args.env_name = "ALE/Pong-v5"
         args.env_task = ""
@@ -684,46 +693,114 @@ def test_recorder():
         args.image_size = 84
         args.collector_devices = ["cpu"]
         args.categorical_action_encoding = False
+        return args
 
-        N = 8
+    def test_recorder(self, N=8):
+        args = self._get_args()
+        with tempfile.TemporaryDirectory() as folder:
+            logger = TensorboardLogger(exp_name=folder)
 
-        recorder = transformed_env_constructor(
-            args,
-            video_tag="tmp",
-            norm_obs_only=True,
-            stats={"loc": 0, "scale": 1},
-            logger=logger,
-        )()
+            recorder = transformed_env_constructor(
+                args,
+                video_tag="tmp",
+                norm_obs_only=True,
+                stats={"loc": 0, "scale": 1},
+                logger=logger,
+            )()
 
-        recorder = Recorder(
-            record_frames=args.record_frames,
-            frame_skip=args.frame_skip,
-            policy_exploration=None,
-            recorder=recorder,
-            record_interval=args.record_interval,
-        )
-
-        for _ in range(N):
-            recorder(None)
-
-        for (_, _, filenames) in walk(folder):
-            filename = filenames[0]
-            break
-        for _ in range(3):
-            ea = event_accumulator.EventAccumulator(
-                path.join(folder, filename),
-                size_guidance={
-                    event_accumulator.IMAGES: 0,
-                },
+            recorder = Recorder(
+                record_frames=args.record_frames,
+                frame_skip=args.frame_skip,
+                policy_exploration=None,
+                recorder=recorder,
+                record_interval=args.record_interval,
             )
-            ea.Reload()
-            print(ea.Tags())
-            img = ea.Images("tmp_ALE/Pong-v5_video")
-            try:
-                assert len(img) == N // args.record_interval
+            trainer = mocking_trainer()
+            recorder.register(trainer)
+
+            for _ in range(N):
+                recorder(None)
+
+            for (_, _, filenames) in walk(folder):
+                filename = filenames[0]
                 break
-            except AssertionError:
-                sleep(0.1)
+
+            for _ in range(3):
+                ea = event_accumulator.EventAccumulator(
+                    path.join(folder, filename),
+                    size_guidance={
+                        event_accumulator.IMAGES: 0,
+                    },
+                )
+                ea.Reload()
+                print(ea.Tags())
+                img = ea.Images("tmp_ALE/Pong-v5_video")
+                try:
+                    assert len(img) == N // args.record_interval
+                    break
+                except AssertionError:
+                    sleep(0.1)
+
+    @pytest.mark.parametrize(
+        "backend",
+        [
+            "torchsnapshot",
+            "torch",
+        ],
+    )
+    def test_recorder_load(self, backend, N=8):
+        state_dict_has_been_called = [False]
+        load_state_dict_has_been_called = [False]
+        Recorder.state_dict, Recorder_state_dict = _fun_checker(
+            Recorder.state_dict, state_dict_has_been_called
+        )
+        (
+            Recorder.load_state_dict,
+            Recorder_load_state_dict,
+        ) = _fun_checker(Recorder.load_state_dict, load_state_dict_has_been_called)
+
+        args = self._get_args()
+
+        def _make_recorder_and_trainer(tmpdirname):
+            logger = TensorboardLogger(exp_name=tmpdirname)
+            if backend == "torch":
+                file = path.join(tmpdirname, "file.pt")
+            elif backend == "torchsnapshot":
+                file = tmpdirname
+            else:
+                raise NotImplementedError
+            trainer = mocking_trainer(file)
+
+            recorder = transformed_env_constructor(
+                args,
+                video_tag="tmp",
+                norm_obs_only=True,
+                stats={"loc": 0, "scale": 1},
+                logger=logger,
+            )()
+
+            recorder = Recorder(
+                record_frames=args.record_frames,
+                frame_skip=args.frame_skip,
+                policy_exploration=None,
+                recorder=recorder,
+                record_interval=args.record_interval,
+            )
+            recorder.register(trainer)
+            return trainer, recorder, file
+
+        with tempfile.TemporaryDirectory() as tmpdirname, tempfile.TemporaryDirectory() as tmpdirname2:
+            trainer, recorder, file = _make_recorder_and_trainer(tmpdirname)
+            for _ in range(N):
+                recorder(None)
+            trainer.save_trainer(True)
+            trainer2, recorder2, _ = _make_recorder_and_trainer(tmpdirname2)
+            trainer2.load_from_file(file)
+            assert recorder2._count == 8
+            assert state_dict_has_been_called[0]
+            assert load_state_dict_has_been_called[0]
+        Recorder.state_dict = Recorder_state_dict
+        Recorder.load_state_dict = Recorder_load_state_dict
 
 
 def test_updateweights():
@@ -732,26 +809,78 @@ def test_updateweights():
 
     T = 5
     update_weights = UpdateWeights(trainer.collector, T)
-    trainer.register_op("post_steps", update_weights)
+    update_weights.register(trainer)
     for t in range(T):
         trainer._post_steps_hook()
         assert trainer.collector.called_update_policy_weights_ is (t == T - 1)
     assert trainer.collector.called_update_policy_weights_
 
 
-def test_countframes():
-    torch.manual_seed(0)
-    trainer = mocking_trainer()
+class TestCountFrames:
+    def test_countframes(self):
+        torch.manual_seed(0)
+        trainer = mocking_trainer()
 
-    frame_skip = 3
-    batch = 10
-    count_frames = CountFramesLog(frame_skip=frame_skip)
-    trainer.register_op("pre_steps_log", count_frames)
-    td = TensorDict(
-        {"mask": torch.zeros(batch, dtype=torch.bool).bernoulli_()}, [batch]
+        frame_skip = 3
+        batch = 10
+        count_frames = CountFramesLog(frame_skip=frame_skip)
+        count_frames.register(trainer)
+        td = TensorDict(
+            {"mask": torch.zeros(batch, dtype=torch.bool).bernoulli_()}, [batch]
+        )
+        trainer._pre_steps_log_hook(td)
+        assert count_frames.frame_count == td.get("mask").sum() * frame_skip
+
+    @pytest.mark.parametrize(
+        "backend",
+        [
+            "torchsnapshot",
+            "torch",
+        ],
     )
-    trainer._pre_steps_log_hook(td)
-    assert count_frames.frame_count == td.get("mask").sum() * frame_skip
+    def test_countframes_load(self, backend):
+        state_dict_has_been_called = [False]
+        load_state_dict_has_been_called = [False]
+        CountFramesLog.state_dict, CountFramesLog_state_dict = _fun_checker(
+            CountFramesLog.state_dict, state_dict_has_been_called
+        )
+        (
+            CountFramesLog.load_state_dict,
+            CountFramesLog_load_state_dict,
+        ) = _fun_checker(
+            CountFramesLog.load_state_dict, load_state_dict_has_been_called
+        )
+
+        def _make_countframe_and_trainer(tmpdirname):
+            if backend == "torch":
+                file = path.join(tmpdirname, "file.pt")
+            elif backend == "torchsnapshot":
+                file = tmpdirname
+            else:
+                raise NotImplementedError
+            trainer = mocking_trainer(file)
+            count_frames = CountFramesLog(frame_skip=frame_skip)
+            count_frames.register(trainer)
+            return trainer, count_frames, file
+
+        torch.manual_seed(0)
+
+        frame_skip = 3
+        batch = 10
+        with tempfile.TemporaryDirectory() as tmpdirname, tempfile.TemporaryDirectory() as tmpdirname2:
+            trainer, count_frames, file = _make_countframe_and_trainer(tmpdirname)
+            td = TensorDict(
+                {"mask": torch.zeros(batch, dtype=torch.bool).bernoulli_()}, [batch]
+            )
+            trainer._pre_steps_log_hook(td)
+            trainer.save_trainer(True)
+            trainer2, count_frames2, _ = _make_countframe_and_trainer(tmpdirname2)
+            trainer2.load_from_file(file)
+            assert count_frames2.frame_count == td.get("mask").sum() * frame_skip
+            assert state_dict_has_been_called[0]
+            assert load_state_dict_has_been_called[0]
+        CountFramesLog.state_dict = CountFramesLog_state_dict
+        CountFramesLog.load_state_dict = CountFramesLog_load_state_dict
 
 
 if __name__ == "__main__":
