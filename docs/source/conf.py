@@ -59,6 +59,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_gallery.gen_gallery",
     "sphinxcontrib.aafig",
+    "myst_parser",
 ]
 
 sphinx_gallery_conf = {
