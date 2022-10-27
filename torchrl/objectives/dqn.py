@@ -53,6 +53,7 @@ class DQNLoss(LossModule):
         self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_function = loss_function
         self.priority_key = priority_key
+        self.action_space = self.value_network.action_space
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DQN loss given a tensordict sampled from the replay buffer.
@@ -83,9 +84,6 @@ class DQNLoss(LossModule):
                     f"with device {t.device} when {device} was required"
                 )
 
-        action = tensordict.get("action")
-
-        action = action.to(torch.float)
         td_copy = tensordict.clone()
         if td_copy.device != tensordict.device:
             raise RuntimeError(f"{tensordict} and {td_copy} have different devices")
@@ -95,8 +93,14 @@ class DQNLoss(LossModule):
             buffers=self.value_network_buffers,
         )
 
+        action = tensordict.get("action")
         pred_val = td_copy.get("action_value")
-        pred_val_index = (pred_val * action).sum(-1)
+
+        if self.action_space == "categorical":
+            pred_val_index = torch.gather(pred_val, -1, index=action).squeeze(-1)
+        else:
+            action = action.to(torch.float)
+            pred_val_index = (pred_val * action).sum(-1)
 
         with torch.no_grad():
             target_value = next_state_value(
@@ -162,6 +166,24 @@ class DistributionalDQNLoss(LossModule):
             "value_network",
             create_target_params=self.delay_value,
         )
+        self.action_space = self.value_network.action_space
+
+    @staticmethod
+    def _log_ps_a_default(action, action_log_softmax, batch_size, atoms):
+        action_expand = action.unsqueeze(-2).expand_as(action_log_softmax)
+        log_ps_a = action_log_softmax.masked_select(action_expand.to(torch.bool))
+        log_ps_a = log_ps_a.view(batch_size, atoms)  # log p(s_t, a_t; θonline)
+        return log_ps_a
+
+    @staticmethod
+    def _log_ps_a_categorical(action, action_log_softmax):
+        # Reshaping action of shape `[*batch_sizes, 1]` to `[*batch_sizes, atoms, 1]` for gather.
+        action = action.unsqueeze(-2)
+        new_shape = [-1] * len(action.shape)
+        new_shape[-2] = action_log_softmax.shape[-2]  # calculating atoms
+        action = action.expand(new_shape)
+
+        return torch.gather(action_log_softmax, -1, index=action).squeeze(-1)
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
@@ -198,9 +220,13 @@ class DistributionalDQNLoss(LossModule):
             buffers=self.value_network_buffers,
         )  # Log probabilities log p(s_t, ·; θonline)
         action_log_softmax = td_clone.get("action_value")
-        action_expand = action.unsqueeze(-2).expand_as(action_log_softmax)
-        log_ps_a = action_log_softmax.masked_select(action_expand.to(torch.bool))
-        log_ps_a = log_ps_a.view(batch_size, atoms)  # log p(s_t, a_t; θonline)
+
+        if self.action_space == "categorical":
+            log_ps_a = self._log_ps_a_categorical(action, action_log_softmax)
+        else:
+            log_ps_a = self._log_ps_a_default(
+                action, action_log_softmax, batch_size, atoms
+            )
 
         with torch.no_grad():
             # Calculate nth next state probabilities
@@ -210,7 +236,12 @@ class DistributionalDQNLoss(LossModule):
                 params=self.value_network_params,
                 buffers=self.value_network_buffers,
             )  # Probabilities p(s_t+n, ·; θonline)
-            argmax_indices_ns = next_td.get("action").argmax(-1)  # one-hot encoding
+
+            next_td_action = next_td.get("action")
+            if self.action_space == "categorical":
+                argmax_indices_ns = next_td_action.squeeze(-1)
+            else:
+                argmax_indices_ns = next_td_action.argmax(-1)  # one-hot encoding
 
             self.value_network(
                 next_td,

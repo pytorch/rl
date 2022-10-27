@@ -1,5 +1,6 @@
 import collections
 import math
+import os
 import time
 
 import numpy as np
@@ -26,12 +27,13 @@ class timeit:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         t = time.time() - self.t0
-        self._REG.setdefault(self.name, [0.0, 0.0, 0])
+        val = self._REG.setdefault(self.name, [0.0, 0.0, 0])
 
-        count = self._REG[self.name][1]
-        self._REG[self.name][0] = (self._REG[self.name][0] * count + t) / (count + 1)
-        self._REG[self.name][1] = self._REG[self.name][1] + t
-        self._REG[self.name][2] = count + 1
+        count = val[2]
+        N = count + 1
+        val[0] = val[0] * (count / N) + t / N
+        val[1] += t
+        val[2] = N
 
     @staticmethod
     def print(prefix=None):
@@ -117,3 +119,24 @@ def prod(sequence):
         return math.prod(sequence)
     else:
         return int(np.prod(sequence))
+
+
+def get_binary_env_var(key):
+    """Parses and returns the binary enironment variable value.
+
+    If not present in environment, it is considered `False`.
+
+    Args:
+        key (str): name of the environment variable.
+    """
+    val = os.environ.get(key, "False")
+    if val in ("0", "False", "false"):
+        val = False
+    elif val in ("1", "True", "true"):
+        val = True
+    else:
+        raise ValueError(
+            f"Environment variable {key} should be in 'True', 'False', '0' or '1'. "
+            f"Got {val} instead."
+        )
+    return val

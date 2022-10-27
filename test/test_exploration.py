@@ -65,7 +65,7 @@ def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     policy = ProbabilisticActor(
         spec=action_spec,
         module=module,
-        dist_param_keys=["loc", "scale"],
+        dist_in_keys=["loc", "scale"],
         distribution_class=TanhNormal,
         default_interaction_mode="random",
     ).to(device)
@@ -121,7 +121,7 @@ class TestAdditiveGaussian:
         policy = ProbabilisticActor(
             spec=CompositeSpec(action=action_spec) if spec_origin is not None else None,
             module=module,
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             default_interaction_mode="random",
         ).to(device)
@@ -184,7 +184,7 @@ class TestAdditiveGaussian:
         policy = ProbabilisticActor(
             spec=action_spec if spec_origin is not None else None,
             module=module,
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             default_interaction_mode="random",
         ).to(device)
@@ -253,8 +253,8 @@ def test_gsde(
     actor = ProbabilisticActor(
         module=module,
         spec=spec,
-        dist_param_keys=["loc", "scale"],
-        out_key_sample=["action"],
+        dist_in_keys=["loc", "scale"],
+        sample_out_key=["action"],
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         default_interaction_mode=exploration_mode,

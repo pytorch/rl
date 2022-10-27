@@ -5,10 +5,12 @@
 
 import argparse
 import dataclasses
+from time import sleep
 
 import pytest
 import torch
 from _utils_internal import generate_seeds, get_available_devices
+from torchrl._utils import timeit
 
 try:
     from hydra import compose, initialize
@@ -39,6 +41,8 @@ from torchrl.trainers.helpers.models import (
     PPOModelConfig,
     REDQModelConfig,
     SACModelConfig,
+    DreamerConfig,
+    make_dreamer,
 )
 
 ## these tests aren't truly unitary but setting up a fake env for the
@@ -62,8 +66,16 @@ def _assert_keys_match(td, expeceted_keys):
 @pytest.mark.parametrize("noisy", [tuple(), ("noisy=True",)])
 @pytest.mark.parametrize("distributional", [tuple(), ("distributional=True",)])
 @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
-def test_dqn_maker(device, noisy, distributional, from_pixels):
-    flags = list(noisy + distributional + from_pixels) + ["env_name=CartPole-v1"]
+@pytest.mark.parametrize(
+    "categorical_action_encoding",
+    [("categorical_action_encoding=True",), ("categorical_action_encoding=False",)],
+)
+def test_dqn_maker(
+    device, noisy, distributional, from_pixels, categorical_action_encoding
+):
+    flags = list(noisy + distributional + from_pixels + categorical_action_encoding) + [
+        "env_name=CartPole-v1"
+    ]
 
     config_fields = [
         (config_field.name, config_field.type, config_field)
@@ -86,7 +98,9 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
         env_maker = transformed_env_constructor(
             cfg, use_env_creator=False, custom_env_maker=env_maker
         )
-        proof_environment = env_maker()
+        proof_environment = env_maker(
+            categorical_action_encoding=cfg.categorical_action_encoding
+        )
 
         actor = make_dqn_actor(proof_environment, cfg, device)
         td = proof_environment.reset().to(device)
@@ -513,6 +527,96 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         del proof_environment
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("tanh_loc", [tuple(), ("tanh_loc=True",)])
+@pytest.mark.parametrize("exploration", ["random", "mode"])
+def test_dreamer_make(device, tanh_loc, exploration):
+    import os
+
+    # we hack the env constructor
+    import sys
+
+    sys.path.append(os.path.dirname(__file__) + "/../examples/dreamer/")
+    from dreamer_utils import transformed_env_constructor
+
+    flags = ["from_pixels=True", "catframes=1"]
+
+    config_fields = [
+        (config_field.name, config_field.type, config_field)
+        for config_cls in (
+            EnvConfig,
+            DreamerConfig,
+        )
+        for config_field in dataclasses.fields(config_cls)
+    ]
+
+    Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+    cs = ConfigStore.instance()
+    cs.store(name="config", node=Config)
+    with initialize(version_base=None, config_path=None):
+        cfg = compose(config_name="config", overrides=flags)
+        env_maker = ContinuousActionConvMockEnvNumpy
+        env_maker = transformed_env_constructor(
+            cfg, use_env_creator=False, custom_env_maker=env_maker
+        )
+        proof_environment = env_maker().to(device)
+        model = make_dreamer(
+            proof_environment=proof_environment,
+            device=device,
+            cfg=cfg,
+        )
+        world_model, model_based_env, actor_model, value_model, policy = model
+        out = world_model(proof_environment.rollout(3))
+        expected_keys = {
+            "action",
+            "belief",
+            "done",
+            "next_belief",
+            "next_encoded_latents",
+            "next_pixels",
+            "next_pixels_orig",
+            "next_posterior_mean",
+            "next_posterior_std",
+            "next_prior_mean",
+            "next_prior_std",
+            "next_state",
+            "pixels",
+            "pixels_orig",
+            "reward",
+            "state",
+            "next_reco_pixels",
+        }
+        assert set(out.keys()) == expected_keys
+
+        simulated_data = model_based_env.rollout(3)
+        expected_keys = {
+            "action",
+            "belief",
+            "done",
+            "next_belief",
+            "next_state",
+            "pixels",
+            "pixels_orig",
+            "reward",
+            "state",
+        }
+        assert expected_keys == set(simulated_data.keys())
+
+        simulated_action = actor_model(model_based_env.reset())
+        real_action = actor_model(proof_environment.reset())
+        simulated_policy_action = policy(model_based_env.reset())
+        real_policy_action = policy(proof_environment.reset())
+        assert "action" in simulated_action.keys()
+        assert "action" in real_action.keys()
+        assert "action" in simulated_policy_action.keys()
+        assert "action" in real_policy_action.keys()
+
+        value_td = value_model(proof_environment.reset())
+        assert "state_value" in value_td.keys()
+
+
 @pytest.mark.parametrize("initial_seed", range(5))
 def test_seed_generator(initial_seed):
     num_seeds = 100
@@ -533,6 +637,32 @@ def test_seed_generator(initial_seed):
     seeds0 = generate_seeds(initial_seed, num_seeds)
     seeds1 = generate_seeds(initial_seed, num_seeds)
     assert seeds0 == seeds1
+
+
+def test_timeit():
+    n1 = 500
+    w1 = 1e-4
+    n2 = 200
+    w2 = 1e-4
+    w3 = 1e-4
+    # warmup
+    for _ in range(10):
+        sleep(w1)
+    for _ in range(n1):
+        with timeit("event1"):
+            sleep(w1)
+        sleep(w3)
+    for _ in range(n2):
+        with timeit("event2"):
+            sleep(w2)
+    val1 = timeit._REG["event1"]
+    val2 = timeit._REG["event2"]
+    assert abs(val1[0] - w1) < 1e-2
+    assert abs(val1[1] - n1 * w1) < 1
+    assert val1[2] == n1
+    assert abs(val2[0] - w2) < 1e-2
+    assert abs(val2[1] - n2 * w2) < 1
+    assert val2[2] == n2
 
 
 if __name__ == "__main__":

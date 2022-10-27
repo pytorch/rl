@@ -11,6 +11,7 @@ from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
+    DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
@@ -24,6 +25,7 @@ from torchrl.envs.model_based.common import ModelBasedEnvBase
 spec_dict = {
     "bounded": BoundedTensorSpec,
     "one_hot": OneHotDiscreteTensorSpec,
+    "categorical": DiscreteTensorSpec,
     "unbounded": UnboundedContinuousTensorSpec,
     "ndbounded": NdBoundedTensorSpec,
     "ndunbounded": NdUnboundedContinuousTensorSpec,
@@ -35,6 +37,7 @@ spec_dict = {
 default_spec_kwargs = {
     BoundedTensorSpec: {"minimum": -1.0, "maximum": 1.0},
     OneHotDiscreteTensorSpec: {"n": 7},
+    DiscreteTensorSpec: {"n": 7},
     UnboundedContinuousTensorSpec: {},
     NdBoundedTensorSpec: {"minimum": -torch.ones(4), "maxmimum": torch.ones(4)},
     NdUnboundedContinuousTensorSpec: {
@@ -65,7 +68,12 @@ class _MockEnv(EnvBase):
         cls._reward_spec = cls._reward_spec.to(torch.get_default_dtype())
         return super().__new__(*args, **kwargs)
 
-    def __init__(self, seed: int = 100):
+    def __init__(
+        self,
+        *args,
+        seed: int = 100,
+        **kwargs,
+    ):
         super().__init__(
             device="cpu",
             dtype=torch.get_default_dtype(),
@@ -272,6 +280,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         input_spec=None,
         reward_spec=None,
         from_pixels=False,
+        categorical_action_encoding=False,
         **kwargs,
     ):
         size = cls.size = 7
@@ -286,7 +295,12 @@ class DiscreteActionVecMockEnv(_MockEnv):
                 ),
             )
         if action_spec is None:
-            action_spec = OneHotDiscreteTensorSpec(7)
+            action_spec_cls = (
+                DiscreteTensorSpec
+                if categorical_action_encoding
+                else OneHotDiscreteTensorSpec
+            )
+            action_spec = action_spec_cls(7)
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec()
 
@@ -302,6 +316,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
         cls.from_pixels = from_pixels
+        cls.categorical_action_encoding = categorical_action_encoding
         return super().__new__(*args, **kwargs)
 
     def _get_in_obs(self, obs):
@@ -328,7 +343,9 @@ class DiscreteActionVecMockEnv(_MockEnv):
     ) -> TensorDictBase:
         tensordict = tensordict.to(self.device)
         a = tensordict.get("action")
-        assert (a.sum(-1) == 1).all()
+
+        if not self.categorical_action_encoding:
+            assert (a.sum(-1) == 1).all()
         assert not self.is_done, "trying to execute step in done env"
 
         obs = self._get_in_obs(tensordict.get(self._out_key)) + a / self.maxstep
@@ -397,12 +414,13 @@ class ContinuousActionVecMockEnv(_MockEnv):
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         self.counter += 1
         self.step_count = 0
-        state = torch.zeros(self.size) + self.counter
+        # state = torch.zeros(self.size) + self.counter
         if tensordict is None:
             tensordict = TensorDict({}, self.batch_size, device=self.device)
         tensordict = tensordict.select()
-        tensordict.set("next_" + self.out_key, self._get_out_obs(state))
-        tensordict.set("next_" + self._out_key, self._get_out_obs(state))
+        tensordict.update(self.observation_spec.rand(self.batch_size))
+        # tensordict.set("next_" + self.out_key, self._get_out_obs(state))
+        # tensordict.set("next_" + self._out_key, self._get_out_obs(state))
         tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
         return tensordict
 
@@ -513,6 +531,7 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
         input_spec=None,
         reward_spec=None,
         from_pixels=True,
+        categorical_action_encoding=False,
         **kwargs,
     ):
         if observation_spec is None:
@@ -526,7 +545,12 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
                 ),
             )
         if action_spec is None:
-            action_spec = OneHotDiscreteTensorSpec(7)
+            action_spec_cls = (
+                DiscreteTensorSpec
+                if categorical_action_encoding
+                else OneHotDiscreteTensorSpec
+            )
+            action_spec = action_spec_cls(7)
         if input_spec is None:
             cls._out_key = "pixels_orig"
             input_spec = CompositeSpec(
@@ -543,6 +567,7 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
             reward_spec=reward_spec,
             input_spec=input_spec,
             from_pixels=from_pixels,
+            categorical_action_encoding=categorical_action_encoding,
             **kwargs,
         )
 
@@ -568,21 +593,22 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
         input_spec=None,
         reward_spec=None,
         from_pixels=True,
+        pixel_shape=[1, 7, 7],
         **kwargs,
     ):
         if observation_spec is None:
             cls.out_key = "pixels"
             observation_spec = CompositeSpec(
                 next_pixels=NdUnboundedContinuousTensorSpec(
-                    shape=torch.Size([1, 7, 7])
+                    shape=torch.Size(pixel_shape)
                 ),
                 next_pixels_orig=NdUnboundedContinuousTensorSpec(
-                    shape=torch.Size([1, 7, 7])
+                    shape=torch.Size(pixel_shape)
                 ),
             )
 
         if action_spec is None:
-            action_spec = NdBoundedTensorSpec(-1, 1, (7,))
+            action_spec = NdBoundedTensorSpec(-1, 1, pixel_shape[-1])
 
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec()
@@ -602,7 +628,7 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
         )
 
     def _get_out_obs(self, obs):
-        obs = torch.diag_embed(obs, 0, -2, -1).unsqueeze(0)
+        obs = torch.diag_embed(obs, 0, -2, -1)
         return obs
 
     def _get_in_obs(self, obs):

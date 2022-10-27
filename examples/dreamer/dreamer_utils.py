@@ -2,13 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Callable, Optional, Union, Any, Sequence
 
-import torch
-
+from torchrl.data import NdUnboundedContinuousTensorSpec
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
@@ -16,9 +14,7 @@ from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     CatFrames,
-    CatTensors,
     DoubleToFloat,
-    FiniteTensorDictCheck,
     GrayScale,
     NoopResetEnv,
     ObservationNorm,
@@ -26,57 +22,26 @@ from torchrl.envs.transforms import (
     RewardScaling,
     ToTensorImage,
     TransformedEnv,
-    VecNorm,
     CenterCrop,
 )
-from torchrl.envs.transforms.transforms import gSDENoise, FlattenObservation
+from torchrl.envs.transforms.transforms import (
+    FlattenObservation,
+    TensorDictPrimer,
+)
 from torchrl.record.recorder import VideoRecorder
 from torchrl.trainers.loggers import Logger
 
 __all__ = [
-    "correct_for_frame_skip",
     "transformed_env_constructor",
     "parallel_env_constructor",
-    "get_stats_random_rollout",
 ]
 
 LIBS = {
     "gym": GymEnv,
     "dm_control": DMControlEnv,
 }
-
-
-def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
-    """Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.
-
-    This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targetting a total number of frames
-    of 1M but actually collecting frame_skip * 1M frames.
-
-    Args:
-        cfg (DictConfig): DictConfig containing some frame-counting argument, including:
-            "max_frames_per_traj", "total_frames", "frames_per_batch", "record_frames", "annealing_frames",
-            "init_random_frames", "init_env_steps"
-
-    Returns:
-         the input DictConfig, modified in-place.
-
-    """
-    # Adapt all frame counts wrt frame_skip
-    if cfg.frame_skip != 1:
-        fields = [
-            "max_frames_per_traj",
-            "total_frames",
-            "frames_per_batch",
-            "record_frames",
-            "annealing_frames",
-            "init_random_frames",
-            "init_env_steps",
-            "noops",
-        ]
-        for field in fields:
-            if hasattr(cfg, field):
-                setattr(cfg, field, getattr(cfg, field) // cfg.frame_skip)
-    return cfg
+import torch
+from torch.cuda.amp import autocast
 
 
 def make_env_transforms(
@@ -97,7 +62,6 @@ def make_env_transforms(
     from_pixels = cfg.from_pixels
     vecnorm = cfg.vecnorm
     norm_rewards = vecnorm and cfg.norm_rewards
-    _norm_obs_only = norm_obs_only or not norm_rewards
     reward_scaling = cfg.reward_scaling
     reward_loc = cfg.reward_loc
 
@@ -146,68 +110,25 @@ def make_env_transforms(
         env.append_transform(RewardScaling(reward_loc, reward_scaling))
 
     double_to_float_list = []
-    double_to_float_inv_list = []
+    float_to_double_list = []
     if env_library is DMControlEnv:
         double_to_float_list += [
             "reward",
-        ]
-        double_to_float_list += [
             "action",
         ]
-        double_to_float_inv_list += ["action"]  # DMControl requires double-precision
-    if not from_pixels:
-        selected_keys = [
-            key
-            for key in env.observation_spec.keys()
-            if ("pixels" not in key)
-            and (key.replace("next_", "") not in env.input_spec.keys())
-        ]
+        float_to_double_list += ["action"]  # DMControl requires double-precision
+    env.append_transform(
+        DoubleToFloat(keys_in=double_to_float_list, keys_inv_in=float_to_double_list)
+    )
 
-        # even if there is a single tensor, it'll be renamed in "next_observation_vector"
-        out_key = "next_observation_vector"
-        env.append_transform(CatTensors(keys_in=selected_keys, out_key=out_key))
+    default_dict = {
+        "next_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
+        "next_belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
+    }
+    env.append_transform(
+        TensorDictPrimer(random=False, default_value=0, **default_dict)
+    )
 
-        if not vecnorm:
-            if stats is None:
-                _stats = {"loc": 0.0, "scale": 1.0}
-            else:
-                _stats = stats
-            env.append_transform(
-                ObservationNorm(**_stats, keys_in=[out_key], standard_normal=True)
-            )
-        else:
-            env.append_transform(
-                VecNorm(
-                    keys_in=[out_key, "reward"] if not _norm_obs_only else [out_key],
-                    decay=0.9999,
-                )
-            )
-
-        double_to_float_list.append(out_key)
-        env.append_transform(
-            DoubleToFloat(
-                keys_in=double_to_float_list, keys_inv_in=double_to_float_inv_list
-            )
-        )
-
-        if hasattr(cfg, "catframes") and cfg.catframes:
-            env.append_transform(
-                CatFrames(N=cfg.catframes, keys_in=[out_key], cat_dim=-1)
-            )
-
-    else:
-        env.append_transform(
-            DoubleToFloat(
-                keys_in=double_to_float_list, keys_inv_in=double_to_float_inv_list
-            )
-        )
-
-    if hasattr(cfg, "gSDE") and cfg.gSDE:
-        env.append_transform(
-            gSDENoise(action_dim=action_dim_gsde, state_dim=state_dim_gsde)
-        )
-
-    env.append_transform(FiniteTensorDictCheck())
     return env
 
 
@@ -225,13 +146,14 @@ def transformed_env_constructor(
     state_dim_gsde: Optional[int] = None,
     batch_dims: Optional[int] = 0,
 ) -> Union[Callable, EnvCreator]:
-    """Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
+    """
+    Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
         cfg (DictConfig): a DictConfig containing the arguments of the script.
         video_tag (str, optional): video tag to be passed to the Logger object
         logger (Logger, optional): logger associated with the script
-        stats (dict, optional): a dictionary containing the :obj:`loc` and :obj:`scale` for the `ObservationNorm` transform
+        stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
         use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,
@@ -261,7 +183,6 @@ def transformed_env_constructor(
         env_library = LIBS[cfg.env_library]
         frame_skip = cfg.frame_skip
         from_pixels = cfg.from_pixels
-        categorical_action_encoding = cfg.categorical_action_encoding
 
         if custom_env is None and custom_env_maker is None:
             if isinstance(cfg.collector_devices, str):
@@ -278,8 +199,11 @@ def transformed_env_constructor(
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
-                "categorical_action_encoding": categorical_action_encoding,
             }
+            if env_name == "quadruped":
+                # hard code camera_id for quadruped
+                camera_id = "x"
+                env_kwargs["camera_id"] = camera_id
             if env_library is DMControlEnv:
                 env_kwargs.update({"task_name": env_task})
             env_kwargs.update(kwargs)
@@ -351,81 +275,102 @@ def parallel_env_constructor(
     return parallel_env
 
 
-@torch.no_grad()
-def get_stats_random_rollout(
-    cfg: "DictConfig",  # noqa: F821
-    proof_environment: EnvBase = None,
-    key: Optional[str] = None,
+def recover_pixels(pixels, stats):
+    return (
+        (255 * (pixels * stats["scale"] + stats["loc"]))
+        .clamp(min=0, max=255)
+        .to(torch.uint8)
+    )
+
+
+@torch.inference_mode()
+def call_record(
+    logger,
+    record,
+    collected_frames,
+    sampled_tensordict,
+    stats,
+    model_based_env,
+    actor_model,
+    cfg,
 ):
-    """Gathers stas (loc and scale) from an environment using random rollouts.
+    td_record = record(None)
+    if td_record is not None and logger is not None:
+        for key, value in td_record.items():
+            if key in ["r_evaluation", "total_r_evaluation"]:
+                logger.log_scalar(
+                    key,
+                    value.detach().item(),
+                    step=collected_frames,
+                )
+    # Compute observation reco
+    if cfg.record_video and record._count % cfg.record_interval == 0:
+        world_model_td = sampled_tensordict
 
-    Args:
-        cfg (DictConfig): a config object with `init_env_steps` field, indicating
-            the total number of frames to be collected to compute the stats.
-        proof_environment (EnvBase instance, optional): if provided, this env will
-            be used ot execute the rollouts. If not, it will be created using
-            the cfg object.
-        key (str, optional): if provided, the stats of this key will be gathered.
-            If not, it is expected that only one key exists in `env.observation_spec`.
+        true_pixels = recover_pixels(world_model_td["next_pixels"], stats)
 
-    """
-    proof_env_is_none = proof_environment is None
-    if proof_env_is_none:
-        proof_environment = transformed_env_constructor(
-            cfg=cfg, use_env_creator=False
-        )()
+        reco_pixels = recover_pixels(world_model_td["next_reco_pixels"], stats)
+        with autocast(dtype=torch.float16):
+            world_model_td = world_model_td.select("state", "belief", "reward")
+            world_model_td = model_based_env.rollout(
+                max_steps=true_pixels.shape[1],
+                policy=actor_model,
+                auto_reset=False,
+                tensordict=world_model_td[:, 0],
+            )
+        imagine_pxls = recover_pixels(
+            model_based_env.decode_obs(world_model_td)["next_reco_pixels"],
+            stats,
+        )
 
-    print("computing state stats")
-    if not hasattr(cfg, "init_env_steps"):
-        raise AttributeError("init_env_steps missing from arguments.")
-
-    n = 0
-    val_stats = []
-    while n < cfg.init_env_steps:
-        _td_stats = proof_environment.rollout(max_steps=cfg.init_env_steps)
-        n += _td_stats.numel()
-        val = _td_stats.get(key).cpu()
-        val_stats.append(val)
-        del _td_stats, val
-    val_stats = torch.cat(val_stats, 0)
-
-    if key is None:
-        keys = list(proof_environment.observation_spec.keys())
-        key = keys.pop()
-        if len(keys):
-            raise RuntimeError(
-                f"More than one key exists in the observation_specs: {[key] + keys} were found, "
-                "thus get_stats_random_rollout cannot infer which to compute the stats of."
+        stacked_pixels = torch.cat([true_pixels, reco_pixels, imagine_pxls], dim=-1)
+        if logger is not None:
+            logger.log_video(
+                "pixels_rec_and_imag",
+                stacked_pixels.detach().cpu(),
             )
 
-    if key == "next_pixels":
-        m = val_stats.mean()
-        s = val_stats.std()
-    else:
-        m = val_stats.mean(dim=0)
-        s = val_stats.std(dim=0)
-    m[s == 0] = 0.0
-    s[s == 0] = 1.0
 
-    print(
-        f"stats computed for {val_stats.numel()} steps. Got: \n"
-        f"loc = {m}, \n"
-        f"scale = {s}"
-    )
-    if not torch.isfinite(m).all():
-        raise RuntimeError("non-finite values found in mean")
-    if not torch.isfinite(s).all():
-        raise RuntimeError("non-finite values found in sd")
-    stats = {"loc": m, "scale": s}
-    if proof_env_is_none:
-        proof_environment.close()
-        if (
-            proof_environment.device != torch.device("cpu")
-            and torch.cuda.device_count() > 0
-        ):
-            torch.cuda.empty_cache()
-        del proof_environment
-    return stats
+def grad_norm(optimizer: torch.optim.Optimizer):
+    sum_of_sq = 0.0
+    for pg in optimizer.param_groups:
+        for p in pg["params"]:
+            sum_of_sq += p.grad.pow(2).sum()
+    return sum_of_sq.sqrt().detach().item()
+
+
+def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
+    recorder = transformed_env_constructor(
+        cfg,
+        video_tag=video_tag,
+        norm_obs_only=True,
+        stats=stats,
+        logger=logger,
+        use_env_creator=False,
+    )()
+
+    # remove video recorder from recorder to have matching state_dict keys
+    if cfg.record_video:
+        recorder_rm = TransformedEnv(recorder.base_env)
+        for transform in recorder.transform:
+            if not isinstance(transform, VideoRecorder):
+                recorder_rm.append_transform(transform)
+    else:
+        recorder_rm = recorder
+
+    if isinstance(create_env_fn, ParallelEnv):
+        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
+        create_env_fn.close()
+    elif isinstance(create_env_fn, EnvCreator):
+        recorder_rm.load_state_dict(create_env_fn().state_dict())
+    else:
+        recorder_rm.load_state_dict(create_env_fn.state_dict())
+    # reset reward scaling
+    for t in recorder.transform:
+        if isinstance(t, RewardScaling):
+            t.scale.fill_(1.0)
+            t.loc.fill_(0.0)
+    return recorder
 
 
 @dataclass
@@ -468,5 +413,3 @@ class EnvConfig:
     batch_transform: bool = False
     # if True, the transforms will be applied to the parallel env, and not to each individual env.\
     image_size: int = 84
-    # if True and environment has discrete action space, then it is encoded as categorical values rather than one-hot.
-    categorical_action_encoding: bool = False
