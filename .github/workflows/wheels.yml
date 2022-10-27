@@ -21,7 +21,7 @@ jobs:
       - name: Install PyTorch 1.12 RC
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -c "import sys;print("version:", str(sys.version))"
+          python3 -c "import sys;print('version:', str(sys.version))"
           python3 -c "import sys;assert str(sys.version).startswith(str(${{ matrix.python_version[0] }}));"
           python3 -mpip install torch==1.12 ${{ matrix.cuda_support[1] }}
           python3 -mpip install "git+https://github.com/pytorch/functorch.git@release/0.2"
