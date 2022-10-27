@@ -6,23 +6,27 @@ from __future__ import annotations
 
 import collections
 import math
-from typing import Dict
+from typing import Optional
 
 import torch
+from torch import nn
 from torch.distributions.dirichlet import _Dirichlet
 
 from torchrl.data import DEVICE_TYPING
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs import EnvBase
 
 # This file is inspired by https://github.com/FelixOpolka/Single-Player-MCTS
 # Refactoring involves: renaming, torch and tensordict compatibility and integration in torchrl's API
+from torchrl.envs.utils import step_mdp
+from torchrl.modules import TensorDictModule
 
 
 class MCTSPlanner:
     """To do."""
 
     pass
+
 
 class _Children(collections.UserDict):
     """Children class for _MCTSNode.
@@ -31,13 +35,29 @@ class _Children(collections.UserDict):
     in the node's state tensordict.
 
     """
-    def __init__(self, tensordict, **kwargs):
+
+    def __init__(self, tensordict, env, current, **kwargs):
         self._tensordict = tensordict
         super().__init__(**kwargs)
+        children = self._tensordict.get(
+            "_children", TensorDict({}, [], device=self._tensordict.device)
+        )
+        # no op if key was already present
+        self._tensordict["_children"] = children
+        if len(children.keys()):
+            # recreates the tree if needed
+            # we can already populate the children dict
+            for k in children.keys():
+                child_node = _MCTSNode.make_child_node_from_tensordict(
+                    children[k], env=env, parent=current, prev_action=int(k)
+                )
+                collections.UserDict.__setitem__(self, k, child_node)
 
     def __setitem__(self, key: int, value: _MCTSNode):
         super().__setitem__(key, value)
-        self._tensordict[f"children.{key}"] = value.state
+        children = self._tensordict.get("_children")
+        children[f"{key}"] = value.state
+
 
 class _MCTSNode:
     """Represents a node in the Monte-Carlo search tree. Each node holds a single environment state.
@@ -69,13 +89,12 @@ class _MCTSNode:
         exploration_factor: float = 1.38,
         d_noise_alpha: float = 0.03,
         temp_threshold: int = 5,
-        device: DEVICE_TYPING = "cpu",
+        device: Optional[DEVICE_TYPING] = None,
     ):
         self.state = state
         self.n_actions = n_actions
         self.env = env
-
-        self._children = _Children(state)
+        self._children = None
 
         if parent is None:
             self.depth = 0
@@ -90,20 +109,56 @@ class _MCTSNode:
 
         self._device = device
         self._n_vlosses = 0  # Number of virtual losses on this node
-        self.state["_child_visit_count"] = torch.zeros(
-            [n_actions], dtype=torch.long, device=self.device
-        )
-        self.state["_is_expanded"] = torch.zeros(
-            [1], dtype=torch.bool, device=self.device
-        )
-        self.state["_child_total_value"] = torch.zeros([n_actions], device=self.device)
+        state_keys = set(state.keys())
+        if "n_actions" not in state_keys:
+            self.state["n_actions"] = torch.tensor(
+                [n_actions], dtype=torch.long, device=self.device
+            )
+        if "_child_visit_count" not in state_keys:
+            self.state["_child_visit_count"] = torch.zeros(
+                [n_actions], dtype=torch.long, device=self.device
+            )
+        if "_is_expanded" not in state_keys:
+            self.state["_is_expanded"] = torch.zeros(
+                [1], dtype=torch.bool, device=self.device
+            )
+        if "_child_total_value" not in state_keys:
+            self.state["_child_total_value"] = torch.zeros(
+                [n_actions], device=self.device
+            )
         # Save copy of original prior before it gets mutated by dirichlet noise
-        self.state["_original_prior"] = torch.zeros([n_actions], device=self.device)
-        self.state["_child_prior"] = torch.zeros([n_actions], device=self.device)
-        parent.children[prev_action] = self
+        if "_original_prior" not in state_keys:
+            self.state["_original_prior"] = torch.zeros([n_actions], device=self.device)
+        if "_child_prior" not in state_keys:
+            self.state["_child_prior"] = torch.zeros([n_actions], device=self.device)
+        if hasattr(parent, "_children") and parent._children is not None:
+            parent._children[prev_action] = self
+        self._children = _Children(self.state, self.env, self)
+
+    @staticmethod
+    def make_child_node_from_tensordict(tensordict, env, parent, prev_action):
+        return _MCTSNode(
+            tensordict,
+            n_actions=tensordict["n_actions"].item(),
+            env=env,
+            parent=parent,
+            prev_action=prev_action,
+            # TODO: pass hyperparams
+            device=tensordict.device,
+        )
+
+    @property
+    def depth(self) -> torch.Tensor:
+        return self.state["_depth"].item()
+
+    @depth.setter
+    def depth(self, depth: int):
+        self.state["_depth"] = torch.tensor([depth], dtype=torch.long)
 
     @property
     def children(self):
+        if self._children is None:
+            self._children = _Children(self.state, self.env, self)
         return self._children
 
     @property
@@ -232,7 +287,10 @@ class _MCTSNode:
         if action not in self.children:
             # Obtain state following given action.
             state = self.state.clone(recurse=False)
-            new_state = self.env.step(state.set("action", torch.tensor([action])))
+            new_state = state.set("action", torch.tensor([action]))
+            new_state = self.env.step(new_state)
+            # filter out private keys
+            new_state = step_mdp(new_state, keep_other=False)
             self.children[action] = _MCTSNode(
                 new_state, self.n_actions, self.env, prev_action=action, parent=self
             )
@@ -352,6 +410,10 @@ class _VoidNode:
         self._child_total_value = collections.defaultdict(float)
         self.children = {}
 
+    @property
+    def depth(self):
+        return -1
+
     def revert_virtual_loss(self, up_to=None):
         pass
 
@@ -363,3 +425,109 @@ class _VoidNode:
 
     def backup_value(self, value, up_to=None):
         pass
+
+
+class MCTSPolicy(nn.Module):
+    """A Monte-Carlo policy.
+
+    Args:
+        agent_network (TensorDictModule): Network for predicting action probabilities and
+            state value estimate.
+        env (EnvBase): A stateless env that defines environment dynamics (i.e. a simulator).
+        simulations_per_move (int, optional): Number of traversals through the tree
+            before performing a step. Default: 800.
+        num_parallel (int, optional): Number of leaf nodes to collect before evaluating
+            them in conjunction. Default: 8.
+    """
+
+    def __init__(
+        self,
+        agent_network: TensorDictModule,
+        env: EnvBase,
+        simulations_per_move: int = 800,
+        num_parallel=8,
+    ):
+        super().__init__()
+        self.agent_network = agent_network
+        # self.env = env
+        self.simulations_per_move = simulations_per_move
+        self.num_parallel = num_parallel
+        self.temp_threshold = None  # Overwritten in initialize_search
+        self.env = env
+
+        self.qs = []
+        self.rewards = []
+        self.searches_pi = []
+        self.obs = []
+
+        self._root: Optional[_MCTSNode] = None
+
+    def _reset_root(self, tensordict):
+        # Create a tree from the tensordict, if not yet present (or not the one expected).
+        def _root_and_tensordict_differ(root, tensordict):
+            state_filter = root.state.select(*self.env.observation_spec)
+            tensordict = tensordict.select(*self.env.observation_spec)
+            return (tensordict == state_filter).all()
+        if self._root is not None and self._root.state is tensordict:
+            # then the root is right
+            return
+        if self._root is None or _root_and_tensordict_differ(self._root, tensordict):
+            # the root has to be reset to the desired node
+            self._root = _MCTSNode(tensordict, n_actions=self.n_actions, env=self.env, parent=None)
+
+    def forward(self, tensordict):
+        self._reset_root(tensordict)
+
+        # inject noise
+        self._root.inject_noise()
+
+        # current sim
+        current_simulations = self._root.visit_count
+
+        # We want `num_simulations` simulations per action not counting
+        # simulations from previous actions.
+        while self._root.visit_count < current_simulations + self.simulations_per_move:
+            self._tree_search()
+
+        """Picks an action to execute in the environment."""
+        if self.root.depth > self.temp_threshold:
+            action = self.root._child_visit_count.argmax(-1)
+        else:
+            cdf = self.root._child_visit_count.cumsum(-1)
+            cdf /= cdf[..., -1:]
+            selection = torch.rand_like(cdf[..., :1])
+            action = torch.searchsorted(cdf, selection)
+        return action
+
+    def _tree_search(self):
+        """Performs multiple simulations in the tree (following trajectories) until a given amount of leaves to expand have been encountered.
+
+        Then it expands and evaluates these leaf nodes.
+
+        """
+        leaves = []
+        # Failsafe for when we encounter almost only done-states which would
+        # prevent the loop from ever ending.
+        failsafe = 0
+        while len(leaves) < self.num_parallel and failsafe < self.num_parallel * 2:
+            failsafe += 1
+            leaf = self._root.select_leaf()
+            # If we encounter done-state, we do not need the agent network to
+            # bootstrap. We can backup the value right away.
+            if leaf.is_done():
+                value = self.env.get_return(leaf.state, leaf.depth)
+                leaf.backup_value(value, up_to=self.root)
+                continue
+            # Otherwise, discourage other threads to take the same trajectory
+            # via virtual loss and enqueue the leaf for evaluation by agent
+            # network.
+            leaf.add_virtual_loss(up_to=self.root)
+            leaves.append(leaf)
+        # Evaluate the leaf-states all at once and backup the value estimates.
+        if leaves:
+            action_probs, values = self.agent_netw.step(
+                self.TreeEnv.get_obs_for_states([leaf.state for leaf in leaves]))
+            for leaf, action_prob, value in zip(leaves, action_probs, values):
+                leaf.revert_virtual_loss(up_to=self.root)
+                leaf.incorporate_estimates(action_prob, value, up_to=self.root)
+        return leaves

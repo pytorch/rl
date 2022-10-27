@@ -802,7 +802,69 @@ class TestMCTSNode:
         assert root_node._child_total_value[0] == 3 * value
         assert child_node._child_total_value[1] == 2 * value
 
-        print(root_node.state)
+    def test_MCTSNode_recreate_tree(self, n_actions=2):
+        torch.manual_seed(0)
+        env = MockingMCTSEnv()
+        root_state = TensorDict({"obs": torch.zeros(2)}, [])
+        root_node = _MCTSNode(
+            root_state, n_actions=n_actions, env=env, parent=None, prev_action=None
+        )
+        root_node.maybe_add_child(0)
+        child = root_node.children[0]
+        child.maybe_add_child(0)
+        grand_child = child.children[0]
+        grand_child.maybe_add_child(0)
+
+        root_node2 = _MCTSNode(
+            root_state.clone(recurse=False),
+            n_actions=n_actions,
+            env=env,
+            parent=None,
+            prev_action=None,
+        )
+        assert (root_node2.state == root_state).all()
+        assert root_node2.state["_depth"] == 0
+        assert "_children" in root_node2.state.keys()
+        assert "0" in root_node2.state["_children"].keys()
+        assert root_node2.state["_children", "0", "_depth"] == 1
+        assert "_children" in root_node2.state["_children", "0"].keys()
+        assert "0" in root_node2.state["_children", "0", "_children"].keys()
+        assert root_node2.state["_children", "0", "_children", "0", "_depth"] == 2
+        assert (
+            "_children" in root_node2.state["_children", "0", "_children", "0"].keys()
+        )
+        assert (
+            "0"
+            in root_node2.state["_children", "0", "_children", "0", "_children"].keys()
+        )
+        assert (
+            root_node2.state[
+                "_children", "0", "_children", "0", "_children", "0", "_depth"
+            ]
+            == 3
+        )
+
+        # check that depths are changed accordingly
+        pseudo_node3 = _MCTSNode(
+            root_node.children[0].state.to_tensordict(),
+            n_actions=n_actions,
+            env=env,
+            parent=None,
+            prev_action=None,
+        )
+        assert pseudo_node3.state["_depth"] == 0
+
+        assert "_children" in pseudo_node3.state.keys()
+        assert "0" in pseudo_node3.state["_children"].keys()
+        assert pseudo_node3.state["_children", "0", "_depth"] == 1
+
+        assert "_children" in pseudo_node3.state["_children", "0"].keys()
+        assert "0" in pseudo_node3.state["_children", "0", "_children"].keys()
+        assert pseudo_node3.state["_children", "0", "_children", "0", "_depth"] == 2
+
+        # since depths differ, the tensordict should not be equal anymore
+        assert (pseudo_node3.state != root_state["_children", "0"]).any()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
