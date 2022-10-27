@@ -105,7 +105,7 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
         >>> td_module = ProbabilisticActor(
         ...    module=tensordict_module,
         ...    spec=action_spec,
-        ...    dist_param_keys=["loc", "scale"],
+        ...    dist_in_keys=["loc", "scale"],
         ...    distribution_class=TanhNormal,
         ...    )
         >>> td = td_module(td, params=params, buffers=buffers)
@@ -125,15 +125,15 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
     def __init__(
         self,
         module: TensorDictModule,
-        dist_param_keys: Union[str, Sequence[str]],
-        out_key_sample: Optional[Sequence[str]] = None,
+        dist_in_keys: Union[str, Sequence[str]],
+        sample_out_key: Optional[Sequence[str]] = None,
         spec: Optional[TensorSpec] = None,
         **kwargs,
     ):
-        if out_key_sample is None:
-            out_key_sample = ["action"]
+        if sample_out_key is None:
+            sample_out_key = ["action"]
         if (
-            "action" in out_key_sample
+            "action" in sample_out_key
             and spec is not None
             and not isinstance(spec, CompositeSpec)
         ):
@@ -141,8 +141,8 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
 
         super().__init__(
             module=module,
-            dist_param_keys=dist_param_keys,
-            out_key_sample=out_key_sample,
+            dist_in_keys=dist_in_keys,
+            sample_out_key=sample_out_key,
             spec=spec,
             **kwargs,
         )
@@ -217,7 +217,7 @@ class QValueHook:
     Currently, this is returned as a one-hot encoding.
 
     Args:
-        action_space (str): Action space. Must be one of "one-hot", "mult_one_hot" or "binary".
+        action_space (str): Action space. Must be one of "one-hot", "mult_one_hot", "binary" or "categorical".
         var_nums (int, optional): if action_space == "mult_one_hot", this value represents the cardinality of each
             action component.
 
@@ -254,14 +254,18 @@ class QValueHook:
     ):
         self.action_space = action_space
         self.var_nums = var_nums
-        self.fun_dict = {
+        self.action_func_mapping = {
             "one_hot": self._one_hot,
             "mult_one_hot": self._mult_one_hot,
             "binary": self._binary,
+            "categorical": self._categorical,
         }
-        if action_space not in self.fun_dict:
+        self.action_value_func_mapping = {
+            "categorical": self._categorical_action_value,
+        }
+        if action_space not in self.action_func_mapping:
             raise ValueError(
-                f"action_space must be one of {list(self.fun_dict.keys())}"
+                f"action_space must be one of {list(self.action_func_mapping.keys())}"
             )
 
     def __call__(
@@ -269,14 +273,22 @@ class QValueHook:
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if isinstance(values, tuple):
             values = values[0]
-        action = self.fun_dict[self.action_space](values)
-        chosen_action_value = (action * values).sum(-1, True)
+        action = self.action_func_mapping[self.action_space](values)
+
+        action_value_func = self.action_value_func_mapping.get(
+            self.action_space, self._default_action_value
+        )
+        chosen_action_value = action_value_func(values, action)
         return action, values, chosen_action_value
 
     @staticmethod
     def _one_hot(value: torch.Tensor) -> torch.Tensor:
         out = (value == value.max(dim=-1, keepdim=True)[0]).to(torch.long)
         return out
+
+    @staticmethod
+    def _categorical(value: torch.Tensor) -> torch.Tensor:
+        return torch.argmax(value, dim=-1).to(torch.long)
 
     def _mult_one_hot(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         values = value.split(self.var_nums, dim=-1)
@@ -294,6 +306,21 @@ class QValueHook:
     def _binary(value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
+    @staticmethod
+    def _default_action_value(
+        values: torch.Tensor, action: torch.Tensor
+    ) -> torch.Tensor:
+        return (action * values).sum(-1, True)
+
+    @staticmethod
+    def _categorical_action_value(
+        values: torch.Tensor, action: torch.Tensor
+    ) -> torch.Tensor:
+        if len(values.shape) == 1:
+            return values[action].unsqueeze(-1)
+        batch_size = values.size(0)
+        return values[range(batch_size), action].unsqueeze(-1)
+
 
 class DistributionalQValueHook(QValueHook):
     """Distributional Q-Value hook for Q-value policies.
@@ -305,7 +332,7 @@ class DistributionalQValueHook(QValueHook):
     https://arxiv.org/pdf/1707.06887.pdf
 
     Args:
-        action_space (str): Action space. Must be one of "one_hot", "mult_one_hot" or "binary".
+        action_space (str): Action space. Must be one of "one_hot", "mult_one_hot", "binary" or "categorical".
         support (torch.Tensor): support of the action values.
         var_nums (int, optional): if action_space == "mult_one_hot", this value represents the cardinality of each
             action component.
@@ -352,18 +379,23 @@ class DistributionalQValueHook(QValueHook):
         self.action_space = action_space
         self.support = support
         self.var_nums = var_nums
-        self.fun_dict = {
+        self.action_func_mapping = {
             "one_hot": self._one_hot,
             "mult_one_hot": self._mult_one_hot,
             "binary": self._binary,
+            "categorical": self._categorical,
         }
+        if action_space not in self.action_func_mapping:
+            raise ValueError(
+                f"action_space must be one of {list(self.action_func_mapping.keys())}"
+            )
 
     def __call__(
         self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if isinstance(values, tuple):
             values = values[0]
-        action = self.fun_dict[self.action_space](values, self.support)
+        action = self.action_func_mapping[self.action_space](values, self.support)
         return action, values
 
     def _support_expected(
@@ -400,6 +432,10 @@ class DistributionalQValueHook(QValueHook):
             ],
             -1,
         )
+
+    def _categorical(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
+        value = value = self._support_expected(value, support)
+        return torch.argmax(value, dim=-1).to(torch.long)
 
     @staticmethod
     def _binary(value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
@@ -555,8 +591,8 @@ class ActorValueOperator(TensorDictSequential):
         >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
         ...    spec=spec_action,
-        ...    dist_param_keys=["loc", "scale"],
-        ...    out_key_sample=["action"],
+        ...    dist_in_keys=["loc", "scale"],
+        ...    sample_out_key=["action"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )
@@ -677,8 +713,8 @@ class ActorCriticOperator(ActorValueOperator):
         >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
         ...    spec=spec_action,
-        ...    dist_param_keys=["loc", "scale"],
-        ...    out_key_sample=["action"],
+        ...    dist_in_keys=["loc", "scale"],
+        ...    sample_out_key=["action"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )

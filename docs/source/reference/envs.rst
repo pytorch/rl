@@ -25,6 +25,18 @@ Helpers
     set_exploration_mode
     exploration_mode
 
+Domain-specific
+---------------
+.. currentmodule:: torchrl.envs
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    ModelBasedEnvBase
+    model_based.dreamer.DreamerEnv
+
+
 Libraries
 ---------
 .. currentmodule:: torchrl.envs.libs

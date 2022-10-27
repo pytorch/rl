@@ -275,7 +275,7 @@ class gSDEModule(nn.Module):
         ...     in_keys=["action", "obs", "_eps_gSDE"],
         ...     out_keys=["loc", "scale", "action", "_eps_gSDE"])
         >>> stochatstic_part = ProbabilisticActor(stochatstic_part,
-        ...      dist_param_keys=["loc", "scale"],
+        ...      dist_in_keys=["loc", "scale"],
         ...      distribution_class=TanhNormal)
         >>> stochatstic_policy = TensorDictSequential(deterministic_policy, stochatstic_part)
         >>> tensordict = TensorDict({'obs': torch.randn(state_dim), '_epx_gSDE': torch.zeros(1)}, [])

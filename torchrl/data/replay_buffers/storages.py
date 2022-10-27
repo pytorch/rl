@@ -38,6 +38,9 @@ class Storage:
 
     def __init__(self, max_size: int) -> None:
         self.max_size = int(max_size)
+        # Prototype feature. RBs that use a given instance of Storage should add
+        # themselves to this set.
+        self._attached_entities = set()
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any):
@@ -47,11 +50,27 @@ class Storage:
     def get(self, index: int) -> Any:
         raise NotImplementedError
 
+    def attach(self, buffer: Any) -> None:
+        """This function attaches a sampler to this storage.
+
+        Buffers that read from this storage must be included as an attached
+        entity by calling this method. This guarantees that when data
+        in the storage changes, components are made aware of changes even if the storage
+        is shared with other buffers (eg. Priority Samplers).
+
+        Args:
+            buffer: the object that reads from this storage.
+        """
+        self._attached_entities.add(buffer)
+
     def __getitem__(self, item):
         return self.get(item)
 
     def __setitem__(self, index, value):
-        return self.set(index, value)
+        ret = self.set(index, value)
+        for ent in self._attached_entities:
+            ent.mark_update(index)
+        return ret
 
     def __iter__(self):
         for i in range(len(self)):

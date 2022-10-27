@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import warnings
 from copy import deepcopy
 from textwrap import indent
 from typing import (
@@ -94,7 +95,7 @@ class TensorDictModule(nn.Module):
         in_keys (iterable of str): keys to be read from input tensordict and passed to the module. If it
             contains more than one element, the values will be passed in the order given by the in_keys iterable.
         out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
-            number of tensors returned by the embedded module.
+            number of tensors returned by the embedded module. Using "_" as a key avoid writing tensor to output.
         spec (TensorSpec): specs of the output tensor. If the module outputs multiple output tensors,
             spec characterize the space of the first output tensor.
         safe (bool): if True, the value of the output is checked against the input spec. Out-of-domain sampling can
@@ -186,6 +187,11 @@ class TensorDictModule(nn.Module):
         self.in_keys = in_keys
         _check_all_str(self.in_keys)
 
+        if "_" in in_keys:
+            warnings.warn(
+                'key "_" is for ignoring output, it should not be used in input keys'
+            )
+
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
@@ -195,6 +201,9 @@ class TensorDictModule(nn.Module):
                     "Consider using a CompositeSpec object or no spec at all."
                 )
             spec = CompositeSpec(**{self.out_keys[0]: spec})
+        elif spec is not None and isinstance(spec, CompositeSpec):
+            if "_" in spec.keys():
+                warnings.warn('got a spec with key "_": it will be ignored')
         elif spec is None:
             spec = CompositeSpec()
 
@@ -259,13 +268,13 @@ class TensorDictModule(nn.Module):
             and vmap
             and (isinstance(vmap, bool) or vmap[-1] is None)
         ):
-            #
             dim = tensors[0].shape[0]
             tensordict_out = tensordict.expand(dim, *tensordict.batch_size).contiguous()
         elif tensordict_out is None:
             tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):
-            tensordict_out.set(_out_key, _tensor)
+            if _out_key != "_":
+                tensordict_out.set(_out_key, _tensor)
         return tensordict_out
 
     def _make_vmap(self, buffers, kwargs, n_input):
