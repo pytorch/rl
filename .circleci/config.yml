@@ -522,7 +522,8 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "nvidia/opengl:1.2-glvnd-devel"
+      image_name: "pytorch/manylinux-cuda113"
+#      image_name: "nvidia/opengl:1.2-glvnd-devel"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>

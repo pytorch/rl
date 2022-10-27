@@ -7,7 +7,8 @@
 
 set -e
 
-apt-get update -y && apt-get install git wget unzip gcc g++ libosmesa6 libosmesa6-dev libgl1-mesa-glx libglfw3 -y
+#apt-get update -y && apt-get install git wget unzip gcc g++ libosmesa6 libosmesa6-dev libgl1-mesa-glx libglfw3 -y
+yum makecache && yum install libglvnd-devel mesa-libGL mesa-libEGL glfw -y
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
