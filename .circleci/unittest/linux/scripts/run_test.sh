@@ -4,6 +4,7 @@ set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
+apt-get install python-opengl
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
@@ -20,5 +21,5 @@ export MKL_THREADING_LAYER=GNU
 
 coverage run -m pytest test/smoke_test.py -v --durations 20
 coverage run -m pytest test/smoke_test_deps.py -v --durations 20 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'
-coverage run -m pytest --instafail -v --durations 20
+coverage run -m xvfb-run -s "-screen 0 1400x900x24" pytest --instafail -v --durations 20
 coverage xml
