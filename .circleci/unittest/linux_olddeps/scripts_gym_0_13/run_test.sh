@@ -5,6 +5,8 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
+yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL glfw mesa-libOSMesa-devel glew egl-utils freeglut -y
+
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
