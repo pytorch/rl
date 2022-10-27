@@ -24,6 +24,20 @@ class MCTSPlanner:
 
     pass
 
+class _Children(collections.UserDict):
+    """Children class for _MCTSNode.
+
+    When updating the children of a node, we will also write their tensordict
+    in the node's state tensordict.
+
+    """
+    def __init__(self, tensordict, **kwargs):
+        self._tensordict = tensordict
+        super().__init__(**kwargs)
+
+    def __setitem__(self, key: int, value: _MCTSNode):
+        super().__setitem__(key, value)
+        self._tensordict[f"children.{key}"] = value.state
 
 class _MCTSNode:
     """Represents a node in the Monte-Carlo search tree. Each node holds a single environment state.
@@ -61,29 +75,36 @@ class _MCTSNode:
         self.n_actions = n_actions
         self.env = env
 
+        self._children = _Children(state)
+
         if parent is None:
             self.depth = 0
             parent = _VoidNode()
         else:
             self.depth = parent.depth + 1
         self.parent = parent
-        self.children: Dict[int, _MCTSNode] = {}
         self.prev_action = prev_action
         self.exploration_factor = exploration_factor
         self.d_noise_alpha = d_noise_alpha
         self.temp_threshold = temp_threshold
 
         self._device = device
-        self._is_expanded = False
         self._n_vlosses = 0  # Number of virtual losses on this node
         self.state["_child_visit_count"] = torch.zeros(
             [n_actions], dtype=torch.long, device=self.device
+        )
+        self.state["_is_expanded"] = torch.zeros(
+            [1], dtype=torch.bool, device=self.device
         )
         self.state["_child_total_value"] = torch.zeros([n_actions], device=self.device)
         # Save copy of original prior before it gets mutated by dirichlet noise
         self.state["_original_prior"] = torch.zeros([n_actions], device=self.device)
         self.state["_child_prior"] = torch.zeros([n_actions], device=self.device)
         parent.children[prev_action] = self
+
+    @property
+    def children(self):
+        return self._children
 
     @property
     def _child_visit_count(self) -> torch.Tensor:
@@ -119,7 +140,11 @@ class _MCTSNode:
 
     @property
     def is_expanded(self):
-        return self._is_expanded
+        return self.state["_is_expanded"]
+
+    @is_expanded.setter
+    def is_expanded(self, value: torch.Tensor):
+        self.state["_is_expanded"] = value
 
     @property
     def device(self):
@@ -235,7 +260,7 @@ class _MCTSNode:
         if self.is_expanded:
             self.revert_visits(up_to=up_to)
             return
-        self._is_expanded = True
+        self.is_expanded = True
         self._original_prior = self._child_prior = action_probs
 
         self._child_total_value = (

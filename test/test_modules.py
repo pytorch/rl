@@ -762,6 +762,8 @@ class TestMCTSNode:
         )
         root_node.maybe_add_child(0)
         root_node.incorporate_estimates(action_probs, value, up_to=root_node)
+        assert root_node.is_expanded
+        assert root_node.state["_is_expanded"]
         assert (root_node.state["_original_prior"] == root_node._original_prior).all()
         assert (root_node.state["_child_prior"] == root_node._child_prior).all()
         assert (
@@ -800,6 +802,7 @@ class TestMCTSNode:
         assert root_node._child_total_value[0] == 3 * value
         assert child_node._child_total_value[1] == 2 * value
 
+        print(root_node.state)
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
