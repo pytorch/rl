@@ -6,6 +6,7 @@
 import abc
 import os
 from collections import OrderedDict
+from copy import copy
 from typing import Any, Sequence, Union, Dict
 
 import torch
@@ -196,7 +197,7 @@ class LazyTensorStorage(Storage):
         }
 
     def load_state_dict(self, state_dict):
-        _storage = state_dict.pop("_storage")
+        _storage = copy(state_dict["_storage"])
         if isinstance(_storage, torch.Tensor):
             if isinstance(self._storage, torch.Tensor):
                 self._storage.copy_(_storage)
@@ -325,7 +326,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         }
 
     def load_state_dict(self, state_dict):
-        _storage = state_dict.pop("_storage")
+        _storage = copy(state_dict["_storage"])
         if isinstance(_storage, torch.Tensor):
             if isinstance(self._storage, torch.Tensor):
                 _mem_map_tensor_as_tensor(self._storage).copy_(_storage)
