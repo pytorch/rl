@@ -32,9 +32,7 @@ class Sampler(ABC):
     ) -> dict:
         pass
 
-    def mark_update(
-            self, index: Union[int, torch.Tensor]
-    ) -> None:
+    def mark_update(self, index: Union[int, torch.Tensor]) -> None:
         pass
 
     @property
@@ -188,7 +186,5 @@ class PrioritizedSampler(Sampler):
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
 
-    def mark_update(
-            self, index: Union[int, torch.Tensor]
-    ) -> None:
+    def mark_update(self, index: Union[int, torch.Tensor]) -> None:
         self.update_priority(index, self.default_priority)
