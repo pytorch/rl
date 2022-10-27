@@ -21,6 +21,7 @@ from mocking_classes import (
     MockBatchedUnLockedEnv,
     MockSerialEnv,
 )
+from packaging import version
 from scipy.stats import chisquare
 from torch import nn
 from torchrl.data.tensor_specs import (
@@ -52,7 +53,6 @@ from torchrl.modules import (
     ValueOperator,
 )
 from torchrl.modules.tensordict_module import WorldModelWrapper
-from packaging import version
 
 if _has_gym:
     import gym
