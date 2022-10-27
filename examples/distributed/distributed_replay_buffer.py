@@ -54,7 +54,6 @@ class DummyDataCollectorNode:
         print(self.replay_buffer_rref, self.replay_buffer)
         print("Data Collector Node constructed")
 
-    # @rpc.functions.async_execution
     def __submit_random_item_async(self) -> rpc.RRef:
         td = TensorDict({"a": torch.randint(100, (1,))}, [])
         return rpc.remote(
