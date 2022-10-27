@@ -88,8 +88,16 @@ def _assert_keys_match(td, expeceted_keys):
 @pytest.mark.parametrize("noisy", [tuple(), ("noisy=True",)])
 @pytest.mark.parametrize("distributional", [tuple(), ("distributional=True",)])
 @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
-def test_dqn_maker(device, noisy, distributional, from_pixels):
-    flags = list(noisy + distributional + from_pixels) + ["env_name=CartPole-v1"]
+@pytest.mark.parametrize(
+    "categorical_action_encoding",
+    [("categorical_action_encoding=True",), ("categorical_action_encoding=False",)],
+)
+def test_dqn_maker(
+    device, noisy, distributional, from_pixels, categorical_action_encoding
+):
+    flags = list(noisy + distributional + from_pixels + categorical_action_encoding) + [
+        "env_name=CartPole-v1"
+    ]
 
     config_fields = [
         (config_field.name, config_field.type, config_field)
@@ -112,7 +120,9 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
         env_maker = transformed_env_constructor(
             cfg, use_env_creator=False, custom_env_maker=env_maker
         )
-        proof_environment = env_maker()
+        proof_environment = env_maker(
+            categorical_action_encoding=cfg.categorical_action_encoding
+        )
 
         actor = make_dqn_actor(proof_environment, cfg, device)
         td = proof_environment.reset().to(device)

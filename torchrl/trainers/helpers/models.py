@@ -9,7 +9,12 @@ from typing import Optional, Sequence
 import torch
 from torch import nn, distributions as d
 
-from torchrl.data import DEVICE_TYPING, CompositeSpec, NdUnboundedContinuousTensorSpec
+from torchrl.data import (
+    DEVICE_TYPING,
+    CompositeSpec,
+    NdUnboundedContinuousTensorSpec,
+    DiscreteTensorSpec,
+)
 from torchrl.envs import TransformedEnv, TensorDictPrimer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
@@ -175,9 +180,16 @@ def make_dqn_actor(
         # automatically infer in key
         in_key = list(env_specs["observation_spec"])[0].split("next_")[-1]
 
-    out_features = env_specs["action_spec"].shape[0]
+    out_features = action_spec.shape[0]
     actor_class = QValueActor
     actor_kwargs = {}
+
+    if isinstance(action_spec, DiscreteTensorSpec):
+        # if action spec is modeled as categorical variable, we still need to have features equal
+        # to the number of possible choices and also set categorical behavioural for actors.
+        actor_kwargs.update({"action_space": "categorical"})
+        out_features = env_specs["action_spec"].space.n
+
     if cfg.distributional:
         if not atoms:
             raise RuntimeError(

@@ -30,6 +30,8 @@ from torchrl.data import (
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
     TensorDict,
+    OneHotDiscreteTensorSpec,
+    DiscreteTensorSpec,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
 
@@ -123,11 +125,21 @@ def get_devices():
 class TestDQN:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_actor(
+        self, action_spec_type, batch=2, obs_dim=3, action_dim=4, device="cpu"
+    ):
         # Actor
-        action_spec = NdBoundedTensorSpec(
-            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
-        )
+        if action_spec_type == "one_hot":
+            action_spec = OneHotDiscreteTensorSpec(action_dim)
+        elif action_spec_type == "categorical":
+            action_spec = DiscreteTensorSpec(action_dim)
+        elif action_spec_type == "nd_bounded":
+            action_spec = NdBoundedTensorSpec(
+                -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+            )
+        else:
+            raise ValueError(f"Wrong {action_spec_type}")
+
         module = nn.Linear(obs_dim, action_dim)
         actor = QValueActor(
             spec=CompositeSpec(
@@ -138,21 +150,44 @@ class TestDQN:
         return actor
 
     def _create_mock_distributional_actor(
-        self, batch=2, obs_dim=3, action_dim=4, atoms=5, vmin=1, vmax=5
+        self,
+        action_spec_type,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        atoms=5,
+        vmin=1,
+        vmax=5,
     ):
         # Actor
-        action_spec = MultOneHotDiscreteTensorSpec([atoms] * action_dim)
+        if action_spec_type == "mult_one_hot":
+            action_spec = MultOneHotDiscreteTensorSpec([atoms] * action_dim)
+        elif action_spec_type == "one_hot":
+            action_spec = OneHotDiscreteTensorSpec(action_dim)
+        elif action_spec_type == "categorical":
+            action_spec = DiscreteTensorSpec(action_dim)
+        else:
+            raise ValueError(f"Wrong {action_spec_type}")
         support = torch.linspace(vmin, vmax, atoms, dtype=torch.float)
         module = MLP(obs_dim, (atoms, action_dim))
         actor = DistributionalQValueActor(
             spec=CompositeSpec(action=action_spec, action_value=None),
             module=module,
             support=support,
+            action_space="categorical"
+            if isinstance(action_spec, DiscreteTensorSpec)
+            else "one_hot",
         )
         return actor
 
     def _create_mock_data_dqn(
-        self, batch=2, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+        self,
+        action_spec_type,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        atoms=None,
+        device="cpu",
     ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim)
@@ -165,6 +200,10 @@ class TestDQN:
         else:
             action_value = torch.randn(batch, action_dim)
             action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
+
+        if action_spec_type == "categorical":
+            action_value = torch.max(action_value, -1, keepdim=True)[0]
+            action = torch.argmax(action, -1, keepdim=True)
         reward = torch.randn(batch, 1)
         done = torch.zeros(batch, 1, dtype=torch.bool)
         td = TensorDict(
@@ -182,7 +221,14 @@ class TestDQN:
         return td
 
     def _create_seq_mock_data_dqn(
-        self, batch=2, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+        self,
+        action_spec_type,
+        batch=2,
+        T=4,
+        obs_dim=3,
+        action_dim=4,
+        atoms=None,
+        device="cpu",
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -198,6 +244,10 @@ class TestDQN:
         else:
             action_value = torch.randn(batch, T, action_dim, device=device)
             action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
+
+        if action_spec_type == "categorical":
+            action_value = torch.max(action_value, -1, keepdim=True)[0]
+            action = torch.argmax(action, -1, keepdim=True)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
@@ -219,10 +269,17 @@ class TestDQN:
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_dqn(self, delay_value, device):
+    @pytest.mark.parametrize(
+        "action_spec_type", ("nd_bounded", "one_hot", "categorical")
+    )
+    def test_dqn(self, delay_value, device, action_spec_type):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor(device=device)
-        td = self._create_mock_data_dqn(device=device)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type, device=device
+        )
         loss_fn = DQNLoss(actor, gamma=0.9, loss_function="l2", delay_value=delay_value)
         with _check_td_steady(td):
             loss = loss_fn(td)
@@ -284,11 +341,18 @@ class TestDQN:
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_dqn_batcher(self, n, delay_value, device, gamma=0.9):
+    @pytest.mark.parametrize(
+        "action_spec_type", ("nd_bounded", "one_hot", "categorical")
+    )
+    def test_dqn_batcher(self, n, delay_value, device, action_spec_type, gamma=0.9):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
 
-        td = self._create_seq_mock_data_dqn(device=device)
+        td = self._create_seq_mock_data_dqn(
+            action_spec_type=action_spec_type, device=device
+        )
         loss_fn = DQNLoss(
             actor, gamma=gamma, loss_function="l2", delay_value=delay_value
         )
@@ -388,11 +452,20 @@ class TestDQN:
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_devices())
-    def test_distributional_dqn(self, atoms, delay_value, device, gamma=0.9):
+    @pytest.mark.parametrize(
+        "action_spec_type", ("mult_one_hot", "one_hot", "categorical")
+    )
+    def test_distributional_dqn(
+        self, atoms, delay_value, device, action_spec_type, gamma=0.9
+    ):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_distributional_actor(atoms=atoms).to(device)
+        actor = self._create_mock_distributional_actor(
+            action_spec_type=action_spec_type, atoms=atoms
+        ).to(device)
 
-        td = self._create_mock_data_dqn(atoms=atoms).to(device)
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type, atoms=atoms
+        ).to(device)
         loss_fn = DistributionalDQNLoss(actor, gamma=gamma, delay_value=delay_value)
 
         with _check_td_steady(td):
