@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-18.04
     strategy:
       matrix:
-        python_version: [["3.7", "cp37-cp37m"], ["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
+        python_version: [["3.7", "cp37-cp37"], ["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
         cuda_support: [["", "--extra-index-url https://download.pytorch.org/whl/cpu", "\"['cpu', '11.3', '11.6']\"", "cpu"]]
     container: pytorch/manylinux-${{ matrix.cuda_support[3] }}
     steps:
@@ -21,8 +21,8 @@ jobs:
       - name: Install PyTorch 1.12 RC
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -c "import sys;print(str(${{ matrix.python_version[0] }}))"
-          python3 -c "import sys;assert str(sys.version).startswith(str(${{ matrix.python_version[0] }}));print('ok!!!!!!')"
+      # checks that the python version is accurate
+          python3 -c "import sys;assert str(sys.version).startswith(str(${{ matrix.python_version[0] }}));"
           python3 -mpip install torch==1.12 ${{ matrix.cuda_support[1] }}
           python3 -mpip install "git+https://github.com/pytorch/functorch.git@release/0.2"
       - name: Build wheel
