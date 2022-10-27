@@ -1038,9 +1038,7 @@ class LSTMNet(nn.Module):
 
 
 class GRUNet(nn.Module):
-    """
-    The GRUNet is a neural network composed of a GRU layer encapsulated
-    between two MLPs.
+    """The GRUNet is a neural network composed of a GRU layer encapsulated between two MLPs.
 
     Args:
         mlp_input_kwargs (dict):  kwargs for the MLP before the GRU
@@ -1084,6 +1082,21 @@ class GRUNet(nn.Module):
         last_h: Tensor of shape
             D*num_layers , H_out
             D*num_layers , N, H_out
+
+    Examples:
+        >>> in_features = 11
+        >>> hidden_size = 13
+        >>> out_features = 3
+        >>> batch_size = 5
+        >>> seq_len = 7
+        >>> mlp_input_kwargs = {"in_features": in_features, "out_features": hidden_size}
+        >>> gru_kwargs = { "input_size": hidden_size, "hidden_size": hidden_size}
+        >>> mlp_output_kwargs = {"in_features": hidden_size, "out_features": out_features}
+        >>> net = GRUNet(mlp_input_kwargs, gru_kwargs, mlp_output_kwargs)
+        >>> x_batch = torch.randn(batch_size, seq_len, 11)
+        >>> out_batch , h_batch = net(x_batch)
+        >>> x_no_batch = torch.randn(seq_len, 11)
+        >>> out_no_batch, h_no_batch = net(x_no_batch)
 
     """
 
