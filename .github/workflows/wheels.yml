@@ -20,6 +20,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Install PyTorch 1.12 RC
         run: |
+          echo $PATH
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -c "import sys;print('version:', str(sys.version))"
           python3 -c "import sys;assert str(sys.version).startswith(str(${{ matrix.python_version[0] }}));"
