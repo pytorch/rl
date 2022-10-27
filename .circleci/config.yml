@@ -522,6 +522,7 @@ jobs:
 #      image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     docker:
+      - image: ubuntu-2004-cuda-11.4:202110-01
       - image: nvidia/cudagl:11.4.2-devel
     environment:
 #      image_name: "pytorch/manylinux-cuda113"
