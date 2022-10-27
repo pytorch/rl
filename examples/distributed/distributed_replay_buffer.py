@@ -8,10 +8,7 @@ from functools import wraps
 
 import torch
 import torch.distributed.rpc as rpc
-from torchrl.data.replay_buffers.rb_prototype import (
-    ReplayBuffer,
-    TensorDictReplayBuffer,
-)
+from torchrl.data.replay_buffers.rb_prototype import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
@@ -47,7 +44,7 @@ def accept_remote_rref_invocation(func):
 
 class DummyDataCollectorNode:
     def __init__(self, replay_buffer_rref) -> None:
-        print(f"DummyDataCollectorNode")
+        print("DummyDataCollectorNode")
         self.replay_buffer = rpc.get_worker_info(REPLAY_BUFFER_NODE)
         self.id = rpc.get_worker_info().id
         self.replay_buffer_rref = replay_buffer_rref
@@ -76,7 +73,7 @@ class DummyDataCollectorNode:
 
 class DummyTrainerNode:
     def __init__(self) -> None:
-        print(f"DummyTrainerNode")
+        print("DummyTrainerNode")
         self.id = rpc.get_worker_info().id
         self.replay_buffer = self._create_replay_buffer()
         self._create_and_launch_data_collectors()
@@ -88,7 +85,7 @@ class DummyTrainerNode:
             batch = rpc.rpc_sync(
                 self.replay_buffer.owner(),
                 ReplayBufferNode.sample,
-                args=(self.replay_buffer, 4),
+                args=(self.replay_buffer, 16),
             )
             print(f"[{self.id}] Sample Obtained Iteration: {iteration}")
             print(f"{batch}")
@@ -100,8 +97,8 @@ class DummyTrainerNode:
                 res = rpc.remote(replay_buffer_info, ReplayBufferNode, args=(10000,))
                 print(f"Connected to replay buffer {replay_buffer_info}")
                 return res
-            except:
-                print(f"Failed to connect to replay buffer")
+            except Exception:
+                print("Failed to connect to replay buffer")
                 time.sleep(RETRY_DELAY_SECS)
 
     def _create_and_launch_data_collectors(self) -> None:
@@ -126,7 +123,7 @@ class DummyTrainerNode:
                 print(data_collectors[-1])
                 data_collector_number += 1
                 retries = 0
-            except:
+            except Exception:
                 retries += 1
                 print(
                     f"Failed to connect to DataCollector{data_collector_number} with {retries} retries"
@@ -146,9 +143,9 @@ class DummyTrainerNode:
                     time.sleep(RETRY_DELAY_SECS)
 
 
-class ReplayBufferNode:
+class ReplayBufferNode(TensorDictReplayBuffer):
     def __init__(self, capacity: int) -> None:
-        self._buffer = TensorDictReplayBuffer(
+        super().__init__(
             storage=LazyMemmapStorage(
                 max_size=capacity, scratch_dir="/tmp/", device=torch.device("cpu")
             ),
@@ -157,11 +154,11 @@ class ReplayBufferNode:
             collate_fn=lambda x: x,
         )
         self.id = rpc.get_worker_info().id
-        print(f"ReplayBufferNode constructed")
+        print("ReplayBufferNode constructed")
 
     @accept_remote_rref_invocation
     def sample(self, batch_size: int) -> TensorDict:
-        if len(self._buffer) <= batch_size:
+        if len(self) <= batch_size:
             print(
                 f'[{self.id}] Empty Buffer Sampling at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}'
             )
@@ -170,14 +167,14 @@ class ReplayBufferNode:
             print(
                 f'[{self.id}] Replay Buffer Sampling at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}'
             )
-            batch = self._buffer.sample(batch_size)
+            batch = super().sample(batch_size)
             return batch
 
     @accept_remote_rref_invocation
     def add(self, data: TensorDict) -> None:
-        res = self._buffer.add(data)
+        res = super().add(data)
         print(
-            f'[{self.id}] Replay Buffer Insertion at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")} with {len(self._buffer)} elements'
+            f'[{self.id}] Replay Buffer Insertion at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")} with {len(self)} elements'
         )
         return res
 
