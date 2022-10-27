@@ -12,14 +12,16 @@ jobs:
     runs-on: ubuntu-18.04
     strategy:
       matrix:
-        python_version: [["3.7.2", "cp37-cp37"], ["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
+        python_version: [["3.7", "cp37-cp37m"], ["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
         cuda_support: [["", "--extra-index-url https://download.pytorch.org/whl/cpu", "\"['cpu', '11.3', '11.6']\"", "cpu"]]
     container: pytorch/manylinux-${{ matrix.cuda_support[3] }}
     steps:
       - name: Checkout torchrl
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Install PyTorch 1.12 RC
         run: |
+          var=$(ls -rtlh /opt/python)
+          echo $var
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -c "import sys;print('version:', str(sys.version))"
           python3 -c "import sys;assert str(sys.version).startswith(str(${{ matrix.python_version[0] }}));"
