@@ -7,10 +7,6 @@
 
 set -e
 
-#apt-get update -y && apt-get install git wget unzip gcc g++ libosmesa6 libosmesa6-dev libgl1-mesa-glx libglfw3 -y
-
-
-
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
@@ -18,7 +14,6 @@ root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
-
 
 cd "${root_dir}"
 
@@ -75,7 +70,7 @@ fi
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
 conda env config vars set \
   MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco200_linux \
-  DISPLAY=:99 \
+  DISPLAY=unix:0.0 \
   MJLIB_PATH=$root_dir/.mujoco/mujoco200_linux/bin/libmujoco200.so \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco200_linux/bin \
   MUJOCO_PY_MJKEY_PATH=$root_dir/.mujoco/mjkey.txt \
@@ -86,9 +81,10 @@ conda env config vars set \
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
 
-# install dependencies
+pip install pip --upgrade
+
 conda env update --file "${this_dir}/environment.yml" --prune
-conda install -c conda-forge fltk -y
+#conda install -c conda-forge fltk -y
 
 # ROM licence for Atari
 wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz
