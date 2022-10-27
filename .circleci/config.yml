@@ -520,10 +520,10 @@ jobs:
     <<: *binary_common
 #    machine:
 #      image: ubuntu-2004-cuda-11.4:202110-01
-    resource_class: gpu.nvidia.medium
     docker:
       - image: ubuntu-2004-cuda-11.4:202110-01
       - image: nvidia/cudagl:11.4.2-devel
+    resource_class: 2xlarge
     environment:
 #      image_name: "pytorch/manylinux-cuda113"
 #      image_name: "nvidia/cudagl:11.4.2-devel"
