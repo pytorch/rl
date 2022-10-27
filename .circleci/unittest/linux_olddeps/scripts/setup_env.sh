@@ -102,6 +102,3 @@ cd ${root_dir}/.mujoco/mujoco-py
 git checkout aws_fix
 pip install -e .
 cd $this_dir
-
-# solve permission denied for generated files in mujoco_py
-#chmod -R 777 ${env_dir}/lib/python3.9/site-packages/mujoco_py/generated
