@@ -42,8 +42,8 @@ class ReplayBuffer:
         prefetch: Optional[int] = None,
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
+        self._storage.attach(self)
         self._sampler = sampler if sampler is not None else RandomSampler()
-        self._storage.attach(self._sampler)
         self._writer = writer if writer is not None else RoundRobinWriter()
         self._writer.register_storage(self._storage)
 
@@ -155,6 +155,9 @@ class ReplayBuffer:
                 self._prefetch_queue.append(fut)
 
         return ret
+
+    def mark_update(self, index: Union[int, torch.Tensor]) -> None:
+        self._sampler.mark_update(index)
 
 
 class TensorDictReplayBuffer(ReplayBuffer):

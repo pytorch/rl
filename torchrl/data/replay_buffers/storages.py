@@ -41,18 +41,18 @@ class Storage:
     def get(self, index: int) -> Any:
         raise NotImplementedError
 
-    def attach(self, sampler: Any) -> None:
+    def attach(self, buffer: Any) -> None:
         """This function attaches a sampler to this storage.
 
-        Samplers that read from this storage must be included as an attached
+        Buffers that read from this storage must be included as an attached
         entity by calling this method. This guarantees that when data
-        in the storage changes, samplers are made aware of changes even if the storage
+        in the storage changes, components are made aware of changes even if the storage
         is shared with other buffers (eg. Priority Samplers).
 
         Args:
-            sampler: the object that reads from this storage.
+            buffer: the object that reads from this storage.
         """
-        self._attached_entities.add(sampler)
+        self._attached_entities.add(buffer)
 
     def __getitem__(self, item):
         return self.get(item)

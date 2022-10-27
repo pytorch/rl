@@ -582,13 +582,14 @@ def test_legacy_rb_does_not_attach():
     storage = LazyMemmapStorage(n)
     writer = RoundRobinWriter()
     sampler = RandomSampler()
-    ReplayBuffer(storage=storage, size=n, prefetch=0, collate_fn=lambda x: x)
-    rb_prototype.ReplayBuffer(
+    rb = ReplayBuffer(storage=storage, size=n, prefetch=0, collate_fn=lambda x: x)
+    prb = rb_prototype.ReplayBuffer(
         storage=storage, writer=writer, sampler=sampler, collate_fn=lambda x: x
     )
 
     assert len(storage._attached_entities) == 1
-    assert sampler in storage._attached_entities
+    assert prb in storage._attached_entities
+    assert rb not in storage._attached_entities
 
 
 if __name__ == "__main__":
