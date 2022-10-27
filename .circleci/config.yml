@@ -838,7 +838,7 @@ workflows:
           name: unittest_linux_stable_gpu_py3.10
           python_version: '3.10'
 
-      - unittest_linux_olddeps_gpu:
-          cu_version: cu113
-          name: unittest_linux_olddeps_gpu_py3.9
+      - unittest_linux_olddeps_cpu:
+          cu_version: cpu
+          name: unittest_linux_olddeps_cpu_py3.9
           python_version: '3.9'
