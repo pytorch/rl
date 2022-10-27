@@ -21,11 +21,13 @@ jobs:
       - name: Install PyTorch 1.12 RC
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python3 -c "import sys;assert str(sys.version).startswith(${{ matrix.python_version[0] }});print('ok!!!!!!')"
           python3 -mpip install torch==1.12 ${{ matrix.cuda_support[1] }}
           python3 -mpip install "git+https://github.com/pytorch/functorch.git@release/0.2"
       - name: Build wheel
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python3 -c "import sys;assert str(sys.version).startswith(${{ matrix.python_version[0] }})"
           python3 -mpip install wheel
           BUILD_VERSION=0.0.2a python3 setup.py bdist_wheel
           # NB: wheels have the linux_x86_64 tag so we rename to manylinux1
