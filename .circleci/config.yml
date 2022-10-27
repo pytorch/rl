@@ -518,8 +518,8 @@ jobs:
 
   unittest_linux_olddeps_gpu:
     <<: *binary_common
-    machine:
-      image: ubuntu-2004-cuda-11.4:202110-01
+#    machine:
+#      image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     docker:
       - image: nvidia/cudagl:11.4.2-devel
