@@ -5,8 +5,8 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
-apt-get update -y && apt-get install git wget unzip gcc g++ libosmesa6 libosmesa6-dev libgl1-mesa-glx libglfw3 -y
-#yum makecache && yum install libglvnd-devel mesa-libGL mesa-libEGL glfw -y
+#apt-get update -y && apt-get install git wget unzip gcc g++ libosmesa6 libosmesa6-dev libgl1-mesa-glx libglfw3 -y
+yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL glfw mesa-libOSMesa-devel glew egl-utils freeglut -y
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
@@ -24,4 +24,5 @@ export MKL_THREADING_LAYER=GNU
 pytest test/smoke_test.py -v --durations 20
 pytest test/smoke_test_deps.py -v --durations 20 -k 'test_gym or test_dm_control_pixels or test_dm_control'
 #xvfb-run -s ":99 -screen 0 1280x1024x24" pytest --instafail -v --durations 20
-pytest --instafail -v --durations 20
+#pytest --instafail -v --durations 20
+python test/test_libs.py

@@ -10,8 +10,8 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
-apt-get update -y && apt-get install git wget gcc g++ -y
-#yum makecache && yum install libglvnd-devel mesa-libGL mesa-libEGL glfw -y
+#apt-get update -y && apt-get install git wget gcc g++ -y
+yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL glfw mesa-libOSMesa-devel glew egl-utils freeglut -y
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
     cudatoolkit="cpuonly"
