@@ -8,7 +8,6 @@
 set -e
 
 #apt-get update -y && apt-get install git wget unzip gcc g++ libosmesa6 libosmesa6-dev libgl1-mesa-glx libglfw3 -y
-yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL glfw mesa-libOSMesa-devel glew egl-utils freeglut -y
 
 
 
@@ -98,6 +97,8 @@ mkdir Roms
 wget http://www.atarimania.com/roms/Roms.rar
 ./rar/unrar e Roms.rar ./Roms -y
 python -m atari_py.import_roms Roms
+
+yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL glfw mesa-libOSMesa-devel glew egl-utils freeglut -y
 
 # install mujoco-py locally
 cd ${root_dir}/.mujoco/mujoco-py
