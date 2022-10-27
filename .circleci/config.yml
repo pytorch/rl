@@ -520,13 +520,9 @@ jobs:
     <<: *binary_common
     machine:
       image: ubuntu-2004-cuda-11.4:202110-01
-#    docker:
-#      - image: ubuntu-2004-cuda-11.4:202110-01
-#      - image: nvidia/cudagl:11.4.2-devel
     resource_class: gpu.nvidia.medium
     environment:
       image_name: "pytorch/manylinux-cuda113"
-#      image_name: "nvidia/cudagl:11.4.2-devel"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -538,25 +534,25 @@ jobs:
           name: Generate cache key
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
-      - restore_cache:
-          keys:
-            - env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_olddeps/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+#      - restore_cache:
+#          keys:
+#            - env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_olddeps/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
       - run:
           name: Setup
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts/setup_env.sh
-      - save_cache:
-
-          key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_olddeps/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-
-          paths:
-            - conda
-            - env
+          command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_olddeps/scripts/setup_env.sh
+#      - save_cache:
+#
+#          key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_olddeps/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+#
+#          paths:
+#            - conda
+#            - env
       - run:
           name: Install torchrl
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts/install.sh
       - run:
           name: Run tests
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts/run_test.sh
+          command: bash .circleci/unittest/linux_olddeps/scripts/run_test.sh
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts/post_process.sh
