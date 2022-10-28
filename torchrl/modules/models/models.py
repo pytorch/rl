@@ -1083,7 +1083,7 @@ class GRUNet(nn.Module):
                 (0): Linear(in_features=13, out_features=3, bias=True)
               )
             )
-        >>> x_no_batch = torch.randn(5, 11)
+        >>> x_no_batch = torch.randn(7, 11)
         >>> out_no_batch, h_no_batch = net(x_no_batch)
         >>> print(out_no_batch.shape, h_no_batch.shape)
         torch.Size([7, 3]) torch.Size([1, 13])
