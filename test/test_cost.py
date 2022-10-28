@@ -6,7 +6,18 @@
 import argparse
 from copy import deepcopy
 
-import functorch
+from torchrl.modules.functional_modules import FunctionalModuleWithBuffers
+
+_has_functorch = True
+try:
+    import functorch
+
+    make_functional_with_buffers = functorch.make_functional_with_buffers
+
+except ImportError:
+    _has_functorch = False
+    make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
+
 import numpy as np
 import pytest
 import torch
@@ -19,11 +30,13 @@ from torchrl.data import (
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
     TensorDict,
+    OneHotDiscreteTensorSpec,
+    DiscreteTensorSpec,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
 
 # from torchrl.data.postprocs.utils import expand_as_right
-from torchrl.data.tensordict.tensordict import assert_allclose_td
+from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDictBase
 from torchrl.data.utils import expand_as_right
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TransformedEnv, TensorDictPrimer
@@ -112,11 +125,21 @@ def get_devices():
 class TestDQN:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_actor(
+        self, action_spec_type, batch=2, obs_dim=3, action_dim=4, device="cpu"
+    ):
         # Actor
-        action_spec = NdBoundedTensorSpec(
-            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
-        )
+        if action_spec_type == "one_hot":
+            action_spec = OneHotDiscreteTensorSpec(action_dim)
+        elif action_spec_type == "categorical":
+            action_spec = DiscreteTensorSpec(action_dim)
+        elif action_spec_type == "nd_bounded":
+            action_spec = NdBoundedTensorSpec(
+                -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+            )
+        else:
+            raise ValueError(f"Wrong {action_spec_type}")
+
         module = nn.Linear(obs_dim, action_dim)
         actor = QValueActor(
             spec=CompositeSpec(
@@ -127,21 +150,44 @@ class TestDQN:
         return actor
 
     def _create_mock_distributional_actor(
-        self, batch=2, obs_dim=3, action_dim=4, atoms=5, vmin=1, vmax=5
+        self,
+        action_spec_type,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        atoms=5,
+        vmin=1,
+        vmax=5,
     ):
         # Actor
-        action_spec = MultOneHotDiscreteTensorSpec([atoms] * action_dim)
+        if action_spec_type == "mult_one_hot":
+            action_spec = MultOneHotDiscreteTensorSpec([atoms] * action_dim)
+        elif action_spec_type == "one_hot":
+            action_spec = OneHotDiscreteTensorSpec(action_dim)
+        elif action_spec_type == "categorical":
+            action_spec = DiscreteTensorSpec(action_dim)
+        else:
+            raise ValueError(f"Wrong {action_spec_type}")
         support = torch.linspace(vmin, vmax, atoms, dtype=torch.float)
         module = MLP(obs_dim, (atoms, action_dim))
         actor = DistributionalQValueActor(
             spec=CompositeSpec(action=action_spec, action_value=None),
             module=module,
             support=support,
+            action_space="categorical"
+            if isinstance(action_spec, DiscreteTensorSpec)
+            else "one_hot",
         )
         return actor
 
     def _create_mock_data_dqn(
-        self, batch=2, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+        self,
+        action_spec_type,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        atoms=None,
+        device="cpu",
     ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim)
@@ -154,6 +200,10 @@ class TestDQN:
         else:
             action_value = torch.randn(batch, action_dim)
             action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
+
+        if action_spec_type == "categorical":
+            action_value = torch.max(action_value, -1, keepdim=True)[0]
+            action = torch.argmax(action, -1, keepdim=True)
         reward = torch.randn(batch, 1)
         done = torch.zeros(batch, 1, dtype=torch.bool)
         td = TensorDict(
@@ -171,7 +221,14 @@ class TestDQN:
         return td
 
     def _create_seq_mock_data_dqn(
-        self, batch=2, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+        self,
+        action_spec_type,
+        batch=2,
+        T=4,
+        obs_dim=3,
+        action_dim=4,
+        atoms=None,
+        device="cpu",
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -187,6 +244,10 @@ class TestDQN:
         else:
             action_value = torch.randn(batch, T, action_dim, device=device)
             action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
+
+        if action_spec_type == "categorical":
+            action_value = torch.max(action_value, -1, keepdim=True)[0]
+            action = torch.argmax(action, -1, keepdim=True)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
@@ -205,12 +266,20 @@ class TestDQN:
         )
         return td
 
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_dqn(self, delay_value, device):
+    @pytest.mark.parametrize(
+        "action_spec_type", ("nd_bounded", "one_hot", "categorical")
+    )
+    def test_dqn(self, delay_value, device, action_spec_type):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor(device=device)
-        td = self._create_mock_data_dqn(device=device)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type, device=device
+        )
         loss_fn = DQNLoss(actor, gamma=0.9, loss_function="l2", delay_value=delay_value)
         with _check_td_steady(td):
             loss = loss_fn(td)
@@ -237,14 +306,60 @@ class TestDQN:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    @pytest.mark.skipif(_has_functorch, reason="functorch installed")
+    @pytest.mark.parametrize("delay_value", (False, True))
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "action_spec_type", ("nd_bounded", "one_hot", "categorical")
+    )
+    def test_dqn_nofunctorch(self, delay_value, device, action_spec_type):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type, device=device
+        )
+        loss_fn = DQNLoss(actor, gamma=0.9, loss_function="l2", delay_value=delay_value)
+        with _check_td_steady(td):
+            loss = loss_fn(td)
+        assert loss_fn.priority_key in td.keys()
+
+        sum([item for _, item in loss.items()]).backward()
+        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+
+        # Check param update effect on targets
+        target_value = loss_fn.target_value_network_params.clone()
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_value2 = loss_fn.target_value_network_params.clone()
+        if loss_fn.delay_value:
+            assert_allclose_td(target_value, target_value2)
+        else:
+            assert not (target_value == target_value2).any()
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_dqn_batcher(self, n, delay_value, device, gamma=0.9):
+    @pytest.mark.parametrize(
+        "action_spec_type", ("nd_bounded", "one_hot", "categorical")
+    )
+    def test_dqn_batcher(self, n, delay_value, device, action_spec_type, gamma=0.9):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
 
-        td = self._create_seq_mock_data_dqn(device=device)
+        td = self._create_seq_mock_data_dqn(
+            action_spec_type=action_spec_type, device=device
+        )
         loss_fn = DQNLoss(
             actor, gamma=gamma, loss_function="l2", delay_value=delay_value
         )
@@ -289,14 +404,84 @@ class TestDQN:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    @pytest.mark.skipif(_has_functorch, reason="functorch not installed")
+    @pytest.mark.parametrize("n", range(4))
+    @pytest.mark.parametrize("delay_value", (False, True))
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "action_spec_type", ("nd_bounded", "one_hot", "categorical")
+    )
+    def test_dqn_batcher_nofunctorch(
+        self, n, delay_value, device, action_spec_type, gamma=0.9
+    ):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
+
+        td = self._create_seq_mock_data_dqn(
+            action_spec_type=action_spec_type, device=device
+        )
+        loss_fn = DQNLoss(
+            actor, gamma=gamma, loss_function="l2", delay_value=delay_value
+        )
+
+        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+        ms_td = ms(td.clone())
+
+        with _check_td_steady(ms_td):
+            loss_ms = loss_fn(ms_td)
+        assert loss_fn.priority_key in ms_td.keys()
+
+        with torch.no_grad():
+            loss = loss_fn(td)
+        if n == 0:
+            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            _loss = sum([item for _, item in loss.items()])
+            _loss_ms = sum([item for _, item in loss_ms.items()])
+            assert (
+                abs(_loss - _loss_ms) < 1e-3
+            ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
+        else:
+            with pytest.raises(AssertionError):
+                assert_allclose_td(loss, loss_ms)
+        sum([item for _, item in loss_ms.items()]).backward()
+        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+
+        # Check param update effect on targets
+        target_value = loss_fn.target_value_network_params.clone()
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_value2 = loss_fn.target_value_network_params.clone()
+        if loss_fn.delay_value:
+            assert_allclose_td(target_value, target_value2)
+        else:
+            assert not (target_value == target_value2).any()
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_devices())
-    def test_distributional_dqn(self, atoms, delay_value, device, gamma=0.9):
+    @pytest.mark.parametrize(
+        "action_spec_type", ("mult_one_hot", "one_hot", "categorical")
+    )
+    def test_distributional_dqn(
+        self, atoms, delay_value, device, action_spec_type, gamma=0.9
+    ):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_distributional_actor(atoms=atoms).to(device)
+        actor = self._create_mock_distributional_actor(
+            action_spec_type=action_spec_type, atoms=atoms
+        ).to(device)
 
-        td = self._create_mock_data_dqn(atoms=atoms).to(device)
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type, atoms=atoms
+        ).to(device)
         loss_fn = DistributionalDQNLoss(actor, gamma=gamma, delay_value=delay_value)
 
         with _check_td_steady(td):
@@ -317,6 +502,49 @@ class TestDQN:
             assert not any(
                 (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
             )
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.skipif(_has_functorch, reason="functorch not installed")
+    @pytest.mark.parametrize("atoms", range(4, 10))
+    @pytest.mark.parametrize("delay_value", (False, True))
+    @pytest.mark.parametrize("device", get_devices())
+    @pytest.mark.parametrize(
+        "action_spec_type", ("mult_one_hot", "one_hot", "categorical")
+    )
+    def test_distributional_dqn_nofunctorch(
+        self, atoms, delay_value, device, action_spec_type, gamma=0.9
+    ):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_distributional_actor(
+            action_spec_type=action_spec_type, atoms=atoms
+        ).to(device)
+
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type, atoms=atoms
+        ).to(device)
+        loss_fn = DistributionalDQNLoss(actor, gamma=gamma, delay_value=delay_value)
+
+        with _check_td_steady(td):
+            loss = loss_fn(td)
+        assert loss_fn.priority_key in td.keys()
+
+        sum([item for _, item in loss.items()]).backward()
+        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+
+        # Check param update effect on targets
+        target_value = loss_fn.target_value_network_params.clone()
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_value2 = loss_fn.target_value_network_params.clone()
+        if loss_fn.delay_value:
+            assert_allclose_td(target_value, target_value2)
+        else:
+            assert not (target_value == target_value2).any()
 
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
@@ -417,6 +645,7 @@ class TestDDPG:
         )
         return td
 
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
     def test_ddpg(self, delay_actor, delay_value, device):
@@ -494,6 +723,7 @@ class TestDDPG:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
@@ -549,7 +779,7 @@ class TestSAC:
             spec=CompositeSpec(action=action_spec, loc=None, scale=None),
             module=module,
             distribution_class=TanhNormal,
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
         )
         return actor.to(device)
 
@@ -637,6 +867,7 @@ class TestSAC:
         )
         return td
 
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -746,6 +977,7 @@ class TestSAC:
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
@@ -849,6 +1081,7 @@ class TestSAC:
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 
+@pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
 class TestREDQ:
     seed = 0
 
@@ -865,7 +1098,7 @@ class TestREDQ:
             module=module,
             distribution_class=TanhNormal,
             return_log_prob=True,
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
             spec=CompositeSpec(action=action_spec, loc=None, scale=None),
         )
         return actor.to(device)
@@ -920,7 +1153,7 @@ class TestREDQ:
             TensorDictModule(
                 ActorClass(), in_keys=["hidden"], out_keys=["loc", "scale"]
             ),
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             return_log_prob=True,
         )
@@ -1296,7 +1529,7 @@ class TestPPO:
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
             spec=CompositeSpec(action=action_spec, loc=None, scale=None),
         )
         return actor.to(device)
@@ -1460,7 +1693,8 @@ class TestPPO:
         loss_fn = loss_class(
             actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
         )
-        floss_fn, params, buffers = functorch.make_functional_with_buffers(loss_fn)
+
+        floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
 
         loss = floss_fn(params, buffers, td)
         loss_critic = loss["loss_critic"]
@@ -1468,27 +1702,51 @@ class TestPPO:
         loss_critic.backward(retain_graph=True)
         # check that grads are independent and non null
         named_parameters = loss_fn.named_parameters()
-        for (name, _), p in zip(named_parameters, params):
-            if p.grad is not None and p.grad.norm() > 0.0:
-                assert "actor" not in name
-                assert "critic" in name
-            if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+        if _has_functorch:
+            for (name, _), p in zip(named_parameters, params):
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" not in name
+                    assert "critic" in name
+                if p.grad is None:
+                    assert "actor" in name
+                    assert "critic" not in name
+        else:
+            for key, p in params.flatten_keys(".").items():
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" not in key
+                    assert "value" in key or "critic" in key
+                if p.grad is None:
+                    assert "actor" in key
+                    assert "value" not in key and "critic" not in key
 
-        for param in params:
-            param.grad = None
+        if _has_functorch:
+            for param in params:
+                param.grad = None
+        else:
+            for param in params.flatten_keys(".").values():
+                param.grad = None
         loss_objective.backward()
         named_parameters = loss_fn.named_parameters()
-        for (name, _), p in zip(named_parameters, params):
-            if p.grad is not None and p.grad.norm() > 0.0:
-                assert "actor" in name
-                assert "critic" not in name
-            if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
-        for param in params:
-            param.grad = None
+        if _has_functorch:
+            for (name, _), p in zip(named_parameters, params):
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" in name
+                    assert "critic" not in name
+                if p.grad is None:
+                    assert "actor" not in name
+                    assert "critic" in name
+            for param in params:
+                param.grad = None
+        else:
+            for key, p in params.flatten_keys(".").items():
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" in key
+                    assert "value" not in key and "critic" not in key
+                if p.grad is None:
+                    assert "actor" not in key
+                    assert "value" in key or "critic" in key
+            for param in params.flatten_keys(".").values():
+                param.grad = None
 
 
 class TestReinforce:
@@ -1509,7 +1767,7 @@ class TestReinforce:
             module,
             distribution_class=TanhNormal,
             return_log_prob=True,
-            dist_param_keys=["loc", "scale"],
+            dist_in_keys=["loc", "scale"],
             spec=CompositeSpec(
                 action=NdUnboundedContinuousTensorSpec(n_act), loc=None, scale=None
             ),
@@ -1774,8 +2032,8 @@ class TestDreamer:
                 in_keys=["state", "belief"],
                 out_keys=["loc", "scale"],
             ),
-            dist_param_keys=["loc", "scale"],
-            out_key_sample="action",
+            dist_in_keys=["loc", "scale"],
+            sample_out_key="action",
             default_interaction_mode="random",
             distribution_class=TanhNormal,
         )
@@ -2034,9 +2292,15 @@ def test_updater(mode, value_network_update_interval, device):
             self.convert_to_functional(module1, "module1", create_target_params=True)
             module2 = torch.nn.BatchNorm2d(10).eval()
             self.module2 = module2
-            for target in self.target_module1_params:
+            if _has_functorch:
+                iterator_params = self.target_module1_params
+                iterator_buffers = self.target_module1_buffers
+            else:
+                iterator_params = self.target_module1_params.values()
+                iterator_buffers = self.target_module1_buffers.values()
+            for target in iterator_params:
                 target.data.normal_()
-            for target in self.target_module1_buffers:
+            for target in iterator_buffers:
                 if target.dtype is not torch.int64:
                     target.data.normal_()
                 else:
@@ -2051,24 +2315,68 @@ def test_updater(mode, value_network_update_interval, device):
         upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
     upd.init_()
     for _, v in upd._targets.items():
-        for _v in v:
-            if _v.dtype is not torch.int64:
-                _v.copy_(torch.randn_like(_v))
-            else:
-                _v += 10
+        if isinstance(v, TensorDictBase):
+            for _v in v.values():
+                if _v.dtype is not torch.int64:
+                    _v.copy_(torch.randn_like(_v))
+                else:
+                    _v += 10
+        else:
+            for _v in v:
+                if _v.dtype is not torch.int64:
+                    _v.copy_(torch.randn_like(_v))
+                else:
+                    _v += 10
 
     # total dist
-    d0 = sum(
-        [
-            (target_val[0] - val[0]).norm().item()
-            for (_, target_val), (_, val) in zip(
-                upd._targets.items(), upd._sources.items()
-            )
-        ]
-    )
+    if _has_functorch:
+        d0 = sum(
+            [
+                (target_val[0] - val[0]).norm().item()
+                for (_, target_val), (_, val) in zip(
+                    upd._targets.items(), upd._sources.items()
+                )
+            ]
+        )
+    else:
+        d0 = 0.0
+        for (_, target_val), (_, val) in zip(
+            upd._targets.items(), upd._sources.items()
+        ):
+            for key in target_val.keys():
+                if target_val[key].dtype == torch.long:
+                    continue
+                d0 += (target_val[key] - val[key]).norm().item()
+
     assert d0 > 0
     if mode == "hard":
         for i in range(value_network_update_interval + 1):
+            # test that no update is occuring until value_network_update_interval
+            if _has_functorch:
+                d1 = sum(
+                    [
+                        (target_val[0] - val[0]).norm().item()
+                        for (_, target_val), (_, val) in zip(
+                            upd._targets.items(), upd._sources.items()
+                        )
+                    ]
+                )
+            else:
+                d1 = 0.0
+                for (_, target_val), (_, val) in zip(
+                    upd._targets.items(), upd._sources.items()
+                ):
+                    for key in target_val.keys():
+                        if target_val[key].dtype == torch.long:
+                            continue
+                        d1 += (target_val[key] - val[key]).norm().item()
+
+            assert d1 == d0, i
+            assert upd.counter == i
+            upd.step()
+        assert upd.counter == 0
+        # test that a new update has occured
+        if _has_functorch:
             d1 = sum(
                 [
                     (target_val[0] - val[0]).norm().item()
@@ -2077,23 +2385,43 @@ def test_updater(mode, value_network_update_interval, device):
                     )
                 ]
             )
-            assert d1 == d0, i
-            assert upd.counter == i
-            upd.step()
-        assert upd.counter == 0
-        d1 = sum(
-            [
-                (target_val[0] - val[0]).norm().item()
-                for (_, target_val), (_, val) in zip(
-                    upd._targets.items(), upd._sources.items()
-                )
-            ]
-        )
+        else:
+            d1 = 0.0
+            for (_, target_val), (_, val) in zip(
+                upd._targets.items(), upd._sources.items()
+            ):
+                for key in target_val.keys():
+                    if target_val[key].dtype == torch.long:
+                        continue
+                    d1 += (target_val[key] - val[key]).norm().item()
         assert d1 < d0
 
     elif mode == "soft":
         upd.step()
-        d1 = sum(
+        if _has_functorch:
+            d1 = sum(
+                [
+                    (target_val[0] - val[0]).norm().item()
+                    for (_, target_val), (_, val) in zip(
+                        upd._targets.items(), upd._sources.items()
+                    )
+                ]
+            )
+        else:
+            d1 = 0.0
+            for (_, target_val), (_, val) in zip(
+                upd._targets.items(), upd._sources.items()
+            ):
+                for key in target_val.keys():
+                    if target_val[key].dtype == torch.long:
+                        continue
+                    d1 += (target_val[key] - val[key]).norm().item()
+        assert d1 < d0
+
+    upd.init_()
+    upd.step()
+    if _has_functorch:
+        d2 = sum(
             [
                 (target_val[0] - val[0]).norm().item()
                 for (_, target_val), (_, val) in zip(
@@ -2101,18 +2429,15 @@ def test_updater(mode, value_network_update_interval, device):
                 )
             ]
         )
-        assert d1 < d0
-
-    upd.init_()
-    upd.step()
-    d2 = sum(
-        [
-            (target_val[0] - val[0]).norm().item()
-            for (_, target_val), (_, val) in zip(
-                upd._targets.items(), upd._sources.items()
-            )
-        ]
-    )
+    else:
+        d2 = 0.0
+        for (_, target_val), (_, val) in zip(
+            upd._targets.items(), upd._sources.items()
+        ):
+            for key in target_val.keys():
+                if target_val[key].dtype == torch.long:
+                    continue
+                d2 += (target_val[key] - val[key]).norm().item()
     assert d2 < 1e-6
 
 
@@ -2320,6 +2645,7 @@ def test_custom_conv1d_tensor(device, gamma, N, T, rolling_gamma):
     torch.testing.assert_close(out, out_custom, rtol=1e-4, atol=1e-4)
 
 
+@pytest.mark.skipif(not _has_functorch, reason="no vmap allowed without functorch")
 @pytest.mark.parametrize(
     "dest,expected_dtype,expected_device",
     list(
@@ -2355,8 +2681,8 @@ def test_shared_params(dest, expected_dtype, expected_device):
     td_module_action = ProbabilisticActor(
         module=module_action,
         spec=None,
-        dist_param_keys=["loc", "scale"],
-        out_key_sample=["action"],
+        dist_in_keys=["loc", "scale"],
+        sample_out_key=["action"],
         distribution_class=TanhNormal,
         return_log_prob=True,
     )

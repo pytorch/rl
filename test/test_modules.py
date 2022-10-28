@@ -9,9 +9,14 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from mocking_classes import MockBatchedUnLockedEnv
+from packaging import version
 from torch import nn
 from torchrl.data import TensorDict
-from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec, NdBoundedTensorSpec
+from torchrl.data.tensor_specs import (
+    DiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
+    NdBoundedTensorSpec,
+)
 from torchrl.modules import (
     ActorValueOperator,
     CEMPlanner,
@@ -35,6 +40,14 @@ from torchrl.modules.models.model_based import (
     RSSMRollout,
 )
 from torchrl.modules.models.utils import SquashDims
+
+
+@pytest.fixture
+def double_prec_fixture():
+    dtype = torch.get_default_dtype()
+    torch.set_default_dtype(torch.double)
+    yield
+    torch.set_default_dtype(dtype)
 
 
 @pytest.mark.parametrize("in_features", [3, 10, None])
@@ -213,13 +226,44 @@ def test_value_based_policy(device):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
+def test_value_based_policy_categorical(device):
+    torch.manual_seed(0)
+    obs_dim = 4
+    action_dim = 5
+    action_spec = DiscreteTensorSpec(action_dim)
+
+    def make_net():
+        net = MLP(in_features=obs_dim, out_features=action_dim, depth=2, device=device)
+        for mod in net.modules():
+            if hasattr(mod, "bias") and mod.bias is not None:
+                mod.bias.data.zero_()
+        return net
+
+    actor = QValueActor(
+        spec=action_spec, module=make_net(), safe=True, action_space="categorical"
+    )
+    obs = torch.zeros(2, obs_dim, device=device)
+    td = TensorDict(batch_size=[2], source={"observation": obs})
+    action = actor(td).get("action")
+    assert (0 <= action).all() and (action < action_dim).all()
+
+    actor = QValueActor(
+        spec=action_spec, module=make_net(), safe=False, action_space="categorical"
+    )
+    obs = torch.randn(2, obs_dim, device=device)
+    td = TensorDict(batch_size=[2], source={"observation": obs})
+    action = actor(td).get("action")
+    assert (0 <= action).all() and (action < action_dim).all()
+
+
+@pytest.mark.parametrize("device", get_available_devices())
 def test_actorcritic(device):
     common_module = TensorDictModule(
         spec=None, module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
     ).to(device)
     module = TensorDictModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
     policy_operator = ProbabilisticActor(
-        spec=None, module=module, dist_param_keys=["param"], return_log_prob=True
+        spec=None, module=module, dist_in_keys=["param"], return_log_prob=True
     ).to(device)
     value_operator = ValueOperator(nn.Linear(4, 1), in_keys=["hidden"]).to(device)
     op = ActorValueOperator(
@@ -266,7 +310,16 @@ def test_actorcritic(device):
 @pytest.mark.parametrize("hidden_size", [8, 9])
 @pytest.mark.parametrize("num_layers", [1, 2])
 @pytest.mark.parametrize("has_precond_hidden", [True, False])
-def test_lstm_net(device, out_features, hidden_size, num_layers, has_precond_hidden):
+def test_lstm_net(
+    device,
+    out_features,
+    hidden_size,
+    num_layers,
+    has_precond_hidden,
+    double_prec_fixture,
+):
+
+    torch.manual_seed(0)
     batch = 5
     time_steps = 6
     in_features = 7
@@ -402,10 +455,16 @@ class TestFunctionalModules:
         assert (fmodule(params, buffers, x) == module(x)).all()
 
     def test_func_transformer(self):
+        torch.manual_seed(10)
+        batch = (
+            (10,)
+            if version.parse(torch.__version__) >= version.parse("1.11")
+            else (1, 10)
+        )
         module = nn.Transformer(128)
         module.eval()
         fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
-        x = torch.randn(10, 128)
+        x = torch.randn(*batch, 128)
         torch.testing.assert_close(fmodule(params, buffers, x, x), module(x, x))
 
 
@@ -436,6 +495,12 @@ class TestPlanner:
 
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("batch_size", [[], [3], [5]])
+@pytest.mark.skipif(
+    version.parse(torch.__version__) < version.parse("1.11.0"),
+    reason="""Dreamer works with batches of null to 2 dimensions. Torch < 1.11
+requires one-dimensional batches (for RNN and Conv nets for instance). If you'd like
+to see torch < 1.11 supported for dreamer, please submit an issue.""",
+)
 class TestDreamerComponents:
     @pytest.mark.parametrize("out_features", [3, 5])
     @pytest.mark.parametrize("temporal_size", [[], [2], [4]])

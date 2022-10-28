@@ -7,7 +7,21 @@ import argparse
 
 import pytest
 import torch
-from functorch import make_functional, make_functional_with_buffers
+from torchrl.data.tensordict.tensordict import TensorDictBase
+
+_has_functorch = False
+try:
+    from functorch import make_functional, make_functional_with_buffers
+
+    _has_functorch = True
+except ImportError:
+    from torchrl.modules.functional_modules import (
+        FunctionalModule,
+        FunctionalModuleWithBuffers,
+    )
+
+    make_functional = FunctionalModule._create_from
+    make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
 from torch import nn
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import (
@@ -176,9 +190,9 @@ class TestTDModule:
 
         kwargs = {"distribution_class": TanhNormal}
         if out_keys == ["loc", "scale"]:
-            dist_param_keys = ["loc", "scale"]
+            dist_in_keys = ["loc", "scale"]
         elif out_keys == ["loc_1", "scale_1"]:
-            dist_param_keys = {"loc": "loc_1", "scale": "scale_1"}
+            dist_in_keys = {"loc": "loc_1", "scale": "scale_1"}
         else:
             raise NotImplementedError
 
@@ -191,8 +205,8 @@ class TestTDModule:
                 tensordict_module = ProbabilisticTensorDictModule(
                     module=net,
                     spec=spec,
-                    dist_param_keys=dist_param_keys,
-                    out_key_sample=["out"],
+                    dist_in_keys=dist_in_keys,
+                    sample_out_key=["out"],
                     safe=safe,
                     **kwargs,
                 )
@@ -201,8 +215,8 @@ class TestTDModule:
             tensordict_module = ProbabilisticTensorDictModule(
                 module=net,
                 spec=spec,
-                dist_param_keys=dist_param_keys,
-                out_key_sample=["out"],
+                dist_in_keys=dist_in_keys,
+                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
@@ -307,8 +321,8 @@ class TestTDModule:
                 tensordict_module = ProbabilisticTensorDictModule(
                     module=tdnet,
                     spec=spec,
-                    dist_param_keys=["loc", "scale"],
-                    out_key_sample=["out"],
+                    dist_in_keys=["loc", "scale"],
+                    sample_out_key=["out"],
                     safe=safe,
                     **kwargs,
                 )
@@ -317,8 +331,8 @@ class TestTDModule:
             tensordict_module = ProbabilisticTensorDictModule(
                 module=tdnet,
                 spec=spec,
-                dist_param_keys=["loc", "scale"],
-                out_key_sample=["out"],
+                dist_in_keys=["loc", "scale"],
+                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
@@ -370,8 +384,8 @@ class TestTDModule:
                 tensordict_module = ProbabilisticTensorDictModule(
                     module=tdnet,
                     spec=spec,
-                    dist_param_keys=["loc", "scale"],
-                    out_key_sample=["out"],
+                    dist_in_keys=["loc", "scale"],
+                    sample_out_key=["out"],
                     safe=safe,
                     **kwargs,
                 )
@@ -380,8 +394,8 @@ class TestTDModule:
             tensordict_module = ProbabilisticTensorDictModule(
                 module=tdnet,
                 spec=spec,
-                dist_param_keys=["loc", "scale"],
-                out_key_sample=["out"],
+                dist_in_keys=["loc", "scale"],
+                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
@@ -489,8 +503,8 @@ class TestTDModule:
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
                     spec=spec,
-                    dist_param_keys=["loc", "scale"],
-                    out_key_sample=["out"],
+                    dist_in_keys=["loc", "scale"],
+                    sample_out_key=["out"],
                     safe=safe,
                     **kwargs,
                 )
@@ -499,8 +513,8 @@ class TestTDModule:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
                 spec=spec,
-                dist_param_keys=["loc", "scale"],
-                out_key_sample=["out"],
+                dist_in_keys=["loc", "scale"],
+                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
@@ -549,11 +563,11 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = ProbabilisticTensorDictModule(
+                ProbabilisticTensorDictModule(
                     module=tdnet,
                     spec=spec,
-                    dist_param_keys=["loc", "scale"],
-                    out_key_sample=["out"],
+                    dist_in_keys=["loc", "scale"],
+                    sample_out_key=["out"],
                     safe=safe,
                     **kwargs,
                 )
@@ -562,8 +576,8 @@ class TestTDModule:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
                 spec=spec,
-                dist_param_keys=["loc", "scale"],
-                out_key_sample=["out"],
+                dist_in_keys=["loc", "scale"],
+                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
@@ -580,6 +594,9 @@ class TestTDModule:
         elif safe and spec_type == "bounded":
             assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     def test_vmap(self, safe, spec_type):
@@ -656,6 +673,9 @@ class TestTDModule:
         elif safe and spec_type == "bounded":
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     def test_vmap_probabilistic(self, safe, spec_type):
@@ -693,8 +713,8 @@ class TestTDModule:
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
                     spec=spec,
-                    dist_param_keys=["loc", "scale"],
-                    out_key_sample=["out"],
+                    dist_in_keys=["loc", "scale"],
+                    sample_out_key=["out"],
                     safe=safe,
                     **kwargs,
                 )
@@ -703,8 +723,8 @@ class TestTDModule:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
                 spec=spec,
-                dist_param_keys=["loc", "scale"],
-                out_key_sample=["out"],
+                dist_in_keys=["loc", "scale"],
+                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
@@ -745,6 +765,9 @@ class TestTDModule:
         elif safe and spec_type == "bounded":
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     def test_vmap_probabilistic_laterconstruct(self, safe, spec_type):
@@ -781,8 +804,8 @@ class TestTDModule:
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
                     spec=spec,
-                    dist_param_keys=["loc", "scale"],
-                    out_key_sample=["out"],
+                    dist_in_keys=["loc", "scale"],
+                    sample_out_key=["out"],
                     safe=safe,
                     **kwargs,
                 )
@@ -791,8 +814,8 @@ class TestTDModule:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
                 spec=spec,
-                dist_param_keys=["loc", "scale"],
-                out_key_sample=["out"],
+                dist_in_keys=["loc", "scale"],
+                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
@@ -992,8 +1015,8 @@ class TestTDSequence:
             tdmodule2 = ProbabilisticTensorDictModule(
                 spec=spec,
                 module=net2,
-                dist_param_keys=["loc", "scale"],
-                out_key_sample=["out"],
+                dist_in_keys=["loc", "scale"],
+                sample_out_key=["out"],
                 safe=False,
                 **kwargs,
             )
@@ -1040,7 +1063,10 @@ class TestTDSequence:
         fnet1, params1 = make_functional(net1)
         fdummy_net, _ = make_functional(dummy_net)
         fnet2, params2 = make_functional(net2)
-        params = list(params1) + list(params2)
+        if isinstance(params1, TensorDictBase):
+            params = TensorDict({"0": params1, "1": params2}, [])
+        else:
+            params = list(params1) + list(params2)
 
         if spec_type is None:
             spec = None
@@ -1116,7 +1142,10 @@ class TestTDSequence:
         fnet2 = TensorDictModule(
             module=fnet2, in_keys=["hidden"], out_keys=["loc", "scale"]
         )
-        params = list(params1) + list(params2)
+        if isinstance(params1, TensorDictBase):
+            params = TensorDict({"0": params1, "1": params2}, [])
+        else:
+            params = list(params1) + list(params2)
 
         if spec_type is None:
             spec = None
@@ -1148,8 +1177,8 @@ class TestTDSequence:
             tdmodule2 = ProbabilisticTensorDictModule(
                 fnet2,
                 spec=spec,
-                dist_param_keys=["loc", "scale"],
-                out_key_sample=["out"],
+                dist_in_keys=["loc", "scale"],
+                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
@@ -1203,8 +1232,14 @@ class TestTDSequence:
         fdummy_net, _, _ = make_functional_with_buffers(dummy_net)
         fnet2, params2, buffers2 = make_functional_with_buffers(net2)
 
-        params = list(params1) + list(params2)
-        buffers = list(buffers1) + list(buffers2)
+        if isinstance(params1, TensorDictBase):
+            params = TensorDict({"0": params1, "1": params2}, [])
+        else:
+            params = list(params1) + list(params2)
+        if isinstance(buffers1, TensorDictBase):
+            buffers = TensorDict({"0": buffers1, "1": buffers2}, [])
+        else:
+            buffers = list(buffers1) + list(buffers2)
 
         if spec_type is None:
             spec = None
@@ -1288,8 +1323,14 @@ class TestTDSequence:
         net2 = TensorDictModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
         fnet2, (params2, buffers2) = net2.make_functional_with_buffers()
 
-        params = list(params1) + list(params2)
-        buffers = list(buffers1) + list(buffers2)
+        if isinstance(params1, TensorDictBase):
+            params = TensorDict({"0": params1, "1": params2}, [])
+        else:
+            params = list(params1) + list(params2)
+        if isinstance(buffers1, TensorDictBase):
+            buffers = TensorDict({"0": buffers1, "1": buffers2}, [])
+        else:
+            buffers = list(buffers1) + list(buffers2)
 
         if spec_type is None:
             spec = None
@@ -1321,8 +1362,8 @@ class TestTDSequence:
             tdmodule2 = ProbabilisticTensorDictModule(
                 fnet2,
                 spec=spec,
-                dist_param_keys=["loc", "scale"],
-                out_key_sample=["out"],
+                dist_in_keys=["loc", "scale"],
+                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
@@ -1397,8 +1438,8 @@ class TestTDSequence:
             tdmodule2 = ProbabilisticTensorDictModule(
                 net2,
                 spec=spec,
-                dist_param_keys=["loc", "scale"],
-                out_key_sample=["out"],
+                dist_in_keys=["loc", "scale"],
+                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
@@ -1421,6 +1462,9 @@ class TestTDSequence:
         elif safe and spec_type == "bounded":
             assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     def test_vmap(self, safe, spec_type):
@@ -1519,6 +1563,9 @@ class TestTDSequence:
         elif safe and spec_type == "bounded":
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     def test_vmap_probabilistic(self, safe, spec_type):
@@ -1562,8 +1609,8 @@ class TestTDSequence:
             tdmodule2 = ProbabilisticTensorDictModule(
                 fnet2,
                 spec=spec,
-                out_key_sample=["out"],
-                dist_param_keys=["loc", "scale"],
+                sample_out_key=["out"],
+                dist_in_keys=["loc", "scale"],
                 safe=safe,
                 **kwargs,
             )
@@ -1698,16 +1745,16 @@ class TestTDSequence:
         tdmodule2 = ProbabilisticTensorDictModule(
             fnet2,
             spec=spec,
-            out_key_sample=["out"],
-            dist_param_keys=["loc", "scale"],
+            sample_out_key=["out"],
+            dist_in_keys=["loc", "scale"],
             safe=True,
             **kwargs,
         )
         tdmodule3 = ProbabilisticTensorDictModule(
             fnet3,
             spec=spec,
-            out_key_sample=["out"],
-            dist_param_keys=["loc", "scale"],
+            sample_out_key=["out"],
+            dist_in_keys=["loc", "scale"],
             safe=True,
             **kwargs,
         )
@@ -1724,7 +1771,17 @@ class TestTDSequence:
                 0,
             )
             if functional:
-                tdmodule(td, params=params1 + params2 + params3)
+                if _has_functorch:
+                    params = params1 + params2 + params3
+                else:
+                    params = TensorDict(
+                        {
+                            str(i): params
+                            for i, params in enumerate((params1, params2, params3))
+                        },
+                        [],
+                    )
+                tdmodule(td, params=params)
             else:
                 tdmodule(td)
             assert "loc" in td.keys()
@@ -1738,7 +1795,17 @@ class TestTDSequence:
         else:
             td = TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, [])
             if functional:
-                tdmodule(td, params=params1 + params2 + params3)
+                if _has_functorch:
+                    params = params1 + params2 + params3
+                else:
+                    params = TensorDict(
+                        {
+                            str(i): params
+                            for i, params in enumerate((params1, params2, params3))
+                        },
+                        [],
+                    )
+                tdmodule(td, params=params)
             else:
                 tdmodule(td)
             assert "loc" in td.keys()

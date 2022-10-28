@@ -12,6 +12,7 @@ from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
+    DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
@@ -40,18 +41,19 @@ def test_bounded(dtype):
         assert (ts.encode(ts.to_numpy(r)) == r).all()
 
 
-def test_onehot():
+@pytest.mark.parametrize("cls", [OneHotDiscreteTensorSpec, DiscreteTensorSpec])
+def test_discrete(cls):
     torch.manual_seed(0)
     np.random.seed(0)
 
-    ts = OneHotDiscreteTensorSpec(10)
+    ts = cls(10)
     for _ in range(100):
         r = ts.rand()
         ts.to_numpy(r)
         ts.encode(torch.tensor([5]))
         ts.encode(torch.tensor([5]).numpy())
         ts.encode(9)
-        with pytest.raises(RuntimeError):
+        with pytest.raises(AssertionError):
             ts.encode(torch.tensor([11]))  # out of bounds
         assert ts.is_in(r)
         assert (ts.encode(ts.to_numpy(r)) == r).all()
@@ -508,6 +510,34 @@ class TestEquality:
 
         ts_other = TestEquality._ts_make_all_fields_equal(
             BoundedTensorSpec(0, 1, device, dtype), ts
+        )
+        assert ts != ts_other
+
+    def test_equality_discrete(self):
+        n = 5
+        shape = torch.Size([1])
+        device = "cpu"
+        dtype = torch.float16
+
+        ts = DiscreteTensorSpec(n, shape, device, dtype)
+
+        ts_same = DiscreteTensorSpec(n, shape, device, dtype)
+        assert ts == ts_same
+
+        ts_other = DiscreteTensorSpec(n + 1, shape, device, dtype)
+        assert ts != ts_other
+
+        ts_other = DiscreteTensorSpec(n, shape, "cpu:0", dtype)
+        assert ts != ts_other
+
+        ts_other = DiscreteTensorSpec(n, shape, device, torch.float64)
+        assert ts != ts_other
+
+        ts_other = DiscreteTensorSpec(n, torch.Size([2]), device, torch.float64)
+        assert ts != ts_other
+
+        ts_other = TestEquality._ts_make_all_fields_equal(
+            UnboundedContinuousTensorSpec(device, dtype), ts
         )
         assert ts != ts_other
 

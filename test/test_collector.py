@@ -43,6 +43,22 @@ from torchrl.modules import (
     TensorDictModule,
 )
 
+if _has_gym:
+    import gym
+    from packaging import version
+
+    gym_version = version.parse(gym.__version__)
+    PENDULUM_VERSIONED = (
+        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
+    )
+    PONG_VERSIONED = (
+        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
+    )
+else:
+    # placeholders
+    PENDULUM_VERSIONED = "Pendulum-v1"
+    PONG_VERSIONED = "ALE/Pong-v5"
+
 # torch.set_default_dtype(torch.double)
 
 
@@ -299,7 +315,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
 @pytest.mark.skipif(not _has_gym, reason="gym library is not installed")
 def test_collector_env_reset():
     torch.manual_seed(0)
-    env = SerialEnv(2, lambda: GymEnv("ALE/Pong-v5", frame_skip=4))
+    env = SerialEnv(2, lambda: GymEnv(PONG_VERSIONED, frame_skip=4))
     # env = SerialEnv(3, lambda: GymEnv("CartPole-v1", frame_skip=4))
     env.set_seed(0)
     collector = SyncDataCollector(
@@ -698,7 +714,7 @@ def test_collector_vecnorm_envcreator(static_seed):
     from torchrl.envs.libs.gym import GymEnv
 
     num_envs = 4
-    env_make = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
+    env_make = EnvCreator(lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm()))
     env_make = ParallelEnv(num_envs, env_make)
 
     policy = RandomPolicy(env_make.action_spec)
@@ -893,7 +909,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
 
     policy = TensorDictModule(**policy_kwargs)
 
-    env_maker = lambda: GymEnv("Pendulum-v1")
+    env_maker = lambda: GymEnv(PENDULUM_VERSIONED)
 
     policy(env_maker().reset())
 
@@ -949,7 +965,7 @@ class TestAutoWrap:
     def env_maker(self):
         from torchrl.envs.libs.gym import GymEnv
 
-        return lambda: GymEnv("Pendulum-v1")
+        return lambda: GymEnv(PENDULUM_VERSIONED)
 
     def _create_collector_kwargs(self, env_maker, collector_class, policy):
         collector_kwargs = {"create_env_fn": env_maker, "policy": policy}

@@ -28,8 +28,11 @@ class Sampler(ABC):
         pass
 
     def update_priority(
-        self, index: Union[int, torch.Tensor], priority: Union[int, torch.Tensor]
+        self, index: Union[int, torch.Tensor], priority: Union[float, torch.Tensor]
     ) -> dict:
+        pass
+
+    def mark_update(self, index: Union[int, torch.Tensor]) -> None:
         pass
 
     @property
@@ -182,3 +185,6 @@ class PrioritizedSampler(Sampler):
         priority = np.power(priority + self._eps, self._alpha)
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
+
+    def mark_update(self, index: Union[int, torch.Tensor]) -> None:
+        self.update_priority(index, self.default_priority)

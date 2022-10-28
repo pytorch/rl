@@ -7,7 +7,7 @@ from copy import copy, deepcopy
 
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from _utils_internal import get_available_devices, retry
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
@@ -57,208 +57,237 @@ from torchrl.envs.transforms.transforms import (
 )
 from torchrl.envs.transforms.vip import _VIPNet
 
+if _has_gym:
+    import gym
+    from packaging import version
+
+    gym_version = version.parse(gym.__version__)
+    PENDULUM_VERSIONED = (
+        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
+    )
+else:
+    # placeholders
+    PENDULUM_VERSIONED = "Pendulum-v1"
+
 TIMEOUT = 10.0
 
 
-def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.Queue):
-    env = make_env()
-    env.set_seed(1000 + idx)
-    tensordict = env.reset()
-    for _ in range(10):
-        tensordict = env.rand_step(tensordict)
-    queue_out.put(True)
-    msg = queue_in.get(timeout=TIMEOUT)
-    assert msg == "all_done"
-    t = env.transform
-    obs_sum = t._td.get("next_observation_sum").clone()
-    obs_ssq = t._td.get("next_observation_ssq").clone()
-    obs_count = t._td.get("next_observation_count").clone()
-    reward_sum = t._td.get("reward_sum").clone()
-    reward_ssq = t._td.get("reward_ssq").clone()
-    reward_count = t._td.get("reward_count").clone()
+class TestVecNorm:
+    SEED = -1
 
-    queue_out.put((obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count))
-    msg = queue_in.get(timeout=TIMEOUT)
-    assert msg == "all_done"
-    env.close()
-    queue_out.close()
-    queue_in.close()
-    del queue_in, queue_out
+    @staticmethod
+    def _test_vecnorm_subproc_auto(
+        idx, make_env, queue_out: mp.Queue, queue_in: mp.Queue
+    ):
+        env = make_env()
+        env.set_seed(1000 + idx)
+        tensordict = env.reset()
+        for _ in range(10):
+            tensordict = env.rand_step(tensordict)
+        queue_out.put(True)
+        msg = queue_in.get(timeout=TIMEOUT)
+        assert msg == "all_done"
+        t = env.transform
+        obs_sum = t._td.get("next_observation_sum").clone()
+        obs_ssq = t._td.get("next_observation_ssq").clone()
+        obs_count = t._td.get("next_observation_count").clone()
+        reward_sum = t._td.get("reward_sum").clone()
+        reward_ssq = t._td.get("reward_ssq").clone()
+        reward_count = t._td.get("reward_count").clone()
 
-
-@pytest.mark.parametrize("nprc", [2, 5])
-def test_vecnorm_parallel_auto(nprc):
-
-    queues = []
-    prcs = []
-    if _has_gym:
-        make_env = EnvCreator(
-            lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm(decay=1.0))
+        queue_out.put(
+            (obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count)
         )
-    else:
-        make_env = EnvCreator(
-            lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm(decay=1.0))
-        )
+        msg = queue_in.get(timeout=TIMEOUT)
+        assert msg == "all_done"
+        env.close()
+        queue_out.close()
+        queue_in.close()
+        del queue_in, queue_out
 
-    for idx in range(nprc):
-        prc_queue_in = mp.Queue(1)
-        prc_queue_out = mp.Queue(1)
-        p = mp.Process(
-            target=_test_vecnorm_subproc_auto,
-            args=(
-                idx,
-                make_env,
-                prc_queue_in,
-                prc_queue_out,
-            ),
-        )
-        p.start()
-        prcs.append(p)
-        queues.append((prc_queue_in, prc_queue_out))
+    @pytest.mark.parametrize("nprc", [2, 5])
+    def test_vecnorm_parallel_auto(self, nprc):
 
-    dones = [queue[0].get() for queue in queues]
-    assert all(dones)
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
+        queues = []
+        prcs = []
+        if _has_gym:
+            make_env = EnvCreator(
+                lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm(decay=1.0))
+            )
+        else:
+            make_env = EnvCreator(
+                lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm(decay=1.0))
+            )
 
-    td = make_env.state_dict()["_extra_state"]["td"]
+        for idx in range(nprc):
+            prc_queue_in = mp.Queue(1)
+            prc_queue_out = mp.Queue(1)
+            p = mp.Process(
+                target=self._test_vecnorm_subproc_auto,
+                args=(
+                    idx,
+                    make_env,
+                    prc_queue_in,
+                    prc_queue_out,
+                ),
+            )
+            p.start()
+            prcs.append(p)
+            queues.append((prc_queue_in, prc_queue_out))
 
-    obs_sum = td.get("next_observation_sum").clone()
-    obs_ssq = td.get("next_observation_ssq").clone()
-    obs_count = td.get("next_observation_count").clone()
-    reward_sum = td.get("reward_sum").clone()
-    reward_ssq = td.get("reward_ssq").clone()
-    reward_count = td.get("reward_count").clone()
+        dones = [queue[0].get() for queue in queues]
+        assert all(dones)
+        msg = "all_done"
+        for idx in range(nprc):
+            queues[idx][1].put(msg)
 
-    assert obs_count == nprc * 11 + 2  # 10 steps + reset + init
+        td = make_env.state_dict()["_extra_state"]["td"]
 
-    for idx in range(nprc):
-        tup = queues[idx][0].get(timeout=TIMEOUT)
-        (
-            _obs_sum,
-            _obs_ssq,
-            _obs_count,
-            _reward_sum,
-            _reward_ssq,
-            _reward_count,
-        ) = tup
-        assert (obs_sum == _obs_sum).all(), "sum"
-        assert (obs_ssq == _obs_ssq).all(), "ssq"
-        assert (obs_count == _obs_count).all(), "count"
-        assert (reward_sum == _reward_sum).all(), "sum"
-        assert (reward_ssq == _reward_ssq).all(), "ssq"
-        assert (reward_count == _reward_count).all(), "count"
+        obs_sum = td.get("next_observation_sum").clone()
+        obs_ssq = td.get("next_observation_ssq").clone()
+        obs_count = td.get("next_observation_count").clone()
+        reward_sum = td.get("reward_sum").clone()
+        reward_ssq = td.get("reward_ssq").clone()
+        reward_count = td.get("reward_count").clone()
 
-        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
-            _obs_sum,
-            _obs_ssq,
-            _obs_count,
-            _reward_sum,
-            _reward_ssq,
-            _reward_count,
-        )
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
+        assert obs_count == nprc * 11 + 2  # 10 steps + reset + init
 
-    del queues
-    for p in prcs:
-        p.join()
+        for idx in range(nprc):
+            tup = queues[idx][0].get(timeout=TIMEOUT)
+            (
+                _obs_sum,
+                _obs_ssq,
+                _obs_count,
+                _reward_sum,
+                _reward_ssq,
+                _reward_count,
+            ) = tup
+            assert (obs_sum == _obs_sum).all(), "sum"
+            assert (obs_ssq == _obs_ssq).all(), "ssq"
+            assert (obs_count == _obs_count).all(), "count"
+            assert (reward_sum == _reward_sum).all(), "sum"
+            assert (reward_ssq == _reward_ssq).all(), "ssq"
+            assert (reward_count == _reward_count).all(), "count"
 
+            obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
+                _obs_sum,
+                _obs_ssq,
+                _obs_count,
+                _reward_sum,
+                _reward_ssq,
+                _reward_count,
+            )
+        msg = "all_done"
+        for idx in range(nprc):
+            queues[idx][1].put(msg)
 
-def _run_parallelenv(parallel_env, queue_in, queue_out):
-    tensordict = parallel_env.reset()
-    msg = queue_in.get(timeout=TIMEOUT)
-    assert msg == "start"
-    for _ in range(10):
-        tensordict = parallel_env.rand_step(tensordict)
-    queue_out.put("first round")
-    msg = queue_in.get(timeout=TIMEOUT)
-    assert msg == "start"
-    for _ in range(10):
-        tensordict = parallel_env.rand_step(tensordict)
-    queue_out.put("second round")
-    parallel_env.close()
-    queue_out.close()
-    queue_in.close()
-    del parallel_env, queue_out, queue_in
+        del queues
+        for p in prcs:
+            p.join()
 
-
-def test_parallelenv_vecnorm():
-    if _has_gym:
-        make_env = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
-        env_input_keys = None
-    else:
-        make_env = EnvCreator(
-            lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
-        )
-        env_input_keys = ["action", ContinuousActionVecMockEnv._out_key]
-    parallel_env = ParallelEnv(3, make_env, env_input_keys=env_input_keys)
-    queue_out = mp.Queue(1)
-    queue_in = mp.Queue(1)
-    proc = mp.Process(target=_run_parallelenv, args=(parallel_env, queue_out, queue_in))
-    proc.start()
-    parallel_sd = parallel_env.state_dict()
-    assert "worker0" in parallel_sd
-    worker_sd = parallel_sd["worker0"]
-    td = worker_sd["_extra_state"]["td"]
-    queue_out.put("start")
-    msg = queue_in.get(timeout=TIMEOUT)
-    assert msg == "first round"
-    values = td.clone()
-    queue_out.put("start")
-    msg = queue_in.get(timeout=TIMEOUT)
-    assert msg == "second round"
-    new_values = td.clone()
-    for k, item in values.items():
-        if k in ["reward_sum", "reward_ssq"] and not _has_gym:
-            # mocking env rewards are sparse
-            continue
-        assert (item != new_values.get(k)).any(), k
-    proc.join()
-    if not parallel_env.is_closed:
+    @staticmethod
+    def _run_parallelenv(parallel_env, queue_in, queue_out):
+        tensordict = parallel_env.reset()
+        msg = queue_in.get(timeout=TIMEOUT)
+        assert msg == "start"
+        for _ in range(10):
+            tensordict = parallel_env.rand_step(tensordict)
+        queue_out.put("first round")
+        msg = queue_in.get(timeout=TIMEOUT)
+        assert msg == "start"
+        for _ in range(10):
+            tensordict = parallel_env.rand_step(tensordict)
+        queue_out.put("second round")
         parallel_env.close()
+        queue_out.close()
+        queue_in.close()
+        del parallel_env, queue_out, queue_in
 
+    def test_parallelenv_vecnorm(self):
+        if _has_gym:
+            make_env = EnvCreator(
+                lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm())
+            )
+            env_input_keys = None
+        else:
+            make_env = EnvCreator(
+                lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
+            )
+            env_input_keys = ["action", ContinuousActionVecMockEnv._out_key]
+        parallel_env = ParallelEnv(3, make_env, env_input_keys=env_input_keys)
+        queue_out = mp.Queue(1)
+        queue_in = mp.Queue(1)
+        proc = mp.Process(
+            target=self._run_parallelenv, args=(parallel_env, queue_out, queue_in)
+        )
+        proc.start()
+        parallel_sd = parallel_env.state_dict()
+        assert "worker0" in parallel_sd
+        worker_sd = parallel_sd["worker0"]
+        td = worker_sd["_extra_state"]["td"]
+        queue_out.put("start")
+        msg = queue_in.get(timeout=TIMEOUT)
+        assert msg == "first round"
+        values = td.clone()
+        queue_out.put("start")
+        msg = queue_in.get(timeout=TIMEOUT)
+        assert msg == "second round"
+        new_values = td.clone()
+        for k, item in values.items():
+            if k in ["reward_sum", "reward_ssq"] and not _has_gym:
+                # mocking env rewards are sparse
+                continue
+            assert (item != new_values.get(k)).any(), k
+        proc.join()
+        if not parallel_env.is_closed:
+            parallel_env.close()
 
-@pytest.mark.skipif(not _has_gym, reason="no gym library found")
-@pytest.mark.parametrize(
-    "parallel",
-    [
-        None,
-        False,
-        True,
-    ],
-)
-def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
-    torch.manual_seed(0)
+    @retry(AssertionError, tries=10, delay=0)
+    @pytest.mark.skipif(not _has_gym, reason="no gym library found")
+    @pytest.mark.parametrize(
+        "parallel",
+        [
+            None,
+            False,
+            True,
+        ],
+    )
+    def test_vecnorm(self, parallel, thr=0.2, N=200):
+        self.SEED += 1
+        print(self.SEED)
+        torch.manual_seed(self.SEED)
 
-    if parallel is None:
-        env = GymEnv("Pendulum-v1")
-    elif parallel:
-        env = ParallelEnv(num_workers=5, create_env_fn=lambda: GymEnv("Pendulum-v1"))
-    else:
-        env = SerialEnv(num_workers=5, create_env_fn=lambda: GymEnv("Pendulum-v1"))
+        if parallel is None:
+            env = GymEnv(PENDULUM_VERSIONED)
+        elif parallel:
+            env = ParallelEnv(
+                num_workers=5, create_env_fn=lambda: GymEnv(PENDULUM_VERSIONED)
+            )
+        else:
+            env = SerialEnv(
+                num_workers=5, create_env_fn=lambda: GymEnv(PENDULUM_VERSIONED)
+            )
 
-    env.set_seed(0)
-    t = VecNorm(decay=1.0)
-    env_t = TransformedEnv(env, t)
-    td = env_t.reset()
-    tds = []
-    for _ in range(N):
-        td = env_t.rand_step(td)
-        tds.append(td.clone())
-        if td.get("done").any():
-            td = env_t.reset()
-    tds = torch.stack(tds, 0)
-    obs = tds.get("next_observation")
-    obs = obs.view(-1, obs.shape[-1])
-    mean = obs.mean(0)
-    assert (abs(mean) < thr).all()
-    std = obs.std(0)
-    assert (abs(std - 1) < thr).all()
-    if not env_t.is_closed:
-        env_t.close()
+        env.set_seed(self.SEED)
+        t = VecNorm(decay=1.0)
+        env_t = TransformedEnv(env, t)
+        td = env_t.reset()
+        tds = []
+        for _ in range(N):
+            td = env_t.rand_step(td)
+            tds.append(td.clone())
+            if td.get("done").any():
+                td = env_t.reset()
+        tds = torch.stack(tds, 0)
+        obs = tds.get("next_observation")
+        obs = obs.view(-1, obs.shape[-1])
+        mean = obs.mean(0)
+        assert (abs(mean) < thr).all()
+        std = obs.std(0)
+        assert (abs(std - 1) < thr).all()
+        if not env_t.is_closed:
+            env_t.close()
+        self.SEED = 0
 
 
 def test_added_transforms_are_in_eval_mode_trivial():

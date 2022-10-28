@@ -8,11 +8,11 @@ from typing import List, Dict
 from warnings import warn
 
 import torch
-from packaging import version
 
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
     CompositeSpec,
+    DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
     OneHotDiscreteTensorSpec,
@@ -25,9 +25,9 @@ from ..utils import _classproperty
 
 try:
     import gym
+    from packaging import version
 
     _has_gym = True
-
 except ImportError:
     _has_gym = False
 
@@ -55,11 +55,18 @@ if _has_gym:
 __all__ = ["GymWrapper", "GymEnv"]
 
 
-def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec:
+def _gym_to_torchrl_spec_transform(
+    spec, dtype=None, device="cpu", categorical_action_encoding=False
+) -> TensorSpec:
     if isinstance(spec, gym.spaces.tuple.Tuple):
         raise NotImplementedError("gym.spaces.tuple.Tuple mapping not yet implemented")
     if isinstance(spec, gym.spaces.discrete.Discrete):
-        return OneHotDiscreteTensorSpec(spec.n, device=device)
+        action_space_cls = (
+            DiscreteTensorSpec
+            if categorical_action_encoding
+            else OneHotDiscreteTensorSpec
+        )
+        return action_space_cls(spec.n, device=device)
     elif isinstance(spec, gym.spaces.multi_binary.MultiBinary):
         return BinaryDiscreteTensorSpec(spec.n, device=device)
     elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
@@ -78,11 +85,17 @@ def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec
         spec_out = {}
         for k in spec.keys():
             spec_out["next_" + k] = _gym_to_torchrl_spec_transform(
-                spec[k], device=device
+                spec[k],
+                device=device,
+                categorical_action_encoding=categorical_action_encoding,
             )
         return CompositeSpec(**spec_out)
     elif isinstance(spec, gym.spaces.dict.Dict):
-        return _gym_to_torchrl_spec_transform(spec.spaces, device=device)
+        return _gym_to_torchrl_spec_transform(
+            spec.spaces,
+            device=device,
+            categorical_action_encoding=categorical_action_encoding,
+        )
     else:
         raise NotImplementedError(
             f"spec of type {type(spec).__name__} is currently unaccounted for"
@@ -143,10 +156,11 @@ class GymWrapper(GymLikeEnv):
     git_url = "https://github.com/openai/gym"
     libname = "gym"
 
-    def __init__(self, env=None, **kwargs):
+    def __init__(self, env=None, categorical_action_encoding=False, **kwargs):
         if env is not None:
             kwargs["env"] = env
         self._seed_calls_reset = None
+        self._categorical_action_encoding = categorical_action_encoding
         super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):
@@ -172,7 +186,7 @@ class GymWrapper(GymLikeEnv):
                     "PixelObservationWrapper cannot be used to wrap an environment"
                     "that is already a PixelObservationWrapper instance."
                 )
-            if not env.render_mode and gym_version >= version.parse("0.26.0"):
+            if gym_version >= version.parse("0.26.0") and not env.render_mode:
                 warnings.warn(
                     "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
                     "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
@@ -219,10 +233,14 @@ class GymWrapper(GymLikeEnv):
 
     def _make_specs(self, env: "gym.Env") -> None:
         self.action_spec = _gym_to_torchrl_spec_transform(
-            env.action_space, device=self.device
+            env.action_space,
+            device=self.device,
+            categorical_action_encoding=self._categorical_action_encoding,
         )
         self.observation_spec = _gym_to_torchrl_spec_transform(
-            env.observation_space, device=self.device
+            env.observation_space,
+            device=self.device,
+            categorical_action_encoding=self._categorical_action_encoding,
         )
         if not isinstance(self.observation_spec, CompositeSpec):
             if self.from_pixels:
@@ -276,10 +294,16 @@ class GymEnv(GymWrapper):
 
     """
 
-    def __init__(self, env_name, **kwargs):
+    def __init__(self, env_name, disable_env_checker=None, **kwargs):
         kwargs["env_name"] = env_name
-        if version.parse(gym.__version__) >= version.parse("0.24.0"):
-            kwargs.setdefault("disable_env_checker", True)
+        if gym_version >= version.parse("0.24.0"):
+            kwargs["disable_env_checker"] = (
+                disable_env_checker if disable_env_checker is not None else True
+            )
+        elif disable_env_checker is not None:
+            raise RuntimeError(
+                "disable_env_checker should only be set if gym version is > 0.24"
+            )
         super().__init__(**kwargs)
 
     def _build_env(
