@@ -27,8 +27,6 @@ try:
     import gym
     from packaging import version
 
-    gym_version = version.parse(gym.__version__)
-
     _has_gym = True
 except ImportError:
     _has_gym = False

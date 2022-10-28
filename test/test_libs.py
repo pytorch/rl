@@ -7,12 +7,14 @@ import argparse
 import numpy as np
 import pytest
 import torch
+from _utils_internal import _test_fake_tensordict
 from _utils_internal import get_available_devices
 from packaging import version
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs.libs.dm_control import _has_dmc
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
+from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
 
 if _has_gym:
     import gym
@@ -305,6 +307,17 @@ class TestCollectorLib:
                 break
         collector.shutdown()
         del env
+
+
+@pytest.mark.skipif(not _has_habitat, reason="habitat not installed")
+@pytest.mark.parametrize("envname", ["HabitatRenderPick-v0", "HabitatRenderPick-v0"])
+class TestHabitat:
+    def test_habitat(self, envname):
+        env = HabitatEnv(envname)
+        print([_env for _env in env.available_envs if _env.startswith("Habitat")])
+        rollout = env.rollout(3)
+        print(rollout)
+        _test_fake_tensordict(env)
 
 
 if __name__ == "__main__":
