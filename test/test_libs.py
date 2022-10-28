@@ -7,6 +7,7 @@ import argparse
 import numpy as np
 import pytest
 import torch
+from _utils_internal import _test_fake_tensordict
 from _utils_internal import get_available_devices
 from packaging import version
 from torchrl.collectors import MultiaSyncDataCollector
@@ -274,6 +275,7 @@ def test_habitat(envname):
     print([_env for _env in env.available_envs if _env.startswith("Habitat")])
     rollout = env.rollout(3)
     print(rollout)
+    _test_fake_tensordict(env)
 
 
 if __name__ == "__main__":
