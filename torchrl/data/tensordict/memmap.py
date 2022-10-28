@@ -299,8 +299,6 @@ class MemmapTensor(object):
             and not (isinstance(idx, torch.Tensor) and idx.dtype is torch.bool)
         ):  # and isinstance(idx, torch.Tensor) and len(idx) == 1:
             size = self.shape
-            for _idx in idx:
-                size = _getitem_batch_size(size, _idx)
             out = out.view(size)
         return out
 
@@ -638,9 +636,6 @@ def _cat(
     list_of_tensors = [
         a._tensor if isinstance(a, (MemmapTensor,)) else a for a in list_of_memmap
     ]
-    print("mm: ", [t.shape for t in list_of_memmap])
-    print("tensors: ", [t.shape for t in list_of_tensors])
-    print("dim: ", dim, "shape: ", torch.cat(list_of_tensors, dim, out=out).shape)
     return torch.cat(list_of_tensors, dim, out=out)
 
 

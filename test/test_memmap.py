@@ -6,7 +6,6 @@ import argparse
 import os.path
 import pickle
 import tempfile
-from time import sleep
 
 import numpy as np
 import pytest
