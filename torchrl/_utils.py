@@ -153,7 +153,7 @@ class implement_for:
 
     Args:
         module_name: version is checked for the module with this name (e.g. "gym").
-        from_version: version from which implementation is compatible.
+        from_version: version from which implementation is compatible. Can be open (None).
         to_version: version from which implementation is no longer compatible. Can be open (None).
 
     Examples:
@@ -166,7 +166,9 @@ class implement_for:
     # Stores pointers to fitting implementations: dict[func_name] = func_pointer
     _implementations = {}
 
-    def __init__(self, module_name: str, from_version: str, to_version: str = None):
+    def __init__(
+        self, module_name: str, from_version: str = None, to_version: str = None
+    ):
         self.module_name = module_name
         self.from_version = from_version
         self.to_version = to_version
@@ -187,7 +189,7 @@ class implement_for:
 
         version = module.__version__
 
-        if version >= self.from_version and (
+        if (self.from_version is None or version >= self.from_version) and (
             self.to_version is None or version < self.to_version
         ):
             implementations[func_name] = fn

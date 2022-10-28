@@ -91,7 +91,7 @@ def implement_for_test_missing_module():
     return "missing"
 
 
-@implement_for("_utils_internal", "0", "0.3")
+@implement_for("_utils_internal", None, "0.3")
 def implement_for_test_missing_version():
     return "0-0.3"
 
