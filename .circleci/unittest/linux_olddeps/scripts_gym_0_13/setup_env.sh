@@ -64,7 +64,7 @@ if [[ $OSTYPE == 'darwin'* ]]; then
 elif [ "${CU_VERSION:-}" == cpu ]; then
   PRIVATE_MUJOCO_GL=osmesa
 else
-  PRIVATE_MUJOCO_GL=egl
+  PRIVATE_MUJOCO_GL=osmesa
 fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
