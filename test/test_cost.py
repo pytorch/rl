@@ -309,10 +309,17 @@ class TestDQN:
     @pytest.mark.skipif(_has_functorch, reason="functorch installed")
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_dqn_nofunctorch(self, delay_value, device):
+    @pytest.mark.parametrize(
+        "action_spec_type", ("nd_bounded", "one_hot", "categorical")
+    )
+    def test_dqn_nofunctorch(self, delay_value, device, action_spec_type):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor(device=device)
-        td = self._create_mock_data_dqn(device=device)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type, device=device
+        )
         loss_fn = DQNLoss(actor, gamma=0.9, loss_function="l2", delay_value=delay_value)
         with _check_td_steady(td):
             loss = loss_fn(td)
@@ -401,11 +408,20 @@ class TestDQN:
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_dqn_batcher_nofunctorch(self, n, delay_value, device, gamma=0.9):
+    @pytest.mark.parametrize(
+        "action_spec_type", ("nd_bounded", "one_hot", "categorical")
+    )
+    def test_dqn_batcher_nofunctorch(
+        self, n, delay_value, device, action_spec_type, gamma=0.9
+    ):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
 
-        td = self._create_seq_mock_data_dqn(device=device)
+        td = self._create_seq_mock_data_dqn(
+            action_spec_type=action_spec_type, device=device
+        )
         loss_fn = DQNLoss(
             actor, gamma=gamma, loss_function="l2", delay_value=delay_value
         )
@@ -497,13 +513,20 @@ class TestDQN:
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_devices())
+    @pytest.mark.parametrize(
+        "action_spec_type", ("mult_one_hot", "one_hot", "categorical")
+    )
     def test_distributional_dqn_nofunctorch(
-        self, atoms, delay_value, device, gamma=0.9
+        self, atoms, delay_value, device, action_spec_type, gamma=0.9
     ):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_distributional_actor(atoms=atoms).to(device)
+        actor = self._create_mock_distributional_actor(
+            action_spec_type=action_spec_type, atoms=atoms
+        ).to(device)
 
-        td = self._create_mock_data_dqn(atoms=atoms).to(device)
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type, atoms=atoms
+        ).to(device)
         loss_fn = DistributionalDQNLoss(actor, gamma=gamma, delay_value=delay_value)
 
         with _check_td_steady(td):
