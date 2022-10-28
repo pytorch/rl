@@ -10,7 +10,7 @@ import functools
 import tempfile
 import textwrap
 import uuid
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from collections.abc import Mapping
 from copy import copy, deepcopy
 from numbers import Number
@@ -220,6 +220,30 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return self._is_shared
         return all(item.is_shared() for item in self.values_meta())
 
+    def state_dict(self) -> OrderedDict:
+        out = OrderedDict()
+        for key, item in self.flatten_keys().items():
+            out[key] = item
+        if "__batch_size" in out:
+            raise KeyError(
+                "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
+            )
+        if "__device" in out:
+            raise KeyError(
+                "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
+            )
+        out["__batch_size"] = self.batch_size
+        out["__device"] = self.device
+        return out
+
+    def load_state_dict(self, state_dict: OrderedDict) -> TensorDictBase:
+        self.batch_size = state_dict.pop("__batch_size")
+        device = state_dict.pop("__device")
+        if device is not None:
+            self.to(device)
+        self.update(state_dict, inplace=True)
+        return self
+
     def is_memmap(self, no_check: bool = True) -> bool:
         """Checks if tensordict is stored with MemmapTensors.
 
@@ -411,6 +435,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             if batch_size is not None
             else copy(self)
         )
+        is_locked = out.is_locked
+        if not inplace and is_locked:
+            out.unlock()
         for key, item in self.items():
             if isinstance(item, TensorDictBase):
                 item_trsf = item.apply(fn, inplace=inplace, batch_size=batch_size)
@@ -418,6 +445,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 item_trsf = fn(item)
             if item_trsf is not None:
                 out.set(key, item_trsf, inplace=inplace)
+        if not inplace and is_locked:
+            out.lock()
         return out
 
     def update(
@@ -1417,7 +1446,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             yield self[i]
 
     def flatten_keys(
-        self, separator: str = ",", inplace: bool = False
+        self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
         to_flatten = []
         for key, meta_value in self.items_meta():
@@ -1450,7 +1479,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return tensordict_out
 
     def unflatten_keys(
-        self, separator: str = ",", inplace: bool = False
+        self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
         to_unflatten = defaultdict(lambda: list())
         for key in self.keys():
@@ -1679,6 +1708,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     @is_locked.setter
     def is_locked(self, value: bool):
         self._is_locked = value
+
+    def lock(self):
+        self.is_locked = True
+
+    def unlock(self):
+        self.is_locked = False
 
 
 class TensorDict(TensorDictBase):
