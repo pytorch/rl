@@ -311,12 +311,13 @@ class TestCollectorLib:
 
 @pytest.mark.skipif(not _has_habitat, reason="habitat not installed")
 @pytest.mark.parametrize("envname", ["HabitatRenderPick-v0", "HabitatRenderPick-v0"])
-def test_habitat(envname):
-    env = HabitatEnv(envname)
-    print([_env for _env in env.available_envs if _env.startswith("Habitat")])
-    rollout = env.rollout(3)
-    print(rollout)
-    _test_fake_tensordict(env)
+class TestHabitat:
+    def test_habitat(self, envname):
+        env = HabitatEnv(envname)
+        print([_env for _env in env.available_envs if _env.startswith("Habitat")])
+        rollout = env.rollout(3)
+        print(rollout)
+        _test_fake_tensordict(env)
 
 
 if __name__ == "__main__":
