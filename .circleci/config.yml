@@ -516,13 +516,13 @@ jobs:
       - store_test_results:
           path: test-results
 
-  unittest_linux_olddeps_cpu:
+  unittest_linux_olddeps_gpu:
     <<: *binary_common
-    docker:
-      - image: "pytorch/manylinux-cuda113"
-    resource_class: 2xlarge+
-
+    machine:
+      image: ubuntu-2004-cuda-11.4:202110-01
+    resource_class: gpu.nvidia.medium
     environment:
+      image_name: "pytorch/manylinux-cuda113"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -535,34 +535,31 @@ jobs:
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
       - restore_cache:
-
           keys:
             - env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_olddeps/scripts_gym_0_13/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-
       - run:
           name: Setup
-          command: .circleci/unittest/linux_olddeps/scripts_gym_0_13/setup_env.sh
+          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/setup_env.sh
 
       - save_cache:
-
           key: env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_olddeps/scripts_gym_0_13/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-
           paths:
             - conda
             - env
       - run:
-          name: Install torchrl
-          command: .circleci/unittest/linux_olddeps/scripts_gym_0_13/install.sh
-      - run:
-          name: Run tests
-          command: .circleci/unittest/linux_olddeps/scripts_gym_0_13/run_test.sh
-      - run:
-          name: Codecov upload
+          name: Install torchrl, run tests, upload codecov
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux-stable-cpu
-      - run:
-          name: Post process
-          command: .circleci/unittest/linux_olddeps/scripts_gym_0_13/post_process.sh
+             docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" ".circleci/unittest/linux_olddeps/scripts_gym_0_13/install.sh && .circleci/unittest/linux_olddeps/scripts_gym_0_13/run_test.sh && .circleci/unittest/linux_olddeps/scripts_gym_0_13/post_process.sh && .circleci/unittest/linux_olddeps/scripts_gym_0_13/post_process.sh"
+#      - run:
+#          name: Run tests
+#          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/run_test.sh
+#      - run:
+#          name: Codecov upload
+#          command: |
+#            docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" <(curl -s https://codecov.io/bash) -Z -F linux-stable-cpu
+#      - run:
+#          name: Post process
+#          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/post_process.sh
       - store_test_results:
           path: test-results
 
@@ -838,7 +835,7 @@ workflows:
           name: unittest_linux_stable_gpu_py3.10
           python_version: '3.10'
 
-      - unittest_linux_olddeps_cpu:
-          cu_version: cpu
-          name: unittest_linux_olddeps_cpu_py3.9
+      - unittest_linux_olddeps_gpu:
+          cu_version: cu113
+          name: unittest_linux_olddeps_gpu_py3.9
           python_version: '3.9'
