@@ -43,32 +43,29 @@ def accept_remote_rref_invocation(func):
 
 
 class DummyDataCollectorNode:
-    def __init__(self, replay_buffer_rref) -> None:
-        print("DummyDataCollectorNode")
-        self.replay_buffer = rpc.get_worker_info(REPLAY_BUFFER_NODE)
+    def __init__(self, replay_buffer) -> None:
         self.id = rpc.get_worker_info().id
-        self.replay_buffer_rref = replay_buffer_rref
-        print(self.replay_buffer_rref, self.replay_buffer)
+        self.replay_buffer = replay_buffer
         print("Data Collector Node constructed")
 
     def __submit_random_item_async(self) -> rpc.RRef:
         td = TensorDict({"a": torch.randint(100, (1,))}, [])
         return rpc.remote(
-            self.replay_buffer,
+            self.replay_buffer.owner(),
             ReplayBufferNode.add,
             args=(
-                self.replay_buffer_rref,
+                self.replay_buffer,
                 td,
             ),
         )
 
     @accept_remote_rref_invocation
     def collect(self):
-        print(f"[{self.id}] Collect Initiated")
         for elem in range(50):
             time.sleep(random.randint(1, 4))
-            res = self.__submit_random_item_async().to_here()
-            print(f"[Collector {self.id} {elem}] {res}")
+            print(
+                f"[{self.id}] Collector submission {elem}: {self.__submit_random_item_async().to_here()}"
+            )
 
 
 class DummyTrainerNode:
@@ -94,9 +91,11 @@ class DummyTrainerNode:
         while True:
             try:
                 replay_buffer_info = rpc.get_worker_info(REPLAY_BUFFER_NODE)
-                res = rpc.remote(replay_buffer_info, ReplayBufferNode, args=(10000,))
+                buffer_rref = rpc.remote(
+                    replay_buffer_info, ReplayBufferNode, args=(10000,)
+                )
                 print(f"Connected to replay buffer {replay_buffer_info}")
-                return res
+                return buffer_rref
             except Exception:
                 print("Failed to connect to replay buffer")
                 time.sleep(RETRY_DELAY_SECS)
@@ -120,7 +119,6 @@ class DummyTrainerNode:
                 )
                 data_collectors.append(dc_ref)
                 data_collector_infos.append(data_collector_info)
-                print(data_collectors[-1])
                 data_collector_number += 1
                 retries = 0
             except Exception:
