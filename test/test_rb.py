@@ -140,6 +140,7 @@ class TestPrototypeBuffers:
         for d in new_data:
             found_similar = False
             for b in data:
+                print(b, d)
                 if isinstance(b, TensorDictBase):
                     b = b.exclude("index").select(*set(d.keys()).intersection(b.keys()))
                     d = d.select(*set(d.keys()).intersection(b.keys()))

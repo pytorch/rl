@@ -8,7 +8,7 @@ from __future__ import annotations
 import functools
 import os
 import tempfile
-from copy import copy
+from copy import copy, deepcopy
 from typing import Any, Callable, List, Optional, Tuple, Union, Dict
 
 import numpy as np
@@ -162,9 +162,16 @@ class MemmapTensor(object):
         memmap_copy = copy(memmap_tensor)
         if memmap_copy._index is None:
             memmap_copy._index = []
+        else:
+            # avoid extending someone else's index
+            memmap_copy._index = deepcopy(memmap_copy._index)
         memmap_copy._index.append(index)
         memmap_copy.transfer_ownership = False
         return memmap_copy
+
+    def __iter__(self):
+        for i in range(self.shape[0]):
+            yield self[i]
 
     def _init_shape(
         self,
@@ -468,29 +475,29 @@ class MemmapTensor(object):
         return False
 
     def __add__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.add(self._tensor, other)
+        return torch.add(self, other)
 
     def __truediv__(
         self, other: Union[float, MemmapTensor, torch.Tensor]
     ) -> torch.Tensor:
-        return torch.div(self._tensor, other)
+        return torch.div(self, other)
 
     def __neg__(self: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.neg(self)
 
     def __sub__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.sub(self._tensor, other)
+        return torch.sub(self, other)
 
     def __matmul__(
         self, other: Union[float, MemmapTensor, torch.Tensor]
     ) -> torch.Tensor:
-        return torch.matmul(self._tensor, other)
+        return torch.matmul(self, other)
 
     def __mul__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.mul(self._tensor, other)
+        return torch.mul(self, other)
 
     def __pow__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.pow(self._tensor, other)
+        return torch.pow(self, other)
 
     def __repr__(self) -> str:
         size = self.shape

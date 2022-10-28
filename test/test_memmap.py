@@ -320,6 +320,16 @@ class TestIndexing:
             p.join()
             raise e
 
+    def test_iteration(self):
+        t = MemmapTensor(torch.rand(10))
+        for i, _t in enumerate(t):
+            assert _t == t[i]
+
+    def test_iteration_nd(self):
+        t = MemmapTensor(torch.rand(10, 5))
+        for i, _t in enumerate(t):
+            assert (_t == t[i]).all()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
