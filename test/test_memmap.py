@@ -6,11 +6,13 @@ import argparse
 import os.path
 import pickle
 import tempfile
+from time import sleep
 
 import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
+from torch import multiprocessing as mp
 from torchrl.data.tensordict.memmap import MemmapTensor
 
 
@@ -193,6 +195,131 @@ def test_memmap_zero_value(device, value, shape):
     assert m.shape == (3, 4)
     assert torch.all(m == expected_memmap_tensor)
     assert torch.all(m + torch.ones([3, 4], device=device) == 1)
+
+
+class TestIndexing:
+    @staticmethod
+    def _recv_and_send(queue, filename, shape):
+        t = queue.get(timeout=10.0)
+        assert isinstance(t, MemmapTensor)
+        assert t.filename == filename
+        assert t.shape == shape
+        assert (t == 0).all()
+        msg = "done"
+        queue.put(msg)
+        while queue.full():
+            continue
+
+        msg = queue.get(timeout=10.0)
+        assert msg == "modified"
+        assert (t == 1).all()
+        queue.put("done!!")
+
+        msg = queue.get(timeout=10.0)
+        assert msg == "deleted"
+        assert not os.path.isfile(filename)
+        with pytest.raises(FileNotFoundError, match="No such file or directory"):
+            print(t + 1)
+        queue.put("done again")
+        del queue
+
+    def test_simple_index(self):
+        t = MemmapTensor(torch.zeros(10))
+        # int
+        assert isinstance(t[0], MemmapTensor)
+        assert t[0].filename == t.filename
+        assert t[0].shape == torch.Size([])
+        assert t.shape == torch.Size([10])
+
+    def test_range_index(self):
+        t = MemmapTensor(torch.zeros(10))
+        # int
+        assert isinstance(t[:2], MemmapTensor)
+        assert t[:2].filename == t.filename
+        assert t[:2].shape == torch.Size([2])
+        assert t.shape == torch.Size([10])
+
+    def test_double_index(self):
+        t = MemmapTensor(torch.zeros(10))
+        y = t[:2][-1:]
+        # int
+        assert isinstance(y, MemmapTensor)
+        assert y.filename == t.filename
+        assert y.shape == torch.Size([1])
+        assert t.shape == torch.Size([10])
+
+    def test_ownership(self):
+        t = MemmapTensor(torch.zeros(10))
+        y = t[:2][-1:]
+        del t
+        with pytest.raises(FileNotFoundError, match="No such file or directory"):
+            y + 0
+
+    def test_send_across_procs(self):
+        t = MemmapTensor(torch.zeros(10), transfer_ownership=False)
+        queue = mp.Queue(1)
+        filename = t.filename
+        p = mp.Process(
+            target=TestIndexing._recv_and_send, args=(queue, filename, torch.Size([10]))
+        )
+        try:
+            p.start()
+            queue.put(t, block=True)
+            while queue.full():
+                continue
+            msg = queue.get(timeout=10.0)
+            assert msg == "done"
+
+            t.fill_(1.0)
+            queue.put("modified", block=True)
+            while queue.full():
+                continue
+            msg = queue.get(timeout=10.0)
+            assert msg == "done!!"
+
+            del t
+            queue.put("deleted")
+            while queue.full():
+                continue
+            msg = queue.get(timeout=10.0)
+            assert msg == "done again"
+            p.join()
+        except Exception as e:
+            p.join()
+            raise e
+
+    def test_send_across_procs_index(self):
+        t = MemmapTensor(torch.zeros(10), transfer_ownership=False)
+        queue = mp.Queue(1)
+        filename = t.filename
+        p = mp.Process(
+            target=TestIndexing._recv_and_send, args=(queue, filename, torch.Size([3]))
+        )
+        try:
+            p.start()
+            queue.put(t[:3], block=True)
+            while queue.full():
+                continue
+            msg = queue.get(timeout=10.0)
+            assert msg == "done"
+
+            t.fill_(1.0)
+            queue.put("modified", block=True)
+            while queue.full():
+                continue
+            msg = queue.get(timeout=10.0)
+            assert msg == "done!!"
+
+            del t
+            queue.put("deleted")
+            while queue.full():
+                continue
+            msg = queue.get(timeout=10.0)
+            assert msg == "done again"
+            p.join()
+        except Exception as e:
+            p.join()
+            raise e
 
 
 if __name__ == "__main__":
