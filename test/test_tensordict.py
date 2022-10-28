@@ -1105,7 +1105,6 @@ class TestTensorDicts:
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
-
     def test_write_on_subtd(self, td_name, device):
         td = getattr(self, td_name)(device)
         sub_td = td.get_sub_tensordict(0)

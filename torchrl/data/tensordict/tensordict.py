@@ -1159,7 +1159,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             inv_op_kwargs={"dim": dim},
         )
 
-    def squeeze(self, dim: Optional[int]=None) -> TensorDictBase:
+    def squeeze(self, dim: Optional[int] = None) -> TensorDictBase:
         """Squeezes all tensors for a dimension comprised in between `-td.batch_dims+1` and `td.batch_dims-1` and returns them in a new tensordict.
 
         Args:
@@ -4510,7 +4510,9 @@ class SqueezedTensorDict(_CustomOpTensorDict):
         # dim=1, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[3, 5], [3, 5], [3, 5], [3, 4]] => unsq 1
         # dim=2, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[3, 4], [3, 4], ...] => unsq 2
         diff_to_apply = 1 if dim < squeezed_dim else 0
-        list_item_unsqueeze = [item.unsqueeze(squeezed_dim - diff_to_apply) for item in list_item]
+        list_item_unsqueeze = [
+            item.unsqueeze(squeezed_dim - diff_to_apply) for item in list_item
+        ]
         return self._source._stack_onto_(key, list_item_unsqueeze, dim)
 
 
