@@ -272,9 +272,7 @@ class MemmapTensor(object):
             isinstance(sub_index, torch.Tensor) for sub_index in idx
         ):
             idx = tuple(
-                sub_index.cpu()
-                if isinstance(sub_index, torch.Tensor)
-                else sub_index
+                sub_index.cpu() if isinstance(sub_index, torch.Tensor) else sub_index
                 for sub_index in idx
             )
         memmap_array = memmap_array[idx]
@@ -330,6 +328,11 @@ class MemmapTensor(object):
 
     @property
     def _tensor(self) -> torch.Tensor:
+        if not os.path.isfile(self.filename):
+            # close ref to file if it has been deleted -- ensures all processes
+            # loose access to a file once it's deleted
+            # see https://stackoverflow.com/questions/44691030/numpy-memmap-with-file-deletion
+            self._memmap_array = None
         return self._load_item(self._index)
 
     @property
@@ -376,7 +379,11 @@ class MemmapTensor(object):
 
     @property
     def shape(self) -> torch.Size:
-        return self._shape
+        idx = self._index if self._index is not None else []
+        size = self._shape
+        for _idx in idx:
+            size = _getitem_batch_size(size, _idx)
+        return size
 
     def cpu(self) -> torch.Tensor:
         """Defines the device of the MemmapTensor as "cpu".
@@ -427,6 +434,7 @@ class MemmapTensor(object):
     def __del__(self) -> None:
         if "_has_ownership" in self.__dir__() and self._has_ownership:
             os.unlink(self.filename)
+            del self.file
 
     def __eq__(self, other: Any) -> torch.Tensor:
         # if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
@@ -462,39 +470,34 @@ class MemmapTensor(object):
         return False
 
     def __add__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.add(self, other)
+        return torch.add(self._tensor, other)
 
     def __truediv__(
         self, other: Union[float, MemmapTensor, torch.Tensor]
     ) -> torch.Tensor:
-        return torch.div(self, other)
+        return torch.div(self._tensor, other)
 
     def __neg__(self: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.neg(self)
 
     def __sub__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.sub(self, other)
+        return torch.sub(self._tensor, other)
 
     def __matmul__(
         self, other: Union[float, MemmapTensor, torch.Tensor]
     ) -> torch.Tensor:
-        return torch.matmul(self, other)
+        return torch.matmul(self._tensor, other)
 
     def __mul__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.mul(self, other)
+        return torch.mul(self._tensor, other)
 
     def __pow__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.pow(self, other)
+        return torch.pow(self._tensor, other)
 
     def __repr__(self) -> str:
-        idx = self._index if self._index is not None else []
         size = self.shape
-        for _idx in idx:
-            size = _getitem_batch_size(size, _idx)
-
         return (
-            f"MemmapTensor(shape={size}, device={self.device}, "
-            f"dtype={self.dtype})"
+            f"MemmapTensor(shape={size}, device={self.device}, " f"dtype={self.dtype})"
         )
 
     def __getitem__(self, item: INDEX_TYPING) -> torch.Tensor:
