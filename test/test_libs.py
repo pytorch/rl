@@ -84,7 +84,7 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     if env_name == PONG_VERSIONED and not from_pixels:
         raise pytest.skip("already pixel")
     elif (
-        env_name == PENDULUM_VERSIONED
+        env_name != PONG_VERSIONED
         and from_pixels
         and (not torch.has_cuda or not torch.cuda.device_count())
     ):
@@ -277,6 +277,10 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
 @pytest.mark.parametrize("device", get_available_devices())
 class TestCollectorLib:
     def test_collector_run(self, env_lib, env_args, env_kwargs, device):
+        from_pixels = env_kwargs.get("from_pixels", False)
+        if from_pixels and (not torch.has_cuda or not torch.cuda.device_count()):
+            raise pytest.skip("no cuda device")
+
         env_fn = EnvCreator(lambda: env_lib(*env_args, **env_kwargs, device=device))
         env = ParallelEnv(3, env_fn)
         collector = MultiaSyncDataCollector(
