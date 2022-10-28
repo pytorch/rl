@@ -3,7 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from typing import Union
+
 import torch
+from torch import nn
 
 from torchrl.data import TensorDict
 from torchrl.envs.utils import step_mdp
@@ -30,7 +33,7 @@ class DQNLoss(LossModule):
 
     def __init__(
         self,
-        value_network: QValueActor,
+        value_network: Union[QValueActor, nn.Module],
         gamma: float,
         loss_function: str = "l2",
         priority_key: str = "td_error",
@@ -39,6 +42,18 @@ class DQNLoss(LossModule):
 
         super().__init__()
         self.delay_value = delay_value
+
+        if isinstance(value_network, QValueActor):
+            pass
+        elif isinstance(value_network, nn.Module):
+            # value_network is a nn.Module that doesn't operate on tensordicts directly
+            # so we attempt to auto-wrap value_network with QValueActor
+            value_network = QValueActor(value_network)
+        else:
+            raise TypeError(
+                f"DQNLoss requires value_network to be of QValueActor dtype, got {type(value_network)}"
+            )
+
         self.convert_to_functional(
             value_network,
             "value_network",
@@ -46,10 +61,7 @@ class DQNLoss(LossModule):
         )
 
         self.value_network_in_keys = value_network.in_keys
-        if not isinstance(value_network, QValueActor):
-            raise TypeError(
-                f"DQNLoss requires value_network to be of QValueActor dtype, got {type(value_network)}"
-            )
+
         self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_function = loss_function
         self.priority_key = priority_key
