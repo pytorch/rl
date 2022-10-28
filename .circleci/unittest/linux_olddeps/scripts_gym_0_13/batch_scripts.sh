@@ -7,4 +7,3 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 
 $DIR/install.sh
 $DIR/run_test.sh
-$DIR/post_process.sh
