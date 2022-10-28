@@ -1045,9 +1045,9 @@ class GRUNet(nn.Module):
         in_features (int): number of input features.
         hidden_size (int): number of hidden features for the GRU.
         out_features (int): number of output features.
-        mlp_input_kwargs (dict):  kwargs for the MLP before the GRU.
-        mlp_output_kwargs (dict): kwargs for the MLP after the GRU.
-        gru_kwargs (dict): kwargs for the GRU. The GRU is enforced to be batch_first.
+        mlp_input_kwargs (dict, optional):  kwargs for the MLP before the GRU.
+        mlp_output_kwargs (dict, optional): kwargs for the MLP after the GRU.
+        gru_kwargs (dict, optional): kwargs for the GRU. The GRU is enforced to be batch_first.
                 GRUNet supports stacked GRU but not bidirectional.
 
     By default, the GRUNet is:
