@@ -4,9 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import time
+from functools import wraps
 
 # Get relative file path
 # this returns relative path from current file.
+import pytest
 import torch.cuda
 from torchrl._utils import seed_generator
 
@@ -30,3 +33,32 @@ def generate_seeds(seed, repeat):
         seed = seed_generator(seed)
         seeds.append(seed)
     return seeds
+
+
+# Decorator to retry upon certain Exceptions.
+def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
+    def deco_retry(f):
+        @wraps(f)
+        def f_retry(*args, **kwargs):
+            mtries, mdelay = tries, delay
+            while mtries > 1:
+                try:
+                    return f(*args, **kwargs)
+                except ExceptionToCheck as e:
+                    msg = "%s, Retrying in %d seconds..." % (str(e), mdelay)
+                    print(msg)
+                    time.sleep(mdelay)
+                    mtries -= 1
+            try:
+                return f(*args, **kwargs)
+            except ExceptionToCheck as e:
+                if skip_after_retries:
+                    raise pytest.skip(
+                        f"Skipping after {tries} consecutive {str(e)}"
+                    ) from e
+                else:
+                    raise e
+
+        return f_retry  # true decorator
+
+    return deco_retry
