@@ -8,6 +8,7 @@ from __future__ import annotations
 import functools
 import os
 import tempfile
+from copy import copy
 from typing import Any, Callable, List, Optional, Tuple, Union, Dict
 
 import numpy as np
@@ -154,6 +155,16 @@ class MemmapTensor(object):
             device = device if device is not None else torch.device("cpu")
             dtype = dtype if dtype is not None else torch.get_default_dtype()
             self._init_shape(shape, device, dtype, transfer_ownership)
+        self._index = None
+
+    @staticmethod
+    def _create_memmap_with_index(memmap_tensor, index):
+        memmap_copy = copy(memmap_tensor)
+        if memmap_copy._index is None:
+            memmap_copy._index = []
+        memmap_copy._index.append(index)
+        memmap_copy.transfer_ownership = False
+        return memmap_copy
 
     def _init_shape(
         self,
@@ -254,27 +265,34 @@ class MemmapTensor(object):
             shape=self.np_shape,
         )
 
+    def _get_item(self, idx, memmap_array):
+        if isinstance(idx, torch.Tensor):
+            idx = idx.cpu()
+        elif isinstance(idx, tuple) and any(
+            isinstance(sub_index, torch.Tensor) for sub_index in idx
+        ):
+            idx = tuple(
+                sub_index.cpu()
+                if isinstance(sub_index, torch.Tensor)
+                else sub_index
+                for sub_index in idx
+            )
+        memmap_array = memmap_array[idx]
+        return memmap_array
+
     def _load_item(
         self,
-        idx: Optional[int] = None,
+        idx: Optional[Union[int, tuple, list]] = None,
         memmap_array: Optional[np.ndarray] = None,
         from_numpy: bool = False,
     ) -> torch.Tensor:
         if memmap_array is None:
             memmap_array = self.memmap_array
         if idx is not None:
-            if isinstance(idx, torch.Tensor):
-                idx = idx.cpu()
-            elif isinstance(idx, tuple) and any(
-                isinstance(sub_index, torch.Tensor) for sub_index in idx
-            ):
-                idx = tuple(
-                    sub_index.cpu()
-                    if isinstance(sub_index, torch.Tensor)
-                    else sub_index
-                    for sub_index in idx
-                )
-            memmap_array = memmap_array[idx]
+            if not isinstance(idx, list):
+                idx = [idx]
+            for _idx in idx:
+                memmap_array = self._get_item(_idx, memmap_array)
         out = self._np_to_tensor(memmap_array, from_numpy=from_numpy)
         if (
             idx is not None
@@ -282,7 +300,9 @@ class MemmapTensor(object):
             and len(idx) == 1
             and not (isinstance(idx, torch.Tensor) and idx.dtype is torch.bool)
         ):  # and isinstance(idx, torch.Tensor) and len(idx) == 1:
-            size = _getitem_batch_size(self.shape, idx)
+            size = self.shape
+            for _idx in idx:
+                size = _getitem_batch_size(size, _idx)
             out = out.view(size)
         return out
 
@@ -310,7 +330,7 @@ class MemmapTensor(object):
 
     @property
     def _tensor(self) -> torch.Tensor:
-        return self._load_item()
+        return self._load_item(self._index)
 
     @property
     def _tensor_from_numpy(self) -> torch.Tensor:
@@ -467,8 +487,13 @@ class MemmapTensor(object):
         return torch.pow(self, other)
 
     def __repr__(self) -> str:
+        idx = self._index if self._index is not None else []
+        size = self.shape
+        for _idx in idx:
+            size = _getitem_batch_size(size, _idx)
+
         return (
-            f"MemmapTensor(shape={self.shape}, device={self.device}, "
+            f"MemmapTensor(shape={size}, device={self.device}, "
             f"dtype={self.dtype})"
         )
 
@@ -477,7 +502,7 @@ class MemmapTensor(object):
         # return self._load_item()[item]
         if isinstance(item, (NoneType, EllipsisType, int, np.integer, slice)):
             item = (item,)
-        return self._load_item(idx=item)
+        return MemmapTensor._create_memmap_with_index(self, item)
 
     def __setitem__(self, idx: INDEX_TYPING, value: torch.Tensor):
         if self.device == torch.device("cpu"):
