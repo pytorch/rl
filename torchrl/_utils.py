@@ -125,7 +125,7 @@ def prod(sequence):
 
 
 def get_binary_env_var(key):
-    """Parses and returns the binary enironment variable value.
+    """Parses and returns the binary environment variable value.
 
     If not present in environment, it is considered `False`.
 
@@ -148,7 +148,8 @@ def get_binary_env_var(key):
 class implement_for:
     """A version decorator that checks the version in the environment and implements a function with the fitting one.
 
-    If specified module is missing, the decorator does nothing.
+    If specified module is missing or there is no fitting implementation, call of the decorated function
+    will lead to the explicit error.
     In case of intersected ranges, first fitting implementation is used.
 
     Args:
@@ -174,13 +175,19 @@ class implement_for:
         self.to_version = to_version
 
     def __call__(self, fn):
-        # If the module is missing in the environment the decorator does nothing.
+        @wraps(fn)
+        def unsupported():
+            raise ModuleNotFoundError(
+                f"Supported version of '{self.module_name}' has not been found."
+            )
+
+        # If the module is missing replace the function with the mock.
         try:
             module = import_module(self.module_name)
         except ModuleNotFoundError:
-            return fn
+            return unsupported
 
-        func_name = fn.__name__
+        func_name = f"{fn.__module__}.{fn.__name__}"
         implementations = implement_for._implementations
 
         # Return fitting implementation if it was encountered before.
@@ -193,5 +200,6 @@ class implement_for:
             self.to_version is None or version < self.to_version
         ):
             implementations[func_name] = fn
+            return fn
 
-        return fn
+        return unsupported

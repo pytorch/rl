@@ -85,8 +85,8 @@ def implement_for_test_func():  # noqa: F811
     return "0.1-0.2"
 
 
-# To test that incorrect/missing module doesn't raise an import time exception.
-@implement_for("missing_module", "0")
+# To test that calling decorated function with missing module raises an exception.
+@implement_for("missing_module")
 def implement_for_test_missing_module():
     return "missing"
 
@@ -106,8 +106,10 @@ def test_implement_for():
 
 
 def test_implement_for_missing_module():
-    assert implement_for_test_missing_module() == "missing"
+    with pytest.raises(ModuleNotFoundError):
+        implement_for_test_missing_module()
 
 
 def test_implement_for_missing_version():
-    assert implement_for_test_missing_version() == "0.4+"
+    with pytest.raises(ModuleNotFoundError):
+        implement_for_test_missing_version()
