@@ -6,7 +6,6 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL mesa-libEGL-devel glfw mesa-libOSMesa-devel glew glew-devel egl-utils freeglut xorg-x11-server-Xvfb -y
-#yum install libXcursor libXinerama libXrender -y
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
@@ -21,9 +20,9 @@ lib_dir="${env_dir}/lib"
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 
-pytest test/smoke_test.py -v --durations 20
-pytest test/smoke_test_deps.py -v --durations 20 -k 'test_gym or test_dm_control_pixels or test_dm_control'
-#xvfb-run -s ":99 -screen 0 1280x1024x24" pytest --instafail -v --durations 20
-xvfb-run -a pytest --instafail -v --durations 20
+coverage run -m pytest test/smoke_test.py -v --durations 20
+coverage run -m pytest test/smoke_test_deps.py -v --durations 20 -k 'test_gym or test_dm_control_pixels or test_dm_control'
+MUJOCO_GL=egl coverage run -m xvfb-run -a pytest --instafail -v --durations 20
 #pytest --instafail -v --durations 20
 #python test/test_libs.py
+coverage xml -i
