@@ -534,9 +534,9 @@ jobs:
           name: Generate cache key
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
-      - restore_cache:
-          keys:
-            - env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_olddeps/scripts_gym_0_13/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+#      - restore_cache:
+#          keys:
+#            - env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_olddeps/scripts_gym_0_13/environment.yml" }}-{{ checksum ".circleci-weekly" }}
       - run:
           name: Setup
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/setup_env.sh
