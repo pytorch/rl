@@ -52,9 +52,8 @@ if _has_gym:
         "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
     )
 
-    if gym_version < version.parse("0.24.0"):
+    if gym_version < version.parse("0.24.0") and torch.cuda.device_count() > 0:
         from opengl_rendering import create_opengl_context
-
         create_opengl_context()
 else:
     # placeholders
