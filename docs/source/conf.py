@@ -59,7 +59,6 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_gallery.gen_gallery",
     "sphinxcontrib.aafig",
-    "myst_parser",
 ]
 
 sphinx_gallery_conf = {
@@ -148,8 +147,3 @@ intersphinx_mapping = {
 
 
 aafig_default_options = dict(scale=1.5, aspect=1.0, proportional=True)
-
-# -- Generate knowledge base references -----------------------------------
-from docs.source import knowledge_base
-
-knowledge_base.generate_knowledge_base_references("../../knowledge_base")
