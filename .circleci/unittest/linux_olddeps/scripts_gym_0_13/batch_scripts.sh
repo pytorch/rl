@@ -3,6 +3,8 @@
 # Runs a batch of scripts in a row to allow docker run to keep installed libraries
 # and env variables across runs.
 
-./install.sh
-./run_test.sh
-./post_process.sh
+DIR="$(cd "$(dirname "$0")" && pwd)"
+
+$DIR/install.sh
+$DIR/run_test.sh
+$DIR/post_process.sh
