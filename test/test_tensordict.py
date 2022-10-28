@@ -1101,7 +1101,7 @@ class TestTensorDicts:
         td_squeeze.set_("a", tensor)
         assert (td_squeeze.get("a") == tensor).all()
         if td_name == "unsqueezed_td":
-            assert td_squeeze is td._source
+            assert td_squeeze._source is td
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 

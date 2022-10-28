@@ -1159,26 +1159,39 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             inv_op_kwargs={"dim": dim},
         )
 
-    def squeeze(self, dim: Optional[int]) -> TensorDictBase:
+    def squeeze(self, dim: Optional[int]=None) -> TensorDictBase:
         """Squeezes all tensors for a dimension comprised in between `-td.batch_dims+1` and `td.batch_dims-1` and returns them in a new tensordict.
 
         Args:
-            dim (Optional[int]): dimension along which to squeeze. If dim is None, all singleton dimensions will be squeezed.
+            dim (Optional[int]): dimension along which to squeeze. If dim is None, all singleton dimensions will be squeezed. dim is None by default.
 
         """
-        dim_is_none = dim is None
+        if dim is None:
+            size = self.size()
+            if len(self.size()) == 1 or size.count(1) == 0:
+                return self
+            first_singleton_dim = size.index(1)
 
-        if not dim_is_none and dim < 0:
+            squeezed_dict = SqueezedTensorDict(
+                source=self,
+                custom_op="squeeze",
+                inv_op="unsqueeze",
+                custom_op_kwargs={"dim": first_singleton_dim},
+                inv_op_kwargs={"dim": first_singleton_dim},
+            )
+            return squeezed_dict.squeeze(dim=None)
+
+        if dim < 0:
             dim = self.batch_dims + dim
 
-        if not dim_is_none and self.batch_dims and (dim >= self.batch_dims or dim < 0):
+        if self.batch_dims and (dim >= self.batch_dims or dim < 0):
             raise RuntimeError(
                 f"squeezing is allowed for dims comprised between 0 and "
                 f"td.batch_dims only. Got dim={dim} and batch_size"
                 f"={self.batch_size}."
             )
 
-        if not dim_is_none and (dim >= self.batch_dims or self.batch_size[dim] != 1):
+        if dim >= self.batch_dims or self.batch_size[dim] != 1:
             return self
         return SqueezedTensorDict(
             source=self,
@@ -4496,9 +4509,8 @@ class SqueezedTensorDict(_CustomOpTensorDict):
         # dim=0, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[4, 5], [4, 5], [4, 5]] => unsq 1
         # dim=1, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[3, 5], [3, 5], [3, 5], [3, 4]] => unsq 1
         # dim=2, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[3, 4], [3, 4], ...] => unsq 2
-        diff_to_apply = 1 if squeezed_dim is not None and dim < squeezed_dim else 0
-        unsqueezed_dim = squeezed_dim - diff_to_apply if squeezed_dim is not None else -1
-        list_item_unsqueeze = [item.unsqueeze(unsqueezed_dim) for item in list_item]
+        diff_to_apply = 1 if dim < squeezed_dim else 0
+        list_item_unsqueeze = [item.unsqueeze(squeezed_dim - diff_to_apply) for item in list_item]
         return self._source._stack_onto_(key, list_item_unsqueeze, dim)
 
 
