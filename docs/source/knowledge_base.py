@@ -7,12 +7,16 @@ GEN_DIR = "reference/generated/knowledge_base"
 
 
 def _get_file_content(name: str) -> List[str]:
-    """
-    To include markdown files from the knowledge graph in Sphinx, these are linked using the rst include command. This
-    function returns such a reference file as lines of strings.
+    """A function to get the content of a reference file.
+
+    Given the name of a knowledge base file, populates a file template. The result can be used to link a knowledge base
+    entry to the Sphinx docs.
 
     Args:
-        name (str): name of the file to be referenced without extension.
+        name (str): name of the file to be referenced (without extension).
+
+    Returns: List of strings
+
     """
     return [
         "..\n",
@@ -25,9 +29,10 @@ def _get_file_content(name: str) -> List[str]:
 
 
 def generate_knowledge_base_references(knowledge_base_path: str) -> None:
-    """
-    Sphinx natively doesn't support adding files from outside it's root directory. To include the knowledge base in
-    our docs (https://pytorch.org/rl/), a reference file is generated per entry using this function.
+    """Creates a reference file per knowledge base entry.
+
+    Sphinx natively doesn't support adding files from outside its root directory. To include the knowledge base in
+    our docs (https://pytorch.org/rl/) each entry is linked using an auto-generated file that references the original.
 
     Args:
         knowledge_base_path (str): path to the knowledge base.
