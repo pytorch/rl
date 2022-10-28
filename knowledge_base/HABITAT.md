@@ -10,11 +10,8 @@ Instructions can be found on [habitat github repo](https://github.com/facebookre
 
      Assuming you have [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/) installed, let's prepare a conda env:
      ```bash
-     export MY_TEST_ENV=habitat_test
-     conda deactivate
-     conda env remove -n $MY_TEST_ENV -y
-     conda create -n $MY_TEST_ENV python=3.7 cmake=3.14.0 -y
-     conda activate $MY_TEST_ENV
+     conda create -n habitat python=3.7 cmake=3.14.0 
+     conda activate habitat
      ```
 
   2. **conda install habitat-sim**
@@ -30,13 +27,6 @@ Instructions can be found on [habitat github repo](https://github.com/facebookre
 
      See Habitat-Sim's [installation instructions](https://github.com/facebookresearch/habitat-sim#installation) for more details.
 
-  3. **Install habitat-baselines**.
-
-      The command above will install only core of Habitat-Lab. To include habitat_baselines along with all additional requirements, use the command below after installing habitat-lab:
-
-      ```bash
-       pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-baselines
-      ```
 ### Installing TorchRL
 
 Follow the instructions on the [README.md](../README.md).
