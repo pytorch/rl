@@ -54,6 +54,7 @@ if _has_gym:
 
     if gym_version < version.parse("0.24.0") and torch.cuda.device_count() > 0:
         from opengl_rendering import create_opengl_context
+
         create_opengl_context()
 else:
     # placeholders
@@ -240,6 +241,14 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
     ],
 )
 def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
+    if (
+        gym_version < version.parse("0.26.0")
+        and env_kwargs.get("from_pixels", False)
+        and torch.cuda.device_count() == 0
+    ):
+        pytest.skip(
+            "Skipping test as rendering is not supported in tests before gym 0.26."
+        )
     env = env_lib(*env_args, **env_kwargs)
     td = env.rollout(max_steps=5)
     td0 = td[0]
