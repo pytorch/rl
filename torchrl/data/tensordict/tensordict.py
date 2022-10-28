@@ -35,7 +35,11 @@ from warnings import warn
 import numpy as np
 import torch
 from torch import Tensor
-from torch.jit._shape_functions import infer_size_impl
+
+try:
+    from torch.jit._shape_functions import infer_size_impl
+except ImportError:
+    from torchrl.data.tensordict.utils import infer_size_impl
 
 # from torch.utils._pytree import _register_pytree_node
 
@@ -64,6 +68,10 @@ try:
     _has_functorch = True
 except ImportError:
     _has_functorch = False
+
+    def is_batchedtensor(tensor):
+        return False
+
 
 __all__ = [
     "TensorDict",

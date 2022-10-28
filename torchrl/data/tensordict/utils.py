@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from numbers import Number
-from typing import Tuple, List, Union
+from typing import Tuple, List, Union, Optional
 
 import numpy as np
 import torch
@@ -172,6 +172,43 @@ def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
         )
 
     return new_index
+
+
+def _copy(self: List[int]):
+    out: List[int] = []
+    for elem in self:
+        out.append(elem)
+    return out
+
+
+def infer_size_impl(shape: List[int], numel: int) -> List[int]:
+    """Infers the shape of an expanded tensor whose number of elements is indicated by :obj:`numel`.
+
+    Copied from pytorch for compatibility issues (See #386).
+    See https://github.com/pytorch/pytorch/blob/35d4fa444b67cbcbe34a862782ddf2d92f5b1ce7/torch/jit/_shape_functions.py
+    for the original copy.
+
+    """
+    newsize = 1
+    infer_dim: Optional[int] = None
+    for dim in range(len(shape)):
+        if shape[dim] == -1:
+            if infer_dim is not None:
+                raise AssertionError("only one dimension can be inferred")
+            infer_dim = dim
+        elif shape[dim] >= 0:
+            newsize *= shape[dim]
+        else:
+            raise AssertionError("invalid shape dimensions")
+    if not (
+        numel == newsize
+        or (infer_dim is not None and newsize > 0 and numel % newsize == 0)
+    ):
+        raise AssertionError("invalid shape")
+    out = _copy(shape)
+    if infer_dim is not None:
+        out[infer_dim] = numel // newsize
+    return out
 
 
 def _get_shape(value):
