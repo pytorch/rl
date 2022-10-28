@@ -1039,75 +1039,163 @@ class LSTMNet(nn.Module):
 
 class GRUNet(nn.Module):
     """The GRUNet is a neural network composed of a GRU layer encapsulated between two MLPs.
+    It supports batched or unbatched sequences as input and the time dimension is always the one preceding the features dimensions.
 
     Args:
-        mlp_input_kwargs (dict):  kwargs for the MLP before the GRU
-        mlp_output_kwargs (dict): kwargs for the MLP after the GRU
-        gru_kwargs (dict): kwargs for the GRU
-            gru is enforced to be batch_first
-            num_layers default is 1 (number of gru stacked)
-            bidirectional default is False (True not implemented)
-            https://pytorch.org/docs/stable/generated/torch.nn.GRU.html
+        in_features (int): number of input features.
+        hidden_size (int): number of hidden features for the GRU.
+        out_features (int): number of output features.
+        mlp_input_kwargs (dict):  kwargs for the MLP before the GRU.
+        mlp_output_kwargs (dict): kwargs for the MLP after the GRU.
+        gru_kwargs (dict): kwargs for the GRU. The GRU is enforced to be batch_first.
+                GRUNet supports stacked GRU but not bidirectional.
 
-    The args dicts must respect that:
-        The size of output features in mlp_input must be the same as the input size of the GRU.
-        The size of input features in mlp_output must be the same as the last hidden size of the GRU.
+    By default, the GRUNet is:
+        MLP(in_features=in_features, out_features=hidden_size, depth=0)
+        GRU(in_features=hidden_size, out_features=hidden_size, batch_first=True)
+        MLP(in_features=hidden_size, out_features=out_features, depth=0)
 
-    N = batch size
-    L = sequence size
-    mlp_input_in = input size of the MLP_input
-    mlp_input_out = output size of the MLP_input
-    H_in = input size of the GRU
-    H_out = output size of the GRU
-    mlp_output_in = input size of the MLP_output
-    mlp_output_out = output size of the MLP_output
+    If provided, the args dicts items are chosen over in_features, hidden_size or out_features.
+    They must respect that:
+        - The size of output features in mlp_input must be the same as the input size of the GRU.
+        - The size of input features in mlp_output must be the same as the last hidden size of the GRU.
 
-    Conditions:
-        mlp_input_out = H_in
-        H_out = mlp_output_in
+    N = batch size and L = sequence size.
 
     Inputs:
-        x : Tensor of shape
-            L, mlp_input_in for unbatched input
-            N, L, mlp_input_in for batched input
-        h_0 : Initial hidden state of shape
-            L, H_in
-            N, L, H_in
-            (zeros if None)
+        x : Tensor of shape [L, in_features] or [N, L, in_features].
+        h_0 : Initial hidden state of shape [L, hidden_size] or [N, L, hidden_size]. (zeros if None provided)
 
     Outputs:
-        mlp_out : Tensor of shape
-            L, mlp_output_out
-            N, L, mlp_output_out
-        last_h: Tensor of shape
-            D*num_layers , H_out
-            D*num_layers , N, H_out
+        mlp_out : Tensor of shape L, out_features] or [N, L, out_features].
+        last_h: Tensor of shape [D*num_layers, hidden_size] or [D*num_layers, N, hidden_size].
+            D = 1 always (no bidirectional) and num_layers = 1 by default (number of stacked GRU).
 
     Examples:
-        >>> in_features = 11
-        >>> hidden_size = 13
-        >>> out_features = 3
-        >>> batch_size = 5
-        >>> seq_len = 7
-        >>> mlp_input_kwargs = {"in_features": in_features, "out_features": hidden_size}
-        >>> gru_kwargs = { "input_size": hidden_size, "hidden_size": hidden_size}
-        >>> mlp_output_kwargs = {"in_features": hidden_size, "out_features": out_features}
-        >>> net = GRUNet(mlp_input_kwargs, gru_kwargs, mlp_output_kwargs)
-        >>> x_batch = torch.randn(batch_size, seq_len, 11)
-        >>> out_batch , h_batch = net(x_batch)
-        >>> x_no_batch = torch.randn(seq_len, 11)
+        >>> net = GRUNet(in_features=11, hidden_size=13, out_features=3)
+        >>> print(net)
+        GRUNet(
+              (mlp_in): MLP(
+                (0): Linear(in_features=11, out_features=13, bias=True)
+              )
+              (gru): GRU(13, 13, batch_first=True)
+              (mlp_out): MLP(
+                (0): Linear(in_features=13, out_features=3, bias=True)
+              )
+            )
+        >>> x_no_batch = torch.randn(5, 11)
         >>> out_no_batch, h_no_batch = net(x_no_batch)
+        >>> print(out_no_batch.shape, h_no_batch.shape)
+        torch.Size([7, 3]) torch.Size([1, 13])
+        >>> x_batch = torch.randn(5, 7, 11)
+        >>> out_batch, h_batch = net(x_batch)
+        >>> print(out_batch.shape, h_batch.shape)
+        torch.Size([5, 7, 3]) torch.Size([1, 5, 13])
+        >>> net2 = GRUNet(
+        >>>     in_features=11,
+        >>>     hidden_size=13,
+        >>>     out_features=3,
+        >>>     mlp_input_kwargs={
+        >>>         "depth": 0,
+        >>>         "activation_class": nn.ReLU,
+        >>>         "activate_last_layer": True,
+        >>>     },
+        >>> )
+        >>> print(net2)
+        GRUNet(
+              (mlp_in): MLP(
+                (0): Linear(in_features=11, out_features=13, bias=True)
+                (1): ReLU()
+              )
+              (gru): GRU(13, 13, batch_first=True)
+              (mlp_out): MLP(
+                (0): Linear(in_features=13, out_features=3, bias=True)
+              )
+            )
+        >>> net_stacked = GRUNet(
+        >>>     in_features=123,
+        >>>     hidden_size=456,
+        >>>     out_features=3,
+        >>>     mlp_input_kwargs={
+        >>>         "in_features": 11,
+        >>>         "out_features": 13,
+        >>>     },
+        >>>     gru_kwargs={
+        >>>         "input_size": 13,
+        >>>         "hidden_size": 13,
+        >>>         "num_layers": 2,
+        >>>     },
+        >>>     mlp_output_kwargs={
+        >>>         "in_features": 13,
+        >>>         "depth": 0
+        >>>     },
+        >>> )
+        >>> print(net_stacked)
+        GRUNet(
+              (mlp_in): MLP(
+                (0): Linear(in_features=11, out_features=32, bias=True)
+                (1): Tanh()
+                (2): Linear(in_features=32, out_features=32, bias=True)
+                (3): Tanh()
+                (4): Linear(in_features=32, out_features=32, bias=True)
+                (5): Tanh()
+                (6): Linear(in_features=32, out_features=13, bias=True)
+              )
+              (gru): GRU(13, 13, num_layers=2, batch_first=True)
+              (mlp_out): MLP(
+                (0): Linear(in_features=13, out_features=3, bias=True)
+              )
+            )
+        >>> x_batch = torch.randn(5, 7, 11)
+        >>> out_batch_stacked, h_batch_stacked = net_stacked(x_batch)
+        >>> print(out_batch_stacked.shape, h_batch_stacked.shape)
+        torch.Size([5, 7, 3]) torch.Size([2, 5, 13])
 
     """
 
     def __init__(
         self,
-        mlp_input_kwargs: dict,
-        gru_kwargs: dict,
-        mlp_output_kwargs: dict,
+        in_features: int,
+        hidden_size: int,
+        out_features: int,
+        mlp_input_kwargs: Optional[dict] = None,
+        gru_kwargs: Optional[dict] = None,
+        mlp_output_kwargs: Optional[dict] = None,
         device: DEVICE_TYPING = "cpu",
     ) -> None:
         super().__init__()
+        if mlp_input_kwargs is None:
+            # Default config
+            mlp_input_kwargs = {
+                "in_features": in_features,
+                "out_features": hidden_size,
+                "depth": 0,
+            }
+        else:
+            # Test if in_features or hidden_size should be ignored
+            mlp_input_kwargs.setdefault("in_features", in_features)
+            mlp_input_kwargs.setdefault("out_features", hidden_size)
+
+        if gru_kwargs is None:
+            # Default config
+            gru_kwargs = {"input_size": hidden_size, "hidden_size": hidden_size}
+        else:
+            # Test if hidden_size should be ignored
+            gru_kwargs.setdefault("input_size", hidden_size)
+            gru_kwargs.setdefault("hidden_size", hidden_size)
+
+        if mlp_output_kwargs is None:
+            # Default config
+            mlp_output_kwargs = {
+                "in_features": hidden_size,
+                "out_features": out_features,
+                "depth": 0,
+            }
+        else:
+            # Test if hidden_size or out_features should be ignored
+            mlp_output_kwargs.setdefault("in_features", hidden_size)
+            mlp_output_kwargs.setdefault("out_features", out_features)
+
         if mlp_input_kwargs["out_features"] != gru_kwargs["input_size"]:
             raise ValueError(
                 "The size of output features in mlp_input must be the same as the input size of the GRU."

@@ -15,8 +15,8 @@ from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
 from torchrl.modules import (
     ActorValueOperator,
     CEMPlanner,
-    LSTMNet,
     GRUNet,
+    LSTMNet,
     ProbabilisticActor,
     QValueActor,
     TensorDictModule,
@@ -307,24 +307,18 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("num_layers", [1, 2])  # Test stacked GRU
-@pytest.mark.parametrize("bidirectional", [False])  # Todo: test bidirectional GRU
-def test_gru_net_shape(device, num_layers, bidirectional):
+@pytest.mark.parametrize("num_layers", [1])  # TODO: test stacked gru
+@pytest.mark.parametrize(
+    "bidirectional", [False]
+)  # Todo: change if bidirectional implemented
+def test_gru_net(device, num_layers, bidirectional):
     batch_size = 5
     seq_len = 7
     in_features = 11
     hidden_size = 13
     out_features = 3
-    mlp_input_kwargs = {"in_features": in_features, "out_features": hidden_size}
-    gru_kwargs = {
-        "input_size": hidden_size,
-        "hidden_size": hidden_size,
-        "num_layers": num_layers,
-        "bidirectional": bidirectional,
-    }
-    mlp_output_kwargs = {"in_features": hidden_size, "out_features": out_features}
 
-    net = GRUNet(mlp_input_kwargs, gru_kwargs, mlp_output_kwargs, device)
+    net = GRUNet(in_features, hidden_size, out_features, device=device)
 
     # Test a whole sequence
     # Test with batch size
@@ -358,33 +352,47 @@ def test_gru_net_shape(device, num_layers, bidirectional):
         assert h.size() == torch.Size([num_layers, hidden_size])
 
     # Test instantiation safety
-    mlp_input_kwargs = {"in_features": in_features, "out_features": hidden_size}
-    gru_kwargs = {"input_size": hidden_size, "hidden_size": hidden_size}
-    mlp_output_kwargs = {"in_features": hidden_size, "out_features": out_features}
+
     # Test mlp_input_kwargs["out_features"] != gru_kwargs["input_size"]
     with pytest.raises(ValueError):
-        mlp_input_kwargs2 = {
-            "in_features": in_features,
-            "out_features": hidden_size / 2,
-        }
-        GRUNet(mlp_input_kwargs2, gru_kwargs, mlp_output_kwargs, device)
+        gru_kwargs = {"input_size": int(hidden_size / 2)}
+        GRUNet(
+            in_features, hidden_size, out_features, gru_kwargs=gru_kwargs, device=device
+        )
+    with pytest.raises(ValueError):
+        mlp_input_kwargs = {"out_features": int(hidden_size / 2)}
+        GRUNet(
+            in_features,
+            hidden_size,
+            out_features,
+            mlp_input_kwargs=mlp_input_kwargs,
+            device=device,
+        )
 
     # Test mlp_output_kwargs["in_features"] != gru_kwargs["hidden_size"]
     with pytest.raises(ValueError):
-        mlp_output_kwargs2 = {
-            "in_features": hidden_size / 2,
-            "out_features": out_features,
-        }
-        GRUNet(mlp_input_kwargs, gru_kwargs, mlp_output_kwargs2, device)
+        gru_kwargs = {"hidden_size": int(hidden_size / 2)}
+        GRUNet(
+            in_features, hidden_size, out_features, gru_kwargs=gru_kwargs, device=device
+        )
+    with pytest.raises(ValueError):
+        mlp_output_kwargs = {"in_features": int(hidden_size / 2)}
+        GRUNet(
+            in_features,
+            hidden_size,
+            out_features,
+            mlp_output_kwargs=mlp_output_kwargs,
+            device=device,
+        )
 
     # Test gru_kwargs["bidirectional"]
     with pytest.raises(NotImplementedError):
-        gru_kwargs2 = {
-            "input_size": hidden_size,
-            "hidden_size": hidden_size,
+        gru_kwargs = {
             "bidirectional": True,
         }
-        GRUNet(mlp_input_kwargs, gru_kwargs2, mlp_output_kwargs, device)
+        GRUNet(
+            in_features, hidden_size, out_features, gru_kwargs=gru_kwargs, device=device
+        )
 
     # Test error if the input is of undesired shape
     with pytest.raises(RuntimeError):
