@@ -415,9 +415,7 @@ class TestRB:
             if prioritized:
                 td_out.set(replay_buffer.priority_key, torch.rand(N))
             trainer._post_loss_hook(td_out)
-            # print("trainer1 (a)", trainer.state_dict()["replay_buffer"]["replay_buffer"]["_storage"]["_storage"])
             trainer.save_trainer(True)
-            # print("trainer1", trainer.state_dict()["replay_buffer"]["replay_buffer"]["_storage"]["_storage"])
 
             trainer2 = mocking_trainer()
             storage2, _ = make_storage()
@@ -448,8 +446,6 @@ class TestRB:
                 )  # trainer.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
                 td2 = trainer2._modules["replay_buffer"].replay_buffer._storage._storage
                 if storage_type == "list":
-                    # print(td1[0], td2[0])
-                    # print(td1[1], td2[1])
                     assert all([(_td1 == _td2).all() for _td1, _td2 in zip(td1, td2)])
                     assert all([(_td1 is not _td2) for _td1, _td2 in zip(td1, td2)])
                     assert storage2._storage is td2
@@ -733,7 +729,6 @@ class TestRecorder:
                     },
                 )
                 ea.Reload()
-                print(ea.Tags())
                 img = ea.Images("tmp_ALE/Pong-v5_video")
                 try:
                     assert len(img) == N // args.record_interval
@@ -749,6 +744,10 @@ class TestRecorder:
         ],
     )
     def test_recorder_load(self, backend, N=8):
+        if not _has_ts and backend == "torchsnapshot":
+            pytest.skip("torchsnapshot not found")
+
+        os.environ["CKPT_BACKEND"] = backend
         state_dict_has_been_called = [False]
         load_state_dict_has_been_called = [False]
         Recorder.state_dict, Recorder_state_dict = _fun_checker(
@@ -762,7 +761,7 @@ class TestRecorder:
         args = self._get_args()
 
         def _make_recorder_and_trainer(tmpdirname):
-            logger = TensorboardLogger(exp_name=tmpdirname)
+            logger = TensorboardLogger(exp_name=f"{tmpdirname}/tb")
             if backend == "torch":
                 file = path.join(tmpdirname, "file.pt")
             elif backend == "torchsnapshot":
@@ -789,13 +788,14 @@ class TestRecorder:
             recorder.register(trainer)
             return trainer, recorder, file
 
-        with tempfile.TemporaryDirectory() as tmpdirname, tempfile.TemporaryDirectory() as tmpdirname2:
+        with tempfile.TemporaryDirectory() as tmpdirname:
             trainer, recorder, file = _make_recorder_and_trainer(tmpdirname)
             for _ in range(N):
                 recorder(None)
             trainer.save_trainer(True)
-            trainer2, recorder2, _ = _make_recorder_and_trainer(tmpdirname2)
-            trainer2.load_from_file(file)
+            with tempfile.TemporaryDirectory() as tmpdirname2:
+                trainer2, recorder2, _ = _make_recorder_and_trainer(tmpdirname2)
+                trainer2.load_from_file(file)
             assert recorder2._count == 8
             assert state_dict_has_been_called[0]
             assert load_state_dict_has_been_called[0]
@@ -839,6 +839,10 @@ class TestCountFrames:
         ],
     )
     def test_countframes_load(self, backend):
+        if not _has_ts and backend == "torchsnapshot":
+            pytest.skip("torchsnapshot not found")
+
+        os.environ["CKPT_BACKEND"] = backend
         state_dict_has_been_called = [False]
         load_state_dict_has_been_called = [False]
         CountFramesLog.state_dict, CountFramesLog_state_dict = _fun_checker(
