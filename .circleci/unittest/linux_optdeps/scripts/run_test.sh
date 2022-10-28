@@ -11,7 +11,8 @@ python -m torch.utils.collect_env
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 export MKL_THREADING_LAYER=GNU
+export CKPT_BACKEND=torch
 
 #MUJOCO_GL=glfw pytest --cov=torchrl --junitxml=test-results/junit.xml -v --durations 20
 MUJOCO_GL=egl coverage run -m pytest --instafail -v --durations 20
-coverage xml
+coverage xml -i
