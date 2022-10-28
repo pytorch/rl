@@ -115,7 +115,13 @@ class TestDQN:
     seed = 0
 
     def _create_mock_actor(
-        self, action_spec_type, batch=2, obs_dim=3, action_dim=4, device="cpu"
+        self,
+        action_spec_type,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        is_nn_module=False,
     ):
         # Actor
         if action_spec_type == "one_hot":
@@ -130,6 +136,8 @@ class TestDQN:
             raise ValueError(f"Wrong {action_spec_type}")
 
         module = nn.Linear(obs_dim, action_dim)
+        if is_nn_module:
+            return module.to(device)
         actor = QValueActor(
             spec=CompositeSpec(
                 action=action_spec, action_value=None, chosen_action_value=None
@@ -260,10 +268,11 @@ class TestDQN:
     @pytest.mark.parametrize(
         "action_spec_type", ("nd_bounded", "one_hot", "categorical")
     )
-    def test_dqn(self, delay_value, device, action_spec_type):
+    @pytest.mark.parametrize("is_nn_module", (False, True))
+    def test_dqn(self, delay_value, device, action_spec_type, is_nn_module):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(
-            action_spec_type=action_spec_type, device=device
+            action_spec_type=action_spec_type, device=device, is_nn_module=is_nn_module
         )
         td = self._create_mock_data_dqn(
             action_spec_type=action_spec_type, device=device
