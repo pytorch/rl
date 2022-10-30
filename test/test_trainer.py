@@ -22,7 +22,6 @@ try:
 except ImportError:
     _has_tb = False
 
-from torchrl._utils import _CKPT_BACKEND
 from torchrl.data import (
     TensorDict,
     TensorDictPrioritizedReplayBuffer,
@@ -116,8 +115,8 @@ class TestSelectKeys:
         assert key2 not in td_out.keys()
 
     def test_selectkeys_statedict(self):
-        if not _has_ts and _CKPT_BACKEND == "torchsnapshot":
-            pytest.skip("torchsnapshot not found")
+        if not _has_ts:
+            os.environ["CKPT_BACKEND"] = "torch"
         trainer = mocking_trainer()
         key1 = "first key"
         key2 = "second key"
