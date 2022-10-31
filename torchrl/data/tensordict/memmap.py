@@ -232,7 +232,9 @@ class MemmapTensor(object):
         value: Union[torch.Tensor, torch.Size, MemmapTensor, np.ndarray],
         idx: Optional[int] = None,
     ):
-        if isinstance(value, (torch.Tensor,)):
+        if isinstance(value, MemmapTensor):
+            np_array = value.memmap_array
+        elif isinstance(value, (torch.Tensor,)):
             np_array = value.cpu().numpy()
         elif isinstance(value, torch.Size):
             # create the memmap array on disk
@@ -380,6 +382,9 @@ class MemmapTensor(object):
         return self._tensor.numpy()
 
     def copy_(self, other: Union[torch.Tensor, MemmapTensor]) -> MemmapTensor:
+        print(other.shape, self.shape)
+        print(other.device, self.device)
+        print(other.dtype, self.dtype)
         self._save_item(other)
         return self
 
@@ -403,6 +408,9 @@ class MemmapTensor(object):
             )
         self.transfer_ownership = value
         return self
+
+    def __deepcopy__(self, memodict={}):
+        return MemmapTensor(self)
 
     def __del__(self) -> None:
         if "_has_ownership" in self.__dir__() and self._has_ownership:

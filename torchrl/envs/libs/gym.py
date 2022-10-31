@@ -8,7 +8,6 @@ from typing import List, Dict
 from warnings import warn
 
 import torch
-from packaging import version
 
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
@@ -26,9 +25,9 @@ from ..utils import _classproperty
 
 try:
     import gym
+    from packaging import version
 
     _has_gym = True
-
 except ImportError:
     _has_gym = False
 
@@ -187,7 +186,7 @@ class GymWrapper(GymLikeEnv):
                     "PixelObservationWrapper cannot be used to wrap an environment"
                     "that is already a PixelObservationWrapper instance."
                 )
-            if not env.render_mode and gym_version >= version.parse("0.26.0"):
+            if gym_version >= version.parse("0.26.0") and not env.render_mode:
                 warnings.warn(
                     "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
                     "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
@@ -295,9 +294,16 @@ class GymEnv(GymWrapper):
 
     """
 
-    def __init__(self, env_name, disable_env_checker=True, **kwargs):
+    def __init__(self, env_name, disable_env_checker=None, **kwargs):
         kwargs["env_name"] = env_name
-        kwargs["disable_env_checker"] = disable_env_checker
+        if gym_version >= version.parse("0.24.0"):
+            kwargs["disable_env_checker"] = (
+                disable_env_checker if disable_env_checker is not None else True
+            )
+        elif disable_env_checker is not None:
+            raise RuntimeError(
+                "disable_env_checker should only be set if gym version is > 0.24"
+            )
         super().__init__(**kwargs)
 
     def _build_env(

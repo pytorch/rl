@@ -145,6 +145,42 @@ def get_binary_env_var(key):
     return val
 
 
+class _Dynamic_CKPT_BACKEND:
+    """Allows CKPT_BACKEND to be changed on-the-fly."""
+
+    backends = ["torch", "torchsnapshot"]
+
+    def _get_backend(self):
+        backend = os.environ.get("CKPT_BACKEND", "torchsnapshot")
+        if backend == "torchsnapshot":
+            try:
+                import torchsnapshot  # noqa: F401
+
+                _has_ts = True
+            except ImportError:
+                _has_ts = False
+            if not _has_ts:
+                raise ImportError(
+                    f"torchsnapshot not found, but the backend points to this library. Consider installing torchsnapshot or choose another backend (available backends: {self.backends})"
+                )
+        return backend
+
+    def __getattr__(self, item):
+        return getattr(self._get_backend(), item)
+
+    def __eq__(self, other):
+        return self._get_backend() == other
+
+    def __ne__(self, other):
+        return self._get_backend() != other
+
+    def __repr__(self):
+        return self._get_backend()
+
+
+_CKPT_BACKEND = _Dynamic_CKPT_BACKEND()
+
+
 class implement_for:
     """A version decorator that checks the version in the environment and implements a function with the fitting one.
 

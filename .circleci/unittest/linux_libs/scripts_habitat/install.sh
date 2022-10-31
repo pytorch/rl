@@ -4,6 +4,7 @@ unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
+apt-get update && apt-get install -y git wget gcc g++
 
 set -e
 
@@ -12,7 +13,6 @@ conda activate ./env
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
     version="cpu"
-    echo "Using cpu build"
 else
     if [[ ${#CU_VERSION} -eq 4 ]]; then
         CUDA_VERSION="${CU_VERSION:2:1}.${CU_VERSION:3:1}"
@@ -23,21 +23,25 @@ else
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
 fi
 
+
 # submodules
 git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+    # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
+    # use pip to install pytorch as conda can frequently pick older release
+#    conda install -y pytorch cpuonly -c pytorch-nightly
+    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu --force-reinstall
 else
-    pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cu113
+    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu116 --force-reinstall
 fi
 
 # smoke test
 python -c "import functorch"
 
-# install snapshot
-pip install git+https://github.com/pytorch/torchsnapshot
-
 printf "* Installing torchrl\n"
-python setup.py develop
+pip3 install -e .
+
+# smoke test
+python -c "import torchrl"
