@@ -9,6 +9,7 @@ import functools
 import os
 import tempfile
 from copy import copy, deepcopy
+from tempfile import _TemporaryFileWrapper
 from typing import Any, Callable, List, Optional, Tuple, Union, Dict
 
 import numpy as np
@@ -211,6 +212,7 @@ class MemmapTensor(object):
 
         self._device = elem.device
         self._shape = elem.shape
+        self._shape_indexed = None
         self.transfer_ownership = transfer_ownership
         self.np_shape = tuple(self._shape)
         self._dtype = elem.dtype
@@ -223,8 +225,9 @@ class MemmapTensor(object):
         if isinstance(elem, MemmapTensor):
             prev_filename = elem.filename
             self._copy_item(prev_filename)
-            if self.memmap_array is elem.memmap_array:
-                raise RuntimeError
+            # Do we want to raise an error?
+            # if self.memmap_array is elem.memmap_array:
+            #     raise RuntimeError
         else:
             if elem.requires_grad:
                 raise Exception(
@@ -547,8 +550,9 @@ MemmapTensor of shape {self.shape}."""
         if state["file"] is None:
             # state["_had_ownership"] = state["_had_ownership"]
             # state["_has_ownership"] = delete
-            tmpfile = tempfile.NamedTemporaryFile(delete=False)
-            tmpfile.close()
+            # tmpfile = tempfile.NamedTemporaryFile(delete=False)
+            # tmpfile.close()
+            tmpfile = _TemporaryFileWrapper(None, state["filename"], delete=True)
             tmpfile.name = state["filename"]
             tmpfile._closer.name = state["filename"]
             state["file"] = tmpfile
