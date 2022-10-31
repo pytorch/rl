@@ -1196,13 +1196,28 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             inv_op_kwargs={"dim": dim},
         )
 
-    def squeeze(self, dim: int) -> TensorDictBase:
+    def squeeze(self, dim: Optional[int] = None) -> TensorDictBase:
         """Squeezes all tensors for a dimension comprised in between `-td.batch_dims+1` and `td.batch_dims-1` and returns them in a new tensordict.
 
         Args:
-            dim (int): dimension along which to squeeze
+            dim (Optional[int]): dimension along which to squeeze. If dim is None, all singleton dimensions will be squeezed. dim is None by default.
 
         """
+        if dim is None:
+            size = self.size()
+            if len(self.size()) == 1 or size.count(1) == 0:
+                return self
+            first_singleton_dim = size.index(1)
+
+            squeezed_dict = SqueezedTensorDict(
+                source=self,
+                custom_op="squeeze",
+                inv_op="unsqueeze",
+                custom_op_kwargs={"dim": first_singleton_dim},
+                inv_op_kwargs={"dim": first_singleton_dim},
+            )
+            return squeezed_dict.squeeze(dim=None)
+
         if dim < 0:
             dim = self.batch_dims + dim
 
@@ -4489,8 +4504,8 @@ class UnsqueezedTensorDict(_CustomOpTensorDict):
         True
     """
 
-    def squeeze(self, dim: int) -> TensorDictBase:
-        if dim < 0:
+    def squeeze(self, dim: Optional[int]) -> TensorDictBase:
+        if dim is not None and dim < 0:
             dim = self.batch_dims + dim
         if dim == self.custom_op_kwargs.get("dim"):
             return self._source
