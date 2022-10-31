@@ -294,18 +294,24 @@ class TransformedEnv(EnvBase):
         device = kwargs.pop("device", env.device)
         env = env.to(device)
         super().__init__(device=None, **kwargs)
-        self._set_env(env, device)
-        if transform is None:
-            transform = Compose()
-            transform.set_parent(self)
+
+        if isinstance(env, TransformedEnv):
+            self._set_env(env.base_env, device)
+            self.transform = env.transform
+            self.transform.set_parent(self)
+            self.append_transform(transform)
         else:
-            transform = transform.to(device)
-        transform.eval()
-        self.transform = transform
+            self._set_env(env, device)
+            if transform is None:
+                transform = Compose()
+                transform.set_parent(self)
+            else:
+                transform = transform.to(device)
+            transform.eval()
+            self.transform = transform
 
         self._last_obs = None
         self.cache_specs = cache_specs
-
         self._reward_spec = None
         self._observation_spec = None
         self.batch_size = self.base_env.batch_size
