@@ -8,6 +8,7 @@ from __future__ import annotations
 import pathlib
 import warnings
 from collections import OrderedDict, defaultdict
+from copy import deepcopy
 from textwrap import indent
 from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, List, Any
 
@@ -24,6 +25,7 @@ try:
 except ImportError:
     _has_tqdm = False
 
+from torchrl._utils import _CKPT_BACKEND
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import (
     ReplayBuffer,
@@ -37,6 +39,13 @@ from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.common import LossModule
 from torchrl.trainers.loggers import Logger
+
+try:
+    from torchsnapshot import StateDict, Snapshot
+
+    _has_ts = True
+except ImportError:
+    _has_ts = False
 
 REPLAY_BUFFER_CLASS = {
     "prioritized": TensorDictPrioritizedReplayBuffer,
@@ -108,12 +117,17 @@ class Trainer:
             Default is None (no saving)
     """
 
-    # trackers
-    _optim_count: int = 0
-    _collected_frames: int = 0
-    _last_log: Dict[str, Any] = {}
-    _last_save: int = 0
-    _log_interval: int = 10000
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        # trackers
+        cls._optim_count: int = 0
+        cls._collected_frames: int = 0
+        cls._last_log: Dict[str, Any] = {}
+        cls._last_save: int = 0
+        cls._log_interval: int = 10000
+        cls.collected_frames = 0
+        cls._app_state = None
+        return super().__new__(cls)
 
     def __init__(
         self,
@@ -171,6 +185,80 @@ class Trainer:
         self._post_loss_ops = []
         self._process_optim_batch_ops = []
         self._post_optim_ops = []
+        self._modules = {}
+
+    def register_module(self, module_name: str, module: Any) -> None:
+        if module_name in self._modules:
+            raise RuntimeError(
+                f"{module_name} is already registered, choose a different name."
+            )
+        self._modules[module_name] = module
+
+    def _get_state(self):
+        if _CKPT_BACKEND == "torchsnapshot":
+            state = StateDict(
+                collected_frames=self.collected_frames,
+                _last_log=self._last_log,
+                _last_save=self._last_save,
+                _optim_count=self._optim_count,
+            )
+        else:
+            state = OrderedDict(
+                collected_frames=self.collected_frames,
+                _last_log=self._last_log,
+                _last_save=self._last_save,
+                _optim_count=self._optim_count,
+            )
+        return state
+
+    @property
+    def app_state(self):
+        self._app_state = {
+            "state": StateDict(**self._get_state()),
+            "collector": self.collector,
+            "loss_module": self.loss_module,
+            **{k: item for k, item in self._modules.items()},
+        }
+        return self._app_state
+
+    def state_dict(self) -> Dict:
+        state = self._get_state()
+        state_dict = OrderedDict(
+            collector=self.collector.state_dict(),
+            loss_module=self.loss_module.state_dict(),
+            state=state,
+            **{k: item.state_dict() for k, item in self._modules.items()},
+        )
+        return state_dict
+
+    def load_state_dict(self, state_dict: Dict) -> None:
+        model_state_dict = state_dict["loss_module"]
+        collector_state_dict = state_dict["collector"]
+
+        self.loss_module.load_state_dict(model_state_dict)
+        self.collector.load_state_dict(collector_state_dict)
+        for key, item in self._modules.items():
+            item.load_state_dict(state_dict[key])
+
+        self.collected_frames = state_dict["state"]["collected_frames"]
+        self._last_log = state_dict["state"]["_last_log"]
+        self._last_save = state_dict["state"]["_last_save"]
+        self._optim_count = state_dict["state"]["_optim_count"]
+
+    def _save_trainer(self) -> None:
+        if _CKPT_BACKEND == "torchsnapshot":
+            if not _has_ts:
+                raise ImportError(
+                    "torchsnapshot not found. Consider installing torchsnapshot or "
+                    "using the torch checkpointing backend (`CKPT_BACKEND=torch`)"
+                )
+            Snapshot.take(app_state=self.app_state, path=self.save_trainer_file)
+        elif _CKPT_BACKEND == "torch":
+            torch.save(self.state_dict(), self.save_trainer_file)
+        else:
+            raise NotImplementedError(
+                f"CKPT_BACKEND should be one of {_CKPT_BACKEND.backends}, got {_CKPT_BACKEND}."
+            )
 
     def save_trainer(self, force_save: bool = False) -> None:
         _save = force_save
@@ -179,58 +267,21 @@ class Trainer:
                 self._last_save = self.collected_frames
                 _save = True
         if _save and self.save_trainer_file:
-            torch.save(self.state_dict(), self.save_trainer_file)
+            self._save_trainer()
 
     def load_from_file(self, file: Union[str, pathlib.Path]) -> Trainer:
-        loaded_dict: OrderedDict = torch.load(file)
-
-        # checks that keys match
-        expected_keys = {
-            "env",
-            "loss_module",
-            "_last_log",
-            "_last_save",
-            "_optim_count",
-        }
-        actual_keys = set(loaded_dict.keys())
-        if len(actual_keys.difference(expected_keys)) or len(
-            expected_keys.difference(actual_keys)
-        ):
-            raise RuntimeError(
-                f"Expected keys {expected_keys} in the loaded file but got"
-                f" {actual_keys}"
-            )
-        self.collector.load_state_dict(loaded_dict["env"])
-        self.model.load_state_dict(loaded_dict["model"])
-        for key in [
-            "_last_log",
-            "_last_save",
-            "_optim_count",
-        ]:
-            setattr(self, key, loaded_dict[key])
+        if _CKPT_BACKEND == "torchsnapshot":
+            snapshot = Snapshot(path=file)
+            snapshot.restore(app_state=self.app_state)
+        elif _CKPT_BACKEND == "torch":
+            loaded_dict: OrderedDict = torch.load(file)
+            self.load_state_dict(loaded_dict)
         return self
 
     def set_seed(self):
         seed = self.collector.set_seed(self.seed, static_seed=False)
         torch.manual_seed(seed)
         np.random.seed(seed)
-
-    def state_dict(self) -> Dict:
-        state_dict = OrderedDict(
-            env=self.collector.state_dict(),
-            loss_module=self.loss_module.state_dict(),
-            _collected_frames=self.collected_frames,
-            _last_log=self._last_log,
-            _last_save=self._last_save,
-            _optim_count=self._optim_count,
-        )
-        return state_dict
-
-    def load_state_dict(self, state_dict: Dict) -> None:
-        model_state_dict = state_dict["loss_module"]
-        env_state_dict = state_dict["env"]
-        self.loss_module.load_state_dict(model_state_dict)
-        self.collector.load_state_dict(env_state_dict)
 
     @property
     def collector(self) -> _DataCollector:
@@ -352,8 +403,6 @@ class Trainer:
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
             self._pbar_str = dict()
-
-        self.collected_frames = 0
 
         for batch in self.collector:
             batch = self._process_batch_hook(batch)
@@ -485,6 +534,25 @@ class Trainer:
         return string
 
 
+def _get_list_state_dict(hook_list):
+    out = []
+    for item, kwargs in hook_list:
+        if hasattr(item, "state_dict"):
+            out.append((item.state_dict(), kwargs))
+        else:
+            out.append((None, kwargs))
+    return out
+
+
+def _load_list_state_dict(list_state_dict, hook_list):
+    for i, ((state_dict_item, kwargs), (item, _)) in enumerate(
+        zip(list_state_dict, hook_list)
+    ):
+        if state_dict_item is not None:
+            item.load_state_dict(state_dict_item)
+            hook_list[i] = (item, kwargs)
+
+
 class SelectKeys:
     """Selects keys in a TensorDict batch.
 
@@ -518,6 +586,16 @@ class SelectKeys:
 
     def __call__(self, batch: TensorDictBase) -> TensorDictBase:
         return batch.select(*self.keys)
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        pass
+
+    def register(self, trainer) -> None:
+        trainer.register_op("batch_process", self)
+        trainer.register_module("select_keys", self)
 
 
 class ReplayBufferTrainer:
@@ -600,6 +678,20 @@ class ReplayBufferTrainer:
         if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
             self.replay_buffer.update_priority(batch)
 
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "replay_buffer": self.replay_buffer.state_dict(),
+        }
+
+    def load_state_dict(self, state_dict) -> None:
+        self.replay_buffer.load_state_dict(state_dict["replay_buffer"])
+
+    def register(self, trainer: Trainer):
+        trainer.register_op("batch_process", self.extend)
+        trainer.register_op("process_optim_batch", self.sample)
+        trainer.register_op("post_loss", self.update_priority)
+        trainer.register_module("replay_buffer", self)
+
 
 class ClearCudaCache:
     """Clears cuda cache at a given interval.
@@ -650,6 +742,10 @@ class LogReward:
             self.logname: batch.get("reward").mean().item(),
             "log_pbar": self.log_pbar,
         }
+
+    def register(self, trainer: Trainer):
+        trainer.register_op("pre_steps_log", self)
+        trainer.register_module("log_reward", self)
 
 
 class RewardNormalizer:
@@ -726,6 +822,23 @@ class RewardNormalizer:
         tensordict.set("reward", reward * self.scale)
         self._normalize_has_been_called = True
         return tensordict
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "_reward_stats": deepcopy(self._reward_stats),
+            "scale": self.scale,
+            "_normalize_has_been_called": self._normalize_has_been_called,
+            "_update_has_been_called": self._update_has_been_called,
+        }
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        for key, value in state_dict.items():
+            setattr(self, key, value)
+
+    def register(self, trainer: Trainer):
+        trainer.register_op("batch_process", self.update_reward_stats)
+        trainer.register_op("process_optim_batch", self.normalize_reward)
+        trainer.register_module("reward_normalizer", self)
 
 
 def mask_batch(batch: TensorDictBase) -> TensorDictBase:
@@ -863,6 +976,19 @@ class BatchSubSampler:
             raise RuntimeError("Sampled invalid steps")
         return td
 
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        pass
+
+    def register(self, trainer):
+        trainer.register_op(
+            "process_optim_batch",
+            self,
+        )
+        trainer.register_module("batch_subsampler", self)
+
 
 class Recorder:
     """Recorder hook for Trainer.
@@ -969,6 +1095,23 @@ class Recorder:
         self.recorder.close()
         return out
 
+    def state_dict(self) -> Dict:
+        return {
+            "_count": self._count,
+            "recorder_state_dict": self.recorder.state_dict(),
+        }
+
+    def load_state_dict(self, state_dict: Dict) -> None:
+        self._count = state_dict["_count"]
+        self.recorder.load_state_dict(state_dict["recorder_state_dict"])
+
+    def register(self, trainer: Trainer):
+        trainer.register_module("recorder", self)
+        trainer.register_op(
+            "post_steps_log",
+            self,
+        )
+
 
 class UpdateWeights:
     """A collector weights update hook class.
@@ -1000,6 +1143,19 @@ class UpdateWeights:
         if self.counter % self.update_weights_interval == 0:
             self.collector.update_policy_weights_()
 
+    def register(self, trainer: Trainer):
+        trainer.register_module("update_weights", self)
+        trainer.register_op(
+            "post_steps",
+            self,
+        )
+
+    def state_dict(self) -> Dict:
+        return {}
+
+    def load_state_dict(self, state_dict) -> None:
+        return
+
 
 class CountFramesLog:
     """A frame counter hook.
@@ -1018,8 +1174,12 @@ class CountFramesLog:
 
     """
 
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls.frame_count = 0
+        return super().__new__(cls)
+
     def __init__(self, frame_skip: int, log_pbar: bool = False):
-        self.frame_count = 0
         self.frame_skip = frame_skip
         self.log_pbar = log_pbar
 
@@ -1031,7 +1191,32 @@ class CountFramesLog:
         self.frame_count += current_frames
         return {"n_frames": self.frame_count, "log_pbar": self.log_pbar}
 
+    def register(self, trainer: Trainer):
+        trainer.register_module("count_frames_log", self)
+        trainer.register_op(
+            "pre_steps_log",
+            self,
+        )
+
+    def state_dict(self) -> Dict:
+        return {"frame_count": self.frame_count}
+
+    def load_state_dict(self, state_dict) -> None:
+        self.frame_count = state_dict["frame_count"]
+
 
 def _check_input_output_typehint(func: Callable, input: Type, output: Type):
     # Placeholder for a function that checks the types input / output against expectations
     return
+
+
+def flatten_dict(d):
+    out = {}
+    for key, item in d.items():
+        if isinstance(item, dict):
+            item = flatten_dict(item)
+            for _key, _item in item.items():
+                out[".".join([key, _key])] = _item
+        else:
+            out[key] = item
+    return out

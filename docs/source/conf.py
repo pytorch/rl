@@ -21,6 +21,9 @@
 
 
 # -- Project information -----------------------------------------------------
+import os.path
+import sys
+
 import pytorch_sphinx_theme
 import torchrl
 
@@ -59,6 +62,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_gallery.gen_gallery",
     "sphinxcontrib.aafig",
+    "myst_parser",
 ]
 
 sphinx_gallery_conf = {
@@ -147,3 +151,10 @@ intersphinx_mapping = {
 
 
 aafig_default_options = dict(scale=1.5, aspect=1.0, proportional=True)
+
+# -- Generate knowledge base references -----------------------------------
+current_path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(current_path)
+from knowledge_base import generate_knowledge_base_references
+
+generate_knowledge_base_references("../../knowledge_base")

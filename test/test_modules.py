@@ -9,6 +9,7 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from mocking_classes import MockBatchedUnLockedEnv
+from packaging import version
 from torch import nn
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import (
@@ -44,6 +45,14 @@ from torchrl.modules.models.model_based import (
 )
 from torchrl.modules.models.utils import SquashDims
 from torchrl.modules.planners.mcts import _MCTSNode
+
+
+@pytest.fixture
+def double_prec_fixture():
+    dtype = torch.get_default_dtype()
+    torch.set_default_dtype(torch.double)
+    yield
+    torch.set_default_dtype(dtype)
 
 
 @pytest.mark.parametrize("in_features", [3, 10, None])
@@ -306,7 +315,16 @@ def test_actorcritic(device):
 @pytest.mark.parametrize("hidden_size", [8, 9])
 @pytest.mark.parametrize("num_layers", [1, 2])
 @pytest.mark.parametrize("has_precond_hidden", [True, False])
-def test_lstm_net(device, out_features, hidden_size, num_layers, has_precond_hidden):
+def test_lstm_net(
+    device,
+    out_features,
+    hidden_size,
+    num_layers,
+    has_precond_hidden,
+    double_prec_fixture,
+):
+
+    torch.manual_seed(0)
     batch = 5
     time_steps = 6
     in_features = 7
@@ -442,10 +460,16 @@ class TestFunctionalModules:
         assert (fmodule(params, buffers, x) == module(x)).all()
 
     def test_func_transformer(self):
+        torch.manual_seed(10)
+        batch = (
+            (10,)
+            if version.parse(torch.__version__) >= version.parse("1.11")
+            else (1, 10)
+        )
         module = nn.Transformer(128)
         module.eval()
         fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
-        x = torch.randn(10, 128)
+        x = torch.randn(*batch, 128)
         torch.testing.assert_close(fmodule(params, buffers, x, x), module(x, x))
 
 
@@ -476,6 +500,12 @@ class TestPlanner:
 
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("batch_size", [[], [3], [5]])
+@pytest.mark.skipif(
+    version.parse(torch.__version__) < version.parse("1.11.0"),
+    reason="""Dreamer works with batches of null to 2 dimensions. Torch < 1.11
+requires one-dimensional batches (for RNN and Conv nets for instance). If you'd like
+to see torch < 1.11 supported for dreamer, please submit an issue.""",
+)
 class TestDreamerComponents:
     @pytest.mark.parametrize("out_features", [3, 5])
     @pytest.mark.parametrize("temporal_size", [[], [2], [4]])
