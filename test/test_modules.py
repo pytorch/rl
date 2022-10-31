@@ -44,7 +44,7 @@ from torchrl.modules.models.model_based import (
     RSSMRollout,
 )
 from torchrl.modules.models.utils import SquashDims
-from torchrl.modules.planners.mcts import _MCTSNode
+from torchrl.modules.planners.mcts import _MCTSNode, MCTSPolicy
 
 
 @pytest.fixture
@@ -713,29 +713,45 @@ class TestDreamerComponents:
         )
 
 
-class MockingMCTSEnv(EnvBase):
-    def __init__(self, n_obs=3, n_action=2):
-        self.observation_spec = CompositeSpec(
-            next_obs=NdUnboundedContinuousTensorSpec(n_obs)
-        )
-        self.input_spec = CompositeSpec(action=DiscreteTensorSpec(n_action))
-        self.reward_spec = UnboundedContinuousTensorSpec()
-        super().__init__()
-
-    def _step(self, tensordict):
-        action = tensordict["action"]
-        state = tensordict["obs"]
-        tensordict = tensordict.clone(recurse=False)
-        tensordict["next_obs"] = state + action
-        tensordict["done"] = torch.zeros(1, dtype=torch.bool)
-        tensordict["reward"] = torch.zeros(1)
-        return tensordict
-
-    def _reset(self, tensordict):
-        return TensorDict(self.observation_spec.zero(), [])
-
-
 class TestMCTSNode:
+    class MockingMCTSEnv(EnvBase):
+        def __init__(self, n_obs=3, n_action=2):
+            self.observation_spec = CompositeSpec(
+                next_obs=NdUnboundedContinuousTensorSpec(n_obs)
+            )
+            self.input_spec = CompositeSpec(action=DiscreteTensorSpec(n_action))
+            self.reward_spec = UnboundedContinuousTensorSpec()
+            super().__init__()
+
+        def _step(self, tensordict):
+            action = tensordict["action"]
+            state = tensordict["obs"]
+            tensordict = tensordict.clone(recurse=False)
+            tensordict["next_obs"] = state + action
+            tensordict["done"] = torch.zeros(1, dtype=torch.bool)
+            tensordict["reward"] = torch.ones(1)
+            return tensordict
+
+        def _reset(self, tensordict):
+            return TensorDict(
+                self.observation_spec.zero().update(
+                    {"done": torch.zeros(1, dtype=torch.bool)}
+                ),
+                [],
+            )
+
+    class _SplitModule(nn.Linear):
+        def forward(self, input):
+            y = super().forward(input)
+            return y[..., :-1], y[..., -1]
+
+    class MockingAgentNet(TensorDictModule):
+        def __init__(self, n_actions=2):
+            module = TestMCTSNode._SplitModule(3, n_actions + 1)
+            super().__init__(
+                module, in_keys=["obs"], out_keys=["action_log_prob", "state_value"]
+            )
+
     def test_MCTSNode_init(self, n_actions=2):
         root_state = TensorDict({"obs": torch.zeros(2)}, [])
         root_node = _MCTSNode(
@@ -760,7 +776,7 @@ class TestMCTSNode:
 
     def test_MCTSNode_select_leaf(self, n_actions=2):
         assert n_actions >= 2, "the test will not pass with a single action"
-        env = MockingMCTSEnv()
+        env = TestMCTSNode.MockingMCTSEnv()
         root_state = TensorDict({"obs": torch.zeros(2)}, [])
         root_node = _MCTSNode(
             root_state, n_actions=n_actions, env=env, parent=None, prev_action=None
@@ -785,7 +801,7 @@ class TestMCTSNode:
         torch.manual_seed(0)
         action_probs = torch.rand(n_actions)
         value = torch.rand(1).item()
-        env = MockingMCTSEnv()
+        env = TestMCTSNode.MockingMCTSEnv()
         root_state = TensorDict({"obs": torch.zeros(2)}, [])
         root_node = _MCTSNode(
             root_state, n_actions=n_actions, env=env, parent=None, prev_action=None
@@ -834,7 +850,7 @@ class TestMCTSNode:
 
     def test_MCTSNode_recreate_tree(self, n_actions=2):
         torch.manual_seed(0)
-        env = MockingMCTSEnv()
+        env = TestMCTSNode.MockingMCTSEnv()
         root_state = TensorDict({"obs": torch.zeros(2)}, [])
         root_node = _MCTSNode(
             root_state, n_actions=n_actions, env=env, parent=None, prev_action=None
@@ -894,6 +910,33 @@ class TestMCTSNode:
 
         # since depths differ, the tensordict should not be equal anymore
         assert (pseudo_node3.state != root_state["_children", "0"]).any()
+
+    def test_MCTSNode_return(self, n_actions=2):
+        REWARD = 1.0
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        root_state = TensorDict({"obs": torch.zeros(2)}, [])
+        root_node = _MCTSNode(
+            root_state, n_actions=n_actions, env=env, parent=None, prev_action=None
+        )
+        root_node.maybe_add_child(0)  # r=1
+        child = root_node.children[0]
+        child.maybe_add_child(0)  # r=1
+        grand_child = child.children[0]
+        grand_child.maybe_add_child(0)  # r=1
+        grand_grand_child = grand_child.children[0]
+
+        value = grand_grand_child.get_return(discount=0.95)
+        assert value == REWARD + 0.95 * (REWARD + 0.95 * REWARD)
+        grand_grand_child.backup_value(value, root_node)
+        assert root_node.total_value == REWARD + 0.95 * (REWARD + 0.95 * REWARD)
+
+    def test_MCTSNode_policy(self, n_actions=2):
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        policy = MCTSPolicy(TestMCTSNode.MockingAgentNet(n_actions), env)
+        root_state = env.reset()
+        policy(root_state)
 
 
 if __name__ == "__main__":

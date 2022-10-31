@@ -1007,6 +1007,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 TensorDict will be copied too. Default is `True`.
 
         """
+
         def _clone_value(value):
             if isinstance(value, TensorDictBase):
                 return value.clone(recurse=recurse)
@@ -1014,10 +1015,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 return value.clone()
             else:
                 return value
+
         return TensorDict(
-            source={
-                key: _clone_value(value) for key, value in self.items()
-            },
+            source={key: _clone_value(value) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
         )

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import collections
 import math
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -108,8 +108,11 @@ class _MCTSNode:
         self.temp_threshold = temp_threshold
 
         self._device = device
-        self._n_vlosses = 0  # Number of virtual losses on this node
         state_keys = set(state.keys())
+        if "_n_vlosses" not in state_keys:
+            self.state["_n_vlosses"] = torch.zeros(
+                1, device=self.device, dtype=torch.long
+            )
         if "n_actions" not in state_keys:
             self.state["n_actions"] = torch.tensor(
                 [n_actions], dtype=torch.long, device=self.device
@@ -146,6 +149,14 @@ class _MCTSNode:
             # TODO: pass hyperparams
             device=tensordict.device,
         )
+
+    @property
+    def _n_vlosses(self):
+        return self.state["_n_vlosses"]
+
+    @_n_vlosses.setter
+    def _n_vlosses(self, value):
+        self.state["_n_vlosses"] = value
 
     @property
     def depth(self) -> torch.Tensor:
@@ -272,7 +283,7 @@ class _MCTSNode:
             if not current.is_expanded:
                 break
             # Choose action with highest score.
-            best_move = current.child_action_score.argmax(-1)
+            best_move = current.action_score.argmax(-1)
             current = current.maybe_add_child(best_move)
         return current
 
@@ -290,14 +301,20 @@ class _MCTSNode:
             new_state = state.set("action", torch.tensor([action]))
             new_state = self.env.step(new_state)
             # filter out private keys
-            new_state = step_mdp(new_state, keep_other=False)
+            reward = new_state["reward"]
+            new_state = step_mdp(new_state, keep_other=False, exclude_done=False)
+            # we must link the reward to the next node as one node is linked to multiple
+            # children, each having an independent reward.
+            # Unlike other RL settings, reward must be tied to the action preceding
+            # the state, not following it.
+            new_state["prev_reward"] = reward
             self.children[action] = _MCTSNode(
                 new_state, self.n_actions, self.env, prev_action=action, parent=self
             )
         return self.children[action]
 
     def incorporate_estimates(
-        self, action_probs: torch.Tensor, value: float, up_to: _MCTSNode
+        self, action_log_probs: torch.Tensor, value: float, up_to: _MCTSNode
     ):
         """Method to be called if the node has just been expanded via `select_leaf`.
 
@@ -305,7 +322,7 @@ class _MCTSNode:
         by the neural network.
 
         Args:
-            action_probs (torch.Tensor): Action probabilities for the current
+            action_log_probs (torch.Tensor): Action log-probabilities for the current
                 node's state predicted by the neural network.
             value (float): Value of the current node's state predicted
                 by the neural network.
@@ -319,7 +336,7 @@ class _MCTSNode:
             self.revert_visits(up_to=up_to)
             return
         self.is_expanded = True
-        self._original_prior = self._child_prior = action_probs
+        self._original_prior = self._child_prior = action_log_probs.exp()
 
         self._child_total_value = (
             torch.ones([self.n_actions], dtype=torch.float32, device=self.device)
@@ -369,13 +386,15 @@ class _MCTSNode:
             return
         self.parent.revert_virtual_loss(up_to)
 
-    def backup_value(self, value: float, up_to: _MCTSNode):
+    def backup_value(self, value: Union[torch.Tensor, float], up_to: _MCTSNode):
         """Propagates a value estimation up to the root node.
 
         Args:
             value (torch.Tensor): Value estimate to be propagated.
             up_to (_MCTSNode): The node to propagate until.
         """
+        if isinstance(value, torch.Tensor):
+            value = value.squeeze()
         self.total_value += value
         if self.parent is None or self is up_to:
             return
@@ -385,7 +404,9 @@ class _MCTSNode:
         return self.state["done"]
 
     def inject_noise(self):
-        dirch = _Dirichlet.apply(self.d_noise_alpha * self.n_actions)
+        dirch = _Dirichlet.apply(
+            self.d_noise_alpha * torch.ones(self.n_actions, device=self.device)
+        )
         self._child_prior = self._child_prior * 0.75 + dirch * 0.25
 
     def visits_as_probs(self, squash: bool = False) -> torch.Tensor:
@@ -399,6 +420,20 @@ class _MCTSNode:
         if squash:
             probs = probs ** 0.95
         return probs / probs.sum(-1, True)
+
+    def get_return(self, discount: float = 1.0):
+        """Returns the discounted total reward from the trajectory up to this node."""
+        cur_node = self
+        depth = self.depth
+        total_reward = 0
+        while depth > -1:
+            if depth > 0:
+                total_reward = discount * total_reward
+                reward = cur_node.state["prev_reward"]
+                total_reward = total_reward + reward
+            cur_node = cur_node.parent
+            depth = cur_node.depth
+        return total_reward
 
 
 class _VoidNode:
@@ -446,13 +481,14 @@ class MCTSPolicy(nn.Module):
         env: EnvBase,
         simulations_per_move: int = 800,
         num_parallel=8,
+        temp_threshold=5,
     ):
         super().__init__()
         self.agent_network = agent_network
         # self.env = env
         self.simulations_per_move = simulations_per_move
         self.num_parallel = num_parallel
-        self.temp_threshold = None  # Overwritten in initialize_search
+        self.temp_threshold = temp_threshold
         self.env = env
 
         self.qs = []
@@ -462,18 +498,27 @@ class MCTSPolicy(nn.Module):
 
         self._root: Optional[_MCTSNode] = None
 
+        self.n_actions = self.env.action_spec.space.n
+
     def _reset_root(self, tensordict):
         # Create a tree from the tensordict, if not yet present (or not the one expected).
         def _root_and_tensordict_differ(root, tensordict):
             state_filter = root.state.select(*self.env.observation_spec)
             tensordict = tensordict.select(*self.env.observation_spec)
             return (tensordict == state_filter).all()
+
         if self._root is not None and self._root.state is tensordict:
             # then the root is right
             return
         if self._root is None or _root_and_tensordict_differ(self._root, tensordict):
             # the root has to be reset to the desired node
-            self._root = _MCTSNode(tensordict, n_actions=self.n_actions, env=self.env, parent=None)
+            self._root = _MCTSNode(
+                tensordict,
+                n_actions=self.n_actions,
+                env=self.env,
+                parent=None,
+                prev_action=None,
+            )
 
     def forward(self, tensordict):
         self._reset_root(tensordict)
@@ -489,15 +534,28 @@ class MCTSPolicy(nn.Module):
         while self._root.visit_count < current_simulations + self.simulations_per_move:
             self._tree_search()
 
-        """Picks an action to execute in the environment."""
-        if self.root.depth > self.temp_threshold:
-            action = self.root._child_visit_count.argmax(-1)
+        # Picks an action to execute in the environment.
+        if self._root.depth > self.temp_threshold:
+            action = self._root._child_visit_count.argmax(-1)
         else:
-            cdf = self.root._child_visit_count.cumsum(-1)
-            cdf /= cdf[..., -1:]
+            cdf = self._root._child_visit_count.cumsum(-1)
+            cdf = cdf / cdf[..., -1:]
             selection = torch.rand_like(cdf[..., :1])
             action = torch.searchsorted(cdf, selection)
-        return action
+        tensordict["action"] = action
+        return tensordict
+
+    def _evaluate_leaf_states(self, leaves):
+        leaf_states = torch.stack(
+            [_select_public(leaf.state) for leaf in leaves], 0
+        ).contiguous()
+        leaf_states = self.agent_network(leaf_states)
+
+        for leaf, leaf_state in zip(leaves, leaf_states):
+            leaf.revert_virtual_loss(up_to=self._root)
+            action_log_prob = leaf_state["action_log_prob"]
+            value = leaf_state["state_value"]
+            leaf.incorporate_estimates(action_log_prob, value, up_to=self._root)
 
     def _tree_search(self):
         """Performs multiple simulations in the tree (following trajectories) until a given amount of leaves to expand have been encountered.
@@ -515,19 +573,21 @@ class MCTSPolicy(nn.Module):
             # If we encounter done-state, we do not need the agent network to
             # bootstrap. We can backup the value right away.
             if leaf.is_done():
-                value = self.env.get_return(leaf.state, leaf.depth)
-                leaf.backup_value(value, up_to=self.root)
+                value = leaf.get_return()
+                leaf.backup_value(value, up_to=self._root)
                 continue
             # Otherwise, discourage other threads to take the same trajectory
             # via virtual loss and enqueue the leaf for evaluation by agent
             # network.
-            leaf.add_virtual_loss(up_to=self.root)
+            leaf.add_virtual_loss(up_to=self._root)
             leaves.append(leaf)
         # Evaluate the leaf-states all at once and backup the value estimates.
         if leaves:
-            action_probs, values = self.agent_netw.step(
-                self.TreeEnv.get_obs_for_states([leaf.state for leaf in leaves]))
-            for leaf, action_prob, value in zip(leaves, action_probs, values):
-                leaf.revert_virtual_loss(up_to=self.root)
-                leaf.incorporate_estimates(action_prob, value, up_to=self.root)
+            self._evaluate_leaf_states(leaves)
         return leaves
+
+
+def _select_public(tensordict: TensorDictBase) -> TensorDictBase:
+    """Selects the public keys from a tensordict."""
+    selected_keys = {key for key in tensordict.keys() if not key.startswith("_")}
+    return tensordict.select(*selected_keys)
