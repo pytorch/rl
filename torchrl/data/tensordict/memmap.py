@@ -167,6 +167,7 @@ class MemmapTensor(object):
             memmap_copy._index = deepcopy(memmap_copy._index)
         memmap_copy._index.append(index)
         memmap_copy.transfer_ownership = False
+        memmap_copy._shape_indexed = None
         return memmap_copy
 
     def __iter__(self):
@@ -182,6 +183,7 @@ class MemmapTensor(object):
     ):
         self._device = device
         self._shape = shape
+        self._shape_indexed = None
         self.transfer_ownership = transfer_ownership
         self.np_shape = tuple(self._shape)
         self._dtype = dtype
@@ -386,11 +388,13 @@ class MemmapTensor(object):
 
     @property
     def shape(self) -> torch.Size:
-        idx = self._index if self._index is not None else []
-        size = self._shape
-        for _idx in idx:
-            size = _getitem_batch_size(size, _idx)
-        return size
+        if self._shape_indexed is None:
+            size = self._shape
+            idx = self._index if self._index is not None else []
+            for _idx in idx:
+                size = _getitem_batch_size(size, _idx)
+            self._shape_indexed = size
+        return self._shape_indexed
 
     def cpu(self) -> torch.Tensor:
         """Defines the device of the MemmapTensor as "cpu".
@@ -414,9 +418,13 @@ class MemmapTensor(object):
         return self._tensor.numpy()
 
     def copy_(self, other: Union[torch.Tensor, MemmapTensor]) -> MemmapTensor:
-        print(other.shape, self.shape)
-        print(other.device, self.device)
-        print(other.dtype, self.dtype)
+        if isinstance(other, MemmapTensor) and other.filename == self.filename:
+            if not self.shape == other.shape:
+                raise ValueError(
+                    f"""Cannot copy a MemmapTensor of shape {other.shape} on a 
+MemmapTensor of shape {self.shape}."""
+                )
+            self._index = other._index
         self._save_item(other)
         return self
 
@@ -567,7 +575,9 @@ class MemmapTensor(object):
         return super(MemmapTensor, self).__reduce__(*args, **kwargs)
 
     def to(
-        self, dest: Union[DEVICE_TYPING, torch.dtype]
+        self,
+        dest: Union[DEVICE_TYPING, torch.dtype],
+        non_blocking=False,
     ) -> Union[torch.Tensor, MemmapTensor]:
         """Maps a MemmapTensor to a given dtype or device.
 
@@ -577,6 +587,7 @@ class MemmapTensor(object):
                 (as the data is stored on physical memory). For dtypes, the
                 tensor will be retrieved, mapped to the
                 desired dtype and cast to a new MemmapTensor.
+            non_blocking (bool, optional): no-op for MemmapTensors. Default: False.
 
         Returns: the same memmap-tensor with the changed device.
 
