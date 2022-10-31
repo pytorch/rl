@@ -36,5 +36,8 @@ fi
 # smoke test
 python -c "import functorch"
 
+# install snapshot
+pip install git+https://github.com/pytorch/torchsnapshot
+
 printf "* Installing torchrl\n"
 python setup.py develop

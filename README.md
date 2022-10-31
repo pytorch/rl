@@ -424,9 +424,10 @@ git clone https://github.com/pytorch/rl
 Go to the directory where you have cloned the torchrl repo and install it
 ```
 cd /path/to/torchrl/
-python setup.py develop
+pip install -e .
 ```
 
+On M1 machines, this should work out-of-the-box with the nightly build of PyTorch.
 If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message
 `(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
 
