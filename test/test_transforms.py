@@ -290,12 +290,12 @@ def test_nested_transformed_env():
     t2 = RewardScaling(0, 2)
     env = TransformedEnv(TransformedEnv(base_env, t1), t2)
 
-    assert(env.base_env is base_env)
-    assert(isinstance(env.transform, Compose))
+    assert env.base_env is base_env
+    assert isinstance(env.transform, Compose)
     children = list(env.transform.transforms.children())
     assert len(children) == 2
-    assert(children[0] == t1)
-    assert(children[1] == t2)
+    assert children[0] == t1
+    assert children[1] == t2
 
 
 class TestTransforms:
@@ -1334,7 +1334,13 @@ class TestR3M:
         transformed_env.close()
 
     @pytest.mark.parametrize("stack_images", [True, False])
-    @pytest.mark.parametrize("parallel", [True, False])
+    @pytest.mark.parametrize(
+        "parallel",
+        [
+            False,
+            True,
+        ],
+    )
     def test_r3m_mult_images(self, model, device, stack_images, parallel):
         keys_in = ["next_pixels", "next_pixels2"]
         keys_out = ["next_vec"] if stack_images else ["next_vec", "next_vec2"]

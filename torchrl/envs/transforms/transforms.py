@@ -244,10 +244,20 @@ class Transform(nn.Module):
                 raise ValueError(
                     "A transform parent must be either another Compose transform or an environment object."
                 )
+            compose = parent
+            # the parent of the compose must be a TransformedEnv
+            compose_parent = compose.parent
+            if not isinstance(compose_parent, TransformedEnv):
+                raise ValueError(
+                    f"Compose parent was of type {type(compose_parent)} but expected TransformedEnv."
+                )
             out = TransformedEnv(
-                parent.parent.base_env,
+                compose_parent.base_env,
+                transform=compose_parent.transform
+                if compose_parent.transform is not compose
+                else None,
             )
-            for transform in parent.transforms:
+            for transform in compose.transforms:
                 if transform is self:
                     break
                 out.append_transform(transform)
@@ -291,24 +301,28 @@ class TransformedEnv(EnvBase):
         cache_specs: bool = True,
         **kwargs,
     ):
+        self._transform = None
         device = kwargs.pop("device", env.device)
         env = env.to(device)
         super().__init__(device=None, **kwargs)
 
         if isinstance(env, TransformedEnv):
             self._set_env(env.base_env, device)
-            self.transform = env.transform
-            self.transform.set_parent(self)
-            self.append_transform(transform)
+            if type(transform) is not Compose:
+                # we don't use isinstance as some transforms may be subclassed from
+                # Compose but with other features that we don't want to loose.
+                transform = [transform]
+            env_transform = env.transform
+            if type(env_transform) is not Compose:
+                env_transform = [env_transform]
+            transform = Compose(*env_transform, *transform).to(device)
         else:
             self._set_env(env, device)
             if transform is None:
                 transform = Compose()
-                transform.set_parent(self)
             else:
                 transform = transform.to(device)
-            transform.eval()
-            self.transform = transform
+        self.transform = transform
 
         self._last_obs = None
         self.cache_specs = cache_specs
@@ -320,6 +334,21 @@ class TransformedEnv(EnvBase):
         self.base_env = env.to(device)
         # updates need not be inplace, as transforms may modify values out-place
         self.base_env._inplace_update = False
+
+    @property
+    def transform(self) -> Transform:
+        return self._transform
+
+    @transform.setter
+    def transform(self, transform: Transform):
+        if not isinstance(transform, Transform):
+            raise ValueError(
+                f"""Expected a transform of type torchrl.envs.transforms.Transform,
+but got an object of type {type(transform)}."""
+            )
+        transform.set_parent(self)
+        transform.eval()
+        self._transform = transform
 
     @property
     def device(self) -> bool:
