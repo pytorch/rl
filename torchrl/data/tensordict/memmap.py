@@ -428,6 +428,7 @@ class MemmapTensor(object):
 MemmapTensor of shape {self.shape}."""
                 )
             self._index = other._index
+            return self
         self._save_item(other)
         return self
 
