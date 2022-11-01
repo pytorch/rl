@@ -87,13 +87,10 @@ class DummyTrainerNode:
         if self._ret is None:
             self._ret = ret
         else:
-            # a = self._ret[0]["a"]
-            # new_a = ret[0]["a"]
-            # assert a.filename == new_a.filename, (a.filename, new_a.filename)
-            # a.copy_(new_a)
             self._ret[0].update_(ret[0])
         # make sure the content is read
-        self._ret[0]["a"] + 1
+        self._ret[0]["observation"] + 1
+        self._ret[0]["next_observation"] + 1
         dt = timeit.default_timer() - start_time
         return dt
 
@@ -126,10 +123,8 @@ class ReplayBufferNode(TensorDictReplayBuffer):
         print("ReplayBufferNode constructed")
         tds = TensorDict(
             {
-                "a": torch.randn(
-                    BUFFER_SIZE,
-                    TENSOR_SIZE,
-                )
+                "observation": torch.randn(BUFFER_SIZE, TENSOR_SIZE, ),
+                "next_observation": torch.randn(BUFFER_SIZE, TENSOR_SIZE, ),
             },
             batch_size=[BUFFER_SIZE],
         )
