@@ -38,7 +38,7 @@ storage_options = {
 storage_arg_options = {
     "LazyMemmapStorage": dict(scratch_dir="/tmp/", device=torch.device("cpu")),
     "LazyTensorStorage": dict(),
-    "ListStorage": ListStorage,
+    "ListStorage": dict(),
 }
 parser = argparse.ArgumentParser(
     description="RPC Replay Buffer Example",
@@ -111,8 +111,8 @@ class DummyTrainerNode:
 class ReplayBufferNode(TensorDictReplayBuffer):
     def __init__(self, capacity: int) -> None:
         super().__init__(
-            storage=storage_options[STORAGE_TYPE](
-                max_size=capacity, **storage_arg_options[STORAGE_TYPE]
+            storage=storage_options[storage_type](
+                max_size=capacity, **storage_arg_options[storage_type]
             ),
             sampler=RandomSampler(),
             writer=RoundRobinWriter(),
@@ -137,14 +137,6 @@ class ReplayBufferNode(TensorDictReplayBuffer):
         return super().sample(batch_size)
 
     @accept_remote_rref_invocation
-    def add(self, data: TensorDict) -> None:
-        res = super().add(data)
-        print(
-            f'[{self.id}] Replay Buffer Insertion at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")} with {len(self)} elements'
-        )
-        return res
-
-    @accept_remote_rref_invocation
     def extend(self, tensordicts: Union[List, TensorDict]) -> torch.Tensor:
         return super().extend(tensordicts)
 
@@ -152,16 +144,15 @@ class ReplayBufferNode(TensorDictReplayBuffer):
 if __name__ == "__main__":
     args = parser.parse_args()
     rank = args.rank
-    STORAGE_TYPE = args.storage
+    storage_type = args.storage
 
-    print(f"Rank: {rank}; Storage: {STORAGE_TYPE}")
+    print(f"Rank: {rank}; Storage: {storage_type}")
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-    str_init_method = "tcp://localhost:10000"
     options = rpc.TensorPipeRpcBackendOptions(
-        num_worker_threads=16, init_method=str_init_method, rpc_timeout=120
+        num_worker_threads=16, init_method="tcp://localhost:10004", rpc_timeout=120
     )
     if rank == 0:
         # rank 0 is the trainer
@@ -179,11 +170,11 @@ if __name__ == "__main__":
             if i == 0:
                 continue
             results.append(result)
-            print(results[-1])
+            print(i, results[-1])
 
         print(f"Results: {results}")
         with open(
-            f'./benchmark_{datetime.now().strftime("%d-%m-%Y%H:%M:%S")};batch_size={BATCH_SIZE};tensor_size={TENSOR_SIZE};repeat={REPEATS};storage={STORAGE_TYPE}.pkl',
+            f'./benchmark_{datetime.now().strftime("%d-%m-%Y%H:%M:%S")};batch_size={BATCH_SIZE};tensor_size={TENSOR_SIZE};repeat={REPEATS};storage={storage_type}.pkl',
             "wb+",
         ) as f:
             pickle.dump(results, f)
