@@ -374,7 +374,6 @@ def test_gru_net(device, num_layers, bidirectional):
     # Test with dim > 3
     seq_len = 1
     x = torch.randn(2, 3, batch_size, seq_len, in_features, device=device)
-    print(x.shape)
     x_out, h = net(x)
     for i in range(5):
         x_out, h = net(x, h)
