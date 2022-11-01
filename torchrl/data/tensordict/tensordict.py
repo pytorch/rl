@@ -603,6 +603,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensor = self._convert_to_tensor(input)
         else:
             tensor = input
+        # if (
+        #     _has_functorch and isinstance(tensor, Tensor) and is_batchedtensor(tensor)
+        # ):  # TODO: find a proper way of doing that
+        #     return tensor
+        #     tensor = _unwrap_value(tensor)[0]
 
         if check_device and self.device is not None:
             device = self.device
