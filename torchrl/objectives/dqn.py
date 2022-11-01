@@ -14,6 +14,7 @@ from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
 )
+from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from ..data.tensordict.tensordict import TensorDictBase
 from .common import LossModule
 from .utils import distance_loss, next_state_value
@@ -43,16 +44,9 @@ class DQNLoss(LossModule):
         super().__init__()
         self.delay_value = delay_value
 
-        if isinstance(value_network, QValueActor):
-            pass
-        elif isinstance(value_network, nn.Module):
-            # value_network is a nn.Module that doesn't operate on tensordicts directly
-            # so we attempt to auto-wrap value_network with QValueActor
-            value_network = QValueActor(value_network)
-        else:
-            raise TypeError(
-                f"DQNLoss requires value_network to be of QValueActor dtype, got {type(value_network)}"
-            )
+        value_network = ensure_tensordict_compatible(
+            module=value_network, wrapper_type=QValueActor
+        )
 
         self.convert_to_functional(
             value_network,
@@ -158,7 +152,7 @@ class DistributionalDQNLoss(LossModule):
 
     def __init__(
         self,
-        value_network: DistributionalQValueActor,
+        value_network: Union[DistributionalQValueActor, nn.Module],
         gamma: float,
         priority_key: str = "td_error",
         delay_value: bool = False,
@@ -167,12 +161,11 @@ class DistributionalDQNLoss(LossModule):
         self.register_buffer("gamma", torch.tensor(gamma))
         self.priority_key = priority_key
         self.delay_value = delay_value
-        if not isinstance(value_network, DistributionalQValueActor):
-            raise TypeError(
-                "Expected value_network to be of type "
-                "DistributionalQValueActor "
-                f"but got {type(value_network)}"
-            )
+
+        value_network = ensure_tensordict_compatible(
+            module=value_network, wrapper_type=DistributionalQValueActor
+        )
+
         self.convert_to_functional(
             value_network,
             "value_network",
