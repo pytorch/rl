@@ -1075,14 +1075,14 @@ class GRUNet(nn.Module):
         >>> net = GRUNet(in_features=11, hidden_size=13, out_features=3)
         >>> print(net)
         GRUNet(
-              (mlp_in): MLP(
-                (0): Linear(in_features=11, out_features=13, bias=True)
-              )
-              (gru): GRU(13, 13, batch_first=True)
-              (mlp_out): MLP(
-                (0): Linear(in_features=13, out_features=3, bias=True)
-              )
-            )
+          (mlp_in): MLP(
+            (0): Linear(in_features=11, out_features=13, bias=True)
+          )
+          (gru): GRU(13, 13, batch_first=True)
+          (mlp_out): MLP(
+            (0): Linear(in_features=13, out_features=3, bias=True)
+          )
+        )
         >>> x_no_batch = torch.randn(7, 11)
         >>> out_no_batch, h_no_batch = net(x_no_batch)
         >>> print(out_no_batch.shape, h_no_batch.shape)
@@ -1092,60 +1092,60 @@ class GRUNet(nn.Module):
         >>> print(out_batch.shape, h_batch.shape)
         torch.Size([5, 7, 3]) torch.Size([1, 5, 13])
         >>> net2 = GRUNet(
-        >>>     in_features=11,
-        >>>     hidden_size=13,
-        >>>     out_features=3,
-        >>>     mlp_input_kwargs={
-        >>>         "depth": 0,
-        >>>         "activation_class": nn.ReLU,
-        >>>         "activate_last_layer": True,
-        >>>     },
-        >>> )
+        ...     in_features=11,
+        ...     hidden_size=13,
+        ...     out_features=3,
+        ...     mlp_input_kwargs={
+        ...         "depth": 0,
+        ...         "activation_class": nn.ReLU,
+        ...         "activate_last_layer": True,
+        ...     },
+        ... )
         >>> print(net2)
         GRUNet(
-              (mlp_in): MLP(
-                (0): Linear(in_features=11, out_features=13, bias=True)
-                (1): ReLU()
-              )
-              (gru): GRU(13, 13, batch_first=True)
-              (mlp_out): MLP(
-                (0): Linear(in_features=13, out_features=3, bias=True)
-              )
-            )
+          (mlp_in): MLP(
+            (0): Linear(in_features=11, out_features=13, bias=True)
+            (1): ReLU()
+          )
+          (gru): GRU(13, 13, batch_first=True)
+          (mlp_out): MLP(
+            (0): Linear(in_features=13, out_features=3, bias=True)
+          )
+        )
         >>> net_stacked = GRUNet(
-        >>>     in_features=123,
-        >>>     hidden_size=456,
-        >>>     out_features=3,
-        >>>     mlp_input_kwargs={
-        >>>         "in_features": 11,
-        >>>         "out_features": 13,
-        >>>     },
-        >>>     gru_kwargs={
-        >>>         "input_size": 13,
-        >>>         "hidden_size": 13,
-        >>>         "num_layers": 2,
-        >>>     },
-        >>>     mlp_output_kwargs={
-        >>>         "in_features": 13,
-        >>>         "depth": 0
-        >>>     },
-        >>> )
+        ...     in_features=123,
+        ...     hidden_size=456,
+        ...     out_features=3,
+        ...     mlp_input_kwargs={
+        ...         "in_features": 11,
+        ...         "out_features": 13,
+        ...     },
+        ...     gru_kwargs={
+        ...         "input_size": 13,
+        ...         "hidden_size": 13,
+        ...         "num_layers": 2,
+        ...     },
+        ...     mlp_output_kwargs={
+        ...         "in_features": 13,
+        ...         "depth": 0
+        ...     },
+        ... )
         >>> print(net_stacked)
         GRUNet(
-              (mlp_in): MLP(
-                (0): Linear(in_features=11, out_features=32, bias=True)
-                (1): Tanh()
-                (2): Linear(in_features=32, out_features=32, bias=True)
-                (3): Tanh()
-                (4): Linear(in_features=32, out_features=32, bias=True)
-                (5): Tanh()
-                (6): Linear(in_features=32, out_features=13, bias=True)
-              )
-              (gru): GRU(13, 13, num_layers=2, batch_first=True)
-              (mlp_out): MLP(
-                (0): Linear(in_features=13, out_features=3, bias=True)
-              )
-            )
+          (mlp_in): MLP(
+            (0): Linear(in_features=11, out_features=32, bias=True)
+            (1): Tanh()
+            (2): Linear(in_features=32, out_features=32, bias=True)
+            (3): Tanh()
+            (4): Linear(in_features=32, out_features=32, bias=True)
+            (5): Tanh()
+            (6): Linear(in_features=32, out_features=13, bias=True)
+          )
+          (gru): GRU(13, 13, num_layers=2, batch_first=True)
+          (mlp_out): MLP(
+            (0): Linear(in_features=13, out_features=3, bias=True)
+          )
+        )
         >>> x_batch = torch.randn(5, 7, 11)
         >>> out_batch_stacked, h_batch_stacked = net_stacked(x_batch)
         >>> print(out_batch_stacked.shape, h_batch_stacked.shape)
