@@ -226,7 +226,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         else:
             stacked_td = tensordicts
 
-        index = super().extend(tensordicts)
+        index = super().extend(stacked_td)
         stacked_td.set(
             "index",
             torch.tensor(index, dtype=torch.int, device=stacked_td.device),
