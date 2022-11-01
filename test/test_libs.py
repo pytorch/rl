@@ -7,19 +7,26 @@ import argparse
 import numpy as np
 import pytest
 import torch
+from _utils_internal import _test_fake_tensordict
 from _utils_internal import get_available_devices
 from packaging import version
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs.libs.dm_control import _has_dmc
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
+from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
 
 if _has_gym:
     import gym
 
     gym_version = version.parse(gym.__version__)
+    if gym_version > version.parse("0.19"):
+        from gym.wrappers.pixel_observation import PixelObservationWrapper
+    else:
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as PixelObservationWrapper,
+        )
 
-    from gym.wrappers.pixel_observation import PixelObservationWrapper
 if _has_dmc:
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
@@ -33,13 +40,37 @@ from torchrl.envs.libs.gym import GymEnv, GymWrapper
 
 IS_OSX = platform == "darwin"
 
+if _has_gym:
+    from packaging import version
+
+    gym_version = version.parse(gym.__version__)
+    PENDULUM_VERSIONED = (
+        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
+    )
+    HC_VERSIONED = (
+        "HalfCheetah-v4" if gym_version > version.parse("0.20.0") else "HalfCheetah-v2"
+    )
+    PONG_VERSIONED = (
+        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
+    )
+
+    # if gym_version < version.parse("0.24.0") and torch.cuda.device_count() > 0:
+    #     from opengl_rendering import create_opengl_context
+    #
+    #     create_opengl_context()
+else:
+    # placeholders
+    PENDULUM_VERSIONED = "Pendulum-v1"
+    HC_VERSIONED = "HalfCheetah-v4"
+    PONG_VERSIONED = "ALE/Pong-v5"
+
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize(
     "env_name",
     [
-        "Pendulum-v1",
-        "ALE/Pong-v5",
+        PONG_VERSIONED,
+        PENDULUM_VERSIONED,
     ],
 )
 @pytest.mark.parametrize("frame_skip", [1, 3])
@@ -52,10 +83,10 @@ IS_OSX = platform == "darwin"
     ],
 )
 def test_gym(env_name, frame_skip, from_pixels, pixels_only):
-    if env_name == "ALE/Pong-v5" and not from_pixels:
+    if env_name == PONG_VERSIONED and not from_pixels:
         raise pytest.skip("already pixel")
     elif (
-        env_name == "Pendulum-v1"
+        env_name != PONG_VERSIONED
         and from_pixels
         and (not torch.has_cuda or not torch.cuda.device_count())
     ):
@@ -86,7 +117,7 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     final_seed0, final_seed1 = final_seed
     assert final_seed0 == final_seed1
 
-    if env_name == "ALE/Pong-v5":
+    if env_name == PONG_VERSIONED:
         base_env = gym.make(env_name, frameskip=frame_skip)
         frame_skip = 1
     else:
@@ -205,13 +236,21 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
     "env_lib,env_args,env_kwargs",
     [
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
-        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": True}],
+        [GymEnv, (HC_VERSIONED,), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
-        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": False}],
-        [GymEnv, ("ALE/Pong-v5",), {}],
+        [GymEnv, (HC_VERSIONED,), {"from_pixels": False}],
+        [GymEnv, (PONG_VERSIONED,), {}],
     ],
 )
 def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
+    if (
+        gym_version < version.parse("0.26.0")
+        and env_kwargs.get("from_pixels", False)
+        and torch.cuda.device_count() == 0
+    ):
+        pytest.skip(
+            "Skipping test as rendering is not supported in tests before gym 0.26."
+        )
     env = env_lib(*env_args, **env_kwargs)
     td = env.rollout(max_steps=5)
     td0 = td[0]
@@ -231,15 +270,19 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
     "env_lib,env_args,env_kwargs",
     [
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
-        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": True}],
+        [GymEnv, (HC_VERSIONED,), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
-        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": False}],
-        [GymEnv, ("ALE/Pong-v5",), {}],
+        [GymEnv, (HC_VERSIONED,), {"from_pixels": False}],
+        [GymEnv, (PONG_VERSIONED,), {}],
     ],
 )
 @pytest.mark.parametrize("device", get_available_devices())
 class TestCollectorLib:
     def test_collector_run(self, env_lib, env_args, env_kwargs, device):
+        from_pixels = env_kwargs.get("from_pixels", False)
+        if from_pixels and (not torch.has_cuda or not torch.cuda.device_count()):
+            raise pytest.skip("no cuda device")
+
         env_fn = EnvCreator(lambda: env_lib(*env_args, **env_kwargs, device=device))
         env = ParallelEnv(3, env_fn)
         collector = MultiaSyncDataCollector(
@@ -264,6 +307,17 @@ class TestCollectorLib:
                 break
         collector.shutdown()
         del env
+
+
+@pytest.mark.skipif(not _has_habitat, reason="habitat not installed")
+@pytest.mark.parametrize("envname", ["HabitatRenderPick-v0", "HabitatRenderPick-v0"])
+class TestHabitat:
+    def test_habitat(self, envname):
+        env = HabitatEnv(envname)
+        print([_env for _env in env.available_envs if _env.startswith("Habitat")])
+        rollout = env.rollout(3)
+        print(rollout)
+        _test_fake_tensordict(env)
 
 
 if __name__ == "__main__":

@@ -10,9 +10,11 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
+#apt-get update -y && apt-get install git wget gcc g++ -y
+
 if [ "${CU_VERSION:-}" == cpu ] ; then
+    cudatoolkit="cpuonly"
     version="cpu"
-    echo "Using cpu build"
 else
     if [[ ${#CU_VERSION} -eq 4 ]]; then
         CUDA_VERSION="${CU_VERSION:2:1}.${CU_VERSION:3:1}"
@@ -21,23 +23,23 @@ else
     fi
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
+    cudatoolkit="cudatoolkit=${version}"
 fi
+
+case "$(uname -s)" in
+    Darwin*) os=MacOSX;;
+    *) os=Linux
+esac
 
 # submodules
 git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+    conda install pytorch==1.10.0 torchvision==0.11.0 torchaudio==0.10.0 cpuonly -c pytorch -y
 else
-    pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cu113
+    conda install pytorch==1.10.0 torchvision==0.11.0 torchaudio==0.10.0 cudatoolkit=11.3 -c pytorch -c conda-forge -y
 fi
-
-# smoke test
-python -c "import functorch"
-
-# install snapshot
-pip install git+https://github.com/pytorch/torchsnapshot
 
 printf "* Installing torchrl\n"
 python setup.py develop

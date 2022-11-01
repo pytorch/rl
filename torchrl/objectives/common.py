@@ -7,13 +7,28 @@ from __future__ import annotations
 
 from typing import Iterator, Optional, Tuple, List, Union
 
-import functorch
 import torch
-from functorch._src.make_functional import _swap_state
-from torch import nn
+
+from torchrl.modules.functional_modules import FunctionalModuleWithBuffers
+
+_has_functorch = False
+try:
+    import functorch
+    from functorch._src.make_functional import _swap_state
+
+    _has_functorch = True
+except ImportError:
+    print(
+        "failed to import functorch. TorchRL's features that do not require "
+        "functional programming should work, but functionality and performance "
+        "may be affected. Consider installing functorch and/or upgrating pytorch."
+    )
+    FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
+
+from torch import nn, Tensor
 from torch.nn import Parameter
 
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.modules import TensorDictModule
 
 
@@ -56,6 +71,31 @@ class LossModule(nn.Module):
         create_target_params: bool = False,
         compare_against: Optional[List[Parameter]] = None,
     ) -> None:
+        if _has_functorch:
+            return self._convert_to_functional_functorch(
+                module,
+                module_name,
+                expand_dim,
+                create_target_params,
+                compare_against,
+            )
+        else:
+            return self._convert_to_functional_native(
+                module,
+                module_name,
+                expand_dim,
+                create_target_params,
+                compare_against,
+            )
+
+    def _convert_to_functional_functorch(
+        self,
+        module: TensorDictModule,
+        module_name: str,
+        expand_dim: Optional[int] = None,
+        create_target_params: bool = False,
+        compare_against: Optional[List[Parameter]] = None,
+    ) -> None:
         # To make it robust to device casting, we must register list of
         # tensors as lazy calls to `getattr(self, name_of_tensor)`.
         # Otherwise, casting the module to a device will keep old references
@@ -73,6 +113,7 @@ class LossModule(nn.Module):
                 module_params,
                 module_buffers,
             ) = functorch.make_functional_with_buffers(module)
+
             for _ in functional_module.parameters():
                 # Erase meta params
                 none_state = [None for _ in module_params + module_buffers]
@@ -132,26 +173,28 @@ class LossModule(nn.Module):
             # # delete weights of original model as they do not correspond to the optimized weights
             # network_orig.to("meta")
 
+        params_list = params
+        set_params = set(self.parameters())
         setattr(
             self,
             "_" + param_name,
             nn.ParameterList(
                 [
                     p
-                    for p in params
-                    if isinstance(p, nn.Parameter) and p not in set(self.parameters())
+                    for p in params_list
+                    if isinstance(p, nn.Parameter) and p not in set_params
                 ]
             ),
         )
         setattr(self, param_name, params)
 
+        buffer_name = module_name + "_buffers"
         # we register each buffer independently
         for i, p in enumerate(module_buffers):
             _name = module_name + f"_buffer_{i}"
             self.register_buffer(_name, p)
             # replace buffer by its name
             module_buffers[i] = _name
-        buffer_name = module_name + "_buffers"
         setattr(
             self.__class__,
             buffer_name,
@@ -205,16 +248,175 @@ class LossModule(nn.Module):
             property(lambda _self: self._target_buffer_getter(module_name)),
         )
 
+    def _convert_to_functional_native(
+        self,
+        module: TensorDictModule,
+        module_name: str,
+        expand_dim: Optional[int] = None,
+        create_target_params: bool = False,
+        compare_against: Optional[List[Parameter]] = None,
+    ) -> None:
+        # To make it robust to device casting, we must register list of
+        # tensors as lazy calls to `getattr(self, name_of_tensor)`.
+        # Otherwise, casting the module to a device will keep old references
+        # to uncast tensors
+
+        network_orig = module
+        if hasattr(module, "make_functional_with_buffers"):
+            functional_module, (
+                params,
+                module_buffers,
+            ) = module.make_functional_with_buffers(clone=True)
+        else:
+            (
+                functional_module,
+                params,
+                module_buffers,
+            ) = FunctionalModuleWithBuffers._create_from(module)
+
+        param_name = module_name + "_params"
+
+        # params must be retrieved directly because make_functional will copy the content
+        params_vals = TensorDict(
+            {name: value for name, value in network_orig.named_parameters()}, []
+        )
+        # rename params_vals keys to match params: otherwise we'll have to deal with
+        # module.module.param or such names. We assume that there is a constant prefix
+        # and that, when sorted, all keys will match. We could check that the values
+        # do match too.
+        keys1 = sorted(list(params.flatten_keys(".").keys()))
+        keys2 = sorted(list(params_vals.keys()))
+        for key1, key2 in zip(keys1, keys2):
+            params_vals.rename_key(key2, key1)
+        params = params_vals.unflatten_keys(".")
+
+        if expand_dim:
+            raise ImportError(
+                "expanding params is only possible when functorch is installed,"
+                "as this feature requires calls to the vmap operator."
+            )
+
+        params_list = list(params.flatten_keys(".").values())
+        set_params = set(self.parameters())
+        setattr(
+            self,
+            "_" + param_name,
+            nn.ParameterList(
+                [
+                    p
+                    for p in params_list
+                    if isinstance(p, nn.Parameter) and p not in set_params
+                ]
+            ),
+        )
+        setattr(self, param_name, params)
+
+        buffer_name = module_name + "_buffers"
+        buffers_iter = list(module_buffers.flatten_keys(".").items())
+        module_buffers_list = []
+        for i, (key, value) in enumerate(sorted(buffers_iter)):
+            _name = module_name + f"_buffer_{i}"
+            self.register_buffer(_name, value)
+            # replace buffer by its name
+            module_buffers_list.append((_name, key))
+        setattr(
+            self.__class__,
+            buffer_name,
+            property(
+                lambda _self: TensorDict(
+                    {
+                        key: getattr(_self, _name)
+                        for (_name, key) in module_buffers_list
+                    },
+                    [],
+                    device=self.device,
+                ).unflatten_keys(".")
+            ),
+        )
+
+        # we set the functional module
+        setattr(self, module_name, functional_module)
+
+        name_params_target = "_target_" + param_name
+        name_buffers_target = "_target_" + buffer_name
+        if create_target_params:
+            target_params = getattr(self, param_name).detach().clone()
+            target_params_items = sorted(list(target_params.flatten_keys(".").items()))
+            target_params_list = []
+            for i, (key, val) in enumerate(target_params_items):
+                name = "_".join([name_params_target, str(i)])
+                self.register_buffer(name, val)
+                target_params_list.append((name, key))
+            setattr(
+                self.__class__,
+                name_params_target,
+                property(
+                    lambda _self: TensorDict(
+                        {
+                            key: getattr(_self, _name)
+                            for (_name, key) in target_params_list
+                        },
+                        [],
+                        device=self.device,
+                    ).unflatten_keys(".")
+                ),
+            )
+
+            target_buffers = getattr(self, buffer_name).detach().clone()
+            target_buffers_items = sorted(
+                list(target_buffers.flatten_keys(".").items())
+            )
+            target_buffers_list = []
+            for i, (key, val) in enumerate(target_buffers_items):
+                name = "_".join([name_buffers_target, str(i)])
+                self.register_buffer(name, val)
+                target_buffers_list.append((name, key))
+            setattr(
+                self.__class__,
+                name_buffers_target,
+                property(
+                    lambda _self: TensorDict(
+                        {
+                            key: getattr(_self, _name)
+                            for (_name, key) in target_buffers_list
+                        },
+                        [],
+                        device=self.device,
+                    ).unflatten_keys(".")
+                ),
+            )
+
+        else:
+            setattr(self.__class__, name_params_target, None)
+            setattr(self.__class__, name_buffers_target, None)
+
+        setattr(
+            self.__class__,
+            name_params_target[1:],
+            property(lambda _self: self._target_param_getter(module_name)),
+        )
+        setattr(
+            self.__class__,
+            name_buffers_target[1:],
+            property(lambda _self: self._target_buffer_getter(module_name)),
+        )
+
     def _target_param_getter(self, network_name):
         target_name = "_target_" + network_name + "_params"
         param_name = network_name + "_params"
         if hasattr(self, target_name):
             target_params = getattr(self, target_name)
             if target_params is not None:
+                if isinstance(target_params, TensorDictBase):
+                    return target_params
                 return tuple(target_params)
             else:
-                # detach params as a surrogate for targets
-                return tuple(p.detach() for p in getattr(self, param_name))
+                params = getattr(self, param_name)
+                if isinstance(params, TensorDictBase):
+                    return params.detach()
+                else:
+                    # detach params as a surrogate for targets
+                    return tuple(p.detach() for p in params)
 
         else:
             raise RuntimeError(
@@ -227,9 +429,15 @@ class LossModule(nn.Module):
         if hasattr(self, target_name):
             target_buffers = getattr(self, target_name)
             if target_buffers is not None:
+                if isinstance(target_buffers, TensorDictBase):
+                    return target_buffers
                 return tuple(target_buffers)
             else:
-                return tuple(p.detach() for p in getattr(self, buffer_name))
+                buffers = getattr(self, buffer_name)
+                if isinstance(buffers, TensorDictBase):
+                    return buffers.detach()
+                else:
+                    return tuple(p.detach() for p in buffers)
 
         else:
             raise RuntimeError(
@@ -246,6 +454,12 @@ class LossModule(nn.Module):
         for p in self.parameters():
             return p.device
         return torch.device("cpu")
+
+    def register_buffer(
+        self, name: str, tensor: Optional[Tensor], persistent: bool = True
+    ) -> None:
+        tensor = tensor.to(self.device)
+        return super().register_buffer(name, tensor, persistent)
 
     def parameters(self, recurse: bool = True) -> Iterator[Parameter]:
         for _, param in self.named_parameters(recurse=recurse):

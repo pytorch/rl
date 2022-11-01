@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import os
 import tempfile
 from argparse import Namespace
 from collections import OrderedDict
@@ -11,6 +12,7 @@ from time import sleep
 
 import pytest
 import torch
+from torch import nn
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
@@ -24,6 +26,9 @@ from torchrl.data import (
     TensorDict,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
+    ListStorage,
+    LazyMemmapStorage,
+    LazyTensorStorage,
 )
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.trainers import Recorder, Trainer
@@ -38,7 +43,16 @@ from torchrl.trainers.trainers import (
     RewardNormalizer,
     SelectKeys,
     UpdateWeights,
+    _has_ts,
 )
+
+
+def _fun_checker(fun, checker):
+    def new_fun(*args, **kwargs):
+        checker[0] = True
+        return fun(*args, **kwargs)
+
+    return new_fun, fun
 
 
 class MockingOptim:
@@ -57,121 +71,526 @@ class MockingCollector:
     def shutdown(self):
         pass
 
+    def state_dict(self):
+        return dict()
 
-def mocking_trainer() -> Trainer:
+    def load_state_dict(self, state_dict):
+        pass
+
+
+class MockingLossModule(nn.Module):
+    pass
+
+
+def mocking_trainer(file=None) -> Trainer:
     trainer = Trainer(
         MockingCollector(),
         *[
             None,
         ]
-        * 3,
-        MockingOptim(),
+        * 2,
+        loss_module=MockingLossModule(),
+        optimizer=MockingOptim(),
+        save_trainer_file=file,
     )
-    trainer.collected_frames = 0
     trainer._pbar_str = OrderedDict()
     return trainer
 
 
-def test_selectkeys():
-    trainer = mocking_trainer()
-    key1 = "first key"
-    key2 = "second key"
-    td = TensorDict(
-        {
-            key1: torch.randn(3),
-            key2: torch.randn(3),
-        },
-        [],
-    )
-    trainer.register_op("batch_process", SelectKeys([key1]))
-    td_out = trainer._process_batch_hook(td)
-    assert key1 in td_out.keys()
-    assert key2 not in td_out.keys()
+class TestSelectKeys:
+    def test_selectkeys(self):
+        trainer = mocking_trainer()
+        key1 = "first key"
+        key2 = "second key"
+        td = TensorDict(
+            {
+                key1: torch.randn(3),
+                key2: torch.randn(3),
+            },
+            [],
+        )
+        trainer.register_op("batch_process", SelectKeys([key1]))
+        td_out = trainer._process_batch_hook(td)
+        assert key1 in td_out.keys()
+        assert key2 not in td_out.keys()
 
+    def test_selectkeys_statedict(self):
+        if not _has_ts:
+            os.environ["CKPT_BACKEND"] = "torch"
+        trainer = mocking_trainer()
+        key1 = "first key"
+        key2 = "second key"
+        td = TensorDict(
+            {
+                key1: torch.randn(3),
+                key2: torch.randn(3),
+            },
+            [],
+        )
+        hook = SelectKeys([key1])
+        hook.register(trainer)
+        trainer._process_batch_hook(td)
 
-@pytest.mark.parametrize("prioritized", [True, False])
-def test_rb_trainer(prioritized):
-    trainer = mocking_trainer()
-    S = 100
-    if prioritized:
-        replay_buffer = TensorDictPrioritizedReplayBuffer(S, 1.1, 0.9)
-    else:
-        replay_buffer = TensorDictReplayBuffer(S)
+        trainer2 = mocking_trainer()
+        hook2 = SelectKeys([key1])
+        hook2.register(trainer2)
+        sd = trainer.state_dict()
+        assert not len(sd["select_keys"])
+        trainer2.load_state_dict(sd)
 
-    N = 9
-    rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
+    @pytest.mark.parametrize("backend", ["torchsnapshot", "torch"])
+    def test_selectkeys_save(self, backend):
+        if not _has_ts and backend == "torchsnapshot":
+            pytest.skip("torchsnapshot not found")
+        # we overwrite the method to make sure that load_state_dict and state_dict are being called
+        state_dict_has_been_called = [False]
+        load_state_dict_has_been_called = [False]
+        SelectKeys.state_dict, SelectKeys_state_dict = _fun_checker(
+            SelectKeys.state_dict, state_dict_has_been_called
+        )
+        SelectKeys.load_state_dict, SelectKeys_load_state_dict = _fun_checker(
+            SelectKeys.load_state_dict, load_state_dict_has_been_called
+        )
 
-    trainer.register_op("batch_process", rb_trainer.extend)
-    trainer.register_op("process_optim_batch", rb_trainer.sample)
-    trainer.register_op("post_loss", rb_trainer.update_priority)
+        os.environ["CKPT_BACKEND"] = backend
 
-    key1 = "first key"
-    key2 = "second key"
-    batch = 101
-    td = TensorDict(
-        {
-            key1: torch.randn(batch, 3),
-            key2: torch.randn(batch, 3),
-        },
-        [batch],
-    )
-    td_out = trainer._process_batch_hook(td)
-    assert td_out is td
-
-    td_out = trainer._process_optim_batch_hook(td)
-    assert td_out is not td
-    assert td_out.shape[0] == N
-
-    if prioritized:
-        td_out.set(replay_buffer.priority_key, torch.rand(N))
-
-    td_out = trainer._post_loss_hook(td_out)
-    if prioritized:
-        for idx in range(min(S, batch)):
-            if idx in td_out.get("index"):
-                assert replay_buffer._sum_tree[idx] != 1.0
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            if backend == "torch":
+                file = path.join(tmpdirname, "file.pt")
+            elif backend == "torchsnapshot":
+                file = tmpdirname
             else:
-                assert replay_buffer._sum_tree[idx] == 1.0
-    else:
-        assert "index" not in td_out.keys()
+                raise NotImplementedError
+            trainer = mocking_trainer(file=file)
+            key1 = "first key"
+            key2 = "second key"
+            td = TensorDict(
+                {
+                    key1: torch.randn(3),
+                    key2: torch.randn(3),
+                },
+                [],
+            )
+            select_keys = SelectKeys([key1])
+            select_keys.register(trainer)
+            trainer._process_batch_hook(td)
+            trainer.save_trainer(force_save=True)
+            assert state_dict_has_been_called[0]
+
+            trainer2 = mocking_trainer()
+            select_keys2 = SelectKeys([key1])
+            select_keys2.register(trainer2)
+
+            trainer2.load_from_file(file)
+            assert state_dict_has_been_called[0]
+            if backend == "torch":
+                assert load_state_dict_has_been_called[0]
+
+        SelectKeys.state_dict = SelectKeys_state_dict
+        SelectKeys.load_state_dict = SelectKeys_load_state_dict
 
 
-@pytest.mark.parametrize("logname", ["a", "b"])
-@pytest.mark.parametrize("pbar", [True, False])
-def test_log_reward(logname, pbar):
-    trainer = mocking_trainer()
-    trainer.collected_frames = 0
+@pytest.mark.parametrize("prioritized", [False, True])
+class TestRB:
+    def test_rb_trainer(self, prioritized):
+        torch.manual_seed(0)
+        trainer = mocking_trainer()
+        S = 100
+        if prioritized:
+            replay_buffer = TensorDictPrioritizedReplayBuffer(S, 1.1, 0.9)
+        else:
+            replay_buffer = TensorDictReplayBuffer(S)
 
-    log_reward = LogReward(logname, log_pbar=pbar)
-    trainer.register_op("pre_steps_log", log_reward)
-    td = TensorDict({"reward": torch.ones(3)}, [3])
-    trainer._pre_steps_log_hook(td)
-    if _has_tqdm and pbar:
-        assert trainer._pbar_str[logname] == 1
-    else:
-        assert logname not in trainer._pbar_str
-    assert trainer._log_dict[logname][-1] == 1
+        N = 9
+        rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
+
+        rb_trainer.register(trainer)
+
+        key1 = "first key"
+        key2 = "second key"
+        batch = 101
+        td = TensorDict(
+            {
+                key1: torch.randn(batch, 3),
+                key2: torch.randn(batch, 3),
+            },
+            [batch],
+        )
+        td_out = trainer._process_batch_hook(td)
+        assert td_out is td
+
+        td_out = trainer._process_optim_batch_hook(td)
+        assert td_out is not td
+        assert td_out.shape[0] == N
+
+        if prioritized:
+            td_out.set(replay_buffer.priority_key, torch.rand(N))
+
+        td_out = trainer._post_loss_hook(td_out)
+        if prioritized:
+            for idx in range(min(S, batch)):
+                if idx in td_out.get("index"):
+                    assert replay_buffer._sum_tree[idx] != 1.0
+                else:
+                    assert replay_buffer._sum_tree[idx] == 1.0
+        else:
+            assert "index" not in td_out.keys()
+
+    @pytest.mark.parametrize(
+        "storage_type",
+        [
+            "memmap",
+            "list",
+        ],
+    )
+    def test_rb_trainer_state_dict(self, prioritized, storage_type):
+        torch.manual_seed(0)
+        trainer = mocking_trainer()
+        S = 100
+        if storage_type == "list":
+            storage = ListStorage(S)
+            collate_fn = lambda x: torch.stack(x, 0)
+        elif storage_type == "memmap":
+            storage = LazyMemmapStorage(S)
+            collate_fn = lambda x: x
+        else:
+            raise NotImplementedError
+
+        if prioritized:
+            replay_buffer = TensorDictPrioritizedReplayBuffer(
+                S, 1.1, 0.9, storage=storage, collate_fn=collate_fn
+            )
+        else:
+            replay_buffer = TensorDictReplayBuffer(
+                S, storage=storage, collate_fn=collate_fn
+            )
+
+        N = 9
+        rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
+
+        rb_trainer.register(trainer)
+
+        key1 = "first key"
+        key2 = "second key"
+        batch = 101
+        td = TensorDict(
+            {
+                key1: torch.randn(batch, 3),
+                key2: torch.randn(batch, 3),
+            },
+            [batch],
+        )
+        trainer._process_batch_hook(td)
+        td_out = trainer._process_optim_batch_hook(td)
+        if prioritized:
+            td_out.set(replay_buffer.priority_key, torch.rand(N))
+        trainer._post_loss_hook(td_out)
+
+        trainer2 = mocking_trainer()
+        if prioritized:
+            replay_buffer2 = TensorDictPrioritizedReplayBuffer(
+                S, 1.1, 0.9, storage=storage
+            )
+        else:
+            replay_buffer2 = TensorDictReplayBuffer(S, storage=storage)
+        N = 9
+        rb_trainer2 = ReplayBufferTrainer(replay_buffer=replay_buffer2, batch_size=N)
+        rb_trainer2.register(trainer2)
+        sd = trainer.state_dict()
+        trainer2.load_state_dict(sd)
+
+        assert rb_trainer2.replay_buffer.cursor > 0
+        assert rb_trainer2.replay_buffer.cursor == rb_trainer.replay_buffer.cursor
+
+        if storage_type == "list":
+            assert len(rb_trainer2.replay_buffer._storage._storage) > 0
+            assert len(rb_trainer2.replay_buffer._storage._storage) == len(
+                rb_trainer.replay_buffer._storage._storage
+            )
+            for i, s in enumerate(rb_trainer2.replay_buffer._storage._storage):
+                assert (s == rb_trainer.replay_buffer._storage._storage[i]).all()
+        elif storage_type == "memmap":
+            assert rb_trainer2.replay_buffer._storage._len > 0
+            assert (
+                rb_trainer2.replay_buffer._storage._storage
+                == rb_trainer.replay_buffer._storage._storage
+            ).all()
+
+    @pytest.mark.parametrize(
+        "storage_type",
+        [
+            "memmap",
+            "list",
+            "tensor",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "backend",
+        [
+            "torchsnapshot",
+            "torch",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "re_init",
+        [
+            False,
+            True,
+        ],
+    )
+    def test_rb_trainer_save(
+        self, prioritized, storage_type, backend, re_init, S=10, batch=11, N=3
+    ):
+        if not _has_ts and backend == "torchsnapshot":
+            pytest.skip("torchsnapshot not found")
+
+        torch.manual_seed(0)
+        # we overwrite the method to make sure that load_state_dict and state_dict are being called
+        state_dict_has_been_called = [False]
+        load_state_dict_has_been_called = [False]
+        state_dict_has_been_called_td = [False]
+        load_state_dict_has_been_called_td = [False]
+        ReplayBufferTrainer.state_dict, ReplayBufferTrainer_state_dict = _fun_checker(
+            ReplayBufferTrainer.state_dict, state_dict_has_been_called
+        )
+        (
+            ReplayBufferTrainer.load_state_dict,
+            ReplayBufferTrainer_load_state_dict,
+        ) = _fun_checker(
+            ReplayBufferTrainer.load_state_dict, load_state_dict_has_been_called
+        )
+        TensorDict.state_dict, TensorDict_state_dict = _fun_checker(
+            TensorDict.state_dict, state_dict_has_been_called_td
+        )
+        TensorDict.load_state_dict, TensorDict_load_state_dict = _fun_checker(
+            TensorDict.load_state_dict, load_state_dict_has_been_called_td
+        )
+
+        os.environ["CKPT_BACKEND"] = backend
+
+        def make_storage():
+            if storage_type == "list":
+                storage = ListStorage(S)
+                collate_fn = lambda x: torch.stack(x, 0)
+            elif storage_type == "tensor":
+                storage = LazyTensorStorage(S)
+                collate_fn = lambda x: x
+            elif storage_type == "memmap":
+                storage = LazyMemmapStorage(S)
+                collate_fn = lambda x: x
+            else:
+                raise NotImplementedError
+            return storage, collate_fn
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            if backend == "torch":
+                file = path.join(tmpdirname, "file.pt")
+            elif backend == "torchsnapshot":
+                file = tmpdirname
+            else:
+                raise NotImplementedError
+            trainer = mocking_trainer(file)
+
+            storage, collate_fn = make_storage()
+            if prioritized:
+                replay_buffer = TensorDictPrioritizedReplayBuffer(
+                    S, 1.1, 0.9, storage=storage, collate_fn=collate_fn
+                )
+            else:
+                replay_buffer = TensorDictReplayBuffer(
+                    S, storage=storage, collate_fn=collate_fn
+                )
+
+            rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
+            rb_trainer.register(trainer)
+            key1 = "first key"
+            key2 = "second key"
+            td = TensorDict(
+                {
+                    key1: torch.randn(batch, 3),
+                    key2: torch.randn(batch, 3),
+                },
+                [batch],
+            )
+            trainer._process_batch_hook(td)
+            td_out = trainer._process_optim_batch_hook(td)
+            if prioritized:
+                td_out.set(replay_buffer.priority_key, torch.rand(N))
+            trainer._post_loss_hook(td_out)
+            trainer.save_trainer(True)
+
+            trainer2 = mocking_trainer()
+            storage2, _ = make_storage()
+            if prioritized:
+                replay_buffer2 = TensorDictPrioritizedReplayBuffer(
+                    S, 1.1, 0.9, storage=storage2, collate_fn=collate_fn
+                )
+            else:
+                replay_buffer2 = TensorDictReplayBuffer(
+                    S, storage=storage2, collate_fn=collate_fn
+                )
+            N = 9
+            rb_trainer2 = ReplayBufferTrainer(
+                replay_buffer=replay_buffer2, batch_size=N
+            )
+            rb_trainer2.register(trainer2)
+            if re_init:
+                trainer2._process_batch_hook(td.to_tensordict().zero_())
+            trainer2.load_from_file(file)
+            assert state_dict_has_been_called[0]
+            assert load_state_dict_has_been_called[0]
+            assert state_dict_has_been_called_td[0]
+            if re_init:
+                assert load_state_dict_has_been_called_td[0]
+            if backend != "torch":
+                td1 = (
+                    storage._storage
+                )  # trainer.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
+                td2 = trainer2._modules["replay_buffer"].replay_buffer._storage._storage
+                if storage_type == "list":
+                    assert all([(_td1 == _td2).all() for _td1, _td2 in zip(td1, td2)])
+                    assert all([(_td1 is not _td2) for _td1, _td2 in zip(td1, td2)])
+                    assert storage2._storage is td2
+                else:
+                    assert (td1 == td2).all()
+                    assert td1 is not td2
+                    if storage_type == "memmap":
+                        assert td2.is_memmap()
+                    assert storage2._storage is td2
+
+        ReplayBufferTrainer.state_dict = ReplayBufferTrainer_state_dict
+        ReplayBufferTrainer.load_state_dict = ReplayBufferTrainer_load_state_dict
+        TensorDict.state_dict = TensorDict_state_dict
+        TensorDict.load_state_dict = TensorDict_load_state_dict
 
 
-def test_reward_norm():
-    torch.manual_seed(0)
-    trainer = mocking_trainer()
+class TestLogReward:
+    @pytest.mark.parametrize("logname", ["a", "b"])
+    @pytest.mark.parametrize("pbar", [True, False])
+    def test_log_reward(self, logname, pbar):
+        trainer = mocking_trainer()
+        trainer.collected_frames = 0
 
-    reward_normalizer = RewardNormalizer()
-    trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
-    trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
+        log_reward = LogReward(logname, log_pbar=pbar)
+        trainer.register_op("pre_steps_log", log_reward)
+        td = TensorDict({"reward": torch.ones(3)}, [3])
+        trainer._pre_steps_log_hook(td)
+        if _has_tqdm and pbar:
+            assert trainer._pbar_str[logname] == 1
+        else:
+            assert logname not in trainer._pbar_str
+        assert trainer._log_dict[logname][-1] == 1
 
-    batch = 10
-    reward = torch.randn(batch, 1)
-    td = TensorDict({"reward": reward.clone()}, [batch])
-    td_out = trainer._process_batch_hook(td)
-    assert (td_out.get("reward") == reward).all()
-    assert not reward_normalizer._normalize_has_been_called
+    @pytest.mark.parametrize("logname", ["a", "b"])
+    @pytest.mark.parametrize("pbar", [True, False])
+    def test_log_reward_register(self, logname, pbar):
+        trainer = mocking_trainer()
+        trainer.collected_frames = 0
 
-    td_norm = trainer._process_optim_batch_hook(td)
-    assert reward_normalizer._normalize_has_been_called
-    torch.testing.assert_close(td_norm.get("reward").mean(), torch.zeros([]))
-    torch.testing.assert_close(td_norm.get("reward").std(), torch.ones([]))
+        log_reward = LogReward(logname, log_pbar=pbar)
+        log_reward.register(trainer)
+        td = TensorDict({"reward": torch.ones(3)}, [3])
+        trainer._pre_steps_log_hook(td)
+        if _has_tqdm and pbar:
+            assert trainer._pbar_str[logname] == 1
+        else:
+            assert logname not in trainer._pbar_str
+        assert trainer._log_dict[logname][-1] == 1
+
+
+class TestRewardNorm:
+    def test_reward_norm(self):
+        torch.manual_seed(0)
+        trainer = mocking_trainer()
+
+        reward_normalizer = RewardNormalizer()
+        reward_normalizer.register(trainer)
+
+        batch = 10
+        reward = torch.randn(batch, 1)
+        td = TensorDict({"reward": reward.clone()}, [batch])
+        td_out = trainer._process_batch_hook(td)
+        assert (td_out.get("reward") == reward).all()
+        assert not reward_normalizer._normalize_has_been_called
+
+        td_norm = trainer._process_optim_batch_hook(td)
+        assert reward_normalizer._normalize_has_been_called
+        torch.testing.assert_close(td_norm.get("reward").mean(), torch.zeros([]))
+        torch.testing.assert_close(td_norm.get("reward").std(), torch.ones([]))
+
+    def test_reward_norm_state_dict(self):
+        torch.manual_seed(0)
+        trainer = mocking_trainer()
+
+        reward_normalizer = RewardNormalizer()
+        reward_normalizer.register(trainer)
+
+        batch = 10
+        reward = torch.randn(batch, 1)
+        td = TensorDict({"reward": reward.clone()}, [batch])
+        trainer._process_batch_hook(td)
+        trainer._process_optim_batch_hook(td)
+        state_dict = trainer.state_dict()
+
+        trainer2 = mocking_trainer()
+
+        reward_normalizer2 = RewardNormalizer()
+        reward_normalizer2.register(trainer2)
+        trainer2.load_state_dict(state_dict)
+        for key, item in reward_normalizer._reward_stats.items():
+            assert item == reward_normalizer2._reward_stats[key]
+
+    @pytest.mark.parametrize(
+        "backend",
+        [
+            "torchsnapshot",
+            "torch",
+        ],
+    )
+    def test_reward_norm_save(self, backend):
+        if not _has_ts and backend == "torchsnapshot":
+            pytest.skip("torchsnapshot not found")
+
+        os.environ["CKPT_BACKEND"] = backend
+
+        state_dict_has_been_called = [False]
+        load_state_dict_has_been_called = [False]
+        RewardNormalizer.state_dict, RewardNormalizer_state_dict = _fun_checker(
+            RewardNormalizer.state_dict, state_dict_has_been_called
+        )
+        (
+            RewardNormalizer.load_state_dict,
+            RewardNormalizer_load_state_dict,
+        ) = _fun_checker(
+            RewardNormalizer.load_state_dict, load_state_dict_has_been_called
+        )
+
+        torch.manual_seed(0)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            if backend == "torch":
+                file = path.join(tmpdirname, "file.pt")
+            elif backend == "torchsnapshot":
+                file = tmpdirname
+            else:
+                raise NotImplementedError
+            trainer = mocking_trainer(file)
+            reward_normalizer = RewardNormalizer()
+            reward_normalizer.register(trainer)
+
+            batch = 10
+            reward = torch.randn(batch, 1)
+            td = TensorDict({"reward": reward.clone()}, [batch])
+            trainer._process_batch_hook(td)
+            trainer._process_optim_batch_hook(td)
+            trainer.save_trainer(True)
+
+            trainer2 = mocking_trainer()
+            reward_normalizer2 = RewardNormalizer()
+            reward_normalizer2.register(trainer2)
+            trainer2.load_from_file(file)
+
+        RewardNormalizer.state_dict = RewardNormalizer_state_dict
+        RewardNormalizer.load_state_dict = RewardNormalizer_load_state_dict
 
 
 def test_masking():
@@ -192,40 +611,67 @@ def test_masking():
     assert (td["tensor"][td["mask"].squeeze(-1)] == td_out["tensor"]).all()
 
 
-def test_subsampler():
-    torch.manual_seed(0)
-    trainer = mocking_trainer()
+class TestSubSampler:
+    def test_subsampler(self):
+        torch.manual_seed(0)
+        trainer = mocking_trainer()
 
-    batch_size = 10
-    sub_traj_len = 5
+        batch_size = 10
+        sub_traj_len = 5
 
-    key1 = "key1"
-    key2 = "key2"
+        key1 = "key1"
+        key2 = "key2"
 
-    trainer.register_op(
-        "process_optim_batch",
-        BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len),
-    )
+        subsampler = BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len)
+        subsampler.register(trainer)
 
-    td = TensorDict(
-        {
-            key1: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
-            key2: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
-        },
-        [2, 10],
-    )
+        td = TensorDict(
+            {
+                key1: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
+                key2: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
+            },
+            [2, 10],
+        )
 
-    td_out = trainer._process_optim_batch_hook(td)
-    assert td_out.shape == torch.Size([batch_size // sub_traj_len, sub_traj_len])
-    assert (td_out.get(key1) == td_out.get(key2)).all()
+        td_out = trainer._process_optim_batch_hook(td)
+        assert td_out.shape == torch.Size([batch_size // sub_traj_len, sub_traj_len])
+        assert (td_out.get(key1) == td_out.get(key2)).all()
+
+    def test_subsampler_state_dict(self):
+        trainer = mocking_trainer()
+
+        batch_size = 10
+        sub_traj_len = 5
+
+        key1 = "key1"
+        key2 = "key2"
+
+        subsampler = BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len)
+        subsampler.register(trainer)
+
+        td = TensorDict(
+            {
+                key1: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
+                key2: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
+            },
+            [2, 10],
+        )
+
+        torch.manual_seed(0)
+        td0 = trainer._process_optim_batch_hook(td)
+        trainer2 = mocking_trainer()
+        subsampler2 = BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len)
+        subsampler2.register(trainer2)
+        trainer2.load_state_dict(trainer.state_dict())
+        torch.manual_seed(0)
+        td1 = trainer2._process_optim_batch_hook(td)
+        assert (td0 == td1).all()
 
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library")
 @pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
-def test_recorder():
-    with tempfile.TemporaryDirectory() as folder:
-        print(folder)
-        logger = TensorboardLogger(exp_name=folder)
+class TestRecorder:
+    def _get_args(self):
         args = Namespace()
         args.env_name = "ALE/Pong-v5"
         args.env_task = ""
@@ -245,46 +691,118 @@ def test_recorder():
         args.image_size = 84
         args.collector_devices = ["cpu"]
         args.categorical_action_encoding = False
+        return args
 
-        N = 8
+    def test_recorder(self, N=8):
+        args = self._get_args()
+        with tempfile.TemporaryDirectory() as folder:
+            logger = TensorboardLogger(exp_name=folder)
 
-        recorder = transformed_env_constructor(
-            args,
-            video_tag="tmp",
-            norm_obs_only=True,
-            stats={"loc": 0, "scale": 1},
-            logger=logger,
-        )()
+            recorder = transformed_env_constructor(
+                args,
+                video_tag="tmp",
+                norm_obs_only=True,
+                stats={"loc": 0, "scale": 1},
+                logger=logger,
+            )()
 
-        recorder = Recorder(
-            record_frames=args.record_frames,
-            frame_skip=args.frame_skip,
-            policy_exploration=None,
-            recorder=recorder,
-            record_interval=args.record_interval,
-        )
-
-        for _ in range(N):
-            recorder(None)
-
-        for (_, _, filenames) in walk(folder):
-            filename = filenames[0]
-            break
-        for _ in range(3):
-            ea = event_accumulator.EventAccumulator(
-                path.join(folder, filename),
-                size_guidance={
-                    event_accumulator.IMAGES: 0,
-                },
+            recorder = Recorder(
+                record_frames=args.record_frames,
+                frame_skip=args.frame_skip,
+                policy_exploration=None,
+                recorder=recorder,
+                record_interval=args.record_interval,
             )
-            ea.Reload()
-            print(ea.Tags())
-            img = ea.Images("tmp_ALE/Pong-v5_video")
-            try:
-                assert len(img) == N // args.record_interval
+            trainer = mocking_trainer()
+            recorder.register(trainer)
+
+            for _ in range(N):
+                recorder(None)
+
+            for (_, _, filenames) in walk(folder):
+                filename = filenames[0]
                 break
-            except AssertionError:
-                sleep(0.1)
+
+            for _ in range(3):
+                ea = event_accumulator.EventAccumulator(
+                    path.join(folder, filename),
+                    size_guidance={
+                        event_accumulator.IMAGES: 0,
+                    },
+                )
+                ea.Reload()
+                img = ea.Images("tmp_ALE/Pong-v5_video")
+                try:
+                    assert len(img) == N // args.record_interval
+                    break
+                except AssertionError:
+                    sleep(0.1)
+
+    @pytest.mark.parametrize(
+        "backend",
+        [
+            "torchsnapshot",
+            "torch",
+        ],
+    )
+    def test_recorder_load(self, backend, N=8):
+        if not _has_ts and backend == "torchsnapshot":
+            pytest.skip("torchsnapshot not found")
+
+        os.environ["CKPT_BACKEND"] = backend
+        state_dict_has_been_called = [False]
+        load_state_dict_has_been_called = [False]
+        Recorder.state_dict, Recorder_state_dict = _fun_checker(
+            Recorder.state_dict, state_dict_has_been_called
+        )
+        (
+            Recorder.load_state_dict,
+            Recorder_load_state_dict,
+        ) = _fun_checker(Recorder.load_state_dict, load_state_dict_has_been_called)
+
+        args = self._get_args()
+
+        def _make_recorder_and_trainer(tmpdirname):
+            logger = TensorboardLogger(exp_name=f"{tmpdirname}/tb")
+            if backend == "torch":
+                file = path.join(tmpdirname, "file.pt")
+            elif backend == "torchsnapshot":
+                file = tmpdirname
+            else:
+                raise NotImplementedError
+            trainer = mocking_trainer(file)
+
+            recorder = transformed_env_constructor(
+                args,
+                video_tag="tmp",
+                norm_obs_only=True,
+                stats={"loc": 0, "scale": 1},
+                logger=logger,
+            )()
+
+            recorder = Recorder(
+                record_frames=args.record_frames,
+                frame_skip=args.frame_skip,
+                policy_exploration=None,
+                recorder=recorder,
+                record_interval=args.record_interval,
+            )
+            recorder.register(trainer)
+            return trainer, recorder, file
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            trainer, recorder, file = _make_recorder_and_trainer(tmpdirname)
+            for _ in range(N):
+                recorder(None)
+            trainer.save_trainer(True)
+            with tempfile.TemporaryDirectory() as tmpdirname2:
+                trainer2, recorder2, _ = _make_recorder_and_trainer(tmpdirname2)
+                trainer2.load_from_file(file)
+            assert recorder2._count == 8
+            assert state_dict_has_been_called[0]
+            assert load_state_dict_has_been_called[0]
+        Recorder.state_dict = Recorder_state_dict
+        Recorder.load_state_dict = Recorder_load_state_dict
 
 
 def test_updateweights():
@@ -293,26 +811,82 @@ def test_updateweights():
 
     T = 5
     update_weights = UpdateWeights(trainer.collector, T)
-    trainer.register_op("post_steps", update_weights)
+    update_weights.register(trainer)
     for t in range(T):
         trainer._post_steps_hook()
         assert trainer.collector.called_update_policy_weights_ is (t == T - 1)
     assert trainer.collector.called_update_policy_weights_
 
 
-def test_countframes():
-    torch.manual_seed(0)
-    trainer = mocking_trainer()
+class TestCountFrames:
+    def test_countframes(self):
+        torch.manual_seed(0)
+        trainer = mocking_trainer()
 
-    frame_skip = 3
-    batch = 10
-    count_frames = CountFramesLog(frame_skip=frame_skip)
-    trainer.register_op("pre_steps_log", count_frames)
-    td = TensorDict(
-        {"mask": torch.zeros(batch, dtype=torch.bool).bernoulli_()}, [batch]
+        frame_skip = 3
+        batch = 10
+        count_frames = CountFramesLog(frame_skip=frame_skip)
+        count_frames.register(trainer)
+        td = TensorDict(
+            {"mask": torch.zeros(batch, dtype=torch.bool).bernoulli_()}, [batch]
+        )
+        trainer._pre_steps_log_hook(td)
+        assert count_frames.frame_count == td.get("mask").sum() * frame_skip
+
+    @pytest.mark.parametrize(
+        "backend",
+        [
+            "torchsnapshot",
+            "torch",
+        ],
     )
-    trainer._pre_steps_log_hook(td)
-    assert count_frames.frame_count == td.get("mask").sum() * frame_skip
+    def test_countframes_load(self, backend):
+        if not _has_ts and backend == "torchsnapshot":
+            pytest.skip("torchsnapshot not found")
+
+        os.environ["CKPT_BACKEND"] = backend
+        state_dict_has_been_called = [False]
+        load_state_dict_has_been_called = [False]
+        CountFramesLog.state_dict, CountFramesLog_state_dict = _fun_checker(
+            CountFramesLog.state_dict, state_dict_has_been_called
+        )
+        (
+            CountFramesLog.load_state_dict,
+            CountFramesLog_load_state_dict,
+        ) = _fun_checker(
+            CountFramesLog.load_state_dict, load_state_dict_has_been_called
+        )
+
+        def _make_countframe_and_trainer(tmpdirname):
+            if backend == "torch":
+                file = path.join(tmpdirname, "file.pt")
+            elif backend == "torchsnapshot":
+                file = tmpdirname
+            else:
+                raise NotImplementedError
+            trainer = mocking_trainer(file)
+            count_frames = CountFramesLog(frame_skip=frame_skip)
+            count_frames.register(trainer)
+            return trainer, count_frames, file
+
+        torch.manual_seed(0)
+
+        frame_skip = 3
+        batch = 10
+        with tempfile.TemporaryDirectory() as tmpdirname, tempfile.TemporaryDirectory() as tmpdirname2:
+            trainer, count_frames, file = _make_countframe_and_trainer(tmpdirname)
+            td = TensorDict(
+                {"mask": torch.zeros(batch, dtype=torch.bool).bernoulli_()}, [batch]
+            )
+            trainer._pre_steps_log_hook(td)
+            trainer.save_trainer(True)
+            trainer2, count_frames2, _ = _make_countframe_and_trainer(tmpdirname2)
+            trainer2.load_from_file(file)
+            assert count_frames2.frame_count == td.get("mask").sum() * frame_skip
+            assert state_dict_has_been_called[0]
+            assert load_state_dict_has_been_called[0]
+        CountFramesLog.state_dict = CountFramesLog_state_dict
+        CountFramesLog.load_state_dict = CountFramesLog_load_state_dict
 
 
 if __name__ == "__main__":
