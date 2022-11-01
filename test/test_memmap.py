@@ -330,6 +330,57 @@ class TestIndexing:
         for i, _t in enumerate(t):
             assert (_t == t[i]).all()
 
+    @staticmethod
+    def _test_copy_onto_subproc(queue):
+        t = MemmapTensor(torch.rand(10, 5))
+        idx = torch.tensor([1, 2])
+        queue.put(t[idx], block=True)
+        while queue.full():
+            continue
+
+        idx = torch.tensor([3, 4])
+        queue.put(t[idx], block=True)
+        while queue.full():
+            continue
+        msg = queue.get(timeout=10.0)
+        assert msg == "done"
+        del queue
+
+    def test_copy_onto(self):
+        queue = mp.Queue(1)
+        p = mp.Process(target=TestIndexing._test_copy_onto_subproc, args=(queue,))
+        p.start()
+        try:
+            t_indexed1 = queue.get(timeout=10)
+            assert (t_indexed1._index[0] == torch.tensor([1, 2])).all()
+            # check that file is not opened if we did not access it
+            t_indexed1._memmap_array is None
+            _ = t_indexed1 + 1
+            # check that file is now opened
+            t_indexed1._memmap_array is not None
+
+            # receive 2nd copy
+            t_indexed2 = queue.get(timeout=10)
+            assert t_indexed2.filename == t_indexed1.filename
+            assert (t_indexed2._index[0] == torch.tensor([3, 4])).all()
+            # check that file is open only once
+            t_indexed1._memmap_array is not None
+            t_indexed2._memmap_array is None
+            t_indexed1.copy_(t_indexed2)
+            # same assertion: after copying we should only have one file opened
+            t_indexed1._memmap_array is not None
+            t_indexed2._memmap_array is None
+            _ = t_indexed2 + 1
+            # now we should find 2 opened files
+            t_indexed1._memmap_array is not None
+            t_indexed2._memmap_array is not None
+            queue.put("done", block=True)
+            queue.close()
+            p.join()
+        except Exception as e:
+            p.join()
+            raise e
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

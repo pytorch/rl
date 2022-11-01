@@ -14,7 +14,7 @@ from torch import Tensor
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.modules import TensorDictModule
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossModule, _has_functorch
 from torchrl.objectives.utils import (
     distance_loss,
     hold_out_params,
@@ -74,6 +74,9 @@ class REDQLoss(LossModule):
         delay_qvalue: bool = True,
         gSDE: bool = False,
     ):
+        if not _has_functorch:
+            raise ImportError("REDQ requires functorch to be installed.")
+
         super().__init__()
         self.convert_to_functional(
             actor_network,
