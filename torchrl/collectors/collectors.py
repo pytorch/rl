@@ -634,10 +634,8 @@ class SyncDataCollector(_DataCollector):
 
                 self._reset_if_necessary()
                 self._tensordict.update(
-                    step_mdp(
-                        self._tensordict.exclude("reward", "done"), keep_other=True
-                    ),
-                    inplace=True,
+                    step_mdp(self._tensordict), 
+                    inplace=True
                 )
             if self.return_in_place and len(self._tensordict_out.keys()) > 0:
                 tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))
