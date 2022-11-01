@@ -1207,10 +1207,9 @@ class GRUNet(nn.Module):
         if "bidirectional" in gru_kwargs and gru_kwargs["bidirectional"]:
             raise NotImplementedError("bidirectional GRU is not yet implemented.")
 
-        self.device = device
-        mlp_input_kwargs.update({"device": self.device})
-        gru_kwargs.update({"device": self.device, "batch_first": True})
-        mlp_output_kwargs.update({"device": self.device})
+        mlp_input_kwargs.update({"device": device})
+        gru_kwargs.update({"device": device, "batch_first": True})
+        mlp_output_kwargs.update({"device": device})
 
         self.mlp_in = MLP(**mlp_input_kwargs)
         self.gru = nn.GRU(**gru_kwargs)
