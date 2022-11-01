@@ -402,6 +402,15 @@ def test_gru_net(device, num_layers, bidirectional):
         x = torch.randn(1, 1, 1, 1, device=device)
         net(x)
 
+    # Test warning if batch_first False is asked
+    with pytest.warns(UserWarning):
+        gru_kwargs = {
+            "batch_first": False,
+        }
+        GRUNet(
+            in_features, hidden_size, out_features, gru_kwargs=gru_kwargs, device=device
+        )
+
 
 class TestFunctionalModules:
     def test_func_seq(self):

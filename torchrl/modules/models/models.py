@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from numbers import Number
 from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
 
@@ -1206,6 +1206,11 @@ class GRUNet(nn.Module):
             )
         if "bidirectional" in gru_kwargs and gru_kwargs["bidirectional"]:
             raise NotImplementedError("bidirectional GRU is not yet implemented.")
+
+        if not gru_kwargs.get("batch_first", True):
+            warnings.warn(
+                "You set batch_first to False, but GRUNet enforces batch_first to be True, gru_kwargs will be updated."
+            )
 
         mlp_input_kwargs.update({"device": device})
         gru_kwargs.update({"device": device, "batch_first": True})
