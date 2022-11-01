@@ -398,7 +398,7 @@ jobs:
             bash <(curl -s https://codecov.io/bash) -Z -F habitat-gpu
       - run:
           name: Post Process
-          command: docker run -t --gpus all -v $PWD:$PWD .circleci/unittest/linux_libs/scripts_habitat/post_process.sh
+          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_habitat/post_process.sh
       - store_test_results:
           path: test-results
 

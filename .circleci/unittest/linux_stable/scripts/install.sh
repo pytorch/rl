@@ -33,11 +33,8 @@ else
     pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
 fi
 
-printf "Installing functorch\n"
-pip3 install functorch
-
 # smoke test
-python -c "import functorch"
+python -c "import torch;import functorch"
 
 printf "* Installing torchrl\n"
 printf "g++ version: "

@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
+from torch import multiprocessing as mp
 from torchrl.data.tensordict.memmap import MemmapTensor
 
 
@@ -193,6 +194,192 @@ def test_memmap_zero_value(device, value, shape):
     assert m.shape == (3, 4)
     assert torch.all(m == expected_memmap_tensor)
     assert torch.all(m + torch.ones([3, 4], device=device) == 1)
+
+
+class TestIndexing:
+    @staticmethod
+    def _recv_and_send(queue, filename, shape):
+        t = queue.get(timeout=10.0)
+        assert isinstance(t, MemmapTensor)
+        assert t.filename == filename
+        assert t.shape == shape
+        assert (t == 0).all()
+        msg = "done"
+        queue.put(msg)
+        while queue.full():
+            continue
+
+        msg = queue.get(timeout=10.0)
+        assert msg == "modified"
+        assert (t == 1).all()
+        queue.put("done!!")
+
+        msg = queue.get(timeout=10.0)
+        assert msg == "deleted"
+        assert not os.path.isfile(filename)
+        with pytest.raises(FileNotFoundError, match="No such file or directory"):
+            print(t + 1)
+        queue.put("done again")
+        del queue
+
+    def test_simple_index(self):
+        t = MemmapTensor(torch.zeros(10))
+        # int
+        assert isinstance(t[0], MemmapTensor)
+        assert t[0].filename == t.filename
+        assert t[0].shape == torch.Size([])
+        assert t.shape == torch.Size([10])
+
+    def test_range_index(self):
+        t = MemmapTensor(torch.zeros(10))
+        # int
+        assert isinstance(t[:2], MemmapTensor)
+        assert t[:2].filename == t.filename
+        assert t[:2].shape == torch.Size([2])
+        assert t.shape == torch.Size([10])
+
+    def test_double_index(self):
+        t = MemmapTensor(torch.zeros(10))
+        y = t[:2][-1:]
+        # int
+        assert isinstance(y, MemmapTensor)
+        assert y.filename == t.filename
+        assert y.shape == torch.Size([1])
+        assert t.shape == torch.Size([10])
+
+    def test_ownership(self):
+        t = MemmapTensor(torch.zeros(10))
+        y = t[:2][-1:]
+        del t
+        with pytest.raises(FileNotFoundError, match="No such file or directory"):
+            y + 0
+
+    def test_send_across_procs(self):
+        t = MemmapTensor(torch.zeros(10), transfer_ownership=False)
+        queue = mp.Queue(1)
+        filename = t.filename
+        p = mp.Process(
+            target=TestIndexing._recv_and_send, args=(queue, filename, torch.Size([10]))
+        )
+        try:
+            p.start()
+            queue.put(t, block=True)
+            while queue.full():
+                continue
+            msg = queue.get(timeout=10.0)
+            assert msg == "done"
+
+            t.fill_(1.0)
+            queue.put("modified", block=True)
+            while queue.full():
+                continue
+            msg = queue.get(timeout=10.0)
+            assert msg == "done!!"
+
+            del t
+            queue.put("deleted")
+            while queue.full():
+                continue
+            msg = queue.get(timeout=10.0)
+            assert msg == "done again"
+            p.join()
+        except Exception as e:
+            p.join()
+            raise e
+
+    def test_send_across_procs_index(self):
+        t = MemmapTensor(torch.zeros(10), transfer_ownership=False)
+        queue = mp.Queue(1)
+        filename = t.filename
+        p = mp.Process(
+            target=TestIndexing._recv_and_send, args=(queue, filename, torch.Size([3]))
+        )
+        try:
+            p.start()
+            queue.put(t[:3], block=True)
+            while queue.full():
+                continue
+            msg = queue.get(timeout=10.0)
+            assert msg == "done"
+
+            t.fill_(1.0)
+            queue.put("modified", block=True)
+            while queue.full():
+                continue
+            msg = queue.get(timeout=10.0)
+            assert msg == "done!!"
+
+            del t
+            queue.put("deleted")
+            while queue.full():
+                continue
+            msg = queue.get(timeout=10.0)
+            assert msg == "done again"
+            p.join()
+        except Exception as e:
+            p.join()
+            raise e
+
+    def test_iteration(self):
+        t = MemmapTensor(torch.rand(10))
+        for i, _t in enumerate(t):
+            assert _t == t[i]
+
+    def test_iteration_nd(self):
+        t = MemmapTensor(torch.rand(10, 5))
+        for i, _t in enumerate(t):
+            assert (_t == t[i]).all()
+
+    @staticmethod
+    def _test_copy_onto_subproc(queue):
+        t = MemmapTensor(torch.rand(10, 5))
+        idx = torch.tensor([1, 2])
+        queue.put(t[idx], block=True)
+        while queue.full():
+            continue
+
+        idx = torch.tensor([3, 4])
+        queue.put(t[idx], block=True)
+        while queue.full():
+            continue
+        msg = queue.get(timeout=10.0)
+        assert msg == "done"
+        del queue
+
+    def test_copy_onto(self):
+        queue = mp.Queue(1)
+        p = mp.Process(target=TestIndexing._test_copy_onto_subproc, args=(queue,))
+        p.start()
+        try:
+            t_indexed1 = queue.get(timeout=10)
+            assert (t_indexed1._index[0] == torch.tensor([1, 2])).all()
+            # check that file is not opened if we did not access it
+            t_indexed1._memmap_array is None
+            _ = t_indexed1 + 1
+            # check that file is now opened
+            t_indexed1._memmap_array is not None
+
+            # receive 2nd copy
+            t_indexed2 = queue.get(timeout=10)
+            assert t_indexed2.filename == t_indexed1.filename
+            assert (t_indexed2._index[0] == torch.tensor([3, 4])).all()
+            # check that file is open only once
+            t_indexed1._memmap_array is not None
+            t_indexed2._memmap_array is None
+            t_indexed1.copy_(t_indexed2)
+            # same assertion: after copying we should only have one file opened
+            t_indexed1._memmap_array is not None
+            t_indexed2._memmap_array is None
+            _ = t_indexed2 + 1
+            # now we should find 2 opened files
+            t_indexed1._memmap_array is not None
+            t_indexed2._memmap_array is not None
+            queue.put("done", block=True)
+            queue.close()
+            p.join()
+        except Exception as e:
+            p.join()
+            raise e
 
 
 if __name__ == "__main__":
