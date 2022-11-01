@@ -4,8 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 from copy import copy, deepcopy
-import numpy as np
 
+import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices, retry
@@ -317,7 +317,9 @@ def test_added_transforms_are_in_eval_mode():
 
 class TestTransformedEnv:
     def test_independent_obs_specs_from_shared_env(self):
-        obs_spec = CompositeSpec(next_observation=BoundedTensorSpec(minimum=0, maximum=10))
+        obs_spec = CompositeSpec(
+            next_observation=BoundedTensorSpec(minimum=0, maximum=10)
+        )
         base_env = ContinuousActionVecMockEnv(observation_spec=obs_spec)
         t1 = TransformedEnv(base_env, transform=ObservationNorm(loc=3, scale=2))
         t2 = TransformedEnv(base_env, transform=ObservationNorm(loc=1, scale=6))
@@ -337,8 +339,12 @@ class TestTransformedEnv:
     def test_independent_reward_specs_from_shared_env(self):
         reward_spec = UnboundedContinuousTensorSpec()
         base_env = ContinuousActionVecMockEnv(reward_spec=reward_spec)
-        t1 = TransformedEnv(base_env, transform=RewardClipping(clamp_min=0, clamp_max=4))
-        t2 = TransformedEnv(base_env, transform=RewardClipping(clamp_min=-2, clamp_max=2))
+        t1 = TransformedEnv(
+            base_env, transform=RewardClipping(clamp_min=0, clamp_max=4)
+        )
+        t2 = TransformedEnv(
+            base_env, transform=RewardClipping(clamp_min=-2, clamp_max=2)
+        )
 
         t1_reward_spec = t1.reward_spec
         t2_reward_spec = t2.reward_spec
