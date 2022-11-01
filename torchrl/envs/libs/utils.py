@@ -42,6 +42,7 @@ class GymPixelObservationWrapper(ObservationWrapper):
     def __init__(
         self, env, pixels_only=True, render_kwargs=None, pixel_keys=("pixels",)
     ):
+        env.reset()
         super().__init__(env)
 
         if render_kwargs is None:

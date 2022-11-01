@@ -17,16 +17,28 @@ from typing import (
     Union,
 )
 
+import torch
+
+from torchrl.modules import functional_modules
+
+_has_functorch = False
 try:
     import functorch
+    from functorch import FunctionalModule, FunctionalModuleWithBuffers, vmap
+    from functorch._src.make_functional import _swap_state
 
     _has_functorch = True
 except ImportError:
-    _has_functorch = False
+    print(
+        "failed to import functorch. TorchRL's features that do not require "
+        "functional programming should work, but functionality and performance "
+        "may be affected. Consider installing functorch and/or upgrating pytorch."
+    )
+    from torchrl.modules.functional_modules import (
+        FunctionalModule,
+        FunctionalModuleWithBuffers,
+    )
 
-import torch
-from functorch import FunctionalModule, FunctionalModuleWithBuffers, vmap
-from functorch._src.make_functional import _swap_state
 from torch import nn, Tensor
 
 from torchrl.data import (
@@ -235,6 +247,14 @@ class TensorDictModule(nn.Module):
 
     @property
     def is_functional(self):
+        if not _has_functorch:
+            return isinstance(
+                self.module,
+                (
+                    functional_modules.FunctionalModule,
+                    functional_modules.FunctionalModuleWithBuffers,
+                ),
+            )
         return isinstance(
             self.module,
             (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers),
@@ -525,7 +545,7 @@ class TensorDictModule(nn.Module):
 
     @property
     def num_params(self):
-        if isinstance(
+        if _has_functorch and isinstance(
             self.module,
             (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers),
         ):
@@ -535,7 +555,9 @@ class TensorDictModule(nn.Module):
 
     @property
     def num_buffers(self):
-        if isinstance(self.module, (functorch.FunctionalModuleWithBuffers,)):
+        if _has_functorch and isinstance(
+            self.module, (functorch.FunctionalModuleWithBuffers,)
+        ):
             return len(self.module.buffer_names)
         else:
             return 0

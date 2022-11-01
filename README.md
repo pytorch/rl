@@ -375,7 +375,7 @@ conda install pytorch torchvision torchaudio cudatoolkit=11.6 -c pytorch -c cond
 # For CPU-only build
 conda install pytorch torchvision cpuonly -c pytorch
 
-# Functorch will be integrated in torch from 1.13. As of now, we still need the latest pip release
+# For torch 1.12 (and not above), one should install functorch separately:
 pip3 install functorch
 ```
 
