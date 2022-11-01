@@ -66,6 +66,7 @@ class DummyTrainerNode:
         print("DummyTrainerNode")
         self.id = rpc.get_worker_info().id
         self.replay_buffer = self._create_replay_buffer()
+        self._ret = None
 
     def train(self, batch_size: int) -> None:
         start_time = timeit.default_timer()
@@ -74,6 +75,13 @@ class DummyTrainerNode:
                     ReplayBufferNode.sample,
                     args=(self.replay_buffer, batch_size),
                 )
+        if self._ret is None:
+            self._ret = ret
+        else:
+            self._ret[0].update_(ret[0])
+        # make sure the content is read
+        self._ret[0]["a"] + 1
+
         dt = timeit.default_timer()-start_time
         print(ret)
         return dt               
