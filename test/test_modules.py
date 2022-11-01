@@ -321,20 +321,48 @@ def test_gru_net(device, num_layers, bidirectional):
     net = GRUNet(in_features, hidden_size, out_features, device=device)
 
     # Test a whole sequence
-    # Test with batch size
-    x = torch.randn(batch_size, seq_len, in_features, device=device)
+    # Test with dim = 1
+    x = torch.randn(in_features, device=device)
     x_out, h = net(x)
-    assert x_out.size() == torch.Size([batch_size, seq_len, out_features])
-    assert h.size() == torch.Size([num_layers, batch_size, hidden_size])
+    assert x_out.size() == torch.Size([out_features])
+    assert h.size() == torch.Size([num_layers, hidden_size])
 
-    # Test without batch_size
+    # Test with dim = 2
     x = torch.randn(seq_len, in_features, device=device)
     x_out, h = net(x)
     assert x_out.size() == torch.Size([seq_len, out_features])
     assert h.size() == torch.Size([num_layers, hidden_size])
 
+    # Test with dim = 3
+    x = torch.randn(batch_size, seq_len, in_features, device=device)
+    x_out, h = net(x)
+    assert x_out.size() == torch.Size([batch_size, seq_len, out_features])
+    assert h.size() == torch.Size([num_layers, batch_size, hidden_size])
+
+    # Test with dim > 3
+    x = torch.randn(2, 3, batch_size, seq_len, in_features, device=device)
+    x_out, h = net(x)
+    assert x_out.size() == torch.Size([2, 3, batch_size, seq_len, out_features])
+    assert h.size() == torch.Size([num_layers, 2, 3, batch_size, hidden_size])
+
     # Test a sequence with intermediate hidden state
-    # Test with batch size
+    # Test with dim = 1
+    x = torch.randn(in_features, device=device)
+    x_out, h = net(x)
+    for i in range(5):
+        x_out, h = net(x, h)
+        assert x_out.size() == torch.Size([out_features])
+        assert h.size() == torch.Size([num_layers, hidden_size])
+
+    # Test with dim = 2
+    x = torch.randn(seq_len, in_features, device=device)
+    x_out, h = net(x)
+    for i in range(5):
+        x_out, h = net(x, h)
+        assert x_out.size() == torch.Size([seq_len, out_features])
+        assert h.size() == torch.Size([num_layers, hidden_size])
+
+    # Test with dim = 3
     seq_len = 1
     x = torch.randn(batch_size, seq_len, in_features, device=device)
     x_out, h = net(x)
@@ -343,16 +371,17 @@ def test_gru_net(device, num_layers, bidirectional):
         assert x_out.size() == torch.Size([batch_size, seq_len, out_features])
         assert h.size() == torch.Size([num_layers, batch_size, hidden_size])
 
-    # Test without batch size
-    x = torch.randn(seq_len, in_features, device=device)
+    # Test with dim > 3
+    seq_len = 1
+    x = torch.randn(2, 3, batch_size, seq_len, in_features, device=device)
+    print(x.shape)
     x_out, h = net(x)
     for i in range(5):
         x_out, h = net(x, h)
-        assert x_out.size() == torch.Size([seq_len, out_features])
-        assert h.size() == torch.Size([num_layers, hidden_size])
+        assert x_out.size() == torch.Size([2, 3, batch_size, seq_len, out_features])
+        assert h.size() == torch.Size([num_layers, 2, 3, batch_size, hidden_size])
 
     # Test instantiation safety
-
     # Test mlp_input_kwargs["out_features"] != gru_kwargs["input_size"]
     with pytest.raises(ValueError):
         gru_kwargs = {"input_size": int(hidden_size / 2)}

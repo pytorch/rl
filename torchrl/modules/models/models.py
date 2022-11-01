@@ -1039,7 +1039,9 @@ class LSTMNet(nn.Module):
 
 class GRUNet(nn.Module):
     """The GRUNet is a neural network composed of a GRU layer encapsulated between two MLPs.
-    It supports batched or unbatched sequences as input and the time dimension is always the one preceding the features dimensions.
+    It supports unbatched or batched (of any dim) sequences as input.
+    The time dimension is always the one preceding the features dimensions.
+    Unsequenced inputs are accepted but only unbatched (dim=1).
 
     Args:
         in_features (int): number of input features.
@@ -1060,16 +1062,15 @@ class GRUNet(nn.Module):
         - The size of output features in mlp_input must be the same as the input size of the GRU.
         - The size of input features in mlp_output must be the same as the last hidden size of the GRU.
 
-    N = batch size and L = sequence size.
-
     Inputs:
-        x : Tensor of shape [L, in_features] or [N, L, in_features].
-        h_0 : Initial hidden state of shape [L, hidden_size] or [N, L, hidden_size]. (zeros if None provided)
+        x : Tensor of shape [..., L, in_features]. L is the sequence size.
+            An input of dim 1 is considered as an input of shape [1, in_features].
+        h_0 : Initial hidden state of shape [D*num_layers, ..., hidden_size] (zeros if None provided).
+            D = 1 always (no bidirectional) and num_layers = 1 by default (number of stacked GRU).
 
     Outputs:
-        mlp_out : Tensor of shape L, out_features] or [N, L, out_features].
-        last_h: Tensor of shape [D*num_layers, hidden_size] or [D*num_layers, N, hidden_size].
-            D = 1 always (no bidirectional) and num_layers = 1 by default (number of stacked GRU).
+        mlp_out : Tensor of shape [..., L, out_features].
+        last_h: Tensor of shape [D*num_layers, ..., hidden_size].
 
     Examples:
         >>> net = GRUNet(in_features=11, hidden_size=13, out_features=3)
@@ -1083,6 +1084,10 @@ class GRUNet(nn.Module):
             (0): Linear(in_features=13, out_features=3, bias=True)
           )
         )
+        >>> x_no_batch = torch.randn(11)
+        >>> out_no_batch, h_no_batch = net(x_no_batch)
+        >>> print(out_no_batch.shape, h_no_batch.shape)
+        torch.Size([3]) torch.Size([1, 13])
         >>> x_no_batch = torch.randn(7, 11)
         >>> out_no_batch, h_no_batch = net(x_no_batch)
         >>> print(out_no_batch.shape, h_no_batch.shape)
@@ -1091,6 +1096,10 @@ class GRUNet(nn.Module):
         >>> out_batch, h_batch = net(x_batch)
         >>> print(out_batch.shape, h_batch.shape)
         torch.Size([5, 7, 3]) torch.Size([1, 5, 13])
+        >>> x_batch = torch.randn(3, 5, 7, 11)
+        >>> out_batch, h_batch = net(x_batch)
+        >>> print(out_batch.shape, h_batch.shape)
+        torch.Size([3, 5, 7, 3]) torch.Size([1, 3, 5, 13])
         >>> net2 = GRUNet(
         ...     in_features=11,
         ...     hidden_size=13,
@@ -1221,9 +1230,24 @@ class GRUNet(nn.Module):
         self.mlp_out = MLP(**mlp_output_kwargs)
 
     def forward(self, x, h_0=None):
-        if 2 > len(x.size()) > 3:
-            raise RuntimeError("Input size must be of size 2 or 3.")
+        x_shape = x.shape
+        x_dim = len(x_shape)
+
+        if x_dim < 2:
+            x = x.unsqueeze(0)
+        if x_dim > 3:
+            x = x.flatten(end_dim=-3)
+            if h_0 is not None:
+                h_0 = h_0.flatten(start_dim=1, end_dim=-2)
+
         mlp_in = self.mlp_in(x)
         all_h, last_h = self.gru(mlp_in, h_0)
         mlp_out = self.mlp_out(all_h)
+
+        if x_dim < 2:
+            mlp_out = mlp_out.squeeze()
+        if x_dim > 3:
+            mlp_out = mlp_out.unflatten(0, x_shape[:-2])
+            last_h = last_h.unflatten(1, x_shape[:-2])
+
         return mlp_out, last_h
