@@ -1,35 +1,44 @@
 import argparse
 import os
-import random
+import pickle
 import sys
 import time
 import timeit
 from datetime import datetime
 from functools import wraps
-import pickle
 from typing import Union, List
+
 import torch
 import torch.distributed.rpc as rpc
 from torchrl.data.replay_buffers.rb_prototype import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage, LazyTensorStorage, ListStorage
+from torchrl.data.replay_buffers.storages import (
+    LazyMemmapStorage,
+    LazyTensorStorage,
+    ListStorage,
+)
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
 from torchrl.data.tensordict import TensorDict
-import os
+
 RETRY_LIMIT = 2
 RETRY_DELAY_SECS = 3
 REPLAY_BUFFER_NODE = "ReplayBuffer"
 TRAINER_NODE = "Trainer"
-TENSOR_SIZE = 32*32
+TENSOR_SIZE = 3 * 86 * 86
+BUFFER_SIZE = 1001
 BATCH_SIZE = 256
 REPEATS = 1000
 
 storage_options = {
-    'LazyMemmapStorage': LazyMemmapStorage, 'LazyTensorStorage': LazyTensorStorage, 'ListStorage': ListStorage
+    "LazyMemmapStorage": LazyMemmapStorage,
+    "LazyTensorStorage": LazyTensorStorage,
+    "ListStorage": ListStorage,
 }
 
 storage_arg_options = {
-    'LazyMemmapStorage': dict(scratch_dir="/tmp/", device=torch.device("cpu")), 'LazyTensorStorage': dict(), 'ListStorage': ListStorage
+    "LazyMemmapStorage": dict(scratch_dir="/tmp/", device=torch.device("cpu")),
+    "LazyTensorStorage": dict(),
+    "ListStorage": ListStorage,
 }
 parser = argparse.ArgumentParser(
     description="RPC Replay Buffer Example",
@@ -71,20 +80,22 @@ class DummyTrainerNode:
     def train(self, batch_size: int) -> None:
         start_time = timeit.default_timer()
         ret = rpc.rpc_sync(
-                    self.replay_buffer.owner(),
-                    ReplayBufferNode.sample,
-                    args=(self.replay_buffer, batch_size),
-                )
+            self.replay_buffer.owner(),
+            ReplayBufferNode.sample,
+            args=(self.replay_buffer, batch_size),
+        )
         if self._ret is None:
             self._ret = ret
         else:
+            # a = self._ret[0]["a"]
+            # new_a = ret[0]["a"]
+            # assert a.filename == new_a.filename, (a.filename, new_a.filename)
+            # a.copy_(new_a)
             self._ret[0].update_(ret[0])
         # make sure the content is read
         self._ret[0]["a"] + 1
-
-        dt = timeit.default_timer()-start_time
-        print(ret)
-        return dt               
+        dt = timeit.default_timer() - start_time
+        return dt
 
     def _create_replay_buffer(self) -> rpc.RRef:
         while True:
@@ -113,10 +124,18 @@ class ReplayBufferNode(TensorDictReplayBuffer):
 
         self.id = rpc.get_worker_info().id
         print("ReplayBufferNode constructed")
-        tds = [TensorDict({'a': torch.randn(TENSOR_SIZE,)}, batch_size=[]) for _ in range(1000000)]
-        print('Built random contents')
+        tds = TensorDict(
+            {
+                "a": torch.randn(
+                    BUFFER_SIZE,
+                    TENSOR_SIZE,
+                )
+            },
+            batch_size=[BUFFER_SIZE],
+        )
+        print("Built random contents")
         self.extend(tds)
-        print('Extended tensor dict')
+        print("Extended tensor dict")
 
     @accept_remote_rref_invocation
     def sample(self, batch_size: int) -> TensorDict:
@@ -159,14 +178,23 @@ if __name__ == "__main__":
         )
         print(f"Initialised Trainer Node {rank}")
         trainer = DummyTrainerNode()
-        results = [trainer.train(batch_size=BATCH_SIZE) for _ in range(REPEATS)]
-        
-        print(f'Results: {results}')
-        with open(f'./benchmark_{datetime.now().strftime("%d-%m-%Y%H:%M:%S")};batch_size={BATCH_SIZE};tensor_size={TENSOR_SIZE};repeat={REPEATS};storage={STORAGE_TYPE}.pkl', 'wb+') as f:
+        results = []
+        for i in range(REPEATS):
+            result = trainer.train(batch_size=BATCH_SIZE)
+            if i == 0:
+                continue
+            results.append(result)
+            print(results[-1])
+
+        print(f"Results: {results}")
+        with open(
+            f'./benchmark_{datetime.now().strftime("%d-%m-%Y%H:%M:%S")};batch_size={BATCH_SIZE};tensor_size={TENSOR_SIZE};repeat={REPEATS};storage={STORAGE_TYPE}.pkl',
+            "wb+",
+        ) as f:
             pickle.dump(results, f)
 
         tensor_results = torch.tensor(results)
-        print(f'Mean: {torch.mean(tensor_results)}')
+        print(f"Mean: {torch.mean(tensor_results)}")
         breakpoint()
     elif rank == 1:
         # rank 1 is the replay buffer
