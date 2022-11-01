@@ -421,12 +421,11 @@ class MemmapTensor(object):
         return self._tensor.numpy()
 
     def copy_(self, other: Union[torch.Tensor, MemmapTensor]) -> MemmapTensor:
-        shape = self.shape
         if isinstance(other, MemmapTensor) and other.filename == self.filename:
-            if not shape == other.shape:
+            if not self.shape == other.shape:
                 raise ValueError(
                     f"""Cannot copy a MemmapTensor of shape {other.shape} on a
-MemmapTensor of shape {shape}."""
+MemmapTensor of shape {self.shape}."""
                 )
             self._index = other._index
             return self

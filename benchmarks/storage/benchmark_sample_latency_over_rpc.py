@@ -123,8 +123,14 @@ class ReplayBufferNode(TensorDictReplayBuffer):
         print("ReplayBufferNode constructed")
         tds = TensorDict(
             {
-                "observation": torch.randn(BUFFER_SIZE, TENSOR_SIZE, ),
-                "next_observation": torch.randn(BUFFER_SIZE, TENSOR_SIZE, ),
+                "observation": torch.randn(
+                    BUFFER_SIZE,
+                    TENSOR_SIZE,
+                ),
+                "next_observation": torch.randn(
+                    BUFFER_SIZE,
+                    TENSOR_SIZE,
+                ),
             },
             batch_size=[BUFFER_SIZE],
         )
