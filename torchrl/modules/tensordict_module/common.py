@@ -678,11 +678,10 @@ def ensure_tensordict_compatible(
             "consider writing your own TensorDictModule."
         )
 
-    # TODO: Check out_keys if they are provided.
-
-    if wrapper_type is TensorDictModule:
-        return wrapper_type(module, in_keys=in_keys, out_keys=out_keys)
-    else:
-        raise ValueError(
-            f"Argument wrapper_type requires a TensorDictModule, got {wrapper_type}"
-        )
+    # TODO: Check whether out_keys match (at least in number) if they are provided.
+    kwargs = {}
+    if in_keys is not None:
+        kwargs["in_keys"] = in_keys
+    if out_keys is not None:
+        kwargs["out_keys"] = out_keys
+    return wrapper_type(module, **kwargs)
