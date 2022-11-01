@@ -424,7 +424,7 @@ class MemmapTensor(object):
         if isinstance(other, MemmapTensor) and other.filename == self.filename:
             if not self.shape == other.shape:
                 raise ValueError(
-                    f"""Cannot copy a MemmapTensor of shape {other.shape} on a 
+                    f"""Cannot copy a MemmapTensor of shape {other.shape} on a
 MemmapTensor of shape {self.shape}."""
                 )
             self._index = other._index
