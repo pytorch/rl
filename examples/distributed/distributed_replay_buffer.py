@@ -31,7 +31,6 @@ parser.add_argument(
     help="Node Rank [0 = Replay Buffer, 1 = Dummy Trainer, 2+ = Dummy Data Collector]",
 )
 
-
 def accept_remote_rref_invocation(func):
     @wraps(func)
     def unpack_rref_and_invoke_function(self, *args, **kwargs):
@@ -41,6 +40,13 @@ def accept_remote_rref_invocation(func):
 
     return unpack_rref_and_invoke_function
 
+def accept_remote_rref_udf_invocation(decorated_class):
+    # ignores private methods
+    for name in dir(decorated_class):
+        method = getattr(decorated_class, name)
+        if callable(method) and not name.startswith('_'):
+            setattr(decorated_class, name, accept_remote_rref_invocation(method))
+    return decorated_class
 
 class DummyDataCollectorNode:
     def __init__(self, replay_buffer) -> None:
@@ -140,7 +146,7 @@ class DummyTrainerNode:
                 else:
                     time.sleep(RETRY_DELAY_SECS)
 
-
+@accept_remote_rref_udf_invocation
 class ReplayBufferNode(TensorDictReplayBuffer):
     def __init__(self, capacity: int) -> None:
         super().__init__(
@@ -151,28 +157,25 @@ class ReplayBufferNode(TensorDictReplayBuffer):
             writer=RoundRobinWriter(),
             collate_fn=lambda x: x,
         )
-        self.id = rpc.get_worker_info().id
         print("ReplayBufferNode constructed")
 
-    @accept_remote_rref_invocation
     def sample(self, batch_size: int) -> TensorDict:
         if len(self) <= batch_size:
             print(
-                f'[{self.id}] Empty Buffer Sampling at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}'
+                f'Empty Buffer Sampling at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}'
             )
             return None
         else:
             print(
-                f'[{self.id}] Replay Buffer Sampling at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}'
+                f'Replay Buffer Sampling at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}'
             )
             batch = super().sample(batch_size)
             return batch
 
-    @accept_remote_rref_invocation
     def add(self, data: TensorDict) -> None:
         res = super().add(data)
         print(
-            f'[{self.id}] Replay Buffer Insertion at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")} with {len(self)} elements'
+            f'Replay Buffer Insertion at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")} with {len(self)} elements'
         )
         return res
 
@@ -185,7 +188,7 @@ if __name__ == "__main__":
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-    str_init_method = "tcp://localhost:10000"
+    str_init_method = "tcp://localhost:10004"
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16, init_method=str_init_method
     )
