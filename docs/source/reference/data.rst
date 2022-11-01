@@ -42,6 +42,20 @@ We also provide a prototyped composable replay buffer.
     torchrl.data.replay_buffers.writers.Writer
     torchrl.data.replay_buffers.writers.RoundRobinWriter
 
+Storage choice is very influential on replay buffer sampling latency, especially in distributed reinforcement learning settings with larger data volumes.
+:class:`LazyMemmapStorage` is generally preferred in distributed settings.
+From rough benchmarking as found in https://github.com/pytorch/rl/tree/main/benchmarks/storage, the following mean sampling latency improvements over using ListStorage were found.
+
++-------------------------------+-----------+
+| Storage Type                  | Speed up  |
+|                               |           |
++===============================+===========+
+| :class:`ListStorage`          | 1x        |
++-------------------------------+-----------+
+| :class:`LazyTensorStorage`    | 1.78x     |
++-------------------------------+-----------+
+| :class:`LazyMemmapStorage`    | 2.90x     |
++-------------------------------+-----------+
 
 
 TensorDict

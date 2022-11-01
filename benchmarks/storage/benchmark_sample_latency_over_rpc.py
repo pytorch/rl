@@ -152,7 +152,7 @@ if __name__ == "__main__":
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
     options = rpc.TensorPipeRpcBackendOptions(
-        num_worker_threads=16, init_method="tcp://localhost:10004", rpc_timeout=120
+        num_worker_threads=16, init_method="tcp://localhost:10000", rpc_timeout=120
     )
     if rank == 0:
         # rank 0 is the trainer
