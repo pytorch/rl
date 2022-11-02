@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import argparse
 import time
 import warnings
 
@@ -210,7 +210,7 @@ def test_memmap(idx, dtype, large_scale=False):
         sub_td_sm.update_(td_to_copy)
         if i == 1:
             print(f"memmap td: {time.time() - t0:4.4f} sec")
-        torch.testing.assert_close(sub_td_sm.get("a"), td_to_copy.get("a"))
+        torch.testing.assert_close(sub_td_sm.get("a")._tensor, td_to_copy.get("a"))
 
         t0 = time.time()
         sub_td_sm = td_saved.get_sub_tensordict(idx)
@@ -221,4 +221,5 @@ def test_memmap(idx, dtype, large_scale=False):
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "--capture", "no"])
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

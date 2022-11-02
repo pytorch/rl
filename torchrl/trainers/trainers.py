@@ -17,14 +17,6 @@ import torch.nn
 from torch import nn, optim
 
 from torchrl._utils import KeyDependentDefaultDict
-
-try:
-    from tqdm import tqdm
-
-    _has_tqdm = True
-except ImportError:
-    _has_tqdm = False
-
 from torchrl._utils import _CKPT_BACKEND
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import (
@@ -39,6 +31,13 @@ from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.common import LossModule
 from torchrl.trainers.loggers import Logger
+
+try:
+    from tqdm import tqdm
+
+    _has_tqdm = True
+except ImportError:
+    _has_tqdm = False
 
 try:
     from torchsnapshot import StateDict, Snapshot
