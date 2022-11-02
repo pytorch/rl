@@ -7,6 +7,7 @@
 
 import collections
 import copy
+import inspect
 from collections.abc import MutableMapping
 
 import numpy as np
@@ -87,7 +88,11 @@ class GymPixelObservationWrapper(ObservationWrapper):
 
         pixels_spaces = {}
         for pixel_key in pixel_keys:
-            pixels = self.env.render(**render_kwargs[pixel_key])
+            _kwargs = render_kwargs[pixel_key]
+            # HACK: filter kwargs: this will not work for wrappers!
+            render_sig = inspect.signature(self.env.render)
+            _kwargs = {k: value for k, value in _kwargs.items() if k in render_sig.parameters()}
+            pixels = self.env.render(**_kwargs)
 
             if np.issubdtype(pixels.dtype, np.integer):
                 low, high = (0, 255)
