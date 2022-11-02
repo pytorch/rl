@@ -7,6 +7,7 @@ from __future__ import annotations
 import collections
 import math
 from typing import Optional, Union
+from warnings import warn
 
 import torch
 from torch import nn
@@ -56,7 +57,7 @@ class _Children(collections.UserDict):
     def __setitem__(self, key: int, value: _MCTSNode):
         super().__setitem__(key, value)
         children = self._tensordict.get("_children")
-        children[f"{key}"] = value.state
+        children[str(key)] = value.state
 
 
 class _MCTSNode:
@@ -222,6 +223,7 @@ class _MCTSNode:
 
     @property
     def is_expanded(self):
+        """Boolean value that is set to True once a node has been identified as a leaf and `node.incorporate_estimates` has been called."""
         return self.state["_is_expanded"]
 
     @is_expanded.setter
@@ -234,6 +236,7 @@ class _MCTSNode:
 
     @property
     def visit_count(self) -> int:
+        """Number of times this particular node has been accessed."""
         return self.parent._child_visit_count[self.prev_action]
 
     @visit_count.setter
@@ -276,7 +279,9 @@ class _MCTSNode:
         https://doi.org/10.1287/opre.1040.0145
 
         """
-        return self.exploitation_credit + self.exploration_credit
+        action_score = self.exploitation_credit + self.exploration_credit
+        self.state["action_score"] = action_score
+        return action_score
 
     def select_leaf(self) -> _MCTSNode:
         """Finds a leaf in the MCT rooted in the current node.
@@ -311,6 +316,7 @@ class _MCTSNode:
 
         Returns: a child _MCTSNode.
         """
+        action = int(action)
         if action not in self.children:
             # Obtain state following given action.
             state = self.state.clone(recurse=False)
@@ -535,15 +541,17 @@ class MCTSPolicy(nn.Module):
         keys = keys1.intersection(keys2)
         state_filter = root.state.select(*keys)
         tensordict = tensordict.select(*keys)
-        return (tensordict == state_filter).all()
+        return not (tensordict == state_filter).all()
 
     def _reset_root(self, tensordict):
-        if self._root is not None and self._root.state is tensordict:
-            # then the root is right
-            return self._root
-        if self._root is None or self._root_and_tensordict_differ(
+        if self._root is not None and not self._root_and_tensordict_differ(
             self._root, tensordict
         ):
+            print("keeping root")
+            # then the root is right
+            return self._root
+        else:
+            print("getting root")
             # the root has to be reset to the desired node
             return self._get_root(tensordict)
 
@@ -563,6 +571,7 @@ class MCTSPolicy(nn.Module):
 
         # Picks an action to execute in the environment.
         if self._root.depth > self.temp_threshold:
+            # the visit count depends on the move score, hence more visited nodes have a higher score
             action = self._root._child_visit_count.argmax(-1)
         else:
             cdf = self._root._child_visit_count.cumsum(-1)
@@ -608,6 +617,9 @@ class MCTSPolicy(nn.Module):
             # network.
             leaf.add_virtual_loss(up_to=self._root)
             leaves.append(leaf)
+        if failsafe == self.num_parallel * 2:
+            warn("broke because of failsafe value")
+        # print("len leaves:", len(leaves), "depths:", [leaf.depth for leaf in leaves], "num unique:", len(set(leaves)))
         # Evaluate the leaf-states all at once and backup the value estimates.
         if leaves:
             self._evaluate_leaf_states(leaves)

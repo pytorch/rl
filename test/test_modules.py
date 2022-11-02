@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import time
 from numbers import Number
 
 import pytest
@@ -727,7 +728,7 @@ class TestMCTSNode:
             action = tensordict["action"]
             state = tensordict["obs"]
             tensordict = tensordict.clone(recurse=False)
-            tensordict["next_obs"] = state + action
+            tensordict["next_obs"] = state + action + 1
             tensordict["done"] = torch.zeros(1, dtype=torch.bool)
             tensordict["reward"] = torch.ones(1)
             return tensordict
@@ -937,11 +938,11 @@ class TestMCTSNode:
         policy = MCTSPolicy(TestMCTSNode.MockingAgentNet(n_actions), env)
         root_state1 = env.reset()
         root = policy._get_root(root_state1)
-        assert policy._root_and_tensordict_differ(root, root_state1)
+        assert not policy._root_and_tensordict_differ(root, root_state1)
         root_state2 = env.reset()
         _ = policy._get_root(root_state2)
         assert not (root_state2 == root_state1).all()
-        assert not policy._root_and_tensordict_differ(root, root_state2)
+        assert policy._root_and_tensordict_differ(root, root_state2)
 
     def test_MCTSNode_policy_reset_root(self, n_actions=2):
         torch.manual_seed(0)
@@ -971,18 +972,33 @@ class TestMCTSNode:
     def test_MCTSNode_policy_total(self, n_actions=2):
         torch.manual_seed(0)
         env = TestMCTSNode.MockingMCTSEnv()
-        policy = MCTSPolicy(TestMCTSNode.MockingAgentNet(n_actions), env)
+        policy = MCTSPolicy(
+            TestMCTSNode.MockingAgentNet(n_actions), env, simulations_per_move=40
+        )
         root_state = env.reset()
 
-        # single step:
-        state = policy(root_state)
-        print(state)
+        t0 = time.time()
+        state = root_state
+        for _ in range(5):
+            # policy step:
+            state = policy(state)
+            # print(state)
 
+            # env step
+            state = state["_children", str(state["action"].item())]
+            # env.step(state)
+            # print(state)
+            # # mdp step
+            # state = step_mdp(state, keep_other=True)
+        print(time.time() - t0)
         # rollout
         # TODO: make sure that step_mdp re-uses the cached values
         # (and check that things match)
+        t0 = time.time()
         rollout = env.rollout(5, policy)
+        print(time.time() - t0)
         print(rollout)
+        print(rollout["value"], rollout["action_score"])
 
 
 if __name__ == "__main__":
