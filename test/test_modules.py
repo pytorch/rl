@@ -734,7 +734,7 @@ class TestMCTSNode:
 
         def _reset(self, tensordict):
             return TensorDict(
-                self.observation_spec.zero().update(
+                self.observation_spec.rand().update(
                     {"done": torch.zeros(1, dtype=torch.bool)}
                 ),
                 [],
@@ -931,12 +931,58 @@ class TestMCTSNode:
         grand_grand_child.backup_value(value, root_node)
         assert root_node.total_value == REWARD + 0.95 * (REWARD + 0.95 * REWARD)
 
-    def test_MCTSNode_policy(self, n_actions=2):
+    def test_MCTSNode_policy_root_and_tensordict_differ(self, n_actions=2):
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        policy = MCTSPolicy(TestMCTSNode.MockingAgentNet(n_actions), env)
+        root_state1 = env.reset()
+        root = policy._get_root(root_state1)
+        assert policy._root_and_tensordict_differ(root, root_state1)
+        root_state2 = env.reset()
+        _ = policy._get_root(root_state2)
+        assert not (root_state2 == root_state1).all()
+        assert not policy._root_and_tensordict_differ(root, root_state2)
+
+    def test_MCTSNode_policy_reset_root(self, n_actions=2):
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        policy = MCTSPolicy(TestMCTSNode.MockingAgentNet(n_actions), env)
+        root_state1 = env.reset()
+        root = policy._get_root(root_state1)
+        policy._root = root
+        assert policy._reset_root(root_state1) is root
+        root_state2 = env.reset()
+        assert policy._reset_root(root_state2) is not root
+        policy._root = None
+        assert policy._reset_root(root_state2) is not root
+
+    def test_MCTSNode_policy_treesearch(self, n_actions=2):
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        policy = MCTSPolicy(TestMCTSNode.MockingAgentNet(n_actions), env)
+        root_state1 = env.reset()
+        root = policy._get_root(root_state1)
+        policy._root = root
+        leaves = policy._tree_search()
+        assert all(leaf.is_expanded for leaf in leaves)
+        # check that leaves have no children
+        assert all([not leaf.children for leaf in leaves])
+
+    def test_MCTSNode_policy_total(self, n_actions=2):
         torch.manual_seed(0)
         env = TestMCTSNode.MockingMCTSEnv()
         policy = MCTSPolicy(TestMCTSNode.MockingAgentNet(n_actions), env)
         root_state = env.reset()
-        policy(root_state)
+
+        # single step:
+        state = policy(root_state)
+        print(state)
+
+        # rollout
+        # TODO: make sure that step_mdp re-uses the cached values
+        # (and check that things match)
+        rollout = env.rollout(5, policy)
+        print(rollout)
 
 
 if __name__ == "__main__":

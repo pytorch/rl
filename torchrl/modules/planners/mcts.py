@@ -189,6 +189,22 @@ class _MCTSNode:
         self.state["_child_total_value"] = value
 
     @property
+    def action_log_prob(self) -> torch.Tensor:
+        return self.state["action_log_prob"]
+
+    @action_log_prob.setter
+    def action_log_prob(self, value):
+        self.state["action_log_prob"] = value
+
+    @property
+    def value(self) -> torch.Tensor:
+        return self.state["value"]
+
+    @value.setter
+    def value(self, value):
+        self.state["value"] = value
+
+    @property
     def _original_prior(self) -> torch.Tensor:
         return self.state["_original_prior"]
 
@@ -337,12 +353,14 @@ class _MCTSNode:
             return
         self.is_expanded = True
         self._original_prior = self._child_prior = action_log_probs.exp()
-
         self._child_total_value = (
             torch.ones([self.n_actions], dtype=torch.float32, device=self.device)
             * value
         )
         self.backup_value(value, up_to=up_to)
+
+        self.value = value
+        self.action_log_prob = action_log_probs
 
     def revert_visits(self, up_to: _MCTSNode):
         """Revert visit increments.
@@ -500,25 +518,34 @@ class MCTSPolicy(nn.Module):
 
         self.n_actions = self.env.action_spec.space.n
 
-    def _reset_root(self, tensordict):
-        # Create a tree from the tensordict, if not yet present (or not the one expected).
-        def _root_and_tensordict_differ(root, tensordict):
-            state_filter = root.state.select(*self.env.observation_spec)
-            tensordict = tensordict.select(*self.env.observation_spec)
-            return (tensordict == state_filter).all()
+    # Create a tree from the tensordict, if not yet present (or not the one expected).
+    def _get_root(self, tensordict):
+        self._root = _MCTSNode(
+            tensordict,
+            n_actions=self.n_actions,
+            env=self.env,
+            parent=None,
+            prev_action=None,
+        )
+        return self._root
 
+    def _root_and_tensordict_differ(self, root, tensordict):
+        keys1 = {k for k in root.state.keys() if not k.startswith("_")}
+        keys2 = {k for k in tensordict.keys() if not k.startswith("_")}
+        keys = keys1.intersection(keys2)
+        state_filter = root.state.select(*keys)
+        tensordict = tensordict.select(*keys)
+        return (tensordict == state_filter).all()
+
+    def _reset_root(self, tensordict):
         if self._root is not None and self._root.state is tensordict:
             # then the root is right
-            return
-        if self._root is None or _root_and_tensordict_differ(self._root, tensordict):
+            return self._root
+        if self._root is None or self._root_and_tensordict_differ(
+            self._root, tensordict
+        ):
             # the root has to be reset to the desired node
-            self._root = _MCTSNode(
-                tensordict,
-                n_actions=self.n_actions,
-                env=self.env,
-                parent=None,
-                prev_action=None,
-            )
+            return self._get_root(tensordict)
 
     def forward(self, tensordict):
         self._reset_root(tensordict)

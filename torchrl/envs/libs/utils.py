@@ -91,7 +91,9 @@ class GymPixelObservationWrapper(ObservationWrapper):
             _kwargs = render_kwargs[pixel_key]
             # HACK: filter kwargs: this will not work for wrappers!
             render_sig = inspect.signature(self.env.render)
-            _kwargs = {k: value for k, value in _kwargs.items() if k in render_sig.parameters}
+            _kwargs = {
+                k: value for k, value in _kwargs.items() if k in render_sig.parameters
+            }
             render_kwargs[pixel_key] = _kwargs
             pixels = self.env.render(**_kwargs)
 
