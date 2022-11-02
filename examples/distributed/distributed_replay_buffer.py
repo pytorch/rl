@@ -3,14 +3,13 @@ import os
 import random
 import sys
 import time
-from datetime import datetime
-from functools import wraps
 
 import torch
 import torch.distributed.rpc as rpc
-from torchrl.data.replay_buffers.rb_prototype import TensorDictReplayBuffer
+from torchrl.data.replay_buffers.rb_prototype import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data.replay_buffers.utils import accept_remote_rref_invocation
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
 from torchrl.data.tensordict import TensorDict
 
@@ -31,22 +30,6 @@ parser.add_argument(
     help="Node Rank [0 = Replay Buffer, 1 = Dummy Trainer, 2+ = Dummy Data Collector]",
 )
 
-def accept_remote_rref_invocation(func):
-    @wraps(func)
-    def unpack_rref_and_invoke_function(self, *args, **kwargs):
-        if isinstance(self, torch._C._distributed_rpc.PyRRef):
-            self = self.local_value()
-        return func(self, *args, **kwargs)
-
-    return unpack_rref_and_invoke_function
-
-def accept_remote_rref_udf_invocation(decorated_class):
-    # ignores private methods
-    for name in dir(decorated_class):
-        method = getattr(decorated_class, name)
-        if callable(method) and not name.startswith('_'):
-            setattr(decorated_class, name, accept_remote_rref_invocation(method))
-    return decorated_class
 
 class DummyDataCollectorNode:
     def __init__(self, replay_buffer) -> None:
@@ -70,7 +53,7 @@ class DummyDataCollectorNode:
         for elem in range(50):
             time.sleep(random.randint(1, 4))
             print(
-                f"[{self.id}] Collector submission {elem}: {self._submit_random_item_async().to_here()}"
+                f"Collector [{self.id}] submission {elem}: {self._submit_random_item_async().to_here()}"
             )
 
 
@@ -102,8 +85,8 @@ class DummyTrainerNode:
                 )
                 print(f"Connected to replay buffer {replay_buffer_info}")
                 return buffer_rref
-            except Exception:
-                print("Failed to connect to replay buffer")
+            except Exception as e:
+                print(f"Failed to connect to replay buffer: {e}")
                 time.sleep(RETRY_DELAY_SECS)
 
     def _create_and_launch_data_collectors(self) -> None:
@@ -146,9 +129,9 @@ class DummyTrainerNode:
                 else:
                     time.sleep(RETRY_DELAY_SECS)
 
-@accept_remote_rref_udf_invocation
-class ReplayBufferNode(TensorDictReplayBuffer):
-    def __init__(self, capacity: int) -> None:
+
+class ReplayBufferNode(RemoteTensorDictReplayBuffer):
+    def __init__(self, capacity: int):
         super().__init__(
             storage=LazyMemmapStorage(
                 max_size=capacity, scratch_dir="/tmp/", device=torch.device("cpu")
@@ -157,27 +140,6 @@ class ReplayBufferNode(TensorDictReplayBuffer):
             writer=RoundRobinWriter(),
             collate_fn=lambda x: x,
         )
-        print("ReplayBufferNode constructed")
-
-    def sample(self, batch_size: int) -> TensorDict:
-        if len(self) <= batch_size:
-            print(
-                f'Empty Buffer Sampling at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}'
-            )
-            return None
-        else:
-            print(
-                f'Replay Buffer Sampling at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}'
-            )
-            batch = super().sample(batch_size)
-            return batch
-
-    def add(self, data: TensorDict) -> None:
-        res = super().add(data)
-        print(
-            f'Replay Buffer Insertion at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")} with {len(self)} elements'
-        )
-        return res
 
 
 if __name__ == "__main__":
@@ -188,7 +150,7 @@ if __name__ == "__main__":
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-    str_init_method = "tcp://localhost:10004"
+    str_init_method = "tcp://localhost:10000"
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16, init_method=str_init_method
     )
