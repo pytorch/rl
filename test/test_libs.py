@@ -15,6 +15,7 @@ from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs.libs.dm_control import _has_dmc
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
 from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
+from torchrl.envs.libs.jumanji import JumanjiEnv, _has_jumanji
 
 if _has_gym:
     import gym
@@ -318,6 +319,12 @@ class TestHabitat:
         rollout = env.rollout(3)
         print(rollout)
         _test_fake_tensordict(env)
+
+
+@pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
+class TestJumanji:
+    def test_jumani(self):
+        env = JumanjiEnv("Snake-6x6-v0")
 
 
 if __name__ == "__main__":

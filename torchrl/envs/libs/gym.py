@@ -314,7 +314,7 @@ class GymEnv(GymWrapper):
         if not _has_gym:
             raise RuntimeError(
                 f"gym not found, unable to create {env_name}. "
-                f"Consider downloading and installing dm_control from"
+                f"Consider downloading and installing gym from"
                 f" {self.git_url}"
             )
         from_pixels = kwargs.get("from_pixels", False)
