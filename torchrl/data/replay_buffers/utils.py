@@ -41,7 +41,7 @@ def _to_torch(
 
 
 def accept_remote_rref_invocation(func):
-    """Object method decorator that allows a method to be invoked remotely by passing the `rpc.RRef` associated with the remote object construction as first argument in place of the object."""
+    """Object method decorator that allows a method to be invoked remotely by passing the `rpc.RRef` associated with the remote object construction as first argument in place of the object reference."""
 
     @wraps(func)
     def unpack_rref_and_invoke_function(self, *args, **kwargs):

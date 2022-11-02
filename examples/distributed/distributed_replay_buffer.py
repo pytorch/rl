@@ -1,3 +1,12 @@
+"""
+Example use of a distributed replay buffer
+===========================
+
+This example illustrates how a skeleton reinforcement learning algorithm can be implemented in a distributed fashion with communication between nodes/workers handled using `torch.rpc`.
+It focusses on how to set up a replay buffer worker that accepts remote operation requests efficiently, and so omits any learning component such as parameter updates that may be required for a complete distributed reinforcement learning algorithm implementation.
+In this model, >= 1 data collectors workers are responsible for collecting experiences in an environment, the replay buffer worker receives all of these experiences and exposes them to a trainer that is responsible for making parameter updates to any required models.
+"""
+
 import argparse
 import os
 import random
@@ -32,7 +41,13 @@ parser.add_argument(
 
 
 class DummyDataCollectorNode:
-    def __init__(self, replay_buffer) -> None:
+    """Data collector node responsible for collecting experiences used for learning.
+
+    Args:
+        replay_buffer (rpc.RRef): the RRef associated with the construction of the replay buffer
+    """
+
+    def __init__(self, replay_buffer: rpc.RRef) -> None:
         self.id = rpc.get_worker_info().id
         self.replay_buffer = replay_buffer
         print("Data Collector Node constructed")
@@ -50,6 +65,7 @@ class DummyDataCollectorNode:
 
     @accept_remote_rref_invocation
     def collect(self):
+        """Method that begins experience collection (we just generate random TensorDicts in this example). `accept_remote_rref_invocation` enables this method to be invoked remotely provided the class instantiation `rpc.RRef` is provided in place of the object reference."""
         for elem in range(50):
             time.sleep(random.randint(1, 4))
             print(
@@ -58,6 +74,8 @@ class DummyDataCollectorNode:
 
 
 class DummyTrainerNode:
+    """Trainer node responsible for learning from experiences sampled from an experience replay buffer."""
+
     def __init__(self) -> None:
         print("DummyTrainerNode")
         self.id = rpc.get_worker_info().id
@@ -131,6 +149,13 @@ class DummyTrainerNode:
 
 
 class ReplayBufferNode(RemoteTensorDictReplayBuffer):
+    """Experience replay buffer node that is capable of accepting remote connections. Being a `RemoteTensorDictReplayBuffer` means all of it's public methods are remotely invokable using `torch.rpc`.
+    Using a LazyMemmapStorage is highly advised in distributed settings with shared storage due to the lower serialisation cost of MemmapTensors as well as the ability to specify file storage locations which can improve ability to recover from node failures.
+
+    Args:
+        capacity (int): the maximum number of elements that can be stored in the replay buffer.
+    """
+
     def __init__(self, capacity: int):
         super().__init__(
             storage=LazyMemmapStorage(
