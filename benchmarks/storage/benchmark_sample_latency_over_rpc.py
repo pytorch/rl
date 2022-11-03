@@ -90,8 +90,7 @@ class DummyTrainerNode:
         # make sure the content is read
         self._ret[0]["observation"] + 1
         self._ret[0]["next_observation"] + 1
-        dt = timeit.default_timer() - start_time
-        return dt
+        return timeit.default_timer() - start_time
 
     def _create_replay_buffer(self) -> rpc.RRef:
         while True:
