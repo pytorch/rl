@@ -37,7 +37,6 @@ def add_to_buffer_remotely_test(rank, name, world_size):
     if name == "TRAINER":
         buffer = _construct_buffer("BUFFER")
         res, _ = _add_random_tensor_dict_to_buffer(buffer)
-        print(f"add: {res}")
         assert type(res) is int
         assert res == 0
 
@@ -100,6 +99,7 @@ def _construct_buffer(target):
         except Exception as e:
             print(f"Failed to connect: {e}")
             time.sleep(RETRY_BACKOFF)
+    raise RuntimeError("Unable to connect to replay buffer")
 
 
 def _add_random_tensor_dict_to_buffer(buffer):
