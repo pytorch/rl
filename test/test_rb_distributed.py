@@ -1,19 +1,19 @@
+import os
+import time
+
 import pytest
 import torch
-from torchrl.data.replay_buffers.rb_prototype import RemoteTensorDictReplayBuffer
-from functools import wraps
 import torch.distributed.rpc as rpc
-import os
+import torch.multiprocessing as mp
+from torchrl.data.replay_buffers.rb_prototype import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
-import torch.distributed as dist
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
-import torch.multiprocessing as mp
-import time
 from torchrl.data.tensordict import TensorDict
 
 RETRY_COUNT = 3
 RETRY_BACKOFF = 3
+
 
 class ReplayBufferNode(RemoteTensorDictReplayBuffer):
     def __init__(self, capacity: int):
@@ -25,6 +25,52 @@ class ReplayBufferNode(RemoteTensorDictReplayBuffer):
             writer=RoundRobinWriter(),
             collate_fn=lambda x: x,
         )
+
+
+def construct_buffer_test(rank, name, world_size):
+    if name == "TRAINER":
+        buffer = _construct_buffer("BUFFER")
+        assert type(buffer) is torch._C._distributed_rpc.PyRRef
+
+
+def add_to_buffer_remotely_test(rank, name, world_size):
+    if name == "TRAINER":
+        buffer = _construct_buffer("BUFFER")
+        res, _ = _add_random_tensor_dict_to_buffer(buffer)
+        print(f"add: {res}")
+        assert type(res) is int
+        assert res == 0
+
+
+def sample_from_buffer_remotely_returns_correct_tensordict_test(rank, name, world_size):
+    if name == "TRAINER":
+        buffer = _construct_buffer("BUFFER")
+        _, inserted = _add_random_tensor_dict_to_buffer(buffer)
+        sampled, _ = _sample_from_buffer(buffer, 1)
+        assert type(sampled) is type(inserted) is TensorDict
+        assert (sampled == inserted)["a"].item()
+
+
+@pytest.mark.parametrize("names", [["BUFFER", "TRAINER"]])
+@pytest.mark.parametrize(
+    "func",
+    [
+        construct_buffer_test,
+        add_to_buffer_remotely_test,
+        sample_from_buffer_remotely_returns_correct_tensordict_test,
+    ],
+)
+def test_funcs(names, func):
+    world_size = len(names)
+    with mp.Pool(world_size) as pool:
+        pool.starmap(
+            init_rpc, [(rank, name, world_size) for rank, name in enumerate(names)]
+        )
+        pool.starmap(
+            func, [(rank, name, world_size) for rank, name in enumerate(names)]
+        )
+        pool.apply_async(shutdown)
+
 
 def init_rpc(rank, name, world_size):
     os.environ["MASTER_ADDR"] = "localhost"
@@ -38,58 +84,40 @@ def init_rpc(rank, name, world_size):
         rank=rank,
         backend=rpc.BackendType.TENSORPIPE,
         rpc_backend_options=options,
-        world_size=world_size
+        world_size=world_size,
     )
 
-def construct_buffer_test(rank, name, world_size):
-    init_rpc(rank, name, world_size)
-    if name == 'TRAINER':
-        buffer = _construct_buffer('BUFFER')
-        assert type(buffer) is torch._C._distributed_rpc.PyRRef
 
-def add_to_buffer_remotely_test(rank, name, world_size):
-    init_rpc(rank, name, world_size)
-    if name == 'TRAINER':
-        buffer = _construct_buffer('BUFFER')
-        res, _ = _add_random_tensor_dict_to_buffer(buffer)
-        print(f'add: {res}')
-        assert type(res) is int
-        assert res == 0
-
-def sample_from_buffer_remotely_returns_correct_tensordict_test(rank, name, world_size):
-    init_rpc(rank, name, world_size)
-    if name == 'TRAINER':
-        buffer = _construct_buffer('BUFFER')
-        _, inserted = _add_random_tensor_dict_to_buffer(buffer)
-        sampled, _ = _sample_from_buffer(buffer, 1)
-        assert type(sampled) is type(inserted) is TensorDict
-        assert (sampled == inserted)['a'].item()
-
-@pytest.mark.parametrize("names", [["BUFFER", "TRAINER"]])
-@pytest.mark.parametrize("func", [construct_buffer_test, add_to_buffer_remotely_test, sample_from_buffer_remotely_returns_correct_tensordict_test])
-def test_funcs(names, func):
-    world_size = len(names)
-    with mp.Pool(world_size) as pool:
-        return pool.starmap(func, [(rank, name, world_size) for rank, name in enumerate(names)])
+def shutdown():
+    rpc.shutdown()
 
 
 def _construct_buffer(target):
     for _ in range(RETRY_COUNT):
         try:
-            buffer_rref = rpc.remote(
-                target, ReplayBufferNode, args=(1000,)
-            )
+            buffer_rref = rpc.remote(target, ReplayBufferNode, args=(1000,))
             return buffer_rref
         except Exception as e:
-            print(f'Failed to connect: {e}')
+            print(f"Failed to connect: {e}")
             time.sleep(RETRY_BACKOFF)
+
 
 def _add_random_tensor_dict_to_buffer(buffer):
     rand_td = TensorDict({"a": torch.randint(100, (1,))}, [])
-    return rpc.rpc_sync(buffer.owner(), ReplayBufferNode.add, args=(
-            buffer,
-            rand_td,
-        )), rand_td
+    return (
+        rpc.rpc_sync(
+            buffer.owner(),
+            ReplayBufferNode.add,
+            args=(
+                buffer,
+                rand_td,
+            ),
+        ),
+        rand_td,
+    )
+
 
 def _sample_from_buffer(buffer, batch_size):
-    return rpc.rpc_sync(buffer.owner(), ReplayBufferNode.sample, args=(buffer, batch_size))
+    return rpc.rpc_sync(
+        buffer.owner(), ReplayBufferNode.sample, args=(buffer, batch_size)
+    )
