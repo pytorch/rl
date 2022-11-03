@@ -230,7 +230,7 @@ class Transform(nn.Module):
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         if self.__dict__["_parent"] is not None:
-            raise AttributeError(f"parent of transform already set")
+            raise AttributeError("parent of transform already set")
         self.__dict__["_parent"] = parent
 
     def reset_parent(self) -> None:
@@ -321,10 +321,16 @@ class TransformedEnv(EnvBase):
                 # we don't use isinstance as some transforms may be subclassed from
                 # Compose but with other features that we don't want to loose.
                 transform = [transform]
+            else:
+                for t in transform:
+                    t.reset_parent()
             env_transform = env.transform
-            env_transform.reset_parent()
             if type(env_transform) is not Compose:
+                env_transform.reset_parent()
                 env_transform = [env_transform]
+            else:
+                for t in env_transform:
+                    t.reset_parent()
             transform = Compose(*env_transform, *transform).to(device)
         else:
             self._set_env(env, device)
