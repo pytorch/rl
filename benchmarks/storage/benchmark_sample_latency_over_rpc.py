@@ -6,11 +6,10 @@ import time
 import timeit
 from datetime import datetime
 from functools import wraps
-from typing import Union, List
 
 import torch
 import torch.distributed.rpc as rpc
-from torchrl.data.replay_buffers.rb_prototype import TensorDictReplayBuffer
+from torchrl.data.replay_buffers.rb_prototype import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
@@ -108,8 +107,8 @@ class DummyTrainerNode:
                 time.sleep(RETRY_DELAY_SECS)
 
 
-class ReplayBufferNode(TensorDictReplayBuffer):
-    def __init__(self, capacity: int) -> None:
+class ReplayBufferNode(RemoteTensorDictReplayBuffer):
+    def __init__(self, capacity: int):
         super().__init__(
             storage=storage_options[storage_type](
                 max_size=capacity, **storage_arg_options[storage_type]
@@ -118,8 +117,6 @@ class ReplayBufferNode(TensorDictReplayBuffer):
             writer=RoundRobinWriter(),
             collate_fn=lambda x: x,
         )
-
-        self.id = rpc.get_worker_info().id
         print("ReplayBufferNode constructed")
         tds = TensorDict(
             {
@@ -137,14 +134,6 @@ class ReplayBufferNode(TensorDictReplayBuffer):
         print("Built random contents")
         self.extend(tds)
         print("Extended tensor dict")
-
-    @accept_remote_rref_invocation
-    def sample(self, batch_size: int) -> TensorDict:
-        return super().sample(batch_size)
-
-    @accept_remote_rref_invocation
-    def extend(self, tensordicts: Union[List, TensorDict]) -> torch.Tensor:
-        return super().extend(tensordicts)
 
 
 if __name__ == "__main__":

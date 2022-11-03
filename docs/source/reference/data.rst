@@ -32,6 +32,7 @@ We also provide a prototyped composable replay buffer.
 
     torchrl.data.replay_buffers.rb_prototype.ReplayBuffer
     torchrl.data.replay_buffers.rb_prototype.TensorDictReplayBuffer
+    torchrl.data.replay_buffers.rb_prototype.RemoteTensorDictReplayBuffer
     torchrl.data.replay_buffers.samplers.Sampler
     torchrl.data.replay_buffers.samplers.RandomSampler
     torchrl.data.replay_buffers.samplers.PrioritizedSampler
@@ -52,9 +53,9 @@ From rough benchmarking as found in https://github.com/pytorch/rl/tree/main/benc
 +===============================+===========+
 | :class:`ListStorage`          | 1x        |
 +-------------------------------+-----------+
-| :class:`LazyTensorStorage`    | 1.78x     |
+| :class:`LazyTensorStorage`    | 1.83x     |
 +-------------------------------+-----------+
-| :class:`LazyMemmapStorage`    | 2.90x     |
+| :class:`LazyMemmapStorage`    | 3.44x     |
 +-------------------------------+-----------+
 
 

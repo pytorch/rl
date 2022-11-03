@@ -9,7 +9,7 @@ from ..tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from .replay_buffers import pin_memory_output, stack_tensors, stack_td
 from .samplers import Sampler, RandomSampler
 from .storages import Storage, ListStorage
-from .utils import INT_CLASSES, _to_numpy
+from .utils import INT_CLASSES, _to_numpy, accept_remote_rref_udf_invocation
 from .writers import Writer, RoundRobinWriter
 
 
@@ -248,3 +248,28 @@ class TensorDictReplayBuffer(ReplayBuffer):
             for k, v in info.items():
                 data.set(k, torch.tensor(v, device=data.device), inplace=True)
         return data, info
+
+
+@accept_remote_rref_udf_invocation
+class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
+    """A remote invocation friendly ReplayBuffer class. Public methods can be invoked by remote agents using `torch.rpc` or called locally as normal."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def sample(self, batch_size: int, include_info: bool = False) -> TensorDictBase:
+        return super().sample(batch_size, include_info)
+
+    def add(self, data: TensorDictBase) -> int:
+        return super().add(data)
+
+    def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
+        return super().extend(tensordicts)
+
+    def update_priority(
+        self, index: Union[int, torch.Tensor], priority: Union[int, torch.Tensor]
+    ) -> None:
+        return super().update_priority(index, priority)
+
+    def update_tensordict_priority(self, data: TensorDictBase) -> None:
+        return super().update_tensordict_priority(data)

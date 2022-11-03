@@ -1,16 +1,24 @@
+"""
+Example use of a distributed replay buffer
+===========================
+
+This example illustrates how a skeleton reinforcement learning algorithm can be implemented in a distributed fashion with communication between nodes/workers handled using `torch.rpc`.
+It focusses on how to set up a replay buffer worker that accepts remote operation requests efficiently, and so omits any learning component such as parameter updates that may be required for a complete distributed reinforcement learning algorithm implementation.
+In this model, >= 1 data collectors workers are responsible for collecting experiences in an environment, the replay buffer worker receives all of these experiences and exposes them to a trainer that is responsible for making parameter updates to any required models.
+"""
+
 import argparse
 import os
 import random
 import sys
 import time
-from datetime import datetime
-from functools import wraps
 
 import torch
 import torch.distributed.rpc as rpc
-from torchrl.data.replay_buffers.rb_prototype import TensorDictReplayBuffer
+from torchrl.data.replay_buffers.rb_prototype import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data.replay_buffers.utils import accept_remote_rref_invocation
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
 from torchrl.data.tensordict import TensorDict
 
@@ -32,18 +40,14 @@ parser.add_argument(
 )
 
 
-def accept_remote_rref_invocation(func):
-    @wraps(func)
-    def unpack_rref_and_invoke_function(self, *args, **kwargs):
-        if isinstance(self, torch._C._distributed_rpc.PyRRef):
-            self = self.local_value()
-        return func(self, *args, **kwargs)
-
-    return unpack_rref_and_invoke_function
-
-
 class DummyDataCollectorNode:
-    def __init__(self, replay_buffer) -> None:
+    """Data collector node responsible for collecting experiences used for learning.
+
+    Args:
+        replay_buffer (rpc.RRef): the RRef associated with the construction of the replay buffer
+    """
+
+    def __init__(self, replay_buffer: rpc.RRef) -> None:
         self.id = rpc.get_worker_info().id
         self.replay_buffer = replay_buffer
         print("Data Collector Node constructed")
@@ -61,14 +65,17 @@ class DummyDataCollectorNode:
 
     @accept_remote_rref_invocation
     def collect(self):
+        """Method that begins experience collection (we just generate random TensorDicts in this example). `accept_remote_rref_invocation` enables this method to be invoked remotely provided the class instantiation `rpc.RRef` is provided in place of the object reference."""
         for elem in range(50):
             time.sleep(random.randint(1, 4))
             print(
-                f"[{self.id}] Collector submission {elem}: {self._submit_random_item_async().to_here()}"
+                f"Collector [{self.id}] submission {elem}: {self._submit_random_item_async().to_here()}"
             )
 
 
 class DummyTrainerNode:
+    """Trainer node responsible for learning from experiences sampled from an experience replay buffer."""
+
     def __init__(self) -> None:
         print("DummyTrainerNode")
         self.id = rpc.get_worker_info().id
@@ -96,8 +103,8 @@ class DummyTrainerNode:
                 )
                 print(f"Connected to replay buffer {replay_buffer_info}")
                 return buffer_rref
-            except Exception:
-                print("Failed to connect to replay buffer")
+            except Exception as e:
+                print(f"Failed to connect to replay buffer: {e}")
                 time.sleep(RETRY_DELAY_SECS)
 
     def _create_and_launch_data_collectors(self) -> None:
@@ -141,8 +148,15 @@ class DummyTrainerNode:
                     time.sleep(RETRY_DELAY_SECS)
 
 
-class ReplayBufferNode(TensorDictReplayBuffer):
-    def __init__(self, capacity: int) -> None:
+class ReplayBufferNode(RemoteTensorDictReplayBuffer):
+    """Experience replay buffer node that is capable of accepting remote connections. Being a `RemoteTensorDictReplayBuffer` means all of it's public methods are remotely invokable using `torch.rpc`.
+    Using a LazyMemmapStorage is highly advised in distributed settings with shared storage due to the lower serialisation cost of MemmapTensors as well as the ability to specify file storage locations which can improve ability to recover from node failures.
+
+    Args:
+        capacity (int): the maximum number of elements that can be stored in the replay buffer.
+    """
+
+    def __init__(self, capacity: int):
         super().__init__(
             storage=LazyMemmapStorage(
                 max_size=capacity, scratch_dir="/tmp/", device=torch.device("cpu")
@@ -151,30 +165,6 @@ class ReplayBufferNode(TensorDictReplayBuffer):
             writer=RoundRobinWriter(),
             collate_fn=lambda x: x,
         )
-        self.id = rpc.get_worker_info().id
-        print("ReplayBufferNode constructed")
-
-    @accept_remote_rref_invocation
-    def sample(self, batch_size: int) -> TensorDict:
-        if len(self) <= batch_size:
-            print(
-                f'[{self.id}] Empty Buffer Sampling at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}'
-            )
-            return None
-        else:
-            print(
-                f'[{self.id}] Replay Buffer Sampling at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}'
-            )
-            batch = super().sample(batch_size)
-            return batch
-
-    @accept_remote_rref_invocation
-    def add(self, data: TensorDict) -> None:
-        res = super().add(data)
-        print(
-            f'[{self.id}] Replay Buffer Insertion at {datetime.now().strftime("%d/%m/%Y %H:%M:%S")} with {len(self)} elements'
-        )
-        return res
 
 
 if __name__ == "__main__":

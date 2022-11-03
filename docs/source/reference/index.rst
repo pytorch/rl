@@ -10,3 +10,4 @@ API Reference
     modules
     objectives
     trainers
+    utils
