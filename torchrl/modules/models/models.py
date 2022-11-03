@@ -20,18 +20,6 @@ from torchrl.modules.models.utils import (
     Squeeze2dLayer,
 )
 
-__all__ = [
-    "MLP",
-    "ConvNet",
-    "DuelingCnnDQNet",
-    "DistributionalDQNnet",
-    "DdpgCnnActor",
-    "DdpgCnnQNet",
-    "DdpgMlpActor",
-    "DdpgMlpQNet",
-    "LSTMNet",
-]
-
 
 class MLP(nn.Sequential):
     """A multi-layer perceptron.

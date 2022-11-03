@@ -14,8 +14,6 @@ from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase, EnvMetaData
 
-__all__ = ["EnvCreator", "get_env_metadata"]
-
 
 class EnvCreator:
     """Environment creator class.

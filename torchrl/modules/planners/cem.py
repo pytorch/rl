@@ -9,8 +9,6 @@ from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase
 from torchrl.modules.planners import MPCPlannerBase
 
-__all__ = ["CEMPlanner"]
-
 
 class CEMPlanner(MPCPlannerBase):
     """CEMPlanner Module.

@@ -25,21 +25,6 @@ from typing import (
 import numpy as np
 import torch
 
-__all__ = [
-    "TensorSpec",
-    "BoundedTensorSpec",
-    "OneHotDiscreteTensorSpec",
-    "UnboundedContinuousTensorSpec",
-    "UnboundedDiscreteTensorSpec",
-    "NdBoundedTensorSpec",
-    "NdUnboundedContinuousTensorSpec",
-    "NdUnboundedDiscreteTensorSpec",
-    "BinaryDiscreteTensorSpec",
-    "MultOneHotDiscreteTensorSpec",
-    "DiscreteTensorSpec",
-    "CompositeSpec",
-]
-
 from torchrl._utils import get_binary_env_var
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 

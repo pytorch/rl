@@ -17,8 +17,6 @@ from torchrl.data.tensor_specs import TensorSpec, UnboundedContinuousTensorSpec
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.common import _EnvWrapper
 
-__all__ = ["GymLikeEnv", "default_info_dict_reader"]
-
 
 class BaseInfoDictReader(metaclass=abc.ABCMeta):
     """Base class for info-readers."""

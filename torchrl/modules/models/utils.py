@@ -17,11 +17,6 @@ LazyMapping = {
     NoisyLinear: NoisyLazyLinear,
 }
 
-__all__ = [
-    "SqueezeLayer",
-    "Squeeze2dLayer",
-]
-
 
 class SqueezeLayer(nn.Module):
     """Squeezing layer.

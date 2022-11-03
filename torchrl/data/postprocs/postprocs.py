@@ -14,8 +14,6 @@ from torch.nn import functional as F
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import expand_as_right
 
-__all__ = ["MultiStep"]
-
 
 def _conv1d_reward(
     reward: torch.Tensor, gammas: torch.Tensor, n_steps_max: int

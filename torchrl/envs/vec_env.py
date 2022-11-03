@@ -24,8 +24,6 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
-__all__ = ["SerialEnv", "ParallelEnv"]
-
 
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):

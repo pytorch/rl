@@ -19,13 +19,6 @@ from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
 
-__all__ = [
-    "sync_sync_collector",
-    "sync_async_collector",
-    "make_collector_offpolicy",
-    "make_collector_onpolicy",
-]
-
 
 def sync_async_collector(
     env_fns: Union[Callable, List[Callable]],

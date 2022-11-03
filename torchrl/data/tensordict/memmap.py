@@ -25,7 +25,6 @@ from torchrl.data.utils import (
 
 MEMMAP_HANDLED_FN = {}
 
-__all__ = ["MemmapTensor", "set_transfer_ownership"]
 
 NoneType = type(None)
 EllipsisType = type(Ellipsis)

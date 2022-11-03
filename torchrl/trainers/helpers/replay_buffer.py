@@ -15,8 +15,6 @@ from torchrl.data import (
 )
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 
-__all__ = ["make_replay_buffer"]
-
 
 def make_replay_buffer(
     device: DEVICE_TYPING, cfg: "DictConfig"  # noqa: F821

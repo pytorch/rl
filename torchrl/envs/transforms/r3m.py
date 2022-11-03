@@ -33,8 +33,6 @@ try:
 except ImportError:
     _has_tv = False
 
-__all__ = ["R3MTransform"]
-
 
 class _R3MNet(Transform):
 

@@ -37,10 +37,6 @@ OPTIMIZERS = {
     "adamax": optim.Adamax,
 }
 
-__all__ = [
-    "make_trainer",
-]
-
 
 @dataclass
 class TrainerConfig:

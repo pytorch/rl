@@ -32,13 +32,6 @@ from torchrl.data.tensordict.tensordict import (
 )
 from torchrl.data.utils import DEVICE_TYPING
 
-__all__ = [
-    "ReplayBuffer",
-    "PrioritizedReplayBuffer",
-    "TensorDictReplayBuffer",
-    "TensorDictPrioritizedReplayBuffer",
-]
-
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
     """Zips a list of iterables containing tensor-like objects and stacks the resulting lists of tensors together.

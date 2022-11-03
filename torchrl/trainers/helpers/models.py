@@ -85,15 +85,6 @@ ACTIVATIONS = {
     "relu": nn.ReLU,
 }
 
-__all__ = [
-    "make_dqn_actor",
-    "make_ddpg_actor",
-    "make_ppo_model",
-    "make_sac_model",
-    "make_redq_model",
-    "make_dreamer",
-]
-
 
 def make_dqn_actor(
     proof_environment: EnvBase, cfg: "DictConfig", device: torch.device  # noqa: F821

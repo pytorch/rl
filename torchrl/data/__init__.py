@@ -5,5 +5,19 @@
 
 from .postprocs import *
 from .replay_buffers import *
-from .tensor_specs import *
+from .tensor_specs import (
+    TensorSpec,
+    BoundedTensorSpec,
+    OneHotDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
+    NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
+    NdUnboundedDiscreteTensorSpec,
+    BinaryDiscreteTensorSpec,
+    MultOneHotDiscreteTensorSpec,
+    DiscreteTensorSpec,
+    CompositeSpec,
+    DEVICE_TYPING,
+)
 from .tensordict import *

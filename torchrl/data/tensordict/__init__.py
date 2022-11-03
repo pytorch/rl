@@ -3,6 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .memmap import *
-from .metatensor import *
-from .tensordict import *
+from .memmap import MemmapTensor, set_transfer_ownership
+from .tensordict import (
+    TensorDict,
+    SubTensorDict,
+    merge_tensordicts,
+    LazyStackedTensorDict,
+    SavedTensorDict,
+)

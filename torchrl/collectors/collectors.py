@@ -20,24 +20,16 @@ import torch.nn as nn
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
+from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from .._utils import _check_for_faulty_process, prod
-from ..modules.tensordict_module import ProbabilisticTensorDictModule, TensorDictModule
-from .utils import split_trajectories
-
-__all__ = [
-    "SyncDataCollector",
-    "aSyncDataCollector",
-    "MultiaSyncDataCollector",
-    "MultiSyncDataCollector",
-]
-
-from torchrl.envs.transforms import TransformedEnv
 from ..data import TensorSpec
 from ..data.tensordict.tensordict import TensorDictBase, TensorDict
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
 from ..envs.common import EnvBase
 from ..envs.vec_env import _BatchedEnv
+from ..modules.tensordict_module import ProbabilisticTensorDictModule, TensorDictModule
+from .utils import split_trajectories
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory

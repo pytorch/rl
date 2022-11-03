@@ -73,14 +73,6 @@ except ImportError:
         return False
 
 
-__all__ = [
-    "TensorDict",
-    "SubTensorDict",
-    "merge_tensordicts",
-    "LazyStackedTensorDict",
-    "SavedTensorDict",
-]
-
 TD_HANDLED_FUNCTIONS: Dict = dict()
 COMPATIBLE_TYPES = Union[
     Tensor,
