@@ -1,3 +1,9 @@
+"""
+Sample latency benchmarking (using RPC)
+======================================
+A rough benchmark of sample latency using different storage types over the network using `torch.rpc`.
+This code is based on examples/distributed/distributed_replay_buffer.py.
+"""
 import argparse
 import os
 import pickle
@@ -5,7 +11,6 @@ import sys
 import time
 import timeit
 from datetime import datetime
-from functools import wraps
 
 import torch
 import torch.distributed.rpc as rpc
@@ -59,19 +64,8 @@ parser.add_argument(
 )
 
 
-def accept_remote_rref_invocation(func):
-    @wraps(func)
-    def unpack_rref_and_invoke_function(self, *args, **kwargs):
-        if isinstance(self, torch._C._distributed_rpc.PyRRef):
-            self = self.local_value()
-        return func(self, *args, **kwargs)
-
-    return unpack_rref_and_invoke_function
-
-
 class DummyTrainerNode:
     def __init__(self) -> None:
-        print("DummyTrainerNode")
         self.id = rpc.get_worker_info().id
         self.replay_buffer = self._create_replay_buffer()
         self._ret = None
@@ -83,10 +77,13 @@ class DummyTrainerNode:
             ReplayBufferNode.sample,
             args=(self.replay_buffer, batch_size),
         )
-        if self._ret is None:
-            self._ret = ret
+        if storage_type == "ListStorage":
+            self._ret = ret[0]
         else:
-            self._ret[0].update_(ret[0])
+            if self._ret is None:
+                self._ret = ret
+            else:
+                self._ret[0].update_(ret[0])
         # make sure the content is read
         self._ret[0]["observation"] + 1
         self._ret[0]["next_observation"] + 1
@@ -116,7 +113,6 @@ class ReplayBufferNode(RemoteTensorDictReplayBuffer):
             writer=RoundRobinWriter(),
             collate_fn=lambda x: x,
         )
-        print("ReplayBufferNode constructed")
         tds = TensorDict(
             {
                 "observation": torch.randn(
@@ -130,9 +126,7 @@ class ReplayBufferNode(RemoteTensorDictReplayBuffer):
             },
             batch_size=[BUFFER_SIZE],
         )
-        print("Built random contents")
         self.extend(tds)
-        print("Extended tensor dict")
 
 
 if __name__ == "__main__":
@@ -146,7 +140,7 @@ if __name__ == "__main__":
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
     options = rpc.TensorPipeRpcBackendOptions(
-        num_worker_threads=16, init_method="tcp://localhost:10000", rpc_timeout=120
+        num_worker_threads=16, init_method="tcp://localhost:10002", rpc_timeout=120
     )
     if rank == 0:
         # rank 0 is the trainer
@@ -156,7 +150,6 @@ if __name__ == "__main__":
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
         )
-        print(f"Initialised Trainer Node {rank}")
         trainer = DummyTrainerNode()
         results = []
         for i in range(REPEATS):
@@ -166,7 +159,6 @@ if __name__ == "__main__":
             results.append(result)
             print(i, results[-1])
 
-        print(f"Results: {results}")
         with open(
             f'./benchmark_{datetime.now().strftime("%d-%m-%Y%H:%M:%S")};batch_size={BATCH_SIZE};tensor_size={TENSOR_SIZE};repeat={REPEATS};storage={storage_type}.pkl',
             "wb+",
@@ -179,14 +171,12 @@ if __name__ == "__main__":
     elif rank == 1:
         # rank 1 is the replay buffer
         # replay buffer waits passively for construction instructions from trainer node
-        print(REPLAY_BUFFER_NODE)
         rpc.init_rpc(
             REPLAY_BUFFER_NODE,
             rank=rank,
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
         )
-        print(f"Initialised RB Node {rank}")
         breakpoint()
     else:
         sys.exit(1)
