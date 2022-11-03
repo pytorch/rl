@@ -228,9 +228,3 @@ def _unwrap_value(value):
     # batch_dims = out.ndimension() - batch_dims
     # batch_size = out.shape[:batch_dims]
     # return out, batch_size
-
-
-def exclude_private(tensordict):
-    """Exclude private keys, ie. keys starting with a :obj:"`_"` prefix."""
-    keys = [k for k in tensordict.keys() if k.startswith("_")]
-    return tensordict.exclude(*keys)

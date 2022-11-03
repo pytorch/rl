@@ -324,15 +324,9 @@ class _MCTSNode:
             # Obtain state following given action.
             state = self.state.clone(recurse=False)
             new_state = state.set("action", torch.tensor([action]))
+            action_hash = self.env._hash_action(new_state["action"])
             new_state = self.env.step(new_state)
-            # filter out private keys
-            reward = new_state.get("reward")
-            new_state = step_mdp(new_state, keep_other=False, exclude_done=False)
-            # we must link the reward to the next node as one node is linked to multiple
-            # children, each having an independent reward.
-            # Unlike other RL settings, reward must be tied to the action preceding
-            # the state, not following it.
-            new_state.set("prev_reward", reward, _run_checks=False)
+            new_state = new_state["_children", action_hash]
             self.children[action] = _MCTSNode(
                 new_state, self.n_actions, self.env, prev_action=action, parent=self
             )
@@ -428,7 +422,7 @@ class _MCTSNode:
         self.parent.backup_value(value, up_to)
 
     def is_done(self) -> torch.Tensor:
-        return self.state["done"]
+        return self.state["prev_done"]
 
     def inject_noise(self):
         dirch = _Dirichlet.apply(

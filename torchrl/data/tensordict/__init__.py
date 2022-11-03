@@ -6,4 +6,4 @@
 from .memmap import *
 from .metatensor import *
 from .tensordict import *
-from .utils import exclude_private
+from .tensordict import exclude_private

@@ -355,7 +355,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 )
         tensordict.update(tensordict_out, inplace=self._inplace_update)
 
-        del tensordict_out
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:

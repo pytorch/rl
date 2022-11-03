@@ -4815,3 +4815,13 @@ def _find_max_batch_size(source: Union[TensorDictBase, dict]) -> list[int]:
                 return batch_size
         batch_size.append(curr_dim_size)
         curr_dim += 1
+
+
+def exclude_private(tensordict):
+    """Exclude private keys, ie. keys starting with a :obj:"`_"` prefix."""
+    keys = [k for k in tensordict.keys() if k.startswith("_")]
+    tensordict = tensordict.exclude(*keys)
+    for key, item in list(tensordict.items()):
+        if isinstance(item, TensorDictBase):
+            tensordict[key] = exclude_private(item)
+    return tensordict

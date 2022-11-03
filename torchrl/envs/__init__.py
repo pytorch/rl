@@ -9,3 +9,4 @@ from .transforms import *
 from .env_creator import *
 from .gym_like import *
 from .model_based import *
+from .graph_envs import *
