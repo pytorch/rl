@@ -14,7 +14,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from torchrl.data import CompositeSpec, TensorDict, TensorSpec
+from torchrl.data import CompositeSpec, TensorDict, TensorSpec, exclude_private
 from .._utils import seed_generator, prod
 from ..data.tensordict.tensordict import TensorDictBase
 from ..data.utils import DEVICE_TYPING
@@ -515,11 +515,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         break_when_any_done: bool = True,
         return_contiguous: bool = True,
         tensordict: Optional[TensorDictBase] = None,
+        exclude_private_keys: Optional[bool] = True,
     ) -> TensorDictBase:
         """Executes a rollout in the environment.
 
         The function will stop as soon as one of the contained environments
-        returns done=True.
+        returns :obj:`tensordict.get("done") == True`
+        (unless :obj:`break_when_any_done` is turned off).
 
         Args:
             max_steps (int): maximum number of steps to be executed. The actual number of steps can be smaller if
@@ -537,6 +539,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if auto_reset is False, an initial
                 tensordict must be provided.
+            exclude_private_keys (bool, optional): if True, keys with a :obj:`"_"` prefix
+                are removed from the output. Default: :obj:`True`.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -572,7 +576,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 if auto_cast_to_device:
                     tensordict = tensordict.to(env_device)
                 tensordict = self.step(tensordict)
-                tensordicts.append(tensordict.clone())
+                if exclude_private_keys:
+                    tensordicts.append(exclude_private(tensordict).clone())
+                else:
+                    tensordicts.append(tensordict.clone())
                 if (
                     break_when_any_done and tensordict.get("done").any()
                 ) or i == max_steps - 1:

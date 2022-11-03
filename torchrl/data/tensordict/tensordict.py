@@ -365,6 +365,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
     ) -> COMPATIBLE_TYPES:
         if not isinstance(default, str):
+            if callable(default):
+                return default()
             return default
         if default == "_no_default_":
             raise KeyError(
@@ -380,11 +382,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def get(
         self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
     ) -> COMPATIBLE_TYPES:
-        """Gets the value stored with the input key.
+        """Returns the value stored with the input key.
 
         Args:
             key (str): key to be queried.
-            default: default value if the key is not found in the tensordict.
+            default (accepted class or Callable[[], accepted_class], optional):
+                default value if the key is not found in the tensordict.
 
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
@@ -1020,6 +1023,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             source={key: _clone_value(value) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
+            _run_checks=False,
+            _is_memmap=self._is_memmap,
+            _is_shared=self._is_shared,
+            # _meta_source=self._dict_meta,
         )
 
     @classmethod

@@ -41,7 +41,10 @@ class _Children(collections.UserDict):
         self._tensordict = tensordict
         super().__init__(**kwargs)
         children = self._tensordict.get(
-            "_children", TensorDict({}, [], device=self._tensordict.device)
+            "_children",
+            lambda: TensorDict(
+                {}, torch.Size([]), device=self._tensordict.device, _run_checks=False
+            ),
         )
         # no op if key was already present
         self._tensordict["_children"] = children
@@ -153,19 +156,19 @@ class _MCTSNode:
 
     @property
     def _n_vlosses(self):
-        return self.state["_n_vlosses"]
+        return self.state.get("_n_vlosses")
 
     @_n_vlosses.setter
     def _n_vlosses(self, value):
-        self.state["_n_vlosses"] = value
+        self.state.set("_n_vlosses", value)
 
     @property
-    def depth(self) -> torch.Tensor:
-        return self.state["_depth"].item()
+    def depth(self) -> int:
+        return self.state.get("_depth").item()
 
     @depth.setter
     def depth(self, depth: int):
-        self.state["_depth"] = torch.tensor([depth], dtype=torch.long)
+        self.state.set("_depth", torch.tensor([depth], dtype=torch.long))
 
     @property
     def children(self):
@@ -175,60 +178,60 @@ class _MCTSNode:
 
     @property
     def _child_visit_count(self) -> torch.Tensor:
-        return self.state["_child_visit_count"]
+        return self.state.get("_child_visit_count")
 
     @_child_visit_count.setter
     def _child_visit_count(self, value):
-        self.state["_child_visit_count"] = value
+        self.state.set("_child_visit_count", value)
 
     @property
     def _child_total_value(self) -> torch.Tensor:
-        return self.state["_child_total_value"]
+        return self.state.get("_child_total_value")
 
     @_child_total_value.setter
     def _child_total_value(self, value):
-        self.state["_child_total_value"] = value
+        self.state.set("_child_total_value", value)
 
     @property
     def action_log_prob(self) -> torch.Tensor:
-        return self.state["action_log_prob"]
+        return self.state.get("action_log_prob")
 
     @action_log_prob.setter
     def action_log_prob(self, value):
-        self.state["action_log_prob"] = value
+        self.state.set("action_log_prob", value)
 
     @property
     def value(self) -> torch.Tensor:
-        return self.state["value"]
+        return self.state.get("value")
 
     @value.setter
     def value(self, value):
-        self.state["value"] = value
+        self.state.set("value", value)
 
     @property
     def _original_prior(self) -> torch.Tensor:
-        return self.state["_original_prior"]
+        return self.state.get("_original_prior")
 
     @_original_prior.setter
     def _original_prior(self, value):
-        self.state["_original_prior"] = value
+        self.state.set("_original_prior", value)
 
     @property
     def _child_prior(self) -> torch.Tensor:
-        return self.state["_child_prior"]
+        return self.state.get("_child_prior")
 
     @_child_prior.setter
     def _child_prior(self, value):
-        self.state["_child_prior"] = value
+        self.state.set("_child_prior", value)
 
     @property
     def is_expanded(self):
         """Boolean value that is set to True once a node has been identified as a leaf and `node.incorporate_estimates` has been called."""
-        return self.state["_is_expanded"]
+        return self.state.get("_is_expanded")
 
     @is_expanded.setter
     def is_expanded(self, value: torch.Tensor):
-        self.state["_is_expanded"] = value
+        self.state.set("_is_expanded", value)
 
     @property
     def device(self):
@@ -280,7 +283,7 @@ class _MCTSNode:
 
         """
         action_score = self.exploitation_credit + self.exploration_credit
-        self.state["action_score"] = action_score
+        self.state.set("action_score", action_score)
         return action_score
 
     def select_leaf(self) -> _MCTSNode:
@@ -323,13 +326,13 @@ class _MCTSNode:
             new_state = state.set("action", torch.tensor([action]))
             new_state = self.env.step(new_state)
             # filter out private keys
-            reward = new_state["reward"]
+            reward = new_state.get("reward")
             new_state = step_mdp(new_state, keep_other=False, exclude_done=False)
             # we must link the reward to the next node as one node is linked to multiple
             # children, each having an independent reward.
             # Unlike other RL settings, reward must be tied to the action preceding
             # the state, not following it.
-            new_state["prev_reward"] = reward
+            new_state.set("prev_reward", reward, _run_checks=False)
             self.children[action] = _MCTSNode(
                 new_state, self.n_actions, self.env, prev_action=action, parent=self
             )

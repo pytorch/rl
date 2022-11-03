@@ -12,7 +12,7 @@ from _utils_internal import get_available_devices
 from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from torch import nn
-from torchrl.data import TensorDict
+from torchrl.data import TensorDict, exclude_private
 from torchrl.data.tensor_specs import (
     DiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
@@ -979,25 +979,32 @@ class TestMCTSNode:
 
         t0 = time.time()
         state = root_state
+        states = []
         for _ in range(5):
             # policy step:
             state = policy(state)
-            # print(state)
-
-            # env step
+            # env step has already been done, we just move one step further in the tree
+            states.append(exclude_private(state).clone())
             state = state["_children", str(state["action"].item())]
-            # env.step(state)
-            # print(state)
-            # # mdp step
-            # state = step_mdp(state, keep_other=True)
+        states = torch.stack(states, 0).contiguous()
+        assert (state["obs"] > 4).all()
         print(time.time() - t0)
+
         # rollout
         # TODO: make sure that step_mdp re-uses the cached values
         # (and check that things match)
         t0 = time.time()
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        policy = MCTSPolicy(
+            TestMCTSNode.MockingAgentNet(n_actions), env, simulations_per_move=40
+        )
         rollout = env.rollout(5, policy)
         print(time.time() - t0)
         print(rollout)
+        assert (rollout["obs"] == states["obs"]).all()
+        assert (rollout["action"] == states["action"]).all()
+        assert (rollout["action_score"] == states["action_score"]).all()
         print(rollout["value"], rollout["action_score"])
 
 
