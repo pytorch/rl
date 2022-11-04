@@ -15,6 +15,7 @@ from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
 from torchrl.modules import (
     ActorValueOperator,
     CEMPlanner,
+    GRUNet,
     LSTMNet,
     ProbabilisticActor,
     QValueActor,
@@ -303,6 +304,140 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
     torch.testing.assert_close(tds_vec["y"], tds_loop["y"])
     torch.testing.assert_close(tds_vec["hidden0_out"][-1], tds_loop["hidden0_out"][-1])
     torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("num_layers", [1])  # TODO: test stacked gru
+@pytest.mark.parametrize(
+    "bidirectional", [False]
+)  # Todo: change if bidirectional implemented
+def test_gru_net(device, num_layers, bidirectional):
+    batch_size = 5
+    seq_len = 7
+    in_features = 11
+    hidden_size = 13
+    out_features = 3
+
+    net = GRUNet(in_features, hidden_size, out_features, device=device)
+
+    # Test a whole sequence
+    # Test with dim = 1
+    x = torch.randn(in_features, device=device)
+    x_out, h = net(x)
+    assert x_out.size() == torch.Size([out_features])
+    assert h.size() == torch.Size([num_layers, hidden_size])
+
+    # Test with dim = 2
+    x = torch.randn(seq_len, in_features, device=device)
+    x_out, h = net(x)
+    assert x_out.size() == torch.Size([seq_len, out_features])
+    assert h.size() == torch.Size([num_layers, hidden_size])
+
+    # Test with dim = 3
+    x = torch.randn(batch_size, seq_len, in_features, device=device)
+    x_out, h = net(x)
+    assert x_out.size() == torch.Size([batch_size, seq_len, out_features])
+    assert h.size() == torch.Size([num_layers, batch_size, hidden_size])
+
+    # Test with dim > 3
+    x = torch.randn(2, 3, batch_size, seq_len, in_features, device=device)
+    x_out, h = net(x)
+    assert x_out.size() == torch.Size([2, 3, batch_size, seq_len, out_features])
+    assert h.size() == torch.Size([num_layers, 2, 3, batch_size, hidden_size])
+
+    # Test a sequence with intermediate hidden state
+    # Test with dim = 1
+    x = torch.randn(in_features, device=device)
+    x_out, h = net(x)
+    for i in range(5):
+        x_out, h = net(x, h)
+        assert x_out.size() == torch.Size([out_features])
+        assert h.size() == torch.Size([num_layers, hidden_size])
+
+    # Test with dim = 2
+    x = torch.randn(seq_len, in_features, device=device)
+    x_out, h = net(x)
+    for i in range(5):
+        x_out, h = net(x, h)
+        assert x_out.size() == torch.Size([seq_len, out_features])
+        assert h.size() == torch.Size([num_layers, hidden_size])
+
+    # Test with dim = 3
+    seq_len = 1
+    x = torch.randn(batch_size, seq_len, in_features, device=device)
+    x_out, h = net(x)
+    for i in range(5):
+        x_out, h = net(x, h)
+        assert x_out.size() == torch.Size([batch_size, seq_len, out_features])
+        assert h.size() == torch.Size([num_layers, batch_size, hidden_size])
+
+    # Test with dim > 3
+    seq_len = 1
+    x = torch.randn(2, 3, batch_size, seq_len, in_features, device=device)
+    x_out, h = net(x)
+    for i in range(5):
+        x_out, h = net(x, h)
+        assert x_out.size() == torch.Size([2, 3, batch_size, seq_len, out_features])
+        assert h.size() == torch.Size([num_layers, 2, 3, batch_size, hidden_size])
+
+    # Test instantiation safety
+    # Test mlp_input_kwargs["out_features"] != gru_kwargs["input_size"]
+    with pytest.raises(ValueError):
+        gru_kwargs = {"input_size": int(hidden_size / 2)}
+        GRUNet(
+            in_features, hidden_size, out_features, gru_kwargs=gru_kwargs, device=device
+        )
+    with pytest.raises(ValueError):
+        mlp_input_kwargs = {"out_features": int(hidden_size / 2)}
+        GRUNet(
+            in_features,
+            hidden_size,
+            out_features,
+            mlp_input_kwargs=mlp_input_kwargs,
+            device=device,
+        )
+
+    # Test mlp_output_kwargs["in_features"] != gru_kwargs["hidden_size"]
+    with pytest.raises(ValueError):
+        gru_kwargs = {"hidden_size": int(hidden_size / 2)}
+        GRUNet(
+            in_features, hidden_size, out_features, gru_kwargs=gru_kwargs, device=device
+        )
+    with pytest.raises(ValueError):
+        mlp_output_kwargs = {"in_features": int(hidden_size / 2)}
+        GRUNet(
+            in_features,
+            hidden_size,
+            out_features,
+            mlp_output_kwargs=mlp_output_kwargs,
+            device=device,
+        )
+
+    # Test gru_kwargs["bidirectional"]
+    with pytest.raises(NotImplementedError):
+        gru_kwargs = {
+            "bidirectional": True,
+        }
+        GRUNet(
+            in_features, hidden_size, out_features, gru_kwargs=gru_kwargs, device=device
+        )
+
+    # Test error if the input is of undesired shape
+    with pytest.raises(RuntimeError):
+        x = torch.randn(1, device=device)
+        net(x)
+    with pytest.raises(RuntimeError):
+        x = torch.randn(1, 1, 1, 1, device=device)
+        net(x)
+
+    # Test warning if batch_first False is asked
+    with pytest.warns(UserWarning):
+        gru_kwargs = {
+            "batch_first": False,
+        }
+        GRUNet(
+            in_features, hidden_size, out_features, gru_kwargs=gru_kwargs, device=device
+        )
 
 
 class TestFunctionalModules:
