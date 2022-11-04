@@ -3,7 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from typing import Union
+
 import torch
+from torch import nn
 
 from torchrl.data import TensorDict
 from torchrl.envs.utils import step_mdp
@@ -11,6 +14,7 @@ from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
 )
+from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from ..data.tensordict.tensordict import TensorDictBase
 from .common import LossModule
 from .utils import distance_loss, next_state_value
@@ -20,7 +24,7 @@ class DQNLoss(LossModule):
     """The DQN Loss class.
 
     Args:
-        value_network (ProbabilisticTDModule): a Q value operator.
+        value_network (QValueActor or nn.Module): a Q value operator.
         gamma (scalar): a discount factor for return computation.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
         delay_value (bool, optional): whether to duplicate the value network into a new target value network to
@@ -30,7 +34,7 @@ class DQNLoss(LossModule):
 
     def __init__(
         self,
-        value_network: QValueActor,
+        value_network: Union[QValueActor, nn.Module],
         gamma: float,
         loss_function: str = "l2",
         priority_key: str = "td_error",
@@ -39,6 +43,11 @@ class DQNLoss(LossModule):
 
         super().__init__()
         self.delay_value = delay_value
+
+        value_network = ensure_tensordict_compatible(
+            module=value_network, wrapper_type=QValueActor
+        )
+
         self.convert_to_functional(
             value_network,
             "value_network",
@@ -46,10 +55,7 @@ class DQNLoss(LossModule):
         )
 
         self.value_network_in_keys = value_network.in_keys
-        if not isinstance(value_network, QValueActor):
-            raise TypeError(
-                f"DQNLoss requires value_network to be of QValueActor dtype, got {type(value_network)}"
-            )
+
         self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_function = loss_function
         self.priority_key = priority_key
@@ -138,7 +144,7 @@ class DistributionalDQNLoss(LossModule):
     https://arxiv.org/pdf/1707.06887.pdf
 
     Args:
-        value_network (DistributionalQValueActor): the distributional Q
+        value_network (DistributionalQValueActor or nn.Module): the distributional Q
             value operator.
         gamma (scalar): a discount factor for return computation.
         delay_value (bool): whether to duplicate the value network into a new target value network to create double DQN
@@ -146,7 +152,7 @@ class DistributionalDQNLoss(LossModule):
 
     def __init__(
         self,
-        value_network: DistributionalQValueActor,
+        value_network: Union[DistributionalQValueActor, nn.Module],
         gamma: float,
         priority_key: str = "td_error",
         delay_value: bool = False,
@@ -155,12 +161,11 @@ class DistributionalDQNLoss(LossModule):
         self.register_buffer("gamma", torch.tensor(gamma))
         self.priority_key = priority_key
         self.delay_value = delay_value
-        if not isinstance(value_network, DistributionalQValueActor):
-            raise TypeError(
-                "Expected value_network to be of type "
-                "DistributionalQValueActor "
-                f"but got {type(value_network)}"
-            )
+
+        value_network = ensure_tensordict_compatible(
+            module=value_network, wrapper_type=DistributionalQValueActor
+        )
+
         self.convert_to_functional(
             value_network,
             "value_network",

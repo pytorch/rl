@@ -1,7 +1,12 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import os
 
 import pytest
-from torchrl._utils import get_binary_env_var
+from torchrl._utils import get_binary_env_var, implement_for
 
 
 @pytest.mark.parametrize("value", ["True", "1", "true"])
@@ -60,3 +65,59 @@ def test_get_binary_env_var_wrong_value():
     finally:
         if key in os.environ:
             del os.environ[key]
+
+
+class implement_for_test_functions:
+    """
+    Groups functions that are used in tests for `implement_for` decorator.
+    """
+
+    @staticmethod
+    @implement_for("_utils_internal", "0.3")
+    def select_correct_version():
+        """To test from+ range and that this function is correctly selected as the implementation."""
+        return "0.3+"
+
+    @staticmethod
+    @implement_for("_utils_internal", "0.2", "0.3")
+    def select_correct_version():  # noqa: F811
+        """To test that right bound is not included."""
+        return "0.2-0.3"
+
+    @staticmethod
+    @implement_for("_utils_internal", "0.1", "0.2")
+    def select_correct_version():  # noqa: F811
+        """To test that function with missing from-to range is ignored."""
+        return "0.1-0.2"
+
+    @staticmethod
+    @implement_for("missing_module")
+    def missing_module():
+        """To test that calling decorated function with missing module raises an exception."""
+        return "missing"
+
+    @staticmethod
+    @implement_for("_utils_internal", None, "0.3")
+    def missing_version():
+        return "0-0.3"
+
+    @staticmethod
+    @implement_for("_utils_internal", "0.4")
+    def missing_version():  # noqa: F811
+        return "0.4+"
+
+
+def test_implement_for():
+    assert implement_for_test_functions.select_correct_version() == "0.3+"
+
+
+def test_implement_for_missing_module():
+    msg = "Supported version of 'missing_module' has not been found."
+    with pytest.raises(ModuleNotFoundError, match=msg):
+        implement_for_test_functions.missing_module()
+
+
+def test_implement_for_missing_version():
+    msg = "Supported version of '_utils_internal' has not been found."
+    with pytest.raises(ModuleNotFoundError, match=msg):
+        implement_for_test_functions.missing_version()
