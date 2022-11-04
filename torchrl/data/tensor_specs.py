@@ -97,11 +97,6 @@ class Box:
 
 
 @dataclass(repr=False)
-class Values:
-    values: Tuple
-
-
-@dataclass(repr=False)
 class ContinuousBox(Box):
     """A continuous box of values, in between a minimum and a maximum."""
 

@@ -42,6 +42,7 @@ def implements_for_memmap(torch_function) -> Callable:
 
 
 def to_numpy(tensor: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
+    """Maps a tensor to numpy."""
     if isinstance(tensor, torch.Tensor):
         return tensor.detach().cpu().numpy()
     else:

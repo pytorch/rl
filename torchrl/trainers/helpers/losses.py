@@ -205,6 +205,8 @@ def make_ppo_loss(model, cfg) -> PPOLoss:
 
 @dataclass
 class LossConfig:
+    """Generic Loss config struct."""
+
     loss: str = "double"
     # whether double or single SAC loss should be used. Default=double
     hard_update: bool = False
@@ -228,6 +230,8 @@ class LossConfig:
 
 @dataclass
 class PPOLossConfig:
+    """PPO Loss config struct."""
+
     loss: str = "clip"
     # PPO loss class, either clip or kl or base/<empty>. Default=clip
     gamma: float = 0.99

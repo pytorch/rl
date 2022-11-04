@@ -70,6 +70,7 @@ except ImportError:
     _has_functorch = False
 
     def is_batchedtensor(tensor):
+        """Placeholder for the functorch function."""
         return False
 
 
@@ -1299,7 +1300,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             shape = torch.Size(shape)
         if shape == self.shape:
             return self
-        return ViewedTensorDict(
+        return _ViewedTensorDict(
             source=self,
             custom_op="view",
             inv_op="view",
@@ -2768,6 +2769,28 @@ def pad_sequence_td(
     out: TensorDictBase = None,
     device: Optional[DEVICE_TYPING] = None,
 ):
+    """Pads a sequence of TensorDicts to match be able to concatenate them.
+
+    Args:
+        list_of_tensordicts (sequence of TensorDict objects): a list to stack
+        batch_first (bool, optional): the `batch_first` that will be passed to
+            torch.nn.utils.rnn.pad_sequence. Default: :obj:`True`.
+        padding_value (float, optional): the padding value. Default: 0.
+        out (TensorDict, optional): a tensordict instance where to write the
+            results.
+        device (torch.device or compatible type, optional): the device where
+            the tensordict will live.
+
+    Examples:
+        >>> tensordicts = [TensorDict({"a": torch.zeros(i+1)}, []) for i in range(3)]
+        >>> pad_sequence_td(tensordicts)
+        TensorDict(
+            fields={
+                a: Tensor(torch.Size([3, 3]), dtype=torch.float32)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+    """
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
     # check that all tensordict match
@@ -4551,7 +4574,7 @@ class SqueezedTensorDict(_CustomOpTensorDict):
         return self._source._stack_onto_(key, list_item_unsqueeze, dim)
 
 
-class ViewedTensorDict(_CustomOpTensorDict):
+class _ViewedTensorDict(_CustomOpTensorDict):
     def _update_custom_op_kwargs(
         self, source_meta_tensor: MetaTensor
     ) -> Dict[str, Any]:

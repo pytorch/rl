@@ -86,6 +86,7 @@ def make_env_transforms(
     state_dim_gsde,
     batch_dims=0,
 ):
+    """Creates the typical transforms for and env."""
     env = TransformedEnv(env)
 
     from_pixels = cfg.from_pixels
@@ -424,6 +425,8 @@ def get_stats_random_rollout(
 
 @dataclass
 class EnvConfig:
+    """Environment config struct."""
+
     env_library: str = "gym"
     # env_library used for the simulated environment. Default=gym
     env_name: str = "Humanoid-v2"

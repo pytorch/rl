@@ -15,7 +15,7 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     NdUnboundedContinuousTensorSpec,
 )
-from torchrl.envs.transforms import (
+from torchrl.envs.transforms.transforms import (
     ToTensorImage,
     Compose,
     ObservationNorm,

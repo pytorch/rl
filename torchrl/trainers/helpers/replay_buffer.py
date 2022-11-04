@@ -52,6 +52,8 @@ def make_replay_buffer(
 
 @dataclass
 class ReplayArgsConfig:
+    """Generic Replay Buffer config struct."""
+
     buffer_size: int = 1000000
     # buffer size, in number of frames stored. Default=1e6
     prb: bool = False

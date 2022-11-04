@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .trainers import make_trainer
 from .collectors import (
     sync_sync_collector,
     sync_async_collector,
@@ -16,6 +15,7 @@ from .envs import (
     parallel_env_constructor,
     get_stats_random_rollout,
 )
+from .logger import LoggerConfig
 from .losses import (
     make_sac_loss,
     make_dqn_loss,
@@ -32,5 +32,5 @@ from .models import (
     make_redq_model,
     make_dreamer,
 )
-from .logger import LoggerConfig
 from .replay_buffer import make_replay_buffer
+from .trainers import make_trainer

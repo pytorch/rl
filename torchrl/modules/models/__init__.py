@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 
+from .exploration import NoisyLinear, NoisyLazyLinear, reset_noise
+from .model_based import DreamerActor, ObsEncoder, ObsDecoder, RSSMPrior, RSSMPosterior
 from .models import (
     MLP,
     ConvNet,
@@ -15,6 +17,4 @@ from .models import (
     DdpgMlpQNet,
     LSTMNet,
 )
-from .exploration import NoisyLinear, NoisyLazyLinear, reset_noise
 from .utils import SqueezeLayer, Squeeze2dLayer
-from .model_based import DreamerActor, ObsEncoder, ObsDecoder, RSSMPrior, RSSMPosterior

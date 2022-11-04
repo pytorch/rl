@@ -723,6 +723,13 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
 
 
 class InPlaceSampler:
+    """A sampler to write tennsordicts in-place.
+
+    To be used cautiously as this may lead to unexpected behaviour (i.e. tensordicts
+    overwritten during execution).
+
+    """
+
     def __init__(self, device: Optional[DEVICE_TYPING] = None):
         self.out = None
         if device is None:

@@ -159,6 +159,7 @@ class EnvCreator:
 
 
 def env_creator(fun: Callable) -> EnvCreator:
+    """Helper function to call `EnvCreator`."""
     return EnvCreator(fun)
 
 

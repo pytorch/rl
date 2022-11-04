@@ -10,7 +10,7 @@ from torch import nn
 
 from torchrl.envs.utils import step_mdp
 from torchrl.modules.distributions import NormalParamWrapper
-from torchrl.modules.models import MLP
+from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.common import TensorDictModule
 from torchrl.modules.tensordict_module.sequence import TensorDictSequential
 

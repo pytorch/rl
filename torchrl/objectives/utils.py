@@ -80,11 +80,6 @@ def distance_loss(
     return value_loss
 
 
-class ValueLoss:
-    value_network: nn.Module
-    target_value_network: nn.Module
-
-
 class TargetNetUpdater:
     """An abstract class for target network update in Double DQN/DDPG.
 

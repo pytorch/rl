@@ -19,6 +19,6 @@ from .exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from .sequence import TensorDictSequential
 from .probabilistic import ProbabilisticTensorDictModule
+from .sequence import TensorDictSequential
 from .world_models import WorldModelWrapper

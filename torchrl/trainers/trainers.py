@@ -1197,6 +1197,7 @@ def _check_input_output_typehint(func: Callable, input: Type, output: Type):
 
 
 def flatten_dict(d):
+    """Flattens a dictionary with sub-dictionaries accessed through point-separated (:obj:`"var1.var2"`) fields."""
     out = {}
     for key, item in d.items():
         if isinstance(item, dict):

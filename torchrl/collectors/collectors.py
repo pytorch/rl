@@ -39,6 +39,8 @@ DEFAULT_EXPLORATION_MODE: str = "random"
 
 
 class RandomPolicy:
+    """A random policy for data collectors."""
+
     def __init__(self, action_spec: TensorSpec):
         """Random policy for a given action_spec.
 
@@ -65,6 +67,7 @@ class RandomPolicy:
 
 
 def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
+    """Maps the tensors to CPU through a nested dictionary."""
     return OrderedDict(
         **{
             k: recursive_map_to_cpu(item)
