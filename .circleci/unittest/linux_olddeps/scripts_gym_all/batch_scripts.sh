@@ -11,8 +11,8 @@ $DIR/install.sh
 $DIR/run_test.sh
 
 # 0.19
-#$DIR/install_gym.sh "0.19"
-#$DIR/run_test.sh
+$DIR/install_gym.sh "0.19"
+$DIR/run_test.sh
 
 # 0.20
 #$DIR/install_gym.sh "0.20"
