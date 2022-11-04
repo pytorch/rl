@@ -2,6 +2,8 @@ import collections
 import math
 import os
 import time
+from functools import wraps
+from importlib import import_module
 
 import numpy as np
 
@@ -15,6 +17,7 @@ class timeit:
         self.name = name
 
     def __call__(self, fn):
+        @wraps(fn)
         def decorated_fn(*args, **kwargs):
             with self:
                 out = fn(*args, **kwargs)
@@ -122,7 +125,7 @@ def prod(sequence):
 
 
 def get_binary_env_var(key):
-    """Parses and returns the binary enironment variable value.
+    """Parses and returns the binary environment variable value.
 
     If not present in environment, it is considered `False`.
 
@@ -176,3 +179,63 @@ class _Dynamic_CKPT_BACKEND:
 
 
 _CKPT_BACKEND = _Dynamic_CKPT_BACKEND()
+
+
+class implement_for:
+    """A version decorator that checks the version in the environment and implements a function with the fitting one.
+
+    If specified module is missing or there is no fitting implementation, call of the decorated function
+    will lead to the explicit error.
+    In case of intersected ranges, first fitting implementation is used.
+
+    Args:
+        module_name: version is checked for the module with this name (e.g. "gym").
+        from_version: version from which implementation is compatible. Can be open (None).
+        to_version: version from which implementation is no longer compatible. Can be open (None).
+
+    Examples:
+        >>> @implement_for(“gym”, “0.13”, “0.14”)
+        >>> def fun(self, x):
+
+        This indicates that the function is compatible with gym 0.13+, but doesn't with gym 0.14+.
+    """
+
+    # Stores pointers to fitting implementations: dict[func_name] = func_pointer
+    _implementations = {}
+
+    def __init__(
+        self, module_name: str, from_version: str = None, to_version: str = None
+    ):
+        self.module_name = module_name
+        self.from_version = from_version
+        self.to_version = to_version
+
+    def __call__(self, fn):
+        @wraps(fn)
+        def unsupported():
+            raise ModuleNotFoundError(
+                f"Supported version of '{self.module_name}' has not been found."
+            )
+
+        # If the module is missing replace the function with the mock.
+        try:
+            module = import_module(self.module_name)
+        except ModuleNotFoundError:
+            return unsupported
+
+        func_name = f"{fn.__module__}.{fn.__name__}"
+        implementations = implement_for._implementations
+
+        # Return fitting implementation if it was encountered before.
+        if func_name in implementations:
+            return implementations[func_name]
+
+        version = module.__version__
+
+        if (self.from_version is None or version >= self.from_version) and (
+            self.to_version is None or version < self.to_version
+        ):
+            implementations[func_name] = fn
+            return fn
+
+        return unsupported

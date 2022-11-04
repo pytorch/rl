@@ -126,7 +126,13 @@ class TestDQN:
     seed = 0
 
     def _create_mock_actor(
-        self, action_spec_type, batch=2, obs_dim=3, action_dim=4, device="cpu"
+        self,
+        action_spec_type,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        is_nn_module=False,
     ):
         # Actor
         if action_spec_type == "one_hot":
@@ -141,6 +147,8 @@ class TestDQN:
             raise ValueError(f"Wrong {action_spec_type}")
 
         module = nn.Linear(obs_dim, action_dim)
+        if is_nn_module:
+            return module.to(device)
         actor = QValueActor(
             spec=CompositeSpec(
                 action=action_spec, action_value=None, chosen_action_value=None
@@ -158,6 +166,7 @@ class TestDQN:
         atoms=5,
         vmin=1,
         vmax=5,
+        is_nn_module=False,
     ):
         # Actor
         if action_spec_type == "mult_one_hot":
@@ -170,6 +179,11 @@ class TestDQN:
             raise ValueError(f"Wrong {action_spec_type}")
         support = torch.linspace(vmin, vmax, atoms, dtype=torch.float)
         module = MLP(obs_dim, (atoms, action_dim))
+        # TODO: Fails tests with
+        # TypeError: __init__() missing 1 required keyword-only argument: 'support'
+        # DistributionalQValueActor initializer expects additional inputs.
+        # if is_nn_module:
+        #     return module
         actor = DistributionalQValueActor(
             spec=CompositeSpec(action=action_spec, action_value=None),
             module=module,
@@ -272,10 +286,11 @@ class TestDQN:
     @pytest.mark.parametrize(
         "action_spec_type", ("nd_bounded", "one_hot", "categorical")
     )
-    def test_dqn(self, delay_value, device, action_spec_type):
+    @pytest.mark.parametrize("is_nn_module", (False, True))
+    def test_dqn(self, delay_value, device, action_spec_type, is_nn_module):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(
-            action_spec_type=action_spec_type, device=device
+            action_spec_type=action_spec_type, device=device, is_nn_module=is_nn_module
         )
         td = self._create_mock_data_dqn(
             action_spec_type=action_spec_type, device=device
@@ -471,12 +486,13 @@ class TestDQN:
     @pytest.mark.parametrize(
         "action_spec_type", ("mult_one_hot", "one_hot", "categorical")
     )
+    @pytest.mark.parametrize("is_nn_module", (False, True))
     def test_distributional_dqn(
-        self, atoms, delay_value, device, action_spec_type, gamma=0.9
+        self, atoms, delay_value, device, action_spec_type, is_nn_module, gamma=0.9
     ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_distributional_actor(
-            action_spec_type=action_spec_type, atoms=atoms
+            action_spec_type=action_spec_type, atoms=atoms, is_nn_module=is_nn_module
         ).to(device)
 
         td = self._create_mock_data_dqn(
