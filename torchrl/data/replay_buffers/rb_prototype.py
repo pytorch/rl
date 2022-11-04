@@ -175,7 +175,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 return stack_td(x, 0, contiguous=True)
 
             kw["collate_fn"] = collate_fn
-
         super().__init__(**kw)
         self.priority_key = priority_key
 
@@ -232,7 +231,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
             torch.tensor(index, dtype=torch.int, device=stacked_td.device),
             inplace=True,
         )
-        self.update_tensordict_priority(tensordicts)
+        self.update_tensordict_priority(stacked_td)
         return index
 
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
