@@ -35,8 +35,8 @@ def step_mdp(
     Args:
         tensordict (TensorDictBase): tensordict with keys to be renamed
         next_tensordict (TensorDictBase, optional): destination tensordict
-        keep_other (bool, optional): if True, all keys that do not start with :obj:`'next_'` will be kept.
-            Default is True.
+        keep_other (bool, optional): if True, all the keys that do not exist in the :obj:`'next'` sub-tensordict
+            will be copied (except :obj:`"action"`, :obj:`"reward"` and :obj:`"done"`). Default is True.
         exclude_reward (bool, optional): if True, the :obj:`"reward"` key will be discarded
             from the resulting tensordict.
             Default is True.
@@ -66,37 +66,26 @@ def step_mdp(
         >>> print(td_out) # should contain keys 'observation', 'next_observation', 'action', 'reward', 'done' or similar
 
     """
-    other_keys = []
-    prohibited = set()
+    result_tensordict = tensordict.get("next").clone(recurse=False)
+    if keep_other:
+        other_keys = set(tensordict.keys()) - set(result_tensordict.keys())
+    else:
+        other_keys = {"done", "reward", "action"}
+    prohibited = {"next"}
     if exclude_done:
         prohibited.add("done")
-    else:
-        other_keys.append("done")
     if exclude_reward:
         prohibited.add("reward")
-    else:
-        other_keys.append("reward")
     if exclude_action:
         prohibited.add("action")
-    else:
-        other_keys.append("action")
-    keys = [key for key in tensordict.keys() if key.startswith("next_")]
-    if len(keys) == 0:
-        raise RuntimeError(
-            "There was no key starting with 'next_' in the provided TensorDict: ",
-            tensordict,
-        )
-    new_keys = [key[5:] for key in keys]
-    prohibited = prohibited.union(keys).union(new_keys)
-    if keep_other:
-        other_keys = [key for key in tensordict.keys() if key not in prohibited]
-    select_tensordict = tensordict.select(*other_keys, *keys)
-    for new_key, key in zip(new_keys, keys):
-        select_tensordict.rename_key(key, new_key, safe=True)
+    other_keys = other_keys - prohibited
+    if len(other_keys):
+        result_tensordict.update(tensordict.select(*other_keys))
+
     if next_tensordict is not None:
-        return next_tensordict.update(select_tensordict)
+        return next_tensordict.update(result_tensordict)
     else:
-        return select_tensordict
+        return result_tensordict
 
 
 def get_available_libraries():

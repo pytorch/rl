@@ -67,7 +67,7 @@ __all__ = [
     "TensorDictPrimer",
 ]
 
-IMAGE_KEYS = ["next_pixels"]
+IMAGE_KEYS = [("next", "pixels")]
 _MAX_NOOPS_TRIALS = 10
 
 
@@ -159,9 +159,9 @@ class Transform(nn.Module):
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         self._check_inplace()
         for key_in, key_out in zip(self.keys_in, self.keys_out):
-            if key_in in tensordict.keys():
-                observation = self._apply_transform(tensordict.get(key_in))
-                tensordict.set(key_out, observation, inplace=self.inplace)
+            # if key_in in tensordict.keys():
+            observation = self._apply_transform(tensordict[key_in])
+            tensordict.set(key_out, observation, inplace=self.inplace)
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -594,9 +594,9 @@ class ObservationTransform(Transform):
     ):
         if keys_in is None:
             keys_in = [
-                "next_observation",
-                "next_pixels",
-                "next_observation_state",
+                ("next", "observation",),
+                ("next", "pixels",),
+                ("next", "observation_state",),
             ]
         super(ObservationTransform, self).__init__(keys_in=keys_in, keys_out=keys_out)
 
@@ -729,13 +729,13 @@ class ToTensorImage(ObservationTransform):
             observations.
 
     Examples:
-        >>> transform = ToTensorImage(keys_in=["next_pixels"])
+        >>> transform = ToTensorImage(keys_in=[("next", "pixels")])
         >>> ri = torch.randint(0, 255, (1,1,10,11,3), dtype=torch.uint8)
-        >>> td = TensorDict(
-        ...     {"next_pixels": ri},
-        ...     [1, 1])
+        >>> td = TensorDict({
+        ...     "next": TensorDict({"pixels": ri}, [1, 1]),
+        ... }, [1, 1])
         >>> _ = transform(td)
-        >>> obs = td.get("next_pixels")
+        >>> obs = td["next", "pixels"]
         >>> print(obs.shape, obs.dtype)
         torch.Size([1, 1, 3, 10, 11]) torch.float32
     """
@@ -1256,19 +1256,19 @@ class ObservationNorm(ObservationTransform):
     Examples:
         >>> torch.set_default_tensor_type(torch.DoubleTensor)
         >>> r = torch.randn(100, 3)*torch.randn(3) + torch.randn(3)
-        >>> td = TensorDict({'next_obs': r}, [100])
+        >>> td = TensorDict({"next": TensorDict({'obs': r}, [100])}, [100])
         >>> transform = ObservationNorm(
-        ...     loc = td.get('next_obs').mean(0),
-        ...     scale = td.get('next_obs').std(0),
-        ...     keys_in=["next_obs"],
+        ...     loc = td['next', 'obs'].mean(0),
+        ...     scale = td['next', 'obs'].std(0),
+        ...     keys_in=[("next", "obs")],
         ...     standard_normal=True)
         >>> _ = transform(td)
-        >>> print(torch.isclose(td.get('next_obs').mean(0),
+        >>> print(torch.isclose(td['next', 'obs'].mean(0),
         ...     torch.zeros(3)).all())
-        Tensor(True)
-        >>> print(torch.isclose(td.get('next_obs').std(0),
+        tensor(True)
+        >>> print(torch.isclose(td['next', 'obs'].std(0),
         ...     torch.ones(3)).all())
-        Tensor(True)
+        tensor(True)
 
     """
 
@@ -1481,11 +1481,14 @@ class DoubleToFloat(Transform):
     """Maps actions float to double before they are called on the environment.
 
     Examples:
-        >>> td = TensorDict(
-        ...     {'next_obs': torch.ones(1, dtype=torch.double)}, [])
-        >>> transform = DoubleToFloat(keys_in=["next_obs"])
+        >>> td = TensorDict({
+        ...     "next": TensorDict(
+        ...         {'obs': torch.ones(1, dtype=torch.double)}, []
+        ...      )
+        ... }, [])
+        >>> transform = DoubleToFloat(keys_in=[("next", "obs")])
         >>> _ = transform(td)
-        >>> print(td.get("next_obs").dtype)
+        >>> print(td["next", "obs"].dtype)
         torch.float32
 
     """

@@ -386,7 +386,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict (TensorDictBase, optional): tensordict to be used to contain the resulting new observation.
                 In some cases, this input can also be used to pass argument to the reset function.
             execute_step (bool, optional): if True, a :obj:`step_mdp` is executed on the output TensorDict,
-                hereby removing the :obj:`"next_"` prefixes from the keys.
+                hereby selecting the `"next"` sub-tensordict.
             kwargs (optional): other arguments to be passed to the native
                 reset function.
 

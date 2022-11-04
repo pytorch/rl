@@ -1082,14 +1082,14 @@ def test_seed():
 @pytest.mark.parametrize("exclude_done", [True, False])
 @pytest.mark.parametrize("exclude_action", [True, False])
 @pytest.mark.parametrize("has_out", [True, False])
-def test_steptensordict(
+def test_stepmdp(
     keep_other, exclude_reward, exclude_done, exclude_action, has_out
 ):
     torch.manual_seed(0)
     tensordict = TensorDict(
         {
             "ledzep": torch.randn(4, 2),
-            "next_ledzep": torch.randn(4, 2),
+            "next": TensorDict({"ledzep": torch.randn(4, 2)}, [4]),
             "reward": torch.randn(4, 1),
             "done": torch.zeros(4, 1, dtype=torch.bool),
             "beatles": torch.randn(4, 1),
@@ -1107,7 +1107,7 @@ def test_steptensordict(
         next_tensordict=next_tensordict,
     )
     assert "ledzep" in out.keys()
-    assert out["ledzep"] is tensordict["next_ledzep"]
+    assert out["ledzep"] is tensordict["next", "ledzep"]
     if keep_other:
         assert "beatles" in out.keys()
         assert out["beatles"] is tensordict["beatles"]

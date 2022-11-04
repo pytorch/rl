@@ -244,10 +244,10 @@ class GymWrapper(GymLikeEnv):
         )
         if not isinstance(self.observation_spec, CompositeSpec):
             if self.from_pixels:
-                self.observation_spec = CompositeSpec(next_pixels=self.observation_spec)
+                self.observation_spec = CompositeSpec(pixels=self.observation_spec)
             else:
                 self.observation_spec = CompositeSpec(
-                    next_observation=self.observation_spec
+                    observation=self.observation_spec
                 )
         self.reward_spec = UnboundedContinuousTensorSpec(
             device=self.device,
