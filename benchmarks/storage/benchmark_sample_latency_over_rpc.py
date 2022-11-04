@@ -2,6 +2,10 @@
 Sample latency benchmarking (using RPC)
 ======================================
 A rough benchmark of sample latency using different storage types over the network using `torch.rpc`.
+Run this script with --rank=0 and --rank=1 flags set in separate processes - these ranks correspond to the trainer worker and buffer worker respectively, and both need to be initialised.
+e.g. to benchmark LazyMemmapStorage, run the following commands using either two separate shells or multiprocessing.
+    - python3 benchmark_sample_latency_over_rpc.py --rank=0 --storage=LazyMemmapStorage
+    - python3 benchmark_sample_latency_over_rpc.py --rank=1 --storage=LazyMemmapStorage
 This code is based on examples/distributed/distributed_replay_buffer.py.
 """
 import argparse
@@ -60,7 +64,7 @@ parser.add_argument(
     "--storage",
     type=str,
     default="LazyMemmapStorage",
-    help="Storage type [LazyMemmapStorage, LazyTensorStorage]",
+    help="Storage type [LazyMemmapStorage, LazyTensorStorage, ListStorage]",
 )
 
 
