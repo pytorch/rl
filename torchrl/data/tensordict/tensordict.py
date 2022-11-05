@@ -2076,9 +2076,21 @@ class TensorDict(TensorDictBase):
         if not isinstance(key, str):
             _is_tuple = isinstance(key, tuple)
             if _is_tuple and len(key) > 1:
-                return self.get(key[0]).set(key[1:], value, inplace=inplace, _run_checks=_run_checks, _meta_val=_meta_val)
+                return self.get(key[0]).set(
+                    key[1:],
+                    value,
+                    inplace=inplace,
+                    _run_checks=_run_checks,
+                    _meta_val=_meta_val,
+                )
             elif _is_tuple:
-                return self.set(key[0], value, inplace=inplace, _run_checks=_run_checks, _meta_val=_meta_val)
+                return self.set(
+                    key[0],
+                    value,
+                    inplace=inplace,
+                    _run_checks=_run_checks,
+                    _meta_val=_meta_val,
+                )
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
         if self._is_shared is None:

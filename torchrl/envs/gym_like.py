@@ -109,9 +109,9 @@ class GymLikeEnv(_EnvWrapper):
     In this implementation, the info output is discarded (but specific keys can be read
     by updating info_dict_reader, see :obj:`set_info_dict_reader` class method).
 
-    By default, the first output is written at the "next_observation" key-value pair in the output tensordict, unless
+    By default, the first output is written at the `("next", "observation")` key-value pair in the output tensordict, unless
     the first output is a dictionary. In that case, each observation output will be put at the corresponding
-    "next_observation_{key}" location.
+    `("next", f"observation_{key}")` location.
 
     It is also expected that env.reset() returns an observation similar to the one observed after a step is completed.
     """
@@ -167,12 +167,12 @@ class GymLikeEnv(_EnvWrapper):
 
         """
         if isinstance(observations, dict):
-            observations = {"next_" + key: value for key, value in observations.items()}
+            observations = {key: value for key, value in observations.items()}
         if not isinstance(observations, (TensorDict, dict)):
             key = list(self.observation_spec.keys())[0]
             observations = {key: observations}
         observations = self.observation_spec.encode(observations)
-        return observations
+        return observations.select().set("next", observations)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get("action")
@@ -210,7 +210,7 @@ class GymLikeEnv(_EnvWrapper):
             if do_break:
                 break
 
-        obs_dict = self.read_obs(obs)
+        tensordict_out = self.read_obs(obs)
 
         if reward is None:
             reward = np.nan
@@ -218,9 +218,9 @@ class GymLikeEnv(_EnvWrapper):
         done = self._to_tensor(done, dtype=torch.bool)
         self.is_done = done
 
-        tensordict_out = TensorDict(
-            obs_dict, batch_size=tensordict.batch_size, device=self.device
-        )
+        # tensordict_out = TensorDict(
+        #     obs_dict, batch_size=tensordict.batch_size, device=self.device
+        # )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
         if self.info_dict_reader is not None and info is not None:

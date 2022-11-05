@@ -84,7 +84,7 @@ def _gym_to_torchrl_spec_transform(
     elif isinstance(spec, (Dict,)):
         spec_out = {}
         for k in spec.keys():
-            spec_out["next_" + k] = _gym_to_torchrl_spec_transform(
+            spec_out[k] = _gym_to_torchrl_spec_transform(
                 spec[k],
                 device=device,
                 categorical_action_encoding=categorical_action_encoding,
@@ -246,9 +246,7 @@ class GymWrapper(GymLikeEnv):
             if self.from_pixels:
                 self.observation_spec = CompositeSpec(pixels=self.observation_spec)
             else:
-                self.observation_spec = CompositeSpec(
-                    observation=self.observation_spec
-                )
+                self.observation_spec = CompositeSpec(observation=self.observation_spec)
         self.reward_spec = UnboundedContinuousTensorSpec(
             device=self.device,
         )

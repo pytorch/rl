@@ -65,8 +65,11 @@ def _check_all_str(list_of_str):
         raise RuntimeError(
             f"Expected a list of strings but got a string: {list_of_str}"
         )
-    if any(not isinstance(key, str) for key in list_of_str):
-        raise TypeError(f"Expected a list of strings but got: {list_of_str}")
+    for key in list_of_str:
+        if isinstance(key, tuple):
+            _check_all_str(key)
+        elif not isinstance(key, str):
+            raise TypeError(f"Expected a list of strings but got: {list_of_str}")
 
 
 def _forward_hook_safe_action(module, tensordict_in, tensordict_out):

@@ -210,7 +210,7 @@ def test_rollout_predictability(device):
     ).all()
     assert (
         torch.arange(first + 1, first + 101, device=device)
-        == td_out.get("next_observation").squeeze()
+        == td_out["next", "observation"].squeeze()
     ).all()
     assert (
         torch.arange(first + 1, first + 101, device=device)
@@ -254,7 +254,7 @@ def _make_envs(
                     GymEnv(env_name, frame_skip=frame_skip, device=device),
                     Compose(
                         ObservationNorm(
-                            keys_in=["next_observation"], loc=0.5, scale=1.1
+                            keys_in=[("next", "observation")], loc=0.5, scale=1.1
                         ),
                         RewardClipping(0, 0.1),
                     ),
@@ -275,7 +275,7 @@ def _make_envs(
                     Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
                     if not transformed_in
                     else Compose(
-                        *[ObservationNorm(keys_in=["next_pixels"], loc=0, scale=1)]
+                        *[ObservationNorm(keys_in=[("next", "pixels")], loc=0, scale=1)]
                     )
                 )
 
@@ -297,14 +297,14 @@ def _make_envs(
                 return (
                     Compose(
                         ObservationNorm(
-                            keys_in=["next_observation"], loc=0.5, scale=1.1
+                            keys_in=[("next", "observation")], loc=0.5, scale=1.1
                         ),
                         RewardClipping(0, 0.1),
                     )
                     if not transformed_in
                     else Compose(
                         ObservationNorm(
-                            keys_in=["next_observation"], loc=1.0, scale=1.0
+                            keys_in=[("next", "observation")], loc=1.0, scale=1.0
                         )
                     )
                 )
@@ -334,7 +334,7 @@ class TestModelBasedEnvBase:
             TensorDictModule(
                 ActionObsMergeLinear(5, 4),
                 in_keys=["hidden_observation", "action"],
-                out_keys=["next_hidden_observation"],
+                out_keys=[("next", "hidden_observation")],
             ),
             TensorDictModule(
                 nn.Linear(4, 1),
@@ -349,7 +349,7 @@ class TestModelBasedEnvBase:
         assert set(rollout.keys()) == set(mb_env.observation_spec.keys()).union(
             set(mb_env.input_spec.keys())
         ).union({"reward", "done"})
-        assert rollout["next_hidden_observation"].shape == (10, 100, 4)
+        assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_mb_env_batch_lock(self, device, seed=0):
@@ -359,7 +359,7 @@ class TestModelBasedEnvBase:
             TensorDictModule(
                 ActionObsMergeLinear(5, 4),
                 in_keys=["hidden_observation", "action"],
-                out_keys=["next_hidden_observation"],
+                out_keys=[("next", "hidden_observation")],
             ),
             TensorDictModule(
                 nn.Linear(4, 1),
@@ -455,10 +455,15 @@ class TestParallel:
             return TransformedEnv(
                 DMControlEnv("humanoid", "stand"),
                 Compose(
-                    CatTensors(env1_obs_keys, "next_observation_stand", del_keys=False),
-                    CatTensors(env1_obs_keys, "next_observation"),
+                    CatTensors(
+                        env1_obs_keys, ("next", "observation_stand"), del_keys=False
+                    ),
+                    CatTensors(env1_obs_keys, ("next", "observation")),
                     DoubleToFloat(
-                        keys_in=["next_observation_stand", "next_observation"],
+                        keys_in=[
+                            ("next", "observation_stand"),
+                            ("next", "observation"),
+                        ],
                         keys_inv_in=["action"],
                     ),
                 ),
@@ -468,10 +473,12 @@ class TestParallel:
             return TransformedEnv(
                 DMControlEnv("humanoid", "walk"),
                 Compose(
-                    CatTensors(env2_obs_keys, "next_observation_walk", del_keys=False),
-                    CatTensors(env2_obs_keys, "next_observation"),
+                    CatTensors(
+                        env2_obs_keys, ("next", "observation_walk"), del_keys=False
+                    ),
+                    CatTensors(env2_obs_keys, ("next", "observation")),
                     DoubleToFloat(
-                        keys_in=["next_observation_walk", "next_observation"],
+                        keys_in=[("next", "observation_walk"), ("next", "observation")],
                         keys_inv_in=["action"],
                     ),
                 ),
@@ -549,8 +556,15 @@ class TestParallel:
     @pytest.mark.parametrize(
         "selected_keys",
         [
-            ["action", "observation", "next_observation", "done", "reward"],
-            ["hidden", "action", "observation", "next_observation", "done", "reward"],
+            ["action", "observation", ("next", "observation"), "done", "reward"],
+            [
+                "hidden",
+                "action",
+                "observation",
+                ("next", "observation"),
+                "done",
+                "reward",
+            ],
             None,
         ],
     )
@@ -654,9 +668,7 @@ class TestParallel:
             max_steps=10, auto_reset=False, tensordict=td0_serial
         ).contiguous()
         key = "pixels" if "pixels" in td_serial else "observation"
-        torch.testing.assert_close(
-            td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
-        )
+        torch.testing.assert_close(td_serial[:, 0][("next", key)], td_serial[:, 1][key])
 
         out_seed_parallel = env_parallel.set_seed(0, static_seed=static_seed)
         if static_seed:
@@ -669,7 +681,7 @@ class TestParallel:
             max_steps=10, auto_reset=False, tensordict=td0_parallel
         ).contiguous()
         torch.testing.assert_close(
-            td_parallel[:, :-1].get("next_" + key), td_parallel[:, 1:].get(key)
+            td_parallel[:, :-1]["next", key], td_parallel[:, 1:][key]
         )
 
         assert_allclose_td(td0_serial, td0_parallel)
@@ -1082,9 +1094,7 @@ def test_seed():
 @pytest.mark.parametrize("exclude_done", [True, False])
 @pytest.mark.parametrize("exclude_action", [True, False])
 @pytest.mark.parametrize("has_out", [True, False])
-def test_stepmdp(
-    keep_other, exclude_reward, exclude_done, exclude_action, has_out
-):
+def test_stepmdp(keep_other, exclude_reward, exclude_done, exclude_action, has_out):
     torch.manual_seed(0)
     tensordict = TensorDict(
         {

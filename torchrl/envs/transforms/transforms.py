@@ -159,9 +159,9 @@ class Transform(nn.Module):
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         self._check_inplace()
         for key_in, key_out in zip(self.keys_in, self.keys_out):
-            # if key_in in tensordict.keys():
-            observation = self._apply_transform(tensordict[key_in])
-            tensordict.set(key_out, observation, inplace=self.inplace)
+            if key_in in tensordict:
+                observation = self._apply_transform(tensordict[key_in])
+                tensordict.set(key_out, observation, inplace=self.inplace)
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -594,9 +594,18 @@ class ObservationTransform(Transform):
     ):
         if keys_in is None:
             keys_in = [
-                ("next", "observation",),
-                ("next", "pixels",),
-                ("next", "observation_state",),
+                (
+                    "next",
+                    "observation",
+                ),
+                (
+                    "next",
+                    "pixels",
+                ),
+                (
+                    "next",
+                    "observation_state",
+                ),
             ]
         super(ObservationTransform, self).__init__(keys_in=keys_in, keys_out=keys_out)
 
@@ -1572,17 +1581,17 @@ class CatTensors(Transform):
             Default is False.
 
     Examples:
-        >>> transform = CatTensors(keys_in=["key1", "key2"])
-        >>> td = TensorDict({"key1": torch.zeros(1, 1),
-        ...     "key2": torch.ones(1, 1)}, [1])
+        >>> transform = CatTensors(keys_in=[("next", "key1"), ("next", "key2")])
+        >>> td = TensorDict({"next": TensorDict({"key1": torch.zeros(1, 1),
+        ...     "key2": torch.ones(1, 1)}, [1])}, [1])
         >>> _ = transform(td)
-        >>> print(td.get("observation_vector"))
+        >>> print(td["next", "observation_vector"])
         tensor([[0., 1.]])
-        >>> transform = CatTensors(keys_in=["key1", "key2"], dim=-2, unsqueeze_if_oor=True)
-        >>> td = TensorDict({"key1": torch.zeros(1),
-        ...     "key2": torch.ones(1)}, [])
+        >>> transform = CatTensors(keys_in=[("next", "key1"), ("next", "key2")], dim=-2, unsqueeze_if_oor=True)
+        >>> td = TensorDict({"next": TensorDict({"key1": torch.zeros(1, 1),
+        ...     "key2": torch.ones(1, 1)}, [])}, [])
         >>> _ = transform(td)
-        >>> print(td.get("observation_vector").shape)
+        >>> print(td["next", "observation_vector"].shape)
         torch.Size([2, 1])
 
     """
@@ -1593,7 +1602,7 @@ class CatTensors(Transform):
     def __init__(
         self,
         keys_in: Optional[Sequence[str]] = None,
-        out_key: str = "next_observation_vector",
+        out_key: str = ("next", "observation_vector"),
         dim: int = -1,
         del_keys: bool = True,
         unsqueeze_if_oor: bool = False,
@@ -1607,8 +1616,10 @@ class CatTensors(Transform):
         else:
             keys_in = sorted(list(keys_in))
             self._check_keys_in(keys_in, out_key)
-        if type(out_key) != str:
-            raise Exception("CatTensors requires out_key to be of type string")
+        if not isinstance(out_key, (str, tuple)):
+            raise Exception(
+                "CatTensors requires out_key to be of type string or tuple."
+            )
         # super().__init__(keys_in=keys_in)
         super(CatTensors, self).__init__(keys_in=keys_in, keys_out=[out_key])
         self.dim = dim
@@ -1616,12 +1627,11 @@ class CatTensors(Transform):
         self.unsqueeze_if_oor = unsqueeze_if_oor
 
     def _check_keys_in(self, keys_in, out_key):
-        if not out_key.startswith("next_") and all(
-            key.startswith("next_") for key in keys_in
-        ):
+        if not isinstance(out_key, tuple) or not out_key[0] == "next":
             warn(
-                f"It seems that 'next_'-like keys are being concatenated to a non 'next_' key {out_key}. This may result in unwanted behaviours, and the 'next_' flag is missing from the output key."
-                f"Consider renaming the out_key to 'next_{out_key}'"
+                f"""It seems that 'next'-like keys are being concatenated to a
+non 'next' key '{out_key}'. This may result in unwanted behaviours, and the 'next'
+flag is missing from the output key. Consider renaming the out_key to `('next', '{out_key}')`."""
             )
 
     def _find_keys_in(self):
@@ -1639,8 +1649,10 @@ class CatTensors(Transform):
             self.keys_in = self._find_keys_in()
             self._initialized = True
 
-        if all([key in tensordict.keys() for key in self.keys_in]):
-            values = [tensordict.get(key) for key in self.keys_in]
+        # TODO: refactor this after we switch to the new tensordict key viewer
+        if all([key in tensordict for key in self.keys_in]):
+            # TODO: check if 'get' would make sense here? get(keys: Tuple) is currently not implemented
+            values = [tensordict[key] for key in self.keys_in]
             if self.unsqueeze_if_oor:
                 pos_idx = self.dim > 0
                 abs_idx = self.dim if pos_idx else -self.dim - 1
@@ -1750,7 +1762,7 @@ class DiscreteActionProjection(Transform):
     inplace = False
 
     def __init__(self, max_n: int, m: int, action_key: str = "action"):
-        super().__init__([action_key])
+        super().__init__(keys_in=[], keys_inv_in=[action_key])
         self.max_n = max_n
         self.m = m
 

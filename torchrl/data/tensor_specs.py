@@ -1176,7 +1176,10 @@ dtype=torch.float32)},
         del self._specs[key]
 
     def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
-        out = {}
+        if isinstance(vals, TensorDict):
+            out = vals.select()  # create and empty tensordict similar to vals
+        else:
+            out = TensorDict({}, [], _run_checks=False)
         for key, item in vals.items():
             if item is None:
                 raise RuntimeError(
