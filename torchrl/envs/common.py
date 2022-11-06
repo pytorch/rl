@@ -662,13 +662,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         fake_input = input_spec.zero(self.batch_size)
         observation_spec = self.observation_spec
         fake_obs = observation_spec.zero(self.batch_size)
-        fake_obs_step = step_mdp(fake_obs)
+        fake_obs_step = fake_obs
         reward_spec = self.reward_spec
         fake_reward = reward_spec.zero(self.batch_size)
         fake_td = TensorDict(
             {
+                "next": fake_obs,
                 **fake_obs_step,
-                **fake_obs,
                 **fake_input,
                 "reward": fake_reward,
                 "done": fake_reward.to(torch.bool),

@@ -2076,7 +2076,10 @@ class TensorDict(TensorDictBase):
         if not isinstance(key, str):
             _is_tuple = isinstance(key, tuple)
             if _is_tuple and len(key) > 1:
-                return self.get(key[0]).set(
+                _key = key[0]
+                if _key not in self.keys():
+                    self.set(_key, self.select())
+                return self.get(_key).set(
                     key[1:],
                     value,
                     inplace=inplace,
@@ -2156,10 +2159,20 @@ class TensorDict(TensorDictBase):
     def set_(
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], no_check: bool = False
     ) -> TensorDictBase:
+        is_tuple = isinstance(key, tuple)
+        if is_tuple and len(key) > 1:
+            return self.get(key[0]).set_(key[1:], value)
+        elif is_tuple:
+            return self.set_(key[0], value)
+
         if not no_check:
             if not isinstance(key, str):
-                raise TypeError(f"Expected key to be a string but found {type(key)}")
+                raise TypeError(
+                    f"Expected key to be a string or a tuple, but found {type(key)}"
+                )
 
+        # TODO: modify this with the new kew view for efficiency
+        # if no_check or key in self.keys():
         if no_check or key in self.keys():
             if not no_check:
                 proc_value = self._process_input(
@@ -2180,7 +2193,7 @@ class TensorDict(TensorDictBase):
                 if key in self._dict_meta:
                     self._dict_meta[key].requires_grad = proc_value.requires_grad
         else:
-            raise AttributeError(
+            raise KeyError(
                 f'key "{key}" not found in tensordict, '
                 f'call td.set("{key}", value) for populating tensordict with '
                 f"new key-value pair"

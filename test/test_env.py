@@ -346,9 +346,11 @@ class TestModelBasedEnvBase:
             world_model, device=device, batch_size=torch.Size([10])
         )
         rollout = mb_env.rollout(max_steps=100)
-        assert set(rollout.keys()) == set(mb_env.observation_spec.keys()).union(
-            set(mb_env.input_spec.keys())
-        ).union({"reward", "done"})
+        rollout_keys = set(rollout.flatten_keys(".").keys())
+        obs_keys = {"next." + key for key in mb_env.observation_spec.keys()}
+        assert rollout_keys == obs_keys.union(mb_env.input_spec.keys()).union(
+            {"reward", "done"}
+        )
         assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 
     @pytest.mark.parametrize("device", get_available_devices())
@@ -455,14 +457,12 @@ class TestParallel:
             return TransformedEnv(
                 DMControlEnv("humanoid", "stand"),
                 Compose(
-                    CatTensors(
-                        env1_obs_keys, ("next", "observation_stand"), del_keys=False
-                    ),
-                    CatTensors(env1_obs_keys, ("next", "observation")),
+                    CatTensors(env1_obs_keys, "observation_stand", del_keys=False),
+                    CatTensors(env1_obs_keys, "observation"),
                     DoubleToFloat(
                         keys_in=[
-                            ("next", "observation_stand"),
-                            ("next", "observation"),
+                            "observation_stand",
+                            "observation",
                         ],
                         keys_inv_in=["action"],
                     ),
@@ -473,12 +473,10 @@ class TestParallel:
             return TransformedEnv(
                 DMControlEnv("humanoid", "walk"),
                 Compose(
-                    CatTensors(
-                        env2_obs_keys, ("next", "observation_walk"), del_keys=False
-                    ),
-                    CatTensors(env2_obs_keys, ("next", "observation")),
+                    CatTensors(env2_obs_keys, "observation_walk", del_keys=False),
+                    CatTensors(env2_obs_keys, "observation"),
                     DoubleToFloat(
-                        keys_in=[("next", "observation_walk"), ("next", "observation")],
+                        keys_in=["observation_walk", "observation"],
                         keys_inv_in=["action"],
                     ),
                 ),
@@ -556,12 +554,12 @@ class TestParallel:
     @pytest.mark.parametrize(
         "selected_keys",
         [
-            ["action", "observation", ("next", "observation"), "done", "reward"],
+            ["action", "observation", "next", "done", "reward"],
             [
                 "hidden",
                 "action",
                 "observation",
-                ("next", "observation"),
+                "next",
                 "done",
                 "reward",
             ],

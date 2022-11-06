@@ -10,7 +10,6 @@ import multiprocessing as mp
 from copy import deepcopy, copy
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Union
-from warnings import warn
 
 import torch
 from torch import nn, Tensor
@@ -67,7 +66,7 @@ __all__ = [
     "TensorDictPrimer",
 ]
 
-IMAGE_KEYS = [("next", "pixels")]
+IMAGE_KEYS = ["pixels"]
 _MAX_NOOPS_TRIALS = 10
 
 
@@ -166,6 +165,13 @@ class Transform(nn.Module):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._call(tensordict)
+        return tensordict
+        # raise NotImplementedError("""`Transform.forward` is currently not implemented
+
+    # (reserved for usage beyong envs). Use `Transform.step` instead.""")
+
+    def step(self, tensordict: TensorDictBase):
+        tensordict["next"] = self._call(tensordict.get("next"))
         return tensordict
 
     def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
@@ -431,7 +437,7 @@ but got an object of type {type(transform)}."""
         tensordict_out = self.base_env.step(tensordict_in)
         # tensordict should already have been processed by the transforms
         # for logging purposes
-        tensordict_out = self.transform(tensordict_out)
+        tensordict_out = self.transform.step(tensordict_out)
         return tensordict_out
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -441,7 +447,7 @@ but got an object of type {type(transform)}."""
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         out_tensordict = self.base_env.reset(execute_step=False, **kwargs)
         out_tensordict = self.transform.reset(out_tensordict)
-        out_tensordict = self.transform(out_tensordict)
+        out_tensordict = self.transform.step(out_tensordict)
         return out_tensordict
 
     def state_dict(self) -> OrderedDict:
@@ -632,6 +638,11 @@ class Compose(Transform):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
             tensordict = t(tensordict)
+        return tensordict
+
+    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for t in self.transforms:
+            tensordict = t.step(tensordict)
         return tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1127,6 +1138,11 @@ class UnsqueezeTransform(Transform):
             self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
         return super().forward(tensordict)
 
+    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._unsqueeze_dim_orig >= 0:
+            self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
+        return super().step(tensordict)
+
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = observation.unsqueeze(self.unsqueeze_dim)
         return observation
@@ -1210,6 +1226,9 @@ class SqueezeTransform(UnsqueezeTransform):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return super().inv(tensordict)
+
+    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return super().inv(tensordict["next"])
 
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
         return super().forward(tensordict)
@@ -1602,7 +1621,7 @@ class CatTensors(Transform):
     def __init__(
         self,
         keys_in: Optional[Sequence[str]] = None,
-        out_key: str = ("next", "observation_vector"),
+        out_key: str = "observation_vector",
         dim: int = -1,
         del_keys: bool = True,
         unsqueeze_if_oor: bool = False,
@@ -1615,7 +1634,7 @@ class CatTensors(Transform):
                 )
         else:
             keys_in = sorted(list(keys_in))
-            self._check_keys_in(keys_in, out_key)
+            # self._check_keys_in(keys_in, out_key)
         if not isinstance(out_key, (str, tuple)):
             raise Exception(
                 "CatTensors requires out_key to be of type string or tuple."
@@ -1626,14 +1645,6 @@ class CatTensors(Transform):
         self.del_keys = del_keys
         self.unsqueeze_if_oor = unsqueeze_if_oor
 
-    def _check_keys_in(self, keys_in, out_key):
-        if not isinstance(out_key, tuple) or not out_key[0] == "next":
-            warn(
-                f"""It seems that 'next'-like keys are being concatenated to a
-non 'next' key '{out_key}'. This may result in unwanted behaviours, and the 'next'
-flag is missing from the output key. Consider renaming the out_key to `('next', '{out_key}')`."""
-            )
-
     def _find_keys_in(self):
         parent = self.parent
         obs_spec = parent.observation_spec
@@ -1641,7 +1652,6 @@ flag is missing from the output key. Consider renaming the out_key to `('next', 
         for key, value in obs_spec.items():
             if len(value.shape) == 1:
                 keys_in.append(key)
-        self._check_keys_in(keys_in, self.keys_out[0])
         return sorted(keys_in)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1826,7 +1836,7 @@ class NoopResetEnv(Transform):
         """Do no-op action for a number of steps in [1, noop_max]."""
         parent = self.parent
         keys = tensordict.keys()
-        keys = [key for key in keys if not key.startswith("next_")]
+        keys = [key for key in keys if key != "next"]
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
@@ -2073,9 +2083,9 @@ class VecNorm(Transform):
         ...         _ = env.reset()
         ...     tds += [td]
         >>> tds = torch.stack(tds, 0)
-        >>> print((abs(tds.get("next_observation").mean(0))<0.2).all())
+        >>> print((abs(tds.get(("next" ,"observation")).mean(0))<0.2).all())
         tensor(True)
-        >>> print((abs(tds.get("next_observation").std(0)-1)<0.2).all())
+        >>> print((abs(tds.get(("next", "observation")).std(0)-1)<0.2).all())
         tensor(True)
 
     """
