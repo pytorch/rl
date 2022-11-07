@@ -42,31 +42,6 @@ from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
 from torchrl.envs.utils import step_mdp
 
-__all__ = [
-    "Transform",
-    "TransformedEnv",
-    "RewardClipping",
-    "Resize",
-    "CenterCrop",
-    "GrayScale",
-    "Compose",
-    "ToTensorImage",
-    "ObservationNorm",
-    "FlattenObservation",
-    "UnsqueezeTransform",
-    "RewardScaling",
-    "ObservationTransform",
-    "CatFrames",
-    "FiniteTensorDictCheck",
-    "DoubleToFloat",
-    "CatTensors",
-    "NoopResetEnv",
-    "BinarizeReward",
-    "PinMemoryTransform",
-    "VecNorm",
-    "gSDENoise",
-    "TensorDictPrimer",
-]
 
 IMAGE_KEYS = ["next_pixels"]
 _MAX_NOOPS_TRIALS = 10
@@ -230,7 +205,12 @@ class Transform(nn.Module):
         return f"{self.__class__.__name__}(keys={self.keys_in})"
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
+        if self.__dict__["_parent"] is not None:
+            raise AttributeError("parent of transform already set")
         self.__dict__["_parent"] = parent
+
+    def reset_parent(self) -> None:
+        self.__dict__["_parent"] = None
 
     @property
     def parent(self) -> EnvBase:
@@ -252,15 +232,20 @@ class Transform(nn.Module):
                 raise ValueError(
                     f"Compose parent was of type {type(compose_parent)} but expected TransformedEnv."
                 )
+            if compose_parent.transform is not compose:
+                comp_parent_trans = copy(compose_parent.transform)
+                comp_parent_trans.reset_parent()
+            else:
+                comp_parent_trans = None
             out = TransformedEnv(
                 compose_parent.base_env,
-                transform=compose_parent.transform
-                if compose_parent.transform is not compose
-                else None,
+                transform=comp_parent_trans,
             )
-            for transform in compose.transforms:
-                if transform is self:
+            for orig_trans in compose.transforms:
+                if orig_trans is self:
                     break
+                transform = copy(orig_trans)
+                transform.reset_parent()
                 out.append_transform(transform)
         elif isinstance(parent, TransformedEnv):
             out = TransformedEnv(parent.base_env)
@@ -313,9 +298,16 @@ class TransformedEnv(EnvBase):
                 # we don't use isinstance as some transforms may be subclassed from
                 # Compose but with other features that we don't want to loose.
                 transform = [transform]
+            else:
+                for t in transform:
+                    t.reset_parent()
             env_transform = env.transform
             if type(env_transform) is not Compose:
+                env_transform.reset_parent()
                 env_transform = [env_transform]
+            else:
+                for t in env_transform:
+                    t.reset_parent()
             transform = Compose(*env_transform, *transform).to(device)
         else:
             self._set_env(env, device)
@@ -500,9 +492,10 @@ but got an object of type {type(transform)}."""
         transform = transform.to(self.device)
         if not isinstance(self.transform, Compose):
             prev_transform = self.transform
+            prev_transform.reset_parent()
             self.transform = Compose()
             self.transform.append(prev_transform)
-            self.transform.set_parent(self)
+
         self.transform.append(transform)
 
     def insert_transform(self, index: int, transform: Transform) -> None:
@@ -564,8 +557,6 @@ but got an object of type {type(transform)}."""
     def __setattr__(self, key, value):
         propobj = getattr(self.__class__, key, None)
 
-        if isinstance(value, Transform):
-            value.set_parent(self)
         if isinstance(propobj, property):
             ancestors = list(__class__.__mro__)[::-1]
             while isinstance(propobj, property):
@@ -767,7 +758,7 @@ class ToTensorImage(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = self._pixel_observation(deepcopy(observation_spec))
+        observation_spec = self._pixel_observation(observation_spec)
         observation_spec.shape = torch.Size(
             [
                 *observation_spec.shape[:-3],
@@ -923,7 +914,6 @@ class Resize(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -980,20 +970,17 @@ class CenterCrop(ObservationTransform):
                     for key, _obs_spec in observation_spec._specs.items()
                 }
             )
-        else:
-            _observation_spec = deepcopy(observation_spec)
 
-        space = _observation_spec.space
+        space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
             space.maximum = self._apply_transform(space.maximum)
-            _observation_spec.shape = space.minimum.shape
+            observation_spec.shape = space.minimum.shape
         else:
-            _observation_spec.shape = self._apply_transform(
-                torch.zeros(_observation_spec.shape)
+            observation_spec.shape = self._apply_transform(
+                torch.zeros(observation_spec.shape)
             ).shape
 
-        observation_spec = _observation_spec
         return observation_spec
 
     def __repr__(self) -> str:
@@ -1046,7 +1033,6 @@ class FlattenObservation(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
 
         if isinstance(space, ContinuousBox):
@@ -1149,17 +1135,17 @@ class UnsqueezeTransform(Transform):
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         for key in self.keys_inv_in:
-            input_spec = self._transform_spec(deepcopy(input_spec[key]))
+            input_spec = self._transform_spec(input_spec[key])
         return input_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if "reward" in self.keys_in:
-            reward_spec = self._transform_spec(deepcopy(reward_spec))
+            reward_spec = self._transform_spec(reward_spec)
         return reward_spec
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = self._transform_spec(deepcopy(observation_spec))
+        observation_spec = self._transform_spec(observation_spec)
         return observation_spec
 
     def __repr__(self) -> str:
@@ -1223,7 +1209,6 @@ class GrayScale(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1313,7 +1298,6 @@ class ObservationNorm(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1766,9 +1750,8 @@ class DiscreteActionProjection(Transform):
         return action
 
     def tranform_input_spec(self, input_spec: CompositeSpec):
-        input_spec_out = deepcopy(input_spec)
-        input_spec_out["action"] = self.transform_action_spec(input_spec_out["action"])
-        return input_spec_out
+        input_spec["action"] = self.transform_action_spec(input_spec["action"])
+        return input_spec
 
     def __repr__(self) -> str:
         return (

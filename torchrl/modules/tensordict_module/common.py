@@ -54,11 +54,6 @@ from torchrl.modules.functional_modules import (
     FunctionalModuleWithBuffers as rlFunctionalModuleWithBuffers,
 )
 
-__all__ = [
-    "TensorDictModule",
-    "TensorDictModuleWrapper",
-]
-
 
 def _check_all_str(list_of_str):
     if isinstance(list_of_str, str):
@@ -630,6 +625,42 @@ class TensorDictModuleWrapper(nn.Module):
 
 
 def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
+    """Returns `True` if a module can be used as a TensorDictModule, and False if it can't.
+
+    If the signature is misleading an error is raised.
+
+    Examples:
+        >>> module = nn.Linear(3, 4)
+        >>> is_tensordict_compatible(module)
+        False
+        >>> class CustomModule(nn.Module):
+        ...    def __init__(self, module):
+        ...        super().__init__()
+        ...        self.linear = module
+        ...        self.in_keys = ["x"]
+        ...        self.out_keys = ["y"]
+        ...    def forward(self, tensordict):
+        ...        tensordict["y"] = self.linear(tensordict["x"])
+        ...        return tensordict
+        >>> tensordict_module = CustomModule(module)
+        >>> is_tensordict_compatible(tensordict_module)
+        True
+        >>> class CustomModule(nn.Module):
+        ...    def __init__(self, module):
+        ...        super().__init__()
+        ...        self.linear = module
+        ...        self.in_keys = ["x"]
+        ...        self.out_keys = ["y"]
+        ...    def forward(self, tensordict, other_key):
+        ...        tensordict["y"] = self.linear(tensordict["x"])
+        ...        return tensordict
+        >>> tensordict_module = CustomModule(module)
+        >>> try:
+        ...     is_tensordict_compatible(tensordict_module)
+        ... except TypeError:
+        ...     print("passing")
+        passing
+    """
     sig = inspect.signature(module.forward)
 
     if isinstance(module, TensorDictModule) or (

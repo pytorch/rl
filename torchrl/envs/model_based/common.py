@@ -15,8 +15,6 @@ from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.modules.tensordict_module import TensorDictModule
 
-__all__ = ["ModelBasedEnvBase"]
-
 
 class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
     """Basic environnement for Model Based RL algorithms.

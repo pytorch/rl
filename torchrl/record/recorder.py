@@ -18,8 +18,6 @@ from tensordict.tensordict import TensorDictBase
 from torchrl.envs.transforms import ObservationTransform, Transform
 from torchrl.trainers.loggers import Logger
 
-__all__ = ["VideoRecorder", "TensorDictRecorder"]
-
 
 class VideoRecorder(ObservationTransform):
     """Video Recorder transform.

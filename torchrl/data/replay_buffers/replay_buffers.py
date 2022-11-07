@@ -32,13 +32,6 @@ from torchrl.data.replay_buffers.utils import (
 )
 from torchrl.data.utils import DEVICE_TYPING
 
-__all__ = [
-    "ReplayBuffer",
-    "PrioritizedReplayBuffer",
-    "TensorDictReplayBuffer",
-    "TensorDictPrioritizedReplayBuffer",
-]
-
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
     """Zips a list of iterables containing tensor-like objects and stacks the resulting lists of tensors together.
@@ -730,6 +723,13 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
 
 
 class InPlaceSampler:
+    """A sampler to write tennsordicts in-place.
+
+    To be used cautiously as this may lead to unexpected behaviour (i.e. tensordicts
+    overwritten during execution).
+
+    """
+
     def __init__(self, device: Optional[DEVICE_TYPING] = None):
         self.out = None
         if device is None:

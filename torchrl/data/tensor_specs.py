@@ -25,21 +25,6 @@ from typing import (
 import numpy as np
 import torch
 
-__all__ = [
-    "TensorSpec",
-    "BoundedTensorSpec",
-    "OneHotDiscreteTensorSpec",
-    "UnboundedContinuousTensorSpec",
-    "UnboundedDiscreteTensorSpec",
-    "NdBoundedTensorSpec",
-    "NdUnboundedContinuousTensorSpec",
-    "NdUnboundedDiscreteTensorSpec",
-    "BinaryDiscreteTensorSpec",
-    "MultOneHotDiscreteTensorSpec",
-    "DiscreteTensorSpec",
-    "CompositeSpec",
-]
-
 from tensordict.tensordict import TensorDictBase, TensorDict
 
 from torchrl._utils import get_binary_env_var
@@ -110,11 +95,6 @@ class Box:
 
     def __repr__(self):
         return f"{self.__class__.__name__}()"
-
-
-@dataclass(repr=False)
-class Values:
-    values: Tuple
 
 
 @dataclass(repr=False)

@@ -85,15 +85,6 @@ ACTIVATIONS = {
     "relu": nn.ReLU,
 }
 
-__all__ = [
-    "make_dqn_actor",
-    "make_ddpg_actor",
-    "make_ppo_model",
-    "make_sac_model",
-    "make_redq_model",
-    "make_dreamer",
-]
-
 
 def make_dqn_actor(
     proof_environment: EnvBase, cfg: "DictConfig", device: torch.device  # noqa: F821
@@ -1443,6 +1434,8 @@ def make_dreamer(
 
 @dataclass
 class DreamerConfig:
+    """Dreamer model config struct."""
+
     batch_length: int = 50
     state_dim: int = 30
     rssm_hidden_dim: int = 200
@@ -1459,6 +1452,8 @@ class DreamerConfig:
 
 @dataclass
 class PPOModelConfig:
+    """PPO model config struct."""
+
     gSDE: bool = False
     # if True, exploration is achieved using the gSDE technique.
     tanh_loc: bool = False
@@ -1476,6 +1471,8 @@ class PPOModelConfig:
 
 @dataclass
 class SACModelConfig:
+    """SAC model config struct."""
+
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False
@@ -1516,6 +1513,8 @@ class SACModelConfig:
 
 @dataclass
 class DDPGModelConfig:
+    """DDPG model config struct."""
+
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False
@@ -1539,6 +1538,8 @@ class DDPGModelConfig:
 
 @dataclass
 class REDQModelConfig:
+    """REDQ model config struct."""
+
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False
@@ -1577,6 +1578,8 @@ class REDQModelConfig:
 
 @dataclass
 class ContinuousModelConfig:
+    """Continuous control model config struct."""
+
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False
@@ -1619,6 +1622,8 @@ class ContinuousModelConfig:
 
 @dataclass
 class DiscreteModelConfig:
+    """Discrete model config struct."""
+
     annealing_frames: int = 1000000
     # Number of frames used for annealing of the EGreedy exploration. Default=1e6.
     noisy: bool = False

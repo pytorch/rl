@@ -16,7 +16,7 @@ from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.transforms import (
+from torchrl.envs.transforms.transforms import (
     ToTensorImage,
     Compose,
     ObservationNorm,
@@ -33,8 +33,6 @@ try:
     _has_tv = True
 except ImportError:
     _has_tv = False
-
-__all__ = ["R3MTransform"]
 
 
 class _R3MNet(Transform):

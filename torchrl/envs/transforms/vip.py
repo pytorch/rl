@@ -33,8 +33,6 @@ try:
 except ImportError:
     _has_tv = False
 
-__all__ = ["VIPTransform"]
-
 
 class _VIPNet(Transform):
 

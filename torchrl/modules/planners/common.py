@@ -11,8 +11,6 @@ from tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase
 from torchrl.modules import TensorDictModule
 
-__all__ = ["MPCPlannerBase"]
-
 
 class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
     """MPCPlannerBase abstract Module.

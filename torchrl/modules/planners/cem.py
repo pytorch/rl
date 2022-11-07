@@ -7,9 +7,7 @@ import torch
 from tensordict.tensordict import TensorDictBase
 
 from torchrl.envs import EnvBase
-from torchrl.modules.planners import MPCPlannerBase
-
-__all__ = ["CEMPlanner"]
+from torchrl.modules.planners.common import MPCPlannerBase
 
 
 class CEMPlanner(MPCPlannerBase):
@@ -153,7 +151,7 @@ class CEMPlanner(MPCPlannerBase):
             actions = actions.flatten(0, 1)
             actions = self.env.action_spec.project(actions)
             optim_tensordict = expanded_original_tensordict.to_tensordict()
-            policy = PrecomputedActionsSequentialSetter(actions)
+            policy = _PrecomputedActionsSequentialSetter(actions)
             optim_tensordict = self.env.rollout(
                 max_steps=self.planning_horizon,
                 policy=policy,
@@ -179,7 +177,7 @@ class CEMPlanner(MPCPlannerBase):
         return actions_means[:, :, 0].reshape(*batch_size, *self.action_spec.shape)
 
 
-class PrecomputedActionsSequentialSetter:
+class _PrecomputedActionsSequentialSetter:
     def __init__(self, actions):
         self.actions = actions
         self.cmpt = 0

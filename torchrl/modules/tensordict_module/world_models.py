@@ -6,8 +6,6 @@
 
 from torchrl.modules.tensordict_module import TensorDictModule, TensorDictSequential
 
-__all__ = ["WorldModelWrapper"]
-
 
 class WorldModelWrapper(TensorDictSequential):
     """World model wrapper.

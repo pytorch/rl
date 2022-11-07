@@ -15,8 +15,6 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import hold_out_net, distance_loss
 from torchrl.objectives.value.functional import vec_td_lambda_return_estimate
 
-__all__ = ["DreamerModelLoss", "DreamerActorLoss", "DreamerValueLoss"]
-
 
 class DreamerModelLoss(LossModule):
     """Dreamer Model Loss.

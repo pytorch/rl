@@ -25,8 +25,6 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
-__all__ = ["SerialEnv", "ParallelEnv"]
-
 
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):
@@ -882,10 +880,10 @@ class ParallelEnv(_BatchedEnv):
         return self
 
 
-def recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> OrderedDict:
+def _recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> OrderedDict:
     return OrderedDict(
         **{
-            k: recursively_strip_locks_from_state_dict(item)
+            k: _recursively_strip_locks_from_state_dict(item)
             if isinstance(item, OrderedDict)
             else None
             if isinstance(item, MpLock)
@@ -1019,7 +1017,7 @@ def _run_worker_pipe_shared_mem(
             child_pipe.send((msg, None))
 
         elif cmd == "state_dict":
-            state_dict = recursively_strip_locks_from_state_dict(env.state_dict())
+            state_dict = _recursively_strip_locks_from_state_dict(env.state_dict())
             msg = "state_dict"
             child_pipe.send((msg, state_dict))
 
