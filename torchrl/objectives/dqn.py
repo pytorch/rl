@@ -6,7 +6,7 @@
 from typing import Union
 
 import torch
-from tensordict import TensorDictBase
+from tensordict.tensordict import TensorDictBase
 from torch import nn
 
 from torchrl.data import TensorDict

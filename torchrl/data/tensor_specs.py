@@ -40,7 +40,7 @@ __all__ = [
     "CompositeSpec",
 ]
 
-from tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDictBase, TensorDict
 
 from torchrl._utils import get_binary_env_var
 

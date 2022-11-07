@@ -32,7 +32,7 @@ __all__ = [
     "MultiSyncDataCollector",
 ]
 
-from tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDictBase, TensorDict
 
 from torchrl.envs.transforms import TransformedEnv
 from ..data import TensorSpec
