@@ -23,9 +23,18 @@
 # -- Project information -----------------------------------------------------
 import os.path
 import sys
+from pathlib import Path
+import warnings
 
 import pytorch_sphinx_theme
 import torchrl
+
+# find project
+sys.path.insert(0, str(Path(__file__).parents[2]))
+
+# Suppress warnings - TODO
+# suppress_warnings = [ 'misc.highlighting_failure' ]
+warnings.filterwarnings("ignore", category=UserWarning)
 
 project = "torchrl"
 copyright = "2022, Meta"
@@ -61,15 +70,16 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinx_gallery.gen_gallery",
-    "sphinxcontrib.aafig",
     "myst_parser",
 ]
 
 sphinx_gallery_conf = {
-    "examples_dirs": "../../gallery/",  # path to your example scripts
-    "gallery_dirs": "auto_examples",  # path to where to save gallery generated output
+    "examples_dirs": "../../tutorials/sphinx-tutorials/demos_source/",  # path to your example scripts
+    "gallery_dirs": "demos",  # path to where to save gallery generated output
     "backreferences_dir": "gen_modules/backreferences",
     "doc_module": ("torchrl",),
+    'only_warn_on_example_error': True,
+    'filename_pattern': '../../tutorials/sphinx-tutorials/demos_source/', # files to parse
 }
 
 napoleon_use_ivar = True

@@ -29,8 +29,7 @@ TorchRL aims at a high modularity and good runtime performance.
    :maxdepth: 3
    :caption: Contents:
 
-   reference/index
-   reference/knowledge_base
+   demos/demo
 
 Indices and tables
 ==================
