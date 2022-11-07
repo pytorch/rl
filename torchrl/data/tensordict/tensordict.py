@@ -792,8 +792,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             )
         keys1 = set(self.keys())
         keys2 = set(other.keys())
-        if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-            raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
+        if keys1 != keys2:
+            raise KeyError(
+                f"""keys in tensordicts mismatch, got {keys1.difference(keys2)}
+in the right set and {keys2.difference(keys1)} in the left."""
+            )
         d = dict()
         for (key, item1) in self.items():
             d[key] = item1 == other.get(key)
@@ -2259,6 +2262,11 @@ class TensorDict(TensorDictBase):
     def get(
         self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
     ) -> COMPATIBLE_TYPES:
+        is_tuple = isinstance(key, tuple)
+        if is_tuple and len(key) > 1:
+            return self.get(key[0]).get(key[1:], default=default)
+        elif is_tuple:
+            return self.get(key[0], default=default)
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
@@ -2378,7 +2386,8 @@ class TensorDict(TensorDictBase):
         return self
 
     def select(self, *keys: str, inplace: bool = False) -> TensorDictBase:
-        d = {key: value for (key, value) in self.items() if key in keys}
+        # TODO: use key view instead
+        d = {key: self.get(key) for key in keys if key in self}
         d_meta = {
             key: value
             for (key, value) in self.items_meta(make_unset=False)
@@ -2457,6 +2466,8 @@ def assert_allclose_td(
     msg: str = "",
 ) -> bool:
     """Compares two tensordicts and raise an exception if their content does not match exactly."""
+    actual = actual.flatten_keys(".")
+    expected = expected.flatten_keys(".")
     if not isinstance(actual, TensorDictBase) or not isinstance(
         expected, TensorDictBase
     ):

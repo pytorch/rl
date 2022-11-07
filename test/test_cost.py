@@ -112,7 +112,12 @@ class _check_td_steady:
         pass
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        assert (self.td.select(*self.td_clone.keys()) == self.td_clone).all()
+        td1 = self.td_clone.flatten_keys(".")
+        td2 = self.td.flatten_keys(".")
+        s2 = set(td1.keys())
+        s1 = set(td2.keys()).intersection(s2)
+        assert s1 == s2
+        assert (td2.select(*td1.keys()) == td1).all()
 
 
 def get_devices():
@@ -224,7 +229,7 @@ class TestDQN:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next_observation": next_obs,
+                "next": {"observation": next_obs},
                 "done": done,
                 "reward": reward,
                 "action": action,
@@ -269,7 +274,7 @@ class TestDQN:
             batch_size=(batch, T),
             source={
                 "observation": obs * mask.to(obs.dtype),
-                "next_observation": next_obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
@@ -622,7 +627,7 @@ class TestDDPG:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next_observation": next_obs,
+                "next": {"observation": next_obs},
                 "done": done,
                 "reward": reward,
                 "action": action,
@@ -651,7 +656,7 @@ class TestDDPG:
             batch_size=(batch, T),
             source={
                 "observation": obs * mask.to(obs.dtype),
-                "next_observation": next_obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
@@ -844,7 +849,7 @@ class TestSAC:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next_observation": next_obs,
+                "next": {"observation": next_obs},
                 "done": done,
                 "reward": reward,
                 "action": action,
@@ -873,7 +878,7 @@ class TestSAC:
             batch_size=(batch, T),
             source={
                 "observation": obs * mask.to(obs.dtype),
-                "next_observation": next_obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
@@ -1046,7 +1051,12 @@ class TestSAC:
             np.random.seed(0)
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            ms_td_select = (
+                ms_td.flatten_keys(".")
+                .select(*td.flatten_keys(".").keys())
+                .unflatten_keys(".")
+            )
+            assert_allclose_td(td, ms_td_select)
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (
@@ -1193,7 +1203,7 @@ class TestREDQ:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next_observation": next_obs,
+                "next": {"observation": next_obs},
                 "done": done,
                 "reward": reward,
                 "action": action,
@@ -1222,7 +1232,7 @@ class TestREDQ:
             batch_size=(batch, T),
             source={
                 "observation": obs * mask.to(obs.dtype),
-                "next_observation": next_obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
@@ -1579,7 +1589,7 @@ class TestPPO:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next_observation": next_obs,
+                "next": {"observation": next_obs},
                 "done": done,
                 "reward": reward,
                 "action": action,
@@ -1611,7 +1621,7 @@ class TestPPO:
             batch_size=(batch, T),
             source={
                 "observation": obs * mask.to(obs.dtype),
-                "next_observation": next_obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
@@ -1823,7 +1833,7 @@ class TestReinforce:
             {
                 "reward": torch.randn(batch, 1),
                 "observation": torch.randn(batch, n_obs),
-                "next_observation": torch.randn(batch, n_obs),
+                "next": {"observation": torch.randn(batch, n_obs)},
                 "done": torch.zeros(batch, 1, dtype=torch.bool),
                 "action": torch.randn(batch, n_act),
             },
@@ -1867,7 +1877,7 @@ class TestDreamer:
                 "state": torch.zeros(batch_size, temporal_length, state_dim),
                 "belief": torch.zeros(batch_size, temporal_length, rssm_hidden_dim),
                 "pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
-                "next_pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
+                "next": {"pixels": torch.randn(batch_size, temporal_length, 3, 64, 64)},
                 "action": torch.randn(batch_size, temporal_length, 64),
                 "reward": torch.randn(batch_size, temporal_length, 1),
                 "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),

@@ -37,7 +37,7 @@ def test_multistep(n, key, device, T=11):
     tensordict = TensorDict(
         source={
             key: total_obs[:, :T] * mask.to(torch.float),
-            "next_" + key: total_obs[:, 1:] * mask.to(torch.float),
+            "next": {key: total_obs[:, 1:] * mask.to(torch.float)},
             "done": done,
             "reward": torch.randn(1, T, 1, device=device).expand(b, T, 1)
             * mask.to(torch.float),
@@ -60,7 +60,7 @@ def test_multistep(n, key, device, T=11):
     # assert that done at last step is similar to unterminated traj
     assert (ms_tensordict.get("gamma")[4] == ms_tensordict.get("gamma")[0]).all()
     assert (
-        ms_tensordict.get("next_" + key)[4] == ms_tensordict.get("next_" + key)[0]
+        ms_tensordict.get("next", key)[4] == ms_tensordict.get("next", key)[0]
     ).all()
     assert (
         ms_tensordict.get("steps_to_next_obs")[4]
@@ -69,7 +69,7 @@ def test_multistep(n, key, device, T=11):
 
     # check that next obs is properly replaced, or that it is terminated
     next_obs = ms_tensordict.get(key)[:, (1 + ms.n_steps_max) :]
-    true_next_obs = ms_tensordict.get("next_" + key)[:, : -(1 + ms.n_steps_max)]
+    true_next_obs = ms_tensordict.get(("next", key))[:, : -(1 + ms.n_steps_max)]
     terminated = ~ms_tensordict.get("nonterminal")
     assert ((next_obs == true_next_obs) | terminated[:, (1 + ms.n_steps_max) :]).all()
 

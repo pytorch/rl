@@ -147,9 +147,9 @@ class MultiStep(nn.Module):
             tensordict: TennsorDict instance with Batch x Time-steps x ...
                 dimensions.
                 The TensorDict must contain a "reward" and "done" key. All
-                keys that start with the "next_" prefix will be shifted by (
-                at most) self.n_steps_max frames. The TensorDict will also
-                be updated with new key-value pairs:
+                keys int the sub-tensordict nested under the "next" key will be
+                shifted by (at most) :obj:`self.n_steps_max` frames.
+                The TensorDict will also be updated with new key-value pairs:
 
                 - gamma: indicating the discount to be used for the next
                 reward;
@@ -192,25 +192,15 @@ class MultiStep(nn.Module):
         nonterminal = ~post_terminal[:, :T]
         steps_to_next_obs = _get_steps_to_next_obs(nonterminal, self.n_steps_max)
 
-        selected_td = tensordict.select(
-            *[
-                key
-                for key in tensordict.keys()
-                if (key.startswith("next_") or key == "done")
-            ]
-        )
+        selected_td = tensordict.select("next", "done")
 
-        for key, item in selected_td.items():
-            tensordict.set_(
-                key,
-                select_and_repeat(
-                    item,
-                    terminal,
-                    post_terminal,
-                    mask,
-                    self.n_steps_max,
-                ),
+        def _select_and_repeat(item):
+            return select_and_repeat(
+                item, terminal, post_terminal, mask, self.n_steps_max
             )
+
+        selected_td = selected_td.apply(_select_and_repeat)
+        tensordict.update_(selected_td)
 
         tensordict.set("gamma", gamma_masked)
         tensordict.set("steps_to_next_obs", steps_to_next_obs)
