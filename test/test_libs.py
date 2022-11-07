@@ -33,6 +33,7 @@ if _has_dmc:
 
 from sys import platform
 
+from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDictBase
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
@@ -169,11 +170,12 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     nested_obs_env = NestedObsGymEnv()
     env = GymWrapper(nested_obs_env)
 
-    def assert_obs_name(obs: TensorDictBase, obs_spec: TensorDictBase) -> None:
-        for key, value in obs_spec.items():
-            assert key in obs.keys()
-            if isinstance(value, dict):
-                assert_obs_name(value, obs[key])
+    def assert_obs_name(td: TensorDictBase, obs_spec: TensorSpec) -> None:
+        # Note that td can contain also other fields than those in obs_spec
+        for key in obs_spec.keys():
+            assert key in td.keys()
+            if isinstance(td[key], TensorDictBase):
+                assert_obs_name(td[key], obs_spec[key])
 
     # internal function returns with "next_"
     td = env._reset()

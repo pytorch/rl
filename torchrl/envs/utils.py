@@ -97,7 +97,7 @@ def step_mdp(
         for key in keys_all:
             new_key = key[5:]
             td.rename_key(key, new_key, safe=True)
-            if isinstance(td[new_key], (TensorDictBase, dict)):
+            if isinstance(td[new_key], TensorDictBase):
                 keys_ = [
                     key_ for key_ in td[new_key].keys() if key_.startswith("next_")
                 ]
