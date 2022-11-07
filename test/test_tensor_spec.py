@@ -399,6 +399,39 @@ class TestComposite:
             if key != "nested_cp":
                 assert key in td["nested_cp"].keys()
 
+    def test_nested_composite_spec_index(self, is_complete, device, dtype):
+        ts = self._composite_spec(is_complete, device, dtype)
+        ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
+        ts["nested_cp"]["nested_cp"] = self._composite_spec(is_complete, device, dtype)
+        assert ts["nested_cp"]["nested_cp"] is ts["nested_cp", "nested_cp"]
+        assert (
+            ts["nested_cp"]["nested_cp"]["obs"] is ts["nested_cp", "nested_cp", "obs"]
+        )
+
+    def test_nested_composite_spec_rand(self, is_complete, device, dtype):
+        ts = self._composite_spec(is_complete, device, dtype)
+        ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
+        ts["nested_cp"]["nested_cp"] = self._composite_spec(is_complete, device, dtype)
+        r = ts.rand()
+        assert (r["nested_cp", "nested_cp", "obs"] >= 0).all()
+
+    def test_nested_composite_spec_zero(self, is_complete, device, dtype):
+        ts = self._composite_spec(is_complete, device, dtype)
+        ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
+        ts["nested_cp"]["nested_cp"] = self._composite_spec(is_complete, device, dtype)
+        r = ts.zero()
+        assert (r["nested_cp", "nested_cp", "obs"] == 0).all()
+
+    def test_nested_composite_spec_setitem(self, is_complete, device, dtype):
+        ts = self._composite_spec(is_complete, device, dtype)
+        ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
+        ts["nested_cp"]["nested_cp"] = self._composite_spec(is_complete, device, dtype)
+        ts["nested_cp", "nested_cp", "obs"] = None
+        assert (
+            ts["nested_cp"]["nested_cp"]["obs"] is ts["nested_cp", "nested_cp", "obs"]
+        )
+        assert ts["nested_cp"]["nested_cp"]["obs"] is None
+
     def test_nested_composite_spec_update(self, is_complete, device, dtype):
         ts = self._composite_spec(is_complete, device, dtype)
         ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)

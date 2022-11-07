@@ -1154,11 +1154,22 @@ dtype=torch.float32)},
         self._device = value
 
     def __getitem__(self, item):
+        if isinstance(item, tuple) and len(item) > 1:
+            return self[item[0]][item[1:]]
+        elif isinstance(item, tuple):
+            return self[item[0]]
+
         if item in {"shape", "device", "dtype", "space"}:
             raise AttributeError(f"CompositeSpec has no key {item}")
         return self._specs[item]
 
     def __setitem__(self, key, value):
+        if isinstance(key, tuple) and len(key) > 1:
+            self[key[0]][key[1:]] = value
+        elif isinstance(key, tuple):
+            self[key[0]] = value
+        elif not isinstance(key, str):
+            raise TypeError(f"Got key of type {type(key)} when a string was expected.")
         if key in {"shape", "device", "dtype", "space"}:
             raise AttributeError(f"CompositeSpec[{key}] cannot be set")
         if value is not None and value.device != self.device:
@@ -1233,9 +1244,9 @@ dtype=torch.float32)},
             shape = torch.Size([])
         return TensorDict(
             {
-                key: value.rand(shape)
-                for key, value in self._specs.items()
-                if value is not None
+                key: self[key].rand(shape)
+                for key in self.keys(True)
+                if isinstance(key, str) and self[key] is not None
             },
             batch_size=shape,
         )
@@ -1280,7 +1291,11 @@ dtype=torch.float32)},
         if shape is None:
             shape = torch.Size([])
         return TensorDict(
-            {key: self[key].zero(shape) for key in self.keys()},
+            {
+                key: self[key].zero(shape)
+                for key in self.keys(True)
+                if isinstance(key, str) and self[key] is not None
+            },
             shape,
             device=self.device,
         )
