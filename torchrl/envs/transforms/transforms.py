@@ -204,7 +204,12 @@ class Transform(nn.Module):
         return f"{self.__class__.__name__}(keys={self.keys_in})"
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
+        if self.__dict__["_parent"] is not None:
+            raise AttributeError("parent of transform already set")
         self.__dict__["_parent"] = parent
+
+    def reset_parent(self) -> None:
+        self.__dict__["_parent"] = None
 
     @property
     def parent(self) -> EnvBase:
@@ -226,15 +231,20 @@ class Transform(nn.Module):
                 raise ValueError(
                     f"Compose parent was of type {type(compose_parent)} but expected TransformedEnv."
                 )
+            if compose_parent.transform is not compose:
+                comp_parent_trans = copy(compose_parent.transform)
+                comp_parent_trans.reset_parent()
+            else:
+                comp_parent_trans = None
             out = TransformedEnv(
                 compose_parent.base_env,
-                transform=compose_parent.transform
-                if compose_parent.transform is not compose
-                else None,
+                transform=comp_parent_trans,
             )
-            for transform in compose.transforms:
-                if transform is self:
+            for orig_trans in compose.transforms:
+                if orig_trans is self:
                     break
+                transform = copy(orig_trans)
+                transform.reset_parent()
                 out.append_transform(transform)
         elif isinstance(parent, TransformedEnv):
             out = TransformedEnv(parent.base_env)
@@ -287,9 +297,16 @@ class TransformedEnv(EnvBase):
                 # we don't use isinstance as some transforms may be subclassed from
                 # Compose but with other features that we don't want to loose.
                 transform = [transform]
+            else:
+                for t in transform:
+                    t.reset_parent()
             env_transform = env.transform
             if type(env_transform) is not Compose:
+                env_transform.reset_parent()
                 env_transform = [env_transform]
+            else:
+                for t in env_transform:
+                    t.reset_parent()
             transform = Compose(*env_transform, *transform).to(device)
         else:
             self._set_env(env, device)
@@ -474,9 +491,10 @@ but got an object of type {type(transform)}."""
         transform = transform.to(self.device)
         if not isinstance(self.transform, Compose):
             prev_transform = self.transform
+            prev_transform.reset_parent()
             self.transform = Compose()
             self.transform.append(prev_transform)
-            self.transform.set_parent(self)
+
         self.transform.append(transform)
 
     def insert_transform(self, index: int, transform: Transform) -> None:
@@ -538,8 +556,6 @@ but got an object of type {type(transform)}."""
     def __setattr__(self, key, value):
         propobj = getattr(self.__class__, key, None)
 
-        if isinstance(value, Transform):
-            value.set_parent(self)
         if isinstance(propobj, property):
             ancestors = list(__class__.__mro__)[::-1]
             while isinstance(propobj, property):

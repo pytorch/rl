@@ -327,6 +327,27 @@ def test_nested_transformed_env():
     assert children[1] == t2
 
 
+def test_transform_parent():
+    base_env = ContinuousActionVecMockEnv()
+    t1 = RewardScaling(0, 1)
+    t2 = RewardScaling(0, 2)
+    env = TransformedEnv(TransformedEnv(base_env, t1), t2)
+    t3 = RewardClipping(0.1, 0.5)
+    env.append_transform(t3)
+
+    t1_parent_gt = t1._parent
+    t2_parent_gt = t2._parent
+    t3_parent_gt = t3._parent
+
+    _ = t1.parent
+    _ = t2.parent
+    _ = t3.parent
+
+    assert t1_parent_gt == t1._parent
+    assert t2_parent_gt == t2._parent
+    assert t3_parent_gt == t3._parent
+
+
 class TestTransforms:
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize("interpolation", ["bilinear", "bicubic"])
