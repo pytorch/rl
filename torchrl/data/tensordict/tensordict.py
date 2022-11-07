@@ -2386,6 +2386,16 @@ class TensorDict(TensorDictBase):
         return self
 
     def select(self, *keys: str, inplace: bool = False) -> TensorDictBase:
+        if any(isinstance(key, tuple) for key in keys):
+            strange_char = "._|_."
+            if inplace:
+                raise NotImplementedError(
+                    "inplace selection with tuple keys is not implemented yet."
+                )
+            keys = [_flatten_keys(key, strange_char) for key in keys]
+            flatten_self = self.flatten_keys(strange_char)
+            return flatten_self.select(*keys).unflatten_keys(strange_char)
+
         # TODO: use key view instead
         d = {key: self.get(key) for key in keys if key in self}
         d_meta = {
@@ -4842,3 +4852,9 @@ def _find_max_batch_size(source: Union[TensorDictBase, dict]) -> list[int]:
                 return batch_size
         batch_size.append(curr_dim_size)
         curr_dim += 1
+
+
+def _flatten_keys(key, sep):
+    if isinstance(key, str):
+        return key
+    return sep.join(key)

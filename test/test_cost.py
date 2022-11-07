@@ -1915,8 +1915,10 @@ class TestDreamer:
     def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
-            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "next": CompositeSpec(
+                state=NdUnboundedContinuousTensorSpec(state_dim),
+                belief=NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            )
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -1934,27 +1936,27 @@ class TestDreamer:
         rssm_posterior = RSSMPosterior(hidden_dim=rssm_hidden_dim, state_dim=state_dim)
 
         # World Model and reward model
-        rssm_rollout = RSSMRollout(
-            TensorDictModule(
-                rssm_prior,
-                in_keys=["state", "belief", "action"],
-                out_keys=[
-                    "next_prior_mean",
-                    "next_prior_std",
-                    "_",
-                    "next_belief",
-                ],
-            ),
-            TensorDictModule(
-                rssm_posterior,
-                in_keys=["next_belief", "next_encoded_latents"],
-                out_keys=[
-                    "next_posterior_mean",
-                    "next_posterior_std",
-                    "next_state",
-                ],
-            ),
+        rssm_prior = TensorDictModule(
+            rssm_prior,
+            in_keys=["state", "belief", "action"],
+            out_keys=[
+                ("next", "prior_mean"),
+                ("next", "prior_std"),
+                "_",
+                ("next", "belief"),
+            ],
         )
+        rssm_posterior = TensorDictModule(
+            rssm_posterior,
+            in_keys=[("next", "belief"), ("next", "encoded_latents")],
+            out_keys=[
+                ("next", "posterior_mean"),
+                ("next", "posterior_std"),
+                ("next", "state"),
+            ],
+        )
+
+        rssm_rollout = RSSMRollout(rssm_prior, rssm_posterior)
         reward_module = MLP(
             out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU
         )
@@ -1962,19 +1964,19 @@ class TestDreamer:
         world_modeler = TensorDictSequential(
             TensorDictModule(
                 obs_encoder,
-                in_keys=["next_pixels"],
-                out_keys=["next_encoded_latents"],
+                in_keys=[("next", "pixels")],
+                out_keys=[("next", "encoded_latents")],
             ),
             rssm_rollout,
             TensorDictModule(
                 obs_decoder,
-                in_keys=["next_state", "next_belief"],
-                out_keys=["next_reco_pixels"],
+                in_keys=[("next", "state"), ("next", "belief")],
+                out_keys=[("next", "reco_pixels")],
             ),
         )
         reward_module = TensorDictModule(
             reward_module,
-            in_keys=["next_state", "next_belief"],
+            in_keys=[("next", "state"), ("next", "belief")],
             out_keys=["reward"],
         )
         world_model = WorldModelWrapper(world_modeler, reward_module)
@@ -1990,8 +1992,10 @@ class TestDreamer:
     def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
-            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "next": CompositeSpec(
+                state=NdUnboundedContinuousTensorSpec(state_dim),
+                belief=NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            )
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2013,14 +2017,14 @@ class TestDreamer:
                 out_keys=[
                     "_",
                     "_",
-                    "next_state",
-                    "next_belief",
+                    ("next", "state"),
+                    ("next", "belief"),
                 ],
             ),
         )
         reward_model = TensorDictModule(
             reward_module,
-            in_keys=["next_state", "next_belief"],
+            in_keys=[("next", "state"), ("next", "belief")],
             out_keys=["reward"],
         )
         model_based_env = DreamerEnv(
@@ -2039,8 +2043,10 @@ class TestDreamer:
     def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
-            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "next": CompositeSpec(
+                state=NdUnboundedContinuousTensorSpec(state_dim),
+                belief=NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            )
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)

@@ -21,6 +21,7 @@ from typing import (
 
 import torch
 
+from torchrl.data.tensor_specs import _keys_to_empty_composite_spec
 from torchrl.modules import functional_modules
 
 _has_functorch = False
@@ -217,22 +218,35 @@ class TensorDictModule(nn.Module):
                     f"got more than one out_key for the TensorDictModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a CompositeSpec object or no spec at all."
                 )
-            spec = CompositeSpec(**{self.out_keys[0]: spec})
+            spec = _keys_to_empty_composite_spec(self.out_keys)
+            out_key0 = self.out_keys[0]
+            if isinstance(out_key0, tuple):
+                _out_key = out_key0[0]
+                out_key0 = out_key0[1:]
+                sub_spec = spec
+                while len(out_key0):
+                    sub_spec = spec[_out_key] = CompositeSpec()
+                    _out_key = out_key0[0]
+                    out_key0 = out_key0[1:]
+                sub_spec[_out_key] = spec
         elif spec is not None and isinstance(spec, CompositeSpec):
             if "_" in spec.keys():
                 warnings.warn('got a spec with key "_": it will be ignored')
         elif spec is None:
-            spec = CompositeSpec()
+            spec = _keys_to_empty_composite_spec(self.out_keys)
+            print("spec:", spec, "keys:", self.out_keys)
 
         if set(spec.keys()) != set(self.out_keys):
             # then assume that all the non indicated specs are None
-            for key in self.out_keys:
-                if key not in spec:
-                    spec[key] = None
-
-        if set(spec.keys()) != set(self.out_keys):
+            new_spec = _keys_to_empty_composite_spec(self.out_keys)
+            new_spec.update(spec)
+            spec = new_spec
+        s1 = set(spec.keys())
+        s2 = set(self.out_keys)
+        if s1 != s2:
             raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {spec.keys()} and {self.out_keys} respectively"
+                f"""spec keys and out_keys do not match, spec keys had
+{s1 - s2} supplementary keys, and out_keys had {s2 - s1}."""
             )
 
         self._spec = spec

@@ -8,6 +8,8 @@ from __future__ import annotations
 from copy import copy, deepcopy
 from typing import Iterable, List, Optional, Tuple, Union
 
+from torchrl.data.tensor_specs import _keys_to_empty_composite_spec
+
 _has_functorch = False
 try:
     import functorch
@@ -142,7 +144,7 @@ class TensorDictSequential(TensorDictModule):
             if isinstance(module, TensorDictModule) or hasattr(module, "spec"):
                 spec.update(module.spec)
             else:
-                spec.update(CompositeSpec(**{key: None for key in module.out_keys}))
+                spec.update(_keys_to_empty_composite_spec(module.out_keys))
         super().__init__(
             spec=spec,
             module=nn.ModuleList(list(modules)),
