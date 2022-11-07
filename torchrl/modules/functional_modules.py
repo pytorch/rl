@@ -6,10 +6,10 @@
 from copy import deepcopy
 
 import torch
+from tensordict.tensordict import TensorDictBase
 from torch import nn
 
 from torchrl.data import TensorDict
-from torchrl.data.tensordict.tensordict import TensorDictBase
 
 _RESET_OLD_TENSORDICT = True
 try:

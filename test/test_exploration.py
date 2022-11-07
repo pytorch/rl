@@ -9,9 +9,9 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from scipy.stats import ttest_1samp
+from tensordict.tensordict import TensorDict
 from torch import nn
 from torchrl.data import CompositeSpec, NdBoundedTensorSpec
-from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule, TensorDictSequential

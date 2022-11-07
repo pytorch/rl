@@ -4,10 +4,10 @@ from typing import Union, Tuple
 
 import numpy as np
 import torch
+from tensordict.tensordict import TensorDictBase
 from torch import Tensor
 
 from torchrl.data import TensorDict
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.modules import TensorDictModule
 from torchrl.objectives import (

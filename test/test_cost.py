@@ -23,6 +23,9 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from mocking_classes import ContinuousActionConvMockEnv
+
+# from torchrl.data.postprocs.utils import expand_as_right
+from tensordict.tensordict import assert_allclose_td, TensorDictBase
 from torch import autograd, nn
 from torchrl.data import (
     CompositeSpec,
@@ -34,9 +37,6 @@ from torchrl.data import (
     DiscreteTensorSpec,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
-
-# from torchrl.data.postprocs.utils import expand_as_right
-from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDictBase
 from torchrl.data.utils import expand_as_right
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TransformedEnv, TensorDictPrimer

@@ -8,11 +8,11 @@ from copy import deepcopy
 from textwrap import indent
 from typing import List, Sequence, Union, Type, Optional, Tuple
 
+from tensordict.tensordict import TensorDictBase
 from torch import Tensor
 from torch import distributions as d
 
 from torchrl.data import TensorSpec
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import exploration_mode, set_exploration_mode
 from torchrl.modules.distributions import distributions_maps, Delta
 from torchrl.modules.tensordict_module.common import TensorDictModule, _check_all_str

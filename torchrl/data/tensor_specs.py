@@ -40,8 +40,9 @@ __all__ = [
     "CompositeSpec",
 ]
 
+from tensordict import TensorDictBase, TensorDict
+
 from torchrl._utils import get_binary_env_var
-from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 
 _CHECK_IMAGES = get_binary_env_var("CHECK_IMAGES")
 
@@ -1176,7 +1177,10 @@ dtype=torch.float32)},
         del self._specs[key]
 
     def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
-        out = {}
+        if isinstance(vals, TensorDict):
+            out = vals.select()  # create and empty tensordict similar to vals
+        else:
+            out = TensorDict({}, [], _run_checks=False)
         for key, item in vals.items():
             if item is None:
                 raise RuntimeError(
@@ -1237,8 +1241,16 @@ dtype=torch.float32)},
             batch_size=shape,
         )
 
-    def keys(self) -> KeysView:
-        return self._specs.keys()
+    def keys(self, yield_nesting_keys: bool = False) -> KeysView:
+        """Keys of the CompositeSpec.
+
+        Args:
+            yield_nesting_keys (bool, optional): if :obj:`True`, the values returned
+                will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
+                will lead to the keys :obj:`["next", ("next", "obs")]`. Default is :obj:`False`, i.e.
+                only nested keys will be returned.
+        """
+        return _CompositeSpecKeysView(self, yield_nesting_keys)
 
     def items(self) -> ItemsView:
         return self._specs.items()
@@ -1283,6 +1295,55 @@ dtype=torch.float32)},
 
     def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
         for key, item in dict_or_spec.items():
+            if key in self.keys(True) and isinstance(self[key], CompositeSpec):
+                self[key].update(item)
+                continue
             if isinstance(item, TensorSpec) and item.device != self.device:
                 item = deepcopy(item).to(self.device)
             self[key] = item
+
+
+def _keys_to_empty_composite_spec(keys):
+    if not len(keys):
+        return
+    c = CompositeSpec()
+    for key in keys:
+        if isinstance(key, str):
+            c[key] = None
+        elif key[0] in c.keys(yield_nesting_keys=True):
+            if c[key[0]] is None:
+                # if the value is None we just replace it
+                c[key[0]] = _keys_to_empty_composite_spec(key[1:])
+            elif isinstance(c[key[0]], CompositeSpec):
+                # if the value is Composite, we update it
+                out = _keys_to_empty_composite_spec(key[1:])
+                if out is not None:
+                    c[key[0]].update(out)
+            else:
+                raise RuntimeError("Conflicting keys")
+        else:
+            c[key[0]] = _keys_to_empty_composite_spec(key[1:])
+    return c
+
+
+class _CompositeSpecKeysView:
+    """Wrapper class that enables richer behaviour of `key in tensordict.keys()`."""
+
+    def __init__(self, composite: CompositeSpec, _yield_nesting_keys: bool):
+        self.composite = composite
+        self._yield_nesting_keys = _yield_nesting_keys
+
+    def __iter__(
+        self,
+    ):
+        for key, item in self.composite.items():
+            if isinstance(item, CompositeSpec):
+                for subkey in item.keys():
+                    yield (key, *subkey) if isinstance(subkey, tuple) else (key, subkey)
+                if self._yield_nesting_keys:
+                    yield key
+            else:
+                yield key
+
+    def __len__(self):
+        return len(list(self.keys()))

@@ -6,6 +6,8 @@
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Type, Union, Dict, Any
 
+from tensordict.tensordict import TensorDictBase
+
 from torchrl.collectors.collectors import (
     _DataCollector,
     _MultiDataCollector,
@@ -14,7 +16,6 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
 )
 from torchrl.data import MultiStep
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule

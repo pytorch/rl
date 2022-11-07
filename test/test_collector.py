@@ -17,6 +17,7 @@ from mocking_classes import (
     DiscreteActionVecPolicy,
     MockSerialEnv,
 )
+from tensordict.tensordict import assert_allclose_td
 from torch import nn
 from torchrl._utils import seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
@@ -32,7 +33,6 @@ from torchrl.data import (
     TensorDict,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm

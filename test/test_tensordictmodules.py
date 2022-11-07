@@ -7,7 +7,7 @@ import argparse
 
 import pytest
 import torch
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDictBase
 
 _has_functorch = False
 try:

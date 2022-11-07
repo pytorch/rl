@@ -6,9 +6,9 @@
 from typing import Callable
 
 import torch
+from tensordict.tensordict import TensorDictBase
 
 from torchrl.data import TensorDict
-from torchrl.data.tensordict.tensordict import TensorDictBase
 
 
 def _stack_output(fun) -> Callable:

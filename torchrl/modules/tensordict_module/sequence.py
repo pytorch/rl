@@ -22,14 +22,14 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 import torch
-from torch import Tensor, nn
-
-from torchrl.data import CompositeSpec
-from torchrl.data.tensordict.tensordict import (
+from tensordict.tensordict import (
     LazyStackedTensorDict,
     TensorDict,
     TensorDictBase,
 )
+from torch import Tensor, nn
+
+from torchrl.data import CompositeSpec
 from torchrl.modules.tensordict_module.common import TensorDictModule
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,

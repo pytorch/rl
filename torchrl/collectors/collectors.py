@@ -32,9 +32,10 @@ __all__ = [
     "MultiSyncDataCollector",
 ]
 
+from tensordict import TensorDictBase, TensorDict
+
 from torchrl.envs.transforms import TransformedEnv
 from ..data import TensorSpec
-from ..data.tensordict.tensordict import TensorDictBase, TensorDict
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
 from ..envs.common import EnvBase
 from ..envs.vec_env import _BatchedEnv
@@ -60,7 +61,7 @@ class RandomPolicy:
 
         Examples:
             >>> from torchrl.data.tensor_specs import NdBoundedTensorSpec
-            >>> from torchrl.data.tensordict import TensorDict
+            >>> from tensordict import TensorDict
             >>> action_spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
             >>> actor = RandomPolicy(spec=action_spec)
             >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]

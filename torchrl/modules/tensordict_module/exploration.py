@@ -23,7 +23,7 @@ __all__ = [
     "OrnsteinUhlenbeckProcessWrapper",
 ]
 
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDictBase
 
 
 class EGreedyWrapper(TensorDictModuleWrapper):

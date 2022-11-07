@@ -41,6 +41,7 @@ except ImportError:
         FunctionalModuleWithBuffers,
     )
 
+from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 
 from torchrl.data import (
@@ -48,7 +49,6 @@ from torchrl.data import (
     TensorSpec,
     CompositeSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.modules.functional_modules import (
     FunctionalModule as rlFunctionalModule,
     FunctionalModuleWithBuffers as rlFunctionalModuleWithBuffers,

@@ -8,10 +8,10 @@ from collections import OrderedDict
 from typing import Iterable, Optional, Union
 
 import torch
+from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule
 
