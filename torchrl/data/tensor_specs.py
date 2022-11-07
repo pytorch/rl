@@ -1312,10 +1312,10 @@ def _keys_to_empty_composite_spec(keys):
         elif key[0] in c.keys(yield_nesting_keys=True):
             if c[key[0]] is None:
                 # if the value is None we just replace it
-                c[key[0]] = _keys_to_empty_composite_spec(key[1:])
+                c[key[0]] = _keys_to_empty_composite_spec([key[1:]])
             elif isinstance(c[key[0]], CompositeSpec):
                 # if the value is Composite, we update it
-                out = _keys_to_empty_composite_spec(key[1:])
+                out = _keys_to_empty_composite_spec([key[1:]])
                 if out is not None:
                     c[key[0]].update(out)
             else:
@@ -1345,4 +1345,4 @@ class _CompositeSpecKeysView:
                 yield key
 
     def __len__(self):
-        return len(list(self.keys()))
+        return len([k for k in self])
