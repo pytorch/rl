@@ -5,6 +5,7 @@
 import argparse
 from copy import copy, deepcopy
 
+import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices, retry
@@ -22,6 +23,7 @@ from torchrl.data import (
     NdUnboundedContinuousTensorSpec,
     TensorDict,
     UnboundedContinuousTensorSpec,
+    BoundedTensorSpec,
 )
 from torchrl.envs import (
     BinarizeReward,
@@ -311,6 +313,50 @@ def test_added_transforms_are_in_eval_mode():
     assert t.transform.training
     assert t.transform[0].training
     assert t.transform[1].training
+
+
+class TestTransformedEnv:
+    def test_independent_obs_specs_from_shared_env(self):
+        obs_spec = CompositeSpec(
+            next_observation=BoundedTensorSpec(minimum=0, maximum=10)
+        )
+        base_env = ContinuousActionVecMockEnv(observation_spec=obs_spec)
+        t1 = TransformedEnv(base_env, transform=ObservationNorm(loc=3, scale=2))
+        t2 = TransformedEnv(base_env, transform=ObservationNorm(loc=1, scale=6))
+
+        t1_obs_spec = t1.observation_spec
+        t2_obs_spec = t2.observation_spec
+
+        assert t1_obs_spec["next_observation"].space.minimum == 3
+        assert t1_obs_spec["next_observation"].space.maximum == 23
+
+        assert t2_obs_spec["next_observation"].space.minimum == 1
+        assert t2_obs_spec["next_observation"].space.maximum == 61
+
+        assert base_env.observation_spec["next_observation"].space.minimum == 0
+        assert base_env.observation_spec["next_observation"].space.maximum == 10
+
+    def test_independent_reward_specs_from_shared_env(self):
+        reward_spec = UnboundedContinuousTensorSpec()
+        base_env = ContinuousActionVecMockEnv(reward_spec=reward_spec)
+        t1 = TransformedEnv(
+            base_env, transform=RewardClipping(clamp_min=0, clamp_max=4)
+        )
+        t2 = TransformedEnv(
+            base_env, transform=RewardClipping(clamp_min=-2, clamp_max=2)
+        )
+
+        t1_reward_spec = t1.reward_spec
+        t2_reward_spec = t2.reward_spec
+
+        assert t1_reward_spec.space.minimum == 0
+        assert t1_reward_spec.space.maximum == 4
+
+        assert t2_reward_spec.space.minimum == -2
+        assert t2_reward_spec.space.maximum == 2
+
+        assert base_env.reward_spec.space.minimum == -np.inf
+        assert base_env.reward_spec.space.maximum == np.inf
 
 
 def test_nested_transformed_env():

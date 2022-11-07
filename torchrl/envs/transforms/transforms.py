@@ -757,7 +757,7 @@ class ToTensorImage(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = self._pixel_observation(deepcopy(observation_spec))
+        observation_spec = self._pixel_observation(observation_spec)
         observation_spec.shape = torch.Size(
             [
                 *observation_spec.shape[:-3],
@@ -913,7 +913,6 @@ class Resize(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -970,20 +969,17 @@ class CenterCrop(ObservationTransform):
                     for key, _obs_spec in observation_spec._specs.items()
                 }
             )
-        else:
-            _observation_spec = deepcopy(observation_spec)
 
-        space = _observation_spec.space
+        space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
             space.maximum = self._apply_transform(space.maximum)
-            _observation_spec.shape = space.minimum.shape
+            observation_spec.shape = space.minimum.shape
         else:
-            _observation_spec.shape = self._apply_transform(
-                torch.zeros(_observation_spec.shape)
+            observation_spec.shape = self._apply_transform(
+                torch.zeros(observation_spec.shape)
             ).shape
 
-        observation_spec = _observation_spec
         return observation_spec
 
     def __repr__(self) -> str:
@@ -1036,7 +1032,6 @@ class FlattenObservation(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
 
         if isinstance(space, ContinuousBox):
@@ -1139,17 +1134,17 @@ class UnsqueezeTransform(Transform):
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         for key in self.keys_inv_in:
-            input_spec = self._transform_spec(deepcopy(input_spec[key]))
+            input_spec = self._transform_spec(input_spec[key])
         return input_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if "reward" in self.keys_in:
-            reward_spec = self._transform_spec(deepcopy(reward_spec))
+            reward_spec = self._transform_spec(reward_spec)
         return reward_spec
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = self._transform_spec(deepcopy(observation_spec))
+        observation_spec = self._transform_spec(observation_spec)
         return observation_spec
 
     def __repr__(self) -> str:
@@ -1213,7 +1208,6 @@ class GrayScale(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1303,7 +1297,6 @@ class ObservationNorm(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1756,9 +1749,8 @@ class DiscreteActionProjection(Transform):
         return action
 
     def tranform_input_spec(self, input_spec: CompositeSpec):
-        input_spec_out = deepcopy(input_spec)
-        input_spec_out["action"] = self.transform_action_spec(input_spec_out["action"])
-        return input_spec_out
+        input_spec["action"] = self.transform_action_spec(input_spec["action"])
+        return input_spec
 
     def __repr__(self) -> str:
         return (
