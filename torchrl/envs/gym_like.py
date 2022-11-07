@@ -13,7 +13,7 @@ import numpy as np
 import torch
 from tensordict.tensordict import TensorDictBase
 
-from torchrl.data import TensorDict
+from tensordict import TensorDict
 from torchrl.data.tensor_specs import TensorSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvWrapper
 

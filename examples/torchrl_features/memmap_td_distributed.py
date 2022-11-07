@@ -10,7 +10,7 @@ import configargparse
 import torch
 import torch.distributed.rpc as rpc
 from tensordict.memmap import set_transfer_ownership
-from torchrl.data import TensorDict
+from tensordict import TensorDict
 
 parser = configargparse.ArgumentParser()
 parser.add_argument("--world_size", default=2, type=int)

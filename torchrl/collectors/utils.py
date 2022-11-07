@@ -8,7 +8,7 @@ from typing import Callable
 import torch
 from tensordict.tensordict import TensorDictBase
 
-from torchrl.data import TensorDict
+from tensordict import TensorDict
 
 
 def _stack_output(fun) -> Callable:

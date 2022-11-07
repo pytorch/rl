@@ -7,7 +7,7 @@ import torch
 from tensordict.tensordict import TensorDictBase
 from torch import Tensor
 
-from torchrl.data import TensorDict
+from tensordict import TensorDict
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.modules import TensorDictModule
 from torchrl.objectives import (

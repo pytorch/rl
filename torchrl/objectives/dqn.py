@@ -9,7 +9,7 @@ import torch
 from tensordict.tensordict import TensorDictBase
 from torch import nn
 
-from torchrl.data import TensorDict
+from tensordict import TensorDict
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import (
     DistributionalQValueActor,

@@ -6,7 +6,7 @@ from typing import Optional, Tuple
 
 import torch
 
-from torchrl.data import TensorDict
+from tensordict import TensorDict
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.envs.utils import step_mdp

@@ -10,7 +10,7 @@ try:
 except ImportError:
     _has_functorch = False
 from torch import nn
-from torchrl.data import TensorDict
+from tensordict import TensorDict
 from torchrl.modules import TensorDictModule, TensorDictSequential
 from torchrl.modules.functional_modules import (
     FunctionalModule,
