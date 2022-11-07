@@ -4,9 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from .common import Specs, make_tensordict, EnvBase, EnvMetaData
-from .env_creator import EnvCreator, get_env_metadata
-from .gym_like import GymLikeEnv, default_info_dict_reader
-from .model_based import ModelBasedEnvBase
+from .vec_env import SerialEnv, ParallelEnv
 from .transforms import (
     R3MTransform,
     Transform,
@@ -34,4 +32,6 @@ from .transforms import (
     TensorDictPrimer,
     VIPTransform,
 )
-from .vec_env import SerialEnv, ParallelEnv
+from .env_creator import EnvCreator, get_env_metadata
+from .gym_like import GymLikeEnv, default_info_dict_reader
+from .model_based import ModelBasedEnvBase
