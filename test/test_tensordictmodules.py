@@ -22,8 +22,8 @@ except ImportError:
 
     make_functional = FunctionalModule._create_from
     make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
-from torch import nn
 from tensordict import TensorDict
+from torch import nn
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     NdBoundedTensorSpec,

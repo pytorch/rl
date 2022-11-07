@@ -125,7 +125,15 @@ class TestSplits:
         return out
 
     @pytest.mark.parametrize("num_workers", range(3, 34, 3))
-    @pytest.mark.parametrize("traj_len", [10, 17, 50, 97, ])
+    @pytest.mark.parametrize(
+        "traj_len",
+        [
+            10,
+            17,
+            50,
+            97,
+        ],
+    )
     def test_splits(self, num_workers, traj_len):
 
         trajs = TestSplits.create_fake_trajs(num_workers, traj_len)

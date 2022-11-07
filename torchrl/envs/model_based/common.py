@@ -9,8 +9,8 @@ from typing import Optional, Union, List
 
 import numpy as np
 import torch
-
 from tensordict import TensorDict
+
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.modules.tensordict_module import TensorDictModule

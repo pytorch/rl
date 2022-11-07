@@ -15,11 +15,11 @@ from typing import Callable, Optional, Sequence, Union, Any, List, Dict
 from warnings import warn
 
 import torch
+from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from torch import multiprocessing as mp
 
 from torchrl._utils import _check_for_faulty_process
-from tensordict import TensorDict
 from torchrl.data import TensorSpec, CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
