@@ -322,9 +322,46 @@ class TestHabitat:
 
 
 @pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
+@pytest.mark.parametrize("envname", ["Snake-6x6-v0"])
 class TestJumanji:
-    def test_jumani(self):
-        env = JumanjiEnv("Snake-6x6-v0")
+
+    def test_jumanji_seeding(self, envname):
+        final_seed = []
+        tdreset = []
+        tdrollout = []
+        for _ in range(2):
+            env = JumanjiEnv(envname)
+            torch.manual_seed(0)
+            np.random.seed(0)
+            final_seed.append(env.set_seed(0))
+            tdreset.append(env.reset())
+            tdrollout.append(env.rollout(max_steps=50))
+            env.close()
+            del env
+
+        assert final_seed[0] == final_seed[1]
+        assert_allclose_td(*tdreset)
+        assert_allclose_td(*tdrollout)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_jumanji_batch_size(self, envname, batch_size):
+        env = JumanjiEnv("Snake-6x6-v0", batch_size=batch_size)
+        tdreset = env.reset()
+        tdrollout = env.rollout(max_steps=50)
+        env.close()
+        del env
+
+        assert tdreset.batch_size == batch_size
+        assert tdreset["observation"].shape == batch_size + (6, 6, 5)
+        assert tdreset["done"].shape == batch_size + (1,)
+
+        rollout_batch_size = batch_size + (tdrollout.batch_size[-1],)
+        assert tdrollout.batch_size == rollout_batch_size
+        assert tdrollout["observation"].shape == rollout_batch_size + (6, 6, 5)
+        assert tdrollout["next_observation"].shape == rollout_batch_size + (6, 6, 5)
+        assert tdrollout["action"].shape == rollout_batch_size + (1,)
+        assert tdrollout["reward"].shape == rollout_batch_size + (1,)
+        assert tdrollout["done"].shape == rollout_batch_size + (1,)
 
 
 if __name__ == "__main__":

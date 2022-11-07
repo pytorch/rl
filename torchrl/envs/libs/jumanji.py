@@ -6,6 +6,7 @@ import torch
 
 from torchrl.data import (
     DEVICE_TYPING,
+    TensorDict,
     TensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
@@ -14,11 +15,13 @@ from torchrl.data import (
     NdUnboundedContinuousTensorSpec,
     NdUnboundedDiscreteTensorSpec,
 )
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs import GymLikeEnv
 
 try:
     import jax
+    from jax import numpy as jnp
     import jumanji
 
     _has_jumanji = True
@@ -100,12 +103,19 @@ class JumanjiWrapper(GymLikeEnv):
         return env
 
     def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
-        obs_spec = env.observation_spec()
-        self._observation_spec = CompositeSpec(next_observation=obs_spec)
-        action_spec = env.action_spec()
-        self._input_spec = CompositeSpec(action=action_spec)
-        reward_spec = env.reward_spec()
-        self._reward_spec = reward_spec
+        self._input_spec = CompositeSpec(
+            action=_jumanji_to_torchrl_spec_transform(
+                self._env.action_spec(), device=self.device
+            )
+        )
+        self._observation_spec = CompositeSpec(
+            next_observation=_jumanji_to_torchrl_spec_transform(
+                self._env.observation_spec(), device=self.device
+            )
+        )
+        self._reward_spec = _jumanji_to_torchrl_spec_transform(
+            self._env.reward_spec(), device=self.device
+        )
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -114,52 +124,93 @@ class JumanjiWrapper(GymLikeEnv):
         if not isinstance(env, (jumanji.env.Environment,)):
             raise TypeError("env is not of type 'jumanji.env.Environment'.")
 
+    def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
+        seed = self.set_seed(seed)
+        return seed
+
     def _set_seed(self, seed):
-        random_key = jax.random.PRNGKey(seed)
-        key1, key2 = jax.random.split(random_key)
-        self._key1 = key1
-        self._key2 = key2
+        # TODO: when seed is None, what should happen?
+        if seed is None:
+            # jax.random.PRNGKey requires an integer seed.
+            seed = int.from_bytes(np.random.bytes(8), byteorder="big", signed=True)
+        self.key = jax.random.PRNGKey(seed)
 
-    def _reset(self, tensordict):
-        # Sketch of functionality:
-        keys = jax.random.split(self._key1, *self.batch_size)
-        state, timestep = jax.vmap(self.env.reset)(keys)
-        obs_dict = self.read_obs(state)
-        tensordict.update(obs_dict)
-        return tensordict
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
 
-    def _read_state(self, tensordict):
-        """Reads a tensordict, and maps it onto a State"""
-        raise NotImplementedError
+        state = self._decode_state(tensordict)
+        action = self.read_action(tensordict.get("action"))
+        reward = self.reward_spec.zero(self.batch_size)
 
-    def _step(self, tensordict):
-        def step_fn(state, key):
-            action = jax.random.randint(
-                key=key, minval=0, maxval=self.frame_skip, shape=()
-            )
-            new_state, timestep = self.env.step(state, action)
-            return new_state, timestep
+        state = self._flatten(state)
+        action = self._flatten(action)
+        state, timestep = jax.vmap(self._env.step)(state, action)
+        state = self._reshape(state)
+        timestep = self._reshape(timestep)
 
-        # the state is the input to the stateless env. It should be contained in the tensordict.
-        state = self._read_state(tensordict)
-        random_keys = jax.random.split(self._key2, 1)
-        state, _ = jax.lax.scan(step_fn, state, random_keys)
-        obs_dict = self.read_obs(state)
-        tensordict.update(obs_dict)
-        return tensordict
+        state_dict = self._encode_state(state)
+        obs_dict = self.read_obs(np.asarray(timestep.observation))
+        reward = self.read_reward(reward, np.asarray(timestep.reward))
+        done = torch.tensor(np.asarray(
+            timestep.step_type == self.lib.types.StepType.LAST))
 
-    def _output_transform(
-        self, timestep_tuple: Tuple["TimeStep"]  # noqa: F821
-    ) -> Tuple[np.ndarray, float, bool]:
-        # Copy-paste from dm_control, should hold but does not account for the state,
-        # only the timestamp
-        if type(timestep_tuple) is not tuple:
-            timestep_tuple = (timestep_tuple,)
-        reward = timestep_tuple[0].reward
+        self._is_done = done
 
-        done = False  # dm_control envs are non-terminating
-        observation = timestep_tuple[0].observation
-        return observation, reward, done
+        tensordict_out = TensorDict(
+            source=obs_dict,
+            batch_size=tensordict.batch_size,
+            device=self.device,
+        )
+        tensordict_out.set("reward", reward)
+        tensordict_out.set("done", done)
+        tensordict_out.update(state_dict)
+
+        return tensordict_out
+
+    def _reset(
+        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+    ) -> TensorDictBase:
+
+        self.key, *keys = jax.random.split(self.key, self.numel() + 1)
+        state, timestep = jax.vmap(self._env.reset)(jnp.stack(keys))
+        state = self._reshape(state)
+        timestep = self._reshape(timestep)
+
+        state_dict = self._encode_state(state)
+        obs_dict = self.read_obs(np.asarray(timestep.observation))
+        done = torch.zeros(self.batch_size, dtype=torch.bool)
+
+        self._is_done = done
+
+        tensordict_out = TensorDict(
+            source=obs_dict,
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+        tensordict_out.set("done", done)
+        tensordict_out.update(state_dict)
+
+        return tensordict_out
+
+    def _reshape(self, x):
+        shape, n = self.batch_size, 1
+        return jax.tree_util.tree_map(
+            lambda x: x.reshape(shape + x.shape[n:]), x
+        )
+
+    def _flatten(self, x):
+        shape, n = (self.batch_size.numel(),), len(self.batch_size)
+        return jax.tree_util.tree_map(
+            lambda x: x.reshape(shape + x.shape[n:]), x
+        )
+
+    def _encode_state(self, state):
+        # TODO: encode state to tensordict
+        self._state = state
+        return TensorDict({}, batch_size=self.batch_size, device=self.device)
+
+    def _decode_state(self, tensordict):
+        # TODO: decode state from tensordict
+        return self._state
 
 
 class JumanjiEnv(JumanjiWrapper):
