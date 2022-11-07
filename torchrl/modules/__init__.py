@@ -13,6 +13,12 @@ from .distributions import (
     OneHotCategorical,
     distributions_maps,
 )
+from .functional_modules import (
+    FunctionalModule,
+    FunctionalModuleWithBuffers,
+    extract_weights,
+    extract_buffers,
+)
 from .models import (
     NoisyLinear,
     NoisyLazyLinear,
@@ -52,10 +58,4 @@ from .tensordict_module import (
     TensorDictSequential,
     WorldModelWrapper,
 )
-from .planners import CEMPlanner, MPCPlannerBase
-from .functional_modules import (
-    FunctionalModule,
-    FunctionalModuleWithBuffers,
-    extract_weights,
-    extract_buffers,
-)
+from .planners import CEMPlanner, MPCPlannerBase  # usort:skip
