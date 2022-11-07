@@ -167,7 +167,14 @@ class GymLikeEnv(_EnvWrapper):
 
         """
         if isinstance(observations, dict):
-            observations = {"next_" + key: value for key, value in observations.items()}
+
+            def rename(obs):
+                return {
+                    "next_" + key: rename(value) if isinstance(value, dict) else value
+                    for key, value in obs.items()
+                }
+
+            observations = rename(observations)
         if not isinstance(observations, (TensorDict, dict)):
             key = list(self.observation_spec.keys())[0]
             observations = {key: observations}

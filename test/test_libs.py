@@ -143,6 +143,51 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     assert final_seed0 == final_seed2
     assert_allclose_td(tdrollout[0], rollout2, rtol=1e-4, atol=1e-4)
 
+    class NestedObsGymEnv(gym.Env):
+        def __init__(self):
+            self.action_space = gym.spaces.Discrete(5)
+            self.observation_space = gym.spaces.Dict(
+                {
+                    "1": gym.spaces.Discrete(5),
+                    "2": gym.spaces.Dict(
+                        {
+                            "21": gym.spaces.Discrete(5),
+                            "22": gym.spaces.Dict(
+                                {
+                                    "221": gym.spaces.Discrete(5),
+                                    "222": gym.spaces.Discrete(5),
+                                }
+                            ),
+                        }
+                    ),
+                }
+            )
+
+        def reset(self):
+            return self.observation_space.sample()
+
+    nested_obs_env = NestedObsGymEnv()
+    env = GymWrapper(nested_obs_env)
+
+    def assert_obs_name(obs, obs_spec):
+        for key, value in obs_spec.items():
+            assert key in obs.keys()
+            if isinstance(value, dict):
+                assert_obs_name(value, obs[key])
+
+    # internal function returns with "next_"
+    td = env._reset()
+    assert_obs_name(td, env.observation_spec)
+    del td
+
+    # removes "next_"
+    td = env.reset()
+    assert all(["next_" not in key for key in td.flatten_keys().keys()])
+    del td
+
+    env.close()
+    del env
+
 
 @pytest.mark.skipif(not _has_dmc, reason="no dm_control library found")
 @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
