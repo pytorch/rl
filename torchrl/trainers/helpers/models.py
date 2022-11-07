@@ -10,11 +10,11 @@ import torch
 from torch import nn, distributions as d
 
 from torchrl.data import (
-    DEVICE_TYPING,
     CompositeSpec,
     NdUnboundedContinuousTensorSpec,
     DiscreteTensorSpec,
 )
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import TransformedEnv, TensorDictPrimer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
