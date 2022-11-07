@@ -9,6 +9,7 @@ import numpy as np
 import torch
 
 from torchrl.data import CompositeSpec, TensorSpec
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import expand_as_right
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.tensordict_module.common import (
@@ -16,14 +17,6 @@ from torchrl.modules.tensordict_module.common import (
     TensorDictModule,
     TensorDictModuleWrapper,
 )
-
-__all__ = [
-    "EGreedyWrapper",
-    "AdditiveGaussianWrapper",
-    "OrnsteinUhlenbeckProcessWrapper",
-]
-
-from torchrl.data.tensordict.tensordict import TensorDictBase
 
 
 class EGreedyWrapper(TensorDictModuleWrapper):

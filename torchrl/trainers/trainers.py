@@ -56,19 +56,6 @@ LOGGER_METHODS = {
     "loss": "log_scalar",
 }
 
-__all__ = [
-    "Trainer",
-    "BatchSubSampler",
-    "CountFramesLog",
-    "LogReward",
-    "Recorder",
-    "ReplayBuffer",
-    "RewardNormalizer",
-    "SelectKeys",
-    "UpdateWeights",
-    "ClearCudaCache",
-]
-
 TYPE_DESCR = {float: "4.4f", int: ""}
 
 
@@ -1210,6 +1197,7 @@ def _check_input_output_typehint(func: Callable, input: Type, output: Type):
 
 
 def flatten_dict(d):
+    """Flattens a dictionary with sub-dictionaries accessed through point-separated (:obj:`"var1.var2"`) fields."""
     out = {}
     for key, item in d.items():
         if isinstance(item, dict):

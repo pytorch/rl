@@ -4,16 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-
-__all__ = [
-    "make_sac_loss",
-    "make_dqn_loss",
-    "make_ddpg_loss",
-    "make_target_updater",
-    "make_ppo_loss",
-    "make_redq_loss",
-]
-
 from typing import Optional, Tuple, Any
 
 from torchrl.modules import ActorValueOperator, ActorCriticOperator
@@ -215,6 +205,8 @@ def make_ppo_loss(model, cfg) -> PPOLoss:
 
 @dataclass
 class LossConfig:
+    """Generic Loss config struct."""
+
     loss: str = "double"
     # whether double or single SAC loss should be used. Default=double
     hard_update: bool = False
@@ -238,6 +230,8 @@ class LossConfig:
 
 @dataclass
 class PPOLossConfig:
+    """PPO Loss config struct."""
+
     loss: str = "clip"
     # PPO loss class, either clip or kl or base/<empty>. Default=clip
     gamma: float = 0.99
