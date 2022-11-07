@@ -93,20 +93,17 @@ def step_mdp(
         other_keys = [key for key in tensordict.keys() if key not in prohibited]
     select_tensordict = tensordict.select(*other_keys, *keys)
 
-    from torchrl.data import TensorDict
-
-    def rename_keys(keys_all, td: TensorDict):
+    def rename_keys(keys_all: list, td: TensorDictBase) -> None:
         for key in keys_all:
             new_key = key[5:]
             td.rename_key(key, new_key, safe=True)
-            if isinstance(td[new_key], (TensorDict, dict)):
+            if isinstance(td[new_key], (TensorDictBase, dict)):
                 keys_ = [
                     key_ for key_ in td[new_key].keys() if key_.startswith("next_")
                 ]
                 rename_keys(keys_, td[new_key])
 
     rename_keys(keys, select_tensordict)
-    # import pdb; pdb.set_trace()
 
     if next_tensordict is not None:
         return next_tensordict.update(select_tensordict)

@@ -33,7 +33,7 @@ if _has_dmc:
 
 from sys import platform
 
-from torchrl.data.tensordict.tensordict import assert_allclose_td
+from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDictBase
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.gym import GymEnv, GymWrapper
@@ -169,7 +169,7 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     nested_obs_env = NestedObsGymEnv()
     env = GymWrapper(nested_obs_env)
 
-    def assert_obs_name(obs, obs_spec):
+    def assert_obs_name(obs: TensorDictBase, obs_spec: TensorDictBase) -> None:
         for key, value in obs_spec.items():
             assert key in obs.keys()
             if isinstance(value, dict):
