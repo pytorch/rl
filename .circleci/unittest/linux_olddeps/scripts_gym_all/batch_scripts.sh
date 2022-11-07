@@ -11,7 +11,7 @@ $DIR/install.sh
 $DIR/run_test.sh
 
 # 0.19
-GYM_VERSION = "0.19"
+export GYM_VERSION='0.19'
 $DIR/install_gym.sh
 $DIR/run_test.sh
 
