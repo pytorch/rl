@@ -21,6 +21,7 @@ from typing import (
 
 import torch
 
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules import functional_modules
 
 _has_functorch = False
@@ -45,7 +46,6 @@ from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 
 from torchrl.data import (
-    DEVICE_TYPING,
     TensorSpec,
     CompositeSpec,
 )

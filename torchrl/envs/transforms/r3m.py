@@ -6,15 +6,16 @@
 from typing import List, Optional, Union
 
 import torch
+from tensordict import TensorDict
 from torch.hub import load_state_dict_from_url
 from torch.nn import Identity
 
-from torchrl.data import TensorDict, DEVICE_TYPING
 from torchrl.data.tensor_specs import (
     TensorSpec,
     CompositeSpec,
     NdUnboundedContinuousTensorSpec,
 )
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.transforms import (
     ToTensorImage,
     Compose,
