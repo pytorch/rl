@@ -13,6 +13,12 @@ from .distributions import (
     OneHotCategorical,
     distributions_maps,
 )
+from .functional_modules import (
+    FunctionalModule,
+    FunctionalModuleWithBuffers,
+    extract_weights,
+    extract_buffers,
+)
 from .models import (
     NoisyLinear,
     NoisyLazyLinear,
@@ -34,6 +40,7 @@ from .models import (
     SqueezeLayer,
     Squeeze2dLayer,
 )
+from .planners import CEMPlanner, MPCPlannerBase
 from .tensordict_module import (
     Actor,
     ActorValueOperator,
@@ -51,11 +58,4 @@ from .tensordict_module import (
     ProbabilisticTensorDictModule,
     TensorDictSequential,
     WorldModelWrapper,
-)
-from .planners import CEMPlanner, MPCPlannerBase
-from .functional_modules import (
-    FunctionalModule,
-    FunctionalModuleWithBuffers,
-    extract_weights,
-    extract_buffers,
 )
