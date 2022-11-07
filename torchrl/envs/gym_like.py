@@ -169,9 +169,10 @@ class GymLikeEnv(_EnvWrapper):
         if isinstance(observations, dict):
 
             def keys_add_next(obs: dict) -> None:
-                import pdb;pdb.set_trace()
                 return {
-                    "next_" + key: keys_add_next(value) if isinstance(value, dict) else value
+                    "next_" + key: keys_add_next(value)
+                    if isinstance(value, dict)
+                    else value
                     for key, value in obs.items()
                 }
 
