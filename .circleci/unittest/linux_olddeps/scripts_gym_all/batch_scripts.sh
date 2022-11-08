@@ -19,7 +19,8 @@ yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-lib
 for GYM_VERSION in '0.13' '0.19' '0.20' '0.25' '0.26'
 do
   echo "Installing gym version: ${GYM_VERSION}"
-  pip3 install gym==$GYM_VERSION
+  pip3 install 'gym[atari]'==$GYM_VERSION
   echo "Running tests for gym version: ${GYM_VERSION}"
   $DIR/run_test.sh
 done
+

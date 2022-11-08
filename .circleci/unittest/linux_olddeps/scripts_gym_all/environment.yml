@@ -5,12 +5,12 @@ dependencies:
   - pip
   - protobuf
   - pip:
+    # gym[atari]<0.25 installs ale-py==0.8 by default, but this version is not compatible with gym<0.26
+    - ale-py==0.7
     - hypothesis
     - future
     - cloudpickle
-    - gym==0.13
     - pygame
-    - gym[atari]
     - moviepy
     - tqdm
     - pytest
