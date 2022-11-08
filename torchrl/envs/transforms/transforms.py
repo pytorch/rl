@@ -142,6 +142,15 @@ class Transform(nn.Module):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._call(tensordict)
         return tensordict
+        # raise NotImplementedError("""`Transform.forward` is currently not implemented
+
+    # (reserved for usage beyong envs). Use `Transform.step` instead.""")
+
+    def step(self, tensordict: TensorDictBase):
+        # placeholder when we'll move to tensordict['next']
+        # tensordict["next"] = self._call(tensordict.get("next"))
+        tensordict = self._call(tensordict)
+        return tensordict
 
     def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         if self.invertible:
@@ -423,7 +432,7 @@ but got an object of type {type(transform)}."""
         tensordict_out = self.base_env.step(tensordict_in)
         # tensordict should already have been processed by the transforms
         # for logging purposes
-        tensordict_out = self.transform(tensordict_out)
+        tensordict_out = self.transform.step(tensordict_out)
         return tensordict_out
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -433,7 +442,7 @@ but got an object of type {type(transform)}."""
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         out_tensordict = self.base_env.reset(execute_step=False, **kwargs)
         out_tensordict = self.transform.reset(out_tensordict)
-        out_tensordict = self.transform(out_tensordict)
+        out_tensordict = self.transform.step(out_tensordict)
         return out_tensordict
 
     def state_dict(self) -> OrderedDict:
@@ -614,6 +623,11 @@ class Compose(Transform):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
             tensordict = t(tensordict)
+        return tensordict
+
+    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for t in self.transforms:
+            tensordict = t.step(tensordict)
         return tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1104,6 +1118,11 @@ class UnsqueezeTransform(Transform):
             self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
         return super().forward(tensordict)
 
+    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._unsqueeze_dim_orig >= 0:
+            self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
+        return super().step(tensordict)
+
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = observation.unsqueeze(self.unsqueeze_dim)
         return observation
@@ -1186,6 +1205,11 @@ class SqueezeTransform(UnsqueezeTransform):
         return super().unsqueeze_dim
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return super().inv(tensordict)
+
+    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # placeholder for when we'll move to 'next' indexing for steps
+        # return super().inv(tensordict["next"])
         return super().inv(tensordict)
 
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
