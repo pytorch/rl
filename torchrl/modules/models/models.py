@@ -20,18 +20,6 @@ from torchrl.modules.models.utils import (
     Squeeze2dLayer,
 )
 
-__all__ = [
-    "MLP",
-    "ConvNet",
-    "DuelingCnnDQNet",
-    "DistributionalDQNnet",
-    "DdpgCnnActor",
-    "DdpgCnnQNet",
-    "DdpgMlpActor",
-    "DdpgMlpQNet",
-    "LSTMNet",
-]
-
 
 class MLP(nn.Sequential):
     """A multi-layer perceptron.
@@ -672,6 +660,12 @@ def ddpg_init_last_layer(
     scale: float = 6e-4,
     device: Optional[DEVICE_TYPING] = None,
 ) -> None:
+    """Initializer for the last layer of DDPG.
+
+    Presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    https://arxiv.org/pdf/1509.02971.pdf
+
+    """
     last_layer.weight.data.copy_(
         torch.rand_like(last_layer.weight.data, device=device) * scale - scale / 2
     )

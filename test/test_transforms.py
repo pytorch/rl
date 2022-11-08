@@ -5,6 +5,7 @@
 import argparse
 from copy import copy, deepcopy
 
+import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices, retry
@@ -22,6 +23,7 @@ from torchrl.data import (
     NdUnboundedContinuousTensorSpec,
     TensorDict,
     UnboundedContinuousTensorSpec,
+    BoundedTensorSpec,
 )
 from torchrl.envs import (
     BinarizeReward,
@@ -313,6 +315,50 @@ def test_added_transforms_are_in_eval_mode():
     assert t.transform[1].training
 
 
+class TestTransformedEnv:
+    def test_independent_obs_specs_from_shared_env(self):
+        obs_spec = CompositeSpec(
+            next_observation=BoundedTensorSpec(minimum=0, maximum=10)
+        )
+        base_env = ContinuousActionVecMockEnv(observation_spec=obs_spec)
+        t1 = TransformedEnv(base_env, transform=ObservationNorm(loc=3, scale=2))
+        t2 = TransformedEnv(base_env, transform=ObservationNorm(loc=1, scale=6))
+
+        t1_obs_spec = t1.observation_spec
+        t2_obs_spec = t2.observation_spec
+
+        assert t1_obs_spec["next_observation"].space.minimum == 3
+        assert t1_obs_spec["next_observation"].space.maximum == 23
+
+        assert t2_obs_spec["next_observation"].space.minimum == 1
+        assert t2_obs_spec["next_observation"].space.maximum == 61
+
+        assert base_env.observation_spec["next_observation"].space.minimum == 0
+        assert base_env.observation_spec["next_observation"].space.maximum == 10
+
+    def test_independent_reward_specs_from_shared_env(self):
+        reward_spec = UnboundedContinuousTensorSpec()
+        base_env = ContinuousActionVecMockEnv(reward_spec=reward_spec)
+        t1 = TransformedEnv(
+            base_env, transform=RewardClipping(clamp_min=0, clamp_max=4)
+        )
+        t2 = TransformedEnv(
+            base_env, transform=RewardClipping(clamp_min=-2, clamp_max=2)
+        )
+
+        t1_reward_spec = t1.reward_spec
+        t2_reward_spec = t2.reward_spec
+
+        assert t1_reward_spec.space.minimum == 0
+        assert t1_reward_spec.space.maximum == 4
+
+        assert t2_reward_spec.space.minimum == -2
+        assert t2_reward_spec.space.maximum == 2
+
+        assert base_env.reward_spec.space.minimum == -np.inf
+        assert base_env.reward_spec.space.maximum == np.inf
+
+
 def test_nested_transformed_env():
     base_env = ContinuousActionVecMockEnv()
     t1 = RewardScaling(0, 1)
@@ -327,6 +373,27 @@ def test_nested_transformed_env():
     assert children[1] == t2
 
 
+def test_transform_parent():
+    base_env = ContinuousActionVecMockEnv()
+    t1 = RewardScaling(0, 1)
+    t2 = RewardScaling(0, 2)
+    env = TransformedEnv(TransformedEnv(base_env, t1), t2)
+    t3 = RewardClipping(0.1, 0.5)
+    env.append_transform(t3)
+
+    t1_parent_gt = t1._parent
+    t2_parent_gt = t2._parent
+    t3_parent_gt = t3._parent
+
+    _ = t1.parent
+    _ = t2.parent
+    _ = t3.parent
+
+    assert t1_parent_gt == t1._parent
+    assert t2_parent_gt == t2._parent
+    assert t3_parent_gt == t3._parent
+
+
 class TestTransforms:
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize("interpolation", ["bilinear", "bicubic"])
@@ -339,7 +406,7 @@ class TestTransforms:
     def test_resize(self, interpolation, keys, nchannels, batch, device):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
-        resize = Resize(w=20, h=21, interpolation=interpolation, keys_in=keys)
+        resize = Resize(w=20, h=21, interpolation=interpolation, in_keys=keys)
         td = TensorDict(
             {
                 key: torch.randn(*batch, nchannels, 16, 16, device=device)
@@ -377,7 +444,7 @@ class TestTransforms:
     def test_centercrop(self, keys, h, nchannels, batch, device):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
-        cc = CenterCrop(w=20, h=h, keys_in=keys)
+        cc = CenterCrop(w=20, h=h, in_keys=keys)
         if h is None:
             h = 20
         td = TensorDict(
@@ -418,7 +485,7 @@ class TestTransforms:
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, *size, nchannels, 16, 16, device=device)
         start_dim = -3 - len(size)
-        flatten = FlattenObservation(start_dim, -3, keys_in=keys)
+        flatten = FlattenObservation(start_dim, -3, in_keys=keys)
         td = TensorDict(
             {
                 key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
@@ -460,7 +527,7 @@ class TestTransforms:
     def test_unsqueeze(self, keys, size, nchannels, batch, device, unsqueeze_dim):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, *size, nchannels, 16, 16, device=device)
-        unsqueeze = UnsqueezeTransform(unsqueeze_dim, keys_in=keys)
+        unsqueeze = UnsqueezeTransform(unsqueeze_dim, in_keys=keys)
         td = TensorDict(
             {
                 key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
@@ -519,7 +586,7 @@ class TestTransforms:
         torch.manual_seed(0)
         keys_total = set(keys + keys_inv)
         unsqueeze = UnsqueezeTransform(
-            unsqueeze_dim, keys_in=keys, keys_inv_in=keys_inv
+            unsqueeze_dim, in_keys=keys, in_keys_inv=keys_inv
         )
         td = TensorDict(
             {
@@ -554,7 +621,7 @@ class TestTransforms:
     def test_squeeze(self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim):
         torch.manual_seed(0)
         keys_total = set(keys + keys_inv)
-        squeeze = SqueezeTransform(squeeze_dim, keys_in=keys, keys_inv_in=keys_inv)
+        squeeze = SqueezeTransform(squeeze_dim, in_keys=keys, in_keys_inv=keys_inv)
         td = TensorDict(
             {
                 key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
@@ -589,7 +656,7 @@ class TestTransforms:
     ):
         torch.manual_seed(0)
         keys_total = set(keys + keys_inv)
-        squeeze = SqueezeTransform(squeeze_dim, keys_in=keys, keys_inv_in=keys_inv)
+        squeeze = SqueezeTransform(squeeze_dim, in_keys=keys, in_keys_inv=keys_inv)
         td = TensorDict(
             {
                 key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
@@ -620,7 +687,7 @@ class TestTransforms:
     def test_grayscale(self, keys, device):
         torch.manual_seed(0)
         nchannels = 3
-        gs = GrayScale(keys_in=keys)
+        gs = GrayScale(in_keys=keys)
         dont_touch = torch.randn(1, nchannels, 16, 16, device=device)
         td = TensorDict(
             {key: torch.randn(1, nchannels, 16, 16, device=device) for key in keys},
@@ -653,7 +720,7 @@ class TestTransforms:
     def test_totensorimage(self, keys, batch, device):
         torch.manual_seed(0)
         nchannels = 3
-        totensorimage = ToTensorImage(keys_in=keys)
+        totensorimage = ToTensorImage(in_keys=keys)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
         td = TensorDict(
             {
@@ -697,7 +764,7 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_compose(self, keys, batch, device, nchannels=1, N=4):
         torch.manual_seed(0)
-        t1 = CatFrames(keys_in=keys, N=4)
+        t1 = CatFrames(in_keys=keys, N=4)
         t2 = FiniteTensorDictCheck()
         compose = Compose(t1, t2)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
@@ -751,8 +818,8 @@ class TestTransforms:
         torch.manual_seed(0)
         keys_to_transform = set(keys_inv_1 + keys_inv_2)
         keys_total = set(["action_1", "action_2", "dont_touch"])
-        double2float_1 = DoubleToFloat(keys_inv_in=keys_inv_1)
-        double2float_2 = DoubleToFloat(keys_inv_in=keys_inv_2)
+        double2float_1 = DoubleToFloat(in_keys_inv=keys_inv_1)
+        double2float_2 = DoubleToFloat(in_keys_inv=keys_inv_2)
         compose = Compose(double2float_1, double2float_2)
         td = TensorDict(
             {
@@ -794,7 +861,7 @@ class TestTransforms:
             loc = loc.to(device)
         if isinstance(scale, Tensor):
             scale = scale.to(device)
-        on = ObservationNorm(loc, scale, keys_in=keys, standard_normal=standard_normal)
+        on = ObservationNorm(loc, scale, in_keys=keys, standard_normal=standard_normal)
         dont_touch = torch.randn(1, nchannels, 16, 16, device=device)
         td = TensorDict(
             {key: torch.zeros(1, nchannels, 16, 16, device=device) for key in keys}, [1]
@@ -843,7 +910,7 @@ class TestTransforms:
         key1 = "first key"
         key2 = "second key"
         keys = [key1, key2]
-        cat_frames = CatFrames(N=N, keys_in=keys)
+        cat_frames = CatFrames(N=N, in_keys=keys)
         mins = [0, 0.5]
         maxes = [0.5, 1]
         observation_spec = CompositeSpec(
@@ -886,7 +953,7 @@ class TestTransforms:
         key2_tensor = torch.ones(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
-        cat_frames = CatFrames(N=N, keys_in=keys)
+        cat_frames = CatFrames(N=N, in_keys=keys)
 
         cat_frames(td)
         latest_frame = td.get(key2)
@@ -906,7 +973,7 @@ class TestTransforms:
         key2_tensor = torch.ones(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
-        cat_frames = CatFrames(N=N, keys_in=keys)
+        cat_frames = CatFrames(N=N, in_keys=keys)
 
         cat_frames(td)
         buffer_length1 = len(cat_frames.buffer)
@@ -947,7 +1014,7 @@ class TestTransforms:
     def test_double2float(self, keys, keys_inv, device):
         torch.manual_seed(0)
         keys_total = set(keys + keys_inv)
-        double2float = DoubleToFloat(keys_in=keys, keys_inv_in=keys_inv)
+        double2float = DoubleToFloat(in_keys=keys, in_keys_inv=keys_inv)
         dont_touch = torch.randn(1, 3, 3, dtype=torch.double, device=device)
         td = TensorDict(
             {
@@ -999,7 +1066,7 @@ class TestTransforms:
         ],
     )
     def test_cattensors(self, keys, device):
-        cattensors = CatTensors(keys_in=keys, out_key="observation_out", dim=-2)
+        cattensors = CatTensors(in_keys=keys, out_key="observation_out", dim=-2)
 
         dont_touch = torch.randn(1, 3, 3, dtype=torch.double, device=device)
         td = TensorDict(
@@ -1168,7 +1235,7 @@ class TestTransforms:
             keys_total = set([])
         else:
             keys_total = set(keys)
-        reward_scaling = RewardScaling(keys_in=keys, scale=scale, loc=loc)
+        reward_scaling = RewardScaling(in_keys=keys, scale=scale, loc=loc)
         td = TensorDict(
             {
                 **{key: torch.randn(*batch, 1, device=device) for key in keys_total},
@@ -1209,7 +1276,7 @@ class TestTransforms:
         key = list(obs_spec.keys())[0]
 
         env = TransformedEnv(env)
-        env.append_transform(CatFrames(N=4, cat_dim=-1, keys_in=[key]))
+        env.append_transform(CatFrames(N=4, cat_dim=-1, in_keys=[key]))
         assert isinstance(env.transform, Compose)
         assert len(env.transform) == 1
         obs_spec = env.observation_spec
@@ -1234,7 +1301,7 @@ class TestTransforms:
         assert env._observation_spec is not None
         assert env._reward_spec is not None
 
-        env.insert_transform(0, CatFrames(N=4, cat_dim=-1, keys_in=[key]))
+        env.insert_transform(0, CatFrames(N=4, cat_dim=-1, in_keys=[key]))
 
         # transformed envs do not have spec after insert -- they need to be computed
         assert env._input_spec is None
@@ -1281,7 +1348,7 @@ class TestTransforms:
         assert env._observation_spec is None
         assert env._reward_spec is None
 
-        env.insert_transform(-5, CatFrames(N=4, cat_dim=-1, keys_in=[key]))
+        env.insert_transform(-5, CatFrames(N=4, cat_dim=-1, in_keys=[key]))
         assert isinstance(env.transform, Compose)
         assert len(env.transform) == 6
 
@@ -1344,7 +1411,7 @@ class TestR3M:
         keys_out = ["next_vec"]
         r3m = R3MTransform(
             model,
-            keys_in=keys_in,
+            in_keys=keys_in,
             keys_out=keys_out,
             tensor_pixels_keys=tensor_pixels_key,
         )
@@ -1375,7 +1442,7 @@ class TestR3M:
         keys_out = ["next_vec"] if stack_images else ["next_vec", "next_vec2"]
         r3m = R3MTransform(
             model,
-            keys_in=keys_in,
+            in_keys=keys_in,
             keys_out=keys_out,
             stack_images=stack_images,
         )
@@ -1425,7 +1492,7 @@ class TestR3M:
         tensor_pixels_key = None
         r3m = R3MTransform(
             model,
-            keys_in=keys_in,
+            in_keys=keys_in,
             keys_out=keys_out,
             tensor_pixels_keys=tensor_pixels_key,
         )
@@ -1499,7 +1566,7 @@ class TestR3M:
         keys_out = ["next_vec"]
         r3m = R3MTransform(
             model,
-            keys_in=keys_in,
+            in_keys=keys_in,
             keys_out=keys_out,
             tensor_pixels_keys=tensor_pixels_key,
         )
@@ -1525,7 +1592,7 @@ class TestVIP:
         keys_out = ["next_vec"]
         vip = VIPTransform(
             model,
-            keys_in=keys_in,
+            in_keys=keys_in,
             keys_out=keys_out,
             tensor_pixels_keys=tensor_pixels_key,
         )
@@ -1550,7 +1617,7 @@ class TestVIP:
         keys_out = ["next_vec"] if stack_images else ["next_vec", "next_vec2"]
         vip = VIPTransform(
             model,
-            keys_in=keys_in,
+            in_keys=keys_in,
             keys_out=keys_out,
             stack_images=stack_images,
         )
@@ -1600,7 +1667,7 @@ class TestVIP:
         tensor_pixels_key = None
         vip = VIPTransform(
             model,
-            keys_in=keys_in,
+            in_keys=keys_in,
             keys_out=keys_out,
             tensor_pixels_keys=tensor_pixels_key,
         )
@@ -1674,7 +1741,7 @@ class TestVIP:
         keys_out = ["next_vec"]
         vip = VIPTransform(
             model,
-            keys_in=keys_in,
+            in_keys=keys_in,
             keys_out=keys_out,
             tensor_pixels_keys=tensor_pixels_key,
         )
@@ -1695,7 +1762,7 @@ def test_batch_locked_transformed(device):
     env = TransformedEnv(
         MockBatchedLockedEnv(device),
         Compose(
-            ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["next_observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )
@@ -1719,7 +1786,7 @@ def test_batch_unlocked_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device),
         Compose(
-            ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["next_observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )
@@ -1739,7 +1806,7 @@ def test_batch_unlocked_with_batch_size_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device, batch_size=torch.Size([2])),
         Compose(
-            ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["next_observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )

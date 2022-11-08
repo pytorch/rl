@@ -35,8 +35,6 @@ from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
 )
 
-__all__ = ["TensorDictSequential"]
-
 
 class TensorDictSequential(TensorDictModule):
     """A sequence of TensorDictModules.
