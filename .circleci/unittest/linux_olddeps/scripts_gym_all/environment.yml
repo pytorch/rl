@@ -8,6 +8,7 @@ dependencies:
     # gym[atari]<0.25 installs ale-py==0.8 by default, but this version is not compatible with gym<0.26
     - ale-py==0.7
     # Initial version is required to configure Atari ROMS in setup_env.sh
+    - gym==0.13
     - gym[accept-rom-license]
     - gym[atari]
     - hypothesis
