@@ -13,27 +13,13 @@ conda activate ./env
 # Install PyTorch and TorchRL.
 $DIR/install.sh
 
-set GYM_VERSION='0.13'
-# gym==0.13 is installed initially due to environment.yml
-echo 'Running tests for gym version: ${GYM_VERSION}'
-$DIR/run_test.sh
+# Extracted from run_test.sh to run once.
+yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL mesa-libEGL-devel glfw mesa-libOSMesa-devel glew glew-devel egl-utils freeglut xorg-x11-server-Xvfb -y
 
-set GYM_VERSION='0.19'
-pip3 install gym==$GYM_VERSION
-echo 'Running tests for gym version: ${GYM_VERSION}'
-$DIR/run_test.sh
-
-set GYM_VERSION='0.20'
-pip3 install gym==$GYM_VERSION
-echo 'Running tests for gym version: ${GYM_VERSION}'
-$DIR/run_test.sh
-
-set GYM_VERSION='0.25'
-pip3 install gym==$GYM_VERSION
-echo 'Running tests for gym version: ${GYM_VERSION}'
-$DIR/run_test.sh
-
-set GYM_VERSION='0.26'
-pip3 install gym==$GYM_VERSION
-echo 'Running tests for gym version: ${GYM_VERSION}'
-$DIR/run_test.sh
+for GYM_VERSION in '0.13' '0.19' '0.20' '0.25' '0.26'
+do
+  echo "Installing gym version: ${GYM_VERSION}"
+  pip3 install gym==$GYM_VERSION
+  echo "Running tests for gym version: ${GYM_VERSION}"
+  $DIR/run_test.sh
+done
