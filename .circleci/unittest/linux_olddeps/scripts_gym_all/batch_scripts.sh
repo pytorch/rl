@@ -12,7 +12,9 @@ $DIR/run_test.sh
 
 # 0.19
 export GYM_VERSION='0.19'
-$DIR/install_gym.sh
+#$DIR/install_gym.sh # Fix permission denied error.
+conda install gym==$GYM_VERSION
+pip3 list
 $DIR/run_test.sh
 
 # 0.20
