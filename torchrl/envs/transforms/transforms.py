@@ -41,31 +41,6 @@ from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
 from torchrl.envs.utils import step_mdp
 
-__all__ = [
-    "Transform",
-    "TransformedEnv",
-    "RewardClipping",
-    "Resize",
-    "CenterCrop",
-    "GrayScale",
-    "Compose",
-    "ToTensorImage",
-    "ObservationNorm",
-    "FlattenObservation",
-    "UnsqueezeTransform",
-    "RewardScaling",
-    "ObservationTransform",
-    "CatFrames",
-    "FiniteTensorDictCheck",
-    "DoubleToFloat",
-    "CatTensors",
-    "NoopResetEnv",
-    "BinarizeReward",
-    "PinMemoryTransform",
-    "VecNorm",
-    "gSDENoise",
-    "TensorDictPrimer",
-]
 
 IMAGE_KEYS = ["next_pixels"]
 _MAX_NOOPS_TRIALS = 10
@@ -75,9 +50,9 @@ def _apply_to_composite(function):
     def new_fun(self, observation_spec):
         if isinstance(observation_spec, CompositeSpec):
             d = observation_spec._specs
-            for key_in, key_out in zip(self.keys_in, self.keys_out):
-                if key_in in observation_spec.keys():
-                    d[key_out] = function(self, observation_spec[key_in])
+            for in_key, key_out in zip(self.in_keys, self.keys_out):
+                if in_key in observation_spec.keys():
+                    d[key_out] = function(self, observation_spec[in_key])
             return CompositeSpec(**d)
         else:
             return function(self, observation_spec)
@@ -114,21 +89,21 @@ class Transform(nn.Module):
 
     def __init__(
         self,
-        keys_in: Sequence[str],
+        in_keys: Sequence[str],
         keys_out: Optional[Sequence[str]] = None,
-        keys_inv_in: Optional[Sequence[str]] = None,
+        in_keys_inv: Optional[Sequence[str]] = None,
         keys_inv_out: Optional[Sequence[str]] = None,
     ):
         super().__init__()
-        self.keys_in = keys_in
+        self.in_keys = in_keys
         if keys_out is None:
-            keys_out = copy(self.keys_in)
+            keys_out = copy(self.in_keys)
         self.keys_out = keys_out
-        if keys_inv_in is None:
-            keys_inv_in = []
-        self.keys_inv_in = keys_inv_in
+        if in_keys_inv is None:
+            in_keys_inv = []
+        self.in_keys_inv = in_keys_inv
         if keys_inv_out is None:
-            keys_inv_out = copy(self.keys_inv_in)
+            keys_inv_out = copy(self.in_keys_inv)
         self.keys_inv_out = keys_inv_out
         self.__dict__["_parent"] = None
 
@@ -158,7 +133,7 @@ class Transform(nn.Module):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         self._check_inplace()
-        for key_in, key_out in zip(self.keys_in, self.keys_out):
+        for key_in, key_out in zip(self.in_keys, self.keys_out):
             if key_in in tensordict.keys():
                 observation = self._apply_transform(tensordict.get(key_in))
                 tensordict.set(key_out, observation, inplace=self.inplace)
@@ -176,7 +151,7 @@ class Transform(nn.Module):
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._check_inplace()
-        for key_in, key_out in zip(self.keys_inv_in, self.keys_inv_out):
+        for key_in, key_out in zip(self.in_keys_inv, self.keys_inv_out):
             if key_in in tensordict.keys():
                 observation = self._inv_apply_transform(tensordict.get(key_in))
                 tensordict.set(key_out, observation, inplace=self.inplace)
@@ -226,10 +201,15 @@ class Transform(nn.Module):
         pass
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(keys={self.keys_in})"
+        return f"{self.__class__.__name__}(keys={self.in_keys})"
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
+        if self.__dict__["_parent"] is not None:
+            raise AttributeError("parent of transform already set")
         self.__dict__["_parent"] = parent
+
+    def reset_parent(self) -> None:
+        self.__dict__["_parent"] = None
 
     @property
     def parent(self) -> EnvBase:
@@ -251,15 +231,20 @@ class Transform(nn.Module):
                 raise ValueError(
                     f"Compose parent was of type {type(compose_parent)} but expected TransformedEnv."
                 )
+            if compose_parent.transform is not compose:
+                comp_parent_trans = copy(compose_parent.transform)
+                comp_parent_trans.reset_parent()
+            else:
+                comp_parent_trans = None
             out = TransformedEnv(
                 compose_parent.base_env,
-                transform=compose_parent.transform
-                if compose_parent.transform is not compose
-                else None,
+                transform=comp_parent_trans,
             )
-            for transform in compose.transforms:
-                if transform is self:
+            for orig_trans in compose.transforms:
+                if orig_trans is self:
                     break
+                transform = copy(orig_trans)
+                transform.reset_parent()
                 out.append_transform(transform)
         elif isinstance(parent, TransformedEnv):
             out = TransformedEnv(parent.base_env)
@@ -312,9 +297,16 @@ class TransformedEnv(EnvBase):
                 # we don't use isinstance as some transforms may be subclassed from
                 # Compose but with other features that we don't want to loose.
                 transform = [transform]
+            else:
+                for t in transform:
+                    t.reset_parent()
             env_transform = env.transform
             if type(env_transform) is not Compose:
+                env_transform.reset_parent()
                 env_transform = [env_transform]
+            else:
+                for t in env_transform:
+                    t.reset_parent()
             transform = Compose(*env_transform, *transform).to(device)
         else:
             self._set_env(env, device)
@@ -499,9 +491,10 @@ but got an object of type {type(transform)}."""
         transform = transform.to(self.device)
         if not isinstance(self.transform, Compose):
             prev_transform = self.transform
+            prev_transform.reset_parent()
             self.transform = Compose()
             self.transform.append(prev_transform)
-            self.transform.set_parent(self)
+
         self.transform.append(transform)
 
     def insert_transform(self, index: int, transform: Transform) -> None:
@@ -563,8 +556,6 @@ but got an object of type {type(transform)}."""
     def __setattr__(self, key, value):
         propobj = getattr(self.__class__, key, None)
 
-        if isinstance(value, Transform):
-            value.set_parent(self)
         if isinstance(propobj, property):
             ancestors = list(__class__.__mro__)[::-1]
             while isinstance(propobj, property):
@@ -589,16 +580,16 @@ class ObservationTransform(Transform):
 
     def __init__(
         self,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
         keys_out: Optional[Sequence[str]] = None,
     ):
-        if keys_in is None:
-            keys_in = [
+        if in_keys is None:
+            in_keys = [
                 "next_observation",
                 "next_pixels",
                 "next_observation_state",
             ]
-        super(ObservationTransform, self).__init__(keys_in=keys_in, keys_out=keys_out)
+        super(ObservationTransform, self).__init__(in_keys=in_keys, keys_out=keys_out)
 
 
 class Compose(Transform):
@@ -615,7 +606,7 @@ class Compose(Transform):
     inplace = False
 
     def __init__(self, *transforms: Transform):
-        super().__init__(keys_in=[])
+        super().__init__(in_keys=[])
         self.transforms = nn.ModuleList(transforms)
         for t in self.transforms:
             t.set_parent(self)
@@ -729,7 +720,7 @@ class ToTensorImage(ObservationTransform):
             observations.
 
     Examples:
-        >>> transform = ToTensorImage(keys_in=["next_pixels"])
+        >>> transform = ToTensorImage(in_keys=["next_pixels"])
         >>> ri = torch.randint(0, 255, (1,1,10,11,3), dtype=torch.uint8)
         >>> td = TensorDict(
         ...     {"next_pixels": ri},
@@ -746,12 +737,12 @@ class ToTensorImage(ObservationTransform):
         self,
         unsqueeze: bool = False,
         dtype: Optional[torch.device] = None,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
         keys_out: Optional[Sequence[str]] = None,
     ):
-        if keys_in is None:
-            keys_in = IMAGE_KEYS  # default
-        super().__init__(keys_in=keys_in, keys_out=keys_out)
+        if in_keys is None:
+            in_keys = IMAGE_KEYS  # default
+        super().__init__(in_keys=in_keys, keys_out=keys_out)
         self.unsqueeze = unsqueeze
         self.dtype = dtype if dtype is not None else torch.get_default_dtype()
 
@@ -766,7 +757,7 @@ class ToTensorImage(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = self._pixel_observation(deepcopy(observation_spec))
+        observation_spec = self._pixel_observation(observation_spec)
         observation_spec.shape = torch.Size(
             [
                 *observation_spec.shape[:-3],
@@ -800,12 +791,12 @@ class RewardClipping(Transform):
         self,
         clamp_min: float = None,
         clamp_max: float = None,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
         keys_out: Optional[Sequence[str]] = None,
     ):
-        if keys_in is None:
-            keys_in = ["reward"]
-        super().__init__(keys_in=keys_in, keys_out=keys_out)
+        if in_keys is None:
+            in_keys = ["reward"]
+        super().__init__(in_keys=in_keys, keys_out=keys_out)
         clamp_min_tensor = (
             clamp_min if isinstance(clamp_min, Tensor) else torch.tensor(clamp_min)
         )
@@ -843,7 +834,7 @@ class RewardClipping(Transform):
         return (
             f"{self.__class__.__name__}("
             f"clamp_min={float(self.clamp_min):4.4f}, clamp_max"
-            f"={float(self.clamp_max):4.4f}, keys={self.keys_in})"
+            f"={float(self.clamp_max):4.4f}, keys={self.in_keys})"
         )
 
 
@@ -854,12 +845,12 @@ class BinarizeReward(Transform):
 
     def __init__(
         self,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
         keys_out: Optional[Sequence[str]] = None,
     ):
-        if keys_in is None:
-            keys_in = ["reward"]
-        super().__init__(keys_in=keys_in, keys_out=keys_out)
+        if in_keys is None:
+            in_keys = ["reward"]
+        super().__init__(in_keys=in_keys, keys_out=keys_out)
 
     def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
         if not reward.shape or reward.shape[-1] != 1:
@@ -888,7 +879,7 @@ class Resize(ObservationTransform):
         w: int,
         h: int,
         interpolation: str = "bilinear",
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
         keys_out: Optional[Sequence[str]] = None,
     ):
         if not _has_tv:
@@ -897,9 +888,9 @@ class Resize(ObservationTransform):
                 "torchvision implementation. "
                 "Consider installing this dependency."
             )
-        if keys_in is None:
-            keys_in = IMAGE_KEYS  # default
-        super().__init__(keys_in=keys_in, keys_out=keys_out)
+        if in_keys is None:
+            in_keys = IMAGE_KEYS  # default
+        super().__init__(in_keys=in_keys, keys_out=keys_out)
         self.w = int(w)
         self.h = int(h)
         self.interpolation = interpolation
@@ -922,7 +913,6 @@ class Resize(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -939,7 +929,7 @@ class Resize(ObservationTransform):
         return (
             f"{self.__class__.__name__}("
             f"w={int(self.w)}, h={int(self.h)}, "
-            f"interpolation={self.interpolation}, keys={self.keys_in})"
+            f"interpolation={self.interpolation}, keys={self.in_keys})"
         )
 
 
@@ -957,11 +947,11 @@ class CenterCrop(ObservationTransform):
         self,
         w: int,
         h: int = None,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
     ):
-        if keys_in is None:
-            keys_in = IMAGE_KEYS  # default
-        super().__init__(keys_in=keys_in)
+        if in_keys is None:
+            in_keys = IMAGE_KEYS  # default
+        super().__init__(in_keys=in_keys)
         self.w = w
         self.h = h if h else w
 
@@ -974,25 +964,22 @@ class CenterCrop(ObservationTransform):
             return CompositeSpec(
                 **{
                     key: self.transform_observation_spec(_obs_spec)
-                    if key in self.keys_in
+                    if key in self.in_keys
                     else _obs_spec
                     for key, _obs_spec in observation_spec._specs.items()
                 }
             )
-        else:
-            _observation_spec = deepcopy(observation_spec)
 
-        space = _observation_spec.space
+        space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
             space.maximum = self._apply_transform(space.maximum)
-            _observation_spec.shape = space.minimum.shape
+            observation_spec.shape = space.minimum.shape
         else:
-            _observation_spec.shape = self._apply_transform(
-                torch.zeros(_observation_spec.shape)
+            observation_spec.shape = self._apply_transform(
+                torch.zeros(observation_spec.shape)
             ).shape
 
-        observation_spec = _observation_spec
         return observation_spec
 
     def __repr__(self) -> str:
@@ -1018,11 +1005,11 @@ class FlattenObservation(ObservationTransform):
         self,
         first_dim: int = 0,
         last_dim: int = -3,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
     ):
-        if keys_in is None:
-            keys_in = IMAGE_KEYS  # default
-        super().__init__(keys_in=keys_in)
+        if in_keys is None:
+            in_keys = IMAGE_KEYS  # default
+        super().__init__(in_keys=in_keys)
         self.first_dim = first_dim
         self.last_dim = last_dim
 
@@ -1033,7 +1020,7 @@ class FlattenObservation(ObservationTransform):
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         out = super().set_parent(parent)
         observation_spec = self.parent.observation_spec
-        for key in self.keys_in:
+        for key in self.in_keys:
             if key in observation_spec:
                 observation_spec = observation_spec[key]
                 if self.first_dim >= 0:
@@ -1045,7 +1032,6 @@ class FlattenObservation(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
 
         if isinstance(space, ContinuousBox):
@@ -1083,17 +1069,17 @@ class UnsqueezeTransform(Transform):
     def __init__(
         self,
         unsqueeze_dim: int,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
         keys_out: Optional[Sequence[str]] = None,
-        keys_inv_in: Optional[Sequence[str]] = None,
+        in_keys_inv: Optional[Sequence[str]] = None,
         keys_inv_out: Optional[Sequence[str]] = None,
     ):
-        if keys_in is None:
-            keys_in = IMAGE_KEYS  # default
+        if in_keys is None:
+            in_keys = IMAGE_KEYS  # default
         super().__init__(
-            keys_in=keys_in,
+            in_keys=in_keys,
             keys_out=keys_out,
-            keys_inv_in=keys_inv_in,
+            in_keys_inv=in_keys_inv,
             keys_inv_out=keys_inv_out,
         )
         self._unsqueeze_dim_orig = unsqueeze_dim
@@ -1147,24 +1133,24 @@ class UnsqueezeTransform(Transform):
         return spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        for key in self.keys_inv_in:
-            input_spec = self._transform_spec(deepcopy(input_spec[key]))
+        for key in self.in_keys_inv:
+            input_spec = self._transform_spec(input_spec[key])
         return input_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        if "reward" in self.keys_in:
-            reward_spec = self._transform_spec(deepcopy(reward_spec))
+        if "reward" in self.in_keys:
+            reward_spec = self._transform_spec(reward_spec)
         return reward_spec
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = self._transform_spec(deepcopy(observation_spec))
+        observation_spec = self._transform_spec(observation_spec)
         return observation_spec
 
     def __repr__(self) -> str:
         s = (
-            f"{self.__class__.__name__}(keys_in={self.keys_in}, keys_out={self.keys_out},"
-            f" keys_inv_in={self.keys_inv_in}, keys_inv_out={self.keys_inv_out})"
+            f"{self.__class__.__name__}(in_keys={self.in_keys}, keys_out={self.keys_out},"
+            f" keys_inv_in={self.in_keys_inv}, keys_inv_out={self.keys_inv_out})"
         )
         return s
 
@@ -1182,16 +1168,16 @@ class SqueezeTransform(UnsqueezeTransform):
     def __init__(
         self,
         squeeze_dim: int,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
         keys_out: Optional[Sequence[str]] = None,
-        keys_inv_in: Optional[Sequence[str]] = None,
+        in_keys_inv: Optional[Sequence[str]] = None,
         keys_inv_out: Optional[Sequence[str]] = None,
     ):
         super().__init__(
             unsqueeze_dim=squeeze_dim,
-            keys_in=keys_inv_in,
+            in_keys=in_keys_inv,
             keys_out=keys_out,
-            keys_inv_in=keys_in,
+            in_keys_inv=in_keys,
             keys_inv_out=keys_inv_out,
         )
 
@@ -1211,10 +1197,10 @@ class GrayScale(ObservationTransform):
 
     inplace = False
 
-    def __init__(self, keys_in: Optional[Sequence[str]] = None):
-        if keys_in is None:
-            keys_in = IMAGE_KEYS
-        super(GrayScale, self).__init__(keys_in=keys_in)
+    def __init__(self, in_keys: Optional[Sequence[str]] = None):
+        if in_keys is None:
+            in_keys = IMAGE_KEYS
+        super(GrayScale, self).__init__(in_keys=in_keys)
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = F.rgb_to_grayscale(observation)
@@ -1222,7 +1208,6 @@ class GrayScale(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1260,7 +1245,7 @@ class ObservationNorm(ObservationTransform):
         >>> transform = ObservationNorm(
         ...     loc = td.get('next_obs').mean(0),
         ...     scale = td.get('next_obs').std(0),
-        ...     keys_in=["next_obs"],
+        ...     in_keys=["next_obs"],
         ...     standard_normal=True)
         >>> _ = transform(td)
         >>> print(torch.isclose(td.get('next_obs').mean(0),
@@ -1278,17 +1263,17 @@ class ObservationNorm(ObservationTransform):
         self,
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
         # observation_spec_key: =None,
         standard_normal: bool = False,
     ):
-        if keys_in is None:
-            keys_in = [
+        if in_keys is None:
+            in_keys = [
                 "next_observation",
                 "next_pixels",
                 "next_observation_state",
             ]
-        super().__init__(keys_in=keys_in)
+        super().__init__(in_keys=in_keys)
         if not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc, dtype=torch.float)
         if not isinstance(scale, torch.Tensor):
@@ -1312,7 +1297,6 @@ class ObservationNorm(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1324,7 +1308,7 @@ class ObservationNorm(ObservationTransform):
             return (
                 f"{self.__class__.__name__}("
                 f"loc={float(self.loc):4.4f}, scale"
-                f"={float(self.scale):4.4f}, keys={self.keys_in})"
+                f"={float(self.scale):4.4f}, keys={self.in_keys})"
             )
         else:
             return super().__repr__()
@@ -1345,7 +1329,7 @@ class CatFrames(ObservationTransform):
             Default is `4`.
         cat_dim (int, optional): dimension along which concatenate the
             observations. Default is `cat_dim=-3`.
-        keys_in (list of int, optional): keys pointing to the frames that have
+        in_keys (list of int, optional): keys pointing to the frames that have
             to be concatenated.
 
     """
@@ -1356,11 +1340,11 @@ class CatFrames(ObservationTransform):
         self,
         N: int = 4,
         cat_dim: int = -3,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
     ):
-        if keys_in is None:
-            keys_in = IMAGE_KEYS
-        super().__init__(keys_in=keys_in)
+        if in_keys is None:
+            in_keys = IMAGE_KEYS
+        super().__init__(in_keys=in_keys)
         self.N = N
         self.cat_dim = cat_dim
         self.buffer = []
@@ -1396,7 +1380,7 @@ class CatFrames(ObservationTransform):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(N={self.N}, cat_dim"
-            f"={self.cat_dim}, keys={self.keys_in})"
+            f"={self.cat_dim}, keys={self.in_keys})"
         )
 
 
@@ -1419,11 +1403,11 @@ class RewardScaling(Transform):
         self,
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
     ):
-        if keys_in is None:
-            keys_in = ["reward"]
-        super().__init__(keys_in=keys_in)
+        if in_keys is None:
+            in_keys = ["reward"]
+        super().__init__(in_keys=in_keys)
         if not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc)
         if not isinstance(scale, torch.Tensor):
@@ -1450,7 +1434,7 @@ class RewardScaling(Transform):
         return (
             f"{self.__class__.__name__}("
             f"loc={self.loc.item():4.4f}, scale={self.scale.item():4.4f}, "
-            f"keys={self.keys_in})"
+            f"keys={self.in_keys})"
         )
 
 
@@ -1460,7 +1444,7 @@ class FiniteTensorDictCheck(Transform):
     inplace = False
 
     def __init__(self):
-        super().__init__(keys_in=[])
+        super().__init__(in_keys=[])
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         source = {}
@@ -1483,7 +1467,7 @@ class DoubleToFloat(Transform):
     Examples:
         >>> td = TensorDict(
         ...     {'next_obs': torch.ones(1, dtype=torch.double)}, [])
-        >>> transform = DoubleToFloat(keys_in=["next_obs"])
+        >>> transform = DoubleToFloat(in_keys=["next_obs"])
         >>> _ = transform(td)
         >>> print(td.get("next_obs").dtype)
         torch.float32
@@ -1495,10 +1479,10 @@ class DoubleToFloat(Transform):
 
     def __init__(
         self,
-        keys_in: Optional[Sequence[str]] = None,
-        keys_inv_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
+        in_keys_inv: Optional[Sequence[str]] = None,
     ):
-        super().__init__(keys_in=keys_in, keys_inv_in=keys_inv_in)
+        super().__init__(in_keys=in_keys, in_keys_inv=in_keys_inv)
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         return obs.to(torch.float)
@@ -1518,7 +1502,7 @@ class DoubleToFloat(Transform):
                 space.maximum = space.maximum.to(torch.float)
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        for key in self.keys_inv_in:
+        for key in self.in_keys_inv:
             if input_spec[key].dtype is not torch.double:
                 raise TypeError(
                     f"input_spec[{key}].dtype is not double: {input_spec[key].dtype}"
@@ -1527,7 +1511,7 @@ class DoubleToFloat(Transform):
         return input_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        if "reward" in self.keys_in:
+        if "reward" in self.in_keys:
             if reward_spec.dtype is not torch.double:
                 raise TypeError("reward_spec.dtype is not double")
 
@@ -1541,8 +1525,8 @@ class DoubleToFloat(Transform):
 
     def __repr__(self) -> str:
         s = (
-            f"{self.__class__.__name__}(keys_in={self.keys_in}, keys_out={self.keys_out},"
-            f"keys_inv_in={self.keys_inv_in}, keys_inv_out={self.keys_inv_out})"
+            f"{self.__class__.__name__}(in_keys={self.in_keys}, keys_out={self.keys_out},"
+            f"keys_inv_in={self.in_keys_inv}, keys_inv_out={self.keys_inv_out})"
         )
         return s
 
@@ -1555,7 +1539,7 @@ class CatTensors(Transform):
     "observation_velocity")
 
     Args:
-        keys_in (Sequence of str): keys to be concatenated. If `None` (or not provided)
+        in_keys (Sequence of str): keys to be concatenated. If `None` (or not provided)
             the keys will be retrieved from the parent environment the first time
             the transform is used. This behaviour will only work if a parent is set.
         out_key: key of the resulting tensor.
@@ -1569,13 +1553,13 @@ class CatTensors(Transform):
             Default is False.
 
     Examples:
-        >>> transform = CatTensors(keys_in=["key1", "key2"])
+        >>> transform = CatTensors(in_keys=["key1", "key2"])
         >>> td = TensorDict({"key1": torch.zeros(1, 1),
         ...     "key2": torch.ones(1, 1)}, [1])
         >>> _ = transform(td)
         >>> print(td.get("observation_vector"))
         tensor([[0., 1.]])
-        >>> transform = CatTensors(keys_in=["key1", "key2"], dim=-2, unsqueeze_if_oor=True)
+        >>> transform = CatTensors(in_keys=["key1", "key2"], dim=-2, unsqueeze_if_oor=True)
         >>> td = TensorDict({"key1": torch.zeros(1),
         ...     "key2": torch.ones(1)}, [])
         >>> _ = transform(td)
@@ -1589,55 +1573,55 @@ class CatTensors(Transform):
 
     def __init__(
         self,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
         out_key: str = "next_observation_vector",
         dim: int = -1,
         del_keys: bool = True,
         unsqueeze_if_oor: bool = False,
     ):
-        self._initialized = keys_in is not None
+        self._initialized = in_keys is not None
         if not self._initialized:
             if dim != -1:
                 raise ValueError(
                     "Lazy call to CatTensors is only supported when `dim=-1`."
                 )
         else:
-            keys_in = sorted(list(keys_in))
-            self._check_keys_in(keys_in, out_key)
+            in_keys = sorted(list(in_keys))
+            self._check_in_keys(in_keys, out_key)
         if type(out_key) != str:
             raise Exception("CatTensors requires out_key to be of type string")
-        # super().__init__(keys_in=keys_in)
-        super(CatTensors, self).__init__(keys_in=keys_in, keys_out=[out_key])
+        # super().__init__(in_keys=in_keys)
+        super(CatTensors, self).__init__(in_keys=in_keys, keys_out=[out_key])
         self.dim = dim
         self.del_keys = del_keys
         self.unsqueeze_if_oor = unsqueeze_if_oor
 
-    def _check_keys_in(self, keys_in, out_key):
+    def _check_in_keys(self, in_keys, out_key):
         if not out_key.startswith("next_") and all(
-            key.startswith("next_") for key in keys_in
+            key.startswith("next_") for key in in_keys
         ):
             warn(
                 f"It seems that 'next_'-like keys are being concatenated to a non 'next_' key {out_key}. This may result in unwanted behaviours, and the 'next_' flag is missing from the output key."
                 f"Consider renaming the out_key to 'next_{out_key}'"
             )
 
-    def _find_keys_in(self):
+    def _find_in_keys(self):
         parent = self.parent
         obs_spec = parent.observation_spec
-        keys_in = []
+        in_keys = []
         for key, value in obs_spec.items():
             if len(value.shape) == 1:
-                keys_in.append(key)
-        self._check_keys_in(keys_in, self.keys_out[0])
-        return sorted(keys_in)
+                in_keys.append(key)
+        self._check_in_keys(in_keys, self.keys_out[0])
+        return sorted(in_keys)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self._initialized:
-            self.keys_in = self._find_keys_in()
+            self.in_keys = self._find_in_keys()
             self._initialized = True
 
-        if all([key in tensordict.keys() for key in self.keys_in]):
-            values = [tensordict.get(key) for key in self.keys_in]
+        if all([key in tensordict.keys() for key in self.in_keys]):
+            values = [tensordict.get(key) for key in self.in_keys]
             if self.unsqueeze_if_oor:
                 pos_idx = self.dim > 0
                 abs_idx = self.dim if pos_idx else -self.dim - 1
@@ -1653,25 +1637,25 @@ class CatTensors(Transform):
             out_tensor = torch.cat(values, dim=self.dim)
             tensordict.set(self.keys_out[0], out_tensor)
             if self.del_keys:
-                tensordict.exclude(*self.keys_in, inplace=True)
+                tensordict.exclude(*self.in_keys, inplace=True)
         else:
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
-                f" {sorted(list(self.keys_in))} but got a TensorDict with keys"
+                f" {sorted(list(self.in_keys))} but got a TensorDict with keys"
                 f" {sorted(list(tensordict.keys()))}"
             )
         return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         # check that all keys are in observation_spec
-        if len(self.keys_in) > 1 and not isinstance(observation_spec, CompositeSpec):
+        if len(self.in_keys) > 1 and not isinstance(observation_spec, CompositeSpec):
             raise ValueError(
                 "CatTensor cannot infer the output observation spec as there are multiple input keys but "
                 "only one observation_spec."
             )
 
         if isinstance(observation_spec, CompositeSpec) and len(
-            [key for key in self.keys_in if key not in observation_spec]
+            [key for key in self.in_keys if key not in observation_spec]
         ):
             raise ValueError(
                 "CatTensor got a list of keys that does not match the keys in observation_spec. "
@@ -1682,7 +1666,7 @@ class CatTensors(Transform):
             # by def, there must be only one key
             return observation_spec
 
-        keys = [key for key in observation_spec._specs.keys() if key in self.keys_in]
+        keys = [key for key in observation_spec._specs.keys() if key in self.in_keys]
 
         sum_shape = sum(
             [
@@ -1704,13 +1688,13 @@ class CatTensors(Transform):
             device=device,
         )
         if self.del_keys:
-            for key in self.keys_in:
+            for key in self.in_keys:
                 del observation_spec[key]
         return observation_spec
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(in_keys={self.keys_in}, out_key"
+            f"{self.__class__.__name__}(in_keys={self.in_keys}, out_key"
             f"={self.keys_out[0]})"
         )
 
@@ -1765,14 +1749,13 @@ class DiscreteActionProjection(Transform):
         return action
 
     def tranform_input_spec(self, input_spec: CompositeSpec):
-        input_spec_out = deepcopy(input_spec)
-        input_spec_out["action"] = self.transform_action_spec(input_spec_out["action"])
-        return input_spec_out
+        input_spec["action"] = self.transform_action_spec(input_spec["action"])
+        return input_spec
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(max_N={self.max_n}, M={self.m}, "
-            f"keys={self.keys_in})"
+            f"keys={self.in_keys})"
         )
 
 
@@ -1992,7 +1975,7 @@ class gSDENoise(Transform):
         state_dim=None,
         action_dim=None,
     ) -> None:
-        super().__init__(keys_in=[])
+        super().__init__(in_keys=[])
         self.state_dim = state_dim
         self.action_dim = action_dim
 
@@ -2037,7 +2020,7 @@ class VecNorm(Transform):
     observations, one should substitute this layer by `vecnorm.to_observation_norm()`.
 
     Args:
-        keys_in (iterable of str, optional): keys to be updated.
+        in_keys (iterable of str, optional): keys to be updated.
             default: ["next_observation", "reward"]
         shared_td (TensorDictBase, optional): A shared tensordict containing the
             keys of the transform.
@@ -2069,7 +2052,7 @@ class VecNorm(Transform):
 
     def __init__(
         self,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
         shared_td: Optional[TensorDictBase] = None,
         lock: mp.Lock = None,
         decay: float = 0.9999,
@@ -2077,9 +2060,9 @@ class VecNorm(Transform):
     ) -> None:
         if lock is None:
             lock = mp.Lock()
-        if keys_in is None:
-            keys_in = ["next_observation", "reward"]
-        super().__init__(keys_in)
+        if in_keys is None:
+            in_keys = ["next_observation", "reward"]
+        super().__init__(in_keys)
         self._td = shared_td
         if shared_td is not None and not (
             shared_td.is_shared() or shared_td.is_memmap()
@@ -2088,7 +2071,7 @@ class VecNorm(Transform):
                 "shared_td must be either in shared memory or a memmap " "tensordict."
             )
         if shared_td is not None:
-            for key in keys_in:
+            for key in in_keys:
                 if (
                     (key + "_sum" not in shared_td.keys())
                     or (key + "_ssq" not in shared_td.keys())
@@ -2107,7 +2090,7 @@ class VecNorm(Transform):
         if self.lock is not None:
             self.lock.acquire()
 
-        for key in self.keys_in:
+        for key in self.in_keys:
             if key not in tensordict.keys():
                 continue
             self._init(tensordict, key)
@@ -2173,7 +2156,7 @@ class VecNorm(Transform):
     def to_observation_norm(self) -> Union[Compose, ObservationNorm]:
         """Converts VecNorm into an ObservationNorm class that can be used at inference time."""
         out = []
-        for key in self.keys_in:
+        for key in self.in_keys:
             _sum = self._td.get(key + "_sum")
             _ssq = self._td.get(key + "_ssq")
             _count = self._td.get(key + "_count")
@@ -2184,9 +2167,9 @@ class VecNorm(Transform):
                 loc=mean,
                 scale=std,
                 standard_normal=True,
-                keys_in=self.keys_in,
+                in_keys=self.in_keys,
             )
-            if len(self.keys_in) == 1:
+            if len(self.in_keys) == 1:
                 return _out
             else:
                 out += ObservationNorm
@@ -2278,5 +2261,5 @@ class VecNorm(Transform):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(decay={self.decay:4.4f},"
-            f"eps={self.eps:4.4f}, keys={self.keys_in})"
+            f"eps={self.eps:4.4f}, keys={self.in_keys})"
         )
