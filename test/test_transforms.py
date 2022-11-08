@@ -57,7 +57,7 @@ from torchrl.envs.transforms.transforms import (
     TensorDictPrimer,
     UnsqueezeTransform,
 )
-from torchrl.envs.transforms.vip import _VIPNet
+from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 
 if _has_gym:
     import gym
@@ -1684,6 +1684,71 @@ class TestVIP:
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union({"next_vec", "next_pixels_orig", "action", "reward"})
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
+        transformed_env.close()
+        del transformed_env
+
+    def test_vip_parallel_reward(self, model, device):
+        keys_in = ["next_pixels"]
+        keys_out = ["next_vec"]
+        tensor_pixels_key = None
+        vip = VIPRewardTransform(
+            model,
+            keys_in=keys_in,
+            keys_out=keys_out,
+            tensor_pixels_keys=tensor_pixels_key,
+        )
+        base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
+        transformed_env = TransformedEnv(base_env, vip)
+        tensordict_reset = TensorDict(
+            {"goal_image": torch.randint(0, 255, (4, 7, 7, 3), dtype=torch.uint8)},
+            [4],
+            device=device,
+        )
+        with pytest.raises(
+            KeyError,
+            match=r"VIPRewardTransform.* requires .* key to be present in the input tensordict",
+        ):
+            _ = transformed_env.reset()
+        with pytest.raises(
+            KeyError,
+            match=r"VIPRewardTransform.* requires .* key to be present in the input tensordict",
+        ):
+            _ = transformed_env.reset(tensordict_reset.select())
+
+        td = transformed_env.reset(tensordict_reset)
+        assert td.device == device
+        assert td.batch_size == torch.Size([4])
+        exp_keys = {"vec", "done", "pixels_orig", "goal_embedding", "goal_image"}
+        if tensor_pixels_key:
+            exp_keys.add(tensor_pixels_key)
+        assert set(td.keys()) == exp_keys
+
+        td = transformed_env.rand_step(td)
+        exp_keys = exp_keys.union({"next_vec", "next_pixels_orig", "action", "reward"})
+        assert set(td.keys()) == exp_keys, td
+
+        tensordict_reset = TensorDict(
+            {"goal_image": torch.randint(0, 255, (4, 7, 7, 3), dtype=torch.uint8)},
+            [4],
+            device=device,
+        )
+        td = transformed_env.rollout(
+            3, auto_reset=False, tensordict=transformed_env.reset(tensordict_reset)
+        )
+        assert set(td.keys()) == exp_keys, td
+        # test that we do compute the reward we want
+        cur_embedding = td["next_vec"]
+        goal_embedding = td["goal_embedding"]
+        last_embedding = td["vec"]
+        explicit_reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
+            -torch.norm(last_embedding - goal_embedding, dim=-1)
+        )
+        torch.testing.assert_close(explicit_reward, td["reward"].squeeze())
+        # test that there is only one goal embedding
+        goal = td["goal_embedding"]
+        goal_expand = td["goal_embedding"][:, :1].expand_as(td["goal_embedding"])
+        torch.testing.assert_close(goal, goal_expand)
+
         transformed_env.close()
         del transformed_env
 

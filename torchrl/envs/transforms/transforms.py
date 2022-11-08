@@ -431,7 +431,11 @@ but got an object of type {type(transform)}."""
         return self.base_env.set_seed(seed, static_seed=static_seed)
 
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
-        out_tensordict = self.base_env.reset(execute_step=False, **kwargs)
+        if tensordict is not None:
+            tensordict = tensordict.clone(recurse=False)
+        out_tensordict = self.base_env.reset(
+            tensordict=tensordict, execute_step=False, **kwargs
+        )
         out_tensordict = self.transform.reset(out_tensordict)
         out_tensordict = self.transform(out_tensordict)
         return out_tensordict
