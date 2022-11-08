@@ -1598,7 +1598,7 @@ class CatTensors(Transform):
 
     def _check_in_keys(self, in_keys, out_key):
         if not out_key.startswith("next_") and all(
-                key.startswith("next_") for key in in_keys
+            key.startswith("next_") for key in in_keys
         ):
             warn(
                 f"It seems that 'next_'-like keys are being concatenated to a non 'next_' key {out_key}. This may result in unwanted behaviours, and the 'next_' flag is missing from the output key."
