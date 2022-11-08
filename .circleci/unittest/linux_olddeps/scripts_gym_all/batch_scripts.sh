@@ -10,26 +10,30 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
+# Install PyTorch and TorchRL.
 $DIR/install.sh
 
-# gym==0.13 is installed initially.
+set GYM_VERSION='0.13'
+# gym==0.13 is installed initially due to environment.yml
+echo 'Running tests for gym version: ${GYM_VERSION}'
 $DIR/run_test.sh
 
-# 0.19
-export GYM_VERSION='0.19'
-#$DIR/install_gym.sh # Fix permission denied error.
+set GYM_VERSION='0.19'
 pip3 install gym==$GYM_VERSION
-pip3 list
+echo 'Running tests for gym version: ${GYM_VERSION}'
 $DIR/run_test.sh
 
-# 0.20
-#$DIR/install_gym.sh "0.20"
-#$DIR/run_test.sh
+set GYM_VERSION='0.20'
+pip3 install gym==$GYM_VERSION
+echo 'Running tests for gym version: ${GYM_VERSION}'
+$DIR/run_test.sh
 
-# 0.25
-#$DIR/install_gym.sh "0.25"
-#$DIR/run_test.sh
+set GYM_VERSION='0.25'
+pip3 install gym==$GYM_VERSION
+echo 'Running tests for gym version: ${GYM_VERSION}'
+$DIR/run_test.sh
 
-# 0.26
-#$DIR/install_gym.sh "0.26"
-#$DIR/run_test.sh
+set GYM_VERSION='0.26'
+pip3 install gym==$GYM_VERSION
+echo 'Running tests for gym version: ${GYM_VERSION}'
+$DIR/run_test.sh
