@@ -5,6 +5,11 @@
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
+set -e
+
+eval "$(./conda/bin/conda shell.bash hook)"
+conda activate ./env
+
 $DIR/install.sh
 
 # gym==0.13 is installed initially.
