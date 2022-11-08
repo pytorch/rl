@@ -818,9 +818,15 @@ class NdUnboundedDiscreteTensorSpec(UnboundedDiscreteTensorSpec):
             shape = torch.Size([shape])
 
         dtype, device = _default_dtype_and_device(dtype, device)
+        if dtype == torch.bool:
+            min_value = False
+            max_value = True
+        else:
+            min_value = torch.iinfo(dtype).min
+            max_value = torch.iinfo(dtype).max
         space = ContinuousBox(
-            torch.full(shape, torch.iinfo(dtype).min, device=device),
-            torch.full(shape, torch.iinfo(dtype).max, device=device),
+            torch.full(shape, min_value, device=device),
+            torch.full(shape, max_value, device=device),
         )
 
         super(UnboundedDiscreteTensorSpec, self).__init__(
