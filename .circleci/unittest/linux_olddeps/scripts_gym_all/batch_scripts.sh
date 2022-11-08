@@ -23,4 +23,3 @@ do
   echo "Running tests for gym version: ${GYM_VERSION}"
   $DIR/run_test.sh
 done
-
