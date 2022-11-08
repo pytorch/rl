@@ -29,9 +29,6 @@ import warnings
 import pytorch_sphinx_theme
 import torchrl
 
-# find project
-sys.path.insert(0, str(Path(__file__).parents[2]))
-
 # Suppress warnings - TODO
 # suppress_warnings = [ 'misc.highlighting_failure' ]
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -74,12 +71,11 @@ extensions = [
 ]
 
 sphinx_gallery_conf = {
-    "examples_dirs": "../../tutorials/sphinx-tutorials/demos_source/",  # path to your example scripts
-    "gallery_dirs": "demos",  # path to where to save gallery generated output
+    "examples_dirs": "reference/generated/tutorials/",  # path to your example scripts
+    "gallery_dirs": "tutorials",  # path to where to save gallery generated output
     "backreferences_dir": "gen_modules/backreferences",
     "doc_module": ("torchrl",),
-    'only_warn_on_example_error': True,
-    'filename_pattern': '../../tutorials/sphinx-tutorials/demos_source/', # files to parse
+    'filename_pattern': 'reference/generated/tutorials/', # files to parse
 }
 
 napoleon_use_ivar = True
@@ -165,6 +161,7 @@ aafig_default_options = dict(scale=1.5, aspect=1.0, proportional=True)
 # -- Generate knowledge base references -----------------------------------
 current_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(current_path)
-from knowledge_base import generate_knowledge_base_references
+from content_generation import generate_knowledge_base_references, generate_tutorial_references
 
 generate_knowledge_base_references("../../knowledge_base")
+generate_tutorial_references("../../tutorials/sphinx-tutorials/")
