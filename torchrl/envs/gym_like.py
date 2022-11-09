@@ -219,6 +219,7 @@ class GymLikeEnv(_EnvWrapper):
         tensordict_out = TensorDict(
             obs_dict, batch_size=tensordict.batch_size, device=self.device
         )
+
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
         if self.info_dict_reader is not None and info is not None:

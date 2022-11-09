@@ -25,6 +25,7 @@ def step_mdp(
     exclude_reward: bool = True,
     exclude_done: bool = True,
     exclude_action: bool = True,
+    _run_check: bool = True,
 ) -> TensorDictBase:
     """Creates a new tensordict that reflects a step in time of the input tensordict.
 
@@ -81,7 +82,7 @@ def step_mdp(
     else:
         other_keys.append("action")
     keys = [key for key in tensordict.keys() if key.startswith("next_")]
-    if len(keys) == 0:
+    if _run_check and len(keys) == 0:
         raise RuntimeError(
             "There was no key starting with 'next_' in the provided TensorDict: ",
             tensordict,

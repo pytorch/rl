@@ -90,9 +90,9 @@ class TestVecNorm:
         msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "all_done"
         t = env.transform
-        obs_sum = t._td.get("next_observation_sum").clone()
-        obs_ssq = t._td.get("next_observation_ssq").clone()
-        obs_count = t._td.get("next_observation_count").clone()
+        obs_sum = t._td.get("observation_sum").clone()
+        obs_ssq = t._td.get("observation_ssq").clone()
+        obs_count = t._td.get("observation_count").clone()
         reward_sum = t._td.get("reward_sum").clone()
         reward_ssq = t._td.get("reward_ssq").clone()
         reward_count = t._td.get("reward_count").clone()
@@ -145,9 +145,9 @@ class TestVecNorm:
 
         td = make_env.state_dict()["_extra_state"]["td"]
 
-        obs_sum = td.get("next_observation_sum").clone()
-        obs_ssq = td.get("next_observation_ssq").clone()
-        obs_count = td.get("next_observation_count").clone()
+        obs_sum = td.get("observation_sum").clone()
+        obs_ssq = td.get("observation_ssq").clone()
+        obs_count = td.get("observation_count").clone()
         reward_sum = td.get("reward_sum").clone()
         reward_ssq = td.get("reward_ssq").clone()
         reward_count = td.get("reward_count").clone()
@@ -254,9 +254,8 @@ class TestVecNorm:
             True,
         ],
     )
-    def test_vecnorm(self, parallel, thr=0.2, N=200):
+    def test_vecnorm_rollout(self, parallel, thr=0.2, N=200):
         self.SEED += 1
-        print(self.SEED)
         torch.manual_seed(self.SEED)
 
         if parallel is None:
@@ -317,9 +316,7 @@ def test_added_transforms_are_in_eval_mode():
 
 class TestTransformedEnv:
     def test_independent_obs_specs_from_shared_env(self):
-        obs_spec = CompositeSpec(
-            next_observation=BoundedTensorSpec(minimum=0, maximum=10)
-        )
+        obs_spec = CompositeSpec(observation=BoundedTensorSpec(minimum=0, maximum=10))
         base_env = ContinuousActionVecMockEnv(observation_spec=obs_spec)
         t1 = TransformedEnv(base_env, transform=ObservationNorm(loc=3, scale=2))
         t2 = TransformedEnv(base_env, transform=ObservationNorm(loc=1, scale=6))
@@ -327,14 +324,14 @@ class TestTransformedEnv:
         t1_obs_spec = t1.observation_spec
         t2_obs_spec = t2.observation_spec
 
-        assert t1_obs_spec["next_observation"].space.minimum == 3
-        assert t1_obs_spec["next_observation"].space.maximum == 23
+        assert t1_obs_spec["observation"].space.minimum == 3
+        assert t1_obs_spec["observation"].space.maximum == 23
 
-        assert t2_obs_spec["next_observation"].space.minimum == 1
-        assert t2_obs_spec["next_observation"].space.maximum == 61
+        assert t2_obs_spec["observation"].space.minimum == 1
+        assert t2_obs_spec["observation"].space.maximum == 61
 
-        assert base_env.observation_spec["next_observation"].space.minimum == 0
-        assert base_env.observation_spec["next_observation"].space.maximum == 10
+        assert base_env.observation_spec["observation"].space.minimum == 0
+        assert base_env.observation_spec["observation"].space.maximum == 10
 
     def test_independent_reward_specs_from_shared_env(self):
         reward_spec = UnboundedContinuousTensorSpec()
@@ -400,7 +397,7 @@ class TestTransforms:
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize(
-        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
+        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_available_devices())
     def test_resize(self, interpolation, keys, nchannels, batch, device):
@@ -438,7 +435,7 @@ class TestTransforms:
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("h", [None, 21])
     @pytest.mark.parametrize(
-        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
+        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_available_devices())
     def test_centercrop(self, keys, h, nchannels, batch, device):
@@ -478,7 +475,7 @@ class TestTransforms:
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
     @pytest.mark.parametrize(
-        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
+        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_available_devices())
     def test_flatten(self, keys, size, nchannels, batch, device):
@@ -521,7 +518,7 @@ class TestTransforms:
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
     @pytest.mark.parametrize(
-        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
+        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_available_devices())
     def test_unsqueeze(self, keys, size, nchannels, batch, device, unsqueeze_dim):
@@ -574,11 +571,11 @@ class TestTransforms:
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
     @pytest.mark.parametrize(
-        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
+        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize(
-        "keys_inv", [[], ["action", "some_other_key"], ["next_observation_pixels"]]
+        "keys_inv", [[], ["action", "some_other_key"], ["observation_pixels"]]
     )
     def test_unsqueeze_inv(
         self, keys, keys_inv, size, nchannels, batch, device, unsqueeze_dim
@@ -645,11 +642,11 @@ class TestTransforms:
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
     @pytest.mark.parametrize(
-        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
+        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize(
-        "keys_inv", [[], ["action", "some_other_key"], ["next_observation_pixels"]]
+        "keys_inv", [[], ["action", "some_other_key"], ["observation_pixels"]]
     )
     def test_squeeze_inv(
         self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim
@@ -991,15 +988,15 @@ class TestTransforms:
         )
         ftd(td)
         td.set("inf", torch.zeros(1, 3).fill_(float("inf")))
-        with pytest.raises(ValueError, match="Found non-finite elements"):
+        with pytest.raises(ValueError, match="Encountered a non-finite tensor"):
             ftd(td)
 
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize(
         "keys",
         [
-            ["next_observation", "some_other_key"],
-            ["next_observation_pixels"],
+            ["observation", "some_other_key"],
+            ["observation_pixels"],
             ["action"],
         ],
     )
@@ -1061,8 +1058,8 @@ class TestTransforms:
     @pytest.mark.parametrize(
         "keys",
         [
-            ["next_observation", "next_observation_other"],
-            ["next_observation_pixels"],
+            ["observation", "observation_other"],
+            ["observation_pixels"],
         ],
     )
     def test_cattensors(self, keys, device):
@@ -1107,14 +1104,14 @@ class TestTransforms:
 
     @pytest.mark.parametrize("append", [True, False])
     def test_cattensors_empty(self, append):
-        ct = CatTensors(out_key="next_observation_out", dim=-1, del_keys=False)
+        ct = CatTensors(out_key="observation_out", dim=-1, del_keys=False)
         if append:
             mock_env = TransformedEnv(ContinuousActionVecMockEnv())
             mock_env.append_transform(ct)
         else:
             mock_env = TransformedEnv(ContinuousActionVecMockEnv(), ct)
         tensordict = mock_env.rollout(3)
-        assert all(key in tensordict.keys() for key in ["next_observation_out"])
+        assert all(key in tensordict.keys() for key in ["observation_out"])
         # assert not any(key in tensordict.keys() for key in mock_env.base_env.observation_spec)
 
     @pytest.mark.parametrize("random", [True, False])
@@ -1407,12 +1404,12 @@ class TestTransforms:
 class TestR3M:
     @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
     def test_r3m_instantiation(self, model, tensor_pixels_key, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        keys_in = ["pixels"]
+        out_keys = ["vec"]
         r3m = R3MTransform(
             model,
             in_keys=keys_in,
-            keys_out=keys_out,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
@@ -1426,6 +1423,8 @@ class TestR3M:
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union({"next_vec", "next_pixels_orig", "action", "reward"})
+        if tensor_pixels_key:
+            exp_keys.add("next_" + tensor_pixels_key[0])
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
         transformed_env.close()
 
@@ -1433,24 +1432,24 @@ class TestR3M:
     @pytest.mark.parametrize(
         "parallel",
         [
-            False,
             True,
+            False,
         ],
     )
     def test_r3m_mult_images(self, model, device, stack_images, parallel):
-        keys_in = ["next_pixels", "next_pixels2"]
-        keys_out = ["next_vec"] if stack_images else ["next_vec", "next_vec2"]
+        keys_in = ["pixels", "pixels2"]
+        out_keys = ["vec"] if stack_images else ["vec", "vec2"]
         r3m = R3MTransform(
             model,
             in_keys=keys_in,
-            keys_out=keys_out,
+            out_keys=out_keys,
             stack_images=stack_images,
         )
 
         def base_env_constructor():
             return TransformedEnv(
                 DiscreteActionConvMockEnvNumpy().to(device),
-                CatTensors(["next_pixels"], "next_pixels2", del_keys=False),
+                CatTensors(["pixels"], "pixels2", del_keys=False),
             )
 
         assert base_env_constructor().device == device
@@ -1487,13 +1486,13 @@ class TestR3M:
         transformed_env.close()
 
     def test_r3m_parallel(self, model, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        keys_in = ["pixels"]
+        out_keys = ["vec"]
         tensor_pixels_key = None
         r3m = R3MTransform(
             model,
             in_keys=keys_in,
-            keys_out=keys_out,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
@@ -1562,12 +1561,12 @@ class TestR3M:
 
     @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
     def test_r3m_spec_against_real(self, model, tensor_pixels_key, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        keys_in = ["pixels"]
+        out_keys = ["vec"]
         r3m = R3MTransform(
             model,
             in_keys=keys_in,
-            keys_out=keys_out,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
@@ -1575,7 +1574,7 @@ class TestR3M:
         expected_keys = (
             list(transformed_env.input_spec.keys())
             + list(transformed_env.observation_spec.keys())
-            + [key.strip("next_") for key in transformed_env.observation_spec.keys()]
+            + ["next_" + key for key in transformed_env.observation_spec.keys()]
             + ["reward"]
             + ["done"]
         )
@@ -1588,12 +1587,12 @@ class TestR3M:
 class TestVIP:
     @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
     def test_vip_instantiation(self, model, tensor_pixels_key, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        keys_in = ["pixels"]
+        out_keys = ["vec"]
         vip = VIPTransform(
             model,
             in_keys=keys_in,
-            keys_out=keys_out,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
@@ -1607,25 +1606,27 @@ class TestVIP:
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union({"next_vec", "next_pixels_orig", "action", "reward"})
+        if tensor_pixels_key:
+            exp_keys.add("next_" + tensor_pixels_key[0])
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
         transformed_env.close()
 
     @pytest.mark.parametrize("stack_images", [True, False])
     @pytest.mark.parametrize("parallel", [True, False])
     def test_vip_mult_images(self, model, device, stack_images, parallel):
-        keys_in = ["next_pixels", "next_pixels2"]
-        keys_out = ["next_vec"] if stack_images else ["next_vec", "next_vec2"]
+        keys_in = ["pixels", "pixels2"]
+        out_keys = ["vec"] if stack_images else ["vec", "vec2"]
         vip = VIPTransform(
             model,
             in_keys=keys_in,
-            keys_out=keys_out,
+            out_keys=out_keys,
             stack_images=stack_images,
         )
 
         def base_env_constructor():
             return TransformedEnv(
                 DiscreteActionConvMockEnvNumpy().to(device),
-                CatTensors(["next_pixels"], "next_pixels2", del_keys=False),
+                CatTensors(["pixels"], "pixels2", del_keys=False),
             )
 
         assert base_env_constructor().device == device
@@ -1662,13 +1663,13 @@ class TestVIP:
         transformed_env.close()
 
     def test_vip_parallel(self, model, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        keys_in = ["pixels"]
+        out_keys = ["vec"]
         tensor_pixels_key = None
         vip = VIPTransform(
             model,
             in_keys=keys_in,
-            keys_out=keys_out,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
@@ -1690,11 +1691,11 @@ class TestVIP:
     @pytest.mark.parametrize("del_keys", [True, False])
     @pytest.mark.parametrize(
         "in_keys",
-        [["next_pixels"], ["next_pixels_1", "next_pixels_2", "next_pixels_3"]],
+        [["pixels"], ["pixels_1", "pixels_2", "pixels_3"]],
     )
     @pytest.mark.parametrize(
         "out_keys",
-        [["next_vip_vec"], ["next_vip_vec_1", "next_vip_vec_2", "next_vip_vec_3"]],
+        [["vip_vec"], ["vip_vec_1", "vip_vec_2", "vip_vec_3"]],
     )
     def test_vipnet_transform_observation_spec(
         self, in_keys, out_keys, del_keys, device, model
@@ -1737,12 +1738,12 @@ class TestVIP:
 
     @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
     def test_vip_spec_against_real(self, model, tensor_pixels_key, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        keys_in = ["pixels"]
+        out_keys = ["vec"]
         vip = VIPTransform(
             model,
             in_keys=keys_in,
-            keys_out=keys_out,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
@@ -1750,7 +1751,7 @@ class TestVIP:
         expected_keys = (
             list(transformed_env.input_spec.keys())
             + list(transformed_env.observation_spec.keys())
-            + [key.strip("next_") for key in transformed_env.observation_spec.keys()]
+            + ["next_" + key for key in transformed_env.observation_spec.keys()]
             + ["reward"]
             + ["done"]
         )

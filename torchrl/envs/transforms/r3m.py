@@ -61,7 +61,7 @@ class _R3MNet(Transform):
                 f"model {model_name} is currently not supported by R3M"
             )
         convnet.fc = Identity()
-        super().__init__(in_keys=in_keys, keys_out=out_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.convnet = convnet
         self.del_keys = del_keys
 
@@ -89,15 +89,16 @@ class _R3MNet(Transform):
 
         keys = [key for key in observation_spec._specs.keys() if key in self.in_keys]
         device = observation_spec[keys[0]].device
+        dim = observation_spec[keys[0]].shape[:-3]
 
         observation_spec = CompositeSpec(**observation_spec)
         if self.del_keys:
             for key_in in keys:
                 del observation_spec[key_in]
 
-        for key_out in self.keys_out:
-            observation_spec[key_out] = NdUnboundedContinuousTensorSpec(
-                shape=torch.Size([self.outdim]), device=device
+        for out_key in self.out_keys:
+            observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
+                shape=torch.Size([*dim, self.outdim]), device=device
             )
 
         return observation_spec
@@ -161,7 +162,7 @@ class R3MTransform(Compose):
         model_name (str): one of resnet50, resnet34 or resnet18
         in_keys (list of str, optional): list of input keys. If left empty, the
             "next_pixels" key is assumed.
-        keys_out (list of str, optional): list of output keys. If left empty,
+        out_keys (list of str, optional): list of output keys. If left empty,
              "next_r3m_vec" is assumed.
         size (int, optional): Size of the image to feed to resnet.
             Defaults to 244.
@@ -187,7 +188,7 @@ class R3MTransform(Compose):
         self,
         model_name: str,
         in_keys: List[str] = None,
-        keys_out: List[str] = None,
+        out_keys: List[str] = None,
         size: int = 244,
         stack_images: bool = True,
         download: bool = False,
@@ -199,7 +200,7 @@ class R3MTransform(Compose):
         self.download = download
         self.download_path = download_path
         self.model_name = model_name
-        self.keys_out = keys_out
+        self.out_keys = out_keys
         self.size = size
         self.stack_images = stack_images
         self.tensor_pixels_keys = tensor_pixels_keys
@@ -207,7 +208,7 @@ class R3MTransform(Compose):
     def _init(self):
         keys_in = self.keys_in
         model_name = self.model_name
-        keys_out = self.keys_out
+        out_keys = self.out_keys
         size = self.size
         stack_images = self.stack_images
         tensor_pixels_keys = self.tensor_pixels_keys
@@ -246,46 +247,46 @@ class R3MTransform(Compose):
         transforms.append(resize)
 
         # R3M
-        if keys_out is None:
+        if out_keys is None:
             if stack_images:
-                keys_out = ["next_r3m_vec"]
+                out_keys = ["next_r3m_vec"]
             else:
-                keys_out = [f"next_r3m_vec_{i}" for i in range(len(keys_in))]
-        elif stack_images and len(keys_out) != 1:
+                out_keys = [f"next_r3m_vec_{i}" for i in range(len(keys_in))]
+        elif stack_images and len(out_keys) != 1:
             raise ValueError(
-                f"key_out must be of length 1 if stack_images is True. Got keys_out={keys_out}"
+                f"out_key must be of length 1 if stack_images is True. Got out_keys={out_keys}"
             )
-        elif not stack_images and len(keys_out) != len(keys_in):
+        elif not stack_images and len(out_keys) != len(keys_in):
             raise ValueError(
-                "key_out must be of length equal to in_keys if stack_images is False."
+                "out_key must be of length equal to in_keys if stack_images is False."
             )
 
         if stack_images and len(keys_in) > 1:
             if self.is_3d:
                 unsqueeze = UnsqueezeTransform(
                     in_keys=keys_in,
-                    keys_out=keys_in,
+                    out_keys=keys_in,
                     unsqueeze_dim=-4,
                 )
                 transforms.append(unsqueeze)
 
             cattensors = CatTensors(
                 keys_in,
-                keys_out[0],
+                out_keys[0],
                 dim=-4,
             )
             network = _R3MNet(
-                in_keys=keys_out,
-                out_keys=keys_out,
+                in_keys=out_keys,
+                out_keys=out_keys,
                 model_name=model_name,
                 del_keys=False,
             )
-            flatten = FlattenObservation(-2, -1, keys_out)
+            flatten = FlattenObservation(-2, -1, out_keys)
             transforms = [*transforms, cattensors, network, flatten]
         else:
             network = _R3MNet(
                 in_keys=keys_in,
-                out_keys=keys_out,
+                out_keys=out_keys,
                 model_name=model_name,
                 del_keys=True,
             )
