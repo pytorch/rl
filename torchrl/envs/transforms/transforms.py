@@ -144,9 +144,9 @@ class Transform(nn.Module):
         return tensordict
         # raise NotImplementedError("""`Transform.forward` is currently not implemented
 
-    # (reserved for usage beyong envs). Use `Transform.step` instead.""")
+    # (reserved for usage beyong envs). Use `Transform._step` instead.""")
 
-    def step(self, tensordict: TensorDictBase):
+    def _step(self, tensordict: TensorDictBase):
         # placeholder when we'll move to tensordict['next']
         # tensordict["next"] = self._call(tensordict.get("next"))
         tensordict = self._call(tensordict)
@@ -432,7 +432,7 @@ but got an object of type {type(transform)}."""
         tensordict_out = self.base_env.step(tensordict_in)
         # tensordict should already have been processed by the transforms
         # for logging purposes
-        tensordict_out = self.transform.step(tensordict_out)
+        tensordict_out = self.transform._step(tensordict_out)
         return tensordict_out
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -442,7 +442,7 @@ but got an object of type {type(transform)}."""
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         out_tensordict = self.base_env.reset(execute_step=False, **kwargs)
         out_tensordict = self.transform.reset(out_tensordict)
-        out_tensordict = self.transform.step(out_tensordict)
+        out_tensordict = self.transform(out_tensordict)
         return out_tensordict
 
     def state_dict(self) -> OrderedDict:
@@ -471,15 +471,16 @@ but got an object of type {type(transform)}."""
     def is_closed(self, value: bool):
         self.base_env.is_closed = value
 
-    def is_done_get_fn(self) -> bool:
+    @property
+    def is_done(self) -> bool:
         if self._is_done is None:
             return self.base_env.is_done
         return self._is_done.all()
 
-    def is_done_set_fn(self, val: torch.Tensor) -> None:
+    @is_done.setter
+    def is_done(self, val: torch.Tensor) -> None:
         self._is_done = val
 
-    is_done = property(is_done_get_fn, is_done_set_fn)
 
     def close(self):
         self.base_env.close()
@@ -625,9 +626,9 @@ class Compose(Transform):
             tensordict = t(tensordict)
         return tensordict
 
-    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
-            tensordict = t.step(tensordict)
+            tensordict = t._step(tensordict)
         return tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1118,10 +1119,10 @@ class UnsqueezeTransform(Transform):
             self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
         return super().forward(tensordict)
 
-    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self._unsqueeze_dim_orig >= 0:
             self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
-        return super().step(tensordict)
+        return super()._step(tensordict)
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = observation.unsqueeze(self.unsqueeze_dim)
@@ -1207,7 +1208,7 @@ class SqueezeTransform(UnsqueezeTransform):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return super().inv(tensordict)
 
-    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # placeholder for when we'll move to 'next' indexing for steps
         # return super().inv(tensordict["next"])
         return super().inv(tensordict)
