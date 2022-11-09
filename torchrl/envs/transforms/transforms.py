@@ -38,7 +38,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
-from torchrl.envs.transforms.utils import FiniteTensor
+from torchrl.envs.transforms.utils import check_finite
 from torchrl.envs.utils import step_mdp
 
 
@@ -140,17 +140,16 @@ class Transform(nn.Module):
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        self._call(tensordict)
-        return tensordict
-        # raise NotImplementedError("""`Transform.forward` is currently not implemented
-
-    # (reserved for usage beyong envs). Use `Transform._step` instead.""")
-
-    def _step(self, tensordict: TensorDictBase):
-        # placeholder when we'll move to tensordict['next']
-        # tensordict["next"] = self._call(tensordict.get("next"))
         tensordict = self._call(tensordict)
         return tensordict
+        # raise NotImplementedError("""`Transform.forward` is currently not implemented (reserved for usage beyond envs). Use `Transform._step` instead.""")
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # placeholder when we'll move to tensordict['next']
+        # tensordict["next"] = self._call(tensordict.get("next"))
+        out = self._call(tensordict)
+        # print(out, tensordict, out is tensordict, (out==tensordict).all())
+        return out
 
     def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         if self.invertible:
@@ -481,7 +480,6 @@ but got an object of type {type(transform)}."""
     def is_done(self, val: torch.Tensor) -> None:
         self._is_done = val
 
-
     def close(self):
         self.base_env.close()
         self.is_closed = True
@@ -621,7 +619,7 @@ class Compose(Transform):
         for t in self.transforms:
             t.set_parent(self)
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
             tensordict = t(tensordict)
         return tensordict
@@ -1472,18 +1470,8 @@ class FiniteTensorDictCheck(Transform):
         super().__init__(in_keys=[])
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        source = {}
-        for key, item in tensordict.items():
-            try:
-                source[key] = FiniteTensor(item)
-            except RuntimeError as err:
-                if str(err).rfind("FiniteTensor encountered") > -1:
-                    raise ValueError(f"Found non-finite elements in {key}")
-                else:
-                    raise RuntimeError(str(err))
-
-        finite_tensordict = TensorDict(batch_size=tensordict.batch_size, source=source)
-        return finite_tensordict
+        tensordict.apply(check_finite)
+        return tensordict
 
 
 class DoubleToFloat(Transform):

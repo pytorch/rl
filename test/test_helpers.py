@@ -124,6 +124,8 @@ def test_dqn_maker(
             categorical_action_encoding=cfg.categorical_action_encoding
         )
 
+        print(proof_environment)
+        raise Exception
         actor = make_dqn_actor(proof_environment, cfg, device)
         td = proof_environment.reset().to(device)
         if UNSQUEEZE_SINGLETON and not td.ndimension():
