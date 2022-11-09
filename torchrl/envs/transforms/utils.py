@@ -8,5 +8,6 @@ import torch
 
 
 def check_finite(tensor: torch.Tensor):
+    """Raise an error if a tensor has non-finite elements."""
     if not tensor.isfinite().all():
         raise ValueError("Encountered a non-finite tensor.")
