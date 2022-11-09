@@ -16,7 +16,6 @@ We recommand reading the TensorDict tutorial before going through this one.
 
 import torch
 import torch.nn as nn
-
 from torchrl.data import TensorDict
 from torchrl.modules import TensorDictModule, TensorDictSequential
 
@@ -30,9 +29,7 @@ tensordict = TensorDict(
     {"a": torch.randn(5, 3), "b": torch.zeros(5, 4, 3)},
     batch_size=[5],
 )
-linear = TensorDictModule(
-    nn.Linear(3, 10), in_keys=["a"], out_keys=["a_out"]
-)
+linear = TensorDictModule(nn.Linear(3, 10), in_keys=["a"], out_keys=["a_out"])
 linear(tensordict)
 assert (tensordict.get("b") == 0).all()
 print(tensordict)
@@ -45,6 +42,7 @@ print(tensordict)
 # instance read multiple input values, one must register them in the
 # ``in_keys`` keyword argument of the constructor.
 
+
 class MergeLinear(nn.Module):
     def __init__(self, in_1, in_2, out):
         super().__init__()
@@ -53,6 +51,7 @@ class MergeLinear(nn.Module):
 
     def forward(self, x_1, x_2):
         return (self.linear_1(x_1) + self.linear_2(x_2)) / 2
+
 
 ###############################################################################
 
@@ -78,6 +77,7 @@ mergelinear(tensordict)
 # output values, one must register them in the ``out_keys`` keyword argument
 # of the constructor.
 
+
 class MultiHeadLinear(nn.Module):
     def __init__(self, in_1, out_1, out_2):
         super().__init__()
@@ -86,6 +86,7 @@ class MultiHeadLinear(nn.Module):
 
     def forward(self, x):
         return self.linear_1(x), self.linear_2(x)
+
 
 ###############################################################################
 
@@ -137,9 +138,7 @@ mergelinear = TensorDictModule(
 
 split_and_merge_linear = TensorDictSequential(splitlinear, mergelinear)
 
-assert split_and_merge_linear(tensordict)[
-    "output"
-].shape == torch.Size([5, 13])
+assert split_and_merge_linear(tensordict)["output"].shape == torch.Size([5, 13])
 
 ###############################################################################
 # Example 5: Compatibility with functorch
@@ -165,14 +164,13 @@ func(tensordict, params=params, buffers=buffers)
 
 tensordict = TensorDict({"a": torch.randn(5, 3)}, batch_size=[5])
 num_models = 10
-model  = TensorDictModule(
-        nn.Linear(3, 4), in_keys=["a"], out_keys=["output"]
-    )
+model = TensorDictModule(nn.Linear(3, 4), in_keys=["a"], out_keys=["output"])
 fmodel, (params, buffers) = model.make_functional_with_buffers()
 params = [torch.randn(num_models, *p.shape, device=p.device) for p in params]
 buffers = [torch.randn(num_models, *b.shape, device=b.device) for b in buffers]
 result_td = fmodel(tensordict, params=params, buffers=buffers, vmap=True)
 print("the output tensordict shape is: ", result_td.shape)
+
 
 ###############################################################################
 # Do's and don't with ``TensorDictModule``
@@ -217,18 +215,23 @@ print("the output tensordict shape is: ", result_td.shape)
 # probability if needed.
 
 from torchrl.modules import ProbabilisticTensorDictModule
-from torchrl.modules import  TanhNormal, NormalParamWrapper
-import functorch
-td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
+from torchrl.modules import TanhNormal, NormalParamWrapper
+
+td = TensorDict(
+    {"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)},
+    [
+        3,
+    ],
+)
 net = NormalParamWrapper(torch.nn.GRUCell(4, 8))
 module = TensorDictModule(net, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
 td_module = ProbabilisticTensorDictModule(
-   module=module,
-   dist_in_keys=["loc", "scale"],
-   sample_out_key=["action"],
-   distribution_class=TanhNormal,
-   return_log_prob=True,
-   )
+    module=module,
+    dist_in_keys=["loc", "scale"],
+    sample_out_key=["action"],
+    distribution_class=TanhNormal,
+    return_log_prob=True,
+)
 print(f"TensorDict before going through module: {td}")
 td_module(td)
 print(f"TensorDict after going through module now as keys action, loc and scale: {td}")
@@ -285,9 +288,7 @@ td_module_value = ValueOperator(
     in_keys=["hidden", "action"],
     out_keys=["state_action_value"],
 )
-td_module = ActorCriticOperator(
-    td_module_hidden, td_module_action, td_module_value
-)
+td_module = ActorCriticOperator(td_module_hidden, td_module_action, td_module_value)
 td = TensorDict(
     {"observation": torch.randn(3, 4)},
     [
@@ -346,6 +347,7 @@ from tutorials.src.transformer import (
 # input/output. Moreover, its components inputs need not be identical to the
 # previous layers outputs, allowing us to code complicated neural architecture.
 
+
 class AttentionBlockTensorDict(TensorDictSequential):
     def __init__(
         self,
@@ -380,9 +382,11 @@ class AttentionBlockTensorDict(TensorDictSequential):
             ),
         )
 
+
 ###############################################################################
 # We build the encoder and decoder blocks that will be part of the transformer
 # thanks to ``TensorDictModule``.
+
 
 class TransformerBlockEncoderTensorDict(TensorDictSequential):
     def __init__(
@@ -450,6 +454,7 @@ class TransformerBlockDecoderTensorDict(TensorDictSequential):
             ),
         )
 
+
 ###############################################################################
 # We create the transformer encoder and decoder.
 #
@@ -458,6 +463,7 @@ class TransformerBlockDecoderTensorDict(TensorDictSequential):
 #
 # For a decoder, we now can extract info from ``X_from`` into ``X_to``.
 # ``X_from`` will map to queries whereas ``X_from`` will map to keys and values.
+
 
 class TransformerEncoderTensorDict(TensorDictSequential):
     def __init__(
@@ -551,6 +557,7 @@ class TransformerTensorDict(TensorDictSequential):
             ),
         )
 
+
 ###############################################################################
 # We now test our new ``TransformerTensorDict``.
 
@@ -639,14 +646,8 @@ tdtransformer = TransformerTensorDict(
 ###############################################################################
 
 transformer = Transformer(
-                num_blocks,
-                to_dim,
-                to_len,
-                from_dim,
-                from_len,
-                latent_dim,
-                num_heads
-            )
+    num_blocks, to_dim, to_len, from_dim, from_len, latent_dim, num_heads
+)
 
 ###############################################################################
 # **Inference Time**
@@ -658,14 +659,14 @@ import time
 t1 = time.time()
 tokens = tdtransformer(td_tokens)
 t2 = time.time()
-print('Execution time:', t2 - t1, 'seconds')
+print("Execution time:", t2 - t1, "seconds")
 
 ###############################################################################
 
 t3 = time.time()
 X_out = transformer(X_encode, X_decode)
 t4 = time.time()
-print('Execution time:', t4 - t3, 'seconds')
+print("Execution time:", t4 - t3, "seconds")
 
 ###############################################################################
 # We can see on this minimal example that the overhead introduced by

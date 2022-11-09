@@ -23,7 +23,6 @@
 # -- Project information -----------------------------------------------------
 import os.path
 import sys
-from pathlib import Path
 import warnings
 
 import pytorch_sphinx_theme
@@ -75,8 +74,8 @@ sphinx_gallery_conf = {
     "gallery_dirs": "tutorials",  # path to where to save gallery generated output
     "backreferences_dir": "gen_modules/backreferences",
     "doc_module": ("torchrl",),
-    "filename_pattern": "reference/generated/tutorials/", # files to parse
-    "notebook_images": "reference/generated/tutorials/media/", # images to parse
+    "filename_pattern": "reference/generated/tutorials/",  # files to parse
+    "notebook_images": "reference/generated/tutorials/media/",  # images to parse
 }
 
 napoleon_use_ivar = True
@@ -162,7 +161,10 @@ aafig_default_options = dict(scale=1.5, aspect=1.0, proportional=True)
 # -- Generate knowledge base references -----------------------------------
 current_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(current_path)
-from content_generation import generate_knowledge_base_references, generate_tutorial_references
+from content_generation import (
+    generate_knowledge_base_references,
+    generate_tutorial_references,
+)
 
 generate_knowledge_base_references("../../knowledge_base")
 generate_tutorial_references("../../tutorials/sphinx-tutorials/", "tutorial")

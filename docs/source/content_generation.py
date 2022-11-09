@@ -1,6 +1,6 @@
 import os
-from pathlib import Path
 import shutil
+from pathlib import Path
 from typing import List
 
 FILE_DIR = os.path.dirname(__file__)
@@ -78,9 +78,11 @@ def generate_tutorial_references(tutorial_path: str, file_type: str) -> None:
     Path(target_path).mkdir(parents=True, exist_ok=True)
 
     # Iterate tutorial files and copy
-    file_paths = [os.path.join(tutorial_path, f)
-                  for f in os.listdir(tutorial_path)
-                  if f.endswith((".py", ".rst", ".png"))]
+    file_paths = [
+        os.path.join(tutorial_path, f)
+        for f in os.listdir(tutorial_path)
+        if f.endswith((".py", ".rst", ".png"))
+    ]
 
     for file_path in file_paths:
         shutil.copyfile(file_path, os.path.join(target_path, Path(file_path).name))
