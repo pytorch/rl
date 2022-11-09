@@ -15,3 +15,4 @@ docutils>=0.19
 functorch
 gym[classic_control]
 torchrl
+dm_control

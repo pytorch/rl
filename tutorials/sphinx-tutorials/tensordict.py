@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-TensorDict Tutorial
+TensorDict
 ============================
 TensorDict is a new tensor structure introduced in TorchRL.
 """

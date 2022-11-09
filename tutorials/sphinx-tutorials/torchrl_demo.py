@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-TorchRL Demo
+Introduction to TorchRL
 ============================
 This demo was presented at ICML 2022 on the industry demo day.
 """

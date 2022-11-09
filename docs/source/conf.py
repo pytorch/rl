@@ -75,7 +75,8 @@ sphinx_gallery_conf = {
     "gallery_dirs": "tutorials",  # path to where to save gallery generated output
     "backreferences_dir": "gen_modules/backreferences",
     "doc_module": ("torchrl",),
-    'filename_pattern': 'reference/generated/tutorials/', # files to parse
+    "filename_pattern": "reference/generated/tutorials/", # files to parse
+    "notebook_images": "reference/generated/tutorials/media/", # images to parse
 }
 
 napoleon_use_ivar = True
@@ -164,4 +165,6 @@ sys.path.append(current_path)
 from content_generation import generate_knowledge_base_references, generate_tutorial_references
 
 generate_knowledge_base_references("../../knowledge_base")
-generate_tutorial_references("../../tutorials/sphinx-tutorials/")
+generate_tutorial_references("../../tutorials/sphinx-tutorials/", "tutorial")
+generate_tutorial_references("../../tutorials/src/", "src")
+generate_tutorial_references("../../tutorials/media/", "media")

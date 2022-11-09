@@ -30,6 +30,8 @@ TorchRL aims at a high modularity and good runtime performance.
 
    tutorials/torchrl_demo
    tutorials/tensordict
+   tutorials/tensordict_module
+   tutorials/multi_task
 
 .. toctree::
    :maxdepth: 2
