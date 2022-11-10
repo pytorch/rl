@@ -173,9 +173,8 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                     )
                 sig = inspect.signature(policy.forward)
                 next_observation = {
-                    key[5:]: value
+                    key: value
                     for key, value in observation_spec.rand().items()
-                    if key.startswith("next_")
                 }
                 if set(sig.parameters) == set(next_observation):
                     out_keys = ["action"]

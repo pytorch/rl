@@ -50,7 +50,7 @@ class VideoRecorder(ObservationTransform):
         **kwargs,
     ) -> None:
         if in_keys is None:
-            in_keys = ["next_pixels"]
+            in_keys = ["pixels"]
 
         super().__init__(in_keys=in_keys)
         video_kwargs = {"fps": 6}
