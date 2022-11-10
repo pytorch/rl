@@ -4,6 +4,9 @@ Task-specific policy in multi-task environments
 ================================================
 This tutorial details how multi-task policies and batched environments can be used.
 """
+import torch
+from torch import nn
+
 ##############################################################################
 # At the end of this tutorial, you will be capable of writing policies that
 # can compute actions in diverse settings using a distinct set of weights.
@@ -12,8 +15,6 @@ This tutorial details how multi-task policies and batched environments can be us
 from torchrl.envs import TransformedEnv, CatTensors, Compose, DoubleToFloat, ParallelEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.modules import TensorDictModule, TensorDictSequential, MLP
-from torch import nn
-import torch
 
 ###############################################################################
 # We design two environments, one humanoid that must complete the stand task
@@ -26,8 +27,11 @@ env1 = TransformedEnv(
     Compose(
         CatTensors(env1_obs_keys, "next_observation_stand", del_keys=False),
         CatTensors(env1_obs_keys, "next_observation"),
-        DoubleToFloat(keys_in=["next_observation_stand", "next_observation"], keys_inv_in=["action"]),
-    )
+        DoubleToFloat(
+            in_keys=["next_observation_stand", "next_observation"],
+            in_keys_inv=["action"],
+        ),
+    ),
 )
 env2 = DMControlEnv("humanoid", "walk")
 env2_obs_keys = list(env2.observation_spec.keys())
@@ -36,8 +40,11 @@ env2 = TransformedEnv(
     Compose(
         CatTensors(env2_obs_keys, "next_observation_walk", del_keys=False),
         CatTensors(env2_obs_keys, "next_observation"),
-        DoubleToFloat(keys_in=["next_observation_walk", "next_observation"], keys_inv_in=["action"]),
-    )
+        DoubleToFloat(
+            in_keys=["next_observation_walk", "next_observation"],
+            in_keys_inv=["action"],
+        ),
+    ),
 )
 
 ###############################################################################
@@ -66,10 +73,22 @@ action_dim = env1.action_spec.shape[-1]
 
 ###############################################################################
 
-policy_common = TensorDictModule(nn.Linear(67, 64), in_keys=["observation"], out_keys=["hidden"])
-policy_stand = TensorDictModule(MLP(67 + 64, action_dim, depth=2), in_keys=["observation_stand", "hidden"], out_keys=["action"])
-policy_walk = TensorDictModule(MLP(67 + 64, action_dim, depth=2), in_keys=["observation_walk", "hidden"], out_keys=["action"])
-seq = TensorDictSequential(policy_common, policy_stand, policy_walk, partial_tolerant=True)
+policy_common = TensorDictModule(
+    nn.Linear(67, 64), in_keys=["observation"], out_keys=["hidden"]
+)
+policy_stand = TensorDictModule(
+    MLP(67 + 64, action_dim, depth=2),
+    in_keys=["observation_stand", "hidden"],
+    out_keys=["action"],
+)
+policy_walk = TensorDictModule(
+    MLP(67 + 64, action_dim, depth=2),
+    in_keys=["observation_walk", "hidden"],
+    out_keys=["action"],
+)
+seq = TensorDictSequential(
+    policy_common, policy_stand, policy_walk, partial_tolerant=True
+)
 
 ###############################################################################
 # Let's check that our sequence outputs actions for a single env (stand).
@@ -101,22 +120,35 @@ seq(tdreset)
 # a single task has to be performed. If a list of functions is provided, then
 # it will assume that we are in a multi-task setting.
 
-env1_maker = lambda: TransformedEnv(
-    DMControlEnv("humanoid", "stand"),
-    Compose(
-        CatTensors(env1_obs_keys, "next_observation_stand", del_keys=False),
-        CatTensors(env1_obs_keys, "next_observation"),
-        DoubleToFloat(keys_in=["next_observation_stand", "next_observation"], keys_inv_in=["action"]),
+
+def env1_maker():
+    return TransformedEnv(
+        DMControlEnv("humanoid", "stand"),
+        Compose(
+            CatTensors(env1_obs_keys, "next_observation_stand", del_keys=False),
+            CatTensors(env1_obs_keys, "next_observation"),
+            DoubleToFloat(
+                in_keys=["next_observation_stand", "next_observation"],
+                in_keys_inv=["action"],
+            ),
+        ),
     )
-)
-env2_maker = lambda: TransformedEnv(
-    DMControlEnv("humanoid", "walk"),
-    Compose(
-        CatTensors(env2_obs_keys, "next_observation_walk", del_keys=False),
-        CatTensors(env2_obs_keys, "next_observation"),
-        DoubleToFloat(keys_in=["next_observation_walk", "next_observation"], keys_inv_in=["action"]),
+
+
+def env2_maker():
+    return TransformedEnv(
+        DMControlEnv("humanoid", "walk"),
+        Compose(
+            CatTensors(env2_obs_keys, "next_observation_walk", del_keys=False),
+            CatTensors(env2_obs_keys, "next_observation"),
+            DoubleToFloat(
+                in_keys=["next_observation_walk", "next_observation"],
+                in_keys_inv=["action"],
+            ),
+        ),
     )
-)
+
+
 env = ParallelEnv(2, [env1_maker, env2_maker])
 assert not env._single_task
 
@@ -148,8 +180,8 @@ td_rollout = env.rollout(100, policy=seq, return_contiguous=False)
 
 ###############################################################################
 
-td_rollout[:, 0] # tensordict of the first step: only the common keys are shown
+td_rollout[:, 0]  # tensordict of the first step: only the common keys are shown
 
 ###############################################################################
 
-td_rollout[0] # tensordict of the first env: the stand obs is present
+td_rollout[0]  # tensordict of the first env: the stand obs is present

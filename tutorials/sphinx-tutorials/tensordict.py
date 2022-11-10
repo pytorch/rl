@@ -81,14 +81,18 @@ TensorDict is a new tensor structure introduced in TorchRL.
 # However to achieve this you would need to write a complicated collate
 # function that make sure that every modality is aggregated properly.
 
+
 def collate_dict_fn(dict_list):
     final_dict = {}
     for key in dict_list[0].keys():
-        final_dict[key]= []
+        final_dict[key] = []
         for single_dict in dict_list:
             final_dict[key].append(single_dict[key])
         final_dict[key] = torch.stack(final_dict[key], dim=0)
     return final_dict
+
+
+import torch
 
 ###############################################################################
 # dataloader = Dataloader(DictDataset(), collate_fn = collate_dict_fn)
@@ -120,11 +124,9 @@ def collate_dict_fn(dict_list):
 from torchrl.data import TensorDict
 from torchrl.data.tensordict.tensordict import (
     UnsqueezedTensorDict,
-    ViewedTensorDict,
+    _ViewedTensorDict,
     PermutedTensorDict,
-    LazyStackedTensorDict,
 )
-import torch
 
 ###############################################################################
 # TensorDict is a Datastructure indexed by either keys or numerical indices.
@@ -147,7 +149,7 @@ tensordict = TensorDict({"a": a, "b": b}, batch_size=[])
 # does not work
 try:
     tensordict = TensorDict({"a": a, "b": b}, batch_size=[3, 4, 5])
-except:
+except RuntimeError:
     print("caramba!")
 
 ###############################################################################
@@ -158,10 +160,10 @@ except:
 a = torch.zeros(3, 4)
 b = TensorDict(
     {
-    "c": torch.zeros(3, 4, 5, dtype=torch.int32),
-    "d": torch.zeros(3, 4, 5, 6, dtype=torch.float32)
+        "c": torch.zeros(3, 4, 5, dtype=torch.int32),
+        "d": torch.zeros(3, 4, 5, 6, dtype=torch.float32),
     },
-    batch_size=[3, 4, 5]
+    batch_size=[3, 4, 5],
 )
 tensordict = TensorDict({"a": a, "b": b}, batch_size=[3, 4])
 print(tensordict)
@@ -233,7 +235,7 @@ for value in tensordict.values():
 # The ``update`` method can be used to update a TensorDict with another one
 # (or with a dict):
 
-tensordict.update({"a": torch.ones((3, 4, 5)), "d": 2*torch.ones((3, 4, 2))})
+tensordict.update({"a": torch.ones((3, 4, 5)), "d": 2 * torch.ones((3, 4, 2))})
 # Also works with tensordict.update(TensorDict({"a":torch.ones((3, 4, 5)),
 # "c":torch.ones((3, 4, 2))}, batch_size=[3,4]))
 print(f"a is now equal to 1: {(tensordict['a'] == 1).all()}")
@@ -262,7 +264,9 @@ print("after", tensordict.keys())
 # but it must be shared across tensors. Indeed, you cannot have items that don't
 # share the batch size inside the same TensorDict:
 
-tensordict = TensorDict({"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4])
+tensordict = TensorDict(
+    {"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4]
+)
 print(f"Our TensorDict is of size {tensordict.shape}")
 
 ###############################################################################
@@ -302,8 +306,10 @@ print(tensordict)
 tensordict = TensorDict({}, [10])
 for i in range(2):
     tensordict[i] = TensorDict({"a": torch.randn(3, 4)}, [])
-assert (tensordict[9]["a"] == torch.zeros((3,4))).all()
-tensordict = TensorDict({"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4])
+assert (tensordict[9]["a"] == torch.zeros((3, 4))).all()
+tensordict = TensorDict(
+    {"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4]
+)
 
 ###############################################################################
 # Devices
@@ -327,7 +333,9 @@ tensordict = TensorDict({"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, bat
 # than the original item.
 
 tensordict_clone = tensordict.clone()
-print(f"Content is identical ({(tensordict['a'] == tensordict_clone['a']).all()}) but duplicated ({tensordict['a'] is not tensordict_clone['a']})")
+print(
+    f"Content is identical ({(tensordict['a'] == tensordict_clone['a']).all()}) but duplicated ({tensordict['a'] is not tensordict_clone['a']})"
+)
 
 ###############################################################################
 # **Slicing and Indexing**
@@ -356,7 +364,9 @@ print(tensordict[:, 2:])
 # to the original tensordict as well as the desired index such that tensor
 # modifications can be achieved easily.
 
-tensordict = TensorDict({"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4])
+tensordict = TensorDict(
+    {"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4]
+)
 # a SubTensorDict keeps track of the original one: it does not create a copy in memory of the original data
 subtd = tensordict.get_sub_tensordict((slice(None), torch.tensor([1, 3])))
 tensordict.fill_("a", -1)
@@ -422,10 +432,10 @@ assert torch.cat(list_tensordict, dim=0).shape[0] == 12
 ###############################################################################
 # **View**
 #
-# Support for the view operation returning a ``ViewedTensorDict``.
+# Support for the view operation returning a ``_ViewedTensorDict``.
 # Use ``to_tensordict`` to comeback to retrieve TensorDict.
 
-assert type(tensordict.view(-1)) == ViewedTensorDict
+assert type(tensordict.view(-1)) == _ViewedTensorDict
 assert tensordict.view(-1).shape[0] == 12
 
 ###############################################################################
@@ -434,8 +444,8 @@ assert tensordict.view(-1).shape[0] == 12
 # We can permute the dims of ``TensorDict``. Permute is a Lazy operation that
 # returns PermutedTensorDict. Use ``to_tensordict`` to convert to ``TensorDict``.
 
-assert type(tensordict.permute(1,0)) == PermutedTensorDict
-assert tensordict.permute(1,0).batch_size == torch.Size([4, 3])
+assert type(tensordict.permute(1, 0)) == PermutedTensorDict
+assert tensordict.permute(1, 0).batch_size == torch.Size([4, 3])
 
 ###############################################################################
 # **Reshape**
