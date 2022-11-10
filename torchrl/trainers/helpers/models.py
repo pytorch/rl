@@ -1372,8 +1372,8 @@ def make_dreamer(
             out_keys=[
                 "_",
                 "_",
-                "next_state",
-                "next_belief",
+                "state",
+                "belief",
             ],
         ),
     )
