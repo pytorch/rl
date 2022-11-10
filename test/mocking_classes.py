@@ -154,7 +154,7 @@ class MockSerialEnv(EnvBase):
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict({"reward": n, "done": done, "observation": n.clone()}, [])
 
-    def _reset(self, tensordict: TensorDictBase=None, **kwargs) -> TensorDictBase:
+    def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
         self.max_val = max(self.counter + 100, self.counter * 2)
 
         n = torch.tensor(
