@@ -38,8 +38,8 @@ Hooks can be split into 3 categories: **data processing** (:obj:`"batch_process"
 
 - **Data processing** hooks update a tensordict of data. Hooks :obj:`__call__` method should accept
   a :obj:`TensorDict` object as input and update it given some strategy.
-  Examples of such hooks include Replay Buffer extension, data normalization (including normalization
-  constants update) and such.
+  Examples of such hooks include Replay Buffer extension (:obj:`ReplayBufferTrainer.extend`), data normalization (including normalization
+  constants update), data subsampling (:doc:`BatchSubSampler`) and such.
 
 - **Logging** hooks take a batch of data presented as a :obj:`TensorDict` and write in the logger
   some information retrieved from that data. Examples include the :obj:`Recorder` hook, the reward
@@ -48,7 +48,9 @@ Hooks can be split into 3 categories: **data processing** (:obj:`"batch_process"
   should be displayed on the progression bar printed on the training log.
 
 - **Operation** hooks are hooks that execute specific operations over the models, data collectors,
-  target network updates and such. They are data-independent (they do not require a :obj:`TensorDict`
+  target network updates and such. For instance, syncing the weights of the collectors using :obj:`UpdateWeights`
+  or update the priority of the replay buffer using :obj:`ReplayBufferTrainer.update_priority` are examples
+  of operation hooks. They are data-independent (they do not require a :obj:`TensorDict`
   input), they are just supposed to be executed once at every iteration (or every N iterations).
 
 The hooks provided by TorchRL usually inherit from a common abstract class :obj:`TrainerHookBase`,
