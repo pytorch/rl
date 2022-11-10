@@ -57,10 +57,12 @@ class TensorDictSequential(TensorDictModule):
 
     TensorDictSequence supports functional, modular and vmap coding:
     Examples:
+        >>> import functorch
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.modules import TanhNormal, TensorDictSequential, NormalParamWrapper
         >>> from torchrl.modules.tensordict_module import ProbabilisticTensorDictModule
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import  TanhNormal, TensorDictSequential, NormalParamWrapper
-        >>> import torch, functorch
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
         >>> spec1 = NdUnboundedContinuousTensorSpec(4)
         >>> net1 = NormalParamWrapper(torch.nn.Linear(4, 8))
@@ -391,7 +393,8 @@ class TensorDictSequential(TensorDictModule):
             A tuple of parameter and buffer tuples
 
         Examples:
-            >>> from torchrl.data import NdUnboundedContinuousTensorSpec, TensorDict
+            >>> from tensordict import TensorDict
+            >>> from torchrl.data import NdUnboundedContinuousTensorSpec
             >>> lazy_module1 = nn.LazyLinear(4)
             >>> lazy_module2 = nn.LazyLinear(3)
             >>> spec1 = NdUnboundedContinuousTensorSpec(18)

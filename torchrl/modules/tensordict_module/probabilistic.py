@@ -89,10 +89,11 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             Default is 1000
 
     Examples:
-        >>> from torchrl.modules import ProbabilisticTensorDictModule
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import  TanhNormal, NormalParamWrapper
-        >>> import functorch, torch
+        >>> import functorch
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.modules import ProbabilisticTensorDictModule, TanhNormal, NormalParamWrapper
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> spec = NdUnboundedContinuousTensorSpec(4)
         >>> net = NormalParamWrapper(torch.nn.GRUCell(4, 8))

@@ -9,11 +9,10 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from tensordict.tensordict import assert_allclose_td, TensorDictBase
+from tensordict.tensordict import assert_allclose_td, TensorDictBase, TensorDict
 from torchrl.data import (
     PrioritizedReplayBuffer,
     ReplayBuffer,
-    TensorDict,
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers import (

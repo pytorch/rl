@@ -7,9 +7,9 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+from tensordict.utils import expand_as_right
 
 from torchrl.data import CompositeSpec, TensorSpec
-from torchrl.data.utils import expand_as_right
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.tensordict_module.common import (
     _forward_hook_safe_action,
@@ -45,9 +45,10 @@ class EGreedyWrapper(TensorDictModuleWrapper):
             the exploration wrapper will attempt to recover it from the policy.
 
     Examples:
-        >>> from torchrl.modules import EGreedyWrapper, Actor
-        >>> from torchrl.data import NdBoundedTensorSpec, TensorDict
         >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.modules import EGreedyWrapper, Actor
+        >>> from torchrl.data import NdBoundedTensorSpec
         >>> torch.manual_seed(0)
         >>> spec = NdBoundedTensorSpec(-1, 1, torch.Size([4]))
         >>> module = torch.nn.Linear(4, 4, bias=False)
@@ -277,9 +278,10 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
             default: True
 
     Examples:
-        >>> from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
-        >>> from torchrl.data import NdBoundedTensorSpec, TensorDict
         >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import NdBoundedTensorSpec
+        >>> from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
         >>> torch.manual_seed(0)
         >>> spec = NdBoundedTensorSpec(-1, 1, torch.Size([4]))
         >>> module = torch.nn.Linear(4, 4, bias=False)

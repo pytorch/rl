@@ -89,6 +89,4 @@ Utils
     :toctree: generated/
     :template: rl_template.rst
 
-    utils.expand_as_right
-    utils.expand_right
     MultiStep
