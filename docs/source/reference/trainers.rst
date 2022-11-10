@@ -3,6 +3,85 @@
 torchrl.trainers package
 ========================
 
+The trainer package provides utilities to write re-usable training scripts. The core idea is to use a
+trainer that implements a nested loop, where the outer loop runs the data collection steps and the inner
+loop the optimization steps. We believe this fits multiple RL training schemes, such as
+on-policy, off-policy, model-based and model-free solutions, offline RL and others.
+More particular cases, such as meta-RL algorithms may have training schemes that differ substentially.
+
+The :obj:`trainer.train()` method can be sketched as follows:
+
+.. code-block::
+   :caption: Trainer loops
+
+        >>> for batch in collector:
+        ...     batch = self._process_batch_hook(batch)  # "batch_process"
+        ...     self._pre_steps_log_hook(batch)  # "pre_steps_log"
+        ...     self._pre_optim_hook()  # "pre_optim_steps"
+        ...     for j in range(self.optim_steps_per_batch):
+        ...         sub_batch = self._process_optim_batch_hook(batch)  # "process_optim_batch"
+        ...         losses = self.loss_module(sub_batch)
+        ...         self._post_loss_hook(sub_batch)  # "post_loss"
+        ...         self.optimizer.step()
+        ...         self.optimizer.zero_grad()
+        ...         self._post_optim_hook()  # "post_optim"
+        ...         self._post_optim_log(sub_batch)  # "post_optim_log"
+        ...     self._post_steps_hook()  # "post_steps"
+        ...     self._post_steps_log_hook(batch)  #  "post_steps_log"
+
+There are 9 hooks that can be used in a trainer loop: :obj:`"batch_process"`, :obj:`"pre_optim_steps"`,
+:obj:`"process_optim_batch"`, :obj:`"post_loss"`, :obj:`"post_steps"`, :obj:`"post_optim"`, :obj:`"pre_steps_log"`,
+:obj:`"post_steps_log"` and :obj:`"post_optim_log"`. They are indicated in the comments where they are applied.
+Hooks can be split into 3 categories: **data processing** (:obj:`"batch_process"` and :obj:`"process_optim_batch"`),
+**logging** (:obj:`"pre_steps_log"`, :obj:`"post_optim_log"` and :obj:`"post_steps_log"`) and **operations** hook
+(:obj:`"pre_optim_steps"`, :obj:`"post_loss"`, :obj:`"post_optim"` and :obj:`"post_steps"`).
+
+- **Data processing** hooks update a tensordict of data. Hooks :obj:`__call__` method should accept
+  a :obj:`TensorDict` object as input and update it given some strategy.
+  Examples of such hooks include Replay Buffer extension, data normalization (including normalization
+  constants update) and such.
+
+- **Logging** hooks take a batch of data presented as a :obj:`TensorDict` and write in the logger
+  some information retrieved from that data. Examples include the :obj:`Recorder` hook, the reward
+  logger (:obj:`LogReward`) and such. Hooks should return a dictionary (or a None value) containing the
+  data to log. The key :obj:`"log_pbar"` is reserved to boolean values indicating if the logged value
+  should be displayed on the progression bar printed on the training log.
+
+- **Operation** hooks are hooks that execute specific operations over the models, data collectors,
+  target network updates and such. They are data-independent (they do not require a :obj:`TensorDict`
+  input), they are just supposed to be executed once at every iteration (or every N iterations).
+
+The hooks provided by TorchRL usually inherit from a common abstract class :obj:`TrainerHookBase`,
+and all implement three base methods: a :obj:`state_dict` and :obj:`load_state_dict` method for
+checkpointing and a :obj:`register` method that registers the hook at the default value in the
+trainer. This method takes a trainer and a module name as input. For instance, the following logging
+hook is executed every 10 calls to :obj:`"post_optim_log"`:
+
+.. code-block::
+
+        >>> class LoggingHook(TrainerHookBase):
+        ...     def __init__(self):
+        ...         self.counter = 0
+        ...
+        ...     def register(self, trainer, name):
+        ...         trainer.register_module(self, "logging_hook")
+        ...         trainer.register_op("post_optim_log", self)
+        ...
+        ...     def save_dict(self):
+        ...         return {"counter": self.counter}
+        ...
+        ...     def load_state_dict(self, state_dict):
+        ...         self.counter = state_dict["counter"]
+        ...
+        ...     def __call__(self, batch):
+        ...         if self.counter % 10 == 0:
+        ...             self.counter += 1
+        ...             out = {"some_value": batch["some_value"].item(), "log_pbar": False}
+        ...         else:
+        ...             out = None
+        ...         self.counter += 1
+        ...         return out
+
 Trainer and hooks
 -----------------
 

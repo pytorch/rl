@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import abc
 import pathlib
 import warnings
 from collections import OrderedDict, defaultdict
@@ -57,6 +58,21 @@ LOGGER_METHODS = {
 }
 
 TYPE_DESCR = {float: "4.4f", int: ""}
+
+
+class TrainerHookBase:
+    """An abstract hooking class for torchrl Trainer class."""
+    @abc.abstractmethod
+    def state_dict(self) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def register(self, trainer: Trainer, name: str):
+        raise NotImplementedError
 
 
 class Trainer:
@@ -539,7 +555,7 @@ def _load_list_state_dict(list_state_dict, hook_list):
             hook_list[i] = (item, kwargs)
 
 
-class SelectKeys:
+class SelectKeys(TrainerHookBase):
     """Selects keys in a TensorDict batch.
 
     Args:
@@ -579,12 +595,12 @@ class SelectKeys:
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         pass
 
-    def register(self, trainer) -> None:
+    def register(self, trainer, name="batch_process") -> None:
         trainer.register_op("batch_process", self)
-        trainer.register_module("select_keys", self)
+        trainer.register_module(name, self)
 
 
-class ReplayBufferTrainer:
+class ReplayBufferTrainer(TrainerHookBase):
     """Replay buffer hook provider.
 
     Args:
@@ -672,14 +688,14 @@ class ReplayBufferTrainer:
     def load_state_dict(self, state_dict) -> None:
         self.replay_buffer.load_state_dict(state_dict["replay_buffer"])
 
-    def register(self, trainer: Trainer):
+    def register(self, trainer: Trainer, name: str = "replay_buffer"):
         trainer.register_op("batch_process", self.extend)
         trainer.register_op("process_optim_batch", self.sample)
         trainer.register_op("post_loss", self.update_priority)
-        trainer.register_module("replay_buffer", self)
+        trainer.register_module(name, self)
 
 
-class ClearCudaCache:
+class ClearCudaCache(TrainerHookBase):
     """Clears cuda cache at a given interval.
 
     Examples:
@@ -698,7 +714,7 @@ class ClearCudaCache:
             torch.cuda.empty_cache()
 
 
-class LogReward:
+class LogReward(TrainerHookBase):
     """Reward logger hook.
 
     Args:
@@ -729,12 +745,12 @@ class LogReward:
             "log_pbar": self.log_pbar,
         }
 
-    def register(self, trainer: Trainer):
+    def register(self, trainer: Trainer, name: str = "replay_buffer"):
         trainer.register_op("pre_steps_log", self)
-        trainer.register_module("log_reward", self)
+        trainer.register_module(name, self)
 
 
-class RewardNormalizer:
+class RewardNormalizer(TrainerHookBase):
     """Reward normalizer hook.
 
     Args:
@@ -821,10 +837,10 @@ class RewardNormalizer:
         for key, value in state_dict.items():
             setattr(self, key, value)
 
-    def register(self, trainer: Trainer):
+    def register(self, trainer: Trainer, name: str = "reward_normalizer"):
         trainer.register_op("batch_process", self.update_reward_stats)
         trainer.register_op("process_optim_batch", self.normalize_reward)
-        trainer.register_module("reward_normalizer", self)
+        trainer.register_module(name, self)
 
 
 def mask_batch(batch: TensorDictBase) -> TensorDictBase:
@@ -848,7 +864,7 @@ def mask_batch(batch: TensorDictBase) -> TensorDictBase:
     return batch
 
 
-class BatchSubSampler:
+class BatchSubSampler(TrainerHookBase):
     """Data subsampler for online RL algorithms.
 
     This class subsamples a part of a whole batch of data just collected from the
@@ -968,15 +984,15 @@ class BatchSubSampler:
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         pass
 
-    def register(self, trainer):
+    def register(self, trainer: Trainer, name: str = "batch_subsampler"):
         trainer.register_op(
             "process_optim_batch",
             self,
         )
-        trainer.register_module("batch_subsampler", self)
+        trainer.register_module(name, self)
 
 
-class Recorder:
+class Recorder(TrainerHookBase):
     """Recorder hook for Trainer.
 
     Args:
@@ -1091,15 +1107,15 @@ class Recorder:
         self._count = state_dict["_count"]
         self.recorder.load_state_dict(state_dict["recorder_state_dict"])
 
-    def register(self, trainer: Trainer):
+    def register(self, trainer: Trainer, name: str = "post_steps_log"):
         trainer.register_module("recorder", self)
         trainer.register_op(
-            "post_steps_log",
+            name,
             self,
         )
 
 
-class UpdateWeights:
+class UpdateWeights(TrainerHookBase):
     """A collector weights update hook class.
 
     This hook must be used whenever the collector policy weights sit on a
@@ -1129,10 +1145,10 @@ class UpdateWeights:
         if self.counter % self.update_weights_interval == 0:
             self.collector.update_policy_weights_()
 
-    def register(self, trainer: Trainer):
+    def register(self, trainer: Trainer, name: str = "post_steps"):
         trainer.register_module("update_weights", self)
         trainer.register_op(
-            "post_steps",
+            name,
             self,
         )
 
@@ -1143,7 +1159,7 @@ class UpdateWeights:
         return
 
 
-class CountFramesLog:
+class CountFramesLog(TrainerHookBase):
     """A frame counter hook.
 
     Args:
@@ -1177,10 +1193,10 @@ class CountFramesLog:
         self.frame_count += current_frames
         return {"n_frames": self.frame_count, "log_pbar": self.log_pbar}
 
-    def register(self, trainer: Trainer):
+    def register(self, trainer: Trainer, name: str = "pre_steps_log"):
         trainer.register_module("count_frames_log", self)
         trainer.register_op(
-            "pre_steps_log",
+            name,
             self,
         )
 
