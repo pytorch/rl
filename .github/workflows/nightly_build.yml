@@ -217,6 +217,9 @@ jobs:
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install --upgrade pip
+      - name: Install tensordict
+        run: |
+          python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
       - name: Install test dependencies
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
