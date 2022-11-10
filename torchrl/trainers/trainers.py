@@ -62,6 +62,7 @@ TYPE_DESCR = {float: "4.4f", int: ""}
 
 class TrainerHookBase:
     """An abstract hooking class for torchrl Trainer class."""
+
     @abc.abstractmethod
     def state_dict(self) -> Dict[str, Any]:
         raise NotImplementedError
