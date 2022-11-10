@@ -31,7 +31,10 @@ TorchRL aims at a high modularity and good runtime performance.
    tutorials/torchrl_demo
    tutorials/tensordict
    tutorials/tensordict_module
+   tutorials/torch_envs
    tutorials/multi_task
+   tutorials/coding_ddpg
+   tutorials/coding_dqn
 
 .. toctree::
    :maxdepth: 2

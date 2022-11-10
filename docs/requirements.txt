@@ -15,4 +15,15 @@ docutils>=0.19
 functorch
 gym[classic_control]
 torchrl
+torchvision
 dm_control
+gym
+atari-py
+ale-py
+gym[accept-rom-license]
+pygame
+tqdm
+ipython
+imageio
+imageio[ffmpeg]
+imageio[pyav]

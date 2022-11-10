@@ -321,7 +321,7 @@ print(f"Critic: {td_clone}")  # no action
 # (Vaswani et al, 2017).
 # TODO: fix the figure that does not show up
 #
-# .. figure:: /tutorials/media/transformer.png
+# .. image:: ../transformer.png
 #    :alt: The transformer png
 #
 # We have let the positional encoders aside for simplicity.
