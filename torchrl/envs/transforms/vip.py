@@ -14,6 +14,7 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     NdUnboundedContinuousTensorSpec,
 )
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.transforms import (
     ToTensorImage,
     Compose,
@@ -306,3 +307,45 @@ class VIPTransform(Compose):
     transform_reward_spec = _init_first(Compose.transform_reward_spec)
     reset = _init_first(Compose.reset)
     init = _init_first(Compose.init)
+
+
+class VIPRewardTransform(VIPTransform):
+    """A VIP transform to compute rewards based on embedded similarity.
+
+    This class will update the reward computation
+    """
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if "goal_embedding" not in tensordict.keys():
+            tensordict = self._embed_goal(tensordict)
+        return super().reset(tensordict)
+
+    def _embed_goal(self, tensordict):
+        if "goal_image" not in tensordict.keys():
+            raise KeyError(
+                f"{self.__class__.__name__}.reset() requires a `'goal_image'` key to be "
+                f"present in the input tensordict."
+            )
+        tensordict_in = tensordict.select("goal_image").rename_key(
+            "goal_image", self.keys_in[0]
+        )
+        tensordict_in = super(VIPRewardTransform, self).forward(tensordict_in)
+        tensordict = tensordict.update(
+            tensordict_in.rename_key(self.keys_out[0], "goal_embedding")
+        )
+        return tensordict
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if "goal_embedding" not in tensordict.keys():
+            tensordict = self._embed_goal(tensordict)
+        tensordict = super().forward(tensordict)
+        cur_embedding = tensordict.get(self.keys_out[0])
+        last_embedding_key = self.keys_out[0].split("next_")[1]
+        last_embedding = tensordict.get(last_embedding_key, None)
+        if last_embedding is not None:
+            goal_embedding = tensordict["goal_embedding"]
+            reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
+                -torch.norm(last_embedding - goal_embedding, dim=-1)
+            )
+            tensordict.set("reward", reward)
+        return tensordict
