@@ -1909,13 +1909,14 @@ class TensorDictPrimer(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         for key, spec in self.primers.items():
-            if key in observation_spec:
-                raise RuntimeError(
-                    f"The key {key} is already in the observation_spec. This means "
-                    f"that the value reset by TensorDictPrimer will confict with the "
-                    f"value obtained through the call to `env.reset()`. Consider renaming "
-                    f"the {key} key."
-                )
+            # deprecating this with the new "next_" logic where we expect keys to collide
+            # if key in observation_spec:
+            #     raise RuntimeError(
+            #         f"The key {key} is already in the observation_spec. This means "
+            #         f"that the value reset by TensorDictPrimer will confict with the "
+            #         f"value obtained through the call to `env.reset()`. Consider renaming "
+            #         f"the {key} key."
+            #     )
             observation_spec[key] = spec.to(self.device)
         return observation_spec
 

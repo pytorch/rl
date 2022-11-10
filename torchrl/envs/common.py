@@ -150,15 +150,11 @@ class Specs:
             raise RuntimeError("observation_spec is expected to be of Composite type.")
         else:
             for (key, item) in self["observation_spec"].items():
-                if not key.startswith("next_"):
-                    raise RuntimeError(
-                        f"All observation keys must start with the :obj:`'next_'` prefix. Found {key}"
-                    )
                 observation_placeholder = torch.zeros(item.shape, dtype=item.dtype)
                 if next_observation:
-                    td.set(key, observation_placeholder)
+                    td.set("next_" + key, observation_placeholder)
                 td.set(
-                    key[5:],
+                    key,
                     observation_placeholder.clone(),
                 )
 

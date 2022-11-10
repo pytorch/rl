@@ -1905,8 +1905,8 @@ class TestDreamer:
     def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
-            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": NdUnboundedContinuousTensorSpec(state_dim),
+            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -1980,8 +1980,8 @@ class TestDreamer:
     def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
-            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": NdUnboundedContinuousTensorSpec(state_dim),
+            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2003,14 +2003,14 @@ class TestDreamer:
                 out_keys=[
                     "_",
                     "_",
-                    "next_state",
-                    "next_belief",
+                    "state",
+                    "belief",
                 ],
             ),
         )
         reward_model = TensorDictModule(
             reward_module,
-            in_keys=["next_state", "next_belief"],
+            in_keys=["state", "belief"],
             out_keys=["reward"],
         )
         model_based_env = DreamerEnv(

@@ -48,8 +48,8 @@ class DreamerEnv(ModelBasedEnvBase):
         #     ),
         # )
         self.input_spec = CompositeSpec(
-            state=self.observation_spec["next_state"],
-            belief=self.observation_spec["next_belief"],
+            state=self.observation_spec["state"],
+            belief=self.observation_spec["belief"],
             action=self.action_spec.to(self.device),
         )
 
@@ -59,7 +59,6 @@ class DreamerEnv(ModelBasedEnvBase):
         td = self.input_spec.rand(shape=batch_size).to(device)
         td["reward"] = self.reward_spec.rand(shape=batch_size).to(device)
         td.update(self.observation_spec.rand(shape=batch_size).to(device))
-        td = self.step(td)
         return td
 
     def decode_obs(self, tensordict: TensorDict, compute_latents=False) -> TensorDict:
