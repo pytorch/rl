@@ -37,13 +37,11 @@ OPTIMIZERS = {
     "adamax": optim.Adamax,
 }
 
-__all__ = [
-    "make_trainer",
-]
-
 
 @dataclass
 class TrainerConfig:
+    """Trainer config struct."""
+
     optim_steps_per_batch: int = 500
     # Number of optimization steps in between two collection of data. See frames_per_batch below.
     optimizer: str = "adam"

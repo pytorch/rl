@@ -15,8 +15,6 @@ from torchrl.data import (
 )
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 
-__all__ = ["make_replay_buffer"]
-
 
 def make_replay_buffer(
     device: DEVICE_TYPING, cfg: "DictConfig"  # noqa: F821
@@ -54,6 +52,8 @@ def make_replay_buffer(
 
 @dataclass
 class ReplayArgsConfig:
+    """Generic Replay Buffer config struct."""
+
     buffer_size: int = 1000000
     # buffer size, in number of frames stored. Default=1e6
     prb: bool = False

@@ -40,7 +40,12 @@ collate_fn_dict = {
 
 
 @pytest.mark.parametrize(
-    "rb_type", [rb_prototype.ReplayBuffer, rb_prototype.TensorDictReplayBuffer]
+    "rb_type",
+    [
+        rb_prototype.ReplayBuffer,
+        rb_prototype.TensorDictReplayBuffer,
+        rb_prototype.RemoteTensorDictReplayBuffer,
+    ],
 )
 @pytest.mark.parametrize(
     "sampler", [samplers.RandomSampler, samplers.PrioritizedSampler]
@@ -69,16 +74,22 @@ class TestPrototypeBuffers:
     def _get_datum(self, rb_type):
         if rb_type is rb_prototype.ReplayBuffer:
             data = torch.randint(100, (1,))
-        elif rb_type is rb_prototype.TensorDictReplayBuffer:
+        elif (
+            rb_type is rb_prototype.TensorDictReplayBuffer
+            or rb_type is rb_prototype.RemoteTensorDictReplayBuffer
+        ):
             data = TensorDict({"a": torch.randint(100, (1,))}, [])
         else:
             raise NotImplementedError(rb_type)
         return data
 
-    def _get_data(self, rbtype, size):
-        if rbtype is rb_prototype.ReplayBuffer:
+    def _get_data(self, rb_type, size):
+        if rb_type is rb_prototype.ReplayBuffer:
             data = torch.randint(100, (size, 1))
-        elif rbtype is rb_prototype.TensorDictReplayBuffer:
+        elif (
+            rb_type is rb_prototype.TensorDictReplayBuffer
+            or rb_type is rb_prototype.RemoteTensorDictReplayBuffer
+        ):
             data = TensorDict(
                 {
                     "a": torch.randint(100, (size,)),
@@ -87,7 +98,7 @@ class TestPrototypeBuffers:
                 [size],
             )
         else:
-            raise NotImplementedError(rbtype)
+            raise NotImplementedError(rb_type)
         return data
 
     def test_add(self, rb_type, sampler, writer, storage, size):
@@ -236,16 +247,12 @@ def test_prototype_prb(priority_key, contiguous, device):
     rb.update_tensordict_priority(s)
     s, _ = rb.sample(5)
     assert (val == s.get("a")).sum() >= 1
-    torch.testing.assert_allclose(
-        td2[idx0].get("a").view(1), s.get("a").unique().view(1)
-    )
+    torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
     # test updating values of original td
     td2.set_("a", torch.ones_like(td2.get("a")))
     s, _ = rb.sample(5)
-    torch.testing.assert_allclose(
-        td2[idx0].get("a").view(1), s.get("a").unique().view(1)
-    )
+    torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
 
 @pytest.mark.parametrize("stack", [False, True])

@@ -17,8 +17,6 @@ from torchrl.envs.utils import exploration_mode, set_exploration_mode
 from torchrl.modules.distributions import distributions_maps, Delta
 from torchrl.modules.tensordict_module.common import TensorDictModule, _check_all_str
 
-__all__ = ["ProbabilisticTensorDictModule"]
-
 
 class ProbabilisticTensorDictModule(TensorDictModule):
     """A probabilistic TD Module.
