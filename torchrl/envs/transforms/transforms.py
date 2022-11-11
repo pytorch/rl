@@ -9,7 +9,7 @@ import collections
 import multiprocessing as mp
 from copy import deepcopy, copy
 from textwrap import indent
-from typing import Any, List, Optional, OrderedDict, Sequence, Union
+from typing import Any, List, Optional, OrderedDict, Sequence, Union, Tuple
 from warnings import warn
 
 import torch
@@ -1265,8 +1265,8 @@ class ObservationNorm(ObservationTransform):
 
     def __init__(
         self,
-        loc: Union[float, torch.Tensor],
-        scale: Union[float, torch.Tensor],
+        loc: Optional[float, torch.Tensor] = None,
+        scale: Optional[float, torch.Tensor] = None,
         in_keys: Optional[Sequence[str]] = None,
         # observation_spec_key: =None,
         standard_normal: bool = False,
@@ -1278,18 +1278,60 @@ class ObservationNorm(ObservationTransform):
                 "next_observation_state",
             ]
         super().__init__(in_keys=in_keys)
-        if not isinstance(loc, torch.Tensor):
-            loc = torch.tensor(loc, dtype=torch.float)
-        if not isinstance(scale, torch.Tensor):
-            scale = torch.tensor(scale, dtype=torch.float)
+        self.standard_normal = standard_normal
+        self.eps = 1e-6
+
+        if loc is not None and scale is None:
+            if not isinstance(loc, torch.Tensor):
+                loc = torch.tensor(loc, dtype=torch.float)
+            if not isinstance(scale, torch.Tensor):
+                scale = torch.tensor(scale, dtype=torch.float)
+                scale.clamp_min(self.eps)
 
         # self.observation_spec_key = observation_spec_key
-        self.standard_normal = standard_normal
         self.register_buffer("loc", loc)
-        eps = 1e-6
-        self.register_buffer("scale", scale.clamp_min(eps))
+        self.register_buffer("scale", scale)
+
+    def init_stats(
+        self,
+        num_iter: int,
+        reduce_dim: Union[int, Tuple[int]] = 0,
+        key: Optional[str] = None,
+    ) -> None:
+        if self.loc is not None or self.scale is not None:
+            raise RuntimeError("Loc/Scale are already initialized")
+
+        if len(self.in_keys) > 1 and key is None:
+            raise RuntimeError(
+                "Transform has multiple in_keys but no specific key was passed as an argument"
+            )
+        key = self.in_keys[0] if key is None else key
+
+        parent = self.parent
+        collected_frames = 0
+        data = []
+        while collected_frames < num_iter:
+            tensordict = parent.rollout(max_steps=num_iter)
+            collected_frames += tensordict.numel()
+            data.append(tensordict.get(key))
+
+        data = torch.cat(data, reduce_dim)
+        loc = data.mean(reduce_dim)
+        scale = data.std(reduce_dim)
+
+        if not self.standard_normal:
+            loc = loc / scale
+            scale = 1 / scale
+
+        self.register_buffer("loc", loc)
+        self.register_buffer("scale", scale.clamp_min(self.eps))
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+        if self.loc is None or self.scale is None:
+            raise RuntimeError(
+                "Loc/Scale have not been initialized. Either pass in values in the constructor"
+                "or call the init_stats method"
+            )
         if self.standard_normal:
             loc = self.loc
             scale = self.scale

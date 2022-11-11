@@ -905,6 +905,50 @@ class TestTransforms:
                     assert (observation_spec[key].space.minimum == loc).all()
                     assert (observation_spec[key].space.maximum == scale + loc).all()
 
+    @pytest.mark.parametrize(
+        "keys", [["next_observation"], ["next_observation", "next_pixel"]]
+    )
+    @pytest.mark.parametrize("size", [1, 3])
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    def test_observationnorm_init_stats(self, keys, size, device, standard_normal):
+        base_env = ContinuousActionVecMockEnv(
+            observation_spec=CompositeSpec(
+                next_observation=NdBoundedTensorSpec(
+                    minimum=1, maximum=1, shape=torch.Size([size])
+                ),
+                next_observation_orig=NdBoundedTensorSpec(
+                    minimum=1, maximum=1, shape=torch.Size([size])
+                ),
+            ),
+            action_spec=NdBoundedTensorSpec(
+                minimum=1, maximum=1, shape=torch.Size((size,))
+            ),
+            seed=0,
+        )
+        base_env.out_key = "observation"
+        t_env = TransformedEnv(
+            base_env,
+            transform=ObservationNorm(in_keys=keys, standard_normal=standard_normal),
+        )
+        if len(keys) > 1:
+            t_env.transform.init_stats(num_iter=11, key="next_observation")
+        else:
+            t_env.transform.init_stats(num_iter=11)
+
+        if standard_normal:
+            torch.testing.assert_close(t_env.transform.loc, torch.Tensor([1.06] * size))
+            torch.testing.assert_close(
+                t_env.transform.scale, torch.Tensor([0.03316621] * size)
+            )
+        else:
+            torch.testing.assert_close(
+                t_env.transform.loc, torch.Tensor([31.960236] * size)
+            )
+            torch.testing.assert_close(
+                t_env.transform.scale, torch.Tensor([30.151169] * size)
+            )
+
     def test_catframes_transform_observation_spec(self):
         N = 4
         key1 = "first key"
