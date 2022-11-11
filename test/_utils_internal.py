@@ -11,9 +11,9 @@ from functools import wraps
 # this returns relative path from current file.
 import pytest
 import torch.cuda
+from tensordict.tensordict import TensorDictBase
 from torchrl._utils import seed_generator
 from torchrl.data import CompositeSpec
-from tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase
 
 

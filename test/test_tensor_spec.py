@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from tensordict.tensordict import TensorDict, TensorDictBase
 from scipy.stats import chisquare
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
