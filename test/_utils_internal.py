@@ -13,7 +13,7 @@ import pytest
 import torch.cuda
 from torchrl._utils import seed_generator
 from torchrl.data import CompositeSpec
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase
 
 
