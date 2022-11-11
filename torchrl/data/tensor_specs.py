@@ -1018,8 +1018,12 @@ class DiscreteTensorSpec(TensorSpec):
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
-        return (torch.rand(*shape, *self.shape, device=self.device) * self.space.n).to(
-            torch.long
+        return torch.randint(
+            0,
+            self.space.n,
+            torch.Size([*shape, *self.shape]),
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
