@@ -82,3 +82,10 @@ def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
         return f_retry  # true decorator
 
     return deco_retry
+
+@pytest.fixture
+def dtype_fixture():
+    dtype = torch.get_default_dtype()
+    torch.set_default_dtype(torch.double)
+    yield dtype
+    torch.set_default_dtype(dtype)

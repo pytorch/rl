@@ -8,7 +8,7 @@ from copy import copy, deepcopy
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices, retry
+from _utils_internal import get_available_devices, retry, dtype_fixture
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
@@ -1688,7 +1688,7 @@ class TestVIP:
         transformed_env.close()
         del transformed_env
 
-    def test_vip_parallel_reward(self, model, device):
+    def test_vip_parallel_reward(self, model, device, dtype_fixture):
         torch.manual_seed(1)
         in_keys = ["pixels"]
         out_keys = ["vec"]
@@ -1729,6 +1729,7 @@ class TestVIP:
         exp_keys = exp_keys.union({"next_vec", "next_pixels_orig", "action", "reward"})
         assert set(td.keys()) == exp_keys, td
 
+        torch.manual_seed(1)
         tensordict_reset = TensorDict(
             {"goal_image": torch.randint(0, 255, (4, 7, 7, 3), dtype=torch.uint8)},
             [4],
