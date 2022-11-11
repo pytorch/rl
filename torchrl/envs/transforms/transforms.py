@@ -444,7 +444,7 @@ but got an object of type {type(transform)}."""
         if tensordict is not None:
             tensordict = tensordict.clone(recurse=False)
         out_tensordict = self.base_env.reset(
-            tensordict=tensordict, execute_step=False, **kwargs
+            tensordict=tensordict, **kwargs
         )
         out_tensordict = self.transform.reset(out_tensordict)
         out_tensordict = self.transform(out_tensordict)

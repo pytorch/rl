@@ -1689,8 +1689,8 @@ class TestVIP:
         del transformed_env
 
     def test_vip_parallel_reward(self, model, device):
-        in_keys = ["next_pixels"]
-        out_keys = ["next_vec"]
+        in_keys = ["pixels"]
+        out_keys = ["vec"]
         tensor_pixels_key = None
         vip = VIPRewardTransform(
             model,
