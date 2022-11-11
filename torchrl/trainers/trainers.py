@@ -596,7 +596,7 @@ class SelectKeys(TrainerHookBase):
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         pass
 
-    def register(self, trainer, name="batch_process") -> None:
+    def register(self, trainer, name="select_keys") -> None:
         trainer.register_op("batch_process", self)
         trainer.register_module(name, self)
 
@@ -746,7 +746,7 @@ class LogReward(TrainerHookBase):
             "log_pbar": self.log_pbar,
         }
 
-    def register(self, trainer: Trainer, name: str = "replay_buffer"):
+    def register(self, trainer: Trainer, name: str = "log_reward"):
         trainer.register_op("pre_steps_log", self)
         trainer.register_module(name, self)
 
@@ -1108,10 +1108,10 @@ class Recorder(TrainerHookBase):
         self._count = state_dict["_count"]
         self.recorder.load_state_dict(state_dict["recorder_state_dict"])
 
-    def register(self, trainer: Trainer, name: str = "post_steps_log"):
-        trainer.register_module("recorder", self)
+    def register(self, trainer: Trainer, name: str = "recorder"):
+        trainer.register_module(name, self)
         trainer.register_op(
-            name,
+            "post_steps_log",
             self,
         )
 
@@ -1146,10 +1146,10 @@ class UpdateWeights(TrainerHookBase):
         if self.counter % self.update_weights_interval == 0:
             self.collector.update_policy_weights_()
 
-    def register(self, trainer: Trainer, name: str = "post_steps"):
-        trainer.register_module("update_weights", self)
+    def register(self, trainer: Trainer, name: str = "update_weights"):
+        trainer.register_module(name, self)
         trainer.register_op(
-            name,
+            "post_steps",
             self,
         )
 
@@ -1194,10 +1194,10 @@ class CountFramesLog(TrainerHookBase):
         self.frame_count += current_frames
         return {"n_frames": self.frame_count, "log_pbar": self.log_pbar}
 
-    def register(self, trainer: Trainer, name: str = "pre_steps_log"):
-        trainer.register_module("count_frames_log", self)
+    def register(self, trainer: Trainer, name: str = "count_frames_log"):
+        trainer.register_module(name, self)
         trainer.register_op(
-            name,
+            "pre_steps_log",
             self,
         )
 
