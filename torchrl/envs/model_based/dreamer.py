@@ -8,8 +8,9 @@ from typing import Tuple
 
 import numpy as np
 import torch
+from tensordict import TensorDict
 
-from torchrl.data import TensorDict, CompositeSpec
+from torchrl.data import CompositeSpec
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import EnvBase
 from torchrl.envs.model_based import ModelBasedEnvBase

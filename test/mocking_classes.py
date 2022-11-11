@@ -6,6 +6,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl._utils import seed_generator
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -18,7 +19,6 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
 

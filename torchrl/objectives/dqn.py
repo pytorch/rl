@@ -6,16 +6,16 @@
 from typing import Union
 
 import torch
+from tensordict import TensorDict
+from tensordict.tensordict import TensorDictBase
 from torch import nn
 
-from torchrl.data import TensorDict
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
 )
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
-from ..data.tensordict.tensordict import TensorDictBase
 from .common import LossModule
 from .utils import distance_loss, next_state_value
 

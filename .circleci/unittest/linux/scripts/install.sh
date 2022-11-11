@@ -39,5 +39,8 @@ python -c "import functorch"
 # install snapshot
 pip install git+https://github.com/pytorch/torchsnapshot
 
+# install tensordict
+pip install git+https://github.com/pytorch-labs/tensordict
+
 printf "* Installing torchrl\n"
 python setup.py develop

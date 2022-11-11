@@ -24,9 +24,9 @@ from typing import (
 
 import numpy as np
 import torch
+from tensordict.tensordict import TensorDictBase, TensorDict
 
 from torchrl._utils import get_binary_env_var
-from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 
 _CHECK_IMAGES = get_binary_env_var("CHECK_IMAGES")
 

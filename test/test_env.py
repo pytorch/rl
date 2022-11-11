@@ -22,12 +22,12 @@ from mocking_classes import (
     MockSerialEnv,
 )
 from packaging import version
+from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ObservationNorm
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
@@ -648,7 +648,7 @@ class TestParallel:
         td_serial = env_serial.rollout(
             max_steps=10, auto_reset=False, tensordict=td0_serial
         ).contiguous()
-        key = "pixels" if "pixels" in td_serial else "observation"
+        key = "pixels" if "pixels" in td_serial.keys() else "observation"
         torch.testing.assert_close(
             td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
         )
