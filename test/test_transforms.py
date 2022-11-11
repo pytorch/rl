@@ -1689,7 +1689,7 @@ class TestVIP:
         del transformed_env
 
     def test_vip_parallel_reward(self, model, device):
-        torch.manual_seed(0)
+        torch.manual_seed(1)
         in_keys = ["pixels"]
         out_keys = ["vec"]
         tensor_pixels_key = None
