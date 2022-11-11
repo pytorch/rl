@@ -65,13 +65,14 @@ def _jumanji_to_torchrl_spec_transform(
     elif isinstance(spec, jumanji.specs.Spec) and hasattr(spec, "__dict__"):
         new_spec = {}
         for key, value in spec.__dict__.items():
-            if key == "_name":
-                continue
-            key = key.removesuffix("_obs")
-            key = key.removesuffix("_spec")
-            new_spec[key] = _jumanji_to_torchrl_spec_transform(
-                value, dtype, device, categorical_action_encoding
-            )
+            if isinstance(value, jumanji.specs.Spec):
+                if key.endswith("_obs"):
+                    key = key[:-4]
+                if key.endswith("_spec"):
+                    key = key[:-5]
+                new_spec[key] = _jumanji_to_torchrl_spec_transform(
+                    value, dtype, device, categorical_action_encoding
+                )
         return CompositeSpec(**new_spec)
     else:
         raise TypeError(f"Unsupported spec type {type(spec)}")

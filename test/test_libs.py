@@ -356,12 +356,7 @@ class TestJumanji:
     def test_jumanji_spec_rollout(self, envname, batch_size):
         env = JumanjiEnv(envname, batch_size=batch_size)
         env.set_seed(0)
-        tdrollout = env.rollout(max_steps=50)
-        fake_td = (
-            env.fake_tensordict().unsqueeze(-1).expand(*tdrollout.shape).contiguous()
-        )
-        tdrollout.zero_()
-        assert (tdrollout == fake_td).all()
+        _test_fake_tensordict(env)
 
 
 if __name__ == "__main__":

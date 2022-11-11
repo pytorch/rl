@@ -1188,7 +1188,10 @@ dtype=torch.float32)},
                 raise RuntimeError(
                     "CompositeSpec.encode cannot be used with missing values."
                 )
-            out[key] = self[key].encode(item)
+            try:
+                out[key] = self[key].encode(item)
+            except KeyError:
+                raise KeyError(f"The CompositeSpec instance with keys {self.keys()} does not have a '{key}' key.")
         return out
 
     def __repr__(self) -> str:
