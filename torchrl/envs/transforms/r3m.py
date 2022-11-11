@@ -93,8 +93,8 @@ class _R3MNet(Transform):
 
         observation_spec = CompositeSpec(**observation_spec)
         if self.del_keys:
-            for key_in in keys:
-                del observation_spec[key_in]
+            for in_key in keys:
+                del observation_spec[in_key]
 
         for out_key in self.out_keys:
             observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
@@ -196,7 +196,7 @@ class R3MTransform(Compose):
         tensor_pixels_keys: List[str] = None,
     ):
         super().__init__()
-        self.keys_in = in_keys
+        self.in_keys = in_keys
         self.download = download
         self.download_path = download_path
         self.model_name = model_name
@@ -206,7 +206,7 @@ class R3MTransform(Compose):
         self.tensor_pixels_keys = tensor_pixels_keys
 
     def _init(self):
-        keys_in = self.keys_in
+        in_keys = self.in_keys
         model_name = self.model_name
         out_keys = self.out_keys
         size = self.size
@@ -216,10 +216,10 @@ class R3MTransform(Compose):
         # ToTensor
         transforms = []
         if tensor_pixels_keys:
-            for i in range(len(keys_in)):
+            for i in range(len(in_keys)):
                 transforms.append(
                     CatTensors(
-                        in_keys=[keys_in[i]],
+                        in_keys=[in_keys[i]],
                         out_key=tensor_pixels_keys[i],
                         del_keys=False,
                     )
@@ -227,7 +227,7 @@ class R3MTransform(Compose):
 
         totensor = ToTensorImage(
             unsqueeze=False,
-            in_keys=keys_in,
+            in_keys=in_keys,
         )
         transforms.append(totensor)
 
@@ -235,7 +235,7 @@ class R3MTransform(Compose):
         mean = [0.485, 0.456, 0.406]
         std = [0.229, 0.224, 0.225]
         normalize = ObservationNorm(
-            in_keys=keys_in,
+            in_keys=in_keys,
             loc=torch.tensor(mean).view(3, 1, 1),
             scale=torch.tensor(std).view(3, 1, 1),
             standard_normal=True,
@@ -243,7 +243,7 @@ class R3MTransform(Compose):
         transforms.append(normalize)
 
         # Resize: note that resize is a no-op if the tensor has the desired size already
-        resize = Resize(size, size, in_keys=keys_in)
+        resize = Resize(size, size, in_keys=in_keys)
         transforms.append(resize)
 
         # R3M
@@ -251,27 +251,27 @@ class R3MTransform(Compose):
             if stack_images:
                 out_keys = ["next_r3m_vec"]
             else:
-                out_keys = [f"next_r3m_vec_{i}" for i in range(len(keys_in))]
+                out_keys = [f"next_r3m_vec_{i}" for i in range(len(in_keys))]
         elif stack_images and len(out_keys) != 1:
             raise ValueError(
                 f"out_key must be of length 1 if stack_images is True. Got out_keys={out_keys}"
             )
-        elif not stack_images and len(out_keys) != len(keys_in):
+        elif not stack_images and len(out_keys) != len(in_keys):
             raise ValueError(
                 "out_key must be of length equal to in_keys if stack_images is False."
             )
 
-        if stack_images and len(keys_in) > 1:
+        if stack_images and len(in_keys) > 1:
             if self.is_3d:
                 unsqueeze = UnsqueezeTransform(
-                    in_keys=keys_in,
-                    out_keys=keys_in,
+                    in_keys=in_keys,
+                    out_keys=in_keys,
                     unsqueeze_dim=-4,
                 )
                 transforms.append(unsqueeze)
 
             cattensors = CatTensors(
-                keys_in,
+                in_keys,
                 out_keys[0],
                 dim=-4,
             )
@@ -285,7 +285,7 @@ class R3MTransform(Compose):
             transforms = [*transforms, cattensors, network, flatten]
         else:
             network = _R3MNet(
-                in_keys=keys_in,
+                in_keys=in_keys,
                 out_keys=out_keys,
                 model_name=model_name,
                 del_keys=True,

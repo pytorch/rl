@@ -132,9 +132,9 @@ class Transform(nn.Module):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         self._check_inplace()
-        for key_in, out_key in zip(self.in_keys, self.out_keys):
-            if key_in in tensordict.keys():
-                observation = self._apply_transform(tensordict.get(key_in))
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if in_key in tensordict.keys():
+                observation = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(out_key, observation, inplace=self.inplace)
         return tensordict
 
@@ -158,9 +158,9 @@ class Transform(nn.Module):
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._check_inplace()
-        for key_in, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-            if key_in in tensordict.keys():
-                observation = self._inv_apply_transform(tensordict.get(key_in))
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+            if in_key in tensordict.keys():
+                observation = self._inv_apply_transform(tensordict.get(in_key))
                 tensordict.set(out_key, observation, inplace=self.inplace)
         return tensordict
 
@@ -441,7 +441,11 @@ but got an object of type {type(transform)}."""
         return self.base_env.set_seed(seed, static_seed=static_seed)
 
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
-        out_tensordict = self.base_env.reset(**kwargs)
+        if tensordict is not None:
+            tensordict = tensordict.clone(recurse=False)
+        out_tensordict = self.base_env.reset(
+            tensordict=tensordict, execute_step=False, **kwargs
+        )
         out_tensordict = self.transform.reset(out_tensordict)
         out_tensordict = self.transform(out_tensordict)
         return out_tensordict
