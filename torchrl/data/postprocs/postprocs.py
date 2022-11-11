@@ -14,7 +14,6 @@ from torch import nn
 from torch.nn import functional as F
 
 
-
 def _conv1d_reward(
     reward: torch.Tensor, gammas: torch.Tensor, n_steps_max: int
 ) -> torch.Tensor:

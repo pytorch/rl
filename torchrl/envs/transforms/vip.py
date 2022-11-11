@@ -7,6 +7,7 @@ from typing import List, Optional, Union
 
 import torch
 from tensordict import TensorDict
+from tensordict.tensordict import TensorDictBase
 from torch.hub import load_state_dict_from_url
 
 from torchrl.data.tensor_specs import (

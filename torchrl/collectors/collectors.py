@@ -17,6 +17,7 @@ from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Di
 import numpy as np
 import torch
 import torch.nn as nn
+from tensordict.tensordict import TensorDictBase, TensorDict
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
