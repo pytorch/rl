@@ -1281,12 +1281,12 @@ class ObservationNorm(ObservationTransform):
         self.standard_normal = standard_normal
         self.eps = 1e-6
 
-        if loc is not None and scale is not None:
-            if not isinstance(loc, torch.Tensor):
-                loc = torch.tensor(loc, dtype=torch.float)
-            if not isinstance(scale, torch.Tensor):
-                scale = torch.tensor(scale, dtype=torch.float)
-                scale.clamp_min(self.eps)
+        if loc is not None and not isinstance(loc, torch.Tensor):
+            loc = torch.tensor(loc, dtype=torch.float)
+
+        if scale is not None and not isinstance(scale, torch.Tensor):
+            scale = torch.tensor(scale, dtype=torch.float)
+            scale.clamp_min(self.eps)
 
         # self.observation_spec_key = observation_spec_key
         self.register_buffer("loc", loc)
