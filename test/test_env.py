@@ -11,7 +11,13 @@ import numpy as np
 import pytest
 import torch
 import yaml
-from _utils_internal import get_available_devices
+from _utils_internal import (
+    get_available_devices,
+    PONG_VERSIONED,
+    CARTPOLE_VERSIONED,
+    PENDULUM_VERSIONED,
+    HALFCHEETAH_VERSIONED,
+)
 from mocking_classes import (
     ActionObsMergeLinear,
     DiscreteActionConvMockEnv,
@@ -36,7 +42,6 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ObservationNorm
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
-from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import (
     Compose,
     RewardClipping,
@@ -54,30 +59,6 @@ from torchrl.modules import (
 )
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
-if _has_gym:
-    import gym
-
-    gym_version = version.parse(gym.__version__)
-    PENDULUM_VERSIONED = (
-        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
-    )
-    CARTPOLE_VERSIONED = (
-        "CartPole-v1" if gym_version > version.parse("0.20.0") else "CartPole-v0"
-    )
-    PONG_VERSIONED = (
-        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
-    )
-    HALFCHEETAH_VERSIONED = (
-        "HalfCheetah-v4" if gym_version > version.parse("0.20.0") else "HalfCheetah-v2"
-    )
-else:
-    # placeholder
-    gym_version = version.parse("0.0.1")
-
-    # placeholders
-    PENDULUM_VERSIONED = "Pendulum-v1"
-    CARTPOLE_VERSIONED = "CartPole-v1"
-    PONG_VERSIONED = "ALE/Pong-v5"
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -134,11 +115,14 @@ except FileNotFoundError:
 #     assert_allclose_td(rollout1, rollout0)
 
 
-@pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, CARTPOLE_VERSIONED])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_env_seed(env_name, frame_skip, seed=0):
-    env = GymEnv(env_name, frame_skip=frame_skip)
+    from torchrl.envs.libs.gym import _has_gym, GymEnv
+
+    if not _has_gym:
+        pytest.skip("no gym")
+    env = GymEnv(env_name(), frame_skip=frame_skip)
     action = env.action_spec.rand()
 
     env.set_seed(seed)
@@ -166,11 +150,14 @@ def test_env_seed(env_name, frame_skip, seed=0):
     env.close()
 
 
-@pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, PONG_VERSIONED])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_rollout(env_name, frame_skip, seed=0):
-    env = GymEnv(env_name, frame_skip=frame_skip)
+    from torchrl.envs.libs.gym import _has_gym, GymEnv
+
+    if not _has_gym:
+        pytest.skip("no gym")
+    env = GymEnv(env_name(), frame_skip=frame_skip)
 
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -232,6 +219,10 @@ def _make_envs(
     device="cpu",
     kwargs=None,
 ):
+    from torchrl.envs.libs.gym import _has_gym, GymEnv
+
+    if not _has_gym:
+        pytest.skip("no gym")
     torch.manual_seed(0)
     if not transformed_in:
 
@@ -491,7 +482,6 @@ class TestParallel:
         assert "observation_stand" in td[:, 0][0].keys()
         assert "observation_stand" not in td[:, 0][1].keys()
 
-    @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [False, True])
@@ -500,7 +490,7 @@ class TestParallel:
         self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=3
     ):
         env_parallel, env_serial, env0 = _make_envs(
-            env_name,
+            env_name(),
             frame_skip,
             transformed_in=transformed_in,
             transformed_out=transformed_out,
@@ -541,7 +531,6 @@ class TestParallel:
         # env_serial.close()  # never opened
         env0.close()
 
-    @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [True, False])
@@ -565,7 +554,7 @@ class TestParallel:
         N=3,
     ):
         env_parallel, env_serial, env0 = _make_envs(
-            env_name,
+            env_name(),
             frame_skip,
             transformed_in=transformed_in,
             transformed_out=transformed_out,
@@ -625,7 +614,6 @@ class TestParallel:
         # env_serial.close()
         env0.close()
 
-    @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize(
         "env_name",
         [
@@ -641,7 +629,7 @@ class TestParallel:
         self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
         env_parallel, env_serial, _ = _make_envs(
-            env_name, frame_skip, transformed_in, transformed_out, 5
+            env_name(), frame_skip, transformed_in, transformed_out, 5
         )
 
         out_seed_serial = env_serial.set_seed(0, static_seed=static_seed)
@@ -679,8 +667,11 @@ class TestParallel:
         env_parallel.close()
         env_serial.close()
 
-    @pytest.mark.skipif(not _has_gym, reason="no gym")
     def test_parallel_env_shutdown(self):
+        from torchrl.envs.libs.gym import _has_gym, GymEnv
+
+        if not _has_gym:
+            pytest.skip("no gym")
         env_make = EnvCreator(lambda: GymEnv(PENDULUM_VERSIONED))
         env = ParallelEnv(4, env_make)
         env.reset()
@@ -710,7 +701,6 @@ class TestParallel:
         env.close()
 
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda to test on")
-    @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
     @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
@@ -730,7 +720,7 @@ class TestParallel:
     ):
         # tests casting to device
         env_parallel, env_serial, env0 = _make_envs(
-            env_name,
+            env_name(),
             frame_skip,
             transformed_in=transformed_in,
             transformed_out=transformed_out,
@@ -785,7 +775,6 @@ class TestParallel:
         env_serial.close()
         env0.close()
 
-    @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
@@ -800,7 +789,7 @@ class TestParallel:
         N = 3
 
         env_parallel, env_serial, env0 = _make_envs(
-            env_name,
+            env_name(),
             frame_skip,
             transformed_in=transformed_in,
             transformed_out=transformed_out,
@@ -824,13 +813,12 @@ class TestParallel:
         env_serial.close()
         env0.close()
 
-    @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_parallel_env_transform_consistency(self, env_name, frame_skip, device):
         env_parallel_in, env_serial_in, env0_in = _make_envs(
-            env_name,
+            env_name(),
             frame_skip,
             transformed_in=True,
             transformed_out=False,
@@ -838,7 +826,7 @@ class TestParallel:
             N=3,
         )
         env_parallel_out, env_serial_out, env0_out = _make_envs(
-            env_name,
+            env_name(),
             frame_skip,
             transformed_in=False,
             transformed_out=True,
@@ -1043,8 +1031,11 @@ class TestSpec:
         assert sample.shape == torch.Size([100, 10, 5])
 
 
-@pytest.mark.skipif(not _has_gym, reason="no gym")
 def test_seed():
+    from torchrl.envs.libs.gym import _has_gym, GymEnv
+
+    if not _has_gym:
+        pytest.skip("no gym")
     torch.manual_seed(0)
     env1 = GymEnv(PENDULUM_VERSIONED)
     env1.set_seed(0)
@@ -1184,15 +1175,18 @@ def test_batch_unlocked_with_batch_size(device):
         env.step(td_expanded)
 
 
-@pytest.mark.skipif(not _has_gym, reason="no gym")
-@pytest.mark.skipif(
-    gym_version < version.parse("0.20.0"),
-    reason="older versions of half-cheetah do not have 'x_position' info key.",
-)
 def test_info_dict_reader(seed=0):
+    from torchrl.envs.libs.gym import _has_gym, GymWrapper
+
+    if not _has_gym:
+        pytest.skip("no gym")
     import gym
 
-    env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED))
+    gym_version = version.parse(gym.__version__)
+    if gym_version < version.parse("0.20.0"):
+        pytest.skip("older versions of half-cheetah do not have 'x_position' info key.")
+
+    env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED()))
     env.set_info_dict_reader(default_info_dict_reader(["x_position"]))
 
     assert "x_position" in env.observation_spec.keys()

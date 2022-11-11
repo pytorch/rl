@@ -83,24 +83,50 @@ def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
 
     return deco_retry
 
+
 def PENDULUM_VERSIONED():
     @implement_for("gym", None, "0.20")
-    def _pendulum_version():
+    def _pendulum_version():  # noqa
         return "Pendulum-v0"
 
-    @implement_for("gym", "0.21", None)
-    def _pendulum_version():
+    @implement_for("gym", "0.20", None)
+    def _pendulum_version():  # noqa
         return "Pendulum-v1"
 
     return _pendulum_version()
 
+
+def CARTPOLE_VERSIONED():
+    @implement_for("gym", None, "0.20")
+    def _cartpole_version():  # noqa
+        return "CartPole-v0"
+
+    @implement_for("gym", "0.20", None)
+    def _cartpole_version():  # noqa
+        return "CartPole-v1"
+
+    return _cartpole_version()
+
+
+def HALFCHEETAH_VERSIONED():
+    @implement_for("gym", None, "0.20")
+    def _haflcheetah_version():  # noqa
+        return "HalfCheetah-v2"
+
+    @implement_for("gym", "0.20", None)
+    def _haflcheetah_version():  # noqa
+        return "HalfCheetah-v4"
+
+    return _haflcheetah_version()
+
+
 def PONG_VERSIONED():
     @implement_for("gym", None, "0.20")
-    def _pong_versioned():
+    def _pong_versioned():  # noqa
         return "Pong-v4"
 
-    @implement_for("gym", "0.21", None)
-    def _pong_versioned():
+    @implement_for("gym", "0.20", None)
+    def _pong_versioned():  # noqa
         return "ALE/Pong-v5"
 
     return _pong_versioned()

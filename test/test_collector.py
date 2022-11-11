@@ -42,6 +42,7 @@ from torchrl.modules import (
     TensorDictModule,
 )
 
+
 class WrappablePolicy(nn.Module):
     def __init__(self, out_features: int, multiple_outputs: bool = False):
         super().__init__()
@@ -294,6 +295,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
 
 def test_collector_env_reset():
     from torchrl.envs.libs.gym import _has_gym, GymEnv
+
     if not _has_gym:
         pytest.skip(reason="gym library is not installed")
 
@@ -694,11 +696,14 @@ def test_collector_vecnorm_envcreator(static_seed):
 
     """
     from torchrl.envs.libs.gym import _has_gym, GymEnv
+
     if not _has_gym:
         pytest.skip(reason="gym library is not installed")
 
     num_envs = 4
-    env_make = EnvCreator(lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm()))
+    env_make = EnvCreator(
+        lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm())
+    )
     env_make = ParallelEnv(num_envs, env_make)
 
     policy = RandomPolicy(env_make.action_spec)
@@ -862,6 +867,7 @@ def test_excluded_keys(collector_class, exclude):
 @pytest.mark.parametrize("explicit_spec", [True, False])
 def test_collector_output_keys(collector_class, init_random_frames, explicit_spec):
     from torchrl.envs.libs.gym import _has_gym, GymEnv
+
     if not _has_gym:
         pytest.skip(reason="gym library is not installed")
 
@@ -948,6 +954,7 @@ class TestAutoWrap:
     @pytest.fixture
     def env_maker(self):
         from torchrl.envs.libs.gym import _has_gym, GymEnv
+
         if not _has_gym:
             pytest.skip(reason="gym library is not installed")
 
