@@ -1451,12 +1451,12 @@ class TestTransforms:
 class TestR3M:
     @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
     def test_r3m_instantiation(self, model, tensor_pixels_key, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        in_keys = ["next_pixels"]
+        out_keys = ["next_vec"]
         r3m = R3MTransform(
             model,
-            in_keys=keys_in,
-            keys_out=keys_out,
+            in_keys=in_keys,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
@@ -1482,12 +1482,12 @@ class TestR3M:
         ],
     )
     def test_r3m_mult_images(self, model, device, stack_images, parallel):
-        keys_in = ["next_pixels", "next_pixels2"]
-        keys_out = ["next_vec"] if stack_images else ["next_vec", "next_vec2"]
+        in_keys = ["next_pixels", "next_pixels2"]
+        out_keys = ["next_vec"] if stack_images else ["next_vec", "next_vec2"]
         r3m = R3MTransform(
             model,
-            in_keys=keys_in,
-            keys_out=keys_out,
+            in_keys=in_keys,
+            out_keys=out_keys,
             stack_images=stack_images,
         )
 
@@ -1531,13 +1531,13 @@ class TestR3M:
         transformed_env.close()
 
     def test_r3m_parallel(self, model, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        in_keys = ["next_pixels"]
+        out_keys = ["next_vec"]
         tensor_pixels_key = None
         r3m = R3MTransform(
             model,
-            in_keys=keys_in,
-            keys_out=keys_out,
+            in_keys=in_keys,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
@@ -1606,12 +1606,12 @@ class TestR3M:
 
     @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
     def test_r3m_spec_against_real(self, model, tensor_pixels_key, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        in_keys = ["next_pixels"]
+        out_keys = ["next_vec"]
         r3m = R3MTransform(
             model,
-            in_keys=keys_in,
-            keys_out=keys_out,
+            in_keys=in_keys,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
@@ -1632,12 +1632,12 @@ class TestR3M:
 class TestVIP:
     @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
     def test_vip_instantiation(self, model, tensor_pixels_key, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        in_keys = ["next_pixels"]
+        out_keys = ["next_vec"]
         vip = VIPTransform(
             model,
-            in_keys=keys_in,
-            keys_out=keys_out,
+            in_keys=in_keys,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
@@ -1657,12 +1657,12 @@ class TestVIP:
     @pytest.mark.parametrize("stack_images", [True, False])
     @pytest.mark.parametrize("parallel", [True, False])
     def test_vip_mult_images(self, model, device, stack_images, parallel):
-        keys_in = ["next_pixels", "next_pixels2"]
-        keys_out = ["next_vec"] if stack_images else ["next_vec", "next_vec2"]
+        in_keys = ["next_pixels", "next_pixels2"]
+        out_keys = ["next_vec"] if stack_images else ["next_vec", "next_vec2"]
         vip = VIPTransform(
             model,
-            in_keys=keys_in,
-            keys_out=keys_out,
+            in_keys=in_keys,
+            out_keys=out_keys,
             stack_images=stack_images,
         )
 
@@ -1706,13 +1706,13 @@ class TestVIP:
         transformed_env.close()
 
     def test_vip_parallel(self, model, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        in_keys = ["next_pixels"]
+        out_keys = ["next_vec"]
         tensor_pixels_key = None
         vip = VIPTransform(
             model,
-            in_keys=keys_in,
-            keys_out=keys_out,
+            in_keys=in_keys,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
@@ -1732,13 +1732,13 @@ class TestVIP:
         del transformed_env
 
     def test_vip_parallel_reward(self, model, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        in_keys = ["next_pixels"]
+        out_keys = ["next_vec"]
         tensor_pixels_key = None
         vip = VIPRewardTransform(
             model,
-            keys_in=keys_in,
-            keys_out=keys_out,
+            in_keys=in_keys,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
@@ -1846,12 +1846,12 @@ class TestVIP:
 
     @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
     def test_vip_spec_against_real(self, model, tensor_pixels_key, device):
-        keys_in = ["next_pixels"]
-        keys_out = ["next_vec"]
+        in_keys = ["next_pixels"]
+        out_keys = ["next_vec"]
         vip = VIPTransform(
             model,
-            in_keys=keys_in,
-            keys_out=keys_out,
+            in_keys=in_keys,
+            out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
