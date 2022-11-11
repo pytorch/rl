@@ -98,7 +98,7 @@ class _BatchedEnv(EnvBase):
         selected_keys (list of str, optional): keys that have to be returned by the environment.
             When creating a batch of environment, it might be the case that only some of the keys are to be returned.
             For instance, if the environment returns 'next_pixels' and 'next_vector', the user might only
-            be interested in, say, 'next_vector'. By indicating which keys must be returned in the tensordict,
+            be interested in, say, 'vector'. By indicating which keys must be returned in the tensordict,
             one can easily control the amount of data occupied in memory (for instance to limit the memory size of a
             replay buffer) and/or limit the amount of data passed from one process to the other;
         excluded_keys (list of str, optional): list of keys to be excluded from the returned tensordicts.
@@ -575,7 +575,7 @@ class SerialEnv(_BatchedEnv):
         tensordict_in = tensordict.select(*self.env_input_keys)
         tensordict_out = []
         for i in range(self.num_workers):
-            _tensordict_out = self._envs[i].step(tensordict_in[i])
+            _tensordict_out = self._envs[i]._step(tensordict_in[i])
             tensordict_out.append(_tensordict_out)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -606,7 +606,7 @@ class SerialEnv(_BatchedEnv):
         for i, _env in enumerate(self._envs):
             if not reset_workers[i]:
                 continue
-            _td = _env.reset(execute_step=False, **kwargs)
+            _td = _env._reset(**kwargs)
             keys = keys.union(_td.keys())
             self.shared_tensordicts[i].update_(_td)
 
@@ -961,7 +961,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
-            _td = env.reset(execute_step=False, **reset_kwargs)
+            _td = env._reset(**reset_kwargs)
             if reset_keys is None:
                 reset_keys = set(_td.keys())
             if pin_memory:
@@ -983,9 +983,11 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError(
                     f"calling step when env is done, just reset = {just_reset}"
                 )
-            _td = env.step(_td)
+            _td = env._step(_td)
             if step_keys is None:
-                step_keys = set(_td.keys()) - set(env_input_keys)
+                step_keys = set(env.observation_spec.keys()).union(
+                    {"done", "terminated", "reward"}
+                )
             if pin_memory:
                 _td.pin_memory()
             tensordict.update_(_td.select(*step_keys))

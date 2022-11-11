@@ -838,7 +838,7 @@ def test_excluded_keys(collector_class, exclude):
         return ContinuousActionVecMockEnv()
 
     dummy_env = make_env()
-    obs_spec = dummy_env.observation_spec["next_observation"]
+    obs_spec = dummy_env.observation_spec["observation"]
     policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])
     policy = Actor(policy_module, spec=dummy_env.action_spec)
     policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
@@ -870,9 +870,9 @@ def test_excluded_keys(collector_class, exclude):
 @pytest.mark.parametrize(
     "collector_class",
     [
-        SyncDataCollector,
         MultiaSyncDataCollector,
         MultiSyncDataCollector,
+        SyncDataCollector,
     ],
 )
 @pytest.mark.parametrize("init_random_frames", [0, 50])
@@ -928,7 +928,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
 
     collector = collector_class(**collector_kwargs)
 
-    keys = [
+    keys = {
         "action",
         "done",
         "hidden1",
@@ -941,10 +941,10 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "reward",
         "step_count",
         "traj_ids",
-    ]
+    }
     b = next(iter(collector))
 
-    assert set(b.keys()) == set(keys)
+    assert set(b.keys()) == keys
     collector.shutdown()
     del collector
 

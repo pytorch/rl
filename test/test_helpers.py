@@ -657,6 +657,8 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "next_state",
             "pixels",
             "pixels_orig",
+            "next_pixels",
+            "next_pixels_orig",
             "reward",
             "state",
         }

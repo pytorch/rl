@@ -1469,14 +1469,14 @@ def _dreamer_make_mbenv(
             out_keys=[
                 "_",
                 "_",
-                "next_state",
-                "next_belief",
+                "state",
+                "belief",
             ],
         ),
     )
     reward_model = TensorDictModule(
         reward_module,
-        in_keys=["next_state", "next_belief"],
+        in_keys=["state", "belief"],
         out_keys=["reward"],
     )
     model_based_env = DreamerEnv(
@@ -1492,8 +1492,8 @@ def _dreamer_make_mbenv(
     model_based_env.set_specs_from_env(proof_environment)
     model_based_env = TransformedEnv(model_based_env)
     default_dict = {
-        "next_state": NdUnboundedContinuousTensorSpec(state_dim),
-        "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+        "state": NdUnboundedContinuousTensorSpec(state_dim),
+        "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
         # "action": proof_environment.action_spec,
     }
     model_based_env.append_transform(

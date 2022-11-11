@@ -89,6 +89,7 @@ class _R3MNet(Transform):
 
         keys = [key for key in observation_spec._specs.keys() if key in self.in_keys]
         device = observation_spec[keys[0]].device
+        dim = observation_spec[keys[0]].shape[:-3]
 
         observation_spec = CompositeSpec(**observation_spec)
         if self.del_keys:
@@ -97,7 +98,7 @@ class _R3MNet(Transform):
 
         for out_key in self.out_keys:
             observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
-                shape=torch.Size([self.outdim]), device=device
+                shape=torch.Size([*dim, self.outdim]), device=device
             )
 
         return observation_spec

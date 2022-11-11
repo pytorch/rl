@@ -150,15 +150,11 @@ class Specs:
             raise RuntimeError("observation_spec is expected to be of Composite type.")
         else:
             for (key, item) in self["observation_spec"].items():
-                if not key.startswith("next_"):
-                    raise RuntimeError(
-                        f"All observation keys must start with the :obj:`'next_'` prefix. Found {key}"
-                    )
                 observation_placeholder = torch.zeros(item.shape, dtype=item.dtype)
                 if next_observation:
-                    td.set(key, observation_placeholder)
+                    td.set("next_" + key, observation_placeholder)
                 td.set(
-                    key[5:],
+                    key,
                     observation_placeholder.clone(),
                 )
 
@@ -323,6 +319,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict.is_locked = True  # make sure _step does not modify the tensordict
         tensordict_out = self._step(tensordict)
         tensordict.is_locked = False
+        obs_keys = set(self.observation_spec.keys())
+        for key, item in list(tensordict_out.items()):
+            if key in obs_keys:
+                tensordict_out.rename_key(key, "next_" + key)
 
         if tensordict_out is tensordict:
             raise RuntimeError(
@@ -368,7 +368,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def reset(
         self,
         tensordict: Optional[TensorDictBase] = None,
-        execute_step: bool = True,
         **kwargs,
     ) -> TensorDictBase:
         """Resets the environment.
@@ -378,8 +377,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         Args:
             tensordict (TensorDictBase, optional): tensordict to be used to contain the resulting new observation.
                 In some cases, this input can also be used to pass argument to the reset function.
-            execute_step (bool, optional): if True, a :obj:`step_mdp` is executed on the output TensorDict,
-                hereby removing the :obj:`"next_"` prefixes from the keys.
             kwargs (optional): other arguments to be passed to the native
                 reset function.
 
@@ -408,13 +405,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if self.is_done:
             raise RuntimeError(
                 f"Env {self} was done after reset. This is (currently) not allowed."
-            )
-        if execute_step:
-            tensordict_reset = step_mdp(
-                tensordict_reset,
-                exclude_done=False,
-                exclude_reward=False,  # some policies may need reward and action at reset time
-                exclude_action=False,
             )
         if tensordict is not None:
             tensordict.update(tensordict_reset)
@@ -658,8 +648,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         input_spec = self.input_spec
         fake_input = input_spec.zero(self.batch_size)
         observation_spec = self.observation_spec
-        fake_obs = observation_spec.zero(self.batch_size)
-        fake_obs_step = step_mdp(fake_obs)
+        fake_obs_step = observation_spec.zero(self.batch_size)
+        fake_obs = TensorDict(
+            {"next_" + key: item for key, item in fake_obs_step.items()},
+            fake_obs_step.batch_size,
+        )
         reward_spec = self.reward_spec
         fake_reward = reward_spec.zero(self.batch_size)
         fake_td = TensorDict(
