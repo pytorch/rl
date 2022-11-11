@@ -1019,7 +1019,11 @@ class DiscreteTensorSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         return torch.randint(
-            0, self.space.n, torch.Size([*shape, *self.shape]), device=self.device, dtype=self.dtype
+            0,
+            self.space.n,
+            torch.Size([*shape, *self.shape]),
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
