@@ -53,7 +53,7 @@ class _VIPNet(Transform):
             raise NotImplementedError(
                 f"model {model_name} is currently not supported by VIP"
             )
-        super().__init__(in_keys=in_keys, keys_out=out_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.convnet = convnet
         self.del_keys = del_keys
 
@@ -84,11 +84,11 @@ class _VIPNet(Transform):
 
         observation_spec = CompositeSpec(**observation_spec)
         if self.del_keys:
-            for key_in in keys:
-                del observation_spec[key_in]
+            for in_key in keys:
+                del observation_spec[in_key]
 
-        for key_out in self.keys_out:
-            observation_spec[key_out] = NdUnboundedContinuousTensorSpec(
+        for out_key in self.out_keys:
+            observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
                 shape=torch.Size([self.outdim]), device=device
             )
 
@@ -136,7 +136,7 @@ class VIPTransform(Compose):
         model_name (str): one of resnet50
         in_keys (list of str, optional): list of input keys. If left empty, the
             "next_pixels" key is assumed.
-        keys_out (list of str, optional): list of output keys. If left empty,
+        out_keys (list of str, optional): list of output keys. If left empty,
              "next_vip_vec" is assumed.
         size (int, optional): Size of the image to feed to resnet.
             Defaults to 244.
@@ -162,7 +162,7 @@ class VIPTransform(Compose):
         self,
         model_name: str,
         in_keys: List[str] = None,
-        keys_out: List[str] = None,
+        out_keys: List[str] = None,
         size: int = 244,
         stack_images: bool = True,
         download: bool = False,
@@ -170,19 +170,19 @@ class VIPTransform(Compose):
         tensor_pixels_keys: List[str] = None,
     ):
         super().__init__()
-        self.keys_in = in_keys
+        self.in_keys = in_keys
         self.download = download
         self.download_path = download_path
         self.model_name = model_name
-        self.keys_out = keys_out
+        self.out_keys = out_keys
         self.size = size
         self.stack_images = stack_images
         self.tensor_pixels_keys = tensor_pixels_keys
 
     def _init(self):
-        keys_in = self.keys_in
+        in_keys = self.in_keys
         model_name = self.model_name
-        keys_out = self.keys_out
+        out_keys = self.out_keys
         size = self.size
         stack_images = self.stack_images
         tensor_pixels_keys = self.tensor_pixels_keys
@@ -190,10 +190,10 @@ class VIPTransform(Compose):
         # ToTensor
         transforms = []
         if tensor_pixels_keys:
-            for i in range(len(keys_in)):
+            for i in range(len(in_keys)):
                 transforms.append(
                     CatTensors(
-                        in_keys=[keys_in[i]],
+                        in_keys=[in_keys[i]],
                         out_key=tensor_pixels_keys[i],
                         del_keys=False,
                     )
@@ -201,7 +201,7 @@ class VIPTransform(Compose):
 
         totensor = ToTensorImage(
             unsqueeze=False,
-            in_keys=keys_in,
+            in_keys=in_keys,
         )
         transforms.append(totensor)
 
@@ -209,7 +209,7 @@ class VIPTransform(Compose):
         mean = [0.485, 0.456, 0.406]
         std = [0.229, 0.224, 0.225]
         normalize = ObservationNorm(
-            in_keys=keys_in,
+            in_keys=in_keys,
             loc=torch.tensor(mean).view(3, 1, 1),
             scale=torch.tensor(std).view(3, 1, 1),
             standard_normal=True,
@@ -217,50 +217,50 @@ class VIPTransform(Compose):
         transforms.append(normalize)
 
         # Resize: note that resize is a no-op if the tensor has the desired size already
-        resize = Resize(size, size, in_keys=keys_in)
+        resize = Resize(size, size, in_keys=in_keys)
         transforms.append(resize)
 
         # VIP
-        if keys_out is None:
+        if out_keys is None:
             if stack_images:
-                keys_out = ["next_vip_vec"]
+                out_keys = ["next_vip_vec"]
             else:
-                keys_out = [f"next_vip_vec_{i}" for i in range(len(keys_in))]
-        elif stack_images and len(keys_out) != 1:
+                out_keys = [f"next_vip_vec_{i}" for i in range(len(in_keys))]
+        elif stack_images and len(out_keys) != 1:
             raise ValueError(
-                f"key_out must be of length 1 if stack_images is True. Got keys_out={keys_out}"
+                f"out_key must be of length 1 if stack_images is True. Got out_keys={out_keys}"
             )
-        elif not stack_images and len(keys_out) != len(keys_in):
+        elif not stack_images and len(out_keys) != len(in_keys):
             raise ValueError(
-                "key_out must be of length equal to in_keys if stack_images is False."
+                "out_key must be of length equal to in_keys if stack_images is False."
             )
 
-        if stack_images and len(keys_in) > 1:
+        if stack_images and len(in_keys) > 1:
             if self.is_3d:
                 unsqueeze = UnsqueezeTransform(
-                    in_keys=keys_in,
-                    keys_out=keys_in,
+                    in_keys=in_keys,
+                    out_keys=in_keys,
                     unsqueeze_dim=-4,
                 )
                 transforms.append(unsqueeze)
 
             cattensors = CatTensors(
-                keys_in,
-                keys_out[0],
+                in_keys,
+                out_keys[0],
                 dim=-4,
             )
             network = _VIPNet(
-                in_keys=keys_out,
-                out_keys=keys_out,
+                in_keys=out_keys,
+                out_keys=out_keys,
                 model_name=model_name,
                 del_keys=False,
             )
-            flatten = FlattenObservation(-2, -1, keys_out)
+            flatten = FlattenObservation(-2, -1, out_keys)
             transforms = [*transforms, cattensors, network, flatten]
         else:
             network = _VIPNet(
-                in_keys=keys_in,
-                out_keys=keys_out,
+                in_keys=in_keys,
+                out_keys=out_keys,
                 model_name=model_name,
                 del_keys=True,
             )
@@ -327,11 +327,11 @@ class VIPRewardTransform(VIPTransform):
                 f"present in the input tensordict."
             )
         tensordict_in = tensordict.select("goal_image").rename_key(
-            "goal_image", self.keys_in[0]
+            "goal_image", self.in_keys[0]
         )
         tensordict_in = super(VIPRewardTransform, self).forward(tensordict_in)
         tensordict = tensordict.update(
-            tensordict_in.rename_key(self.keys_out[0], "goal_embedding")
+            tensordict_in.rename_key(self.out_keys[0], "goal_embedding")
         )
         return tensordict
 
@@ -339,8 +339,8 @@ class VIPRewardTransform(VIPTransform):
         if "goal_embedding" not in tensordict.keys():
             tensordict = self._embed_goal(tensordict)
         tensordict = super().forward(tensordict)
-        cur_embedding = tensordict.get(self.keys_out[0])
-        last_embedding_key = self.keys_out[0].split("next_")[1]
+        cur_embedding = tensordict.get(self.out_keys[0])
+        last_embedding_key = self.out_keys[0].split("next_")[1]
         last_embedding = tensordict.get(last_embedding_key, None)
         if last_embedding is not None:
             goal_embedding = tensordict["goal_embedding"]
