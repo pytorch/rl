@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
+from scipy.stats import chisquare
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -716,3 +717,130 @@ class TestEquality:
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+
+
+class TestSpec:
+    @pytest.mark.parametrize(
+        "action_spec_cls", [OneHotDiscreteTensorSpec, DiscreteTensorSpec]
+    )
+    def test_discrete_action_spec_reconstruct(self, action_spec_cls):
+        torch.manual_seed(0)
+        action_spec = action_spec_cls(10)
+
+        actions_tensors = [action_spec.rand() for _ in range(10)]
+        actions_numpy = [action_spec.to_numpy(a) for a in actions_tensors]
+        actions_tensors_2 = [action_spec.encode(a) for a in actions_numpy]
+        assert all(
+            [(a1 == a2).all() for a1, a2 in zip(actions_tensors, actions_tensors_2)]
+        )
+
+        actions_numpy = [int(np.random.randint(0, 10, (1,))) for a in actions_tensors]
+        actions_tensors = [action_spec.encode(a) for a in actions_numpy]
+        actions_numpy_2 = [action_spec.to_numpy(a) for a in actions_tensors]
+        assert all([(a1 == a2) for a1, a2 in zip(actions_numpy, actions_numpy_2)])
+
+    def test_mult_discrete_action_spec_reconstruct(self):
+        torch.manual_seed(0)
+        action_spec = MultOneHotDiscreteTensorSpec((10, 5))
+
+        actions_tensors = [action_spec.rand() for _ in range(10)]
+        actions_numpy = [action_spec.to_numpy(a) for a in actions_tensors]
+        actions_tensors_2 = [action_spec.encode(a) for a in actions_numpy]
+        assert all(
+            [(a1 == a2).all() for a1, a2 in zip(actions_tensors, actions_tensors_2)]
+        )
+
+        actions_numpy = [
+            np.concatenate(
+                [np.random.randint(0, 10, (1,)), np.random.randint(0, 5, (1,))], 0
+            )
+            for a in actions_tensors
+        ]
+        actions_tensors = [action_spec.encode(a) for a in actions_numpy]
+        actions_numpy_2 = [action_spec.to_numpy(a) for a in actions_tensors]
+        assert all([(a1 == a2).all() for a1, a2 in zip(actions_numpy, actions_numpy_2)])
+
+    def test_one_hot_discrete_action_spec_rand(self):
+        torch.manual_seed(0)
+        action_spec = OneHotDiscreteTensorSpec(10)
+
+        sample = torch.stack([action_spec.rand() for _ in range(10000)], 0)
+
+        sample_list = sample.argmax(-1)
+        sample_list = list([sum(sample_list == i).item() for i in range(10)])
+        assert chisquare(sample_list).pvalue > 0.1
+
+        sample = action_spec.to_numpy(sample)
+        sample = [sum(sample == i) for i in range(10)]
+        assert chisquare(sample).pvalue > 0.1
+
+    def test_categorical_action_spec_rand(self):
+        torch.manual_seed(1)
+        action_spec = DiscreteTensorSpec(10)
+
+        sample = action_spec.rand((10000,))
+
+        sample_list = sample[:, 0]
+        sample_list = list([sum(sample_list == i).item() for i in range(10)])
+        print(sample_list)
+        assert chisquare(sample_list).pvalue > 0.1
+
+        sample = action_spec.to_numpy(sample)
+        sample = [sum(sample == i) for i in range(10)]
+        assert chisquare(sample).pvalue > 0.1
+
+    def test_mult_discrete_action_spec_rand(self):
+        torch.manual_seed(0)
+        ns = (10, 5)
+        N = 100000
+        action_spec = MultOneHotDiscreteTensorSpec((10, 5))
+
+        actions_tensors = [action_spec.rand() for _ in range(10)]
+        actions_numpy = [action_spec.to_numpy(a) for a in actions_tensors]
+        actions_tensors_2 = [action_spec.encode(a) for a in actions_numpy]
+        assert all(
+            [(a1 == a2).all() for a1, a2 in zip(actions_tensors, actions_tensors_2)]
+        )
+
+        sample = np.stack(
+            [action_spec.to_numpy(action_spec.rand()) for _ in range(N)], 0
+        )
+        assert sample.shape[0] == N
+        assert sample.shape[1] == 2
+        assert sample.ndim == 2, f"found shape: {sample.shape}"
+
+        sample0 = sample[:, 0]
+        sample_list = list([sum(sample0 == i) for i in range(ns[0])])
+        assert chisquare(sample_list).pvalue > 0.1
+
+        sample1 = sample[:, 1]
+        sample_list = list([sum(sample1 == i) for i in range(ns[1])])
+        assert chisquare(sample_list).pvalue > 0.1
+
+    def test_categorical_action_spec_encode(self):
+        action_spec = DiscreteTensorSpec(10)
+
+        projected = action_spec.project(
+            torch.tensor([-100, -1, 0, 1, 9, 10, 100], dtype=torch.long)
+        )
+        assert (
+            projected == torch.tensor([0, 0, 0, 1, 9, 9, 9], dtype=torch.long)
+        ).all()
+
+        projected = action_spec.project(
+            torch.tensor([-100.0, -1.0, 0.0, 1.0, 9.0, 10.0, 100.0], dtype=torch.float)
+        )
+        assert (
+            projected == torch.tensor([0, 0, 0, 1, 9, 9, 9], dtype=torch.long)
+        ).all()
+
+    def test_bounded_rand(self):
+        spec = BoundedTensorSpec(-3, 3)
+        sample = torch.stack([spec.rand() for _ in range(100)])
+        assert (-3 <= sample).all() and (3 >= sample).all()
+
+    def test_ndbounded_shape(self):
+        spec = NdBoundedTensorSpec(-3, 3 * torch.ones(10, 5), shape=[10, 5])
+        sample = torch.stack([spec.rand() for _ in range(100)], 0)
+        assert (-3 <= sample).all() and (3 >= sample).all()
+        assert sample.shape == torch.Size([100, 10, 5])
