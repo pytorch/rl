@@ -74,7 +74,7 @@ def _jumanji_to_torchrl_spec_transform(
             )
         return CompositeSpec(**new_spec)
     else:
-        raise NotImplementedError(type(spec))
+        raise TypeError(f"Unsupported spec type {type(spec)}")
 
 
 def _jumanji_to_torchrl_obs_spec_transform(
@@ -91,7 +91,7 @@ def _jumanji_to_torchrl_obs_spec_transform(
     elif isinstance(spec, jumanji.specs.Spec):
         return CompositeSpec(**{f"next_{k}": v for k, v in new_spec.items()})
     else:
-        raise NotImplementedError(type(spec))
+        raise TypeError(f"Unsupported spec type {type(spec)}")
 
 
 def _jumanji_to_torchrl_state_spec_transform(
@@ -119,7 +119,7 @@ def _jumanji_to_torchrl_state_spec_transform(
             }
         )
     else:
-        raise NotImplementedError(type(state))
+        raise TypeError(f"Unsupported state type {type(state)}")
 
 
 def _jumanji_to_torchrl_input_spec_transform(
@@ -130,13 +130,14 @@ def _jumanji_to_torchrl_input_spec_transform(
     categorical_action_encoding: bool = True,
 ) -> TensorSpec:
     state_dict = _jumanji_to_torchrl_data_transform(state, device=device)
-    input_spec = _jumanji_to_torchrl_state_spec_transform(
-        state_dict, dtype, device, categorical_action_encoding
+    input_spec = CompositeSpec(
+        state=_jumanji_to_torchrl_state_spec_transform(
+            state_dict, dtype, device, categorical_action_encoding
+        ),
+        action=_jumanji_to_torchrl_spec_transform(
+            action_spec, dtype, device, categorical_action_encoding
+        )
     )
-    action_spec = _jumanji_to_torchrl_spec_transform(
-        action_spec, dtype, device, categorical_action_encoding
-    )
-    input_spec["action"] = action_spec
     return input_spec
 
 
@@ -151,17 +152,18 @@ def _jumanji_to_torchrl_data_transform(val, device):
         if val.dtype == np.uint64:
             val = val.astype(np.int64)
         return torch.tensor(val, device=device)
-    if isinstance(val, tuple) and hasattr(val, "_fields"):  # named tuples
+    elif isinstance(val, tuple) and hasattr(val, "_fields"):  # named tuples
         return {
             k: _jumanji_to_torchrl_data_transform(v, device=device)
             for k, v in zip(val._fields, val)
         }
-    if hasattr(val, "__dict__"):
+    elif hasattr(val, "__dict__"):
         return {
             k: _jumanji_to_torchrl_data_transform(v, device=device)
             for k, v in val.__dict__.items()
         }
-    raise TypeError(f"Unsupported data type {type(val)}")
+    else:
+        raise TypeError(f"Unsupported data type {type(val)}")
 
 
 def _torchrl_to_jumanji_state_transform(tensordict: TensorDict, env):
@@ -287,9 +289,8 @@ class JumanjiWrapper(GymLikeEnv):
 
     def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
         # generate a sample state object to build state spec from.
-        seed = int.from_bytes(np.random.bytes(7), byteorder="big", signed=False)
-        self.set_seed(seed)
-        state, _ = env.reset(self.key)
+        key = jax.random.PRNGKey(0)
+        state, _ = env.reset(key)
 
         self._input_spec = _jumanji_to_torchrl_input_spec_transform(
             env.action_spec(), state, device=self.device
@@ -308,13 +309,22 @@ class JumanjiWrapper(GymLikeEnv):
         if not isinstance(env, (jumanji.env.Environment,)):
             raise TypeError("env is not of type 'jumanji.env.Environment'.")
 
-    def _init_env(self) -> Optional[int]:
+    def _init_env(self):
         pass
 
     def _set_seed(self, seed):
         if seed is None:
             raise Exception("Jumanji requires an integer seed.")
         self.key = jax.random.PRNGKey(seed)
+
+    def read_state(self, state):
+        state = _jumanji_to_torchrl_data_transform(state, device=self.device)
+        state = self.input_spec["state"].encode(state)
+        return state
+
+    def read_obs(self, obs):
+        obs = _jumanji_to_torchrl_data_transform(obs, device=self.device)
+        return super().read_obs(obs)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
 
@@ -328,16 +338,11 @@ class JumanjiWrapper(GymLikeEnv):
         state = self._reshape(state)
         timestep = self._reshape(timestep)
 
-        state_dict = _jumanji_to_torchrl_data_transform(state, device=self.device)
-        obs_dict = self.read_obs(
-            _jumanji_to_torchrl_data_transform(timestep.observation, device=self.device)
-        )
-        reward = self.read_reward(
-            reward,
-            _jumanji_to_torchrl_data_transform(timestep.reward, device=self.device),
-        )
-        done = _jumanji_to_torchrl_data_transform(
-            timestep.step_type == self.lib.types.StepType.LAST, device=self.device
+        state_dict = self.read_state(state)
+        obs_dict = self.read_obs(timestep.observation)
+        reward = self.read_reward(reward, np.asarray(timestep.reward))
+        done = torch.tensor(
+            np.asarray(timestep.step_type == self.lib.types.StepType.LAST)
         )
 
         self._is_done = done
@@ -349,7 +354,7 @@ class JumanjiWrapper(GymLikeEnv):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        tensordict_out.set("state", state_dict)
+        tensordict_out["state"] = state_dict
 
         return tensordict_out
 
@@ -362,11 +367,9 @@ class JumanjiWrapper(GymLikeEnv):
         state = self._reshape(state)
         timestep = self._reshape(timestep)
 
-        state_dict = _jumanji_to_torchrl_data_transform(state, device=self.device)
-        obs_dict = self.read_obs(
-            _jumanji_to_torchrl_data_transform(timestep.observation, device=self.device)
-        )
-        done = torch.zeros(self.batch_size, dtype=torch.bool, device=self.device)
+        state_dict = self.read_state(state)
+        obs_dict = self.read_obs(timestep.observation)
+        done = torch.zeros(self.batch_size, dtype=torch.bool)
 
         self._is_done = done
 
@@ -376,7 +379,7 @@ class JumanjiWrapper(GymLikeEnv):
             device=self.device,
         )
         tensordict_out.set("done", done)
-        tensordict_out.set("state", state_dict)
+        tensordict_out["state"] = state_dict
 
         return tensordict_out
 
@@ -397,7 +400,6 @@ class JumanjiEnv(JumanjiWrapper):
         >>> td = env.rand_step()
         >>> print(td)
         >>> print(env.available_envs)
-
     """
 
     def __init__(self, env_name, **kwargs):
