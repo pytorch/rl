@@ -170,7 +170,7 @@ class VIPTransform(Compose):
         tensor_pixels_keys: List[str] = None,
     ):
         super().__init__()
-        self.keys_in = in_keys
+        self.in_keys = in_keys
         self.download = download
         self.download_path = download_path
         self.model_name = model_name
@@ -180,7 +180,7 @@ class VIPTransform(Compose):
         self.tensor_pixels_keys = tensor_pixels_keys
 
     def _init(self):
-        keys_in = self.keys_in
+        in_keys = self.in_keys
         model_name = self.model_name
         keys_out = self.keys_out
         size = self.size
@@ -190,10 +190,10 @@ class VIPTransform(Compose):
         # ToTensor
         transforms = []
         if tensor_pixels_keys:
-            for i in range(len(keys_in)):
+            for i in range(len(in_keys)):
                 transforms.append(
                     CatTensors(
-                        in_keys=[keys_in[i]],
+                        in_keys=[in_keys[i]],
                         out_key=tensor_pixels_keys[i],
                         del_keys=False,
                     )
@@ -201,7 +201,7 @@ class VIPTransform(Compose):
 
         totensor = ToTensorImage(
             unsqueeze=False,
-            in_keys=keys_in,
+            in_keys=in_keys,
         )
         transforms.append(totensor)
 
@@ -209,7 +209,7 @@ class VIPTransform(Compose):
         mean = [0.485, 0.456, 0.406]
         std = [0.229, 0.224, 0.225]
         normalize = ObservationNorm(
-            in_keys=keys_in,
+            in_keys=in_keys,
             loc=torch.tensor(mean).view(3, 1, 1),
             scale=torch.tensor(std).view(3, 1, 1),
             standard_normal=True,
@@ -217,7 +217,7 @@ class VIPTransform(Compose):
         transforms.append(normalize)
 
         # Resize: note that resize is a no-op if the tensor has the desired size already
-        resize = Resize(size, size, in_keys=keys_in)
+        resize = Resize(size, size, in_keys=in_keys)
         transforms.append(resize)
 
         # VIP
@@ -225,27 +225,27 @@ class VIPTransform(Compose):
             if stack_images:
                 keys_out = ["next_vip_vec"]
             else:
-                keys_out = [f"next_vip_vec_{i}" for i in range(len(keys_in))]
+                keys_out = [f"next_vip_vec_{i}" for i in range(len(in_keys))]
         elif stack_images and len(keys_out) != 1:
             raise ValueError(
                 f"key_out must be of length 1 if stack_images is True. Got keys_out={keys_out}"
             )
-        elif not stack_images and len(keys_out) != len(keys_in):
+        elif not stack_images and len(keys_out) != len(in_keys):
             raise ValueError(
                 "key_out must be of length equal to in_keys if stack_images is False."
             )
 
-        if stack_images and len(keys_in) > 1:
+        if stack_images and len(in_keys) > 1:
             if self.is_3d:
                 unsqueeze = UnsqueezeTransform(
-                    in_keys=keys_in,
-                    keys_out=keys_in,
+                    in_keys=in_keys,
+                    keys_out=in_keys,
                     unsqueeze_dim=-4,
                 )
                 transforms.append(unsqueeze)
 
             cattensors = CatTensors(
-                keys_in,
+                in_keys,
                 keys_out[0],
                 dim=-4,
             )
@@ -259,7 +259,7 @@ class VIPTransform(Compose):
             transforms = [*transforms, cattensors, network, flatten]
         else:
             network = _VIPNet(
-                in_keys=keys_in,
+                in_keys=in_keys,
                 out_keys=keys_out,
                 model_name=model_name,
                 del_keys=True,
@@ -327,7 +327,7 @@ class VIPRewardTransform(VIPTransform):
                 f"present in the input tensordict."
             )
         tensordict_in = tensordict.select("goal_image").rename_key(
-            "goal_image", self.keys_in[0]
+            "goal_image", self.in_keys[0]
         )
         tensordict_in = super(VIPRewardTransform, self).forward(tensordict_in)
         tensordict = tensordict.update(
