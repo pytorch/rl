@@ -12,7 +12,9 @@ from functools import wraps
 import pytest
 import torch.cuda
 from torchrl._utils import seed_generator
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase
+from torchrl.data import CompositeSpec
 
 
 # Specified for test_utils.py
@@ -53,6 +55,30 @@ def _test_fake_tensordict(env: EnvBase):
     assert (fake_tensordict == real_tensordict).all()
     for key in keys2:
         assert fake_tensordict[key].shape == real_tensordict[key].shape
+
+    # test dtypes
+    for key, value in real_tensordict.unflatten_keys(".").items():
+        _check_dtype(key, value, env.observation_spec, env.input_spec)
+
+
+def _check_dtype(key, value, obs_spec, input_spec):
+    if key.startswith("next_"):
+        return
+    if isinstance(value, TensorDictBase):
+        for _key, _value in value.items():
+            if isinstance(obs_spec, CompositeSpec) and "next_" + key in obs_spec.keys():
+                _check_dtype(_key, _value, obs_spec["next_" + key], input_spec=None)
+            elif isinstance(input_spec, CompositeSpec) and key in input_spec.keys():
+                _check_dtype(_key, _value, obs_spec=None, input_spec=input_spec[key])
+            else:
+                raise KeyError(f"key '{_key}' is unknown.")
+    else:
+        if obs_spec is not None and "next_" + key in obs_spec.keys():
+            assert obs_spec["next_" + key].dtype is value.dtype, f"{obs_spec['next_' + key].dtype} vs {value.dtype} for {key}"
+        elif input_spec is not None and key in input_spec.keys():
+            assert input_spec[key].dtype is value.dtype, f"{input_spec[key].dtype} vs {value.dtype} for {key}"
+        else:
+            assert key in {"done", "reward"}, (key, obs_spec, input_spec)
 
 
 # Decorator to retry upon certain Exceptions.
