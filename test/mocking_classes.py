@@ -157,9 +157,8 @@ class MockSerialEnv(EnvBase):
     def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
         self.max_val = max(self.counter + 100, self.counter * 2)
 
-        n = torch.tensor(
-            [self.counter], device=self.device, dtype=torch.get_default_dtype()
-        )
+        n = seed_generator(self.counter) % 17
+        n = torch.tensor([n], device=self.device, dtype=torch.get_default_dtype())
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict({"done": done, "observation": n}, [])
@@ -236,11 +235,8 @@ class MockBatchedLockedEnv(EnvBase):
         else:
             batch_size = tensordict.batch_size
 
-        n = (
-            torch.full(batch_size, self.counter)
-            .to(self.device)
-            .to(torch.get_default_dtype())
-        )
+        n = seed_generator(self.counter) % 17
+        n = torch.full(batch_size, n).to(self.device).to(torch.get_default_dtype())
         done = self.counter >= self.max_val
         done = torch.full(batch_size, done, dtype=torch.bool, device=self.device)
 
@@ -323,7 +319,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
 
     def _reset(self, tensordict: TensorDictBase = None) -> TensorDictBase:
         self.counter += 1
-        state = torch.zeros(self.size) + self.counter
+        n = seed_generator(self.counter) % 17
+        state = torch.zeros(self.size) + n
         if tensordict is None:
             tensordict = TensorDict({}, self.batch_size, device=self.device)
         tensordict = tensordict.select().set(self.out_key, self._get_out_obs(state))

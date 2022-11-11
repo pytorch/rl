@@ -389,7 +389,7 @@ class SyncDataCollector(_DataCollector):
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
         self.return_same_td = return_same_td
 
-        self._tensordict = env.fake_tensordict()
+        self._tensordict = env.reset()
         self._tensordict.set(
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
@@ -417,20 +417,12 @@ class SyncDataCollector(_DataCollector):
             # otherwise, we perform a small number of steps with the policy to
             # determine the relevant keys with which to pre-populate _tensordict_out.
             # See #505 for additional context.
-            self._tensordict_out = self.env.rollout(
-                3, self.policy, auto_cast_to_device=True
-            )
-            if env.batch_size:
-                self._tensordict_out = self._tensordict_out[..., :1]
-            else:
-                self._tensordict_out = self._tensordict_out[:1]
+            self._tensordict_out = env.fake_tensordict().unsqueeze(-1)
             self._tensordict_out = (
                 self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
                 .to_tensordict()
                 .zero_()
-                .detach()
             )
-            env.reset()
 
         # in addition to outputs of the policy, we add traj_ids and step_count to
         # _tensordict_out which will be collected during rollout
@@ -571,8 +563,8 @@ class SyncDataCollector(_DataCollector):
                 self._tensordict.set("reset_workers", done_or_terminated)
             else:
                 self._tensordict.zero_()
-
             self.env.reset(self._tensordict)
+
             if self._tensordict.get("done").any():
                 raise RuntimeError(
                     f"Got {sum(self._tensordict.get('done'))} done envs after reset."
@@ -610,7 +602,7 @@ class SyncDataCollector(_DataCollector):
                     td_cast = self._cast_to_policy(self._tensordict)
                     td_cast = self.policy(td_cast)
                     self._cast_to_env(td_cast, self._tensordict)
-                    self.env.step(self._tensordict)
+                    self._tensordict = self.env.step(self._tensordict)
 
                 step_count = self._tensordict.get("step_count")
                 step_count += 1
