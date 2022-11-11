@@ -54,6 +54,9 @@ jobs:
       shell: bash
       run: |
         conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
+    - name: Install tensordict
+      run: |
+        python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
     - name: Install TorchRL
       run: |
         conda run -n build_binary python -m pip install -e .
