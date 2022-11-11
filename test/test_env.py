@@ -28,7 +28,6 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ObservationNorm
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
