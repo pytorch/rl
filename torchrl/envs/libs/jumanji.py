@@ -40,7 +40,9 @@ def _jumanji_to_torchrl_spec_transform(
             if categorical_action_encoding
             else OneHotDiscreteTensorSpec
         )
-        return action_space_cls(spec.num_values, device=device)
+        if dtype is None:
+            dtype = numpy_to_torch_dtype_dict[spec.dtype]
+        return action_space_cls(spec.num_values, dtype=dtype, device=device)
     elif isinstance(spec, jumanji.specs.BoundedArray):
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
