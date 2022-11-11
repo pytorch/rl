@@ -45,7 +45,9 @@ def _test_fake_tensordict(env: EnvBase):
     keys1 = set(fake_tensordict.keys())
     keys2 = set(real_tensordict.keys())
     assert keys1 == keys2
-    fake_tensordict = fake_tensordict.expand(3).to_tensordict()
+    fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
+    fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
+    fake_tensordict = fake_tensordict.to_tensordict()
     fake_tensordict.zero_()
     real_tensordict.zero_()
     assert (fake_tensordict == real_tensordict).all()

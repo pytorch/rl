@@ -1044,8 +1044,9 @@ class DiscreteTensorSpec(TensorSpec):
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
+        shape = [*shape, *self.shape]
         return torch.randint(
-            0, self.space.n, self.shape, device=self.device, dtype=self.dtype
+            0, self.space.n, shape, device=self.device, dtype=self.dtype
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
