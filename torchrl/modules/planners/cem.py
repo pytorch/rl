@@ -44,7 +44,8 @@ class CEMPlanner(MPCPlannerBase):
             the action. Defaults to "action"
 
     Examples:
-        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec, TensorDict
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
         >>> from torchrl.envs.model_based import ModelBasedEnvBase
         >>> from torchrl.modules import TensorDictModule
         >>> class MyMBEnv(ModelBasedEnvBase):

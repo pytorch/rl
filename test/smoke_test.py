@@ -2,7 +2,6 @@ def test_imports():
     from torchrl.data import (  # noqa: F401
         PrioritizedReplayBuffer,
         ReplayBuffer,
-        TensorDict,
         TensorSpec,
     )
     from torchrl.envs import Transform, TransformedEnv  # noqa: F401

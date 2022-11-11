@@ -653,7 +653,7 @@ class TestParallel:
         td_serial = env_serial.rollout(
             max_steps=10, auto_reset=False, tensordict=td0_serial
         ).contiguous()
-        key = "pixels" if "pixels" in td_serial else "observation"
+        key = "pixels" if "pixels" in td_serial.keys() else "observation"
         torch.testing.assert_close(
             td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
         )

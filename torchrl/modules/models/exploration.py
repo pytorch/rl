@@ -263,8 +263,8 @@ class gSDEModule(nn.Module):
         device (DEVICE_TYPING, optional): device to create the model on.
 
     Examples:
+        >>> from tensordict import TensorDict
         >>> from torchrl.modules import TensorDictModule, TensorDictSequential, ProbabilisticActor, TanhNormal
-        >>> from torchrl.data import TensorDict
         >>> batch, state_dim, action_dim = 3, 7, 5
         >>> model = nn.Linear(state_dim, action_dim)
         >>> deterministic_policy = TensorDictModule(model, in_keys=["obs"], out_keys=["action"])
