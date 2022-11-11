@@ -15,6 +15,7 @@ from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs.libs.dm_control import _has_dmc
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
 from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
+from torchrl.envs.libs.jumanji import JumanjiEnv, _has_jumanji
 
 if _has_gym:
     import gym
@@ -348,6 +349,53 @@ class TestHabitat:
     def test_habitat(self, envname):
         env = HabitatEnv(envname)
         rollout = env.rollout(3)
+        _test_fake_tensordict(env)
+
+
+@pytest.mark.skipif(not _has_habitat, reason="habitat not installed")
+@pytest.mark.parametrize("envname", ["HabitatRenderPick-v0", "HabitatRenderPick-v0"])
+class TestHabitat:
+    def test_habitat(self, envname):
+        env = HabitatEnv(envname)
+        rollout = env.rollout(3)
+        _test_fake_tensordict(env)
+
+
+@pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
+@pytest.mark.parametrize("envname", ["Snake-6x6-v0"])
+class TestJumanji:
+    def test_jumanji_seeding(self, envname):
+        final_seed = []
+        tdreset = []
+        tdrollout = []
+        for _ in range(2):
+            env = JumanjiEnv(envname)
+            torch.manual_seed(0)
+            np.random.seed(0)
+            final_seed.append(env.set_seed(0))
+            tdreset.append(env.reset())
+            tdrollout.append(env.rollout(max_steps=50))
+            env.close()
+            del env
+        assert final_seed[0] == final_seed[1]
+        assert_allclose_td(*tdreset)
+        assert_allclose_td(*tdrollout)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_jumanji_batch_size(self, envname, batch_size):
+        env = JumanjiEnv(envname, batch_size=batch_size)
+        env.set_seed(0)
+        tdreset = env.reset()
+        tdrollout = env.rollout(max_steps=50)
+        env.close()
+        del env
+        assert tdreset.batch_size == batch_size
+        assert tdrollout.batch_size[:-1] == batch_size
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_jumanji_spec_rollout(self, envname, batch_size):
+        env = JumanjiEnv(envname, batch_size=batch_size)
+        env.set_seed(0)
         _test_fake_tensordict(env)
 
 
