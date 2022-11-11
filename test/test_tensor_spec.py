@@ -7,11 +7,8 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from scipy.stats import chisquare
-
 from _utils_internal import get_available_devices
-from torchrl.data import OneHotDiscreteTensorSpec, DiscreteTensorSpec, \
-    MultOneHotDiscreteTensorSpec, BoundedTensorSpec, NdBoundedTensorSpec
+from scipy.stats import chisquare
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
