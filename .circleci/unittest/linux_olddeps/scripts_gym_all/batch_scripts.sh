@@ -17,12 +17,12 @@ $DIR/install.sh
 yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL mesa-libEGL-devel glfw mesa-libOSMesa-devel glew glew-devel egl-utils freeglut xorg-x11-server-Xvfb -y
 
 # gym[atari]<0.25 installs ale-py==0.8 by default, but this version is not compatible with gym<0.26
-pip3 install ale-py==0.7
+# pip3 install ale-py==0.7
 
 for GYM_VERSION in '0.13' '0.19' '0.20' '0.25' '0.26'
 do
   echo "Installing gym version: ${GYM_VERSION}"
-  pip3 install 'gym[atari]'==$GYM_VERSION
+  pip3 install gym==$GYM_VERSION
   echo "Running tests for gym version: ${GYM_VERSION}"
   $DIR/run_test.sh
 done
