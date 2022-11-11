@@ -352,15 +352,6 @@ class TestHabitat:
         _test_fake_tensordict(env)
 
 
-@pytest.mark.skipif(not _has_habitat, reason="habitat not installed")
-@pytest.mark.parametrize("envname", ["HabitatRenderPick-v0", "HabitatRenderPick-v0"])
-class TestHabitat:
-    def test_habitat(self, envname):
-        env = HabitatEnv(envname)
-        rollout = env.rollout(3)
-        _test_fake_tensordict(env)
-
-
 @pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
 @pytest.mark.parametrize("envname", ["Snake-6x6-v0"])
 class TestJumanji:
