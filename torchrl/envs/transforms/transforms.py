@@ -38,7 +38,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
-from torchrl.envs.transforms.utils import FiniteTensor
+from torchrl.envs.transforms.utils import check_finite
 from torchrl.envs.utils import step_mdp
 
 
@@ -50,9 +50,9 @@ def _apply_to_composite(function):
     def new_fun(self, observation_spec):
         if isinstance(observation_spec, CompositeSpec):
             d = observation_spec._specs
-            for in_key, key_out in zip(self.in_keys, self.keys_out):
+            for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if in_key in observation_spec.keys():
-                    d[key_out] = function(self, observation_spec[in_key])
+                    d[out_key] = function(self, observation_spec[in_key])
             return CompositeSpec(**d)
         else:
             return function(self, observation_spec)
@@ -90,21 +90,21 @@ class Transform(nn.Module):
     def __init__(
         self,
         in_keys: Sequence[str],
-        keys_out: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
         in_keys_inv: Optional[Sequence[str]] = None,
-        keys_inv_out: Optional[Sequence[str]] = None,
+        out_keys_inv: Optional[Sequence[str]] = None,
     ):
         super().__init__()
         self.in_keys = in_keys
-        if keys_out is None:
-            keys_out = copy(self.in_keys)
-        self.keys_out = keys_out
+        if out_keys is None:
+            out_keys = copy(self.in_keys)
+        self.out_keys = out_keys
         if in_keys_inv is None:
             in_keys_inv = []
         self.in_keys_inv = in_keys_inv
-        if keys_inv_out is None:
-            keys_inv_out = copy(self.in_keys_inv)
-        self.keys_inv_out = keys_inv_out
+        if out_keys_inv is None:
+            out_keys_inv = copy(self.in_keys_inv)
+        self.out_keys_inv = out_keys_inv
         self.__dict__["_parent"] = None
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -133,15 +133,23 @@ class Transform(nn.Module):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         self._check_inplace()
-        for key_in, key_out in zip(self.in_keys, self.keys_out):
-            if key_in in tensordict.keys():
-                observation = self._apply_transform(tensordict.get(key_in))
-                tensordict.set(key_out, observation, inplace=self.inplace)
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if in_key in tensordict.keys():
+                observation = self._apply_transform(tensordict.get(in_key))
+                tensordict.set(out_key, observation, inplace=self.inplace)
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        self._call(tensordict)
+        tensordict = self._call(tensordict)
         return tensordict
+        # raise NotImplementedError("""`Transform.forward` is currently not implemented (reserved for usage beyond envs). Use `Transform._step` instead.""")
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # placeholder when we'll move to tensordict['next']
+        # tensordict["next"] = self._call(tensordict.get("next"))
+        out = self._call(tensordict)
+        # print(out, tensordict, out is tensordict, (out==tensordict).all())
+        return out
 
     def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         if self.invertible:
@@ -151,10 +159,10 @@ class Transform(nn.Module):
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._check_inplace()
-        for key_in, key_out in zip(self.in_keys_inv, self.keys_inv_out):
-            if key_in in tensordict.keys():
-                observation = self._inv_apply_transform(tensordict.get(key_in))
-                tensordict.set(key_out, observation, inplace=self.inplace)
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+            if in_key in tensordict.keys():
+                observation = self._inv_apply_transform(tensordict.get(in_key))
+                tensordict.set(out_key, observation, inplace=self.inplace)
         return tensordict
 
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -423,7 +431,7 @@ but got an object of type {type(transform)}."""
         tensordict_out = self.base_env.step(tensordict_in)
         # tensordict should already have been processed by the transforms
         # for logging purposes
-        tensordict_out = self.transform(tensordict_out)
+        tensordict_out = self.transform._step(tensordict_out)
         return tensordict_out
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -466,15 +474,15 @@ but got an object of type {type(transform)}."""
     def is_closed(self, value: bool):
         self.base_env.is_closed = value
 
-    def is_done_get_fn(self) -> bool:
+    @property
+    def is_done(self) -> bool:
         if self._is_done is None:
             return self.base_env.is_done
         return self._is_done.all()
 
-    def is_done_set_fn(self, val: torch.Tensor) -> None:
+    @is_done.setter
+    def is_done(self, val: torch.Tensor) -> None:
         self._is_done = val
-
-    is_done = property(is_done_get_fn, is_done_set_fn)
 
     def close(self):
         self.base_env.close()
@@ -585,7 +593,7 @@ class ObservationTransform(Transform):
     def __init__(
         self,
         in_keys: Optional[Sequence[str]] = None,
-        keys_out: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = [
@@ -593,7 +601,7 @@ class ObservationTransform(Transform):
                 "next_pixels",
                 "next_observation_state",
             ]
-        super(ObservationTransform, self).__init__(in_keys=in_keys, keys_out=keys_out)
+        super(ObservationTransform, self).__init__(in_keys=in_keys, out_keys=out_keys)
 
 
 class Compose(Transform):
@@ -615,9 +623,14 @@ class Compose(Transform):
         for t in self.transforms:
             t.set_parent(self)
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
             tensordict = t(tensordict)
+        return tensordict
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for t in self.transforms:
+            tensordict = t._step(tensordict)
         return tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -742,11 +755,11 @@ class ToTensorImage(ObservationTransform):
         unsqueeze: bool = False,
         dtype: Optional[torch.device] = None,
         in_keys: Optional[Sequence[str]] = None,
-        keys_out: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
-        super().__init__(in_keys=in_keys, keys_out=keys_out)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.unsqueeze = unsqueeze
         self.dtype = dtype if dtype is not None else torch.get_default_dtype()
 
@@ -796,11 +809,11 @@ class RewardClipping(Transform):
         clamp_min: float = None,
         clamp_max: float = None,
         in_keys: Optional[Sequence[str]] = None,
-        keys_out: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = ["reward"]
-        super().__init__(in_keys=in_keys, keys_out=keys_out)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         clamp_min_tensor = (
             clamp_min if isinstance(clamp_min, Tensor) else torch.tensor(clamp_min)
         )
@@ -850,11 +863,11 @@ class BinarizeReward(Transform):
     def __init__(
         self,
         in_keys: Optional[Sequence[str]] = None,
-        keys_out: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = ["reward"]
-        super().__init__(in_keys=in_keys, keys_out=keys_out)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
 
     def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
         if not reward.shape or reward.shape[-1] != 1:
@@ -884,7 +897,7 @@ class Resize(ObservationTransform):
         h: int,
         interpolation: str = "bilinear",
         in_keys: Optional[Sequence[str]] = None,
-        keys_out: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if not _has_tv:
             raise ImportError(
@@ -894,7 +907,7 @@ class Resize(ObservationTransform):
             )
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
-        super().__init__(in_keys=in_keys, keys_out=keys_out)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.w = int(w)
         self.h = int(h)
         self.interpolation = interpolation
@@ -1074,17 +1087,17 @@ class UnsqueezeTransform(Transform):
         self,
         unsqueeze_dim: int,
         in_keys: Optional[Sequence[str]] = None,
-        keys_out: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
         in_keys_inv: Optional[Sequence[str]] = None,
-        keys_inv_out: Optional[Sequence[str]] = None,
+        out_keys_inv: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
         super().__init__(
             in_keys=in_keys,
-            keys_out=keys_out,
+            out_keys=out_keys,
             in_keys_inv=in_keys_inv,
-            keys_inv_out=keys_inv_out,
+            out_keys_inv=out_keys_inv,
         )
         self._unsqueeze_dim_orig = unsqueeze_dim
 
@@ -1107,6 +1120,11 @@ class UnsqueezeTransform(Transform):
         if self._unsqueeze_dim_orig >= 0:
             self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
         return super().forward(tensordict)
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._unsqueeze_dim_orig >= 0:
+            self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
+        return super()._step(tensordict)
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = observation.unsqueeze(self.unsqueeze_dim)
@@ -1153,8 +1171,8 @@ class UnsqueezeTransform(Transform):
 
     def __repr__(self) -> str:
         s = (
-            f"{self.__class__.__name__}(in_keys={self.in_keys}, keys_out={self.keys_out},"
-            f" keys_inv_in={self.in_keys_inv}, keys_inv_out={self.keys_inv_out})"
+            f"{self.__class__.__name__}(in_keys={self.in_keys}, out_keys={self.out_keys},"
+            f" in_keys_inv={self.in_keys_inv}, out_keys_inv={self.out_keys_inv})"
         )
         return s
 
@@ -1173,16 +1191,16 @@ class SqueezeTransform(UnsqueezeTransform):
         self,
         squeeze_dim: int,
         in_keys: Optional[Sequence[str]] = None,
-        keys_out: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
         in_keys_inv: Optional[Sequence[str]] = None,
-        keys_inv_out: Optional[Sequence[str]] = None,
+        out_keys_inv: Optional[Sequence[str]] = None,
     ):
         super().__init__(
             unsqueeze_dim=squeeze_dim,
             in_keys=in_keys_inv,
-            keys_out=keys_out,
+            out_keys=out_keys,
             in_keys_inv=in_keys,
-            keys_inv_out=keys_inv_out,
+            out_keys_inv=out_keys_inv,
         )
 
     @property
@@ -1190,6 +1208,11 @@ class SqueezeTransform(UnsqueezeTransform):
         return super().unsqueeze_dim
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return super().inv(tensordict)
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # placeholder for when we'll move to 'next' indexing for steps
+        # return super().inv(tensordict["next"])
         return super().inv(tensordict)
 
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1451,18 +1474,8 @@ class FiniteTensorDictCheck(Transform):
         super().__init__(in_keys=[])
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        source = {}
-        for key, item in tensordict.items():
-            try:
-                source[key] = FiniteTensor(item)
-            except RuntimeError as err:
-                if str(err).rfind("FiniteTensor encountered") > -1:
-                    raise ValueError(f"Found non-finite elements in {key}")
-                else:
-                    raise RuntimeError(str(err))
-
-        finite_tensordict = TensorDict(batch_size=tensordict.batch_size, source=source)
-        return finite_tensordict
+        tensordict.apply(check_finite)
+        return tensordict
 
 
 class DoubleToFloat(Transform):
@@ -1529,8 +1542,8 @@ class DoubleToFloat(Transform):
 
     def __repr__(self) -> str:
         s = (
-            f"{self.__class__.__name__}(in_keys={self.in_keys}, keys_out={self.keys_out},"
-            f"keys_inv_in={self.in_keys_inv}, keys_inv_out={self.keys_inv_out})"
+            f"{self.__class__.__name__}(in_keys={self.in_keys}, out_keys={self.out_keys},"
+            f"in_keys_inv={self.in_keys_inv}, out_keys_inv={self.out_keys_inv})"
         )
         return s
 
@@ -1595,7 +1608,7 @@ class CatTensors(Transform):
         if type(out_key) != str:
             raise Exception("CatTensors requires out_key to be of type string")
         # super().__init__(in_keys=in_keys)
-        super(CatTensors, self).__init__(in_keys=in_keys, keys_out=[out_key])
+        super(CatTensors, self).__init__(in_keys=in_keys, out_keys=[out_key])
         self.dim = dim
         self.del_keys = del_keys
         self.unsqueeze_if_oor = unsqueeze_if_oor
@@ -1616,7 +1629,7 @@ class CatTensors(Transform):
         for key, value in obs_spec.items():
             if len(value.shape) == 1:
                 in_keys.append(key)
-        self._check_in_keys(in_keys, self.keys_out[0])
+        self._check_in_keys(in_keys, self.out_keys[0])
         return sorted(in_keys)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1639,7 +1652,7 @@ class CatTensors(Transform):
                 ]
 
             out_tensor = torch.cat(values, dim=self.dim)
-            tensordict.set(self.keys_out[0], out_tensor)
+            tensordict.set(self.out_keys[0], out_tensor)
             if self.del_keys:
                 tensordict.exclude(*self.in_keys, inplace=True)
         else:
@@ -1681,7 +1694,7 @@ class CatTensors(Transform):
             ]
         )
         spec0 = observation_spec[keys[0]]
-        out_key = self.keys_out[0]
+        out_key = self.out_keys[0]
         shape = list(spec0.shape)
         device = spec0.device
         shape[self.dim] = sum_shape
@@ -1699,7 +1712,7 @@ class CatTensors(Transform):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(in_keys={self.in_keys}, out_key"
-            f"={self.keys_out[0]})"
+            f"={self.out_keys[0]})"
         )
 
 
