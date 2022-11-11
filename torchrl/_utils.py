@@ -194,7 +194,7 @@ class implement_for:
         to_version: version from which implementation is no longer compatible. Can be open (None).
 
     Examples:
-        >>> @implement_for(“gym”, “0.13”, “0.14”)
+        >>> @implement_for('gym', '0.13', '0.14')
         >>> def fun(self, x):
 
         This indicates that the function is compatible with gym 0.13+, but doesn't with gym 0.14+.

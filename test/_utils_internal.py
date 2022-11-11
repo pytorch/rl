@@ -11,7 +11,7 @@ from functools import wraps
 # this returns relative path from current file.
 import pytest
 import torch.cuda
-from torchrl._utils import seed_generator
+from torchrl._utils import seed_generator, implement_for
 from torchrl.envs import EnvBase
 
 
@@ -82,3 +82,25 @@ def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
         return f_retry  # true decorator
 
     return deco_retry
+
+def PENDULUM_VERSIONED():
+    @implement_for("gym", None, "0.20")
+    def _pendulum_version():
+        return "Pendulum-v0"
+
+    @implement_for("gym", "0.21", None)
+    def _pendulum_version():
+        return "Pendulum-v1"
+
+    return _pendulum_version()
+
+def PONG_VERSIONED():
+    @implement_for("gym", None, "0.20")
+    def _pong_versioned():
+        return "Pong-v4"
+
+    @implement_for("gym", "0.21", None)
+    def _pong_versioned():
+        return "ALE/Pong-v5"
+
+    return _pong_versioned()

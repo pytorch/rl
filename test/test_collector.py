@@ -8,7 +8,7 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from _utils_internal import generate_seeds
+from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnv,
@@ -34,7 +34,6 @@ from torchrl.data import (
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
-from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import (
     Actor,
@@ -42,25 +41,6 @@ from torchrl.modules import (
     OrnsteinUhlenbeckProcessWrapper,
     TensorDictModule,
 )
-
-if _has_gym:
-    import gym
-    from packaging import version
-
-    gym_version = version.parse(gym.__version__)
-    PENDULUM_VERSIONED = (
-        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
-    )
-    PONG_VERSIONED = (
-        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
-    )
-else:
-    # placeholders
-    PENDULUM_VERSIONED = "Pendulum-v1"
-    PONG_VERSIONED = "ALE/Pong-v5"
-
-# torch.set_default_dtype(torch.double)
-
 
 class WrappablePolicy(nn.Module):
     def __init__(self, out_features: int, multiple_outputs: bool = False):
@@ -312,10 +292,13 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     ccollector.shutdown()
 
 
-@pytest.mark.skipif(not _has_gym, reason="gym library is not installed")
 def test_collector_env_reset():
+    from torchrl.envs.libs.gym import _has_gym, GymEnv
+    if not _has_gym:
+        pytest.skip(reason="gym library is not installed")
+
     torch.manual_seed(0)
-    env = SerialEnv(2, lambda: GymEnv(PONG_VERSIONED, frame_skip=4))
+    env = SerialEnv(2, lambda: GymEnv(PONG_VERSIONED(), frame_skip=4))
     # env = SerialEnv(3, lambda: GymEnv("CartPole-v1", frame_skip=4))
     env.set_seed(0)
     collector = SyncDataCollector(
@@ -698,7 +681,6 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     assert_allclose_td(data10, data20)
 
 
-@pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
 @pytest.mark.parametrize("static_seed", [True, False])
 def test_collector_vecnorm_envcreator(static_seed):
     """
@@ -711,10 +693,12 @@ def test_collector_vecnorm_envcreator(static_seed):
     are modified after the collector is run for more steps.
 
     """
-    from torchrl.envs.libs.gym import GymEnv
+    from torchrl.envs.libs.gym import _has_gym, GymEnv
+    if not _has_gym:
+        pytest.skip(reason="gym library is not installed")
 
     num_envs = 4
-    env_make = EnvCreator(lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm()))
+    env_make = EnvCreator(lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm()))
     env_make = ParallelEnv(num_envs, env_make)
 
     policy = RandomPolicy(env_make.action_spec)
@@ -866,7 +850,6 @@ def test_excluded_keys(collector_class, exclude):
     dummy_env.close()
 
 
-@pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
 @pytest.mark.parametrize(
     "collector_class",
     [
@@ -878,7 +861,9 @@ def test_excluded_keys(collector_class, exclude):
 @pytest.mark.parametrize("init_random_frames", [0, 50])
 @pytest.mark.parametrize("explicit_spec", [True, False])
 def test_collector_output_keys(collector_class, init_random_frames, explicit_spec):
-    from torchrl.envs.libs.gym import GymEnv
+    from torchrl.envs.libs.gym import _has_gym, GymEnv
+    if not _has_gym:
+        pytest.skip(reason="gym library is not installed")
 
     out_features = 1
     hidden_size = 12
@@ -909,7 +894,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
 
     policy = TensorDictModule(**policy_kwargs)
 
-    env_maker = lambda: GymEnv(PENDULUM_VERSIONED)
+    env_maker = lambda: GymEnv(PENDULUM_VERSIONED())
 
     policy(env_maker().reset())
 
@@ -949,7 +934,6 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     del collector
 
 
-@pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
 @pytest.mark.parametrize(
     "collector_class",
     [
@@ -963,9 +947,11 @@ class TestAutoWrap:
 
     @pytest.fixture
     def env_maker(self):
-        from torchrl.envs.libs.gym import GymEnv
+        from torchrl.envs.libs.gym import _has_gym, GymEnv
+        if not _has_gym:
+            pytest.skip(reason="gym library is not installed")
 
-        return lambda: GymEnv(PENDULUM_VERSIONED)
+        return lambda: GymEnv(PENDULUM_VERSIONED())
 
     def _create_collector_kwargs(self, env_maker, collector_class, policy):
         collector_kwargs = {"create_env_fn": env_maker, "policy": policy}
