@@ -1281,7 +1281,7 @@ class ObservationNorm(ObservationTransform):
         self.standard_normal = standard_normal
         self.eps = 1e-6
 
-        if loc is not None and scale is None:
+        if loc is not None and scale is not None:
             if not isinstance(loc, torch.Tensor):
                 loc = torch.tensor(loc, dtype=torch.float)
             if not isinstance(scale, torch.Tensor):
@@ -1299,7 +1299,9 @@ class ObservationNorm(ObservationTransform):
         key: Optional[str] = None,
     ) -> None:
         if self.loc is not None or self.scale is not None:
-            raise RuntimeError("Loc/Scale are already initialized")
+            raise RuntimeError(
+                f"Loc/Scale are already initialized: ({self.loc}, {self.scale})"
+            )
 
         if len(self.in_keys) > 1 and key is None:
             raise RuntimeError(
