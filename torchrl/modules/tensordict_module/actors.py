@@ -8,6 +8,7 @@ from typing import Optional, Sequence, Tuple, Union
 import torch
 from torch import nn
 
+from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, TensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import (
     TensorDictModule,
@@ -17,19 +18,6 @@ from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
 )
 from torchrl.modules.tensordict_module.sequence import TensorDictSequential
-
-__all__ = [
-    "Actor",
-    "ActorValueOperator",
-    "ValueOperator",
-    "ProbabilisticActor",
-    "QValueActor",
-    "ActorCriticOperator",
-    "ActorCriticWrapper",
-    "DistributionalQValueActor",
-]
-
-from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, TensorSpec
 
 
 class Actor(TensorDictModule):

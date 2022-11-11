@@ -23,6 +23,8 @@ TensorDict modules
     ActorValueOperator
     ActorCriticOperator
     ActorCriticWrapper
+    is_tensordict_compatible
+    ensure_tensordict_compatible
 
 Hooks
 -----
