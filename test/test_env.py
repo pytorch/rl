@@ -672,7 +672,7 @@ class TestParallel:
 
         if not _has_gym:
             pytest.skip("no gym")
-        env_make = EnvCreator(lambda: GymEnv(PENDULUM_VERSIONED))
+        env_make = EnvCreator(lambda: GymEnv(PENDULUM_VERSIONED()))
         env = ParallelEnv(4, env_make)
         env.reset()
         assert not env.is_closed
@@ -1037,13 +1037,13 @@ def test_seed():
     if not _has_gym:
         pytest.skip("no gym")
     torch.manual_seed(0)
-    env1 = GymEnv(PENDULUM_VERSIONED)
+    env1 = GymEnv(PENDULUM_VERSIONED())
     env1.set_seed(0)
     state0_1 = env1.reset()
     state1_1 = env1.step(state0_1.set("action", env1.action_spec.rand()))
 
     torch.manual_seed(0)
-    env2 = GymEnv(PENDULUM_VERSIONED)
+    env2 = GymEnv(PENDULUM_VERSIONED())
     env2.set_seed(0)
     state0_2 = env2.reset()
     state1_2 = env2.step(state0_2.set("action", env2.action_spec.rand()))
