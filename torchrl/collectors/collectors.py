@@ -419,7 +419,7 @@ class SyncDataCollector(_DataCollector):
             # See #505 for additional context.
             with torch.no_grad():
                 self._tensordict_out = env.fake_tensordict()
-                self._tensordict_out = policy(self._tensordict_out).unsqueeze(-1)
+                self._tensordict_out = self.policy(self._tensordict_out).unsqueeze(-1)
             self._tensordict_out = (
                 self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
                 .to_tensordict()
