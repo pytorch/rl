@@ -418,8 +418,8 @@ class SyncDataCollector(_DataCollector):
             # determine the relevant keys with which to pre-populate _tensordict_out.
             # See #505 for additional context.
             with torch.no_grad():
-                self._tensordict_out = env.fake_tensordict().unsqueeze(-1)
-                self._tensordict_out = policy(self._tensordict_out)
+                self._tensordict_out = env.fake_tensordict()
+                self._tensordict_out = policy(self._tensordict_out).unsqueeze(-1)
             self._tensordict_out = (
                 self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
                 .to_tensordict()
