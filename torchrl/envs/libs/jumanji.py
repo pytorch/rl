@@ -59,7 +59,11 @@ def _jumanji_to_torchrl_spec_transform(
         if dtype == torch.bool:
             # torch.bool is not supported by unbounded specs.
             return NdBoundedTensorSpec(
-                shape=spec.shape, minimum=False, maximum=True, dtype=dtype, device=device
+                shape=spec.shape,
+                minimum=False,
+                maximum=True,
+                dtype=dtype,
+                device=device,
             )
         elif dtype in (torch.float, torch.double, torch.half):
             return NdUnboundedContinuousTensorSpec(
@@ -112,7 +116,11 @@ def _jumanji_to_torchrl_state_spec_transform(
         if state.dtype == torch.bool:
             # torch.bool is not supported by unbounded specs.
             return NdBoundedTensorSpec(
-                shape=state.shape, minimum=False, maximum=True, dtype=state.dtype, device=device
+                shape=state.shape,
+                minimum=False,
+                maximum=True,
+                dtype=state.dtype,
+                device=device,
             )
         elif state.dtype in (torch.float, torch.double, torch.half):
             return NdUnboundedContinuousTensorSpec(
