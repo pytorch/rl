@@ -991,7 +991,7 @@ class TestTransforms:
         )
         ftd(td)
         td.set("inf", torch.zeros(1, 3).fill_(float("inf")))
-        with pytest.raises(ValueError, match="Found non-finite elements"):
+        with pytest.raises(ValueError, match="Encountered a non-finite tensor"):
             ftd(td)
 
     @pytest.mark.parametrize("device", get_available_devices())
