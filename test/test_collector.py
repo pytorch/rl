@@ -870,9 +870,9 @@ def test_excluded_keys(collector_class, exclude):
 @pytest.mark.parametrize(
     "collector_class",
     [
-        SyncDataCollector,
         MultiaSyncDataCollector,
         MultiSyncDataCollector,
+        SyncDataCollector,
     ],
 )
 @pytest.mark.parametrize("init_random_frames", [0, 50])
