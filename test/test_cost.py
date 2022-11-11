@@ -21,7 +21,7 @@ except ImportError:
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices, dtype_fixture
+from _utils_internal import get_available_devices, dtype_fixture  # noqa
 from mocking_classes import ContinuousActionConvMockEnv
 from torch import autograd, nn
 from torchrl.data import (
@@ -93,8 +93,6 @@ from torchrl.objectives.value.functional import (
     vec_td_lambda_advantage_estimate,
 )
 from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor
-
-
 
 
 class _check_td_steady:
@@ -2550,7 +2548,7 @@ def test_tdlambda_tensor_gamma(device, gamma, lmbda, N, T):
 @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
 @pytest.mark.parametrize("N", [(3,), (7, 3)])
 @pytest.mark.parametrize("T", [3, 5, 50])
-def test_vectdlambda_tensor_gamma(device, gamma, lmbda, N, T, dtype_fixture):
+def test_vectdlambda_tensor_gamma(device, gamma, lmbda, N, T, dtype_fixture):  # noqa
     """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
     with gamma being a tensor or a scalar
 
@@ -2593,13 +2591,14 @@ def test_vectdlambda_tensor_gamma(device, gamma, lmbda, N, T, dtype_fixture):
 @pytest.mark.parametrize("N", [(3,), (7, 3)])
 @pytest.mark.parametrize("T", [50, 3])
 @pytest.mark.parametrize("rolling_gamma", [True, False, None])
-def test_vectdlambda_rand_gamma(device, lmbda, N, T, rolling_gamma):
+def test_vectdlambda_rand_gamma(
+    device, lmbda, N, T, rolling_gamma, dtype_fixture  # noqa
+):
     """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
     with gamma being a random tensor
 
     """
     torch.manual_seed(0)
-    _ = dtype_fixture
 
     done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
     reward = torch.randn(*N, T, 1, device=device)

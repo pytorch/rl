@@ -8,7 +8,7 @@ from copy import copy, deepcopy
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices, retry, dtype_fixture
+from _utils_internal import get_available_devices, retry, dtype_fixture  # noqa
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
@@ -1688,7 +1688,7 @@ class TestVIP:
         transformed_env.close()
         del transformed_env
 
-    def test_vip_parallel_reward(self, model, device, dtype_fixture):
+    def test_vip_parallel_reward(self, model, device, dtype_fixture):  # noqa
         torch.manual_seed(1)
         in_keys = ["pixels"]
         out_keys = ["vec"]
