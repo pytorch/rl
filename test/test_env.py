@@ -254,7 +254,7 @@ def _make_envs(
                     GymEnv(env_name, frame_skip=frame_skip, device=device),
                     Compose(
                         ObservationNorm(
-                            keys_in=["next_observation"], loc=0.5, scale=1.1
+                            in_keys=["next_observation"], loc=0.5, scale=1.1
                         ),
                         RewardClipping(0, 0.1),
                     ),
@@ -275,7 +275,7 @@ def _make_envs(
                     Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
                     if not transformed_in
                     else Compose(
-                        *[ObservationNorm(keys_in=["next_pixels"], loc=0, scale=1)]
+                        *[ObservationNorm(in_keys=["next_pixels"], loc=0, scale=1)]
                     )
                 )
 
@@ -297,14 +297,14 @@ def _make_envs(
                 return (
                     Compose(
                         ObservationNorm(
-                            keys_in=["next_observation"], loc=0.5, scale=1.1
+                            in_keys=["next_observation"], loc=0.5, scale=1.1
                         ),
                         RewardClipping(0, 0.1),
                     )
                     if not transformed_in
                     else Compose(
                         ObservationNorm(
-                            keys_in=["next_observation"], loc=1.0, scale=1.0
+                            in_keys=["next_observation"], loc=1.0, scale=1.0
                         )
                     )
                 )
@@ -458,8 +458,8 @@ class TestParallel:
                     CatTensors(env1_obs_keys, "next_observation_stand", del_keys=False),
                     CatTensors(env1_obs_keys, "next_observation"),
                     DoubleToFloat(
-                        keys_in=["next_observation_stand", "next_observation"],
-                        keys_inv_in=["action"],
+                        in_keys=["next_observation_stand", "next_observation"],
+                        in_keys_inv=["action"],
                     ),
                 ),
             )
@@ -471,8 +471,8 @@ class TestParallel:
                     CatTensors(env2_obs_keys, "next_observation_walk", del_keys=False),
                     CatTensors(env2_obs_keys, "next_observation"),
                     DoubleToFloat(
-                        keys_in=["next_observation_walk", "next_observation"],
-                        keys_inv_in=["action"],
+                        in_keys=["next_observation_walk", "next_observation"],
+                        in_keys_inv=["action"],
                     ),
                 ),
             )
