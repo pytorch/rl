@@ -336,17 +336,21 @@ class VIPRewardTransform(VIPTransform):
         )
         return tensordict
 
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if "goal_embedding" not in tensordict.keys():
             tensordict = self._embed_goal(tensordict)
-        tensordict = super().forward(tensordict)
-        cur_embedding = tensordict.get(self.out_keys[0])
-        last_embedding_key = self.out_keys[0].split("next_")[1]
+        last_embedding_key = self.out_keys[0]
         last_embedding = tensordict.get(last_embedding_key, None)
+        tensordict = super()._step(tensordict)
+        cur_embedding = tensordict.get(self.out_keys[0])
         if last_embedding is not None:
             goal_embedding = tensordict["goal_embedding"]
             reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
                 -torch.norm(last_embedding - goal_embedding, dim=-1)
             )
             tensordict.set("reward", reward)
+        return tensordict
+
+    def forward(self, tensordict):
+        tensordict = super().forward(tensordict)
         return tensordict

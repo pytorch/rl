@@ -1689,6 +1689,7 @@ class TestVIP:
         del transformed_env
 
     def test_vip_parallel_reward(self, model, device):
+        torch.manual_seed(0)
         in_keys = ["pixels"]
         out_keys = ["vec"]
         tensor_pixels_key = None
@@ -1734,21 +1735,27 @@ class TestVIP:
             device=device,
         )
         td = transformed_env.rollout(
-            3, auto_reset=False, tensordict=transformed_env.reset(tensordict_reset)
+            5, auto_reset=False, tensordict=transformed_env.reset(tensordict_reset)
         )
         assert set(td.keys()) == exp_keys, td
         # test that we do compute the reward we want
         cur_embedding = td["next_vec"]
         goal_embedding = td["goal_embedding"]
         last_embedding = td["vec"]
-        explicit_reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
-            -torch.norm(last_embedding - goal_embedding, dim=-1)
-        )
-        torch.testing.assert_close(explicit_reward, td["reward"].squeeze())
+
         # test that there is only one goal embedding
         goal = td["goal_embedding"]
         goal_expand = td["goal_embedding"][:, :1].expand_as(td["goal_embedding"])
         torch.testing.assert_close(goal, goal_expand)
+
+        torch.testing.assert_close(cur_embedding[:, :-1], last_embedding[:, 1:])
+        with pytest.raises(AssertionError):
+            torch.testing.assert_close(cur_embedding[:, 1:], last_embedding[:, :-1])
+
+        explicit_reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
+            -torch.norm(last_embedding - goal_embedding, dim=-1)
+        )
+        torch.testing.assert_close(explicit_reward, td["reward"].squeeze())
 
         transformed_env.close()
         del transformed_env

@@ -431,6 +431,9 @@ but got an object of type {type(transform)}."""
         tensordict_out = self.base_env._step(tensordict_in)
         # tensordict should already have been processed by the transforms
         # for logging purposes
+        tensordict_out = tensordict_out.update(
+            tensordict.exclude(*tensordict_out.keys())
+        )
         next_tensordict = self.transform._step(tensordict_out)
         tensordict_out.update(next_tensordict, inplace=False)
 
@@ -443,9 +446,7 @@ but got an object of type {type(transform)}."""
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         if tensordict is not None:
             tensordict = tensordict.clone(recurse=False)
-        out_tensordict = self.base_env.reset(
-            tensordict=tensordict, **kwargs
-        )
+        out_tensordict = self.base_env.reset(tensordict=tensordict, **kwargs)
         out_tensordict = self.transform.reset(out_tensordict)
         out_tensordict = self.transform(out_tensordict)
         return out_tensordict
