@@ -12,9 +12,9 @@ from functools import wraps
 import pytest
 import torch.cuda
 from torchrl._utils import seed_generator
+from torchrl.data import CompositeSpec
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase
-from torchrl.data import CompositeSpec
 
 
 def get_relative_path(curr_file, *path_components):
@@ -70,9 +70,13 @@ def _check_dtype(key, value, obs_spec, input_spec):
                 raise KeyError(f"key '{_key}' is unknown.")
     else:
         if obs_spec is not None and "next_" + key in obs_spec.keys():
-            assert obs_spec["next_" + key].dtype is value.dtype, f"{obs_spec['next_' + key].dtype} vs {value.dtype} for {key}"
+            assert (
+                obs_spec["next_" + key].dtype is value.dtype
+            ), f"{obs_spec['next_' + key].dtype} vs {value.dtype} for {key}"
         elif input_spec is not None and key in input_spec.keys():
-            assert input_spec[key].dtype is value.dtype, f"{input_spec[key].dtype} vs {value.dtype} for {key}"
+            assert (
+                input_spec[key].dtype is value.dtype
+            ), f"{input_spec[key].dtype} vs {value.dtype} for {key}"
         else:
             assert key in {"done", "reward"}, (key, obs_spec, input_spec)
 

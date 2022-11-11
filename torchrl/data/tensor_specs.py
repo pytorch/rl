@@ -1044,8 +1044,8 @@ class DiscreteTensorSpec(TensorSpec):
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
-        return (torch.rand(*shape, *self.shape, device=self.device) * self.space.n).to(
-            torch.long
+        return torch.randint(
+            0, self.space.n, shape, *self.shape, device=self.device, dtype=self.dtype
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
@@ -1191,7 +1191,9 @@ dtype=torch.float32)},
             try:
                 out[key] = self[key].encode(item)
             except KeyError:
-                raise KeyError(f"The CompositeSpec instance with keys {self.keys()} does not have a '{key}' key.")
+                raise KeyError(
+                    f"The CompositeSpec instance with keys {self.keys()} does not have a '{key}' key."
+                )
         return out
 
     def __repr__(self) -> str:
