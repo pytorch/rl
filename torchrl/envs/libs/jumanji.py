@@ -136,7 +136,7 @@ def _jumanji_to_torchrl_input_spec_transform(
         ),
         action=_jumanji_to_torchrl_spec_transform(
             action_spec, dtype, device, categorical_action_encoding
-        )
+        ),
     )
     return input_spec
 
