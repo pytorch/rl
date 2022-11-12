@@ -27,3 +27,4 @@ ipython
 imageio
 imageio[ffmpeg]
 imageio[pyav]
+tensordict-nightly

@@ -3,6 +3,10 @@
 TorchRL envs
 ============================
 """
+import torch
+from matplotlib import pyplot as plt
+from tensordict import TensorDict
+
 ##############################################################################
 # Environments play a crucial role in RL settings, often somewhat similar to
 # datasets in supervised and unsupervised settings. The RL community has
@@ -27,9 +31,7 @@ TorchRL envs
 # With gym, it means that building an environment is as easy as:
 
 from torchrl.envs.libs.gym import GymEnv
-from matplotlib import pyplot as plt
-from torchrl.data import TensorDict
-import torch
+
 env = GymEnv("Pendulum-v1")
 
 ###############################################################################
@@ -86,9 +88,11 @@ print(tensordict)
 # We can now execute a step in the environment. Since we don't have a policy,
 # we can just generate a random action:
 
+
 def policy(tensordict):
     tensordict.set("action", env.action_spec.rand())
     return tensordict
+
 
 policy(tensordict)
 tensordict_out = env.step(tensordict)
@@ -123,7 +127,9 @@ tensordict.set("some other key", torch.randn(1))
 tensordict_tprime = step_mdp(tensordict)
 
 print(tensordict_tprime)
-print((tensordict_tprime.get("observation") == tensordict.get("next_observation")).all())
+print(
+    (tensordict_tprime.get("observation") == tensordict.get("next_observation")).all()
+)
 
 ###############################################################################
 # We can observe that step_mdp has removed all the time-dependent
@@ -150,7 +156,10 @@ print(tensordict_rollout)
 # length of the trajectory. We can check that the observation match their
 # next value:
 
-(tensordict_rollout.get("observation")[1:] == tensordict_rollout.get("next_observation")[:-1]).all()
+(
+    tensordict_rollout.get("observation")[1:]
+    == tensordict_rollout.get("next_observation")[:-1]
+).all()
 
 
 ###############################################################################
@@ -209,9 +218,11 @@ env.close()
 # Some environments only come in image-based format
 
 env = GymEnv("ALE/Pong-v5")
-print('from pixels: ', env.from_pixels)
-print('tensordict: ', env.reset())
+print("from pixels: ", env.from_pixels)
+print("tensordict: ", env.reset())
 env.close()
+
+from matplotlib import pyplot as plt
 
 ###############################################################################
 # DeepMind Control environments
@@ -223,15 +234,14 @@ env.close()
 # The ``available_envs`` now returns a dict of envs and possible tasks:
 
 from torchrl.envs.libs.dm_control import DMControlEnv
-from matplotlib import pyplot as plt
 
 DMControlEnv.available_envs
 
 ###############################################################################
 
-env = DMControlEnv('acrobot', 'swingup')
+env = DMControlEnv("acrobot", "swingup")
 tensordict = env.reset()
-print('result of reset: ', tensordict)
+print("result of reset: ", tensordict)
 env.close()
 
 ###############################################################################
@@ -239,11 +249,13 @@ env.close()
 
 from torchrl.envs.libs.dm_control import DMControlEnv
 
-env = DMControlEnv('acrobot', 'swingup', from_pixels=True, pixels_only=True)
+env = DMControlEnv("acrobot", "swingup", from_pixels=True, pixels_only=True)
 tensordict = env.reset()
-print('result of reset: ', tensordict)
+print("result of reset: ", tensordict)
 plt.imshow(tensordict.get("pixels").numpy())
 env.close()
+
+import torch
 
 ###############################################################################
 # Transforming envs
@@ -268,15 +280,14 @@ env.close()
 # built around a ``base_dist`` distribution and (a sequence of) ``transforms``.
 
 from torchrl.envs.libs.dm_control import DMControlEnv
-import torch
 from torchrl.envs.transforms import TransformedEnv, ToTensorImage
 
 # ToTensorImage transforms a numpy-like image into a tensor one,
-env = DMControlEnv('acrobot', 'swingup', from_pixels=True, pixels_only=True)
-print('reset before transform: ', env.reset())
+env = DMControlEnv("acrobot", "swingup", from_pixels=True, pixels_only=True)
+print("reset before transform: ", env.reset())
 
 env = TransformedEnv(env, ToTensorImage())
-print('reset after transform: ', env.reset())
+print("reset after transform: ", env.reset())
 env.close()
 
 ###############################################################################
@@ -284,7 +295,7 @@ env.close()
 
 from torchrl.envs.transforms import Compose, Resize
 
-env = DMControlEnv('acrobot', 'swingup', from_pixels=True, pixels_only=True)
+env = DMControlEnv("acrobot", "swingup", from_pixels=True, pixels_only=True)
 env = TransformedEnv(env, Compose(ToTensorImage(), Resize(32, 32)))
 env.reset()
 
@@ -292,26 +303,31 @@ env.reset()
 # Transforms can also be added one at a time:
 
 from torchrl.envs.transforms import GrayScale
+
 env.append_transform(GrayScale())
 env.reset()
 
 ###############################################################################
 # As expected, the metadata get updated too:
 
-print('original obs spec: ', env.base_env.observation_spec)
-print('current obs spec: ', env.observation_spec)
+print("original obs spec: ", env.base_env.observation_spec)
+print("current obs spec: ", env.observation_spec)
 
 ###############################################################################
 # We can also concatenate tensors if needed:
 
 from torchrl.envs.transforms import CatTensors
 
-env = DMControlEnv('acrobot', 'swingup')
+env = DMControlEnv("acrobot", "swingup")
 print("keys before concat: ", env.reset())
 
 # make sure to work with "next_key" as this is what step will return
-env = TransformedEnv(env, CatTensors(in_keys=["next_orientations", "next_velocity"],
-                                     out_key="next_observation"))
+env = TransformedEnv(
+    env,
+    CatTensors(
+        in_keys=["next_orientations", "next_velocity"], out_key="next_observation"
+    ),
+)
 print("keys after concat: ", env.reset())
 
 ###############################################################################
@@ -334,10 +350,13 @@ print("keys after concat: ", env.reset())
 # resets the parent environment before executing a certain number of steps
 # at random in that environment.
 
-env = DMControlEnv('acrobot', 'swingup')
+env = DMControlEnv("acrobot", "swingup")
 env = TransformedEnv(env)
-env.append_transform(CatTensors(in_keys=["next_orientations", "next_velocity"],
-                                out_key="next_observation"))
+env.append_transform(
+    CatTensors(
+        in_keys=["next_orientations", "next_velocity"], out_key="next_observation"
+    )
+)
 env.append_transform(GrayScale())
 
 print("env: \n", env)
@@ -364,12 +383,16 @@ import torch
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.transforms import CatTensors, GrayScale, TransformedEnv
 
-env = DMControlEnv('acrobot', 'swingup')
+env = DMControlEnv("acrobot", "swingup")
 env = TransformedEnv(env)
-env.append_transform(CatTensors(in_keys=["next_orientations", "next_velocity"], out_key="next_observation"))
+env.append_transform(
+    CatTensors(
+        in_keys=["next_orientations", "next_velocity"], out_key="next_observation"
+    )
+)
 
 if torch.has_cuda and torch.cuda.device_count():
-    env.to('cuda:0')
+    env.to("cuda:0")
     env.reset()
 
 ###############################################################################
@@ -386,7 +409,9 @@ from torchrl.envs.libs.gym import GymEnv
 
 env_make = lambda: GymEnv("Pendulum-v1")
 parallel_env = ParallelEnv(3, env_make)  # -> creates 3 envs in parallel
-parallel_env = ParallelEnv(3, [env_make, env_make, env_make])  # similar to the previous command
+parallel_env = ParallelEnv(
+    3, [env_make, env_make, env_make]
+)  # similar to the previous command
 
 ###############################################################################
 # The ``SerialEnv`` class is similar to the ``ParallelEnv`` except for the
@@ -434,6 +459,8 @@ parallel_env.close()
 out_seed = parallel_env.set_seed(10)
 print(out_seed)
 
+from time import sleep
+
 ###############################################################################
 # Accessing environment attributes
 # ---------------------------------
@@ -442,13 +469,15 @@ print(out_seed)
 # to access this attribute. Here's an example:
 
 from uuid import uuid1
-from time import sleep
+
 
 def env_make():
     env = GymEnv("Pendulum-v1")
     env._env.foo = f"bar_{uuid1()}"
-    env._env.get_something = lambda r: r+1
+    env._env.get_something = lambda r: r + 1
     return env
+
+
 env = env_make()
 
 ###############################################################################
@@ -487,6 +516,8 @@ print(something)
 
 parallel_env.close()
 
+from matplotlib import pyplot as plt
+
 ###############################################################################
 # kwargs for parallel environments
 # ---------------------------------
@@ -497,15 +528,21 @@ parallel_env.close()
 
 from torchrl.envs import ParallelEnv, TransformedEnv, ToTensorImage, Resize, Compose
 from torchrl.envs.libs.gym import GymEnv
-from matplotlib import pyplot as plt
+
 
 def env_make(env_name):
-    env = TransformedEnv(GymEnv(env_name, from_pixels=True, pixels_only=True),
-                         Compose(ToTensorImage(), Resize(64, 64)))
+    env = TransformedEnv(
+        GymEnv(env_name, from_pixels=True, pixels_only=True),
+        Compose(ToTensorImage(), Resize(64, 64)),
+    )
     return env
 
-parallel_env = ParallelEnv(2, [env_make, env_make],
-                           [{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}])
+
+parallel_env = ParallelEnv(
+    2,
+    [env_make, env_make],
+    [{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
+)
 tensordict = parallel_env.reset()
 
 plt.figure()
@@ -514,6 +551,8 @@ plt.imshow(tensordict[0].get("pixels").permute(1, 2, 0).numpy())
 plt.subplot(122)
 plt.imshow(tensordict[1].get("pixels").permute(1, 2, 0).numpy())
 parallel_env.close()
+
+from matplotlib import pyplot as plt
 
 ###############################################################################
 # Transforming parallel environments
@@ -524,17 +563,30 @@ parallel_env.close()
 # device capabilities (e.g. transforms on cuda devices) and vectorizing
 # operations on the main process if possible.
 
-from torchrl.envs import ParallelEnv, TransformedEnv, ToTensorImage, Resize, Compose, GrayScale
+from torchrl.envs import (
+    ParallelEnv,
+    TransformedEnv,
+    ToTensorImage,
+    Resize,
+    Compose,
+    GrayScale,
+)
 from torchrl.envs.libs.gym import GymEnv
-from matplotlib import pyplot as plt
+
 
 def env_make(env_name):
-    env = TransformedEnv(GymEnv(env_name, from_pixels=True, pixels_only=True),
-                         Compose(ToTensorImage(), Resize(64, 64)))  # transforms on remote processes
+    env = TransformedEnv(
+        GymEnv(env_name, from_pixels=True, pixels_only=True),
+        Compose(ToTensorImage(), Resize(64, 64)),
+    )  # transforms on remote processes
     return env
 
-parallel_env = ParallelEnv(2, [env_make, env_make],
-                           [{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}])
+
+parallel_env = ParallelEnv(
+    2,
+    [env_make, env_make],
+    [{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
+)
 parallel_env = TransformedEnv(parallel_env, GrayScale())  # transforms on main process
 tensordict = parallel_env.reset()
 
@@ -591,13 +643,13 @@ from torchrl.envs.transforms import VecNorm, TransformedEnv
 
 make_env = EnvCreator(lambda: TransformedEnv(GymEnv("CartPole-v1"), VecNorm(decay=1.0)))
 env = ParallelEnv(3, make_env)
-make_env.state_dict()['_extra_state']['td']["next_observation_count"].fill_(0.0)
-make_env.state_dict()['_extra_state']['td']["next_observation_ssq"].fill_(0.0)
-make_env.state_dict()['_extra_state']['td']["next_observation_sum"].fill_(0.0)
+make_env.state_dict()["_extra_state"]["td"]["next_observation_count"].fill_(0.0)
+make_env.state_dict()["_extra_state"]["td"]["next_observation_ssq"].fill_(0.0)
+make_env.state_dict()["_extra_state"]["td"]["next_observation_sum"].fill_(0.0)
 
 tensordict = env.rollout(max_steps=5)
 
-print('tensordict: ', tensordict)
+print("tensordict: ", tensordict)
 print("mean: :", tensordict.get("observation").view(-1, 3).mean(0))  # Approx 0
 print("std: :", tensordict.get("observation").view(-1, 3).std(0))  # Approx 1
 
@@ -608,7 +660,9 @@ print("std: :", tensordict.get("observation").view(-1, 3).std(0))  # Approx 1
 # ``TensorDict`` that is used to collect data from the dispached environments.
 # This small difference will usually be absored throughout training.
 
-print("update counts: ",
-      make_env.state_dict()['_extra_state']['td']["next_observation_count"])
+print(
+    "update counts: ",
+    make_env.state_dict()["_extra_state"]["td"]["next_observation_count"],
+)
 
 env.close()

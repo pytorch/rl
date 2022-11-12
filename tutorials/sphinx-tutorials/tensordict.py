@@ -121,11 +121,11 @@ import torch
 # ``TensorDict`` structure
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-from torchrl.data import TensorDict
-from torchrl.data.tensordict.tensordict import (
+from tensordict.tensordict import (
     UnsqueezedTensorDict,
-    _ViewedTensorDict,
+    ViewedTensorDict,
     PermutedTensorDict,
+    TensorDict,
 )
 
 ###############################################################################
@@ -432,10 +432,10 @@ assert torch.cat(list_tensordict, dim=0).shape[0] == 12
 ###############################################################################
 # **View**
 #
-# Support for the view operation returning a ``_ViewedTensorDict``.
+# Support for the view operation returning a ``ViewedTensorDict``.
 # Use ``to_tensordict`` to comeback to retrieve TensorDict.
 
-assert type(tensordict.view(-1)) == _ViewedTensorDict
+assert type(tensordict.view(-1)) == ViewedTensorDict
 assert tensordict.view(-1).shape[0] == 12
 
 ###############################################################################

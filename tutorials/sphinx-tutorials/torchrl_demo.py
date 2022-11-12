@@ -45,7 +45,7 @@ This demo was presented at ICML 2022 on the industry demo day.
 # ------------------------------
 
 import torch
-from torchrl.data import TensorDict
+from tensordict import TensorDict
 
 ###############################################################################
 # Let's create a TensorDict.
@@ -409,7 +409,7 @@ actor = Actor(base_module, in_keys=["obs"])
 tensordict = TensorDict({"obs": torch.randn(5)}, batch_size=[])
 actor(tensordict)  # action is the default value
 
-from torchrl.data import TensorDict
+from tensordict import TensorDict
 
 ###############################################################################
 
@@ -605,8 +605,8 @@ print(i)
 del collector
 
 import torch
+from tensordict import TensorDict
 from torch import nn
-from torchrl.data import TensorDict
 from torchrl.modules import TensorDictModule
 
 ###############################################################################

@@ -41,7 +41,6 @@ import tqdm
 from matplotlib import pyplot as plt
 from torch import nn
 from torch import optim
-
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import CompositeSpec
 from torchrl.data import (
@@ -96,6 +95,7 @@ from torchrl.trainers.helpers.envs import (
 # ``from_pixels=True`` which is passed when calling ``GymEnv`` or
 # ``DMControlEnv``.
 
+
 def make_env():
     """
     Create a base env
@@ -110,11 +110,10 @@ def make_env():
         env_library = DMControlEnv
     elif backend == "gym":
         env_name = "HalfCheetah-v4"
-        env_args = (env_name, )
+        env_args = (env_name,)
         env_library = GymEnv
     else:
         raise NotImplementedError
-
 
     env_kwargs = {
         "device": device,
@@ -124,6 +123,7 @@ def make_env():
     }
     env = env_library(*env_args, **env_kwargs)
     return env
+
 
 ###############################################################################
 # Transforms
@@ -140,8 +140,10 @@ def make_env():
 # We also leave the possibility to normalize the states: we will take care of
 # computing the normalizing constants later on.
 
+
 def make_transformed_env(
-    env, stats=None,
+    env,
+    stats=None,
 ):
     """
     Apply transforms to the env (such as reward scaling and state normalization)
@@ -160,7 +162,6 @@ def make_transformed_env(
             "reward",
         ]
         double_to_float_inv_list += ["action"]
-
 
     # We concatenate all states into a single "next_observation_vector"
     # even if there is a single tensor, it'll be renamed in "next_observation_vector".
@@ -186,8 +187,8 @@ def make_transformed_env(
         )
     )
 
-
     return env
+
 
 ###############################################################################
 # Parallel execution
@@ -197,6 +198,7 @@ def make_transformed_env(
 # execute the transform in the main process, or execute the transforms in
 # parallel. To leverage the vectorization capabilities of PyTorch, we adopt
 # the first method:
+
 
 def parallel_env_constructor(
     stats,
@@ -217,6 +219,7 @@ def parallel_env_constructor(
     env = make_transformed_env(parallel_env, stats, **env_kwargs)
     return env
 
+
 ###############################################################################
 # Normalization of the observations
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -224,9 +227,8 @@ def parallel_env_constructor(
 # steps in the environment and compute the mean and standard deviation of the
 # collected observations:
 
-def get_stats_random_rollout(
-    proof_environment, key: Optional[str] = None
-):
+
+def get_stats_random_rollout(proof_environment, key: Optional[str] = None):
     print("computing state stats")
     n = 0
     td_stats = []
@@ -276,23 +278,25 @@ def get_env_stats():
     proof_env = make_transformed_env(make_env(), None)
     proof_env.set_seed(seed)
     stats = get_stats_random_rollout(
-        proof_env, key="next_observation_vector",
+        proof_env,
+        key="next_observation_vector",
     )
     # make sure proof_env is closed
     proof_env.close()
     return stats
+
 
 ###############################################################################
 # Building the model
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # Let us now build the DDPG actor and QValue network.
 
+
 def make_ddpg_actor(
     stats,
     device="cpu",
 ):
     proof_environment = make_transformed_env(make_env(), stats)
-
 
     env_specs = proof_environment.specs
     out_features = env_specs["action_spec"].shape[0]
@@ -343,6 +347,7 @@ def make_ddpg_actor(
 
     return actor, qnet
 
+
 ###############################################################################
 # Evaluator: building your recorder object
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -351,6 +356,7 @@ def make_ddpg_actor(
 # do this using a dedicated class, ``Recorder``, which executes the policy in
 # the environment at a given frequency and returns some statistics obtained
 # from these simulations. The following helper function builds this object:
+
 
 def make_recorder(actor_model_explore, stats):
     base_env = make_env()
@@ -366,6 +372,7 @@ def make_recorder(actor_model_explore, stats):
     )
     return recorder_obj
 
+
 ###############################################################################
 # Replay buffer
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -378,34 +385,36 @@ def make_recorder(actor_model_explore, stats):
 # function takes care of creating the replay buffer with the desired
 # hyperparameters:
 
+
 def make_replay_buffer(make_replay_buffer=3):
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
+            buffer_size,
+            alpha=0.7,
+            beta=0.5,
+            collate_fn=lambda x: x,
+            pin_memory=False,
+            prefetch=make_replay_buffer,
+            storage=LazyMemmapStorage(
                 buffer_size,
-                alpha=0.7,
-                beta=0.5,
-                collate_fn=lambda x: x,
-                pin_memory=False,
-                prefetch=make_replay_buffer,
-                storage=LazyMemmapStorage(
-                    buffer_size,
-                    scratch_dir=buffer_scratch_dir,
-                    device=device,
-                ),
-            )
+                scratch_dir=buffer_scratch_dir,
+                device=device,
+            ),
+        )
     else:
         replay_buffer = TensorDictReplayBuffer(
+            buffer_size,
+            collate_fn=lambda x: x,
+            pin_memory=False,
+            prefetch=make_replay_buffer,
+            storage=LazyMemmapStorage(
                 buffer_size,
-                collate_fn=lambda x: x,
-                pin_memory=False,
-                prefetch=make_replay_buffer,
-                storage=LazyMemmapStorage(
-                    buffer_size,
-                    scratch_dir=buffer_scratch_dir,
-                    device=device,
-                ),
-            )
+                scratch_dir=buffer_scratch_dir,
+                device=device,
+            ),
+        )
     return replay_buffer
+
 
 ###############################################################################
 # Hyperparameters
@@ -420,9 +429,7 @@ reward_scaling = 5.0
 
 # execute on cuda if available
 device = (
-    torch.device("cpu")
-    if torch.cuda.device_count() == 0
-    else torch.device("cuda:0")
+    torch.device("cpu") if torch.cuda.device_count() == 0 else torch.device("cuda:0")
 )
 
 init_env_steps = 1000  # number of random steps used as for stats computation
@@ -432,18 +439,24 @@ env_library = None  # overwritten because global in env maker
 env_name = None  # overwritten because global in env maker
 
 exp_name = "cheetah"
-annealing_frames = 1000000 // frame_skip  # Number of frames before OU noise becomes null
-lr=5e-4
+annealing_frames = (
+    1000000 // frame_skip
+)  # Number of frames before OU noise becomes null
+lr = 5e-4
 weight_decay = 0.0
-total_frames = 1000000 // frame_skip
-init_random_frames = 5000 // frame_skip   # Number of random frames used as warm-up
+total_frames = 5000 // frame_skip
+# total_frames = 1000000 // frame_skip
+init_random_frames = 0
+# init_random_frames = 5000 // frame_skip   # Number of random frames used as warm-up
 optim_steps_per_batch = 32  # Number of iterations of the inner loop
 batch_size = 128
-frames_per_batch = 1000 // frame_skip    # Number of frames returned by the collector at each iteration of the outer loop
+frames_per_batch = (
+    1000 // frame_skip
+)  # Number of frames returned by the collector at each iteration of the outer loop
 gamma = 0.99
-tau = 0.005    # Decay factor for the target network
-prb = True    # If True, a Prioritized replay buffer will be used
-buffer_size = 1000000 // frame_skip    # Number of frames stored in the buffer
+tau = 0.005  # Decay factor for the target network
+prb = True  # If True, a Prioritized replay buffer will be used
+buffer_size = 1000000 // frame_skip  # Number of frames stored in the buffer
 buffer_scratch_dir = "/tmp/"
 n_steps_forward = 3
 
@@ -519,21 +532,22 @@ create_env_fn = parallel_env_constructor(
 # Batch collector:
 collector = MultiaSyncDataCollector(
     create_env_fn=[create_env_fn, create_env_fn],
-    policy = actor_model_explore,
-    total_frames = total_frames,
-    max_frames_per_traj = 1000,
-    frames_per_batch = frames_per_batch,
-    init_random_frames = init_random_frames,
-    reset_at_each_iter = False,
-    postproc = MultiStep(n_steps_max=n_steps_forward,
-                         gamma=gamma) if n_steps_forward > 0 else None,
-    split_trajs = True,
-    devices = [device, device],  # device for execution
-    passing_devices = [device, device],  # device where data will be stored and passed
-    seed = None,
-    pin_memory = False,
-    update_at_each_batch = False,
-    exploration_mode = "random",
+    policy=actor_model_explore,
+    total_frames=total_frames,
+    max_frames_per_traj=1000,
+    frames_per_batch=frames_per_batch,
+    init_random_frames=init_random_frames,
+    reset_at_each_iter=False,
+    postproc=MultiStep(n_steps_max=n_steps_forward, gamma=gamma)
+    if n_steps_forward > 0
+    else None,
+    split_trajs=True,
+    devices=[device, device],  # device for execution
+    passing_devices=[device, device],  # device where data will be stored and passed
+    seed=None,
+    pin_memory=False,
+    update_at_each_batch=False,
+    exploration_mode="random",
 )
 collector.set_seed(seed)
 
@@ -551,16 +565,16 @@ recorder = make_recorder(actor_model_explore, stats)
 # with the same learning rate for both.
 
 # Optimizers
-optimizer_actor = optim.Adam(
-    actor.parameters(), lr=lr, weight_decay=weight_decay
-)
-optimizer_qnet = optim.Adam(
-    qnet.parameters(), lr=lr, weight_decay=weight_decay
-)
+optimizer_actor = optim.Adam(actor.parameters(), lr=lr, weight_decay=weight_decay)
+optimizer_qnet = optim.Adam(qnet.parameters(), lr=lr, weight_decay=weight_decay)
 total_collection_steps = total_frames // frames_per_batch
 
-scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_actor, T_max=total_collection_steps)
-scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_qnet, T_max=total_collection_steps)
+scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(
+    optimizer_actor, T_max=total_collection_steps
+)
+scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(
+    optimizer_qnet, T_max=total_collection_steps
+)
 
 ###############################################################################
 # Time to train the policy!
@@ -608,7 +622,9 @@ rewards = []
 rewards_eval = []
 
 # Main loop
-norm_factor_training = sum(gamma**i for i in range(n_steps_forward)) if n_steps_forward else 1
+norm_factor_training = (
+    sum(gamma ** i for i in range(n_steps_forward)) if n_steps_forward else 1
+)
 
 collected_frames = 0
 pbar = tqdm.tqdm(total=total_frames)
@@ -681,12 +697,16 @@ for i, tensordict in enumerate(collector):
             if prb:
                 replay_buffer.update_priority(sampled_tensordict)
 
-    rewards.append((i, tensordict['reward'].mean().item() / norm_factor_training / frame_skip))
+    rewards.append(
+        (i, tensordict["reward"].mean().item() / norm_factor_training / frame_skip)
+    )
     td_record = recorder(None)
     if td_record is not None:
         rewards_eval.append((i, td_record["r_evaluation"]))
     if len(rewards_eval):
-        pbar.set_description(f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f}), reward eval: reward: {rewards_eval[-1][1]: 4.4f}")
+        pbar.set_description(
+            f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f}), reward eval: reward: {rewards_eval[-1][1]: 4.4f}"
+        )
 
     # update the exploration strategy
     actor_model_explore.step(current_frames)
@@ -770,20 +790,22 @@ create_env_fn = parallel_env_constructor(
 # Batch collector:
 collector = MultiaSyncDataCollector(
     create_env_fn=[create_env_fn, create_env_fn],
-    policy = actor_model_explore,
-    total_frames = total_frames,
-    max_frames_per_traj = 1000,
-    frames_per_batch = frames_per_batch,
-    init_random_frames = init_random_frames,
-    reset_at_each_iter = False,
-    postproc = MultiStep(n_steps_max=n_steps_forward, gamma=gamma) if n_steps_forward > 0 else None,
-    split_trajs = True,
-    devices = [device, device],  # device for execution
-    passing_devices = [device, device],  # device where data will be stored and passed
-    seed = None,
-    pin_memory = False,
-    update_at_each_batch = False,
-    exploration_mode = "random",
+    policy=actor_model_explore,
+    total_frames=total_frames,
+    max_frames_per_traj=1000,
+    frames_per_batch=frames_per_batch,
+    init_random_frames=init_random_frames,
+    reset_at_each_iter=False,
+    postproc=MultiStep(n_steps_max=n_steps_forward, gamma=gamma)
+    if n_steps_forward > 0
+    else None,
+    split_trajs=True,
+    devices=[device, device],  # device for execution
+    passing_devices=[device, device],  # device where data will be stored and passed
+    seed=None,
+    pin_memory=False,
+    update_at_each_batch=False,
+    exploration_mode="random",
 )
 collector.set_seed(seed)
 
@@ -795,16 +817,16 @@ recorder = make_recorder(actor_model_explore, stats)
 
 
 # Optimizers
-optimizer_actor = optim.Adam(
-    actor.parameters(), lr=lr, weight_decay=weight_decay
-)
-optimizer_qnet = optim.Adam(
-    qnet.parameters(), lr=lr, weight_decay=weight_decay
-)
+optimizer_actor = optim.Adam(actor.parameters(), lr=lr, weight_decay=weight_decay)
+optimizer_qnet = optim.Adam(qnet.parameters(), lr=lr, weight_decay=weight_decay)
 total_collection_steps = total_frames // frames_per_batch
 
-scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_actor, T_max=total_collection_steps)
-scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_qnet, T_max=total_collection_steps)
+scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(
+    optimizer_actor, T_max=total_collection_steps
+)
+scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(
+    optimizer_qnet, T_max=total_collection_steps
+)
 
 ###############################################################################
 # The training loop needs to be modified. First, whereas before extending the
@@ -822,6 +844,7 @@ for data in collector:
 # Let's import the td_lambda function
 
 from torchrl.objectives.value.functional import vec_td_lambda_advantage_estimate
+
 lmbda = 0.95
 
 ###############################################################################
@@ -845,7 +868,9 @@ rewards = []
 rewards_eval = []
 
 # Main loop
-norm_factor_training = sum(gamma**i for i in range(n_steps_forward)) if n_steps_forward else 1
+norm_factor_training = (
+    sum(gamma ** i for i in range(n_steps_forward)) if n_steps_forward else 1
+)
 
 collected_frames = 0
 # # if tqdm is to be used
@@ -858,10 +883,12 @@ for i, tensordict in enumerate(collector):
 
     if r0 is None:
         r0 = tensordict["reward"].mean().item()
-#     pbar.update(tensordict.numel())
+    #     pbar.update(tensordict.numel())
 
     # extend the replay buffer with the new data
-    tensordict.batch_size = tensordict.batch_size[:1]  # this is necessary for prioritized replay buffers: we will assign one priority value to each element, hence the batch_size must comply with the number of priority values
+    tensordict.batch_size = tensordict.batch_size[
+        :1
+    ]  # this is necessary for prioritized replay buffers: we will assign one priority value to each element, hence the batch_size must comply with the number of priority values
     current_frames = tensordict.numel()
     collected_frames += tensordict["mask"].sum()
     replay_buffer.extend(tensordict.cpu())
@@ -880,15 +907,21 @@ for i, tensordict in enumerate(collector):
             with hold_out_net(actor):
                 # get next state value
                 next_tensordict = step_mdp(sampled_tensordict)
-                qnet_target(actor(next_tensordict.view(-1))).view(sampled_tensordict.shape)
+                qnet_target(actor(next_tensordict.view(-1))).view(
+                    sampled_tensordict.shape
+                )
                 next_value = next_tensordict["state_action_value"]
                 assert not next_value.requires_grad
 
             # This is the crucial bit: we'll compute the TD(lambda) instead of a simple single step estimate
             done = sampled_tensordict["done"]
             reward = sampled_tensordict["reward"]
-            value = qnet(sampled_tensordict.view(-1)).view(sampled_tensordict.shape)["state_action_value"]
-            advantage = vec_td_lambda_advantage_estimate(gamma, lmbda, value, next_value, reward, done)
+            value = qnet(sampled_tensordict.view(-1)).view(sampled_tensordict.shape)[
+                "state_action_value"
+            ]
+            advantage = vec_td_lambda_advantage_estimate(
+                gamma, lmbda, value, next_value, reward, done
+            )
             # we sample from the values we have computed
             rand_idx = torch.randint(0, advantage.numel(), (batch_size,))
             value_loss = advantage.view(-1)[rand_idx].pow(2).mean()
@@ -904,7 +937,9 @@ for i, tensordict in enumerate(collector):
             # compute loss for actor and backprop: the actor must maximise the state-action value, hence the loss is the neg value of this.
             sampled_tensordict_actor = sampled_tensordict.select(*actor.in_keys)
             with hold_out_net(qnet):
-                qnet(actor(sampled_tensordict_actor.view(-1))).view(sampled_tensordict.shape)
+                qnet(actor(sampled_tensordict_actor.view(-1))).view(
+                    sampled_tensordict.shape
+                )
             actor_loss = -sampled_tensordict_actor["state_action_value"]
             actor_loss.view(-1)[rand_idx].mean().backward()
 
@@ -924,12 +959,14 @@ for i, tensordict in enumerate(collector):
             if prb:
                 replay_buffer.update_priority(sampled_tensordict)
 
-    rewards.append((i, tensordict['reward'].mean().item() / norm_factor_training / frame_skip))
+    rewards.append(
+        (i, tensordict["reward"].mean().item() / norm_factor_training / frame_skip)
+    )
     td_record = recorder(None)
     if td_record is not None:
         rewards_eval.append((i, td_record["r_evaluation"]))
-#     if len(rewards_eval):
-#         pbar.set_description(f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f}), reward eval: reward: {rewards_eval[-1][1]: 4.4f}")
+    #     if len(rewards_eval):
+    #         pbar.set_description(f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f}), reward eval: reward: {rewards_eval[-1][1]: 4.4f}")
 
     # update the exploration strategy
     actor_model_explore.step(current_frames)

@@ -16,7 +16,7 @@ We recommand reading the TensorDict tutorial before going through this one.
 
 import torch
 import torch.nn as nn
-from torchrl.data import TensorDict
+from tensordict import TensorDict
 from torchrl.modules import TensorDictModule, TensorDictSequential
 
 ###############################################################################

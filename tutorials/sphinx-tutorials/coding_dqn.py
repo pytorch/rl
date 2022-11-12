@@ -3,6 +3,8 @@
 Coding a pixel-based DQN using TorchRL
 =======================================
 """
+import imageio
+
 ##############################################################################
 # This tutorial will guide you through the steps to code DQN to solve the
 # CartPole task from scratch. DQN
@@ -42,34 +44,41 @@ Coding a pixel-based DQN using TorchRL
 import torch
 import tqdm
 from IPython import display
+from IPython.display import Video
 from matplotlib import pyplot as plt
+from tensordict import TensorDict
 from torch import nn
-
 from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.data import TensorDict, TensorDictReplayBuffer, LazyMemmapStorage
+from torchrl.data import TensorDictReplayBuffer, LazyMemmapStorage
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import TransformedEnv, ToTensorImage, Compose, \
-    GrayScale, CatFrames, ObservationNorm, Resize, CatTensors
+from torchrl.envs.transforms import (
+    TransformedEnv,
+    ToTensorImage,
+    Compose,
+    GrayScale,
+    CatFrames,
+    ObservationNorm,
+    Resize,
+    CatTensors,
+)
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import QValueActor, EGreedyWrapper, DuelingCnnDQNet
-
-import imageio
-from IPython.display import Video
 
 
 def is_notebook() -> bool:
     try:
         shell = get_ipython().__class__.__name__
-        if shell == 'ZMQInteractiveShell':
-            return True   # Jupyter notebook or qtconsole
-        elif shell == 'TerminalInteractiveShell':
+        if shell == "ZMQInteractiveShell":
+            return True  # Jupyter notebook or qtconsole
+        elif shell == "TerminalInteractiveShell":
             return False  # Terminal running IPython
         else:
             return False  # Other type (?)
     except NameError:
-        return False      # Probably standard Python interpreter
+        return False  # Probably standard Python interpreter
+
 
 ###############################################################################
 # Hyperparameters
@@ -92,7 +101,8 @@ lmbda = 0.95
 # This is harder to do with our data collectors since they return batches of N collected frames, where N is a constant.
 # However, one can easily get the same restriction on number of episodes by breaking the training loop when a certain number
 # episodes has been collected.
-total_frames = 500000
+total_frames = 5000
+# total_frames = 500000
 # Random frames used to initialize the replay buffer.
 init_random_frames = 500
 # Frames in each batch collected.
@@ -130,15 +140,22 @@ init_bias = 20.0
 # - mean and standard deviation: we normalize the observations (images)
 #   with two parameters computed from a random rollout in the environment.
 
+
 def make_env(parallel=False, m=0, s=1):
 
     if parallel:
         base_env = ParallelEnv(
             n_workers,
-            EnvCreator(lambda: GymEnv("CartPole-v1", from_pixels=True, pixels_only=True, device=device))
+            EnvCreator(
+                lambda: GymEnv(
+                    "CartPole-v1", from_pixels=True, pixels_only=True, device=device
+                )
+            ),
         )
     else:
-        base_env = GymEnv("CartPole-v1", from_pixels=True, pixels_only=True, device=device)
+        base_env = GymEnv(
+            "CartPole-v1", from_pixels=True, pixels_only=True, device=device
+        )
 
     env = TransformedEnv(
         base_env,
@@ -146,10 +163,14 @@ def make_env(parallel=False, m=0, s=1):
             ToTensorImage(),
             GrayScale(),
             Resize(64, 64),
-            ObservationNorm(in_keys=["next_pixels"], loc=m, scale=s, standard_normal=True),
+            ObservationNorm(
+                in_keys=["next_pixels"], loc=m, scale=s, standard_normal=True
+            ),
             CatFrames(4, in_keys=["next_pixels"]),
-        ))
+        ),
+    )
     return env
+
 
 ###############################################################################
 # Compute normalizing constants:
@@ -171,8 +192,9 @@ m, s
 # *direction on the cart.*
 
 # we add a CatTensors transform to copy the "next_pixels" before it's being replaced by its grayscale, resized version
-dummy_env.transform.insert(0, CatTensors(["next_pixels"],
-                           "next_pixels_save", del_keys=False))
+dummy_env.transform.insert(
+    0, CatTensors(["next_pixels"], "next_pixels_save", del_keys=False)
+)
 # we omit the policy from the rollout call: this will generate random actions from the env.action_spec attribute
 eval_rollout = dummy_env.rollout(max_steps=10000).cpu()
 
@@ -195,25 +217,30 @@ eval_rollout = dummy_env.rollout(max_steps=10000).cpu()
 # values, pick up the one with the maximum value and write all those results
 # in the input ``TensorDict``.
 
+
 def make_model():
     cnn_kwargs = {
-    "num_cells": [32, 64, 64],
+        "num_cells": [32, 64, 64],
         "kernel_sizes": [6, 4, 3],
         "strides": [2, 2, 1],
         "activation_class": nn.ELU,
         "squeeze_output": True,
         "aggregator_class": nn.AdaptiveAvgPool2d,
-        "aggregator_kwargs": {"output_size": (1, 1)}
+        "aggregator_kwargs": {"output_size": (1, 1)},
     }
     mlp_kwargs = {
         "depth": 2,
-        "num_cells": [64, 64, ],
+        "num_cells": [
+            64,
+            64,
+        ],
         # "out_features": dummy_env.action_spec.shape[-1],
-        "activation_class": nn.ELU
+        "activation_class": nn.ELU,
     }
-    net = DuelingCnnDQNet(dummy_env.action_spec.shape[-1], 1, cnn_kwargs, mlp_kwargs).to(device)
+    net = DuelingCnnDQNet(
+        dummy_env.action_spec.shape[-1], 1, cnn_kwargs, mlp_kwargs
+    ).to(device)
     net.value[-1].bias.data.fill_(init_bias)
-
 
     actor = QValueActor(net, in_keys=["pixels"], spec=dummy_env.action_spec).to(device)
     # init actor
@@ -226,15 +253,26 @@ def make_model():
     factor, (_, buffers) = actor.make_functional_with_buffers(clone=True, native=True)
     # making functional creates a copy of the params, which we don't want (i.e. we want the parameters from `actor` to match those in the params object),
     # hence we create the params object in a second step
-    params = TensorDict({k: v for k, v in net.named_parameters()}, []).unflatten_keys(".")
+    params = TensorDict({k: v for k, v in net.named_parameters()}, []).unflatten_keys(
+        "."
+    )
 
     # creating the target parameters is fairly easy with tensordict:
-    params_target, buffers_target = params.to_tensordict().detach(), buffers.to_tensordict().detach()
+    params_target, buffers_target = (
+        params.to_tensordict().detach(),
+        buffers.to_tensordict().detach(),
+    )
 
     # we wrap our actor in an EGreedyWrapper for data collection
-    actor_explore = EGreedyWrapper(actor, annealing_num_steps=total_frames, eps_init=eps_greedy_val, eps_end=eps_greedy_val_env)
+    actor_explore = EGreedyWrapper(
+        actor,
+        annealing_num_steps=total_frames,
+        eps_init=eps_greedy_val,
+        eps_end=eps_greedy_val_env,
+    )
 
     return factor, actor, actor_explore, params, buffers, params_target, buffers_target
+
 
 ###############################################################################
 # When creating the model, we initialize the network with an environment reset.
@@ -242,7 +280,15 @@ def make_model():
 # ``QValueActor`` (pay attention to the keys ``action``, ``action_value`` and
 # ``chosen_action_value`` after calling the policy).
 
-factor, actor, actor_explore, params, buffers, params_target, buffers_target = make_model()
+(
+    factor,
+    actor,
+    actor_explore,
+    params,
+    buffers,
+    params_target,
+    buffers_target,
+) = make_model()
 params_flat = params.flatten_keys(".")
 buffers_flat = buffers.flatten_keys(".")
 params_target_flat = params_target.flatten_keys(".")
@@ -272,7 +318,10 @@ replay_buffer = TensorDictReplayBuffer(
 ###############################################################################
 
 data_collector = MultiaSyncDataCollector(
-    [make_env(True, m=m, s=s), make_env(True, m=m, s=s)],  # 2 collectors, each with an set of `num_workers` environments being run in parallel
+    [
+        make_env(True, m=m, s=s),
+        make_env(True, m=m, s=s),
+    ],  # 2 collectors, each with an set of `num_workers` environments being run in parallel
     policy=actor_explore,
     frames_per_batch=frames_per_batch,
     total_frames=total_frames,
@@ -327,7 +376,9 @@ for j, data in enumerate(data_collector):
     if sum(frames) > init_random_frames:
         for i in range(n_optim):
             # sample from the RB and send to device
-            sampled_data = replay_buffer.sample(batch_size).to(device, non_blocking=True)
+            sampled_data = replay_buffer.sample(batch_size).to(
+                device, non_blocking=True
+            )
 
             # collect data from RB
             reward = sampled_data["reward"].squeeze(-1)
@@ -345,7 +396,7 @@ for j, data in enumerate(data_collector):
                 next_value = factor(
                     tdstep.select(*actor.in_keys),
                     params=params_target,
-                    buffers=buffers_target
+                    buffers=buffers_target,
                 )["chosen_action_value"].squeeze(-1)
                 exp_value = reward + gamma * next_value * (1 - done)
             assert exp_value.shape == action_value.shape
@@ -362,12 +413,14 @@ for j, data in enumerate(data_collector):
             # update of the target parameters
             for (key, p1) in params_flat.items():
                 p2 = params_target_flat[key]
-                params_target_flat.set_(key, tau * p1.data + (1-tau) * p2.data)
+                params_target_flat.set_(key, tau * p1.data + (1 - tau) * p2.data)
             for (key, p1) in buffers_flat.items():
                 p2 = buffers_target_flat[key]
-                buffers_target_flat.set_(key, tau * p1.data + (1-tau) * p2.data)
+                buffers_target_flat.set_(key, tau * p1.data + (1 - tau) * p2.data)
 
-        pbar.set_description(f"error: {error: 4.4f}, value: {action_value.mean(): 4.4f}")
+        pbar.set_description(
+            f"error: {error: 4.4f}, value: {action_value.mean(): 4.4f}"
+        )
         actor_explore.step(current_frames)
 
         # logs
@@ -378,7 +431,7 @@ for j, data in enumerate(data_collector):
         traj_lengths_eval.append(eval_rollout.shape[-1])
         evals.append(eval_rollout["reward"].squeeze(-1).sum(-1).item())
         if len(mavgs):
-            mavgs.append(evals[-1]*0.05 + mavgs[-1]*0.95)
+            mavgs.append(evals[-1] * 0.05 + mavgs[-1] * 0.95)
         else:
             mavgs.append(evals[-1])
         losses.append(error.item())
@@ -393,31 +446,31 @@ for j, data in enumerate(data_collector):
             else:
                 plt.clf()
             plt.figure(figsize=(15, 15))
-            plt.subplot(3,2,1)
-            plt.plot(frames[-len(evals):], evals, label="return")
-            plt.plot(frames[-len(mavgs):], mavgs, label="mavg")
+            plt.subplot(3, 2, 1)
+            plt.plot(frames[-len(evals) :], evals, label="return")
+            plt.plot(frames[-len(mavgs) :], mavgs, label="mavg")
             plt.xlabel("frames collected")
             plt.ylabel("trajectory length (= return)")
-            plt.subplot(3,2,2)
-            plt.plot(traj_count[-len(evals):], evals, label="return")
-            plt.plot(traj_count[-len(mavgs):], mavgs, label="mavg")
+            plt.subplot(3, 2, 2)
+            plt.plot(traj_count[-len(evals) :], evals, label="return")
+            plt.plot(traj_count[-len(mavgs) :], mavgs, label="mavg")
             plt.xlabel("trajectories collected")
             plt.legend()
-            plt.subplot(3,2,3)
-            plt.plot(frames[-len(losses):], losses)
+            plt.subplot(3, 2, 3)
+            plt.plot(frames[-len(losses) :], losses)
             plt.xlabel("frames collected")
             plt.title("loss")
-            plt.subplot(3,2,4)
-            plt.plot(frames[-len(values):], values)
+            plt.subplot(3, 2, 4)
+            plt.plot(frames[-len(values) :], values)
             plt.xlabel("frames collected")
             plt.title("value")
-            plt.subplot(3,2,5)
-            plt.plot(frames[-len(grad_vals):], grad_vals)
+            plt.subplot(3, 2, 5)
+            plt.plot(frames[-len(grad_vals) :], grad_vals)
             plt.xlabel("frames collected")
             plt.title("grad norm")
             plt.savefig("dqn_td0.png")
             if len(traj_lengths):
-                plt.subplot(3,2,6)
+                plt.subplot(3, 2, 6)
                 plt.plot(traj_lengths)
                 plt.xlabel("batches")
                 plt.title("traj length (training)")
@@ -436,33 +489,44 @@ if is_notebook():
 plt.figure(figsize=(15, 15))
 plt.imshow(plt.imread("dqn_td0.png"))
 plt.tight_layout()
-plt.axis('off')
+plt.axis("off")
 
 ###############################################################################
 
 # save results
-torch.save({
-    "frames": frames,
-    "evals": evals,
-    "mavgs": mavgs,
-    "losses": losses,
-    "values": values,
-    "grad_vals": grad_vals,
-    "traj_lengths_training": traj_lengths,
-    "traj_count": traj_count,
-    "weights": (params, buffers),
-}, "saved_results_td0.pt")
+torch.save(
+    {
+        "frames": frames,
+        "evals": evals,
+        "mavgs": mavgs,
+        "losses": losses,
+        "values": values,
+        "grad_vals": grad_vals,
+        "traj_lengths_training": traj_lengths,
+        "traj_count": traj_count,
+        "weights": (params, buffers),
+    },
+    "saved_results_td0.pt",
+)
 
 ###############################################################################
 # TD-lambda
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-from torchrl.data.tensordict.tensordict import pad
+from tensordict.tensordict import pad
 from torchrl.objectives.value.functional import vec_td_lambda_advantage_estimate
 
 ###############################################################################
 
-factor, actor, actor_explore, params, buffers, params_target, buffers_target = make_model()
+(
+    factor,
+    actor,
+    actor_explore,
+    params,
+    buffers,
+    params_target,
+    buffers_target,
+) = make_model()
 params_flat = params.flatten_keys(".")
 buffers_flat = buffers.flatten_keys(".")
 params_target_flat = params_target.flatten_keys(".")
@@ -515,7 +579,7 @@ prev_traj_count = 0
 pbar = tqdm.tqdm(total=total_frames)
 for j, data in enumerate(data_collector):
     mask = data["mask"].squeeze(-1)
-    data = pad(data, [0, 0, 0, max_size-data.shape[1]])
+    data = pad(data, [0, 0, 0, max_size - data.shape[1]])
     current_frames = mask.sum().cpu().item()
     pbar.update(current_frames)
 
@@ -530,14 +594,18 @@ for j, data in enumerate(data_collector):
 
     if sum(frames) > init_random_frames:
         for i in range(n_optim):
-            sampled_data = replay_buffer.sample(batch_size // max_size).to(device, non_blocking=True)
+            sampled_data = replay_buffer.sample(batch_size // max_size).to(
+                device, non_blocking=True
+            )
 
             reward = sampled_data["reward"]
             done = sampled_data["done"].to(reward.dtype)
             action = sampled_data["action"].clone()
 
             sampled_data_out = sampled_data.select(*actor.in_keys)
-            sampled_data_out = factor(sampled_data_out, params=params, buffers=buffers, vmap=(None, None, 0))
+            sampled_data_out = factor(
+                sampled_data_out, params=params, buffers=buffers, vmap=(None, None, 0)
+            )
             action_value = sampled_data_out["action_value"]
             action_value = (action_value * action.to(action_value.dtype)).sum(-1, True)
             with torch.no_grad():
@@ -573,23 +641,27 @@ for j, data in enumerate(data_collector):
 
             for (key, p1) in params_flat.items():
                 p2 = params_target_flat[key]
-                params_target_flat.set_(key, tau * p1.data + (1-tau) * p2.data)
+                params_target_flat.set_(key, tau * p1.data + (1 - tau) * p2.data)
             for (key, p1) in buffers_flat.items():
                 p2 = buffers_target_flat[key]
-                buffers_target_flat.set_(key, tau * p1.data + (1-tau) * p2.data)
+                buffers_target_flat.set_(key, tau * p1.data + (1 - tau) * p2.data)
 
-        pbar.set_description(f"error: {error: 4.4f}, value: {action_value.mean(): 4.4f}")
+        pbar.set_description(
+            f"error: {error: 4.4f}, value: {action_value.mean(): 4.4f}"
+        )
         actor_explore.step(current_frames)
 
         # logs
         with set_exploration_mode("random"), torch.no_grad():
-    #         eval_rollout = dummy_env.rollout(max_steps=1000, policy=actor_explore, auto_reset=True).cpu()
-            eval_rollout = dummy_env.rollout(max_steps=10000, policy=actor, auto_reset=True).cpu()
+            #         eval_rollout = dummy_env.rollout(max_steps=1000, policy=actor_explore, auto_reset=True).cpu()
+            eval_rollout = dummy_env.rollout(
+                max_steps=10000, policy=actor, auto_reset=True
+            ).cpu()
         grad_vals.append(float(gv))
         traj_lengths_eval.append(eval_rollout.shape[-1])
         evals.append(eval_rollout["reward"].squeeze(-1).sum(-1).item())
         if len(mavgs):
-            mavgs.append(evals[-1]*0.05 + mavgs[-1]*0.95)
+            mavgs.append(evals[-1] * 0.05 + mavgs[-1] * 0.95)
         else:
             mavgs.append(evals[-1])
         losses.append(error.item())
@@ -604,30 +676,30 @@ for j, data in enumerate(data_collector):
             else:
                 plt.clf()
             plt.figure(figsize=(15, 15))
-            plt.subplot(3,2,1)
-            plt.plot(frames[-len(evals):], evals, label="return")
-            plt.plot(frames[-len(mavgs):], mavgs, label="mavg")
+            plt.subplot(3, 2, 1)
+            plt.plot(frames[-len(evals) :], evals, label="return")
+            plt.plot(frames[-len(mavgs) :], mavgs, label="mavg")
             plt.xlabel("frames collected")
             plt.ylabel("trajectory length (= return)")
-            plt.subplot(3,2,2)
-            plt.plot(traj_count[-len(evals):], evals, label="return")
-            plt.plot(traj_count[-len(mavgs):], mavgs, label="mavg")
+            plt.subplot(3, 2, 2)
+            plt.plot(traj_count[-len(evals) :], evals, label="return")
+            plt.plot(traj_count[-len(mavgs) :], mavgs, label="mavg")
             plt.xlabel("trajectories collected")
             plt.legend()
-            plt.subplot(3,2,3)
-            plt.plot(frames[-len(losses):], losses)
+            plt.subplot(3, 2, 3)
+            plt.plot(frames[-len(losses) :], losses)
             plt.xlabel("frames collected")
             plt.title("loss")
-            plt.subplot(3,2,4)
-            plt.plot(frames[-len(values):], values)
+            plt.subplot(3, 2, 4)
+            plt.plot(frames[-len(values) :], values)
             plt.xlabel("frames collected")
             plt.title("value")
-            plt.subplot(3,2,5)
-            plt.plot(frames[-len(grad_vals):], grad_vals)
+            plt.subplot(3, 2, 5)
+            plt.plot(frames[-len(grad_vals) :], grad_vals)
             plt.xlabel("frames collected")
             plt.title("grad norm")
             if len(traj_lengths):
-                plt.subplot(3,2,6)
+                plt.subplot(3, 2, 6)
                 plt.plot(traj_lengths)
                 plt.xlabel("batches")
                 plt.title("traj length (training)")
@@ -647,22 +719,25 @@ if is_notebook():
 plt.figure(figsize=(15, 15))
 plt.imshow(plt.imread("dqn_tdlambda.png"))
 plt.tight_layout()
-plt.axis('off')
+plt.axis("off")
 
 ###############################################################################
 
 # save results
-torch.save({
-    "frames": frames,
-    "evals": evals,
-    "mavgs": mavgs,
-    "losses": losses,
-    "values": values,
-    "grad_vals": grad_vals,
-    "traj_lengths_training": traj_lengths,
-    "traj_count": traj_count,
-    "weights": (params, buffers),
-}, "saved_results_tdlambda.pt")
+torch.save(
+    {
+        "frames": frames,
+        "evals": evals,
+        "mavgs": mavgs,
+        "losses": losses,
+        "values": values,
+        "grad_vals": grad_vals,
+        "traj_lengths_training": traj_lengths,
+        "traj_count": traj_count,
+        "weights": (params, buffers),
+    },
+    "saved_results_tdlambda.pt",
+)
 
 ###############################################################################
 
@@ -686,40 +761,58 @@ traj_count_td0 = load_td0["traj_count"]
 traj_count_tdlambda = load_tdlambda["traj_count"]
 
 plt.figure(figsize=(15, 15))
-plt.subplot(3,2,1)
-plt.plot(frames[-len(evals_td0):], evals_td0, label="return (td0)", alpha=0.5)
-plt.plot(frames[-len(evals_tdlambda):], evals_tdlambda, label="return (td(lambda))", alpha=0.5)
-plt.plot(frames[-len(mavgs_td0):], mavgs_td0, label="mavg (td0)")
-plt.plot(frames[-len(mavgs_tdlambda):], mavgs_tdlambda, label="mavg (td(lambda))")
+plt.subplot(3, 2, 1)
+plt.plot(frames[-len(evals_td0) :], evals_td0, label="return (td0)", alpha=0.5)
+plt.plot(
+    frames[-len(evals_tdlambda) :],
+    evals_tdlambda,
+    label="return (td(lambda))",
+    alpha=0.5,
+)
+plt.plot(frames[-len(mavgs_td0) :], mavgs_td0, label="mavg (td0)")
+plt.plot(frames[-len(mavgs_tdlambda) :], mavgs_tdlambda, label="mavg (td(lambda))")
 plt.xlabel("frames collected")
 plt.ylabel("trajectory length (= return)")
-plt.subplot(3,2,2)
-plt.plot(traj_count_td0[-len(evals_td0):], evals_td0, label="return (td0)", alpha=0.5)
-plt.plot(traj_count_tdlambda[-len(evals_tdlambda):], evals_tdlambda, label="return (td(lambda))", alpha=0.5)
-plt.plot(traj_count_td0[-len(mavgs_td0):], mavgs_td0, label="mavg (td0)")
-plt.plot(traj_count_tdlambda[-len(mavgs_tdlambda):], mavgs_tdlambda, label="mavg (td(lambda))")
+plt.subplot(3, 2, 2)
+plt.plot(traj_count_td0[-len(evals_td0) :], evals_td0, label="return (td0)", alpha=0.5)
+plt.plot(
+    traj_count_tdlambda[-len(evals_tdlambda) :],
+    evals_tdlambda,
+    label="return (td(lambda))",
+    alpha=0.5,
+)
+plt.plot(traj_count_td0[-len(mavgs_td0) :], mavgs_td0, label="mavg (td0)")
+plt.plot(
+    traj_count_tdlambda[-len(mavgs_tdlambda) :],
+    mavgs_tdlambda,
+    label="mavg (td(lambda))",
+)
 plt.xlabel("trajectories collected")
 plt.legend()
-plt.subplot(3,2,3)
-plt.plot(frames[-len(losses_td0):], losses_td0, label="loss (td0)")
-plt.plot(frames[-len(losses_tdlambda):], losses_tdlambda, label="loss (td(lambda))")
+plt.subplot(3, 2, 3)
+plt.plot(frames[-len(losses_td0) :], losses_td0, label="loss (td0)")
+plt.plot(frames[-len(losses_tdlambda) :], losses_tdlambda, label="loss (td(lambda))")
 plt.xlabel("frames collected")
 plt.title("loss")
 plt.legend()
-plt.subplot(3,2,4)
-plt.plot(frames[-len(values_td0):], values_td0, label="values (td0)")
-plt.plot(frames[-len(values_tdlambda):], values_tdlambda, label="values (td(lambda))")
+plt.subplot(3, 2, 4)
+plt.plot(frames[-len(values_td0) :], values_td0, label="values (td0)")
+plt.plot(frames[-len(values_tdlambda) :], values_tdlambda, label="values (td(lambda))")
 plt.xlabel("frames collected")
 plt.title("value")
 plt.legend()
-plt.subplot(3,2,5)
-plt.plot(frames[-len(grad_vals_td0):], grad_vals_td0, label="gradient norm (td0)")
-plt.plot(frames[-len(grad_vals_tdlambda):], grad_vals_tdlambda, label="gradient norm (td(lambda))")
+plt.subplot(3, 2, 5)
+plt.plot(frames[-len(grad_vals_td0) :], grad_vals_td0, label="gradient norm (td0)")
+plt.plot(
+    frames[-len(grad_vals_tdlambda) :],
+    grad_vals_tdlambda,
+    label="gradient norm (td(lambda))",
+)
 plt.xlabel("frames collected")
 plt.title("grad norm")
 plt.legend()
 if len(traj_lengths):
-    plt.subplot(3,2,6)
+    plt.subplot(3, 2, 6)
     plt.plot(traj_lengths_td0, label="episode length (td0)")
     plt.plot(traj_lengths_tdlambda, label="episode length (td(lambda))")
     plt.xlabel("batches")
@@ -729,7 +822,9 @@ if len(traj_lengths):
 
 ###############################################################################
 
-dummy_env.transform.insert(0, CatTensors(["next_pixels"], "next_pixels_save", del_keys=False))
+dummy_env.transform.insert(
+    0, CatTensors(["next_pixels"], "next_pixels_save", del_keys=False)
+)
 eval_rollout = dummy_env.rollout(max_steps=10000, policy=actor, auto_reset=True).cpu()
 eval_rollout
 
