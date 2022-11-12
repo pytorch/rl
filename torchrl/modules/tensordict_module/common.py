@@ -21,6 +21,7 @@ from typing import (
 
 import torch
 
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules import functional_modules
 
 _has_functorch = False
@@ -41,23 +42,17 @@ except ImportError:
         FunctionalModuleWithBuffers,
     )
 
+from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 
 from torchrl.data import (
-    DEVICE_TYPING,
     TensorSpec,
     CompositeSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.modules.functional_modules import (
     FunctionalModule as rlFunctionalModule,
     FunctionalModuleWithBuffers as rlFunctionalModuleWithBuffers,
 )
-
-__all__ = [
-    "TensorDictModule",
-    "TensorDictModuleWrapper",
-]
 
 
 def _check_all_str(list_of_str):
@@ -122,9 +117,11 @@ class TensorDictModule(nn.Module):
         case, the 'params' (and 'buffers') keyword argument must be specified:
 
     Examples:
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
+        >>> import functorch
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
         >>> from torchrl.modules import TensorDictModule
-        >>> import torch, functorch
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> spec = NdUnboundedContinuousTensorSpec(8)
         >>> module = torch.nn.GRUCell(4, 8)
@@ -472,7 +469,8 @@ class TensorDictModule(nn.Module):
             A tuple of parameter and buffer tuples
 
         Examples:
-            >>> from torchrl.data import NdUnboundedContinuousTensorSpec, TensorDict
+            >>> from tensordict import TensorDict
+            >>> from torchrl.data import NdUnboundedContinuousTensorSpec
             >>> lazy_module = nn.LazyLinear(4)
             >>> spec = NdUnboundedContinuousTensorSpec(18)
             >>> td_module = TensorDictModule(lazy_module, spec, ["some_input"],
@@ -577,10 +575,11 @@ class TensorDictModuleWrapper(nn.Module):
     Examples:
         >>> #     This class can be used for exploration wrappers
         >>> import functorch
-        >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.data.utils import expand_as_right
         >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.utils import expand_as_right
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule
         >>>
         >>> class EpsilonGreedyExploration(TensorDictModuleWrapper):
         ...     eps = 0.5
@@ -630,6 +629,42 @@ class TensorDictModuleWrapper(nn.Module):
 
 
 def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
+    """Returns `True` if a module can be used as a TensorDictModule, and False if it can't.
+
+    If the signature is misleading an error is raised.
+
+    Examples:
+        >>> module = nn.Linear(3, 4)
+        >>> is_tensordict_compatible(module)
+        False
+        >>> class CustomModule(nn.Module):
+        ...    def __init__(self, module):
+        ...        super().__init__()
+        ...        self.linear = module
+        ...        self.in_keys = ["x"]
+        ...        self.out_keys = ["y"]
+        ...    def forward(self, tensordict):
+        ...        tensordict["y"] = self.linear(tensordict["x"])
+        ...        return tensordict
+        >>> tensordict_module = CustomModule(module)
+        >>> is_tensordict_compatible(tensordict_module)
+        True
+        >>> class CustomModule(nn.Module):
+        ...    def __init__(self, module):
+        ...        super().__init__()
+        ...        self.linear = module
+        ...        self.in_keys = ["x"]
+        ...        self.out_keys = ["y"]
+        ...    def forward(self, tensordict, other_key):
+        ...        tensordict["y"] = self.linear(tensordict["x"])
+        ...        return tensordict
+        >>> tensordict_module = CustomModule(module)
+        >>> try:
+        ...     is_tensordict_compatible(tensordict_module)
+        ... except TypeError:
+        ...     print("passing")
+        passing
+    """
     sig = inspect.signature(module.forward)
 
     if isinstance(module, TensorDictModule) or (

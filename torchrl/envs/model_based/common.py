@@ -9,13 +9,11 @@ from typing import Optional, Union, List
 
 import numpy as np
 import torch
+from tensordict import TensorDict
 
-from torchrl.data import TensorDict
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.modules.tensordict_module import TensorDictModule
-
-__all__ = ["ModelBasedEnvBase"]
 
 
 class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
@@ -29,7 +27,8 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
 
     Example:
         >>> import torch
-        >>> from torchrl.data import TensorDict, CompositeSpec, NdUnboundedContinuousTensorSpec
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
@@ -51,8 +50,8 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         ...         tensordict = tensordict.update(self.observation_spec.rand(self.batch_size))
         ...         return tensordict
         >>> # This environment is used as follows:
-        >>> from torchrl.modules import MLP, WorldModelWrapper
         >>> import torch.nn as nn
+        >>> from torchrl.modules import MLP, WorldModelWrapper
         >>> world_model = WorldModelWrapper(
         ...     TensorDictModule(
         ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),

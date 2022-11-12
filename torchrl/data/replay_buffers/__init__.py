@@ -3,5 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .replay_buffers import *
-from .storages import *
+from .replay_buffers import (
+    ReplayBuffer,
+    PrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
+    TensorDictPrioritizedReplayBuffer,
+)
+from .storages import Storage, ListStorage, LazyMemmapStorage, LazyTensorStorage

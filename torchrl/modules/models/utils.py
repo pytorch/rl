@@ -9,18 +9,13 @@ from typing import Optional, Sequence, Type
 import torch
 from torch import nn
 
-from torchrl.data import DEVICE_TYPING
+from torchrl.data.utils import DEVICE_TYPING
 from .exploration import NoisyLazyLinear, NoisyLinear
 
 LazyMapping = {
     nn.Linear: nn.LazyLinear,
     NoisyLinear: NoisyLazyLinear,
 }
-
-__all__ = [
-    "SqueezeLayer",
-    "Squeeze2dLayer",
-]
 
 
 class SqueezeLayer(nn.Module):

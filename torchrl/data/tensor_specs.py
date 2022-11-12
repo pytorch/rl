@@ -24,24 +24,9 @@ from typing import (
 
 import numpy as np
 import torch
-
-__all__ = [
-    "TensorSpec",
-    "BoundedTensorSpec",
-    "OneHotDiscreteTensorSpec",
-    "UnboundedContinuousTensorSpec",
-    "UnboundedDiscreteTensorSpec",
-    "NdBoundedTensorSpec",
-    "NdUnboundedContinuousTensorSpec",
-    "NdUnboundedDiscreteTensorSpec",
-    "BinaryDiscreteTensorSpec",
-    "MultOneHotDiscreteTensorSpec",
-    "DiscreteTensorSpec",
-    "CompositeSpec",
-]
+from tensordict.tensordict import TensorDictBase, TensorDict
 
 from torchrl._utils import get_binary_env_var
-from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 
 _CHECK_IMAGES = get_binary_env_var("CHECK_IMAGES")
 
@@ -109,11 +94,6 @@ class Box:
 
     def __repr__(self):
         return f"{self.__class__.__name__}()"
-
-
-@dataclass(repr=False)
-class Values:
-    values: Tuple
 
 
 @dataclass(repr=False)
@@ -1038,8 +1018,12 @@ class DiscreteTensorSpec(TensorSpec):
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
-        return (torch.rand(*shape, *self.shape, device=self.device) * self.space.n).to(
-            torch.long
+        return torch.randint(
+            0,
+            self.space.n,
+            torch.Size([*shape, *self.shape]),
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:

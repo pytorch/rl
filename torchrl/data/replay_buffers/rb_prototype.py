@@ -4,8 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Optional, Sequence, Union, Tuple, List
 
 import torch
+from tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 
-from ..tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from .replay_buffers import pin_memory_output, stack_tensors, stack_td
 from .samplers import Sampler, RandomSampler
 from .storages import Storage, ListStorage

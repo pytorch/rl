@@ -13,11 +13,10 @@ try:
 except ImportError:
     center_crop_fn = None
 
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDictBase
+
 from torchrl.envs.transforms import ObservationTransform, Transform
 from torchrl.trainers.loggers import Logger
-
-__all__ = ["VideoRecorder", "TensorDictRecorder"]
 
 
 class VideoRecorder(ObservationTransform):
@@ -30,7 +29,7 @@ class VideoRecorder(ObservationTransform):
         logger (Logger): a Logger instance where the video
             should be written.
         tag (str): the video tag in the logger.
-        keys_in (Sequence[str], optional): keys to be read to produce the video.
+        in_keys (Sequence[str], optional): keys to be read to produce the video.
             Default is :obj:`"next_pixels"`.
         skip (int): frame interval in the output video.
             Default is 2.
@@ -45,16 +44,16 @@ class VideoRecorder(ObservationTransform):
         self,
         logger: Logger,
         tag: str,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
         skip: int = 2,
         center_crop: Optional[int] = None,
         make_grid: bool = True,
         **kwargs,
     ) -> None:
-        if keys_in is None:
-            keys_in = ["next_pixels"]
+        if in_keys is None:
+            in_keys = ["next_pixels"]
 
-        super().__init__(keys_in=keys_in)
+        super().__init__(in_keys=in_keys)
         video_kwargs = {"fps": 6}
         video_kwargs.update(kwargs)
         self.video_kwargs = video_kwargs
@@ -152,12 +151,12 @@ class TensorDictRecorder(Transform):
         out_file_base: str,
         skip_reset: bool = True,
         skip: int = 4,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
     ) -> None:
-        if keys_in is None:
-            keys_in = []
+        if in_keys is None:
+            in_keys = []
 
-        super().__init__(keys_in=keys_in)
+        super().__init__(in_keys=in_keys)
         self.iter = 0
         self.out_file_base = out_file_base
         self.td = []
@@ -169,8 +168,8 @@ class TensorDictRecorder(Transform):
         self.count += 1
         if self.count % self.skip == 0:
             _td = td
-            if self.keys_in:
-                _td = td.select(*self.keys_in).to_tensordict()
+            if self.in_keys:
+                _td = td.select(*self.in_keys).to_tensordict()
             self.td.append(_td)
         return td
 

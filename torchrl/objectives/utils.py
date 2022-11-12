@@ -8,20 +8,12 @@ from collections import OrderedDict
 from typing import Iterable, Optional, Union
 
 import torch
+from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule
-
-__all__ = [
-    "SoftUpdate",
-    "HardUpdate",
-    "distance_loss",
-    "hold_out_params",
-    "hold_out_net",
-]
 
 
 class _context_manager:
@@ -86,11 +78,6 @@ def distance_loss(
     else:
         raise NotImplementedError(f"Unknown loss {loss_function}")
     return value_loss
-
-
-class ValueLoss:
-    value_network: nn.Module
-    target_value_network: nn.Module
 
 
 class TargetNetUpdater:

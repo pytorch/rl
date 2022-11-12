@@ -17,27 +17,19 @@ from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Di
 import numpy as np
 import torch
 import torch.nn as nn
+from tensordict.tensordict import TensorDictBase, TensorDict
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
+from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from .._utils import _check_for_faulty_process, prod
-from ..modules.tensordict_module import ProbabilisticTensorDictModule, TensorDictModule
-from .utils import split_trajectories
-
-__all__ = [
-    "SyncDataCollector",
-    "aSyncDataCollector",
-    "MultiaSyncDataCollector",
-    "MultiSyncDataCollector",
-]
-
-from torchrl.envs.transforms import TransformedEnv
 from ..data import TensorSpec
-from ..data.tensordict.tensordict import TensorDictBase, TensorDict
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
 from ..envs.common import EnvBase
 from ..envs.vec_env import _BatchedEnv
+from ..modules.tensordict_module import ProbabilisticTensorDictModule, TensorDictModule
+from .utils import split_trajectories
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
@@ -47,6 +39,8 @@ DEFAULT_EXPLORATION_MODE: str = "random"
 
 
 class RandomPolicy:
+    """A random policy for data collectors."""
+
     def __init__(self, action_spec: TensorSpec):
         """Random policy for a given action_spec.
 
@@ -59,8 +53,8 @@ class RandomPolicy:
             action_spec: TensorSpec object describing the action specs
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> from torchrl.data.tensor_specs import NdBoundedTensorSpec
-            >>> from torchrl.data.tensordict import TensorDict
             >>> action_spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
             >>> actor = RandomPolicy(spec=action_spec)
             >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
@@ -73,6 +67,7 @@ class RandomPolicy:
 
 
 def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
+    """Maps the tensors to CPU through a nested dictionary."""
     return OrderedDict(
         **{
             k: recursive_map_to_cpu(item)

@@ -8,13 +8,10 @@ from __future__ import annotations
 from typing import Tuple
 
 import torch
+from tensordict.tensordict import TensorDictBase
+from tensordict.utils import expand_as_right
 from torch import nn
 from torch.nn import functional as F
-
-from torchrl.data.tensordict.tensordict import TensorDictBase
-from torchrl.data.utils import expand_as_right
-
-__all__ = ["MultiStep"]
 
 
 def _conv1d_reward(
@@ -76,7 +73,7 @@ def _get_steps_to_next_obs(nonterminal: torch.Tensor, n_steps_max: int) -> torch
     return steps_to_next_obs
 
 
-def select_and_repeat(
+def _select_and_repeat(
     tensor: torch.Tensor,
     terminal: torch.Tensor,
     post_terminal: torch.Tensor,
@@ -203,7 +200,7 @@ class MultiStep(nn.Module):
         for key, item in selected_td.items():
             tensordict.set_(
                 key,
-                select_and_repeat(
+                _select_and_repeat(
                     item,
                     terminal,
                     post_terminal,

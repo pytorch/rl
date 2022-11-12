@@ -93,13 +93,13 @@ def make_env_transforms(
         if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation())
-        env.append_transform(CatFrames(N=cfg.catframes, keys_in=["next_pixels"]))
+        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["next_pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
-        env.append_transform(ObservationNorm(**obs_stats, keys_in=["next_pixels"]))
+        env.append_transform(ObservationNorm(**obs_stats, in_keys=["next_pixels"]))
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -118,7 +118,7 @@ def make_env_transforms(
         ]
         float_to_double_list += ["action"]  # DMControl requires double-precision
     env.append_transform(
-        DoubleToFloat(keys_in=double_to_float_list, keys_inv_in=float_to_double_list)
+        DoubleToFloat(in_keys=double_to_float_list, in_keys_inv=float_to_double_list)
     )
 
     default_dict = {

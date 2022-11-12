@@ -59,24 +59,6 @@ The following mean sampling latency improvements over using ListStorage were fou
 +-------------------------------+-----------+
 
 
-TensorDict
-----------
-
-Passing data across objects can become a burdensome task when designing high-level classes: for instance it can be
-hard to design an actor class that can take an arbitrary number of inputs and return an arbitrary number of inputs. The
-`TensorDict` class simplifies this process by packing together a bag of tensors in a dictionary-like object. This
-class supports a set of basic operations on tensors to facilitate the manipulation of entire batch of data (e.g.
-`torch.cat`, `torch.stack`, `.to(device)` etc.).
-
-
-.. autosummary::
-    :toctree: generated/
-    :template: rl_template.rst
-
-    TensorDict
-    SubTensorDict
-    LazyStackedTensorDict
-
 TensorSpec
 ----------
 
@@ -107,6 +89,4 @@ Utils
     :toctree: generated/
     :template: rl_template.rst
 
-    utils.expand_as_right
-    utils.expand_right
     MultiStep

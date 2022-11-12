@@ -10,11 +10,11 @@ import torch
 from torch import nn, distributions as d
 
 from torchrl.data import (
-    DEVICE_TYPING,
     CompositeSpec,
     NdUnboundedContinuousTensorSpec,
     DiscreteTensorSpec,
 )
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import TransformedEnv, TensorDictPrimer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
@@ -84,15 +84,6 @@ ACTIVATIONS = {
     "tanh": nn.Tanh,
     "relu": nn.ReLU,
 }
-
-__all__ = [
-    "make_dqn_actor",
-    "make_ddpg_actor",
-    "make_ppo_model",
-    "make_sac_model",
-    "make_redq_model",
-    "make_dreamer",
-]
 
 
 def make_dqn_actor(
@@ -1225,6 +1216,57 @@ def make_dreamer(
         out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU
     )
 
+    world_model = _dreamer_make_world_model(
+        obs_encoder, obs_decoder, rssm_prior, rssm_posterior, reward_module
+    ).to(device)
+    with torch.no_grad(), set_exploration_mode("random"):
+        tensordict = proof_environment.rollout(4)
+        tensordict = tensordict.to_tensordict().to(device)
+        tensordict = tensordict.to(device)
+        world_model(tensordict)
+
+    model_based_env = _dreamer_make_mbenv(
+        reward_module,
+        rssm_prior,
+        obs_decoder,
+        proof_environment,
+        use_decoder_in_env,
+        cfg.state_dim,
+        cfg.rssm_hidden_dim,
+    )
+    model_based_env = model_based_env.to(device)
+
+    actor_simulator, actor_realworld = _dreamer_make_actors(
+        obs_encoder,
+        rssm_prior,
+        rssm_posterior,
+        cfg.mlp_num_units,
+        action_key,
+        proof_environment,
+    )
+    actor_simulator = actor_simulator.to(device)
+
+    value_model = _dreamer_make_value_model(cfg.mlp_num_units, value_key)
+    value_model = value_model.to(device)
+    with torch.no_grad(), set_exploration_mode("random"):
+        tensordict = model_based_env.rollout(4)
+        tensordict = tensordict.to(device)
+        tensordict = actor_simulator(tensordict)
+        value_model(tensordict)
+
+    actor_realworld = actor_realworld.to(device)
+    if proof_env_is_none:
+        proof_environment.close()
+        torch.cuda.empty_cache()
+        del proof_environment
+
+    del tensordict
+    return world_model, model_based_env, actor_simulator, value_model, actor_realworld
+
+
+def _dreamer_make_world_model(
+    obs_encoder, obs_decoder, rssm_prior, rssm_posterior, reward_module
+):
     # World Model and reward model
     rssm_rollout = RSSMRollout(
         TensorDictModule(
@@ -1270,14 +1312,38 @@ def make_dreamer(
         transition_model,
         reward_model,
     )
+    return world_model
 
-    # actor for simulator: interacts with states ~ prior
+
+def _dreamer_make_actors(
+    obs_encoder,
+    rssm_prior,
+    rssm_posterior,
+    mlp_num_units,
+    action_key,
+    proof_environment,
+):
     actor_module = DreamerActor(
         out_features=proof_environment.action_spec.shape[0],
         depth=3,
-        num_cells=cfg.mlp_num_units,
+        num_cells=mlp_num_units,
         activation_class=nn.ELU,
     )
+    actor_simulator = _dreamer_make_actor_sim(
+        action_key, proof_environment, actor_module
+    )
+    actor_realworld = _dreamer_make_actor_real(
+        obs_encoder,
+        rssm_prior,
+        rssm_posterior,
+        actor_module,
+        action_key,
+        proof_environment,
+    )
+    return actor_simulator, actor_realworld
+
+
+def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
     actor_simulator = ProbabilisticTensorDictModule(
         TensorDictModule(
             actor_module,
@@ -1302,6 +1368,12 @@ def make_dreamer(
             }
         ),
     )
+    return actor_simulator
+
+
+def _dreamer_make_actor_real(
+    obs_encoder, rssm_prior, rssm_posterior, actor_module, action_key, proof_environment
+):
     # actor for real world: interacts with states ~ posterior
     # Out actor differs from the original paper where first they compute prior and posterior and then act on it
     # but we found that this approach worked better.
@@ -1353,17 +1425,33 @@ def make_dreamer(
             ],
         ),
     )
+    return actor_realworld
+
+
+def _dreamer_make_value_model(mlp_num_units, value_key):
+    # actor for simulator: interacts with states ~ prior
     value_model = TensorDictModule(
         MLP(
             out_features=1,
             depth=3,
-            num_cells=cfg.mlp_num_units,
+            num_cells=mlp_num_units,
             activation_class=nn.ELU,
         ),
         in_keys=["state", "belief"],
         out_keys=[value_key],
     )
+    return value_model
 
+
+def _dreamer_make_mbenv(
+    reward_module,
+    rssm_prior,
+    obs_decoder,
+    proof_environment,
+    use_decoder_in_env,
+    state_dim,
+    rssm_hidden_dim,
+):
     # MB environment
     if use_decoder_in_env:
         mb_env_obs_decoder = TensorDictModule(
@@ -1396,53 +1484,28 @@ def make_dreamer(
             transition_model,
             reward_model,
         ),
-        prior_shape=torch.Size([cfg.state_dim]),
-        belief_shape=torch.Size([cfg.rssm_hidden_dim]),
+        prior_shape=torch.Size([state_dim]),
+        belief_shape=torch.Size([rssm_hidden_dim]),
         obs_decoder=mb_env_obs_decoder,
     )
 
     model_based_env.set_specs_from_env(proof_environment)
     model_based_env = TransformedEnv(model_based_env)
     default_dict = {
-        "next_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
-        "next_belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
+        "next_state": NdUnboundedContinuousTensorSpec(state_dim),
+        "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
         # "action": proof_environment.action_spec,
     }
     model_based_env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
     )
-
-    world_model = world_model.to(device)
-
-    # init nets
-    with torch.no_grad(), set_exploration_mode("random"):
-        tensordict = proof_environment.rollout(4)
-        tensordict = tensordict.to_tensordict().to(device)
-        tensordict = tensordict.to(device)
-        world_model(tensordict)
-    model_based_env = model_based_env.to(device)
-
-    actor_simulator = actor_simulator.to(device)
-    value_model = value_model.to(device)
-
-    with torch.no_grad(), set_exploration_mode("random"):
-        tensordict = model_based_env.rollout(4)
-        tensordict = tensordict.to(device)
-        tensordict = actor_simulator(tensordict)
-        value_model(tensordict)
-
-    actor_realworld = actor_realworld.to(device)
-    if proof_env_is_none:
-        proof_environment.close()
-        torch.cuda.empty_cache()
-        del proof_environment
-
-    del tensordict
-    return world_model, model_based_env, actor_simulator, value_model, actor_realworld
+    return model_based_env
 
 
 @dataclass
 class DreamerConfig:
+    """Dreamer model config struct."""
+
     batch_length: int = 50
     state_dim: int = 30
     rssm_hidden_dim: int = 200
@@ -1459,6 +1522,8 @@ class DreamerConfig:
 
 @dataclass
 class PPOModelConfig:
+    """PPO model config struct."""
+
     gSDE: bool = False
     # if True, exploration is achieved using the gSDE technique.
     tanh_loc: bool = False
@@ -1476,6 +1541,8 @@ class PPOModelConfig:
 
 @dataclass
 class SACModelConfig:
+    """SAC model config struct."""
+
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False
@@ -1516,6 +1583,8 @@ class SACModelConfig:
 
 @dataclass
 class DDPGModelConfig:
+    """DDPG model config struct."""
+
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False
@@ -1539,6 +1608,8 @@ class DDPGModelConfig:
 
 @dataclass
 class REDQModelConfig:
+    """REDQ model config struct."""
+
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False
@@ -1577,6 +1648,8 @@ class REDQModelConfig:
 
 @dataclass
 class ContinuousModelConfig:
+    """Continuous control model config struct."""
+
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False
@@ -1619,6 +1692,8 @@ class ContinuousModelConfig:
 
 @dataclass
 class DiscreteModelConfig:
+    """Discrete model config struct."""
+
     annealing_frames: int = 1000000
     # Number of frames used for annealing of the EGreedy exploration. Default=1e6.
     noisy: bool = False

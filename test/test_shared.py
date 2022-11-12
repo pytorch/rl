@@ -8,8 +8,8 @@ import warnings
 
 import pytest
 import torch
+from tensordict import SavedTensorDict, TensorDict
 from torch import multiprocessing as mp
-from torchrl.data import SavedTensorDict, TensorDict
 
 
 class TestShared:
