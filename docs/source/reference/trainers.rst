@@ -121,7 +121,7 @@ whereas the :obj:`torch` backend expects a file path (typically a  :obj:`.pt` fi
     >>> # to save to a path
     >>> trainer.save_trainer(True)
     >>> # to load from a path
-    >>> trainer2.load_from_file(filepath)
+    >>> trainer.load_from_file(filepath)
 
 The :obj:`Trainer.train()` method can be used to execute the above loop with all of
 its hooks, although using the :obj:`Trainer` class for its checkpointing capability
