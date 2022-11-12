@@ -6,8 +6,8 @@ import abc
 from typing import Optional
 
 import torch
+from tensordict.tensordict import TensorDictBase
 
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase
 from torchrl.modules import TensorDictModule
 

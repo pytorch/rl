@@ -13,7 +13,8 @@ try:
 except ImportError:
     center_crop_fn = None
 
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDictBase
+
 from torchrl.envs.transforms import ObservationTransform, Transform
 from torchrl.trainers.loggers import Logger
 

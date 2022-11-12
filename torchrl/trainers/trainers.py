@@ -15,6 +15,8 @@ from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, List,
 
 import numpy as np
 import torch.nn
+from tensordict.tensordict import TensorDictBase, pad
+from tensordict.utils import expand_right
 from torch import nn, optim
 
 from torchrl._utils import KeyDependentDefaultDict
@@ -25,8 +27,7 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase, pad
-from torchrl.data.utils import expand_right, DEVICE_TYPING
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule

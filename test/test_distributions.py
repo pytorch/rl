@@ -8,8 +8,8 @@ import argparse
 import pytest
 import torch
 from _utils_internal import get_available_devices
+from tensordict.tensordict import TensorDictBase
 from torch import autograd, nn
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.modules import (
     NormalParamWrapper,
     OneHotCategorical,

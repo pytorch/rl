@@ -6,6 +6,7 @@
 from typing import Union, Optional, List
 
 import torch
+from tensordict.tensordict import TensorDictBase
 
 # for value, log_policy, reward, entropy in list(zip(values, log_policies, rewards, entropies))[::-1]:
 #     gae = gae * opt.gamma * opt.tau
@@ -17,7 +18,6 @@ import torch
 #     entropy_loss = entropy_loss + entropy
 from torch import Tensor, nn
 
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.value.functional import (
