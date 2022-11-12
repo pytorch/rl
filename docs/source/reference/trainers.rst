@@ -84,6 +84,46 @@ hook is executed every 10 calls to :obj:`"post_optim_log"`:
         ...         self.counter += 1
         ...         return out
 
+Checkpointing
+-------------
+
+The trainer class and hooks support checkpointing, which can be achieved either
+using the `torchsnapshot <https://github.com/pytorch/torchsnapshot/>`_ backend or
+the regular torch backend. This can be controlled via the global variable :obj:`CKPT_BACKEND`:
+
+.. code-block::
+
+    $ CKPT_BACKEND=torch python script.py
+
+which defaults to :obj:`torchsnapshot`. The advantage of torchsnapshot over pytorch
+is that it is a more flexible API, which supports distributed checkpointing and
+also allows users to load tensors from a file stored on disk to a tensor with a
+physical storage (which pytorch currently does not support). This allows, for instance,
+to load tensors from and to a replay buffer that would otherwise not fit in memory.
+
+When building a trainer, one can provide a file path where the checkpoints are to
+be written. With the :obj:`torchsnapshot` backend, a directory path is expected,
+whereas the :obj:`torch` backend expects a file path (typically a  :obj:`.pt` file).
+
+.. code-block::
+
+    >>> filepath = "path/to/dir/"
+    >>> trainer = Trainer(
+    ...     collector=collector,
+    ...     total_frames=total_frames,
+    ...     frame_skip=frame_skip,
+    ...     loss_module=loss_module,
+    ...     optimizer=optimizer,
+    ...     save_trainer_file=filepath,
+    ... )
+    >>> select_keys = SelectKeys(["action", "observation"])
+    >>> select_keys.register(trainer)
+    >>> # to save to a path
+    >>> trainer.save_trainer(True)
+    >>> # to load from a path
+    >>> trainer2.load_from_file(filepath)
+
+
 Trainer and hooks
 -----------------
 
