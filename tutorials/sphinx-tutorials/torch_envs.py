@@ -404,10 +404,13 @@ if torch.has_cuda and torch.cuda.device_count():
 # those tensors differ in shapes). Creating such environments is quite easy.
 # Let us look at the simplest case:
 
-from torchrl.envs import ParallelEnv, SerialEnv
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs import ParallelEnv
 
-env_make = lambda: GymEnv("Pendulum-v1")
+
+def env_make():
+    return GymEnv("Pendulum-v1")
+
+
 parallel_env = ParallelEnv(3, env_make)  # -> creates 3 envs in parallel
 parallel_env = ParallelEnv(
     3, [env_make, env_make, env_make]
@@ -492,7 +495,7 @@ parallel_env = ParallelEnv(3, env_make)  # -> creates 3 envs in parallel
 # env has not been started --> error:
 try:
     parallel_env.foo
-except:
+except AttributeError:
     print("Aargh what did I do!")
     sleep(10)  # make sure we don't get ahead of ourselves
 

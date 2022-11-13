@@ -70,9 +70,6 @@ from torchrl.modules import (
 from torchrl.modules.distributions.continuous import TanhDelta
 from torchrl.objectives.utils import hold_out_net
 from torchrl.trainers import Recorder
-from torchrl.trainers.helpers.envs import (
-    get_stats_random_rollout,
-)
 
 ###############################################################################
 # Environment
@@ -243,15 +240,6 @@ def get_stats_random_rollout(proof_environment, key: Optional[str] = None):
         td_stats.append(_td_stats_select)
         del _td_stats, _td_stats_select
     td_stats = torch.cat(td_stats, 0)
-
-    if key is None:
-        keyset_seedlist(proof_environment.observation_spec.keys())
-        key = keys.pop()
-        if len(keys):
-            raise RuntimeError(
-                f"More than one key exists in the observation_specs: {[key] + keys} were found, "
-                "thus get_stats_random_rollout cannot infer which to compute the stats of."
-            )
 
     m = td_stats.get(key).mean(dim=0)
     s = td_stats.get(key).std(dim=0)

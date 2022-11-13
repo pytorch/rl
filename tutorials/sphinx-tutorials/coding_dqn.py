@@ -3,7 +3,6 @@
 Coding a pixel-based DQN using TorchRL
 =======================================
 """
-import imageio
 
 ##############################################################################
 # This tutorial will guide you through the steps to code DQN to solve the
@@ -44,7 +43,6 @@ import imageio
 import torch
 import tqdm
 from IPython import display
-from IPython.display import Video
 from matplotlib import pyplot as plt
 from tensordict import TensorDict
 from torch import nn
@@ -376,9 +374,8 @@ for j, data in enumerate(data_collector):
     if sum(frames) > init_random_frames:
         for i in range(n_optim):
             # sample from the RB and send to device
-            sampled_data = replay_buffer.sample(batch_size).to(
-                device, non_blocking=True
-            )
+            sampled_data = replay_buffer.sample(batch_size)
+            sampled_data = sampled_data.to(device, non_blocking=True)
 
             # collect data from RB
             reward = sampled_data["reward"].squeeze(-1)
@@ -594,9 +591,8 @@ for j, data in enumerate(data_collector):
 
     if sum(frames) > init_random_frames:
         for i in range(n_optim):
-            sampled_data = replay_buffer.sample(batch_size // max_size).to(
-                device, non_blocking=True
-            )
+            sampled_data = replay_buffer.sample(batch_size // max_size)
+            sampled_data = sampled_data.clone().to(device, non_blocking=True)
 
             reward = sampled_data["reward"]
             done = sampled_data["done"].to(reward.dtype)

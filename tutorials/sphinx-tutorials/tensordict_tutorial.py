@@ -122,9 +122,9 @@ import torch
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 from tensordict.tensordict import (
-    UnsqueezedTensorDict,
-    ViewedTensorDict,
-    PermutedTensorDict,
+    _UnsqueezedTensorDict,
+    _ViewedTensorDict,
+    _PermutedTensorDict,
     TensorDict,
 )
 
@@ -432,19 +432,19 @@ assert torch.cat(list_tensordict, dim=0).shape[0] == 12
 ###############################################################################
 # **View**
 #
-# Support for the view operation returning a ``ViewedTensorDict``.
+# Support for the view operation returning a ``_ViewedTensorDict``.
 # Use ``to_tensordict`` to comeback to retrieve TensorDict.
 
-assert type(tensordict.view(-1)) == ViewedTensorDict
+assert type(tensordict.view(-1)) == _ViewedTensorDict
 assert tensordict.view(-1).shape[0] == 12
 
 ###############################################################################
 # **Permute**
 #
 # We can permute the dims of ``TensorDict``. Permute is a Lazy operation that
-# returns PermutedTensorDict. Use ``to_tensordict`` to convert to ``TensorDict``.
+# returns _PermutedTensorDict. Use ``to_tensordict`` to convert to ``TensorDict``.
 
-assert type(tensordict.permute(1, 0)) == PermutedTensorDict
+assert type(tensordict.permute(1, 0)) == _PermutedTensorDict
 assert tensordict.permute(1, 0).batch_size == torch.Size([4, 3])
 
 ###############################################################################
@@ -458,12 +458,12 @@ assert tensordict.reshape(-1).batch_size == torch.Size([12])
 # **Squeeze and Unsqueeze**
 #
 # Tensordict also supports squeeze and unsqueeze. Unsqueeze is a lazy operation
-# that returns UnsqueezedTensorDict. Use ``to_tensordict`` to retrieve a
+# that returns _UnsqueezedTensorDict. Use ``to_tensordict`` to retrieve a
 # tensordict after unsqueeze. Calling ``unsqueeze(dim).squeeze(dim)`` returns
 # the original tensordict.
 
 unsqueezed_tensordict = tensordict.unsqueeze(0)
-assert type(unsqueezed_tensordict) == UnsqueezedTensorDict
+assert type(unsqueezed_tensordict) == _UnsqueezedTensorDict
 assert unsqueezed_tensordict.batch_size == torch.Size([1, 3, 4])
 
 assert type(unsqueezed_tensordict.squeeze(0)) == TensorDict
