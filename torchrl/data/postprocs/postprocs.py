@@ -8,11 +8,10 @@ from __future__ import annotations
 from typing import Tuple
 
 import torch
+from tensordict.tensordict import TensorDictBase
+from tensordict.utils import expand_as_right
 from torch import nn
 from torch.nn import functional as F
-
-from torchrl.data.tensordict.tensordict import TensorDictBase
-from torchrl.data.utils import expand_as_right
 
 
 def _conv1d_reward(

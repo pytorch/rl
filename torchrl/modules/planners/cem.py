@@ -4,8 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
+from tensordict.tensordict import TensorDictBase
 
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase
 from torchrl.modules.planners.common import MPCPlannerBase
 
@@ -44,7 +44,8 @@ class CEMPlanner(MPCPlannerBase):
             the action. Defaults to "action"
 
     Examples:
-        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec, TensorDict
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
         >>> from torchrl.envs.model_based import ModelBasedEnvBase
         >>> from torchrl.modules import TensorDictModule
         >>> class MyMBEnv(ModelBasedEnvBase):
