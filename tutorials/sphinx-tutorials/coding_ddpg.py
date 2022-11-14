@@ -92,7 +92,6 @@ from torchrl.trainers import Recorder
 # ``from_pixels=True`` which is passed when calling ``GymEnv`` or
 # ``DMControlEnv``.
 
-
 def make_env():
     """
     Create a base env
@@ -156,7 +155,7 @@ def make_transformed_env(
     if env_library is DMControlEnv:
         # DMControl requires double-precision
         double_to_float_list += [
-            "reward",
+            "reward", "action",
         ]
         double_to_float_inv_list += ["action"]
 
@@ -328,7 +327,7 @@ def make_ddpg_actor(
     # init: since we have lazy layers, we should run the network
     # once to initialize them
     with torch.no_grad(), set_exploration_mode("random"):
-        td = proof_environment.rollout(max_steps=1000)
+        td = proof_environment.rollout(max_steps=4)
         td = td.to(device)
         actor(td)
         qnet(td)
@@ -641,7 +640,7 @@ for i, tensordict in enumerate(collector):
     if collected_frames >= init_random_frames:
         for j in range(optim_steps_per_batch):
             # sample from replay buffer
-            sampled_tensordict = replay_buffer.sample(batch_size)
+            sampled_tensordict = replay_buffer.sample(batch_size).clone()
 
             # compute loss for qnet and backprop
             with hold_out_net(actor):
