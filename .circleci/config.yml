@@ -615,7 +615,7 @@ jobs:
       - store_test_results:
           path: test-results
 
-  unittest_linux_gym_all_gpu:
+  unittest_linux_olddeps_gym_all_gpu:
     <<: *binary_common
     machine:
       image: ubuntu-2004-cuda-11.4:202110-01
@@ -648,7 +648,6 @@ jobs:
           name: Install torchrl, run tests
           command: |
             docker run -t --env=CUDA_VISIBLE_DEVICES="" --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_all/batch_scripts.sh
-      #            docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/batch_scripts.sh
       - run:
           name: Codecov upload
           command: |
@@ -884,7 +883,7 @@ workflows:
           cu_version: cu113
           name: unittest_linux_olddeps_gpu_py3.9
           python_version: '3.9'
-      - unittest_linux_gym_all_gpu:
+      - unittest_linux_olddeps_gym_all_gpu:
           cu_version: cu113
-          name: unittest_linux_gym_all_gpu_py3.9
+          name: unittest_linux_olddeps_gym_all_gpu_py3.9
           python_version: '3.9'

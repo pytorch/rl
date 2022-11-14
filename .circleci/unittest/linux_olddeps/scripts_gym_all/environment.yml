@@ -5,7 +5,7 @@ dependencies:
   - pip
   - protobuf
   - pip:
-    # Initial version is required to configure Atari ROMS in setup_env.sh
+    # Initial version is required to install Atari ROMS in setup_env.sh
     - gym[atari]==0.13
     - hypothesis
     - future
