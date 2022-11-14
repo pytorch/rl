@@ -133,7 +133,7 @@ class Specs:
 
         Args:
             next_observation (bool, optional): if False, the observation returned
-                will be of the current step only (no :obj:`"next_"` key will be present).
+                will be of the current step only (no :obj:`"next"` nested tensordict will be present).
                 Default is True.
             log_prob (bool, optional): If True, a log_prob key-value pair will be added
                 to the tensordict.
@@ -152,7 +152,7 @@ class Specs:
             for (key, item) in self["observation_spec"].items():
                 observation_placeholder = torch.zeros(item.shape, dtype=item.dtype)
                 if next_observation:
-                    td.set("next_" + key, observation_placeholder)
+                    td.update({"next": {key: observation_placeholder}})
                 td.set(
                     key,
                     observation_placeholder.clone(),
@@ -320,9 +320,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict_out = self._step(tensordict)
         tensordict.is_locked = False
         obs_keys = set(self.observation_spec.keys())
-        for key, item in list(tensordict_out.items()):
-            if key in obs_keys:
-                tensordict_out.rename_key(key, "next_" + key)
+        tensordict_out_select = tensordict_out.select(*obs_keys)
+        tensordict_out = tensordict_out.exclude(*obs_keys)
+        tensordict_out["next"] = tensordict_out_select
 
         if tensordict_out is tensordict:
             raise RuntimeError(
@@ -648,17 +648,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         input_spec = self.input_spec
         fake_input = input_spec.zero(self.batch_size)
         observation_spec = self.observation_spec
-        fake_obs_step = observation_spec.zero(self.batch_size)
-        fake_obs = TensorDict(
-            {"next_" + key: item for key, item in fake_obs_step.items()},
-            fake_obs_step.batch_size,
-        )
+        fake_obs = observation_spec.zero(self.batch_size)
         reward_spec = self.reward_spec
         fake_reward = reward_spec.zero(self.batch_size)
         fake_td = TensorDict(
             {
-                **fake_obs_step,
                 **fake_obs,
+                "next": fake_obs.clone(),
                 **fake_input,
                 "reward": fake_reward,
                 "done": fake_reward.to(torch.bool),

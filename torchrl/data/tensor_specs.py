@@ -1052,6 +1052,9 @@ class CompositeSpec(TensorSpec):
     """A composition of TensorSpecs.
 
     Args:
+        *args: if an unnamed argument is passed, it must be a dictionary with keys
+            matching the expected keys to be found in the :obj:`CompositeSpec` object.
+            This is useful to build nested CompositeSpecs with tuple indices.
         **kwargs (key (str): value (TensorSpec)): dictionary of tensorspecs
             to be stored. Values can be None, in which case is_in will be assumed
             to be :obj:`True` for the corresponding tensors, and :obj:`project()` will have no
@@ -1083,13 +1086,20 @@ class CompositeSpec(TensorSpec):
         >>> print("random td: ", composite_spec.rand([3,]))
         random td:  TensorDict(
             fields={
-                pixels: Tensor(torch.Size([3, 3, 32, 32]), \
-dtype=torch.float32),
-                observation_vector: Tensor(torch.Size([3, 33]), \
-dtype=torch.float32)},
+                observation_vector: Tensor(torch.Size([3, 33]), dtype=torch.float32),
+                pixels: Tensor(torch.Size([3, 3, 32, 32]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu,
+            device=None,
             is_shared=False)
+
+
+    Examples:
+        >>> # we can build a nested composite spec using unnamed arguments
+        >>> print(CompositeSpec({("a", "b"): None, ("a", "c"): None}))
+        CompositeSpec(
+            a: CompositeSpec(
+                b: None,
+                c: None))
 
     """
 
@@ -1100,7 +1110,7 @@ dtype=torch.float32)},
         cls._device = torch.device("cpu")
         return super().__new__(cls)
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         self._specs = kwargs
         if len(kwargs):
             _device = None
@@ -1115,6 +1125,18 @@ dtype=torch.float32)},
                         f"All devices of CompositeSpec must match."
                     )
             self._device = _device
+        if len(args):
+            if len(args) > 1:
+                raise RuntimeError(
+                    "Got multiple arguments, when at most one is expected for CompositeSpec."
+                )
+            argdict = args[0]
+            if not isinstance(argdict, dict):
+                raise RuntimeError(
+                    f"Expected a dictionary of specs, but got an argument of type {type(argdict)}."
+                )
+            for k, item in argdict.items():
+                self[k] = item
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -1149,9 +1171,13 @@ dtype=torch.float32)},
 
     def __setitem__(self, key, value):
         if isinstance(key, tuple) and len(key) > 1:
+            if key[0] not in self.keys(True):
+                self[key[0]] = CompositeSpec()
             self[key[0]][key[1:]] = value
+            return
         elif isinstance(key, tuple):
             self[key[0]] = value
+            return
         elif not isinstance(key, str):
             raise TypeError(f"Got key of type {type(key)} when a string was expected.")
         if key in {"shape", "device", "dtype", "space"}:
@@ -1244,7 +1270,7 @@ dtype=torch.float32)},
                 will lead to the keys :obj:`["next", ("next", "obs")]`. Default is :obj:`False`, i.e.
                 only nested keys will be returned.
         """
-        return _CompositeSpecKeysView(self, yield_nesting_keys)
+        return _CompositeSpecKeysView(self, _yield_nesting_keys=yield_nesting_keys)
 
     def items(self) -> ItemsView:
         return self._specs.items()
@@ -1327,15 +1353,21 @@ def _keys_to_empty_composite_spec(keys):
 class _CompositeSpecKeysView:
     """Wrapper class that enables richer behaviour of `key in tensordict.keys()`."""
 
-    def __init__(self, composite: CompositeSpec, _yield_nesting_keys: bool):
+    def __init__(
+        self,
+        composite: CompositeSpec,
+        nested_keys: bool = True,
+        _yield_nesting_keys: bool = False,
+    ):
         self.composite = composite
         self._yield_nesting_keys = _yield_nesting_keys
+        self.nested_keys = nested_keys
 
     def __iter__(
         self,
     ):
         for key, item in self.composite.items():
-            if isinstance(item, CompositeSpec):
+            if self.nested_keys and isinstance(item, CompositeSpec):
                 for subkey in item.keys():
                     yield (key, *subkey) if isinstance(subkey, tuple) else (key, subkey)
                 if self._yield_nesting_keys:

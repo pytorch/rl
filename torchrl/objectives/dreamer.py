@@ -70,14 +70,14 @@ class DreamerModelLoss(LossModule):
         tensordict = self.world_model(tensordict)
         # compute model loss
         kl_loss = self.kl_loss(
-            tensordict.get("next_prior_mean"),
-            tensordict.get("next_prior_std"),
-            tensordict.get("next_posterior_mean"),
-            tensordict.get("next_posterior_std"),
+            tensordict.get(("next", "prior_mean")),
+            tensordict.get(("next", "prior_std")),
+            tensordict.get(("next", "posterior_mean")),
+            tensordict.get(("next", "posterior_std")),
         )
         reco_loss = distance_loss(
-            tensordict.get("next_pixels"),
-            tensordict.get("next_reco_pixels"),
+            tensordict.get(("next", "pixels")),
+            tensordict.get(("next", "reco_pixels")),
             self.reco_loss,
         )
         if not self.global_average:

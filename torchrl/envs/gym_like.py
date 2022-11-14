@@ -107,9 +107,9 @@ class GymLikeEnv(_EnvWrapper):
     In this implementation, the info output is discarded (but specific keys can be read
     by updating info_dict_reader, see :obj:`set_info_dict_reader` class method).
 
-    By default, the first output is written at the "next_observation" key-value pair in the output tensordict, unless
+    By default, the first output is written at the "observation" key-value pair in the output tensordict, unless
     the first output is a dictionary. In that case, each observation output will be put at the corresponding
-    "next_observation_{key}" location.
+    :obj:`f"{key}"` location for each :obj:`f"{key}"` of the dictionary.
 
     It is also expected that env.reset() returns an observation similar to the one observed after a step is completed.
     """

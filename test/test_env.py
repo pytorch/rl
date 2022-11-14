@@ -951,7 +951,7 @@ def test_steptensordict(
     tensordict = TensorDict(
         {
             "ledzep": torch.randn(4, 2),
-            "next_ledzep": torch.randn(4, 2),
+            "next": {"ledzep": torch.randn(4, 2)},
             "reward": torch.randn(4, 1),
             "done": torch.zeros(4, 1, dtype=torch.bool),
             "beatles": torch.randn(4, 1),
@@ -969,7 +969,7 @@ def test_steptensordict(
         next_tensordict=next_tensordict,
     )
     assert "ledzep" in out.keys()
-    assert out["ledzep"] is tensordict["next_ledzep"]
+    assert out["ledzep"] is tensordict["next", "ledzep"]
     if keep_other:
         assert "beatles" in out.keys()
         assert out["beatles"] is tensordict["beatles"]

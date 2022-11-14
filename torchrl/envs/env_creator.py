@@ -45,29 +45,29 @@ class EnvCreator:
         >>> env_creator = EnvCreator(env_fn)
         >>>
         >>> def test_env1(env_creator):
-        >>>     env = env_creator()
-        >>>     tensordict = env.reset()
-        >>>     for _ in range(10):
-        >>>         env.rand_step(tensordict)
-        >>>         if env.is_done:
-        >>>             tensordict = env.reset(tensordict)
-        >>>     print("env 1: ", env.transform._td.get("next_observation_count"))
+        ...     env = env_creator()
+        ...     tensordict = env.reset()
+        ...     for _ in range(10):
+        ...         env.rand_step(tensordict)
+        ...         if env.is_done:
+        ...             tensordict = env.reset(tensordict)
+        ...     print("env 1: ", env.transform._td.get(("next", "observation_count")))
         >>>
         >>> def test_env2(env_creator):
-        >>>     env = env_creator()
-        >>>     time.sleep(5)
-        >>>     print("env 2: ", env.transform._td.get("next_observation_count"))
+        ...     env = env_creator()
+        ...     time.sleep(5)
+        ...     print("env 2: ", env.transform._td.get(("next", "observation_count")))
         >>>
         >>> if __name__ == "__main__":
-        >>>     ps = []
-        >>>     p1 = mp.Process(target=test_env1, args=(env_creator,))
-        >>>     p1.start()
-        >>>     ps.append(p1)
-        >>>     p2 = mp.Process(target=test_env2, args=(env_creator,))
-        >>>     p2.start()
-        >>>     ps.append(p1)
-        >>>     for p in ps:
-        >>>         p.join()
+        ...     ps = []
+        ...     p1 = mp.Process(target=test_env1, args=(env_creator,))
+        ...     p1.start()
+        ...     ps.append(p1)
+        ...     p2 = mp.Process(target=test_env2, args=(env_creator,))
+        ...     p2.start()
+        ...     ps.append(p1)
+        ...     for p in ps:
+        ...         p.join()
         env 1:  tensor([11.9934])
         env 2:  tensor([11.9934])
     """

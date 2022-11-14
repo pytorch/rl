@@ -48,7 +48,7 @@ def step_mdp(
             Default is True.
 
     Returns:
-         A new tensordict (or next_tensordict) with the "next_*" keys renamed without the "next_" prefix.
+         A new tensordict (or next_tensordict) containing the tensors of the t+1 step.
 
     Examples:
     This funtion allows for this kind of loop to be used:
@@ -80,19 +80,13 @@ def step_mdp(
         prohibited.add("action")
     else:
         other_keys.append("action")
-    keys = [key for key in tensordict.keys() if key.startswith("next_")]
-    if _run_check and len(keys) == 0:
-        raise RuntimeError(
-            "There was no key starting with 'next_' in the provided TensorDict: ",
-            tensordict,
-        )
-    new_keys = [key[5:] for key in keys]
-    prohibited = prohibited.union(keys).union(new_keys)
+
+    prohibited.add("next")
     if keep_other:
         other_keys = [key for key in tensordict.keys() if key not in prohibited]
-    select_tensordict = tensordict.select(*other_keys, *keys)
-    for new_key, key in zip(new_keys, keys):
-        select_tensordict.rename_key(key, new_key, safe=True)
+    select_tensordict = tensordict.select(*other_keys)
+    select_tensordict = select_tensordict.update(tensordict.get("next"))
+
     if next_tensordict is not None:
         return next_tensordict.update(select_tensordict)
     else:

@@ -1804,7 +1804,6 @@ class NoopResetEnv(Transform):
         """Do no-op action for a number of steps in [1, noop_max]."""
         parent = self.parent
         # keys = tensordict.keys()
-        # keys = [key for key in keys if not key.startswith("next_")]
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
@@ -2033,7 +2032,7 @@ class VecNorm(Transform):
 
     Args:
         in_keys (iterable of str, optional): keys to be updated.
-            default: ["next_observation", "reward"]
+            default: ["observation", "reward"]
         shared_td (TensorDictBase, optional): A shared tensordict containing the
             keys of the transform.
         decay (number, optional): decay rate of the moving average.
@@ -2053,9 +2052,9 @@ class VecNorm(Transform):
         ...         _ = env.reset()
         ...     tds += [td]
         >>> tds = torch.stack(tds, 0)
-        >>> print((abs(tds.get("next_observation").mean(0))<0.2).all())
+        >>> print((abs(tds.get(("next", "observation")).mean(0))<0.2).all())
         tensor(True)
-        >>> print((abs(tds.get("next_observation").std(0)-1)<0.2).all())
+        >>> print((abs(tds.get(("next", "observation")).std(0)-1)<0.2).all())
         tensor(True)
 
     """
@@ -2190,7 +2189,7 @@ class VecNorm(Transform):
     @staticmethod
     def build_td_for_shared_vecnorm(
         env: EnvBase,
-        keys_prefix: Optional[Sequence[str]] = None,
+        keys: Optional[Sequence[str]] = None,
         memmap: bool = False,
     ) -> TensorDictBase:
         """Creates a shared tensordict for normalization across processes.
@@ -2198,8 +2197,8 @@ class VecNorm(Transform):
         Args:
             env (EnvBase): example environment to be used to create the
                 tensordict
-            keys_prefix (iterable of str, optional): prefix of the keys that
-                have to be normalized. Default is `["next_", "reward"]`
+            keys (iterable of str, optional): keys that
+                have to be normalized. Default is `["next", "reward"]`
             memmap (bool): if True, the resulting tensordict will be cast into
                 memmory map (using `memmap_()`). Otherwise, the tensordict
                 will be placed in shared memory.
@@ -2212,7 +2211,7 @@ class VecNorm(Transform):
             >>> queue = mp.Queue()
             >>> env = make_env()
             >>> td_shared = VecNorm.build_td_for_shared_vecnorm(env,
-            ...     ["next_observation", "reward"])
+            ...     ["next", "reward"])
             >>> assert td_shared.is_shared()
             >>> queue.put(td_shared)
             >>> # on workers
@@ -2220,20 +2219,20 @@ class VecNorm(Transform):
             >>> env = TransformedEnv(make_env(), v)
 
         """
-        if keys_prefix is None:
-            keys_prefix = ["next_", "reward"]
+        raise NotImplementedError("this feature is currently put on hold.")
+        sep = ".-|-."
+        if keys is None:
+            keys = ["next", "reward"]
         td = make_tensordict(env)
-        keys = set(
-            key
-            for key in td.keys()
-            if any(key.startswith(_prefix) for _prefix in keys_prefix)
-        )
+        keys = set(key for key in td.keys() if key in keys)
         td_select = td.select(*keys)
+        td_select = td_select.flatten_keys(sep)
         if td.batch_dims:
             raise RuntimeError(
                 f"VecNorm should be used with non-batched environments. "
                 f"Got batch_size={td.batch_size}"
             )
+        keys = list(td_select.keys())
         for key in keys:
             td_select.set(key + "_ssq", td_select.get(key).clone())
             td_select.set(
@@ -2246,7 +2245,8 @@ class VecNorm(Transform):
                 ),
             )
             td_select.rename_key(key, key + "_sum")
-        td_select.zero_()
+        td_select.exclude(*keys).zero_()
+        td_select = td_select.unflatten_keys(sep)
         if memmap:
             return td_select.memmap_()
         return td_select.share_memory_()
