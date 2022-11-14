@@ -6,9 +6,8 @@
 from typing import Any, Union
 
 import pkg_resources
+from tensordict.tensordict import TensorDictBase
 from torch.autograd.grad_mode import _DecoratorContextManager
-
-from torchrl.data.tensordict.tensordict import TensorDictBase
 
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 

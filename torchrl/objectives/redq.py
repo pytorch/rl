@@ -9,9 +9,9 @@ from typing import Union
 
 import numpy as np
 import torch
+from tensordict.tensordict import TensorDictBase, TensorDict
 from torch import Tensor
 
-from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.common import LossModule, _has_functorch

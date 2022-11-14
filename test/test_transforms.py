@@ -15,13 +15,13 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
 )
+from tensordict import TensorDict
 from torch import multiprocessing as mp, Tensor
 from torchrl._utils import prod
 from torchrl.data import (
     CompositeSpec,
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
-    TensorDict,
     UnboundedContinuousTensorSpec,
     BoundedTensorSpec,
 )

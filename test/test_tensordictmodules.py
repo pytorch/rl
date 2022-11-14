@@ -7,7 +7,7 @@ import argparse
 
 import pytest
 import torch
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDictBase
 
 _has_functorch = False
 try:
@@ -22,8 +22,8 @@ except ImportError:
 
     make_functional = FunctionalModule._create_from
     make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
+from tensordict import TensorDict
 from torch import nn
-from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     NdBoundedTensorSpec,

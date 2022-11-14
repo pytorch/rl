@@ -29,12 +29,3 @@ from .tensor_specs import (
     CompositeSpec,
     DEVICE_TYPING,
 )
-from .tensordict import (
-    MemmapTensor,
-    set_transfer_ownership,
-    TensorDict,
-    SubTensorDict,
-    merge_tensordicts,
-    LazyStackedTensorDict,
-    SavedTensorDict,
-)
