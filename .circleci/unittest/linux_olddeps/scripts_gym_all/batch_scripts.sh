@@ -43,7 +43,7 @@ do
   $DIR/run_test.sh
 done
 
-for GYM_VERSION in '0.20' '0.25'
+for GYM_VERSION in '0.20'
 do
   echo "Installing gym version: ${GYM_VERSION}"
   pip3 install 'gym[atari]'==$GYM_VERSION
@@ -52,7 +52,7 @@ do
   $DIR/run_test.sh
 done
 
-for GYM_VERSION in '0.26'
+for GYM_VERSION in  '0.25' '0.26'
 do
   echo "Installing gym version: ${GYM_VERSION}"
   pip3 install 'gym[atari]'==$GYM_VERSION
