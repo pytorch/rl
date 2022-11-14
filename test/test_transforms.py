@@ -949,6 +949,29 @@ class TestTransforms:
                 t_env.transform.scale, torch.Tensor([30.151169] * size)
             )
 
+    def test_observationnorm_stats_already_initialized_error(self):
+        transform = ObservationNorm(in_keys='next_observation', loc=0, scale=1)
+
+        with pytest.raises(RuntimeError, match="Loc/Scale are already initialized"):
+            transform.init_stats(num_iter=11)
+
+    def test_observationnorm_init_stats_multiple_keys_error(self):
+        transform = ObservationNorm(in_keys=['next_observation', 'next_pixels'])
+
+        err_msg = 'Transform has multiple in_keys but no specific key was passed as an argument'
+        with pytest.raises(RuntimeError, match=err_msg):
+            transform.init_stats(num_iter=11)
+
+    def test_observationnorm_uninitialized_stats_error(self):
+        transform = ObservationNorm(in_keys=['next_observation', 'next_pixels'])
+
+        err_msg = (
+            "Loc/Scale have not been initialized. Either pass in values in the constructor "
+            "or call the init_stats method"
+        )
+        with pytest.raises(RuntimeError, match=err_msg):
+            transform._apply_transform(torch.Tensor([1]))
+
     def test_catframes_transform_observation_spec(self):
         N = 4
         key1 = "first key"

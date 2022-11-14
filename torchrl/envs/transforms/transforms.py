@@ -95,6 +95,9 @@ class Transform(nn.Module):
         out_keys_inv: Optional[Sequence[str]] = None,
     ):
         super().__init__()
+        if isinstance(in_keys, str):
+            in_keys = [in_keys]
+
         self.in_keys = in_keys
         if out_keys is None:
             out_keys = copy(self.in_keys)
@@ -1331,7 +1334,7 @@ class ObservationNorm(ObservationTransform):
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         if self.loc is None or self.scale is None:
             raise RuntimeError(
-                "Loc/Scale have not been initialized. Either pass in values in the constructor"
+                "Loc/Scale have not been initialized. Either pass in values in the constructor "
                 "or call the init_stats method"
             )
         if self.standard_normal:
