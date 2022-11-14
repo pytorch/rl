@@ -894,7 +894,13 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     policy_kwargs = {
         "module": net,
         "in_keys": ["observation", "hidden1", "hidden2"],
-        "out_keys": ["action", "hidden1", "hidden2", "next_hidden1", "next_hidden2"],
+        "out_keys": [
+            "action",
+            "hidden1",
+            "hidden2",
+            ("next", "hidden1"),
+            ("next", "hidden2"),
+        ],
     }
     if explicit_spec:
         hidden_spec = NdUnboundedContinuousTensorSpec((1, hidden_size))
@@ -902,8 +908,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
             action=UnboundedContinuousTensorSpec(),
             hidden1=hidden_spec,
             hidden2=hidden_spec,
-            next_hidden1=hidden_spec,
-            next_hidden2=hidden_spec,
+            next=CompositeSpec(hidden1=hidden_spec, hidden2=hidden_spec),
         )
 
     policy = TensorDictModule(**policy_kwargs)
@@ -933,9 +938,9 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "hidden1",
         "hidden2",
         "mask",
-        "next_hidden1",
-        "next_hidden2",
-        "next_observation",
+        ("next", "hidden1"),
+        ("next", "hidden2"),
+        ("next", "observation"),
         "observation",
         "reward",
         "step_count",
@@ -943,7 +948,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     }
     b = next(iter(collector))
 
-    assert set(b.keys()) == keys
+    assert set(b.keys(True)) == keys
     collector.shutdown()
     del collector
 

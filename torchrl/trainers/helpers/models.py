@@ -1274,9 +1274,9 @@ def _dreamer_make_world_model(
             in_keys=["state", "belief", "action"],
             out_keys=[
                 ("next", "prior_mean"),
-                 ("next", "prior_std"),
+                ("next", "prior_std"),
                 "_",
-                  ("next", "belief"),
+                ("next", "belief"),
             ],
         ),
         TensorDictModule(

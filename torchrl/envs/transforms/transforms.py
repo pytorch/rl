@@ -53,7 +53,7 @@ def _apply_to_composite(function):
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if in_key in observation_spec.keys():
                     d[out_key] = function(self, observation_spec[in_key])
-            return CompositeSpec(**d)
+            return CompositeSpec(d)
         else:
             return function(self, observation_spec)
 
@@ -134,7 +134,7 @@ class Transform(nn.Module):
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         self._check_inplace()
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys():
+            if in_key in tensordict.keys(include_nested=True):
                 observation = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(out_key, observation, inplace=self.inplace)
         return tensordict
@@ -160,7 +160,7 @@ class Transform(nn.Module):
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._check_inplace()
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-            if in_key in tensordict.keys():
+            if in_key in tensordict.keys(include_nested=True):
                 observation = self._inv_apply_transform(tensordict.get(in_key))
                 tensordict.set(out_key, observation, inplace=self.inplace)
         return tensordict
@@ -1630,7 +1630,7 @@ class CatTensors(Transform):
             self.in_keys = self._find_in_keys()
             self._initialized = True
 
-        if all([key in tensordict.keys() for key in self.in_keys]):
+        if all([key in tensordict.keys(include_nested=True) for key in self.in_keys]):
             values = [tensordict.get(key) for key in self.in_keys]
             if self.unsqueeze_if_oor:
                 pos_idx = self.dim > 0
@@ -1652,7 +1652,7 @@ class CatTensors(Transform):
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
                 f" {sorted(list(self.in_keys))} but got a TensorDict with keys"
-                f" {sorted(list(tensordict.keys()))}"
+                f" {sorted(list(tensordict.keys(include_nested=True)))}"
             )
         return tensordict
 
@@ -2102,7 +2102,7 @@ class VecNorm(Transform):
             self.lock.acquire()
 
         for key in self.in_keys:
-            if key not in tensordict.keys():
+            if key not in tensordict.keys(include_nested=True):
                 continue
             self._init(tensordict, key)
             # update and standardize
