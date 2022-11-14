@@ -21,6 +21,7 @@ from .losses import (
     make_dqn_loss,
     make_ddpg_loss,
     make_target_updater,
+    make_a2c_loss,
     make_ppo_loss,
     make_redq_loss,
 )

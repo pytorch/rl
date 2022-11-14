@@ -172,6 +172,31 @@ def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[TargetNetUpdater]]:
     return loss_module, target_net_updater
 
 
+def make_a2c_loss(model, cfg) -> A2CLoss:
+    """Builds the A2C loss module."""
+    actor_model = model.get_policy_operator()
+    critic_model = model.get_value_operator()
+
+    advantage = TDEstimate(
+        gamma=cfg.gamma,
+        value_network=critic_model,
+        average_rewards=True,
+        gradient_mode=False,
+    )
+
+    kwargs = {
+        "actor": actor_model,
+        "critic": critic_model,
+        "loss_critic_type": cfg.critic_loss_function,
+        "entropy_coef": cfg.entropy_coef,
+        "advantage_module": advantage
+    }
+
+    loss_module = A2CLoss(**kwargs)
+
+    return loss_module
+
+
 def make_ppo_loss(model, cfg) -> PPOLoss:
     """Builds the PPO loss module."""
     loss_dict = {
@@ -226,6 +251,22 @@ class LossConfig:
     # REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.
     target_entropy: Any = None
     # Target entropy for the policy distribution. Default is None (auto calculated as the `target_entropy = -action_dim`)
+
+
+@dataclass
+class A2CLossConfig:
+    """A2C Loss config struct."""
+
+    gamma: float = 0.99
+    # Decay factor for return computation. Default=0.99.
+    entropy_coef: float = 1e-3
+    # Entropy factor for the A2C loss
+    critic_coef: float = 1.0
+    # Critic factor for the A2C loss
+    critic_loss_function: str = "smooth_l1"
+    # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
+    advantage_in_loss: bool = False
+    # if True, the advantage is computed on the sub-batch.
 
 
 @dataclass
