@@ -166,6 +166,12 @@ class GymLikeEnv(_EnvWrapper):
         """
         if isinstance(observations, dict):
             observations = {"next_" + key: value for key, value in observations.items()}
+        if isinstance(observations, TensorDict):
+            observations = TensorDict(
+                {"next_" + key: value for key, value in observations.items()},
+                device=observations.device,
+                batch_size=observations.batch_size,
+            )
         if not isinstance(observations, (TensorDict, dict)):
             key = list(self.observation_spec.keys())[0]
             observations = {key: observations}

@@ -60,25 +60,30 @@ def _test_fake_tensordict(env: EnvBase):
 
     # test dtypes
     for key, value in real_tensordict.unflatten_keys(".").items():
-        _check_dtype(key, value, env.observation_spec, env.input_spec)
+        _check_dtype(key, value, env.observation_spec, env.input_spec, top_layer=True)
 
 
-def _check_dtype(key, value, obs_spec, input_spec):
+def _check_dtype(key, value, obs_spec, input_spec, top_layer=False):
     if key.startswith("next_"):
         return
+    obs_key = "next_" + key if top_layer else key
     if isinstance(value, TensorDictBase):
         for _key, _value in value.items():
-            if isinstance(obs_spec, CompositeSpec) and "next_" + key in obs_spec.keys():
-                _check_dtype(_key, _value, obs_spec["next_" + key], input_spec=None)
-            elif isinstance(input_spec, CompositeSpec) and key in input_spec.keys():
+            if isinstance(obs_spec, CompositeSpec) and obs_key in obs_spec.keys(
+                yield_nesting_keys=True
+            ):
+                _check_dtype(_key, _value, obs_spec[obs_key], input_spec=None)
+            elif isinstance(input_spec, CompositeSpec) and key in input_spec.keys(
+                yield_nesting_keys=True
+            ):
                 _check_dtype(_key, _value, obs_spec=None, input_spec=input_spec[key])
             else:
                 raise KeyError(f"key '{_key}' is unknown.")
     else:
-        if obs_spec is not None and "next_" + key in obs_spec.keys():
+        if obs_spec is not None and obs_key in obs_spec.keys():
             assert (
-                obs_spec["next_" + key].dtype is value.dtype
-            ), f"{obs_spec['next_' + key].dtype} vs {value.dtype} for {key}"
+                obs_spec[obs_key].dtype is value.dtype
+            ), f"{obs_spec[obs_key].dtype} vs {value.dtype} for {key}"
         elif input_spec is not None and key in input_spec.keys():
             assert (
                 input_spec[key].dtype is value.dtype

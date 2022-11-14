@@ -80,71 +80,25 @@ def _jumanji_to_torchrl_spec_transform(
         raise TypeError(f"Unsupported spec type {type(spec)}")
 
 
-def _jumanji_to_torchrl_obs_spec_transform(
-    spec,
-    dtype: Optional[torch.dtype] = None,
-    device: DEVICE_TYPING = None,
-    categorical_action_encoding: bool = True,
-) -> TensorSpec:
-    new_spec = _jumanji_to_torchrl_spec_transform(
-        spec, dtype, device, categorical_action_encoding
-    )
-    if isinstance(spec, jumanji.specs.Array):
-        return CompositeSpec(next_observation=new_spec)
-    elif isinstance(spec, jumanji.specs.Spec):
-        return CompositeSpec(**{f"next_{k}": v for k, v in new_spec.items()})
-    else:
-        raise TypeError(f"Unsupported spec type {type(spec)}")
-
-
-def _jumanji_to_torchrl_state_spec_transform(
-    state,
-    dtype: Optional[torch.dtype] = None,
-    device: DEVICE_TYPING = None,
-    categorical_action_encoding: bool = True,
-) -> TensorSpec:
+def _data_to_spec_transform(state) -> TensorSpec:
     if isinstance(state, torch.Tensor):
         if state.dtype in (torch.float, torch.double, torch.half):
             return NdUnboundedContinuousTensorSpec(
-                shape=state.shape, dtype=state.dtype, device=device
+                shape=state.shape, dtype=state.dtype, device=state.device
             )
         else:
             return NdUnboundedDiscreteTensorSpec(
-                shape=state.shape, dtype=state.dtype, device=device
+                shape=state.shape, dtype=state.dtype, device=state.device
             )
-    elif isinstance(state, dict):
+    elif isinstance(state, TensorDict):
         return CompositeSpec(
-            **{
-                key: _jumanji_to_torchrl_state_spec_transform(
-                    value, dtype, device, categorical_action_encoding
-                )
-                for key, value in state.items()
-            }
+            **{key: _data_to_spec_transform(value) for key, value in state.items()}
         )
     else:
         raise TypeError(f"Unsupported state type {type(state)}")
 
 
-def _jumanji_to_torchrl_input_spec_transform(
-    action_spec,
-    state,
-    dtype: Optional[torch.dtype] = None,
-    device: DEVICE_TYPING = None,
-    categorical_action_encoding: bool = True,
-) -> TensorSpec:
-    state_dict = _jumanji_to_torchrl_data_transform(state, device=device)
-    input_spec = CompositeSpec(
-        state=_jumanji_to_torchrl_state_spec_transform(
-            state_dict, dtype, device, categorical_action_encoding
-        ),
-        action=_jumanji_to_torchrl_spec_transform(
-            action_spec, dtype, device, categorical_action_encoding
-        ),
-    )
-    return input_spec
-
-
-def _jumanji_to_torchrl_data_transform(val, device):
+def _jumanji_to_torchrl_data_transform(val, device, batch_size):
     if isinstance(val, (jax.Array, np.ndarray)):
         if isinstance(val, jax.Array):
             val = np.array(val)
@@ -156,15 +110,23 @@ def _jumanji_to_torchrl_data_transform(val, device):
             val = val.astype(np.int64)
         return torch.tensor(val, device=device)
     elif isinstance(val, tuple) and hasattr(val, "_fields"):  # named tuples
-        return {
-            k: _jumanji_to_torchrl_data_transform(v, device=device)
-            for k, v in zip(val._fields, val)
-        }
+        return TensorDict(
+            {
+                k: _jumanji_to_torchrl_data_transform(v, device, batch_size)
+                for k, v in zip(val._fields, val)
+            },
+            device=device,
+            batch_size=batch_size,
+        )
     elif hasattr(val, "__dict__"):
-        return {
-            k: _jumanji_to_torchrl_data_transform(v, device=device)
-            for k, v in val.__dict__.items()
-        }
+        return TensorDict(
+            {
+                k: _jumanji_to_torchrl_data_transform(v, device, batch_size)
+                for k, v in val.__dict__.items()
+            },
+            device=device,
+            batch_size=batch_size,
+        )
     else:
         raise TypeError(f"Unsupported data type {type(val)}")
 
@@ -290,20 +252,45 @@ class JumanjiWrapper(GymLikeEnv):
             raise NotImplementedError("TODO")
         return env
 
-    def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
+    def _make_state_spec(self, env) -> TensorSpec:
         # generate a sample state object to build state spec from.
         key = jax.random.PRNGKey(0)
         state, _ = env.reset(key)
 
-        self._input_spec = _jumanji_to_torchrl_input_spec_transform(
-            env.action_spec(), state, device=self.device
+        state_dict = _jumanji_to_torchrl_data_transform(
+            state, self.device, batch_size=()
         )
-        self._observation_spec = _jumanji_to_torchrl_obs_spec_transform(
-            env.observation_spec(), device=self.device
+        state_spec = _data_to_spec_transform(state_dict)
+        return state_spec
+
+    def _make_input_spec(self, env) -> TensorSpec:
+        return CompositeSpec(
+            action=_jumanji_to_torchrl_spec_transform(
+                env.action_spec(), device=self.device
+            ),
         )
-        self._reward_spec = _jumanji_to_torchrl_spec_transform(
-            env.reward_spec(), device=self.device
-        )
+
+    def _make_observation_spec(self, env) -> TensorSpec:
+        spec = env.observation_spec()
+        new_spec = _jumanji_to_torchrl_spec_transform(spec, device=self.device)
+        if isinstance(spec, jumanji.specs.Array):
+            return CompositeSpec(next_observation=new_spec)
+        elif isinstance(spec, jumanji.specs.Spec):
+            return CompositeSpec(**{f"next_{k}": v for k, v in new_spec.items()})
+        else:
+            raise TypeError(f"Unsupported spec type {type(spec)}")
+
+    def _make_reward_spec(self, env) -> TensorSpec:
+        return _jumanji_to_torchrl_spec_transform(env.reward_spec(), device=self.device)
+
+    def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
+        self._input_spec = self._make_input_spec(env)
+        self._observation_spec = self._make_observation_spec(env)
+        self._reward_spec = self._make_reward_spec(env)
+
+        state_spec = self._make_state_spec(env)
+        self._input_spec["state"] = state_spec
+        self._observation_spec["state"] = state_spec
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -321,12 +308,16 @@ class JumanjiWrapper(GymLikeEnv):
         self.key = jax.random.PRNGKey(seed)
 
     def read_state(self, state):
-        state = _jumanji_to_torchrl_data_transform(state, device=self.device)
+        state = _jumanji_to_torchrl_data_transform(
+            state, device=self.device, batch_size=self.batch_size
+        )
         state = self.input_spec["state"].encode(state)
         return state
 
     def read_obs(self, obs):
-        obs = _jumanji_to_torchrl_data_transform(obs, device=self.device)
+        obs = _jumanji_to_torchrl_data_transform(
+            obs, device=self.device, batch_size=self.batch_size
+        )
         return super().read_obs(obs)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
