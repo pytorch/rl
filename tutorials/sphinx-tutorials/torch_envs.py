@@ -495,9 +495,9 @@ parallel_env = ParallelEnv(3, env_make)  # -> creates 3 envs in parallel
 # env has not been started --> error:
 try:
     parallel_env.foo
-except AttributeError:
+except RuntimeError:
     print("Aargh what did I do!")
-    sleep(10)  # make sure we don't get ahead of ourselves
+    sleep(2)  # make sure we don't get ahead of ourselves
 
 ###############################################################################
 
