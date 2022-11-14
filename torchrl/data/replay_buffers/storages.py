@@ -10,11 +10,11 @@ from copy import copy
 from typing import Any, Sequence, Union, Dict
 
 import torch
+from tensordict.memmap import MemmapTensor
+from tensordict.tensordict import TensorDictBase, TensorDict
 
 from torchrl._utils import _CKPT_BACKEND
 from torchrl.data.replay_buffers.utils import INT_CLASSES
-from torchrl.data.tensordict.memmap import MemmapTensor
-from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 
 try:
     from torchsnapshot.serialization import tensor_from_memoryview

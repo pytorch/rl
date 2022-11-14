@@ -33,6 +33,9 @@ else
     pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
 fi
 
+# install tensordict
+pip install git+https://github.com/pytorch-labs/tensordict
+
 # smoke test
 python -c "import torch;import functorch"
 

@@ -24,6 +24,8 @@ try:
 except ImportError:
     _has_tv = False
 
+from tensordict.tensordict import TensorDictBase, TensorDict
+
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
@@ -34,7 +36,6 @@ from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     DEVICE_TYPING,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite

@@ -11,6 +11,11 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple, Union, Dict
 
 import numpy as np
 import torch
+from tensordict.tensordict import (
+    TensorDictBase,
+    _stack as stack_td,
+    LazyStackedTensorDict,
+)
 from torch import Tensor
 
 from torchrl._torchrl import (
@@ -24,11 +29,6 @@ from torchrl.data.replay_buffers.utils import INT_CLASSES
 from torchrl.data.replay_buffers.utils import (
     _to_numpy,
     _to_torch,
-)
-from torchrl.data.tensordict.tensordict import (
-    TensorDictBase,
-    _stack as stack_td,
-    LazyStackedTensorDict,
 )
 from torchrl.data.utils import DEVICE_TYPING
 

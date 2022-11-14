@@ -9,8 +9,8 @@ try:
     _has_functorch = True
 except ImportError:
     _has_functorch = False
+from tensordict import TensorDict
 from torch import nn
-from torchrl.data import TensorDict
 from torchrl.modules import TensorDictModule, TensorDictSequential
 from torchrl.modules.functional_modules import (
     FunctionalModule,

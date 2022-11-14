@@ -17,6 +17,7 @@ from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Di
 import numpy as np
 import torch
 import torch.nn as nn
+from tensordict.tensordict import TensorDictBase, TensorDict
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
@@ -24,7 +25,6 @@ from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from .._utils import _check_for_faulty_process, prod
 from ..data import TensorSpec
-from ..data.tensordict.tensordict import TensorDictBase, TensorDict
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
 from ..envs.common import EnvBase
 from ..envs.vec_env import _BatchedEnv
@@ -53,8 +53,8 @@ class RandomPolicy:
             action_spec: TensorSpec object describing the action specs
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> from torchrl.data.tensor_specs import NdBoundedTensorSpec
-            >>> from torchrl.data.tensordict import TensorDict
             >>> action_spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
             >>> actor = RandomPolicy(spec=action_spec)
             >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
