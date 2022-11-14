@@ -950,20 +950,20 @@ class TestTransforms:
             )
 
     def test_observationnorm_stats_already_initialized_error(self):
-        transform = ObservationNorm(in_keys='next_observation', loc=0, scale=1)
+        transform = ObservationNorm(in_keys="next_observation", loc=0, scale=1)
 
         with pytest.raises(RuntimeError, match="Loc/Scale are already initialized"):
             transform.init_stats(num_iter=11)
 
     def test_observationnorm_init_stats_multiple_keys_error(self):
-        transform = ObservationNorm(in_keys=['next_observation', 'next_pixels'])
+        transform = ObservationNorm(in_keys=["next_observation", "next_pixels"])
 
-        err_msg = 'Transform has multiple in_keys but no specific key was passed as an argument'
+        err_msg = "Transform has multiple in_keys but no specific key was passed as an argument"
         with pytest.raises(RuntimeError, match=err_msg):
             transform.init_stats(num_iter=11)
 
     def test_observationnorm_uninitialized_stats_error(self):
-        transform = ObservationNorm(in_keys=['next_observation', 'next_pixels'])
+        transform = ObservationNorm(in_keys=["next_observation", "next_pixels"])
 
         err_msg = (
             "Loc/Scale have not been initialized. Either pass in values in the constructor "
