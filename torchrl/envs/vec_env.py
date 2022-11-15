@@ -991,7 +991,7 @@ def _run_worker_pipe_shared_mem(
                 )
             if pin_memory:
                 _td.pin_memory()
-            tensordict.update_(_td.select(*step_keys))
+            tensordict.update_(_td.select(*step_keys, strict=False))
             if _td.get("done"):
                 msg = "done"
             else:
