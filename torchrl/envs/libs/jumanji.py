@@ -2,10 +2,10 @@ from typing import Optional, Dict, Union
 
 import numpy as np
 import torch
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import (
     DEVICE_TYPING,
-    TensorDict,
     TensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
@@ -14,7 +14,6 @@ from torchrl.data import (
     NdUnboundedContinuousTensorSpec,
     NdUnboundedDiscreteTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs import GymLikeEnv
 
