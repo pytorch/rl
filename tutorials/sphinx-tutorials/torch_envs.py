@@ -3,10 +3,6 @@
 TorchRL envs
 ============================
 """
-import torch
-from matplotlib import pyplot as plt
-from tensordict import TensorDict
-
 ##############################################################################
 # Environments play a crucial role in RL settings, often somewhat similar to
 # datasets in supervised and unsupervised settings. The RL community has
@@ -29,6 +25,12 @@ from tensordict import TensorDict
 # will pass the arguments and keyword arguments to the root library builder.
 #
 # With gym, it means that building an environment is as easy as:
+
+import torch
+from matplotlib import pyplot as plt
+from tensordict import TensorDict
+
+##############################################################################
 
 from torchrl.envs.libs.gym import GymEnv
 
@@ -132,8 +134,8 @@ print(
 )
 
 ###############################################################################
-# We can observe that step_mdp has removed all the time-dependent
-# ``key-value pairs``, but not ``"some other key"``. Also, the new
+# We can observe that ``step_mdp`` has removed all the time-dependent
+# key-value pairs, but not ``"some other key"``. Also, the new
 # observation matches the previous one.
 #
 # Finally, note that the ``env.reset`` method also accepts a tensordict to update:
@@ -222,16 +224,18 @@ print("from pixels: ", env.from_pixels)
 print("tensordict: ", env.reset())
 env.close()
 
-from matplotlib import pyplot as plt
-
 ###############################################################################
 # DeepMind Control environments
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # To run this part of the tutorial, make sure you have installed dm_control:
-#   $ pip install dm_control
+#    $ pip install dm_control
 # We also provide a wrapper for DM Control suite. Again, building an
 # environment is easy: first let's look at what environments can be accessed.
 # The ``available_envs`` now returns a dict of envs and possible tasks:
+
+from matplotlib import pyplot as plt
+
+###############################################################################
 
 from torchrl.envs.libs.dm_control import DMControlEnv
 
@@ -247,15 +251,11 @@ env.close()
 ###############################################################################
 # Of course we can also use pixel-based environments:
 
-from torchrl.envs.libs.dm_control import DMControlEnv
-
 env = DMControlEnv("acrobot", "swingup", from_pixels=True, pixels_only=True)
 tensordict = env.reset()
 print("result of reset: ", tensordict)
 plt.imshow(tensordict.get("pixels").numpy())
 env.close()
-
-import torch
 
 ###############################################################################
 # Transforming envs
@@ -264,22 +264,22 @@ import torch
 # read by the policy or stored in a buffer.
 #
 # In many instances, the RL community has adopted a wrapping scheme of the type
-#   $ env_transformed = wrapper1(wrapper2(env))
+#    $ env_transformed = wrapper1(wrapper2(env))
 # to transform environments. This has numerous advantages: it makes accessing
 # the environment specs obvious (the outer wrapper is the source of truth for
 # the external world), and it makes it easy to interact with vectorized
 # environment. However it also makes it hard to access inner environments:
 # say one wants to remove a wrapper (e.g. ``wrapper2``) from the chain,
 # this operation requires us to collect
-#   $ env0 = env.env.env
-#   $ env_transformed_bis = wrapper1(env0)
+#    $ env0 = env.env.env
+#
+#    $ env_transformed_bis = wrapper1(env0)
 # TorchRL takes the stance of using sequences of transforms instead, as it is
 # done in other pytorch domain libraries (e.g. ``torchvision``). This
 # approach is also similar to the way distributions are transformed in
 # ``torch.distribution``, where a ``TransformedDistribution`` object is
 # built around a ``base_dist`` distribution and (a sequence of) ``transforms``.
 
-from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.transforms import TransformedEnv, ToTensorImage
 
 # ToTensorImage transforms a numpy-like image into a tensor one,
@@ -333,7 +333,7 @@ print("keys after concat: ", env.reset())
 ###############################################################################
 # This feature makes it easy to mofidy the sets of transforms applied to an
 # environment input and output. In fact, transforms are run both before and
-# after a step is executed: for the pre-step pass, the ``keys_inv_in`` list of
+# after a step is executed: for the pre-step pass, the ``in_keys_inv`` list of
 # keys will be passed to the ``_inv_apply_transform`` method. An example of
 # such a transform would be to transform floating-point actions (output from
 # a neural network) to the double dtype (requires by the wrapped environment).
@@ -379,8 +379,6 @@ print("CatTensors transform parent env: \n", env.transform[0].parent)
 # advantage of storing data on GPU is (1) speedup of transforms as mentioned
 # above and (2) sharing data amongst workers in multiprocessing settings.
 
-import torch
-from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.transforms import CatTensors, GrayScale, TransformedEnv
 
 env = DMControlEnv("acrobot", "swingup")
@@ -462,14 +460,16 @@ parallel_env.close()
 out_seed = parallel_env.set_seed(10)
 print(out_seed)
 
-from time import sleep
-
 ###############################################################################
 # Accessing environment attributes
 # ---------------------------------
 # It sometimes occurs that a wrapped environment has an attribute that is of
 # interest. First, note that TorchRL environment wrapper constains the toolings
 # to access this attribute. Here's an example:
+
+from time import sleep
+
+###############################################################################
 
 from uuid import uuid1
 
@@ -518,8 +518,6 @@ print(something)
 ###############################################################################
 
 parallel_env.close()
-
-from matplotlib import pyplot as plt
 
 ###############################################################################
 # kwargs for parallel environments

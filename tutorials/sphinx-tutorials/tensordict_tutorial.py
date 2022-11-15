@@ -2,7 +2,7 @@
 """
 TensorDict
 ============================
-TensorDict is a new tensor structure introduced in TorchRL.
+``TensorDict`` is a new tensor structure introduced in TorchRL.
 """
 ##############################################################################
 # With RL, you need to be able to deal with multiple tensors such as actions,
@@ -27,9 +27,10 @@ TensorDict is a new tensor structure introduced in TorchRL.
 #
 # In classical pytorch we would need to do the following:
 #
-# TODO: re-format the snippets
+# TODO: should these snippets be re-formatted?
+#
+# **Method A**
 
-# Method A
 # for i in range(optim_steps):
 #   images, labels = get_data_A()
 #   loss = loss_module(images, labels)
@@ -38,8 +39,8 @@ TensorDict is a new tensor structure introduced in TorchRL.
 #   optim.zero_grad()
 
 ###############################################################################
+# **Method B**
 
-# Method B
 # for i in range(optim_steps):
 #   images, labels = get_data_B()
 #   loss = loss_module(images, labels)
@@ -53,8 +54,8 @@ TensorDict is a new tensor structure introduced in TorchRL.
 # The idea of TensorDict is to do the following:
 
 ###############################################################################
+# **General Method**
 
-# General Method
 # for i in range(optim_steps):
 #   images, labels = get_data()
 #   loss = loss_module(images, labels)
@@ -91,13 +92,10 @@ def collate_dict_fn(dict_list):
         final_dict[key] = torch.stack(final_dict[key], dim=0)
     return final_dict
 
-
-import torch
-
 ###############################################################################
-# dataloader = Dataloader(DictDataset(), collate_fn = collate_dict_fn)
-#
 # With TensorDicts this is now much simpler:
+#
+# **dataloader = Dataloader(DictDataset(), collate_fn = collate_dict_fn)**
 
 # class DictDataset(Dataset):
 #   ...
@@ -108,9 +106,9 @@ import torch
 ###############################################################################
 # Here, the collate function is as simple as:
 #
-# collate_tensordict_fn = lambda tds : torch.stack(tds, dim=0)
+# **collate_tensordict_fn = lambda tds : torch.stack(tds, dim=0)**
 #
-# dataloader = Dataloader(DictDataset(), collate_fn = collate_tensordict_fn)
+# **dataloader = Dataloader(DictDataset(), collate_fn = collate_tensordict_fn)**
 #
 # This is even more useful when considering nested structures
 # (Which ``TensorDict`` supports).
@@ -118,8 +116,12 @@ import torch
 # TensorDict inherits multiple properties from ``torch.Tensor`` and ``dict``
 # that we will detail furtherdown.
 #
-# ``TensorDict`` structure
+# TensorDict structure
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+import torch
+
+###############################################################################
 
 from tensordict.tensordict import (
     _UnsqueezedTensorDict,
@@ -171,7 +173,7 @@ print(tensordict)
 ###############################################################################
 # ``TensorDict`` does not support algebraic operations by design.
 #
-# ``TensorDict`` Dictionary Features
+# TensorDict Dictionary Features
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # ``TensorDict`` shares a lot of features with python dictionaries.
 
@@ -246,9 +248,16 @@ print(f"d is now equal to 2: {(tensordict['d'] == 2).all()}")
 # ------------------------------
 # TensorDict also support keys deletion with the ``del`` operator:
 
-print("before", tensordict.keys())
+print("before")
+for k in tensordict.keys():
+    print(k)
+
+###############################################################################
+
 del tensordict["c"]
-print("after", tensordict.keys())
+print("after")
+for k in tensordict.keys():
+    print(k)
 
 ###############################################################################
 # TensorDict tensor features

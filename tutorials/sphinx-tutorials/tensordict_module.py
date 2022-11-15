@@ -11,7 +11,7 @@ We recommand reading the TensorDict tutorial before going through this one.
 # ``TensorDict`` as input when called.
 # It is up to the user to define the keys to be read as input and output.
 #
-# ``TensorDictModule`` by examples
+# TensorDictModule by examples
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 import torch
@@ -173,7 +173,7 @@ print("the output tensordict shape is: ", result_td.shape)
 
 
 ###############################################################################
-# Do's and don't with ``TensorDictModule``
+# Do's and don't with TensorDictModule
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # Don't use ``nn.Module`` wrappers with ``TensorDictModule`` componants.
 # This would break some of ``TensorDictModule`` features such as ``functorch``
@@ -319,9 +319,8 @@ print(f"Critic: {td_clone}")  # no action
 #
 # The following figure shows the classical transformer architecture
 # (Vaswani et al, 2017).
-# TODO: fix the figure that does not show up
 #
-# .. image:: ../transformer.png
+# .. image:: /reference/generated/tutorials/media/transformer.png
 #    :alt: The transformer png
 #
 # We have let the positional encoders aside for simplicity.
