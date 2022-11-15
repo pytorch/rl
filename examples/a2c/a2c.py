@@ -15,7 +15,7 @@ from hydra.core.config_store import ConfigStore
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.objectives.value import GAE
+from torchrl.objectives.value import TDEstimate
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
@@ -157,23 +157,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         use_env_creator=False,
     )()
 
-    # remove video recorder from recorder to have matching state_dict keys
-    if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env)
-        for transform in recorder.transform:
-            if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform)
-    else:
-        recorder_rm = recorder
-
-    if isinstance(create_env_fn, ParallelEnv):
-        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-        create_env_fn.close()
-    elif isinstance(create_env_fn, EnvCreator):
-        recorder_rm.load_state_dict(create_env_fn().state_dict())
-    else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
-
     # reset reward scaling
     for t in recorder.transform:
         if isinstance(t, RewardScaling):
@@ -190,14 +173,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger,
         cfg,
     )
-    if cfg.loss == "kl":
-        trainer.register_op("pre_optim_steps", loss_module.reset)
 
     if not cfg.advantage_in_loss:
         critic_model = model.get_value_operator()
-        advantage = GAE(
+        advantage = TDEstimate(
             cfg.gamma,
-            cfg.lmbda,
             value_network=critic_model,
             average_rewards=True,
             gradient_mode=False,

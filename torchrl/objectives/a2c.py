@@ -53,7 +53,7 @@ class A2CLoss(LossModule):
         critic_coef: float = 1.0,
         gamma: float = 0.99,
         loss_critic_type: str = "smooth_l1",
-        advantage_module: Callable[[TensorDictBase], TensorDictBase] = None,
+        advantage_module: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
     ):
         super().__init__()
         self.convert_to_functional(actor, "actor")
@@ -126,7 +126,10 @@ class A2CLoss(LossModule):
         return self.critic_coef * loss_value
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = self.advantage_module(tensordict)
+        if self.advantage_module is not None:
+            tensordict = self.advantage_module(
+                tensordict,
+            )
         tensordict = tensordict.clone()
         advantage = tensordict.get(self.advantage_key)
         log_probs, dist = self._log_probs(tensordict)
