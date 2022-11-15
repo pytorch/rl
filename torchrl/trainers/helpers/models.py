@@ -246,8 +246,8 @@ def make_ddpg_actor(
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
         >>> import dataclasses
-        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
-        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["observation"]),
+        ...    CatTensors(["observation"], "observation_vector")))
         >>> device = torch.device("cpu")
         >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
         ...                    (DDPGModelConfig, EnvConfig)
@@ -447,8 +447,8 @@ def make_ppo_model(
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
         >>> import dataclasses
-        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
-        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["observation"]),
+        ...    CatTensors(["observation"], "observation_vector")))
         >>> device = torch.device("cpu")
         >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
         ...                    (PPOModelConfig, EnvConfig)
@@ -740,8 +740,8 @@ def make_sac_model(
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
         >>> import dataclasses
-        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
-        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["observation"]),
+        ...    CatTensors(["observation"], "observation_vector")))
         >>> device = torch.device("cpu")
         >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
         ...                    (SACModelConfig, EnvConfig)
@@ -960,8 +960,8 @@ def make_redq_model(
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
         >>> import dataclasses
-        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
-        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["observation"]),
+        ...    CatTensors(["observation"], "observation_vector")))
         >>> device = torch.device("cpu")
         >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
         ...                    (RedqModelConfig, EnvConfig)

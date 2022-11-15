@@ -30,7 +30,7 @@ class VideoRecorder(ObservationTransform):
             should be written.
         tag (str): the video tag in the logger.
         in_keys (Sequence[str], optional): keys to be read to produce the video.
-            Default is :obj:`"next_pixels"`.
+            Default is :obj:`"pixels"`.
         skip (int): frame interval in the output video.
             Default is 2.
         center_crop (int, optional): value of square center crop.

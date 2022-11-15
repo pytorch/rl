@@ -74,7 +74,7 @@ class CEMPlanner(MPCPlannerBase):
         ...     TensorDictModule(
         ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
         ...         in_keys=["hidden_observation", "action"],
-        ...         out_keys=["next_hidden_observation"],
+        ...         out_keys=["hidden_observation"],
         ...     ),
         ...     TensorDictModule(
         ...         nn.Linear(4, 1),
