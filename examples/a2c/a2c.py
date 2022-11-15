@@ -31,8 +31,8 @@ from torchrl.trainers.helpers.envs import (
 from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.losses import make_a2c_loss, A2CLossConfig
 from torchrl.trainers.helpers.models import (
-    make_ppo_model as make_a2c_model,
-    PPOModelConfig as A2CModelConfig,
+    make_a2c_model,
+    A2CModelConfig,
 )
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
 

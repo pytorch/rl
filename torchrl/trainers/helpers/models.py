@@ -547,7 +547,7 @@ def make_a2c_model(
                 )
             common_module = MLP(
                 num_cells=[
-                    400,
+                    64,
                 ],
                 out_features=hidden_features,
                 activate_last_layer=True,
@@ -560,7 +560,7 @@ def make_a2c_model(
         )
 
         policy_net = MLP(
-            num_cells=[200],
+            num_cells=[64],
             out_features=out_features,
         )
         if not cfg.gSDE:
@@ -611,7 +611,7 @@ def make_a2c_model(
             return_log_prob=True,
         )
         value_net = MLP(
-            num_cells=[200],
+            num_cells=[64],
             out_features=1,
         )
         value_operator = ValueOperator(value_net, in_keys=["hidden"])
@@ -628,8 +628,8 @@ def make_a2c_model(
         if cfg.lstm:
             policy_net = LSTMNet(
                 out_features=out_features,
-                lstm_kwargs={"input_size": 256, "hidden_size": 256},
-                mlp_kwargs={"num_cells": [256, 256], "out_features": 256},
+                lstm_kwargs={"input_size": 64, "hidden_size": 64},
+                mlp_kwargs={"num_cells": [64, 64], "out_features": 64},
             )
             in_keys_actor += ["hidden0", "hidden1"]
             out_keys += ["hidden0", "hidden1", "next_hidden0", "next_hidden1"]
