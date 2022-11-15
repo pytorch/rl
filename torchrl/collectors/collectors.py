@@ -536,7 +536,8 @@ class SyncDataCollector(_DataCollector):
     def _cast_to_policy(self, td: TensorDictBase) -> TensorDictBase:
         policy_device = self.device
         if hasattr(self.policy, "in_keys"):
-            td = td.select(*self.policy.in_keys)
+            # some keys may be absent -- TensorDictModule is resilient to missing keys
+            td = td.select(*self.policy.in_keys, strict=False)
         if self._td_policy is None:
             self._td_policy = td.to(policy_device)
         else:
