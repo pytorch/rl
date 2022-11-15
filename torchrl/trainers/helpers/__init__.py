@@ -28,6 +28,7 @@ from .losses import (
 from .models import (
     make_dqn_actor,
     make_ddpg_actor,
+    make_a2c_model,
     make_ppo_model,
     make_sac_model,
     make_redq_model,
