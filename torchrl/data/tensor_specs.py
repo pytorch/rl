@@ -1126,6 +1126,8 @@ class CompositeSpec(TensorSpec):
                     )
             self._device = _device
         if len(args):
+            if not len(kwargs):
+                self._device = None
             if len(args) > 1:
                 raise RuntimeError(
                     "Got multiple arguments, when at most one is expected for CompositeSpec."
@@ -1136,6 +1138,10 @@ class CompositeSpec(TensorSpec):
                     f"Expected a dictionary of specs, but got an argument of type {type(argdict)}."
                 )
             for k, item in argdict.items():
+                if item is None:
+                    continue
+                if self._device is None:
+                    self._device = item.device
                 self[k] = item
 
     @property

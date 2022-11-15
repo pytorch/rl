@@ -899,6 +899,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
             "hidden2",
             ("next", "hidden1"),
             ("next", "hidden2"),
+            "next",
         ],
     }
     if explicit_spec:
@@ -940,6 +941,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         ("next", "hidden1"),
         ("next", "hidden2"),
         ("next", "observation"),
+        "next",
         "observation",
         "reward",
         "step_count",

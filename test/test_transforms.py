@@ -904,9 +904,7 @@ class TestTransforms:
                     assert (observation_spec[key].space.minimum == loc).all()
                     assert (observation_spec[key].space.maximum == scale + loc).all()
 
-    @pytest.mark.parametrize(
-        "keys", [["observation"], ["observation", "next_pixel"]]
-    )
+    @pytest.mark.parametrize("keys", [["observation"], ["observation", "next_pixel"]])
     @pytest.mark.parametrize("size", [1, 3])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("standard_normal", [True, False])
@@ -935,18 +933,14 @@ class TestTransforms:
         else:
             t_env.transform.init_stats(num_iter=11)
 
-        if standard_normal:
-            torch.testing.assert_close(t_env.transform.loc, torch.Tensor([1.06] * size))
-            torch.testing.assert_close(
-                t_env.transform.scale, torch.Tensor([0.03316621] * size)
-            )
-        else:
-            torch.testing.assert_close(
-                t_env.transform.loc, torch.Tensor([31.960236] * size)
-            )
-            torch.testing.assert_close(
-                t_env.transform.scale, torch.Tensor([30.151169] * size)
-            )
+        assert t_env.transform.loc.shape == t_env.observation_spec["observation"].shape
+        assert (
+            t_env.transform.scale.shape == t_env.observation_spec["observation"].shape
+        )
+        assert t_env.transform.loc.dtype == t_env.observation_spec["observation"].dtype
+        assert (
+            t_env.transform.loc.device == t_env.observation_spec["observation"].device
+        )
 
     def test_observationnorm_stats_already_initialized_error(self):
         transform = ObservationNorm(in_keys="next_observation", loc=0, scale=1)

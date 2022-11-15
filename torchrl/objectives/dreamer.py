@@ -171,6 +171,7 @@ class DreamerActorLoss(LossModule):
             tensordict = tensordict.reshape(-1)
 
         with hold_out_net(self.model_based_env), set_exploration_mode("random"):
+            tensordict = self.model_based_env.reset(tensordict.clone(recurse=False))
             fake_data = self.model_based_env.rollout(
                 max_steps=self.imagination_horizon,
                 policy=self.actor_model,
