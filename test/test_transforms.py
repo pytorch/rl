@@ -905,7 +905,7 @@ class TestTransforms:
                     assert (observation_spec[key].space.maximum == scale + loc).all()
 
     @pytest.mark.parametrize(
-        "keys", [["next_observation"], ["next_observation", "next_pixel"]]
+        "keys", [["observation"], ["observation", "next_pixel"]]
     )
     @pytest.mark.parametrize("size", [1, 3])
     @pytest.mark.parametrize("device", get_available_devices())
@@ -913,10 +913,10 @@ class TestTransforms:
     def test_observationnorm_init_stats(self, keys, size, device, standard_normal):
         base_env = ContinuousActionVecMockEnv(
             observation_spec=CompositeSpec(
-                next_observation=NdBoundedTensorSpec(
+                observation=NdBoundedTensorSpec(
                     minimum=1, maximum=1, shape=torch.Size([size])
                 ),
-                next_observation_orig=NdBoundedTensorSpec(
+                observation_orig=NdBoundedTensorSpec(
                     minimum=1, maximum=1, shape=torch.Size([size])
                 ),
             ),
@@ -931,7 +931,7 @@ class TestTransforms:
             transform=ObservationNorm(in_keys=keys, standard_normal=standard_normal),
         )
         if len(keys) > 1:
-            t_env.transform.init_stats(num_iter=11, key="next_observation")
+            t_env.transform.init_stats(num_iter=11, key="observation")
         else:
             t_env.transform.init_stats(num_iter=11)
 
