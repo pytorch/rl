@@ -142,10 +142,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_env=create_env_fn,
         actor_model_explore=actor_model,
         cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device} if device >= 0 else {}
-        #     for device in cfg.env_rendering_devices
-        # ],
     )
 
     recorder = transformed_env_constructor(
@@ -164,14 +160,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
             t.loc.fill_(0.0)
 
     trainer = make_trainer(
-        collector,
-        loss_module,
-        recorder,
-        None,
-        actor_model,
-        None,
-        logger,
-        cfg,
+        collector=collector,
+        loss_module=loss_module,
+        recorder=recorder,
+        target_net_updater=None,
+        policy_exploration=actor_model,
+        replay_buffer=None,
+        logger=logger,
+        cfg=cfg,
     )
 
     if not cfg.advantage_in_loss:
