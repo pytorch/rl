@@ -756,7 +756,7 @@ class ParallelEnv(_BatchedEnv):
             keys = keys.union(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return self.shared_tensordict_parent.select(*keys).clone()
+        return self.shared_tensordict_parent.select(*keys, strict=False).clone()
 
     @_check_start
     def _shutdown_workers(self) -> None:

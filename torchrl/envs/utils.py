@@ -28,9 +28,7 @@ def step_mdp(
 ) -> TensorDictBase:
     """Creates a new tensordict that reflects a step in time of the input tensordict.
 
-    Given a tensordict retrieved after a step, returns another tensordict with all the :obj:`'next_'` prefixes are removed,
-    i.e. all the :obj:`'next_some_other_string'` keys will be renamed onto :obj:`'some_other_string'` keys.
-
+    Given a tensordict retrieved after a step, returns the :obj:`"next"` indexed-tensordict.
 
     Args:
         tensordict (TensorDictBase): tensordict with keys to be renamed
