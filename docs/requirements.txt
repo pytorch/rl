@@ -27,4 +27,4 @@ ipython
 imageio
 imageio[ffmpeg]
 imageio[pyav]
-tensordict-nightly
+-e git+https://github.com/pytorch-labs/tensordict.git@main
