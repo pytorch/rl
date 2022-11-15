@@ -80,7 +80,9 @@ class PPOLoss(LossModule):
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self.device))
         self.loss_critic_type = loss_critic_type
-        self.advantage_module = advantage_module.to(self.device)
+        self.advantage_module = advantage_module
+        if self.advantage_module is not None:
+            self.advantage_module = advantage_module.to(self.device)
 
     def reset(self) -> None:
         pass
