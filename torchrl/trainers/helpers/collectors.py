@@ -10,7 +10,6 @@ from tensordict.tensordict import TensorDictBase
 
 from torchrl.collectors.collectors import (
     _DataCollector,
-    _MultiDataCollector,
     SyncDataCollector,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
