@@ -1327,7 +1327,7 @@ class ObservationNorm(ObservationTransform):
                 Defaults to 0.
             key (str, optional): if provided, the summary statistics will be
                 retrieved from that key in the resulting tensordicts.
-                Otherwise the first key in :obj:`ObservationNorm.in_keys` will be used.
+                Otherwise, the first key in :obj:`ObservationNorm.in_keys` will be used.
 
         """
         if self.loc is not None or self.scale is not None:
