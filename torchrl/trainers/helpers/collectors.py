@@ -175,7 +175,7 @@ def _make_collector(
     num_env_per_collector: Optional[int] = None,
     num_collectors: Optional[int] = None,
     **kwargs,
-) -> _MultiDataCollector:
+) -> _DataCollector:
     if env_kwargs is None:
         env_kwargs = dict()
     if isinstance(env_fns, list):
