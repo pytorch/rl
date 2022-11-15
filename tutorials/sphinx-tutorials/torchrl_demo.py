@@ -6,7 +6,8 @@ This demo was presented at ICML 2022 on the industry demo day.
 """
 ##############################################################################
 # It gives a good overview of TorchRL functionalities. Feel free to reach out
-# to vmoens@fb.com or submit issues if you have questions or comments about it.
+# to vmoens@fb.com or submit issues if you have questions or comments about
+# it.
 #
 # TorchRL is an open-source Reinforcement Learning (RL) library for PyTorch.
 #
@@ -14,29 +15,97 @@ This demo was presented at ICML 2022 on the industry demo day.
 #
 # The PyTorch ecosystem team (Meta) has decided to invest in that library to
 # provide a leading platform to develop RL solutions in research settings.
-# It provides pytorch and **python-first**, low and high level **abstractions**
-# for RL that are intended to be efficient, documented and properly tested.
-# The code is aimed at supporting research in RL. Most of it is written in python
-# in a highly modular way, such that researchers can easily swap components,
-# transform them or write new ones with little effort.
+#
+# It provides pytorch and **python-first**, low and high level
+# **abstractions** # for RL that are intended to be efficient, documented and
+# properly tested.
+# The code is aimed at supporting research in RL. Most of it is written in
+# python in a highly modular way, such that researchers can easily swap
+# components, transform them or write new ones with little effort.
+#
 # This repo attempts to align with the existing pytorch ecosystem libraries
-# in that it has a dataset pillar (torchrl/envs), transforms, models, data utilities
-# (e.g. collectors and containers), etc. TorchRL aims at having as few dependencies
-# as possible (python standard library, numpy and pytorch).
+# in that it has a dataset pillar (torchrl/envs), transforms, models, data
+# utilities (e.g. collectors and containers), etc. TorchRL aims at having as
+# few dependencies as possible (python standard library, numpy and pytorch).
 # Common environment libraries (e.g. OpenAI gym) are only optional.
 #
-# Content:
+# **Content**: TODO: should the presentation get changed ?
 #
-# Unlike other domains, RL is less about media than algorithms. As such, it is harder
-# to make truly independent components.
+# torchrl
+#
+# - collectors
+#    - collectors.py
+# - data
+#    - tensor_specs.py
+#    - postprocs
+#       - postprocs.py
+#    - replay_buffers
+#       - replay_buffers.py
+#       - storages.py
+# - envs
+#    - common.py
+#    - env_creator.py
+#    - gym_like.py
+#    - vec_env.py
+#    - libs
+#       - dm_control.py
+#       - gym.py
+#    - transforms
+#       - functional.py
+#       - transforms.py
+# - modules
+#    - distributions
+#       - continuous.py
+#       - discrete.py
+#    - models
+#       - models.py
+#       - exploration.py
+#    - tensordict_module
+#       - actors.py
+#       - common.py
+#       - exploration.py
+#       - probabilistic.py
+#       - sequence.py
+# - objectives
+#    - common.py
+#    - ddpg.py
+#    - dqn.py
+#    - functional.py
+#    - ppo.py
+#    - redq.py
+#    - reinforce.py
+#    - sac.py
+#    - utils.py
+#    - value
+#       - advantages.py
+#       - functional.py
+#       - pg.py
+#       - utils.py
+#       - vtrace.py
+# - record
+#       - recorder.py
+# - trainers
+#    - loggers
+#    - trainers.py
+#    - helpers
+#       - collectors.py
+#       - envs.py
+#       - loggers.py
+#       - losses.py
+#       - models.py
+#       - replay_buffer.py
+#       - trainers.py
+#
+# Unlike other domains, RL is less about media than *algorithms*. As such, it
+# is harder to make truly independent components.
 #
 # What TorchRL is not:
-# - a collection of algorithms: we do not intend to provide SOTA implementations of
-# RL algorithms, but we provide these algorithms only as examples of how to use the library.
+# - a collection of algorithms: we do not intend to provide SOTA implementations of RL algorithms,
+#   but we provide these algorithms only as examples of how to use the library.
 # - a research framework
 #
-# TorchRL has very few core dependencies, mostly PyTorch and functorch. All other
-# dependencies (gym, torchvision, wandb / tensorboard) are optional.
+# TorchRL has very few core dependencies, mostly PyTorch and functorch. All
+# other dependencies (gym, torchvision, wandb / tensorboard) are optional.
 #
 # Data
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -280,8 +349,6 @@ env.reset()
 
 env.action_spec
 
-from torch import nn
-
 ###############################################################################
 # Modules
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -290,6 +357,10 @@ from torch import nn
 # ------------------------------
 #
 # Example of a MLP model:
+
+from torch import nn
+
+###############################################################################
 
 from torchrl.modules import MLP, ConvNet
 from torchrl.modules.models.utils import SquashDims
@@ -408,8 +479,6 @@ base_module = nn.Linear(5, 3)
 actor = Actor(base_module, in_keys=["obs"])
 tensordict = TensorDict({"obs": torch.randn(5)}, batch_size=[])
 actor(tensordict)  # action is the default value
-
-from tensordict import TensorDict
 
 ###############################################################################
 
@@ -545,12 +614,12 @@ tensordict_rollout
 
 (tensordict_rollout == tensordicts_prealloc).all()
 
-from torch import nn
+# Collectors
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 from torchrl.collectors import MultiSyncDataCollector, MultiaSyncDataCollector
 
 ###############################################################################
-# Collectors
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.libs.gym import GymEnv
@@ -604,11 +673,6 @@ for i, d in enumerate(collector):
 print(i)
 del collector
 
-import torch
-from tensordict import TensorDict
-from torch import nn
-from torchrl.modules import TensorDictModule
-
 ###############################################################################
 # Objectives
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -644,12 +708,13 @@ tensordict = TensorDict(
         "done": torch.zeros(10, 1, dtype=torch.bool),
     },
     batch_size=[10],
+    device="cpu"
 )
-# loss_td = loss_fn(tensordict)
+loss_td = loss_fn(tensordict)
 
 ###############################################################################
 
-# loss_td
+loss_td
 
 ###############################################################################
 
@@ -662,6 +727,7 @@ tensordict
 # TorchRL is currently an **alpha-release**: there may be bugs and there is no
 # guarantee about BC-breaking changes. We should be able to move to a beta-release
 # by the end of the year. Our roadmap to get there comprises:
+#
 # - Distributed solutions
 # - Offline RL
 # - Greater support for meta-RL
@@ -679,4 +745,4 @@ tensordict
 # Installing the Library
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# The library is on PyPI: $ pip install torchrl
+# The library is on PyPI: *pip install torchrl*
