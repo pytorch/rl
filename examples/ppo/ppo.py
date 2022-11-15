@@ -15,7 +15,7 @@ from hydra.core.config_store import ConfigStore
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.objectives import GAE
+from torchrl.objectives.value import GAE
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,

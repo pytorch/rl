@@ -9,7 +9,7 @@ import collections
 import multiprocessing as mp
 from copy import deepcopy, copy
 from textwrap import indent
-from typing import Any, List, Optional, OrderedDict, Sequence, Union
+from typing import Any, List, Optional, OrderedDict, Sequence, Union, Tuple
 from warnings import warn
 
 import torch
@@ -96,6 +96,9 @@ class Transform(nn.Module):
         out_keys_inv: Optional[Sequence[str]] = None,
     ):
         super().__init__()
+        if isinstance(in_keys, str):
+            in_keys = [in_keys]
+
         self.in_keys = in_keys
         if out_keys is None:
             out_keys = copy(self.in_keys)
@@ -1255,10 +1258,21 @@ class ObservationNorm(ObservationTransform):
         >>> _ = transform(td)
         >>> print(torch.isclose(td.get('next_obs').mean(0),
         ...     torch.zeros(3)).all())
-        Tensor(True)
+        tensor(True)
         >>> print(torch.isclose(td.get('next_obs').std(0),
         ...     torch.ones(3)).all())
-        Tensor(True)
+        tensor(True)
+
+    The normalisation stats can be automatically computed:
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> torch.manual_seed(0)
+        >>> env = GymEnv("Pendulum-v1")
+        >>> env = TransformedEnv(env, ObservationNorm(in_keys=["observation"]))
+        >>> env.set_seed(0)
+        >>> env.transform.init_stats(100)
+        >>> print(env.transform.loc, env.transform.scale)
+        tensor([-1.3752e+01, -6.5087e-03,  2.9294e-03], dtype=torch.float32) tensor([14.9636,  2.5608,  0.6408], dtype=torch.float32)
 
     """
 
@@ -1266,8 +1280,8 @@ class ObservationNorm(ObservationTransform):
 
     def __init__(
         self,
-        loc: Union[float, torch.Tensor],
-        scale: Union[float, torch.Tensor],
+        loc: Optional[float, torch.Tensor] = None,
+        scale: Optional[float, torch.Tensor] = None,
         in_keys: Optional[Sequence[str]] = None,
         # observation_spec_key: =None,
         standard_normal: bool = False,
@@ -1279,18 +1293,79 @@ class ObservationNorm(ObservationTransform):
                 "next_observation_state",
             ]
         super().__init__(in_keys=in_keys)
-        if not isinstance(loc, torch.Tensor):
+        self.standard_normal = standard_normal
+        self.eps = 1e-6
+
+        if loc is not None and not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc, dtype=torch.float)
-        if not isinstance(scale, torch.Tensor):
+
+        if scale is not None and not isinstance(scale, torch.Tensor):
             scale = torch.tensor(scale, dtype=torch.float)
+            scale.clamp_min(self.eps)
 
         # self.observation_spec_key = observation_spec_key
-        self.standard_normal = standard_normal
         self.register_buffer("loc", loc)
-        eps = 1e-6
-        self.register_buffer("scale", scale.clamp_min(eps))
+        self.register_buffer("scale", scale)
+
+    def init_stats(
+        self,
+        num_iter: int,
+        reduce_dim: Union[int, Tuple[int]] = 0,
+        key: Optional[str] = None,
+    ) -> None:
+        """Initializes the loc and scale stats of the parent environment.
+
+        Normalization constant should ideally make the observation statistics approach
+        those of a standard Gaussian distribution. This method computes a location
+        and scale tensor that will empirically compute the mean and standard
+        deviation of a Gaussian distribution fitted on data generated randomly with
+        the parent environment for a given number of steps.
+
+        Args:
+            num_iter (int): number of random iterations to run in the environment.
+            reduce_dim (int, optional): dimension to compute the mean and std over.
+                Defaults to 0.
+            key (str, optional): if provided, the summary statistics will be
+                retrieved from that key in the resulting tensordicts.
+                Otherwise, the first key in :obj:`ObservationNorm.in_keys` will be used.
+
+        """
+        if self.loc is not None or self.scale is not None:
+            raise RuntimeError(
+                f"Loc/Scale are already initialized: ({self.loc}, {self.scale})"
+            )
+
+        if len(self.in_keys) > 1 and key is None:
+            raise RuntimeError(
+                "Transform has multiple in_keys but no specific key was passed as an argument"
+            )
+        key = self.in_keys[0] if key is None else key
+
+        parent = self.parent
+        collected_frames = 0
+        data = []
+        while collected_frames < num_iter:
+            tensordict = parent.rollout(max_steps=num_iter)
+            collected_frames += tensordict.numel()
+            data.append(tensordict.get(key))
+
+        data = torch.cat(data, reduce_dim)
+        loc = data.mean(reduce_dim)
+        scale = data.std(reduce_dim)
+
+        if not self.standard_normal:
+            loc = loc / scale
+            scale = 1 / scale
+
+        self.register_buffer("loc", loc)
+        self.register_buffer("scale", scale.clamp_min(self.eps))
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+        if self.loc is None or self.scale is None:
+            raise RuntimeError(
+                "Loc/Scale have not been initialized. Either pass in values in the constructor "
+                "or call the init_stats method"
+            )
         if self.standard_normal:
             loc = self.loc
             scale = self.scale

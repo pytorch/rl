@@ -200,7 +200,7 @@ class RSSMRollout(nn.Module):
             tensordict_out.append(_tensordict)
             if t < time_steps - 1:
                 _tensordict = step_mdp(
-                    _tensordict.select(*self.out_keys), keep_other=False
+                    _tensordict.select(*self.out_keys, strict=False), keep_other=False
                 )
                 _tensordict = update_values[..., t + 1].update(_tensordict)
 

@@ -125,16 +125,18 @@ class TestPrototypeBuffers:
             found_similar = False
             for b in rb._storage:
                 if isinstance(b, TensorDictBase):
-                    b = b.exclude("index").select(*set(d.keys()).intersection(b.keys()))
-                    d = d.select(*set(d.keys()).intersection(b.keys()))
+                    keys = set(d.keys()).intersection(b.keys())
+                    b = b.exclude("index").select(*keys, strict=False)
+                    keys = set(d.keys()).intersection(b.keys())
+                    d = d.select(*keys, strict=False)
 
                 value = b == d
                 if isinstance(value, (torch.Tensor, TensorDictBase)):
                     value = value.all()
                 if value:
-                    found_similar = True
                     break
-            assert found_similar
+            else:
+                raise RuntimeError("did not find match")
 
     def test_sample(self, rb_type, sampler, writer, storage, size):
         torch.manual_seed(0)
@@ -152,18 +154,18 @@ class TestPrototypeBuffers:
             for b in data:
                 print(b, d)
                 if isinstance(b, TensorDictBase):
-                    b = b.exclude("index").select(*set(d.keys()).intersection(b.keys()))
-                    d = d.select(*set(d.keys()).intersection(b.keys()))
+                    keys = set(d.keys()).intersection(b.keys())
+                    b = b.exclude("index").select(*keys, strict=False)
+                    keys = set(d.keys()).intersection(b.keys())
+                    d = d.select(*keys, strict=False)
 
                 value = b == d
                 if isinstance(value, (torch.Tensor, TensorDictBase)):
                     value = value.all()
                 if value:
-                    found_similar = True
                     break
-            if not found_similar:
-                d
-            assert found_similar, (d, data)
+            else:
+                raise RuntimeError("did not find match")
 
     def test_index(self, rb_type, sampler, writer, storage, size):
         torch.manual_seed(0)
@@ -394,16 +396,18 @@ class TestBuffers:
             found_similar = False
             for b in rb._storage:
                 if isinstance(b, TensorDictBase):
-                    b = b.exclude("index").select(*set(d.keys()).intersection(b.keys()))
-                    d = d.select(*set(d.keys()).intersection(b.keys()))
+                    keys = set(d.keys()).intersection(b.keys())
+                    b = b.exclude("index").select(*keys, strict=False)
+                    keys = set(d.keys()).intersection(b.keys())
+                    d = d.select(*keys, strict=False)
 
                 value = b == d
                 if isinstance(value, (torch.Tensor, TensorDictBase)):
                     value = value.all()
                 if value:
-                    found_similar = True
                     break
-            assert found_similar
+            else:
+                raise RuntimeError("did not find match")
 
     def test_sample(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)
@@ -418,18 +422,18 @@ class TestBuffers:
             found_similar = False
             for b in data:
                 if isinstance(b, TensorDictBase):
-                    b = b.exclude("index").select(*set(d.keys()).intersection(b.keys()))
-                    d = d.select(*set(d.keys()).intersection(b.keys()))
+                    keys = set(d.keys()).intersection(b.keys())
+                    b = b.exclude("index").select(*keys, strict=False)
+                    keys = set(d.keys()).intersection(b.keys())
+                    d = d.select(*keys, strict=False)
 
                 value = b == d
                 if isinstance(value, (torch.Tensor, TensorDictBase)):
                     value = value.all()
                 if value:
-                    found_similar = True
                     break
-            if not found_similar:
-                d
-            assert found_similar, (d, data)
+            else:
+                raise RuntimeError("did not find matching value")
 
     def test_index(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)
