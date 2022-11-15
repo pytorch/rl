@@ -10,7 +10,7 @@ exp_name: A2C # experiment name. Used for logging directory.
 record_interval: 100 # number of batch collections in between two collections of validation rollouts. Default=1000.
 
 # Collector
-frames_per_batch: 32 # Number of steps executed in the environment per collection.
+frames_per_batch: 64 # Number of steps executed in the environment per collection.
 total_frames: 2_000_000 # total number of frames collected for training. Does account for frame_skip.
 num_workers: 2 # Number of workers used for data collection.
 env_per_collector: 2 # Number of environments per collector. If the env_per_collector is in the range:
