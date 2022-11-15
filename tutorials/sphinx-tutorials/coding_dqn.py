@@ -7,7 +7,7 @@ Coding a pixel-based DQN using TorchRL
 ##############################################################################
 # This tutorial will guide you through the steps to code DQN to solve the
 # CartPole task from scratch. DQN
-# ('Deep Q-Learning <https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf>'_) was
+# (`Deep Q-Learning <https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf>`_) was
 # the founding work in deep reinforcement learning. On a high level, the
 # algorithm is quite simple: Q-learning consists in learning a table of
 # state-action values in such a way that, when facing any particular state,
@@ -20,6 +20,7 @@ Coding a pixel-based DQN using TorchRL
 # actions available.
 #
 # In this tutorial, you will learn:
+#
 # - how to build an environment in TorchRL, including transforms (e.g. data
 #   normalization, frame concatenation, resizing and turning to grayscale)
 #   and parallel execution;
@@ -30,7 +31,8 @@ Coding a pixel-based DQN using TorchRL
 # - how to store trajectories (and not transitions) in your replay buffer),
 #   and how to estimate returns using TD(lambda);
 # - how to make a module functional and use ;
-#   and finally how to evaluate your model.
+# - and finally how to evaluate your model.
+#
 # This tutorial assumes the reader is familiar with some of TorchRL
 # primitives, such as ``TensorDict`` and ``TensorDictModules``, although it
 # should be sufficiently transparent to be understood without a deep
@@ -100,7 +102,6 @@ lmbda = 0.95
 # However, one can easily get the same restriction on number of episodes by breaking the training loop when a certain number
 # episodes has been collected.
 total_frames = 5000
-# total_frames = 500000
 # Random frames used to initialize the replay buffer.
 init_random_frames = 500
 # Frames in each batch collected.
@@ -127,9 +128,14 @@ eps_greedy_val_env = 0.05
 init_bias = 20.0
 
 ###############################################################################
+# **Note**: for fast rendering of the tutorial ``total_frames`` hyperparameter
+# was set to a very low number. To get a reasonable performance, use a greater
+# value e.g. 500000
+#
 # Building the environment
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # Our environment builder has three arguments:
+#
 # - parallel: determines whether multiple environments have to be run in
 #   parallel. We stack the transforms after the ParallelEnv to take advantage
 #   of vectorization of the operations on device, although this would
@@ -206,7 +212,9 @@ eval_rollout = dummy_env.rollout(max_steps=10000).cpu()
 # simple CNN followed by a two-layer MLP. The only trick used here is that
 # the action values (i.e. left and right action value) are computed using
 #
-#   values = baseline(observation) + values(observation) - values(observation).mean()
+# .. math::
+#
+#    values = baseline(observation) + values(observation) - values(observation).mean()
 #
 # where ``baseline`` is a ``num_obs -> 1`` function and ``values`` is a
 # ``num_obs -> num_actions`` function.
@@ -314,6 +322,11 @@ replay_buffer = TensorDictReplayBuffer(
 )
 
 ###############################################################################
+# Our *data collector* will run two parallel environments in parallel, and
+# deliver the collected tensordicts once at a time to the main process. We'll
+# use the ``MultiaSyncDataCollector`` collector, which will collect data while
+# the optimization is taking place.
+
 
 data_collector = MultiaSyncDataCollector(
     [
@@ -329,12 +342,14 @@ data_collector = MultiaSyncDataCollector(
 )
 
 ###############################################################################
+# Our *optimizer* and the env used for evaluation
 
 optim = torch.optim.Adam(list(params_flat.values()), lr)
 dummy_env = make_env(parallel=False, m=m, s=s)
 print(actor_explore(dummy_env.reset()))
 
 ###############################################################################
+# Various lists that will contain the values recorded for evaluation:
 
 evals = []
 traj_lengths_eval = []
@@ -350,6 +365,7 @@ prev_traj_count = 0
 ###############################################################################
 # Training loop
 # ------------------------------
+# TODO: how to hide the cell output? a small plot is generated
 
 pbar = tqdm.tqdm(total=total_frames)
 for j, data in enumerate(data_collector):
@@ -436,7 +452,7 @@ for j, data in enumerate(data_collector):
         traj_count.append(prev_traj_count + data["done"].sum().item())
         prev_traj_count = traj_count[-1]
         # plots
-        if j % 100 == 0:
+        if j % 10 == 0:
             if is_notebook():
                 display.clear_output(wait=True)
                 display.display(plt.gcf())
@@ -465,14 +481,14 @@ for j, data in enumerate(data_collector):
             plt.plot(frames[-len(grad_vals) :], grad_vals)
             plt.xlabel("frames collected")
             plt.title("grad norm")
-            plt.savefig("dqn_td0.png")
             if len(traj_lengths):
                 plt.subplot(3, 2, 6)
                 plt.plot(traj_lengths)
                 plt.xlabel("batches")
                 plt.title("traj length (training)")
-            if is_notebook():
-                plt.show()
+        plt.savefig("dqn_td0.png")
+        if is_notebook():
+            plt.show()
 
     # update policy weights
     data_collector.update_policy_weights_()
@@ -482,6 +498,9 @@ if is_notebook():
     display.display(plt.gcf())
 
 ###############################################################################
+# **Note**: As already mentioned above, to get a more reasonable performance,
+# use a greater value for ``total_frames`` e.g. 500000.
+
 
 plt.figure(figsize=(15, 15))
 plt.imshow(plt.imread("dqn_td0.png"))
@@ -509,11 +528,27 @@ torch.save(
 ###############################################################################
 # TD-lambda
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# We can improve the above algorithm by getting a better estimate of the
+# return, using not only the next state value but the whole sequence of rewards
+# and values that follow a particular step.
+#
+# TorchRL provides a vectorized version of TD(lambda) named
+# ``vec_td_lambda_advantage_estimate``. We'll use this to obtain a target
+# value that the value network will be trained to match.
+#
+# The big difference in this implementation is that we'll store entire
+# trajectories and not single steps in the replay buffer. This will be done
+# automatically as long as we're not "flattening" the tensordict collected
+# using its mask: by keeping a shape ``[Batch x timesteps]`` and giving this
+# to the RB, we'll be creating a replay buffer of size
+# ``[Capacity x timesteps]``.
+
 
 from tensordict.tensordict import pad
 from torchrl.objectives.value.functional import vec_td_lambda_advantage_estimate
 
 ###############################################################################
+# We reset the actor, the RB and the collector
 
 (
     factor,
@@ -572,6 +607,12 @@ prev_traj_count = 0
 ###############################################################################
 # Training loop
 # ------------------------------
+# There are very few differences with the training loop above:
+#
+# - The tensordict received by the collector is not masked but padded to the
+#   desired shape (such that all tensordicts have the same shape of
+#   ``[Batch x max_size]``), and sent directly to the RB.
+# - We use ``vec_td_lambda_advantage_estimate`` to compute the target value.
 
 pbar = tqdm.tqdm(total=total_frames)
 for j, data in enumerate(data_collector):
@@ -665,7 +706,7 @@ for j, data in enumerate(data_collector):
         traj_count.append(prev_traj_count + data["done"].sum().item())
         prev_traj_count = traj_count[-1]
         # plots
-        if j % 100 == 0:
+        if j % 10 == 0:
             if is_notebook():
                 display.clear_output(wait=True)
                 display.display(plt.gcf())
@@ -699,9 +740,9 @@ for j, data in enumerate(data_collector):
                 plt.plot(traj_lengths)
                 plt.xlabel("batches")
                 plt.title("traj length (training)")
-            plt.savefig("dqn_tdlambda.png")
-            if is_notebook():
-                plt.show()
+        plt.savefig("dqn_tdlambda.png")
+        if is_notebook():
+            plt.show()
 
     # update policy weights
     data_collector.update_policy_weights_()
@@ -711,6 +752,8 @@ if is_notebook():
     display.display(plt.gcf())
 
 ###############################################################################
+# **Note**: As already mentioned above, to get a more reasonable performance,
+# use a greater value for ``total_frames`` e.g. 500000.
 
 plt.figure(figsize=(15, 15))
 plt.imshow(plt.imread("dqn_tdlambda.png"))
@@ -736,6 +779,12 @@ torch.save(
 )
 
 ###############################################################################
+# Let's compare the results on a single plot. Because the TD(lambda) version
+# works better, we'll have fewer episodes collected for a given number of
+# frames (as there are more frames per episode).
+#
+# **Note**: As already mentioned above, to get a more reasonable performance,
+# use a greater value for ``total_frames`` e.g. 500000.
 
 load_td0 = torch.load("saved_results_td0.pt")
 load_tdlambda = torch.load("saved_results_tdlambda.pt")
@@ -817,6 +866,9 @@ if len(traj_lengths):
 
 
 ###############################################################################
+# Finally, we generate a new video to check what the algorithm has learnt.
+# If all goes well, the duration should be significantly longer than with the
+# initial, random rollout.
 
 dummy_env.transform.insert(
     0, CatTensors(["next_pixels"], "next_pixels_save", del_keys=False)
@@ -832,3 +884,27 @@ eval_rollout
 ###############################################################################
 # Conclusion and possible improvements
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# We have seen that using TD(lambda) greatly improved the performance of our
+# algorithm. Other possible improvements could include:
+#
+# - Using the Multi-Step post-processing. Multi-step will project an action
+#   to the nth following step, and create a discounted sum of the rewards in
+#   between. This trick can make the algorithm noticebly less myopic. To use
+#   this, simply create the collector with
+#
+#       from torchrl.data.postprocs.postprocs import MultiStep
+#       collector = CollectorClass(..., postproc=MultiStep(gamma, n))
+#
+#   where ``n`` is the number of looking-forward steps. Pay attention to the
+#   fact that the ``gamma`` factor has to be corrected by the number of
+#   steps till the next observation when being passed to
+#   ``vec_td_lambda_advantage_estimate``:
+#
+#       gamma = gamma ** tensordict["steps_to_next_obs"]
+# - A prioritized replay buffer could also be used. This will give a
+#   higher priority to samples that have the worst value accuracy.
+# - A distributional loss (see ``torchrl.objectives.DistributionalDQNLoss``
+#   for more information).
+# - More fancy exploration techniques, such as NoisyLinear layers and such
+#   (check ``torchrl.modules.NoisyLinear``, which is fully compatible with the
+#   ``MLP`` class used in our Dueling DQN).

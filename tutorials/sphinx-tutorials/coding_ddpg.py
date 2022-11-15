@@ -5,20 +5,21 @@ Coding DDPG using TorchRL
 """
 ##############################################################################
 # This tutorial will guide you through the steps to code DDPG from scratch.
-# DDPG ('Deep Deterministic Policy Gradient <https://arxiv.org/abs/1509.02971>'_)
+# DDPG (`Deep Deterministic Policy Gradient <https://arxiv.org/abs/1509.02971>`_)
 # is a simple continuous control algorithm. It essentially consists in
 # learning a parametric value function for an action-observation pair, and
 # then learning a policy that outputs actions that maximise this value
 # function given a certain observation.
 #
 # In this tutorial, you will learn:
+#
 # - how to build an environment in TorchRL, including transforms
 #   (e.g. data normalization) and parallel execution;
 # - how to design a policy and value network;
 # - how to collect data from your environment efficiently and store them
 #   in a replay buffer;
 # - how to store trajectories (and not transitions) in your replay buffer);
-# and finally how to evaluate your model.
+# - and finally how to evaluate your model.
 #
 # This tutorial assumes the reader is familiar with some of TorchRL primitives,
 # such as ``TensorDict`` and ``TensorDictModules``, although it should be
@@ -431,8 +432,7 @@ annealing_frames = (
 )  # Number of frames before OU noise becomes null
 lr = 5e-4
 weight_decay = 0.0
-total_frames = 5000 // frame_skip
-# total_frames = 1000000 // frame_skip
+total_frames = 50000 // frame_skip
 init_random_frames = 0
 # init_random_frames = 5000 // frame_skip   # Number of random frames used as warm-up
 optim_steps_per_batch = 32  # Number of iterations of the inner loop
@@ -456,6 +456,10 @@ num_layers = 2
 seed = 0
 
 ###############################################################################
+# **Note**: for fast rendering of the tutorial ``total_frames`` hyperparameter
+# was set to a very low number. To get a reasonable performance, use a greater
+# value e.g. 1000000.
+#
 # Initialization
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # To initialize the experiment, we first acquire the observation statistics,
@@ -501,12 +505,15 @@ create_env_fn = parallel_env_constructor(
 # async manner (i.e. data will be collected while the policy is being optimized).
 #
 # The parameters to specify are:
+#
 # - the list of environment creation functions,
 # - the policy,
 # - the total number of frames before the collector is considered empty,
 # - the maximum number of frames per trajectory (useful for non-terminating
 #   environments, like dm_control ones).
+#
 # One should also pass:
+#
 # - the number of frames in each batch collected,
 # - the number of random steps executed independently from the policy,
 # - the devices used for policy execution, and
@@ -567,6 +574,7 @@ scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(
 # Time to train the policy!
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # Some notes about the following cell:
+#
 # - ``hold_out_net`` is a TorchRL context manager that temporarily sets
 #   ``requires_grad`` to False for a set of network parameters. This is used to
 #   prevent ``backward`` to write gradients on parameters that need not to be
@@ -708,6 +716,9 @@ collector.shutdown()
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # We make a simple plot of the average rewards during training. We can observe
 # that our policy learned quite well to solve the task.
+#
+# **Note**: As already mentioned above, to get a more reasonable performance,
+# use a greater value for ``total_frames`` e.g. 1000000.
 
 plt.figure()
 plt.plot(*zip(*rewards), label="training")
@@ -966,6 +977,9 @@ collector.shutdown()
 ###############################################################################
 # We can observe that using TD(lambda) made our results considerably more
 # stable for a similar training speed:
+#
+# **Note**: As already mentioned above, to get a more reasonable performance,
+# use a greater value for ``total_frames`` e.g. 1000000.
 
 plt.figure()
 plt.plot(*zip(*rewards), label="training")
