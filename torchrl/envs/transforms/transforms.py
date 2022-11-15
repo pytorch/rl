@@ -9,24 +9,11 @@ import collections
 import multiprocessing as mp
 from copy import deepcopy, copy
 from textwrap import indent
-from typing import Any, List, Optional, OrderedDict, Sequence, Union, Tuple
-from warnings import warn
-from typing import Any, List, Optional, OrderedDict, Sequence, Union
+from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
-from torch import nn, Tensor
-
-try:
-    from torchvision.transforms.functional import center_crop
-    from torchvision.transforms.functional_tensor import (
-        resize,
-    )  # as of now resize is imported from torchvision
-
-    _has_tv = True
-except ImportError:
-    _has_tv = False
-
 from tensordict.tensordict import TensorDictBase, TensorDict
+from torch import nn, Tensor
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -43,6 +30,16 @@ from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
 from torchrl.envs.utils import step_mdp
 
+
+try:
+    from torchvision.transforms.functional import center_crop
+    from torchvision.transforms.functional_tensor import (
+        resize,
+    )  # as of now resize is imported from torchvision
+
+    _has_tv = True
+except ImportError:
+    _has_tv = False
 
 IMAGE_KEYS = ["pixels"]
 _MAX_NOOPS_TRIALS = 10

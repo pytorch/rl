@@ -7,7 +7,6 @@ from typing import Union, Optional, List
 
 import torch
 from tensordict.tensordict import TensorDictBase
-
 from torch import Tensor, nn
 
 from torchrl.envs.utils import step_mdp
