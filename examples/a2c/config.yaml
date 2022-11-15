@@ -7,9 +7,9 @@ frame_skip: 2 # frame_skip for the environment.
 reward_scaling: 1.0 # scale of the reward.
 reward_loc: 0.0 # location of the reward.
 init_env_steps: 1000 # number of random steps to compute normalizing constants
-vecnorm: True # Normalizes the environment observation and reward outputs with the running statistics obtained across processes.
+vecnorm: False # Normalizes the environment observation and reward outputs with the running statistics obtained across processes.
 norm_rewards: False # If True, rewards will be normalized on the fly.
-norm_stats: True # Deactivates the normalization based on random collection of data.
+norm_stats: False # Deactivates the normalization based on random collection of data.
 noops:  0 # number of random steps to do after reset. Default is 0
 catframes: 0 # Number of frames to concatenate through time. Default is 0 (do not use CatFrames).
 center_crop: False # center crop size.
@@ -24,7 +24,7 @@ logger: wandb # recorder type to be used. One of 'tensorboard', 'wandb' or 'csv'
 record_video: False # whether a video of the task should be rendered during logging.
 no_video: True # whether a video of the task should be rendered during logging.
 exp_name: A2C # experiment name. Used for logging directory.
-record_interval: 1000 # number of batch collections in between two collections of validation rollouts. Default=1000.
+record_interval: 100 # number of batch collections in between two collections of validation rollouts. Default=1000.
 record_frames: 1000 # number of steps in validation rollouts. " "Default=1000.
 recorder_log_keys: ["reward"] # Keys to log in the recorder
 offline_logging: True # If True, Wandb will do the logging offline
@@ -55,13 +55,13 @@ shared_mapping: False # if True, the first layers of the actor-critic are shared
 
 # Objective
 gamma: 0.99
-entropy_coef: 1e-3 # Entropy factor for the A2C loss
+entropy_coef: 0.1 # Entropy factor for the A2C loss
 critic_coef: 0.4 # Critic factor for the A2C loss
 critic_loss_function: smooth_l1 # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
 advantage_in_loss: False # if True, the advantage is computed on the sub-batch
 
 # Trainer
-optim_steps_per_batch: 1 # Number of optimization steps in between two collection of data.
+optim_steps_per_batch: 12 # Number of optimization steps in between two collection of data.
 optimizer: "adam" # Optimizer to be used.
 lr_scheduler: "" # LR scheduler.
 selected_keys: null # a list of strings that indicate the data that should be kept from the data collector.
@@ -69,8 +69,8 @@ batch_size: 256 # batch size of the TensorDict retrieved from the replay buffer.
 log_interval: 1 # logging interval, in terms of optimization steps. Default=10000.
 lr: 2e-4 # Learning rate used for the optimizer. Default=3e-4.
 weight_decay: 0.0 # Weight-decay to be used with the optimizer. Default=0.0.
-clip_norm: 0.5 # value at which the total gradient norm / single derivative should be clipped. Default=1000.0
-clip_grad_norm: True # if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient values will be clipped to the desired threshold.
+clip_norm: 1000 # value at which the total gradient norm / single derivative should be clipped. Default=1000.0
+clip_grad_norm: False # if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient values will be clipped to the desired threshold.
 normalize_rewards_online: True # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
 normalize_rewards_online_scale: 1.0 # Final scale of the normalized rewards.
 normalize_rewards_online_decay: 0.0 # Decay of the reward moving averaging

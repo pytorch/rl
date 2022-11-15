@@ -182,6 +182,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             average_rewards=True,
             gradient_mode=False,
         )
+        advantage = advantage.to(device)
         trainer.register_op(
             "process_optim_batch",
             advantage,

@@ -70,7 +70,9 @@ class A2CLoss(LossModule):
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self.device))
         self.loss_critic_type = loss_critic_type
-        self.advantage_module = advantage_module.to(self.device)
+        self.advantage_module = advantage_module
+        if advantage_module:
+            self.advantage_module = advantage_module.to(self.device)
 
     def reset(self) -> None:
         pass

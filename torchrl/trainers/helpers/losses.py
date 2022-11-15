@@ -178,12 +178,15 @@ def make_a2c_loss(model, cfg) -> A2CLoss:
     actor_model = model.get_policy_operator()
     critic_model = model.get_value_operator()
 
-    advantage = TDEstimate(
-        gamma=cfg.gamma,
-        value_network=critic_model,
-        average_rewards=True,
-        gradient_mode=False,
-    )
+    if cfg.advantage_in_loss:
+        advantage = TDEstimate(
+            gamma=cfg.gamma,
+            value_network=critic_model,
+            average_rewards=True,
+            gradient_mode=False,
+        )
+    else:
+        advantage = None
 
     kwargs = {
         "actor": actor_model,
