@@ -8,12 +8,12 @@ from typing import Optional
 import torch
 
 from torchrl.data import (
-    DEVICE_TYPING,
     ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data.utils import DEVICE_TYPING
 
 
 def make_replay_buffer(

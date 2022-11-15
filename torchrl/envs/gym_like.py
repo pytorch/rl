@@ -11,10 +11,10 @@ from typing import List, Optional, Sequence, Union, Tuple, Any, Dict
 
 import numpy as np
 import torch
+from tensordict import TensorDict
+from tensordict.tensordict import TensorDictBase
 
-from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import TensorSpec, UnboundedContinuousTensorSpec
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.common import _EnvWrapper
 
 

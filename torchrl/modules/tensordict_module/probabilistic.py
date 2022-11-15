@@ -8,11 +8,11 @@ from copy import deepcopy
 from textwrap import indent
 from typing import List, Sequence, Union, Type, Optional, Tuple
 
+from tensordict.tensordict import TensorDictBase
 from torch import Tensor
 from torch import distributions as d
 
 from torchrl.data import TensorSpec
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import exploration_mode, set_exploration_mode
 from torchrl.modules.distributions import distributions_maps, Delta
 from torchrl.modules.tensordict_module.common import TensorDictModule, _check_all_str
@@ -87,10 +87,11 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             Default is 1000
 
     Examples:
-        >>> from torchrl.modules import ProbabilisticTensorDictModule
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import  TanhNormal, NormalParamWrapper
-        >>> import functorch, torch
+        >>> import functorch
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.modules import ProbabilisticTensorDictModule, TanhNormal, NormalParamWrapper
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> spec = NdUnboundedContinuousTensorSpec(4)
         >>> net = NormalParamWrapper(torch.nn.GRUCell(4, 8))

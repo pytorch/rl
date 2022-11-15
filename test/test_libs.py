@@ -34,7 +34,7 @@ if _has_dmc:
 
 from sys import platform
 
-from torchrl.data.tensordict.tensordict import assert_allclose_td
+from tensordict.tensordict import assert_allclose_td
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.gym import GymEnv, GymWrapper

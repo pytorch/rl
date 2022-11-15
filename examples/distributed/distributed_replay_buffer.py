@@ -15,12 +15,12 @@ import time
 
 import torch
 import torch.distributed.rpc as rpc
+from tensordict import TensorDict
 from torchrl.data.replay_buffers.rb_prototype import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.utils import accept_remote_rref_invocation
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
-from torchrl.data.tensordict import TensorDict
 
 RETRY_LIMIT = 2
 RETRY_DELAY_SECS = 3

@@ -18,6 +18,7 @@ from datetime import datetime
 
 import torch
 import torch.distributed.rpc as rpc
+from tensordict import TensorDict
 from torchrl.data.replay_buffers.rb_prototype import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import (
@@ -26,7 +27,6 @@ from torchrl.data.replay_buffers.storages import (
     ListStorage,
 )
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
-from torchrl.data.tensordict import TensorDict
 
 RETRY_LIMIT = 2
 RETRY_DELAY_SECS = 3

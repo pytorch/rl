@@ -9,6 +9,7 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from scipy.stats import chisquare
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -21,7 +22,6 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     _keys_to_empty_composite_spec,
 )
-from torchrl.data.tensordict.tensordict import TensorDict, TensorDictBase
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])

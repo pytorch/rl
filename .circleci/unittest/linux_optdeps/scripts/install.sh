@@ -35,6 +35,9 @@ else
     pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 fi
 
+# install tensordict
+pip install git+https://github.com/pytorch-labs/tensordict
+
 # smoke test
 python -c "import functorch"
 
