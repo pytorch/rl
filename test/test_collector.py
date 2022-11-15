@@ -593,9 +593,8 @@ def test_collector_consistency(num_env, env_name, seed=100):
 @pytest.mark.parametrize("collector_class", [SyncDataCollector, aSyncDataCollector])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
-    """
-    Tests that various frames_per_batch lead to the same results
-    """
+    """Tests that various frames_per_batch lead to the same results."""
+
     if num_env == 1:
 
         def env_fn(seed):
