@@ -187,10 +187,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
             "process_optim_batch",
             advantage,
         )
-        trainer._process_optim_batch_ops = [
-            trainer._process_optim_batch_ops[-1],
-            *trainer._process_optim_batch_ops[:-1],
-        ]
 
     final_seed = collector.set_seed(cfg.seed)
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
