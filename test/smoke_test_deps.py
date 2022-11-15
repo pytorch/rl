@@ -2,20 +2,9 @@ import argparse
 import tempfile
 
 import pytest
+from torchrl._utils import implement_for
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
-
-if _has_gym:
-    import gym
-    from packaging import version
-
-    gym_version = version.parse(gym.__version__)
-    PONG_VERSIONED = (
-        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
-    )
-else:
-    # placeholders
-    PONG_VERSIONED = "ALE/Pong-v5"
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -46,7 +35,7 @@ def test_gym():
     import gym  # noqa: F401
 
     assert _has_gym
-    env = GymEnv(PONG_VERSIONED)
+    env = GymEnv(_pong_versioned())
     env.reset()
 
 
@@ -63,6 +52,16 @@ def test_tb():
             # OS error could be raised randomly
             # depending on the test machine
             test_rounds -= 1
+
+
+@implement_for("gym", None, "0.21")
+def _pong_versioned():  # noqa: F811
+    return "Pong-v4"
+
+
+@implement_for("gym", "0.21", None)
+def _pong_versioned():  # noqa: F811
+    return "ALE/Pong-v5"
 
 
 if __name__ == "__main__":
