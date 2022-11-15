@@ -1258,10 +1258,21 @@ class ObservationNorm(ObservationTransform):
         >>> _ = transform(td)
         >>> print(torch.isclose(td.get('next_obs').mean(0),
         ...     torch.zeros(3)).all())
-        Tensor(True)
+        tensor(True)
         >>> print(torch.isclose(td.get('next_obs').std(0),
         ...     torch.ones(3)).all())
-        Tensor(True)
+        tensor(True)
+
+    The normalisation stats can be automatically computed:
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> torch.manual_seed(0)
+        >>> env = GymEnv("Pendulum-v1")
+        >>> env = TransformedEnv(env, ObservationNorm(in_keys=["observation"]))
+        >>> env.set_seed(0)
+        >>> env.transform.init_stats(100)
+        >>> print(env.transform.loc, env.transform.scale)
+        tensor([-1.3752e+01, -6.5087e-03,  2.9294e-03], dtype=torch.float32) tensor([14.9636,  2.5608,  0.6408], dtype=torch.float32)
 
     """
 
@@ -1302,6 +1313,23 @@ class ObservationNorm(ObservationTransform):
         reduce_dim: Union[int, Tuple[int]] = 0,
         key: Optional[str] = None,
     ) -> None:
+        """Initializes the loc and scale stats of the parent environment.
+
+        Normalization constant should ideally make the observation statistics approach
+        those of a standard Gaussian distribution. This method computes a location
+        and scale tensor that will empirically compute the mean and standard
+        deviation of a Gaussian distribution fitted on data generated randomly with
+        the parent environment for a given number of steps.
+
+        Args:
+            num_iter (int): number of random iterations to run in the environment.
+            reduce_dim (int, optional): dimension to compute the mean and std over.
+                Defaults to 0.
+            key (str, optional): if provided, the summary statistics will be
+                retrieved from that key in the resulting tensordicts.
+                Otherwise the first key in :obj:`ObservationNorm.in_keys` will be used.
+
+        """
         if self.loc is not None or self.scale is not None:
             raise RuntimeError(
                 f"Loc/Scale are already initialized: ({self.loc}, {self.scale})"
