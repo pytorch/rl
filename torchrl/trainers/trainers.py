@@ -889,7 +889,7 @@ class BatchSubSampler(TrainerHookBase):
         ...         key1: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
         ...         key2: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
         ...     },
-        ...     [13, 10],
+        ...     [2, 10],
         ... )
         >>> trainer.register_op(
         ...     "process_optim_batch",
