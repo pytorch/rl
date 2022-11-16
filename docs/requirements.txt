@@ -28,4 +28,3 @@ imageio
 imageio[ffmpeg]
 imageio[pyav]
 -e git+https://github.com/pytorch-labs/tensordict.git@main#egg=tensordict
-protobuf==3.20
