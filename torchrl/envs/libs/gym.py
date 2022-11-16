@@ -19,6 +19,7 @@ from torchrl.data import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
+from ..._utils import implement_for
 from ...data.utils import numpy_to_torch_dtype_dict
 from ..gym_like import GymLikeEnv, default_info_dict_reader
 from ..utils import _classproperty
@@ -103,14 +104,20 @@ def _gym_to_torchrl_spec_transform(
 
 
 def _get_envs(to_dict=False) -> List:
-    if gym_version < version.parse("0.26.0"):
-        envs = gym.envs.registration.registry.env_specs.keys()
-    else:
-        envs = gym.envs.registration.registry.keys()
-
+    envs = _get_envs_internal()
     envs = list(envs)
     envs = sorted(envs)
-    return envs
+    return sorted(list(envs))
+
+
+@implement_for("gym", None, "0.26.0")
+def _get_envs_internal():  # noqa: F811
+    return gym.envs.registration.registry.env_specs.keys()
+
+
+@implement_for("gym", "0.26.0", None)
+def _get_envs_internal():  # noqa: F811
+    return gym.envs.registration.registry.keys()
 
 
 def _get_gym():
@@ -186,19 +193,27 @@ class GymWrapper(GymLikeEnv):
                     "PixelObservationWrapper cannot be used to wrap an environment"
                     "that is already a PixelObservationWrapper instance."
                 )
-            if gym_version >= version.parse("0.26.0") and not env.render_mode:
-                warnings.warn(
-                    "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
-                    "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
-                    'where mode is either "rgb_array" or any other supported mode.'
-                )
-                # resetting as 0.26 comes with a very 'nice' OrderEnforcing wrapper
-                env = EnvCompatibility(env)
-                env.reset()
-                env = LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
-            else:
-                env = PixelObservationWrapper(env, pixels_only=pixels_only)
+            env = self._build_env_internal(env, pixels_only)
         return env
+
+    @implement_for("gym", None, "0.26.0")
+    def _build_env_internal(self, env, pixels_only):  # noqa: F811
+        return PixelObservationWrapper(env, pixels_only=pixels_only)
+
+    @implement_for("gym", "0.26.0", None)
+    def _build_env_internal(self, env, pixels_only):  # noqa: F811
+        if env.render_mode:
+            return PixelObservationWrapper(env, pixels_only=pixels_only)
+
+        warnings.warn(
+            "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
+            "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
+            'where mode is either "rgb_array" or any other supported mode.'
+        )
+        # resetting as 0.26 comes with a very 'nice' OrderEnforcing wrapper
+        env = EnvCompatibility(env)
+        env.reset()
+        return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
     @_classproperty
     def available_envs(cls) -> List[str]:
@@ -208,27 +223,34 @@ class GymWrapper(GymLikeEnv):
     def lib(self) -> ModuleType:
         return gym
 
-    def _set_seed(self, seed: int) -> int:
-        skip = False
+    @implement_for("gym", None, "0.19.0")
+    def _set_seed(self, seed: int) -> int:  # noqa: F811
+        if self._seed_calls_reset:
+            self.reset(seed=seed)
+        else:
+            self._seed_calls_reset = False
+            self._env.seed(seed=seed)
+
+        return seed
+
+    @implement_for("gym", "0.19.0", None)
+    def _set_seed(self, seed: int) -> int:  # noqa: F811
         if self._seed_calls_reset is None:
-            if gym_version < version.parse("0.19.0"):
+            try:
+                self.reset(seed=seed)
+                self._seed_calls_reset = True
+            except TypeError as err:
+                warnings.warn(
+                    f"reset with seed kwarg returned an exception: {err}.\n"
+                    f"Calling env.seed from now on."
+                )
                 self._seed_calls_reset = False
                 self._env.seed(seed=seed)
-            else:
-                try:
-                    self.reset(seed=seed)
-                    skip = True
-                    self._seed_calls_reset = True
-                except TypeError as err:
-                    warnings.warn(
-                        f"reset with seed kwarg returned an exception: {err}.\n"
-                        f"Calling env.seed from now on."
-                    )
-                    self._seed_calls_reset = False
-        if self._seed_calls_reset and not skip:
+        elif self._seed_calls_reset:
             self.reset(seed=seed)
         elif not self._seed_calls_reset:
             self._env.seed(seed=seed)
+
         return seed
 
     def _make_specs(self, env: "gym.Env") -> None:
