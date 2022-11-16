@@ -66,7 +66,7 @@ jobs:
         mkdir _tmp
         cd _tmp
         conda run -n build_binary \
-          python -c "import torchrl"
+          python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv"
         cd ..
     - name: Build the docset
       run: |
