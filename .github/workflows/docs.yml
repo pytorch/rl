@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         include:
-         - os: linux.2xlarge
+         - os: linux.4xlarge.nvidia.gpu
            python-version: 3.8
     steps:
     - name: Check ldd --version
@@ -76,7 +76,7 @@ jobs:
       run: |
         conda run -n build_binary python -m pip install -r docs/requirements.txt
         cd ./docs
-        MUJOCO_GL=osmesa conda run -n build_binary make html SPHINXOPTS="-v"
+        MUJOCO_GL=egl conda run -n build_binary make html SPHINXOPTS="-v"
         cd ..
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
