@@ -76,7 +76,7 @@ jobs:
       run: |
         conda run -n build_binary python -m pip install -r docs/requirements.txt
         cd ./docs
-        MUJOCO_GL=egl conda run -n build_binary make html SPHINXOPTS="-v"
+        MUJOCO_GL=egl conda run -n build_binary make html
         cd ..
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
