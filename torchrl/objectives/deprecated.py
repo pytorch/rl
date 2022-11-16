@@ -187,10 +187,7 @@ class REDQLoss_deprecated(LossModule):
         tensordict_save = tensordict
 
         obs_keys = self.actor_network.in_keys
-        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
-        tensordict = tensordict.select(
-            "reward", "done", *next_obs_keys, *obs_keys, "action"
-        )
+        tensordict = tensordict.select("reward", "done", "next", *obs_keys, "action")
 
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
@@ -228,7 +225,7 @@ class REDQLoss_deprecated(LossModule):
             )
             state_value = state_value.min(0)[0]
 
-        tensordict.set("next_state_value", state_value)
+        tensordict.set("next.state_value", state_value)
         target_value = get_next_state_value(
             tensordict,
             gamma=self.gamma,

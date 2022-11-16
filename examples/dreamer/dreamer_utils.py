@@ -309,7 +309,7 @@ def call_record(
 
         true_pixels = recover_pixels(world_model_td["next_pixels"], stats)
 
-        reco_pixels = recover_pixels(world_model_td["next_reco_pixels"], stats)
+        reco_pixels = recover_pixels(world_model_td["next", "reco_pixels"], stats)
         with autocast(dtype=torch.float16):
             world_model_td = world_model_td.select("state", "belief", "reward")
             world_model_td = model_based_env.rollout(
@@ -319,7 +319,7 @@ def call_record(
                 tensordict=world_model_td[:, 0],
             )
         imagine_pxls = recover_pixels(
-            model_based_env.decode_obs(world_model_td)["next_reco_pixels"],
+            model_based_env.decode_obs(world_model_td)["next", "reco_pixels"],
             stats,
         )
 

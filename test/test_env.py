@@ -205,7 +205,7 @@ def test_rollout_predictability(device):
     ).all()
     assert (
         torch.arange(first + 1, first + 101, device=device)
-        == td_out.get("next_observation").squeeze()
+        == td_out.get(("next", "observation")).squeeze()
     ).all()
     assert (
         torch.arange(first + 1, first + 101, device=device)
@@ -333,11 +333,11 @@ class TestModelBasedEnvBase:
             world_model, device=device, batch_size=torch.Size([10])
         )
         rollout = mb_env.rollout(max_steps=100)
-        expected_keys = {"next_" + key for key in mb_env.observation_spec.keys()}
+        expected_keys = {("next", key) for key in mb_env.observation_spec.keys()}
         expected_keys = expected_keys.union(set(mb_env.input_spec.keys()))
-        expected_keys = expected_keys.union({"reward", "done"})
-        assert set(rollout.keys()) == expected_keys
-        assert rollout["next_hidden_observation"].shape == (10, 100, 4)
+        expected_keys = expected_keys.union({"reward", "done", "next"})
+        assert set(rollout.keys(True)) == expected_keys
+        assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_mb_env_batch_lock(self, device, seed=0):
@@ -643,7 +643,7 @@ class TestParallel:
         ).contiguous()
         key = "pixels" if "pixels" in td_serial.keys() else "observation"
         torch.testing.assert_close(
-            td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
+            td_serial[:, 0].get(("next", key)), td_serial[:, 1].get(key)
         )
 
         out_seed_parallel = env_parallel.set_seed(0, static_seed=static_seed)
@@ -657,7 +657,7 @@ class TestParallel:
             max_steps=10, auto_reset=False, tensordict=td0_parallel
         ).contiguous()
         torch.testing.assert_close(
-            td_parallel[:, :-1].get("next_" + key), td_parallel[:, 1:].get(key)
+            td_parallel[:, :-1].get(("next", key)), td_parallel[:, 1:].get(key)
         )
 
         assert_allclose_td(td0_serial, td0_parallel)
@@ -931,10 +931,10 @@ def test_seed():
     rollout2 = env2.rollout(max_steps=30)
 
     torch.testing.assert_close(
-        rollout1["observation"][1:], rollout1["next_observation"][:-1]
+        rollout1["observation"][1:], rollout1[("next", "observation")][:-1]
     )
     torch.testing.assert_close(
-        rollout2["observation"][1:], rollout2["next_observation"][:-1]
+        rollout2["observation"][1:], rollout2[("next", "observation")][:-1]
     )
     torch.testing.assert_close(rollout1["observation"], rollout2["observation"])
 
@@ -951,7 +951,7 @@ def test_steptensordict(
     tensordict = TensorDict(
         {
             "ledzep": torch.randn(4, 2),
-            "next_ledzep": torch.randn(4, 2),
+            "next": {"ledzep": torch.randn(4, 2)},
             "reward": torch.randn(4, 1),
             "done": torch.zeros(4, 1, dtype=torch.bool),
             "beatles": torch.randn(4, 1),
@@ -969,7 +969,7 @@ def test_steptensordict(
         next_tensordict=next_tensordict,
     )
     assert "ledzep" in out.keys()
-    assert out["ledzep"] is tensordict["next_ledzep"]
+    assert out["ledzep"] is tensordict["next", "ledzep"]
     if keep_other:
         assert "beatles" in out.keys()
         assert out["beatles"] is tensordict["beatles"]
@@ -1063,7 +1063,7 @@ def test_info_dict_reader(seed=0):
     tensordict = env.reset()
     tensordict = env.rand_step(tensordict)
 
-    assert env.observation_spec["x_position"].is_in(tensordict["next_x_position"])
+    assert env.observation_spec["x_position"].is_in(tensordict[("next", "x_position")])
 
     env2 = GymWrapper(gym.make("HalfCheetah-v4"))
     env2.set_info_dict_reader(
@@ -1075,7 +1075,9 @@ def test_info_dict_reader(seed=0):
     tensordict2 = env2.reset()
     tensordict2 = env2.rand_step(tensordict2)
 
-    assert not env2.observation_spec["x_position"].is_in(tensordict2["next_x_position"])
+    assert not env2.observation_spec["x_position"].is_in(
+        tensordict2[("next", "x_position")]
+    )
 
 
 if __name__ == "__main__":

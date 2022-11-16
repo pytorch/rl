@@ -9,22 +9,11 @@ import collections
 import multiprocessing as mp
 from copy import deepcopy, copy
 from textwrap import indent
-from typing import Any, List, Optional, OrderedDict, Sequence, Union
+from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
-from torch import nn, Tensor
-
-try:
-    from torchvision.transforms.functional import center_crop
-    from torchvision.transforms.functional_tensor import (
-        resize,
-    )  # as of now resize is imported from torchvision
-
-    _has_tv = True
-except ImportError:
-    _has_tv = False
-
 from tensordict.tensordict import TensorDictBase, TensorDict
+from torch import nn, Tensor
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -42,6 +31,16 @@ from torchrl.envs.transforms.utils import check_finite
 from torchrl.envs.utils import step_mdp
 
 
+try:
+    from torchvision.transforms.functional import center_crop
+    from torchvision.transforms.functional_tensor import (
+        resize,
+    )  # as of now resize is imported from torchvision
+
+    _has_tv = True
+except ImportError:
+    _has_tv = False
+
 IMAGE_KEYS = ["pixels"]
 _MAX_NOOPS_TRIALS = 10
 
@@ -53,7 +52,7 @@ def _apply_to_composite(function):
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if in_key in observation_spec.keys():
                     d[out_key] = function(self, observation_spec[in_key])
-            return CompositeSpec(**d)
+            return CompositeSpec(d)
         else:
             return function(self, observation_spec)
 
@@ -95,6 +94,9 @@ class Transform(nn.Module):
         out_keys_inv: Optional[Sequence[str]] = None,
     ):
         super().__init__()
+        if isinstance(in_keys, str):
+            in_keys = [in_keys]
+
         self.in_keys = in_keys
         if out_keys is None:
             out_keys = copy(self.in_keys)
@@ -134,7 +136,7 @@ class Transform(nn.Module):
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         self._check_inplace()
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys():
+            if in_key in tensordict.keys(include_nested=True):
                 observation = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(out_key, observation, inplace=self.inplace)
         return tensordict
@@ -160,7 +162,7 @@ class Transform(nn.Module):
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._check_inplace()
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-            if in_key in tensordict.keys():
+            if in_key in tensordict.keys(include_nested=True):
                 observation = self._inv_apply_transform(tensordict.get(in_key))
                 tensordict.set(out_key, observation, inplace=self.inplace)
         return tensordict
@@ -1281,10 +1283,21 @@ class ObservationNorm(ObservationTransform):
         >>> _ = transform(td)
         >>> print(torch.isclose(td.get('obs').mean(0),
         ...     torch.zeros(3)).all())
-        Tensor(True)
-        >>> print(torch.isclose(td.get('obs').std(0),
+        tensor(True)
+        >>> print(torch.isclose(td.get('next_obs').std(0),
         ...     torch.ones(3)).all())
-        Tensor(True)
+        tensor(True)
+
+    The normalisation stats can be automatically computed:
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> torch.manual_seed(0)
+        >>> env = GymEnv("Pendulum-v1")
+        >>> env = TransformedEnv(env, ObservationNorm(in_keys=["observation"]))
+        >>> env.set_seed(0)
+        >>> env.transform.init_stats(100)
+        >>> print(env.transform.loc, env.transform.scale)
+        tensor([-1.3752e+01, -6.5087e-03,  2.9294e-03], dtype=torch.float32) tensor([14.9636,  2.5608,  0.6408], dtype=torch.float32)
 
     """
 
@@ -1292,8 +1305,8 @@ class ObservationNorm(ObservationTransform):
 
     def __init__(
         self,
-        loc: Union[float, torch.Tensor],
-        scale: Union[float, torch.Tensor],
+        loc: Optional[float, torch.Tensor] = None,
+        scale: Optional[float, torch.Tensor] = None,
         in_keys: Optional[Sequence[str]] = None,
         # observation_spec_key: =None,
         standard_normal: bool = False,
@@ -1305,18 +1318,79 @@ class ObservationNorm(ObservationTransform):
                 "observation_state",
             ]
         super().__init__(in_keys=in_keys)
-        if not isinstance(loc, torch.Tensor):
+        self.standard_normal = standard_normal
+        self.eps = 1e-6
+
+        if loc is not None and not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc, dtype=torch.float)
-        if not isinstance(scale, torch.Tensor):
+
+        if scale is not None and not isinstance(scale, torch.Tensor):
             scale = torch.tensor(scale, dtype=torch.float)
+            scale = scale.clamp_min(self.eps)
 
         # self.observation_spec_key = observation_spec_key
-        self.standard_normal = standard_normal
         self.register_buffer("loc", loc)
-        eps = 1e-6
-        self.register_buffer("scale", scale.clamp_min(eps))
+        self.register_buffer("scale", scale)
+
+    def init_stats(
+        self,
+        num_iter: int,
+        reduce_dim: Union[int, Tuple[int]] = 0,
+        key: Optional[str] = None,
+    ) -> None:
+        """Initializes the loc and scale stats of the parent environment.
+
+        Normalization constant should ideally make the observation statistics approach
+        those of a standard Gaussian distribution. This method computes a location
+        and scale tensor that will empirically compute the mean and standard
+        deviation of a Gaussian distribution fitted on data generated randomly with
+        the parent environment for a given number of steps.
+
+        Args:
+            num_iter (int): number of random iterations to run in the environment.
+            reduce_dim (int, optional): dimension to compute the mean and std over.
+                Defaults to 0.
+            key (str, optional): if provided, the summary statistics will be
+                retrieved from that key in the resulting tensordicts.
+                Otherwise, the first key in :obj:`ObservationNorm.in_keys` will be used.
+
+        """
+        if self.loc is not None or self.scale is not None:
+            raise RuntimeError(
+                f"Loc/Scale are already initialized: ({self.loc}, {self.scale})"
+            )
+
+        if len(self.in_keys) > 1 and key is None:
+            raise RuntimeError(
+                "Transform has multiple in_keys but no specific key was passed as an argument"
+            )
+        key = self.in_keys[0] if key is None else key
+
+        parent = self.parent
+        collected_frames = 0
+        data = []
+        while collected_frames < num_iter:
+            tensordict = parent.rollout(max_steps=num_iter)
+            collected_frames += tensordict.numel()
+            data.append(tensordict.get(key))
+
+        data = torch.cat(data, reduce_dim)
+        loc = data.mean(reduce_dim)
+        scale = data.std(reduce_dim)
+
+        if not self.standard_normal:
+            loc = loc / scale
+            scale = 1 / scale
+
+        self.register_buffer("loc", loc)
+        self.register_buffer("scale", scale.clamp_min(self.eps))
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+        if self.loc is None or self.scale is None:
+            raise RuntimeError(
+                "Loc/Scale have not been initialized. Either pass in values in the constructor "
+                "or call the init_stats method"
+            )
         if self.standard_normal:
             loc = self.loc
             scale = self.scale
@@ -1630,7 +1704,7 @@ class CatTensors(Transform):
             self.in_keys = self._find_in_keys()
             self._initialized = True
 
-        if all([key in tensordict.keys() for key in self.in_keys]):
+        if all([key in tensordict.keys(include_nested=True) for key in self.in_keys]):
             values = [tensordict.get(key) for key in self.in_keys]
             if self.unsqueeze_if_oor:
                 pos_idx = self.dim > 0
@@ -1652,7 +1726,7 @@ class CatTensors(Transform):
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
                 f" {sorted(list(self.in_keys))} but got a TensorDict with keys"
-                f" {sorted(list(tensordict.keys()))}"
+                f" {sorted(list(tensordict.keys(include_nested=True)))}"
             )
         return tensordict
 
@@ -1804,7 +1878,6 @@ class NoopResetEnv(Transform):
         """Do no-op action for a number of steps in [1, noop_max]."""
         parent = self.parent
         # keys = tensordict.keys()
-        # keys = [key for key in keys if not key.startswith("next_")]
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
@@ -2033,7 +2106,7 @@ class VecNorm(Transform):
 
     Args:
         in_keys (iterable of str, optional): keys to be updated.
-            default: ["next_observation", "reward"]
+            default: ["observation", "reward"]
         shared_td (TensorDictBase, optional): A shared tensordict containing the
             keys of the transform.
         decay (number, optional): decay rate of the moving average.
@@ -2053,9 +2126,9 @@ class VecNorm(Transform):
         ...         _ = env.reset()
         ...     tds += [td]
         >>> tds = torch.stack(tds, 0)
-        >>> print((abs(tds.get("next_observation").mean(0))<0.2).all())
+        >>> print((abs(tds.get(("next", "observation")).mean(0))<0.2).all())
         tensor(True)
-        >>> print((abs(tds.get("next_observation").std(0)-1)<0.2).all())
+        >>> print((abs(tds.get(("next", "observation")).std(0)-1)<0.2).all())
         tensor(True)
 
     """
@@ -2103,7 +2176,7 @@ class VecNorm(Transform):
             self.lock.acquire()
 
         for key in self.in_keys:
-            if key not in tensordict.keys():
+            if key not in tensordict.keys(include_nested=True):
                 continue
             self._init(tensordict, key)
             # update and standardize
@@ -2190,7 +2263,7 @@ class VecNorm(Transform):
     @staticmethod
     def build_td_for_shared_vecnorm(
         env: EnvBase,
-        keys_prefix: Optional[Sequence[str]] = None,
+        keys: Optional[Sequence[str]] = None,
         memmap: bool = False,
     ) -> TensorDictBase:
         """Creates a shared tensordict for normalization across processes.
@@ -2198,8 +2271,8 @@ class VecNorm(Transform):
         Args:
             env (EnvBase): example environment to be used to create the
                 tensordict
-            keys_prefix (iterable of str, optional): prefix of the keys that
-                have to be normalized. Default is `["next_", "reward"]`
+            keys (iterable of str, optional): keys that
+                have to be normalized. Default is `["next", "reward"]`
             memmap (bool): if True, the resulting tensordict will be cast into
                 memmory map (using `memmap_()`). Otherwise, the tensordict
                 will be placed in shared memory.
@@ -2212,7 +2285,7 @@ class VecNorm(Transform):
             >>> queue = mp.Queue()
             >>> env = make_env()
             >>> td_shared = VecNorm.build_td_for_shared_vecnorm(env,
-            ...     ["next_observation", "reward"])
+            ...     ["next", "reward"])
             >>> assert td_shared.is_shared()
             >>> queue.put(td_shared)
             >>> # on workers
@@ -2220,20 +2293,20 @@ class VecNorm(Transform):
             >>> env = TransformedEnv(make_env(), v)
 
         """
-        if keys_prefix is None:
-            keys_prefix = ["next_", "reward"]
+        raise NotImplementedError("this feature is currently put on hold.")
+        sep = ".-|-."
+        if keys is None:
+            keys = ["next", "reward"]
         td = make_tensordict(env)
-        keys = set(
-            key
-            for key in td.keys()
-            if any(key.startswith(_prefix) for _prefix in keys_prefix)
-        )
+        keys = set(key for key in td.keys() if key in keys)
         td_select = td.select(*keys)
+        td_select = td_select.flatten_keys(sep)
         if td.batch_dims:
             raise RuntimeError(
                 f"VecNorm should be used with non-batched environments. "
                 f"Got batch_size={td.batch_size}"
             )
+        keys = list(td_select.keys())
         for key in keys:
             td_select.set(key + "_ssq", td_select.get(key).clone())
             td_select.set(
@@ -2246,7 +2319,8 @@ class VecNorm(Transform):
                 ),
             )
             td_select.rename_key(key, key + "_sum")
-        td_select.zero_()
+        td_select.exclude(*keys).zero_()
+        td_select = td_select.unflatten_keys(sep)
         if memmap:
             return td_select.memmap_()
         return td_select.share_memory_()

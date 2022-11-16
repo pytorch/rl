@@ -137,9 +137,9 @@ class VIPTransform(Compose):
     Args:
         model_name (str): one of resnet50
         in_keys (list of str, optional): list of input keys. If left empty, the
-            "next_pixels" key is assumed.
+            "pixels" key is assumed.
         out_keys (list of str, optional): list of output keys. If left empty,
-             "next_vip_vec" is assumed.
+             "vip_vec" is assumed.
         size (int, optional): Size of the image to feed to resnet.
             Defaults to 244.
         download (bool, optional): if True, the weights will be downloaded using

@@ -593,9 +593,8 @@ def test_collector_consistency(num_env, env_name, seed=100):
 @pytest.mark.parametrize("collector_class", [SyncDataCollector, aSyncDataCollector])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
-    """
-    Tests that various frames_per_batch lead to the same results
-    """
+    """Tests that various frames_per_batch lead to the same results."""
+
     if num_env == 1:
 
         def env_fn(seed):
@@ -894,7 +893,13 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     policy_kwargs = {
         "module": net,
         "in_keys": ["observation", "hidden1", "hidden2"],
-        "out_keys": ["action", "hidden1", "hidden2", "next_hidden1", "next_hidden2"],
+        "out_keys": [
+            "action",
+            "hidden1",
+            "hidden2",
+            ("next", "hidden1"),
+            ("next", "hidden2"),
+        ],
     }
     if explicit_spec:
         hidden_spec = NdUnboundedContinuousTensorSpec((1, hidden_size))
@@ -902,8 +907,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
             action=UnboundedContinuousTensorSpec(),
             hidden1=hidden_spec,
             hidden2=hidden_spec,
-            next_hidden1=hidden_spec,
-            next_hidden2=hidden_spec,
+            next=CompositeSpec(hidden1=hidden_spec, hidden2=hidden_spec),
         )
 
     policy = TensorDictModule(**policy_kwargs)
@@ -933,9 +937,10 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "hidden1",
         "hidden2",
         "mask",
-        "next_hidden1",
-        "next_hidden2",
-        "next_observation",
+        ("next", "hidden1"),
+        ("next", "hidden2"),
+        ("next", "observation"),
+        "next",
         "observation",
         "reward",
         "step_count",
@@ -943,7 +948,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     }
     b = next(iter(collector))
 
-    assert set(b.keys()) == keys
+    assert set(b.keys(True)) == keys
     collector.shutdown()
     del collector
 

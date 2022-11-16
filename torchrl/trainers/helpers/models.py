@@ -169,7 +169,7 @@ def make_dqn_actor(
             "mlp_kwargs_output": {"num_cells": 512, "layer_class": linear_layer_class},
         }
         # automatically infer in key
-        in_key = list(env_specs["observation_spec"])[0].split("next_")[-1]
+        in_key = list(env_specs["observation_spec"])[0]
 
     out_features = action_spec.shape[0]
     actor_class = QValueActor
@@ -246,8 +246,8 @@ def make_ddpg_actor(
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
         >>> import dataclasses
-        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
-        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["observation"]),
+        ...    CatTensors(["observation"], "observation_vector")))
         >>> device = torch.device("cpu")
         >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
         ...                    (DDPGModelConfig, EnvConfig)
@@ -447,8 +447,8 @@ def make_ppo_model(
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
         >>> import dataclasses
-        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
-        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["observation"]),
+        ...    CatTensors(["observation"], "observation_vector")))
         >>> device = torch.device("cpu")
         >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
         ...                    (PPOModelConfig, EnvConfig)
@@ -632,7 +632,7 @@ def make_ppo_model(
                 mlp_kwargs={"num_cells": [256, 256], "out_features": 256},
             )
             in_keys_actor += ["hidden0", "hidden1"]
-            out_keys += ["hidden0", "hidden1", "next_hidden0", "next_hidden1"]
+            out_keys += ["hidden0", "hidden1", ("next", "hidden0"), ("next", "hidden1")]
         else:
             policy_net = MLP(
                 num_cells=[400, 300],
@@ -740,8 +740,8 @@ def make_sac_model(
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
         >>> import dataclasses
-        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
-        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["observation"]),
+        ...    CatTensors(["observation"], "observation_vector")))
         >>> device = torch.device("cpu")
         >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
         ...                    (SACModelConfig, EnvConfig)
@@ -960,8 +960,8 @@ def make_redq_model(
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
         >>> import dataclasses
-        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
-        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["observation"]),
+        ...    CatTensors(["observation"], "observation_vector")))
         >>> device = torch.device("cpu")
         >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
         ...                    (RedqModelConfig, EnvConfig)
@@ -1273,19 +1273,19 @@ def _dreamer_make_world_model(
             rssm_prior,
             in_keys=["state", "belief", "action"],
             out_keys=[
-                "next_prior_mean",
-                "next_prior_std",
+                ("next", "prior_mean"),
+                ("next", "prior_std"),
                 "_",
-                "next_belief",
+                ("next", "belief"),
             ],
         ),
         TensorDictModule(
             rssm_posterior,
-            in_keys=["next_belief", "next_encoded_latents"],
+            in_keys=[("next", "belief"), ("next", "encoded_latents")],
             out_keys=[
-                "next_posterior_mean",
-                "next_posterior_std",
-                "next_state",
+                ("next", "posterior_mean"),
+                ("next", "posterior_std"),
+                ("next", "state"),
             ],
         ),
     )
@@ -1293,19 +1293,19 @@ def _dreamer_make_world_model(
     transition_model = TensorDictSequential(
         TensorDictModule(
             obs_encoder,
-            in_keys=["next_pixels"],
-            out_keys=["next_encoded_latents"],
+            in_keys=[("next", "pixels")],
+            out_keys=[("next", "encoded_latents")],
         ),
         rssm_rollout,
         TensorDictModule(
             obs_decoder,
-            in_keys=["next_state", "next_belief"],
-            out_keys=["next_reco_pixels"],
+            in_keys=[("next", "state"), ("next", "belief")],
+            out_keys=[("next", "reco_pixels")],
         ),
     )
     reward_model = TensorDictModule(
         reward_module,
-        in_keys=["next_state", "next_belief"],
+        in_keys=[("next", "state"), ("next", "belief")],
         out_keys=["reward"],
     )
     world_model = WorldModelWrapper(
@@ -1421,7 +1421,7 @@ def _dreamer_make_actor_real(
                 "_",
                 "_",
                 "_",  # we don't need the prior state
-                "next_belief",
+                ("next", "belief"),
             ],
         ),
     )
@@ -1456,8 +1456,8 @@ def _dreamer_make_mbenv(
     if use_decoder_in_env:
         mb_env_obs_decoder = TensorDictModule(
             obs_decoder,
-            in_keys=["next_state", "next_belief"],
-            out_keys=["next_reco_pixels"],
+            in_keys=[("next", "state"), ("next", "belief")],
+            out_keys=[("next", "reco_pixels")],
         )
     else:
         mb_env_obs_decoder = None
