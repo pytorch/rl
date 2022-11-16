@@ -146,9 +146,8 @@ class REDQLoss(LossModule):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
-        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
         tensordict_select = tensordict.select(
-            "reward", "done", *next_obs_keys, *obs_keys, "action"
+            "reward", "done", "next", *obs_keys, "action"
         )
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
@@ -297,7 +296,7 @@ class REDQLoss(LossModule):
                 "entropy": -sample_log_prob.mean().detach(),
                 "state_action_value_actor": state_action_value_actor.mean().detach(),
                 "action_log_prob_actor": action_log_prob_actor.mean().detach(),
-                "next_state_value": next_state_value.mean().detach(),
+                "next.state_value": next_state_value.mean().detach(),
                 "target_value": target_value.mean().detach(),
             },
             [],

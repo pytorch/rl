@@ -82,6 +82,7 @@ class _VIPNet(Transform):
 
         keys = [key for key in observation_spec._specs.keys() if key in self.in_keys]
         device = observation_spec[keys[0]].device
+        dim = observation_spec[keys[0]].shape[:-3]
 
         observation_spec = CompositeSpec(**observation_spec)
         if self.del_keys:
@@ -90,7 +91,7 @@ class _VIPNet(Transform):
 
         for out_key in self.out_keys:
             observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
-                shape=torch.Size([self.outdim]), device=device
+                shape=torch.Size([*dim, self.outdim]), device=device
             )
 
         return observation_spec
@@ -136,9 +137,9 @@ class VIPTransform(Compose):
     Args:
         model_name (str): one of resnet50
         in_keys (list of str, optional): list of input keys. If left empty, the
-            "next_pixels" key is assumed.
+            "pixels" key is assumed.
         out_keys (list of str, optional): list of output keys. If left empty,
-             "next_vip_vec" is assumed.
+             "vip_vec" is assumed.
         size (int, optional): Size of the image to feed to resnet.
             Defaults to 244.
         download (bool, optional): if True, the weights will be downloaded using
@@ -224,9 +225,9 @@ class VIPTransform(Compose):
         # VIP
         if out_keys is None:
             if stack_images:
-                out_keys = ["next_vip_vec"]
+                out_keys = ["vip_vec"]
             else:
-                out_keys = [f"next_vip_vec_{i}" for i in range(len(in_keys))]
+                out_keys = [f"vip_vec_{i}" for i in range(len(in_keys))]
         elif stack_images and len(out_keys) != 1:
             raise ValueError(
                 f"out_key must be of length 1 if stack_images is True. Got out_keys={out_keys}"
@@ -336,17 +337,21 @@ class VIPRewardTransform(VIPTransform):
         )
         return tensordict
 
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if "goal_embedding" not in tensordict.keys():
             tensordict = self._embed_goal(tensordict)
-        tensordict = super().forward(tensordict)
-        cur_embedding = tensordict.get(self.out_keys[0])
-        last_embedding_key = self.out_keys[0].split("next_")[1]
+        last_embedding_key = self.out_keys[0]
         last_embedding = tensordict.get(last_embedding_key, None)
+        tensordict = super()._step(tensordict)
+        cur_embedding = tensordict.get(self.out_keys[0])
         if last_embedding is not None:
             goal_embedding = tensordict["goal_embedding"]
             reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
                 -torch.norm(last_embedding - goal_embedding, dim=-1)
             )
             tensordict.set("reward", reward)
+        return tensordict
+
+    def forward(self, tensordict):
+        tensordict = super().forward(tensordict)
         return tensordict
