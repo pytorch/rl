@@ -18,7 +18,7 @@ repos:
           - black == 21.9b0
           - usort == 0.6.4
 
-  - repo: https://gitlab.com/pycqa/flake8
+  - repo: https://github.com/pycqa/flake8
     rev: 3.9.2
     hooks:
       - id: flake8

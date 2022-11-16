@@ -7,7 +7,7 @@ import argparse
 
 import pytest
 import torch
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDictBase
 
 _has_functorch = False
 try:
@@ -22,8 +22,8 @@ except ImportError:
 
     make_functional = FunctionalModule._create_from
     make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
+from tensordict import TensorDict
 from torch import nn
-from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     NdBoundedTensorSpec,
@@ -31,6 +31,10 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import NormalParamWrapper, TanhNormal, TensorDictModule
+from torchrl.modules.tensordict_module.common import (
+    is_tensordict_compatible,
+    ensure_tensordict_compatible,
+)
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
 )
@@ -1842,3 +1846,110 @@ class TestTDSequence:
     if __name__ == "__main__":
         args, unknown = argparse.ArgumentParser().parse_known_args()
         pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+
+
+def test_is_tensordict_compatible():
+    class MultiHeadLinear(nn.Module):
+        def __init__(self, in_1, out_1, out_2, out_3):
+            super().__init__()
+            self.linear_1 = nn.Linear(in_1, out_1)
+            self.linear_2 = nn.Linear(in_1, out_2)
+            self.linear_3 = nn.Linear(in_1, out_3)
+
+        def forward(self, x):
+            return self.linear_1(x), self.linear_2(x), self.linear_3(x)
+
+    td_module = TensorDictModule(
+        MultiHeadLinear(5, 4, 3, 2),
+        in_keys=["in_1", "in_2"],
+        out_keys=["out_1", "out_2"],
+    )
+    assert is_tensordict_compatible(td_module)
+
+    class MockCompatibleModule(nn.Module):
+        def __init__(self, in_keys, out_keys):
+            self.in_keys = in_keys
+            self.out_keys = out_keys
+
+        def forward(self, tensordict):
+            pass
+
+    compatible_nn_module = MockCompatibleModule(
+        in_keys=["in_1", "in_2"],
+        out_keys=["out_1", "out_2"],
+    )
+    assert is_tensordict_compatible(compatible_nn_module)
+
+    class MockIncompatibleModuleNoKeys(nn.Module):
+        def forward(self, input):
+            pass
+
+    incompatible_nn_module_no_keys = MockIncompatibleModuleNoKeys()
+    assert not is_tensordict_compatible(incompatible_nn_module_no_keys)
+
+    class MockIncompatibleModuleMultipleArgs(nn.Module):
+        def __init__(self, in_keys, out_keys):
+            self.in_keys = in_keys
+            self.out_keys = out_keys
+
+        def forward(self, input_1, input_2):
+            pass
+
+    incompatible_nn_module_multi_args = MockIncompatibleModuleMultipleArgs(
+        in_keys=["in_1", "in_2"],
+        out_keys=["out_1", "out_2"],
+    )
+    with pytest.raises(TypeError):
+        is_tensordict_compatible(incompatible_nn_module_multi_args)
+
+
+def test_ensure_tensordict_compatible():
+    class MultiHeadLinear(nn.Module):
+        def __init__(self, in_1, out_1, out_2, out_3):
+            super().__init__()
+            self.linear_1 = nn.Linear(in_1, out_1)
+            self.linear_2 = nn.Linear(in_1, out_2)
+            self.linear_3 = nn.Linear(in_1, out_3)
+
+        def forward(self, x):
+            return self.linear_1(x), self.linear_2(x), self.linear_3(x)
+
+    td_module = TensorDictModule(
+        MultiHeadLinear(5, 4, 3, 2),
+        in_keys=["in_1", "in_2"],
+        out_keys=["out_1", "out_2"],
+    )
+    ensured_module = ensure_tensordict_compatible(td_module)
+    assert ensured_module is td_module
+    with pytest.raises(TypeError):
+        ensure_tensordict_compatible(td_module, in_keys=["input"])
+    with pytest.raises(TypeError):
+        ensure_tensordict_compatible(td_module, out_keys=["output"])
+
+    class NonNNModule:
+        def __init__(self):
+            pass
+
+        def forward(self, x):
+            pass
+
+    non_nn_module = NonNNModule()
+    with pytest.raises(TypeError):
+        ensure_tensordict_compatible(non_nn_module)
+
+    class ErrorNNModule(nn.Module):
+        def forward(self, in_1, in_2):
+            pass
+
+    error_nn_module = ErrorNNModule()
+    with pytest.raises(TypeError):
+        ensure_tensordict_compatible(error_nn_module, in_keys=["input"])
+
+    nn_module = MultiHeadLinear(5, 4, 3, 2)
+    ensured_module = ensure_tensordict_compatible(
+        nn_module,
+        in_keys=["x"],
+        out_keys=["out_1", "out_2", "out_3"],
+    )
+    assert set(ensured_module.in_keys) == {"x"}
+    assert isinstance(ensured_module, TensorDictModule)

@@ -11,8 +11,6 @@ from torch import nn, distributions as d
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 
-__all__ = ["NoisyLinear", "NoisyLazyLinear", "reset_noise"]
-
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
 from torchrl.envs.utils import exploration_mode
@@ -265,8 +263,8 @@ class gSDEModule(nn.Module):
         device (DEVICE_TYPING, optional): device to create the model on.
 
     Examples:
+        >>> from tensordict import TensorDict
         >>> from torchrl.modules import TensorDictModule, TensorDictSequential, ProbabilisticActor, TanhNormal
-        >>> from torchrl.data import TensorDict
         >>> batch, state_dim, action_dim = 3, 7, 5
         >>> model = nn.Linear(state_dim, action_dim)
         >>> deterministic_policy = TensorDictModule(model, in_keys=["obs"], out_keys=["action"])

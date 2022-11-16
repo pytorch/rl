@@ -6,25 +6,18 @@
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Type, Union, Dict, Any
 
+from tensordict.tensordict import TensorDictBase
+
 from torchrl.collectors.collectors import (
     _DataCollector,
-    _MultiDataCollector,
     SyncDataCollector,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
 )
 from torchrl.data import MultiStep
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
-
-__all__ = [
-    "sync_sync_collector",
-    "sync_async_collector",
-    "make_collector_offpolicy",
-    "make_collector_onpolicy",
-]
 
 
 def sync_async_collector(
@@ -181,7 +174,7 @@ def _make_collector(
     num_env_per_collector: Optional[int] = None,
     num_collectors: Optional[int] = None,
     **kwargs,
-) -> _MultiDataCollector:
+) -> _DataCollector:
     if env_kwargs is None:
         env_kwargs = dict()
     if isinstance(env_fns, list):
@@ -373,6 +366,8 @@ def make_collector_onpolicy(
 
 @dataclass
 class OnPolicyCollectorConfig:
+    """On-policy collector config struct."""
+
     collector_devices: Any = field(default_factory=lambda: ["cpu"])
     # device on which the data collector should store the trajectories to be passed to this script.
     # If the collector device differs from the policy device (cuda:0 if available), then the
@@ -416,6 +411,8 @@ class OnPolicyCollectorConfig:
 
 @dataclass
 class OffPolicyCollectorConfig(OnPolicyCollectorConfig):
+    """Off-policy collector config struct."""
+
     multi_step: bool = False
     # whether or not multi-step rewards should be used.
     n_steps_return: int = 3

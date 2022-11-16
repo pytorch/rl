@@ -32,6 +32,7 @@ We also provide a prototyped composable replay buffer.
 
     torchrl.data.replay_buffers.rb_prototype.ReplayBuffer
     torchrl.data.replay_buffers.rb_prototype.TensorDictReplayBuffer
+    torchrl.data.replay_buffers.rb_prototype.RemoteTensorDictReplayBuffer
     torchrl.data.replay_buffers.samplers.Sampler
     torchrl.data.replay_buffers.samplers.RandomSampler
     torchrl.data.replay_buffers.samplers.PrioritizedSampler
@@ -42,25 +43,21 @@ We also provide a prototyped composable replay buffer.
     torchrl.data.replay_buffers.writers.Writer
     torchrl.data.replay_buffers.writers.RoundRobinWriter
 
+Storage choice is very influential on replay buffer sampling latency, especially in distributed reinforcement learning settings with larger data volumes.
+:class:`LazyMemmapStorage` is highly advised in distributed settings with shared storage due to the lower serialisation cost of MemmapTensors as well as the ability to specify file storage locations for improved node failure recovery.
+The following mean sampling latency improvements over using ListStorage were found from rough benchmarking in https://github.com/pytorch/rl/tree/main/benchmarks/storage.
 
++-------------------------------+-----------+
+| Storage Type                  | Speed up  |
+|                               |           |
++===============================+===========+
+| :class:`ListStorage`          | 1x        |
++-------------------------------+-----------+
+| :class:`LazyTensorStorage`    | 1.83x     |
++-------------------------------+-----------+
+| :class:`LazyMemmapStorage`    | 3.44x     |
++-------------------------------+-----------+
 
-TensorDict
-----------
-
-Passing data across objects can become a burdensome task when designing high-level classes: for instance it can be
-hard to design an actor class that can take an arbitrary number of inputs and return an arbitrary number of inputs. The
-`TensorDict` class simplifies this process by packing together a bag of tensors in a dictionary-like object. This
-class supports a set of basic operations on tensors to facilitate the manipulation of entire batch of data (e.g.
-`torch.cat`, `torch.stack`, `.to(device)` etc.).
-
-
-.. autosummary::
-    :toctree: generated/
-    :template: rl_template.rst
-
-    TensorDict
-    SubTensorDict
-    LazyStackedTensorDict
 
 TensorSpec
 ----------
@@ -92,6 +89,4 @@ Utils
     :toctree: generated/
     :template: rl_template.rst
 
-    utils.expand_as_right
-    utils.expand_right
     MultiStep

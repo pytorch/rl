@@ -37,13 +37,11 @@ OPTIMIZERS = {
     "adamax": optim.Adamax,
 }
 
-__all__ = [
-    "make_trainer",
-]
-
 
 @dataclass
 class TrainerConfig:
+    """Trainer config struct."""
+
     optim_steps_per_batch: int = 500
     # Number of optimization steps in between two collection of data. See frames_per_batch below.
     optimizer: str = "adam"
@@ -224,6 +222,7 @@ def make_trainer(
             "process_optim_batch",
             BatchSubSampler(batch_size=cfg.batch_size, sub_traj_len=cfg.sub_traj_len),
         )
+        trainer.register_op("process_optim_batch", lambda batch: batch.to(device))
 
     if optim_scheduler is not None:
         trainer.register_op("post_optim", optim_scheduler.step)

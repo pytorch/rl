@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import inspect
 import warnings
 from copy import deepcopy
 from textwrap import indent
@@ -14,11 +15,13 @@ from typing import (
     List,
     Optional,
     Sequence,
+    Type,
     Union,
 )
 
 import torch
 
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules import functional_modules
 
 _has_functorch = False
@@ -39,32 +42,31 @@ except ImportError:
         FunctionalModuleWithBuffers,
     )
 
+from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 
 from torchrl.data import (
-    DEVICE_TYPING,
     TensorSpec,
     CompositeSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.modules.functional_modules import (
     FunctionalModule as rlFunctionalModule,
     FunctionalModuleWithBuffers as rlFunctionalModuleWithBuffers,
 )
 
-__all__ = [
-    "TensorDictModule",
-    "TensorDictModuleWrapper",
-]
 
-
-def _check_all_str(list_of_str):
-    if isinstance(list_of_str, str):
+def _check_all_str(list_of_str, first_level=True):
+    if isinstance(list_of_str, str) and first_level:
         raise RuntimeError(
             f"Expected a list of strings but got a string: {list_of_str}"
         )
-    if any(not isinstance(key, str) for key in list_of_str):
-        raise TypeError(f"Expected a list of strings but got: {list_of_str}")
+    elif not isinstance(list_of_str, str):
+        try:
+            return [_check_all_str(item, False) for item in list_of_str]
+        except Exception as err:
+            raise TypeError(
+                f"Expected a list of strings but got: {list_of_str} that raised the following error: {err}."
+            )
 
 
 def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
@@ -120,9 +122,11 @@ class TensorDictModule(nn.Module):
         case, the 'params' (and 'buffers') keyword argument must be specified:
 
     Examples:
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
+        >>> import functorch
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
         >>> from torchrl.modules import TensorDictModule
-        >>> import torch, functorch
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> spec = NdUnboundedContinuousTensorSpec(8)
         >>> module = torch.nn.GRUCell(4, 8)
@@ -227,7 +231,7 @@ class TensorDictModule(nn.Module):
 
         if set(spec.keys()) != set(self.out_keys):
             raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {spec.keys()} and {self.out_keys} respectively"
+                f"spec keys and out_keys do not match, got: {set(spec.keys())} and {set(self.out_keys)} respectively"
             )
 
         self._spec = spec
@@ -470,7 +474,8 @@ class TensorDictModule(nn.Module):
             A tuple of parameter and buffer tuples
 
         Examples:
-            >>> from torchrl.data import NdUnboundedContinuousTensorSpec, TensorDict
+            >>> from tensordict import TensorDict
+            >>> from torchrl.data import NdUnboundedContinuousTensorSpec
             >>> lazy_module = nn.LazyLinear(4)
             >>> spec = NdUnboundedContinuousTensorSpec(18)
             >>> td_module = TensorDictModule(lazy_module, spec, ["some_input"],
@@ -575,10 +580,11 @@ class TensorDictModuleWrapper(nn.Module):
     Examples:
         >>> #     This class can be used for exploration wrappers
         >>> import functorch
-        >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.data.utils import expand_as_right
         >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.utils import expand_as_right
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule
         >>>
         >>> class EpsilonGreedyExploration(TensorDictModuleWrapper):
         ...     eps = 0.5
@@ -625,3 +631,119 @@ class TensorDictModuleWrapper(nn.Module):
 
     def forward(self, *args, **kwargs):
         return self.td_module.forward(*args, **kwargs)
+
+
+def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
+    """Returns `True` if a module can be used as a TensorDictModule, and False if it can't.
+
+    If the signature is misleading an error is raised.
+
+    Examples:
+        >>> module = nn.Linear(3, 4)
+        >>> is_tensordict_compatible(module)
+        False
+        >>> class CustomModule(nn.Module):
+        ...    def __init__(self, module):
+        ...        super().__init__()
+        ...        self.linear = module
+        ...        self.in_keys = ["x"]
+        ...        self.out_keys = ["y"]
+        ...    def forward(self, tensordict):
+        ...        tensordict["y"] = self.linear(tensordict["x"])
+        ...        return tensordict
+        >>> tensordict_module = CustomModule(module)
+        >>> is_tensordict_compatible(tensordict_module)
+        True
+        >>> class CustomModule(nn.Module):
+        ...    def __init__(self, module):
+        ...        super().__init__()
+        ...        self.linear = module
+        ...        self.in_keys = ["x"]
+        ...        self.out_keys = ["y"]
+        ...    def forward(self, tensordict, other_key):
+        ...        tensordict["y"] = self.linear(tensordict["x"])
+        ...        return tensordict
+        >>> tensordict_module = CustomModule(module)
+        >>> try:
+        ...     is_tensordict_compatible(tensordict_module)
+        ... except TypeError:
+        ...     print("passing")
+        passing
+    """
+    sig = inspect.signature(module.forward)
+
+    if isinstance(module, TensorDictModule) or (
+        len(sig.parameters) == 1
+        and hasattr(module, "in_keys")
+        and hasattr(module, "out_keys")
+    ):
+        # if the module is a TensorDictModule or takes a single argument and defines
+        # in_keys and out_keys then we assume it can already deal with TensorDict input
+        # to forward and we return True
+        return True
+    elif not hasattr(module, "in_keys") and not hasattr(module, "out_keys"):
+        # if it's not a TensorDictModule, and in_keys and out_keys are not defined then
+        # we assume no TensorDict compatibility and will try to wrap it.
+        return False
+
+    # if in_keys or out_keys were defined but module is not a TensorDictModule or
+    # accepts multiple arguments then it's likely the user is trying to do something
+    # that will have undetermined behaviour, we raise an error
+    raise TypeError(
+        "Received a module that defines in_keys or out_keys and also expects multiple "
+        "arguments to module.forward. If the module is compatible with TensorDict, it "
+        "should take a single argument of type TensorDict to module.forward and define "
+        "both in_keys and out_keys. Alternatively, module.forward can accept "
+        "arbitrarily many tensor inputs and leave in_keys and out_keys undefined and "
+        "TorchRL will attempt to automatically wrap the module with a TensorDictModule."
+    )
+
+
+def ensure_tensordict_compatible(
+    module: Union[
+        FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
+    ],
+    in_keys: Optional[Iterable[str]] = None,
+    out_keys: Optional[Iterable[str]] = None,
+    safe: bool = False,
+    wrapper_type: Optional[Type] = TensorDictModule,
+):
+    """Checks and ensures an object with forward method is TensorDict compatible."""
+    if is_tensordict_compatible(module):
+        if in_keys is not None and set(in_keys) != set(module.in_keys):
+            raise TypeError(
+                f"Arguments to module.forward ({set(module.in_keys)}) doesn't match "
+                f"with the expected TensorDict in_keys ({set(in_keys)})."
+            )
+        if out_keys is not None and set(module.out_keys) != set(out_keys):
+            raise TypeError(
+                f"Outputs of module.forward ({set(module.out_keys)}) doesn't match "
+                f"with the expected TensorDict out_keys ({set(out_keys)})."
+            )
+        # return module itself if it's already tensordict compatible
+        return module
+
+    if not isinstance(module, nn.Module):
+        raise TypeError(
+            "Argument to ensure_tensordict_compatible should be either "
+            "a TensorDictModule or an nn.Module"
+        )
+
+    sig = inspect.signature(module.forward)
+    if in_keys is not None and set(sig.parameters) != set(in_keys):
+        raise TypeError(
+            "Arguments to module.forward are incompatible with entries in "
+            "env.observation_spec. If you want TorchRL to automatically "
+            "wrap your module with a TensorDictModule then the arguments "
+            "to module must correspond one-to-one with entries in "
+            "in_keys. For more complex behaviour and more control you can "
+            "consider writing your own TensorDictModule."
+        )
+
+    # TODO: Check whether out_keys match (at least in number) if they are provided.
+    kwargs = {}
+    if in_keys is not None:
+        kwargs["in_keys"] = in_keys
+    if out_keys is not None:
+        kwargs["out_keys"] = out_keys
+    return wrapper_type(module, **kwargs)
