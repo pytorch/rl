@@ -76,8 +76,8 @@ jobs:
       run: |
         conda run -n build_binary python -m pip install -r docs/requirements.txt
         cd ./docs
-        MUJOCO_GL=egl conda run -n build_binary python -c "import torchrl;import dm_control;import gym;from torchrl.envs.libs.dm_control import DMControlEnv;env = DMControlEnv('cheetah', 'run');print(env.reset())"
-        MUJOCO_GL=egl conda run -n build_binary make html SPHINXOPTS="-v"
+        MUJOCO_GL=osmesa conda run -n build_binary python -c "import torchrl;import dm_control;import gym;from torchrl.envs.libs.dm_control import DMControlEnv;env = DMControlEnv('cheetah', 'run');print(env.reset())"
+        MUJOCO_GL=osmesa conda run -n build_binary make html SPHINXOPTS="-v"
         cd ..
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
