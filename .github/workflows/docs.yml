@@ -72,6 +72,7 @@ jobs:
       run: |
         conda run -n build_binary python -m pip install -r docs/requirements.txt
         cd ./docs
+        python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv;env = DMControlEnv('cheetah', 'run');print(env.reset())"
         conda run -n build_binary make html SPHINXOPTS="-v"
         cd ..
     - name: Get output time
