@@ -1110,7 +1110,7 @@ class CompositeSpec(TensorSpec):
     CompositeSpec supports nested indexing:
         >>> spec = CompositeSpec(obs=None)
         >>> spec["nested", "x"] = None
-        >>> print(spec["nested", "x"])
+        >>> print(spec)
         CompositeSpec(
             nested: CompositeSpec(
                 x: None),
