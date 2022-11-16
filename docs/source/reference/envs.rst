@@ -7,6 +7,8 @@ TorchRL offers an API to handle environments of different backends, such as gym,
 dm-control, dm-lab, model-based environments as well as custom environments.
 The goal is to be able to swap environments in an experiment with little or no effort,
 even if these environments are simulated using different libraries.
+TorchRL offers some out-of-the-box environment wrappers under :obj:`torchrl.envs.libs`,
+which we hope are easily imitated for other libraries.
 The parent class :obj:`EnvBase` is a :obj:`torch.nn.Module` subclass that implements
 the typical environment methods using :obj:`TensorDict` instances. This allows this
 class to be generic and to handle an arbitrary number of input and outputs, as well as
@@ -34,6 +36,15 @@ With these, the following methods are implemented:
 - :obj:`env.step(tensordict)`: a step method that takes a :obj:`TensorDict` input
   containing an input action as well as other inputs (for model-based or stateless
   environments, for instance).
+- :obj:`env.set_seed(integer)`: a seeding method that will return the next seed
+  to be used in a multi-env setting. This next seed is deterministically computed
+  from the preceding one, such that one can seed multiple environments with a different
+  seed without risking to overlap seeds in consecutive experiments, while still
+  having reproducible results.
+- :obj:`env.rollout(max_steps, policy)`: executes a rollout in the environment for
+  a maximum number of steps :obj:`max_steps` and using a policy :obj:`policy`.
+  The policy should be coded using a :obj:`TensorDictModule` (or any other
+  :obj:`TensorDict`-compatible module).
 
 
 .. autosummary::
