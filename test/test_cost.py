@@ -21,7 +21,7 @@ except ImportError:
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from _utils_internal import get_available_devices, dtype_fixture  # noqa
 from mocking_classes import ContinuousActionConvMockEnv
 
 # from torchrl.data.postprocs.utils import expand_as_right
@@ -92,14 +92,6 @@ from torchrl.objectives.value.functional import (
     vec_td_lambda_advantage_estimate,
 )
 from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor
-
-
-@pytest.fixture
-def dtype_fixture():
-    dtype = torch.get_default_dtype()
-    torch.set_default_dtype(torch.DoubleTensor)
-    yield dtype
-    torch.set_default_dtype(dtype)
 
 
 class _check_td_steady:
@@ -223,7 +215,7 @@ class TestDQN:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next_observation": next_obs,
+                "next": {"observation": next_obs},
                 "done": done,
                 "reward": reward,
                 "action": action,
@@ -268,7 +260,7 @@ class TestDQN:
             batch_size=(batch, T),
             source={
                 "observation": obs * mask.to(obs.dtype),
-                "next_observation": next_obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
@@ -621,7 +613,7 @@ class TestDDPG:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next_observation": next_obs,
+                "next": {"observation": next_obs},
                 "done": done,
                 "reward": reward,
                 "action": action,
@@ -650,7 +642,7 @@ class TestDDPG:
             batch_size=(batch, T),
             source={
                 "observation": obs * mask.to(obs.dtype),
-                "next_observation": next_obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
@@ -843,7 +835,7 @@ class TestSAC:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next_observation": next_obs,
+                "next": {"observation": next_obs},
                 "done": done,
                 "reward": reward,
                 "action": action,
@@ -872,7 +864,7 @@ class TestSAC:
             batch_size=(batch, T),
             source={
                 "observation": obs * mask.to(obs.dtype),
-                "next_observation": next_obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
@@ -1192,7 +1184,7 @@ class TestREDQ:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next_observation": next_obs,
+                "next": {"observation": next_obs},
                 "done": done,
                 "reward": reward,
                 "action": action,
@@ -1221,7 +1213,7 @@ class TestREDQ:
             batch_size=(batch, T),
             source={
                 "observation": obs * mask.to(obs.dtype),
-                "next_observation": next_obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
@@ -1578,7 +1570,7 @@ class TestPPO:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next_observation": next_obs,
+                "next": {"observation": next_obs},
                 "done": done,
                 "reward": reward,
                 "action": action,
@@ -1610,7 +1602,7 @@ class TestPPO:
             batch_size=(batch, T),
             source={
                 "observation": obs * mask.to(obs.dtype),
-                "next_observation": next_obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
@@ -1822,7 +1814,7 @@ class TestReinforce:
             {
                 "reward": torch.randn(batch, 1),
                 "observation": torch.randn(batch, n_obs),
-                "next_observation": torch.randn(batch, n_obs),
+                "next": {"observation": torch.randn(batch, n_obs)},
                 "done": torch.zeros(batch, 1, dtype=torch.bool),
                 "action": torch.randn(batch, n_act),
             },
@@ -1866,7 +1858,7 @@ class TestDreamer:
                 "state": torch.zeros(batch_size, temporal_length, state_dim),
                 "belief": torch.zeros(batch_size, temporal_length, rssm_hidden_dim),
                 "pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
-                "next_pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
+                "next": {"pixels": torch.randn(batch_size, temporal_length, 3, 64, 64)},
                 "action": torch.randn(batch_size, temporal_length, 64),
                 "reward": torch.randn(batch_size, temporal_length, 1),
                 "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
@@ -1904,8 +1896,8 @@ class TestDreamer:
     def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
-            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": NdUnboundedContinuousTensorSpec(state_dim),
+            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -1928,19 +1920,19 @@ class TestDreamer:
                 rssm_prior,
                 in_keys=["state", "belief", "action"],
                 out_keys=[
-                    "next_prior_mean",
-                    "next_prior_std",
+                    ("next", "prior_mean"),
+                    ("next", "prior_std"),
                     "_",
-                    "next_belief",
+                    ("next", "belief"),
                 ],
             ),
             TensorDictModule(
                 rssm_posterior,
-                in_keys=["next_belief", "next_encoded_latents"],
+                in_keys=[("next", "belief"), ("next", "encoded_latents")],
                 out_keys=[
-                    "next_posterior_mean",
-                    "next_posterior_std",
-                    "next_state",
+                    ("next", "posterior_mean"),
+                    ("next", "posterior_std"),
+                    ("next", "state"),
                 ],
             ),
         )
@@ -1951,19 +1943,19 @@ class TestDreamer:
         world_modeler = TensorDictSequential(
             TensorDictModule(
                 obs_encoder,
-                in_keys=["next_pixels"],
-                out_keys=["next_encoded_latents"],
+                in_keys=[("next", "pixels")],
+                out_keys=[("next", "encoded_latents")],
             ),
             rssm_rollout,
             TensorDictModule(
                 obs_decoder,
-                in_keys=["next_state", "next_belief"],
-                out_keys=["next_reco_pixels"],
+                in_keys=[("next", "state"), ("next", "belief")],
+                out_keys=[("next", "reco_pixels")],
             ),
         )
         reward_module = TensorDictModule(
             reward_module,
-            in_keys=["next_state", "next_belief"],
+            in_keys=[("next", "state"), ("next", "belief")],
             out_keys=["reward"],
         )
         world_model = WorldModelWrapper(world_modeler, reward_module)
@@ -1979,8 +1971,8 @@ class TestDreamer:
     def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
-            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": NdUnboundedContinuousTensorSpec(state_dim),
+            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2002,14 +1994,14 @@ class TestDreamer:
                 out_keys=[
                     "_",
                     "_",
-                    "next_state",
-                    "next_belief",
+                    "state",
+                    "belief",
                 ],
             ),
         )
         reward_model = TensorDictModule(
             reward_module,
-            in_keys=["next_state", "next_belief"],
+            in_keys=["state", "belief"],
             out_keys=["reward"],
         )
         model_based_env = DreamerEnv(
@@ -2028,8 +2020,8 @@ class TestDreamer:
     def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
-            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": NdUnboundedContinuousTensorSpec(state_dim),
+            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2555,12 +2547,11 @@ def test_tdlambda_tensor_gamma(device, gamma, lmbda, N, T):
 @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
 @pytest.mark.parametrize("N", [(3,), (7, 3)])
 @pytest.mark.parametrize("T", [3, 5, 50])
-def test_vectdlambda_tensor_gamma(device, gamma, lmbda, N, T):
+def test_vectdlambda_tensor_gamma(device, gamma, lmbda, N, T, dtype_fixture):  # noqa
     """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
     with gamma being a tensor or a scalar
 
     """
-    _ = dtype_fixture
 
     torch.manual_seed(0)
 
@@ -2599,13 +2590,14 @@ def test_vectdlambda_tensor_gamma(device, gamma, lmbda, N, T):
 @pytest.mark.parametrize("N", [(3,), (7, 3)])
 @pytest.mark.parametrize("T", [50, 3])
 @pytest.mark.parametrize("rolling_gamma", [True, False, None])
-def test_vectdlambda_rand_gamma(device, lmbda, N, T, rolling_gamma):
+def test_vectdlambda_rand_gamma(
+    device, lmbda, N, T, rolling_gamma, dtype_fixture  # noqa
+):
     """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
     with gamma being a random tensor
 
     """
     torch.manual_seed(0)
-    _ = dtype_fixture
 
     done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
     reward = torch.randn(*N, T, 1, device=device)
