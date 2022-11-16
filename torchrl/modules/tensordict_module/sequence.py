@@ -142,7 +142,7 @@ class TensorDictSequential(TensorDictModule):
             if isinstance(module, TensorDictModule) or hasattr(module, "spec"):
                 spec.update(module.spec)
             else:
-                spec.update(CompositeSpec(**{key: None for key in module.out_keys}))
+                spec.update(CompositeSpec({key: None for key in module.out_keys}))
         super().__init__(
             spec=spec,
             module=nn.ModuleList(list(modules)),

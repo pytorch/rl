@@ -13,7 +13,6 @@ import pytest
 import torch.cuda
 from tensordict.tensordict import TensorDictBase
 from torchrl._utils import seed_generator
-from torchrl.data import CompositeSpec
 from torchrl.envs import EnvBase
 
 
@@ -62,21 +61,20 @@ def _test_fake_tensordict(env: EnvBase):
 
 
 def _check_dtype(key, value, obs_spec, input_spec):
-    if key.startswith("next_"):
-        return
-    if isinstance(value, TensorDictBase):
+    if isinstance(value, TensorDictBase) and key == "next":
         for _key, _value in value.items():
-            if isinstance(obs_spec, CompositeSpec) and "next_" + key in obs_spec.keys():
-                _check_dtype(_key, _value, obs_spec["next_" + key], input_spec=None)
-            elif isinstance(input_spec, CompositeSpec) and key in input_spec.keys():
-                _check_dtype(_key, _value, obs_spec=None, input_spec=input_spec[key])
-            else:
-                raise KeyError(f"key '{_key}' is unknown.")
+            _check_dtype(_key, _value, obs_spec, input_spec=None)
+    elif isinstance(value, TensorDictBase) and key in obs_spec.keys():
+        for _key, _value in value.items():
+            _check_dtype(_key, _value, obs_spec=obs_spec[key], input_spec=None)
+    elif isinstance(value, TensorDictBase) and key in input_spec.keys():
+        for _key, _value in value.items():
+            _check_dtype(_key, _value, obs_spec=None, input_spec=input_spec[key])
     else:
-        if obs_spec is not None and "next_" + key in obs_spec.keys():
+        if obs_spec is not None and key in obs_spec.keys():
             assert (
-                obs_spec["next_" + key].dtype is value.dtype
-            ), f"{obs_spec['next_' + key].dtype} vs {value.dtype} for {key}"
+                obs_spec[key].dtype is value.dtype
+            ), f"{obs_spec[key].dtype} vs {value.dtype} for {key}"
         elif input_spec is not None and key in input_spec.keys():
             assert (
                 input_spec[key].dtype is value.dtype
@@ -112,3 +110,11 @@ def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
         return f_retry  # true decorator
 
     return deco_retry
+
+
+@pytest.fixture
+def dtype_fixture():
+    dtype = torch.get_default_dtype()
+    torch.set_default_dtype(torch.double)
+    yield dtype
+    torch.set_default_dtype(dtype)

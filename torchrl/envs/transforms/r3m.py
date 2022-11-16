@@ -90,6 +90,7 @@ class _R3MNet(Transform):
 
         keys = [key for key in observation_spec._specs.keys() if key in self.in_keys]
         device = observation_spec[keys[0]].device
+        dim = observation_spec[keys[0]].shape[:-3]
 
         observation_spec = CompositeSpec(**observation_spec)
         if self.del_keys:
@@ -98,7 +99,7 @@ class _R3MNet(Transform):
 
         for out_key in self.out_keys:
             observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
-                shape=torch.Size([self.outdim]), device=device
+                shape=torch.Size([*dim, self.outdim]), device=device
             )
 
         return observation_spec
@@ -153,7 +154,7 @@ class R3MTransform(Compose):
     can ensure that the following code snippet works as expected:
 
     Examples:
-        >>> transform = R3MTransform("resenet50", in_keys=["next_pixels"])
+        >>> transform = R3MTransform("resenet50", in_keys=["pixels"])
         >>> env.append_transform(transform)
         >>> # the forward method will first call _init which will look at env.observation_spec
         >>> env.reset()
@@ -161,9 +162,9 @@ class R3MTransform(Compose):
     Args:
         model_name (str): one of resnet50, resnet34 or resnet18
         in_keys (list of str, optional): list of input keys. If left empty, the
-            "next_pixels" key is assumed.
+            "pixels" key is assumed.
         out_keys (list of str, optional): list of output keys. If left empty,
-             "next_r3m_vec" is assumed.
+             "r3m_vec" is assumed.
         size (int, optional): Size of the image to feed to resnet.
             Defaults to 244.
         download (bool, optional): if True, the weights will be downloaded using
@@ -249,9 +250,9 @@ class R3MTransform(Compose):
         # R3M
         if out_keys is None:
             if stack_images:
-                out_keys = ["next_r3m_vec"]
+                out_keys = ["r3m_vec"]
             else:
-                out_keys = [f"next_r3m_vec_{i}" for i in range(len(in_keys))]
+                out_keys = [f"r3m_vec_{i}" for i in range(len(in_keys))]
         elif stack_images and len(out_keys) != 1:
             raise ValueError(
                 f"out_key must be of length 1 if stack_images is True. Got out_keys={out_keys}"
