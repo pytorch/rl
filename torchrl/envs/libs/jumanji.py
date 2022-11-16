@@ -23,8 +23,9 @@ try:
     from jax import numpy as jnp
 
     _has_jumanji = True
-except ImportError:
+except ImportError as err:
     _has_jumanji = False
+    IMPORT_ERR = str(err)
 
 
 def _jumanji_to_torchrl_spec_transform(
@@ -408,7 +409,7 @@ class JumanjiEnv(JumanjiWrapper):
             raise RuntimeError(
                 f"jumanji not found, unable to create {env_name}. "
                 f"Consider installing jumanji. More info:"
-                f" {self.git_url}"
+                f" {self.git_url}. (Original error message during import: {IMPORT_ERR})."
             )
         from_pixels = kwargs.pop("from_pixels", False)
         pixels_only = kwargs.pop("pixels_only", True)
