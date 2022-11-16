@@ -412,7 +412,7 @@ def make_replay_buffer(make_replay_buffer=3):
 # After having written all our helper functions, it is now time to set the
 # experiment hyperparameters:
 
-backend = "dm_control"  # or "gym"
+backend = "gym"  # or "dm_control"
 frame_skip = 2  # if this value is changed, the number of frames collected etc. need to be adjusted
 from_pixels = False
 reward_scaling = 5.0
