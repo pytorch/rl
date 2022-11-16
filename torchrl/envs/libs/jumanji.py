@@ -273,9 +273,9 @@ class JumanjiWrapper(GymLikeEnv):
         spec = env.observation_spec()
         new_spec = _jumanji_to_torchrl_spec_transform(spec, device=self.device)
         if isinstance(spec, jumanji.specs.Array):
-            return CompositeSpec(next_observation=new_spec)
+            return CompositeSpec(observation=new_spec)
         elif isinstance(spec, jumanji.specs.Spec):
-            return CompositeSpec(**{f"next_{k}": v for k, v in new_spec.items()})
+            return CompositeSpec(**{k: v for k, v in new_spec.items()})
         else:
             raise TypeError(f"Unsupported spec type {type(spec)}")
 
