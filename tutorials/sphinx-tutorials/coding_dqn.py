@@ -66,7 +66,6 @@ from torchrl.envs.utils import set_exploration_mode
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import QValueActor, EGreedyWrapper, DuelingCnnDQNet
 
-
 def is_notebook() -> bool:
     try:
         shell = get_ipython().__class__.__name__
@@ -111,7 +110,7 @@ n_optim = 4
 # Frames sampled from the replay buffer at each optimization step
 batch_size = 256
 # Size of the replay buffer in terms of frames
-buffer_size = 100000
+buffer_size = min(total_frames, 100000)
 # Number of environments run in parallel in each data collector
 n_workers = 2
 

@@ -434,7 +434,7 @@ annealing_frames = (
 )  # Number of frames before OU noise becomes null
 lr = 5e-4
 weight_decay = 0.0
-total_frames = 50000 // frame_skip
+total_frames = 5000 // frame_skip
 init_random_frames = 0
 # init_random_frames = 5000 // frame_skip   # Number of random frames used as warm-up
 optim_steps_per_batch = 32  # Number of iterations of the inner loop
@@ -445,7 +445,7 @@ frames_per_batch = (
 gamma = 0.99
 tau = 0.005  # Decay factor for the target network
 prb = True  # If True, a Prioritized replay buffer will be used
-buffer_size = 1000000 // frame_skip  # Number of frames stored in the buffer
+buffer_size = min(total_frames, 1000000 // frame_skip)  # Number of frames stored in the buffer
 buffer_scratch_dir = "/tmp/"
 n_steps_forward = 3
 
