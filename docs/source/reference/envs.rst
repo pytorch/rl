@@ -80,6 +80,7 @@ Composed transforms are built using the :doc:`Compose` class:
         >>> transform = Compose(ToTensorImage(in_keys=["pixels"]), Resize(64, 64, in_keys=["pixels"]))
         >>> env = TransformedEnv(base_env, transform)
 
+
 By default, the transformed environment will inherit the device of the
 :obj:`base_env` that is passed to it. The transforms will then be executed on that device.
 It is now apparent that this can bring a significant speedup depending on the kind of
@@ -94,6 +95,7 @@ Re-using the example above:
    :caption: Transform parent
 
         >>> resize_parent = env.transform[-1].parent  # returns the same as TransformedEnv(base_env, transform[:-1])
+
 
 Transformed environment can be used with vectorized environments.
 Since each transform uses a :doc:`"in_keys"`/:doc:`"out_keys"` set of keyword argument, it is
