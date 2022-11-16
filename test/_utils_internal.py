@@ -14,6 +14,7 @@ import torch.cuda
 from tensordict.tensordict import TensorDictBase
 from torchrl._utils import seed_generator
 from torchrl.envs import EnvBase
+from torchrl.data import CompositeSpec
 
 
 # Specified for test_utils.py
@@ -63,26 +64,43 @@ def _test_fake_tensordict(env: EnvBase):
 
 
 def _check_dtype(key, value, obs_spec, input_spec):
-    if isinstance(value, TensorDictBase) and key == "next":
+    if key in {"reward", "done"}:
+        return
+    elif key == "next":
         for _key, _value in value.items():
-            _check_dtype(_key, _value, obs_spec, input_spec=None)
-    elif isinstance(value, TensorDictBase) and key in obs_spec.keys():
-        for _key, _value in value.items():
-            _check_dtype(_key, _value, obs_spec=obs_spec[key], input_spec=None)
-    elif isinstance(value, TensorDictBase) and key in input_spec.keys():
-        for _key, _value in value.items():
-            _check_dtype(_key, _value, obs_spec=None, input_spec=input_spec[key])
+            _check_dtype(_key, _value, obs_spec, input_spec)
+        return
+    elif key in input_spec.keys(yield_nesting_keys=True):
+        assert input_spec[key].is_in(value)
+        return
+    elif key in obs_spec.keys(yield_nesting_keys=True):
+        assert obs_spec[key].is_in(value)
+        return
     else:
-        if obs_spec is not None and key in obs_spec.keys():
-            assert (
-                obs_spec[key].dtype is value.dtype
-            ), f"{obs_spec[key].dtype} vs {value.dtype} for {key}"
-        elif input_spec is not None and key in input_spec.keys():
-            assert (
-                input_spec[key].dtype is value.dtype
-            ), f"{input_spec[key].dtype} vs {value.dtype} for {key}"
-        else:
-            assert key in {"done", "reward"}, (key, obs_spec, input_spec)
+        raise KeyError(key)
+    #
+    # if isinstance(value, TensorDictBase) and key == "next":
+    #     for _key, _value in value.items():
+    #         _check_dtype(_key, _value, obs_spec, input_spec=input_spec)
+    # elif isinstance(value, TensorDictBase) and isinstance(obs_spec, CompositeSpec) and key in obs_spec.keys():
+    #     for _key, _value in value.items():
+    #         _check_dtype(_key, _value, obs_spec=obs_spec[key], input_spec=None)
+    # elif isinstance(value, TensorDictBase) and isinstance(input_spec, CompositeSpec) and key in input_spec.keys():
+    #     for _key, _value in value.items():
+    #         _check_dtype(_key, _value, obs_spec=None, input_spec=input_spec[key])
+    # else:
+    #     if isinstance(obs_spec, CompositeSpec) and key in obs_spec.keys():
+    #         assert (
+    #             obs_spec[key].dtype is value.dtype
+    #         ), f"{obs_spec[key].dtype} vs {value.dtype} for {key}"
+    #         assert obs_spec[key].is_in(value)
+    #     elif isinstance(input_spec, CompositeSpec) and key in input_spec.keys():
+    #         assert (
+    #             input_spec[key].dtype is value.dtype
+    #         ), f"{input_spec[key].dtype} vs {value.dtype} for {key}"
+    #         assert input_spec[key].is_in(value)
+    #     else:
+    #         assert key in {"done", "reward"}, (key, value, obs_spec, input_spec)
 
 
 # Decorator to retry upon certain Exceptions.
