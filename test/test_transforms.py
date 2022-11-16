@@ -1289,13 +1289,16 @@ class TestTransforms:
     @pytest.mark.parametrize("loc", [1, 5])
     @pytest.mark.parametrize("keys", [None, ["reward_1"]])
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_reward_scaling(self, batch, scale, loc, keys, device):
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    def test_reward_scaling(self, batch, scale, loc, keys, device, standard_normal):
         torch.manual_seed(0)
         if keys is None:
             keys_total = set([])
         else:
             keys_total = set(keys)
-        reward_scaling = RewardScaling(in_keys=keys, scale=scale, loc=loc)
+        reward_scaling = RewardScaling(
+            in_keys=keys, scale=scale, loc=loc, standard_normal=standard_normal
+        )
         td = TensorDict(
             {
                 **{key: torch.randn(*batch, 1, device=device) for key in keys_total},
@@ -1308,8 +1311,12 @@ class TestTransforms:
         td_copy = td.clone()
         reward_scaling(td)
         for key in keys_total:
-            assert (td.get(key) == td_copy.get(key).mul_(scale).add_(loc)).all()
+            if standard_normal:
+                assert (td.get(key) == -loc / scale).all()
+            else:
+                assert (td.get(key) == td_copy.get(key).mul_(scale).add_(loc)).all()
         assert (td.get("dont touch") == td_copy.get("dont touch")).all()
+
         if len(keys_total) == 0:
             assert (
                 td.get("reward") == td_copy.get("reward").mul_(scale).add_(loc)

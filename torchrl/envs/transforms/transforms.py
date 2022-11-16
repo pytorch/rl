@@ -1500,6 +1500,12 @@ class RewardScaling(Transform):
     Args:
         loc (number or torch.Tensor): location of the affine transform
         scale (number or torch.Tensor): scale of the affine transform
+        standard_normal (bool, optional): if True, the transform will be
+
+            .. math::
+                reward = (reward-loc)/scale
+
+            as it is done for standardization. Default is `False`.
     """
 
     inplace = True
@@ -1509,6 +1515,7 @@ class RewardScaling(Transform):
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
         in_keys: Optional[Sequence[str]] = None,
+        standard_normal: bool = False,
     ):
         if in_keys is None:
             in_keys = ["reward"]
@@ -1522,8 +1529,11 @@ class RewardScaling(Transform):
         self.register_buffer("scale", scale.clamp_min(1e-6))
 
     def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
-        reward.mul_(self.scale).add_(self.loc)
-        return reward
+        if self.standard_normal:
+            return (reward - self.loc) / self.scale
+        else:
+            reward.mul_(self.scale).add_(self.loc)
+            return reward
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if isinstance(reward_spec, UnboundedContinuousTensorSpec):
