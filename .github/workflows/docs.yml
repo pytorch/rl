@@ -60,6 +60,10 @@ jobs:
     - name: Install TorchRL
       run: |
         conda run -n build_binary python -m pip install -e .
+    - name: Install deps
+      run: |
+        yum makecache
+        sudo yum -y install mesa-libGL mesa-libGL-devel mesa-libOSMesa mesa-libOSMesa-devel egl-utils freeglut glew glfw
     - name: Test torchrl installation
       shell: bash
       run: |
@@ -72,8 +76,8 @@ jobs:
       run: |
         conda run -n build_binary python -m pip install -r docs/requirements.txt
         cd ./docs
-        conda run -n build_binary python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv;env = DMControlEnv('cheetah', 'run');print(env.reset())"
-        conda run -n build_binary make html SPHINXOPTS="-v"
+        MUJOCO_GL=egl conda run -n build_binary python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv;env = DMControlEnv('cheetah', 'run');print(env.reset())"
+        MUJOCO_GL=egl conda run -n build_binary make html SPHINXOPTS="-v"
         cd ..
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
