@@ -93,6 +93,7 @@ from torchrl.trainers import Recorder
 # ``from_pixels=True`` which is passed when calling ``GymEnv`` or
 # ``DMControlEnv``.
 
+
 def make_env():
     """
     Create a base env
@@ -156,7 +157,8 @@ def make_transformed_env(
     if env_library is DMControlEnv:
         # DMControl requires double-precision
         double_to_float_list += [
-            "reward", "action",
+            "reward",
+            "action",
         ]
         double_to_float_inv_list += ["action"]
 

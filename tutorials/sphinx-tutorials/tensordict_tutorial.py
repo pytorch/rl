@@ -92,6 +92,7 @@ def collate_dict_fn(dict_list):
         final_dict[key] = torch.stack(final_dict[key], dim=0)
     return final_dict
 
+
 ###############################################################################
 # With TensorDicts this is now much simpler:
 #
