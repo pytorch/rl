@@ -1312,7 +1312,7 @@ class TestTransforms:
         reward_scaling(td)
         for key in keys_total:
             if standard_normal:
-                assert (td.get(key) == -loc / scale).all()
+                assert (td.get(key) == ((td_copy.get(key) - loc) / scale)).all()
             else:
                 assert (td.get(key) == td_copy.get(key).mul_(scale).add_(loc)).all()
         assert (td.get("dont touch") == td_copy.get("dont touch")).all()
