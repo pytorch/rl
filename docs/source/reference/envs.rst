@@ -60,6 +60,71 @@ With these, the following methods are implemented:
 
     EnvBase
     GymLikeEnv
+
+Vectorized envs
+---------------
+
+Vectorized (or better: parallel) environments is a common feature in Reinforcement Learning
+where executing the environment step can be cpu-intensive.
+Some libraries such as `gym3 <https://github.com/openai/gym3>`_ or `EnvPool <https://github.com/sail-sg/envpool>`_
+offer interfaces to execute batches of environments simultaneously.
+While they often offer a very competitive computational advantage, they do not
+necessarily scale to the wide variety of environment libraries supported by TorchRL.
+Therefore, TorchRL offers its own, generic :obj:`ParallelEnv` class to run multiple
+environments in parallel.
+As this class inherits from :obj:`EnvBase`, it enjoys the exact same API as other environment.
+Of course, a :obj:`ParallelEnv` will have a batch size that corresponds to its environment count:
+
+.. code-block::
+   :caption: Parallel environment
+
+        >>> def make_env():
+        ...     return GymEnv("Pendulum-v1", from_pixels=True, g=9.81, device="cuda:0")
+        >>> env = ParallelEnv(4, make_env)
+        >>> print(env.batch_size)
+        torch.Size([4])
+
+:obj:`ParallelEnv` allows to retrieve the attributes from its contained environments:
+one can simply call:
+
+.. code-block::
+   :caption: Parallel environment attributes
+
+        >>> a, b, c, d = env.g  # gets the g-force of the various envs, which we set to 9.81 before
+        >>> print(a)
+        9.81
+
+It is also possible to reset some but not all of the environments:
+
+.. code-block::
+   :caption: Parallel environment reset
+
+        >>> tensordict = TensorDict({"reset_workers": [True, False, True, True]}, [4])
+        >>> env.reset(tensordict)
+        TensorDict(
+            fields={
+                done: Tensor(torch.Size([4, 1]), dtype=torch.bool),
+                pixels: Tensor(torch.Size([4, 500, 500, 3]), dtype=torch.uint8),
+                reset_workers: Tensor(torch.Size([4, 1]), dtype=torch.bool)},
+            batch_size=torch.Size([4]),
+            device=None,
+            is_shared=True)
+
+
+A note on performance: launching a :obj:`ParallelEnv` can take quite some time
+as it requires to launch as many python instances as there are processes. Due to
+the time that it takes to run :obj:`import torch` (and other imports), starting the
+parallel env can be a bottleneck. This is why, for instance, TorchRL tests are so slow.
+Once the environment is launched, a great speedup should be observed.
+
+We also offer the :obj:`SerialEnv` class that enjoys the exact same API but is executed
+serially. This is mostly useful for testing purposes, when one wants to assess the
+behaviour of a :obj:`ParallelEnv` without launching the subprocesses.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
     SerialEnv
     ParallelEnv
 
