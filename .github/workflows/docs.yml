@@ -13,6 +13,7 @@ jobs:
         include:
          - os: linux.4xlarge.nvidia.gpu
            python-version: 3.8
+    container: pytorch/manylinux-${{ matrix.cuda_support[3] }}
     steps:
     - name: Debugging with ssh
       uses: lhotari/action-upterm@v1
