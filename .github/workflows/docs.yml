@@ -15,6 +15,10 @@ jobs:
            python-version: 3.8
     container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu18.04
     steps:
+    - name: Install deps
+      run: |
+        sudo apt-get update -y
+        sudo apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev
     - name: Debugging with ssh
       uses: lhotari/action-upterm@v1
     - name: Check ldd --version
@@ -63,10 +67,6 @@ jobs:
     - name: Install TorchRL
       run: |
         conda run -n build_binary python -m pip install -e .
-    - name: Install deps
-      run: |
-        yum makecache
-        sudo yum -y install mesa-libGL mesa-libGL-devel mesa-libOSMesa mesa-libOSMesa-devel egl-utils freeglut glew glfw
     - name: Test torchrl installation
       shell: bash
       run: |
