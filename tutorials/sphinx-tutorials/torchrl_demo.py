@@ -708,6 +708,7 @@ tensordict = TensorDict(
         "done": torch.zeros(10, 1, dtype=torch.bool),
     },
     batch_size=[10],
+    device="cpu",
 )
 loss_td = loss_fn(tensordict)
 
