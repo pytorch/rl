@@ -72,7 +72,7 @@ jobs:
       run: |
         $HOME/miniconda/bin/conda run -n build_binary python -m pip install -r docs/requirements.txt
         cd ./docs
-        conda run -n build_binary make html
+        make html
         cd ..
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"

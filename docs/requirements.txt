@@ -14,7 +14,6 @@ docutils>=0.19
 
 functorch
 gym[classic_control]
-torchrl
 torchvision
 dm_control
 gym
@@ -27,4 +26,3 @@ ipython
 imageio
 imageio[ffmpeg]
 imageio[pyav]
--e git+https://github.com/pytorch-labs/tensordict.git@main#egg=tensordict
