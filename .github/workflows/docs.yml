@@ -28,18 +28,13 @@ jobs:
     # Update references
     - name: Update pip
       run: |
-        sudo yum update -y
-        sudo yum -y install git python3-pip
+        sudo sudo apt-get install python3.8 
         sudo pip3 install --upgrade pip
     - name: Setup conda
       run: |
         rm -rf $HOME/miniconda
         wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
         bash ~/miniconda.sh -b -p $HOME/miniconda
-    - name: Install gcc
-      shell: bash
-      run: |
-        sudo yum group install -y "Development Tools"
     - name: setup Path
       run: |
         echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
