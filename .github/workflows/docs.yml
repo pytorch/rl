@@ -35,45 +35,45 @@ jobs:
         bash ~/miniconda.sh -b -p $HOME/miniconda
     - name: setup Path
       run: |
-        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
-        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+        echo "$HOME/miniconda/bin" >> $GITHUB_PATH
+        echo "CONDA=$HOME/miniconda" >> $GITHUB_PATH
     - name: create conda env
       run: |
-        /home/ec2-user/miniconda/bin/conda create --name build_binary python=${{ matrix.python-version }}
-        /home/ec2-user/miniconda/bin/conda info
+        $HOME/miniconda/bin/conda create --name build_binary python=${{ matrix.python-version }}
+        $HOME/miniconda/bin/conda info
     - name: check python version no Conda
       run: |
         python --version
     - name: check python version
       run: |
-        /home/ec2-user/miniconda/bin/conda run -n build_binary python --version
+        $HOME/miniconda/bin/conda run -n build_binary python --version
     - name: setup Path
       run: |
         echo /usr/local/bin >> $GITHUB_PATH
     - name: Install PyTorch
       shell: bash
       run: |
-        /home/ec2-user/miniconda/bin/conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
+        $HOME/miniconda/bin/conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
     - name: Install tensordict
       run: |
         python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
     - name: Install TorchRL
       run: |
-        /home/ec2-user/miniconda/bin/conda run -n build_binary python -m pip install -e .
+        $HOME/miniconda/bin/conda run -n build_binary python -m pip install -e .
     - name: Test torchrl installation
       shell: bash
       run: |
         mkdir _tmp
         cd _tmp
-        /home/ec2-user/miniconda/bin/conda run -n build_binary \
+        $HOME/miniconda/bin/conda run -n build_binary \
           python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv"
         cd ..
     - name: Build the docset
       run: |
-        /home/ec2-user/miniconda/bin/conda run -n build_binary python -m pip install -r docs/requirements.txt
+        $HOME/miniconda/bin/conda run -n build_binary python -m pip install -r docs/requirements.txt
         cd ./docs
-        MUJOCO_GL=egl /home/ec2-user/miniconda/bin/conda run -n build_binary sphinx-autogen -o generated source/reference/*.rst 
-        MUJOCO_GL=egl /home/ec2-user/miniconda/bin/conda run -n build_binary sphinx-build ./source _local_build
+        MUJOCO_GL=egl $HOME/miniconda/bin/conda run -n build_binary sphinx-autogen -o generated source/reference/*.rst 
+        MUJOCO_GL=egl $HOME/miniconda/bin/conda run -n build_binary sphinx-build ./source _local_build
         cd ..
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
