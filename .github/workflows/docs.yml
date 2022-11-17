@@ -26,7 +26,7 @@ jobs:
     # Update references
     - name: Update pip
       run: |
-        apt-get install python3.8 
+        apt-get install python3.8 -y
         pip3 install --upgrade pip
     - name: Setup conda
       run: |
