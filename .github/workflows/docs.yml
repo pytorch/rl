@@ -13,6 +13,9 @@ jobs:
         include:
          - os: linux.4xlarge.nvidia.gpu
            python-version: 3.8
+    defaults:
+      run:
+        shell: bash -l {0}
     container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu18.04
     steps:
     - name: Install deps
@@ -41,7 +44,9 @@ jobs:
       run: |
         $HOME/miniconda/bin/conda create --name build_binary python=${{ matrix.python-version }}
         $HOME/miniconda/bin/conda info
-        $HOME/miniconda/bin/conda activate build_binary
+        $HOME/miniconda/bin/conda activate build_binary || true
+        echo "after conda activate build_binary: PATH=$PATH;"
+        which build_binary || true
     - name: check python version
       run: |
         python --version
