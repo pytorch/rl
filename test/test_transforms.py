@@ -1317,11 +1317,7 @@ class TestTransforms:
                 assert (td.get(key) == td_copy.get(key).mul_(scale).add_(loc)).all()
         assert (td.get("dont touch") == td_copy.get("dont touch")).all()
 
-        if len(keys_total) == 0:
-            assert (
-                td.get("reward") == td_copy.get("reward").mul_(scale).add_(loc)
-            ).all()
-        elif len(keys_total) == 1:
+        if len(keys_total) == 1:
             reward_spec = UnboundedContinuousTensorSpec(device=device)
             reward_spec = reward_scaling.transform_reward_spec(reward_spec)
             assert reward_spec.shape == torch.Size([1])
