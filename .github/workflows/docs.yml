@@ -7,13 +7,15 @@ on:
   workflow_dispatch:
 jobs:
   build_docs_job:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-18.04
     strategy:
       matrix:
         include:
          - os: linux.4xlarge.nvidia.gpu
            python-version: 3.8
     steps:
+    - name: Debugging with ssh
+      uses: lhotari/action-upterm@v1
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
@@ -72,8 +74,6 @@ jobs:
         conda run -n build_binary \
           python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv"
         cd ..
-    - name: Debugging with ssh
-      uses: lhotari/action-upterm@v1
     - name: Build the docset
       run: |
         conda run -n build_binary python -m pip install -r docs/requirements.txt
