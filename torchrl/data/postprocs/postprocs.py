@@ -8,13 +8,10 @@ from __future__ import annotations
 from typing import Tuple
 
 import torch
+from tensordict.tensordict import TensorDictBase
+from tensordict.utils import expand_as_right
 from torch import nn
 from torch.nn import functional as F
-
-from torchrl.data.tensordict.tensordict import TensorDictBase
-from torchrl.data.utils import expand_as_right
-
-__all__ = ["MultiStep"]
 
 
 def _conv1d_reward(
@@ -76,7 +73,7 @@ def _get_steps_to_next_obs(nonterminal: torch.Tensor, n_steps_max: int) -> torch
     return steps_to_next_obs
 
 
-def select_and_repeat(
+def _select_and_repeat(
     tensor: torch.Tensor,
     terminal: torch.Tensor,
     post_terminal: torch.Tensor,
@@ -147,9 +144,9 @@ class MultiStep(nn.Module):
             tensordict: TennsorDict instance with Batch x Time-steps x ...
                 dimensions.
                 The TensorDict must contain a "reward" and "done" key. All
-                keys that start with the "next_" prefix will be shifted by (
-                at most) self.n_steps_max frames. The TensorDict will also
-                be updated with new key-value pairs:
+                keys that are contained within the "next" nested tensordict
+                will be shifted by (at most) :obj:`MultiStep.n_steps_max` frames.
+                The TensorDict will also be updated with new key-value pairs:
 
                 - gamma: indicating the discount to be used for the next
                 reward;
@@ -192,25 +189,18 @@ class MultiStep(nn.Module):
         nonterminal = ~post_terminal[:, :T]
         steps_to_next_obs = _get_steps_to_next_obs(nonterminal, self.n_steps_max)
 
-        selected_td = tensordict.select(
-            *[
-                key
-                for key in tensordict.keys()
-                if (key.startswith("next_") or key == "done")
-            ]
-        )
+        selected_td = tensordict.select("next", "done")
 
-        for key, item in selected_td.items():
-            tensordict.set_(
-                key,
-                select_and_repeat(
-                    item,
-                    terminal,
-                    post_terminal,
-                    mask,
-                    self.n_steps_max,
-                ),
+        def _select_and_repeat_local(item):
+            return _select_and_repeat(
+                item,
+                terminal,
+                post_terminal,
+                mask,
+                self.n_steps_max,
             )
+
+        selected_td.apply_(_select_and_repeat_local)
 
         tensordict.set("gamma", gamma_masked)
         tensordict.set("steps_to_next_obs", steps_to_next_obs)

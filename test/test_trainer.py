@@ -22,8 +22,8 @@ try:
 except ImportError:
     _has_tb = False
 
+from tensordict import TensorDict
 from torchrl.data import (
-    TensorDict,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
     ListStorage,

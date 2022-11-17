@@ -33,12 +33,6 @@ from torchrl.envs.transforms.transforms import gSDENoise, FlattenObservation
 from torchrl.record.recorder import VideoRecorder
 from torchrl.trainers.loggers import Logger
 
-__all__ = [
-    "correct_for_frame_skip",
-    "transformed_env_constructor",
-    "parallel_env_constructor",
-    "get_stats_random_rollout",
-]
 
 LIBS = {
     "gym": GymEnv,
@@ -92,6 +86,7 @@ def make_env_transforms(
     state_dim_gsde,
     batch_dims=0,
 ):
+    """Creates the typical transforms for and env."""
     env = TransformedEnv(env)
 
     from_pixels = cfg.from_pixels
@@ -129,13 +124,13 @@ def make_env_transforms(
         if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation())
-        env.append_transform(CatFrames(N=cfg.catframes, keys_in=["next_pixels"]))
+        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
-        env.append_transform(ObservationNorm(**obs_stats, keys_in=["next_pixels"]))
+        env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -159,13 +154,12 @@ def make_env_transforms(
         selected_keys = [
             key
             for key in env.observation_spec.keys()
-            if ("pixels" not in key)
-            and (key.replace("next_", "") not in env.input_spec.keys())
+            if ("pixels" not in key) and (key not in env.input_spec.keys())
         ]
 
-        # even if there is a single tensor, it'll be renamed in "next_observation_vector"
-        out_key = "next_observation_vector"
-        env.append_transform(CatTensors(keys_in=selected_keys, out_key=out_key))
+        # even if there is a single tensor, it'll be renamed in "observation_vector"
+        out_key = "observation_vector"
+        env.append_transform(CatTensors(in_keys=selected_keys, out_key=out_key))
 
         if not vecnorm:
             if stats is None:
@@ -173,12 +167,12 @@ def make_env_transforms(
             else:
                 _stats = stats
             env.append_transform(
-                ObservationNorm(**_stats, keys_in=[out_key], standard_normal=True)
+                ObservationNorm(**_stats, in_keys=[out_key], standard_normal=True)
             )
         else:
             env.append_transform(
                 VecNorm(
-                    keys_in=[out_key, "reward"] if not _norm_obs_only else [out_key],
+                    in_keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
                     decay=0.9999,
                 )
             )
@@ -186,19 +180,19 @@ def make_env_transforms(
         double_to_float_list.append(out_key)
         env.append_transform(
             DoubleToFloat(
-                keys_in=double_to_float_list, keys_inv_in=double_to_float_inv_list
+                in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
             )
         )
 
         if hasattr(cfg, "catframes") and cfg.catframes:
             env.append_transform(
-                CatFrames(N=cfg.catframes, keys_in=[out_key], cat_dim=-1)
+                CatFrames(N=cfg.catframes, in_keys=[out_key], cat_dim=-1)
             )
 
     else:
         env.append_transform(
             DoubleToFloat(
-                keys_in=double_to_float_list, keys_inv_in=double_to_float_inv_list
+                in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
             )
         )
 
@@ -355,7 +349,7 @@ def parallel_env_constructor(
 def get_stats_random_rollout(
     cfg: "DictConfig",  # noqa: F821
     proof_environment: EnvBase = None,
-    key: Optional[str] = None,
+    keys: Optional[list[str, str]] = None,
 ):
     """Gathers stas (loc and scale) from an environment using random rollouts.
 
@@ -384,11 +378,11 @@ def get_stats_random_rollout(
     while n < cfg.init_env_steps:
         _td_stats = proof_environment.rollout(max_steps=cfg.init_env_steps)
         n += _td_stats.numel()
-        val = _td_stats.get(key).cpu()
+        val = _td_stats.get(keys[0]).get(keys[1]).cpu()
         val_stats.append(val)
         del _td_stats, val
     val_stats = torch.cat(val_stats, 0)
-
+    key = keys[1]
     if key is None:
         keys = list(proof_environment.observation_spec.keys())
         key = keys.pop()
@@ -398,7 +392,7 @@ def get_stats_random_rollout(
                 "thus get_stats_random_rollout cannot infer which to compute the stats of."
             )
 
-    if key == "next_pixels":
+    if key == "pixels":
         m = val_stats.mean()
         s = val_stats.std()
     else:
@@ -430,6 +424,8 @@ def get_stats_random_rollout(
 
 @dataclass
 class EnvConfig:
+    """Environment config struct."""
+
     env_library: str = "gym"
     # env_library used for the simulated environment. Default=gym
     env_name: str = "Humanoid-v2"

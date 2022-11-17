@@ -7,9 +7,9 @@ import argparse
 import pytest
 import torch
 from _utils_internal import get_available_devices
+from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.postprocs.postprocs import MultiStep
-from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 
 
 @pytest.mark.parametrize("n", range(13))
@@ -37,7 +37,7 @@ def test_multistep(n, key, device, T=11):
     tensordict = TensorDict(
         source={
             key: total_obs[:, :T] * mask.to(torch.float),
-            "next_" + key: total_obs[:, 1:] * mask.to(torch.float),
+            "next": {key: total_obs[:, 1:] * mask.to(torch.float)},
             "done": done,
             "reward": torch.randn(1, T, 1, device=device).expand(b, T, 1)
             * mask.to(torch.float),
@@ -60,7 +60,7 @@ def test_multistep(n, key, device, T=11):
     # assert that done at last step is similar to unterminated traj
     assert (ms_tensordict.get("gamma")[4] == ms_tensordict.get("gamma")[0]).all()
     assert (
-        ms_tensordict.get("next_" + key)[4] == ms_tensordict.get("next_" + key)[0]
+        ms_tensordict.get(("next", key))[4] == ms_tensordict.get(("next", key))[0]
     ).all()
     assert (
         ms_tensordict.get("steps_to_next_obs")[4]
@@ -69,7 +69,7 @@ def test_multistep(n, key, device, T=11):
 
     # check that next obs is properly replaced, or that it is terminated
     next_obs = ms_tensordict.get(key)[:, (1 + ms.n_steps_max) :]
-    true_next_obs = ms_tensordict.get("next_" + key)[:, : -(1 + ms.n_steps_max)]
+    true_next_obs = ms_tensordict.get(("next", key))[:, : -(1 + ms.n_steps_max)]
     terminated = ~ms_tensordict.get("nonterminal")
     assert ((next_obs == true_next_obs) | terminated[:, (1 + ms.n_steps_max) :]).all()
 
@@ -121,18 +121,25 @@ class TestSplits:
             traj_ids[done] = traj_ids.max() + torch.arange(1, done.sum() + 1)
             steps_count[done] = 0
 
-        out = torch.stack(out, 1)
+        out = torch.stack(out, 1).contiguous()
         return out
 
-    @pytest.mark.parametrize("num_workers", range(4, 35))
-    @pytest.mark.parametrize("traj_len", [10, 17, 50, 97, 200])
+    @pytest.mark.parametrize("num_workers", range(3, 34, 3))
+    @pytest.mark.parametrize(
+        "traj_len",
+        [
+            10,
+            17,
+            50,
+            97,
+        ],
+    )
     def test_splits(self, num_workers, traj_len):
 
         trajs = TestSplits.create_fake_trajs(num_workers, traj_len)
         assert trajs.shape[0] == num_workers
         assert trajs.shape[1] == traj_len
         split_trajs = split_trajectories(trajs)
-
         assert split_trajs.shape[0] == split_trajs.get("traj_ids").max() + 1
         assert split_trajs.shape[1] == split_trajs.get("steps_count").max() + 1
 
@@ -146,7 +153,6 @@ class TestSplits:
 
         for w in range(num_workers):
             assert (out_mask.get("workers") == w).sum() == traj_len
-
         # Assert that either the chain is not done XOR if it is it must have the desired length (equal to traj id by design)
         for i in range(split_trajs.get("traj_ids").max()):
             idx_traj_id = out_mask.get("traj_ids") == i

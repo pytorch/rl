@@ -1,8 +1,8 @@
 from typing import Optional, Callable
 
 import torch
+from tensordict.tensordict import TensorDictBase, TensorDict
 
-from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule, ProbabilisticTensorDictModule
 from torchrl.objectives import distance_loss

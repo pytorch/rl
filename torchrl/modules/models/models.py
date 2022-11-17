@@ -11,7 +11,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from torchrl._utils import prod
-from torchrl.data import DEVICE_TYPING
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules.models.utils import (
     _find_depth,
     create_on_device,
@@ -19,19 +19,6 @@ from torchrl.modules.models.utils import (
     SquashDims,
     Squeeze2dLayer,
 )
-
-__all__ = [
-    "MLP",
-    "ConvNet",
-    "DuelingCnnDQNet",
-    "DistributionalDQNnet",
-    "DdpgCnnActor",
-    "DdpgCnnQNet",
-    "DdpgMlpActor",
-    "DdpgMlpQNet",
-    "TD3MlpQNet",
-    "LSTMNet",
-]
 
 
 class MLP(nn.Sequential):
@@ -673,6 +660,12 @@ def ddpg_init_last_layer(
     scale: float = 6e-4,
     device: Optional[DEVICE_TYPING] = None,
 ) -> None:
+    """Initializer for the last layer of DDPG.
+
+    Presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    https://arxiv.org/pdf/1509.02971.pdf
+
+    """
     last_layer.weight.data.copy_(
         torch.rand_like(last_layer.weight.data, device=device) * scale - scale / 2
     )

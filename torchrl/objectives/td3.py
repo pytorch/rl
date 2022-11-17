@@ -10,7 +10,7 @@ from numbers import Number
 
 import torch
 
-from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.modules import TensorDictModule
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.utils import (
@@ -233,11 +233,11 @@ class TD3Loss(LossModule):
                    "target_value": target_value.mean().detach(),
             }
         
-        # calc actor loss
+        # calc actor loss every policy delayed steps
         if self.update_iter % self.policy_update_delay == 0:
             loss_actor = - state_action_value_actor[0].mean()
             out_dict.update({"loss_actor": loss_actor.mean()})
-            self.previous_policy_loss  = loss_actor.mean().detach()
+            self.previous_policy_loss = loss_actor.mean().detach()
         else:
             out_dict.update({"loss_actor": self.previous_policy_loss})
         

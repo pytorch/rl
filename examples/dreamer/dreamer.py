@@ -288,9 +288,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     ):
                         sampled_tensordict_save = (
                             sampled_tensordict.select(
-                                "next_pixels",
-                                "next_reco_pixels",
-                                "state",
+                                "next" "state",
                                 "belief",
                             )[:4]
                             .detach()
