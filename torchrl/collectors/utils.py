@@ -6,9 +6,8 @@
 from typing import Callable
 
 import torch
-
-from torchrl.data import TensorDict
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from tensordict import TensorDict
+from tensordict.tensordict import TensorDictBase
 
 
 def _stack_output(fun) -> Callable:
@@ -34,6 +33,9 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
 
     From there, builds a B x T x ... zero-padded tensordict with B batches on max duration T
     """
+    # TODO: incorporate tensordict.split once it's implemented
+    sep = ".-|-."
+    rollout_tensordict = rollout_tensordict.flatten_keys(sep)
     traj_ids = rollout_tensordict.get("traj_ids")
     ndim = len(rollout_tensordict.batch_size)
     splits = traj_ids.view(-1)
@@ -50,7 +52,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
         )
         if rollout_tensordict.ndimension() == 1:
             rollout_tensordict = rollout_tensordict.unsqueeze(0).to_tensordict()
-        return rollout_tensordict
+        return rollout_tensordict.unflatten_keys(sep)
     out_splits = {
         key: _d.contiguous().view(-1, *_d.shape[ndim:]).split(splits, 0)
         for key, _d in rollout_tensordict.items()
@@ -72,6 +74,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
         device=rollout_tensordict.device,
         batch_size=out_dict["mask"].shape[:-1],
     )
+    td = td.unflatten_keys(sep)
     if (out_dict["done"].sum(1) > 1).any():
         raise RuntimeError("Got more than one done per trajectory")
     return td

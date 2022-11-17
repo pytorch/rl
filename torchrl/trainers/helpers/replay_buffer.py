@@ -8,14 +8,12 @@ from typing import Optional
 import torch
 
 from torchrl.data import (
-    DEVICE_TYPING,
     ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-
-__all__ = ["make_replay_buffer"]
+from torchrl.data.utils import DEVICE_TYPING
 
 
 def make_replay_buffer(
@@ -54,6 +52,8 @@ def make_replay_buffer(
 
 @dataclass
 class ReplayArgsConfig:
+    """Generic Replay Buffer config struct."""
+
     buffer_size: int = 1000000
     # buffer size, in number of frames stored. Default=1e6
     prb: bool = False

@@ -8,6 +8,7 @@ from typing import Optional, Sequence, Tuple, Union
 import torch
 from torch import nn
 
+from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, TensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import (
     TensorDictModule,
@@ -18,19 +19,6 @@ from torchrl.modules.tensordict_module.probabilistic import (
 )
 from torchrl.modules.tensordict_module.sequence import TensorDictSequential
 
-__all__ = [
-    "Actor",
-    "ActorValueOperator",
-    "ValueOperator",
-    "ProbabilisticActor",
-    "QValueActor",
-    "ActorCriticOperator",
-    "ActorCriticWrapper",
-    "DistributionalQValueActor",
-]
-
-from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, TensorSpec
-
 
 class Actor(TensorDictModule):
     """General class for deterministic actors in RL.
@@ -40,10 +28,10 @@ class Actor(TensorDictModule):
     automatically translated into :obj:`spec = CompositeSpec(action=spec)`
 
     Examples:
-        >>> from torchrl.data import TensorDict,
-        ...    NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import Actor
         >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.modules import Actor
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
         >>> action_spec = NdUnboundedContinuousTensorSpec(4)
         >>> module = torch.nn.Linear(4, 4)
@@ -92,9 +80,11 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
     automatically translated into :obj:`spec = CompositeSpec(action=spec)`
 
     Examples:
-        >>> from torchrl.data import TensorDict, NdBoundedTensorSpec
+        >>> import functorch
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import NdBoundedTensorSpec
         >>> from torchrl.modules import Actor, TanhNormal, NormalParamWrapper
-        >>> import torch, functorch
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
         >>> action_spec = NdBoundedTensorSpec(shape=torch.Size([4]),
         ...    minimum=-1, maximum=1)
@@ -157,10 +147,12 @@ class ValueOperator(TensorDictModule):
     key is part of the in_keys list).
 
     Examples:
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import ValueOperator
-        >>> import torch, functorch
+        >>> import functorch
+        >>> import torch
+        >>> from tensordict import TensorDict
         >>> from torch import nn
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.modules import ValueOperator
         >>> td = TensorDict({"observation": torch.randn(3, 4), "action": torch.randn(3, 2)}, [3,])
         >>> class CustomModule(nn.Module):
         ...     def __init__(self):
@@ -223,11 +215,11 @@ class QValueHook:
 
     Examples:
         >>> import functorch
-        >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
-        >>> from torchrl.modules.tensordict_module.actors import QValueHook, Actor
+        >>> import torch
+        >>> from tensordict import TensorDict
         >>> from torch import nn
-        >>> from torchrl.data import OneHotDiscreteTensorSpec, TensorDict
-        >>> import torch, functorch
+        >>> from torchrl.data import OneHotDiscreteTensorSpec
+        >>> from torchrl.modules.tensordict_module.actors import QValueHook, Actor
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
         >>> module = nn.Linear(4, 4)
         >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
@@ -338,10 +330,12 @@ class DistributionalQValueHook(QValueHook):
             action component.
 
     Examples:
-        >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
-        >>> from torchrl.modules.tensordict_module.actors import DistributionalQValueHook, Actor
+        >>> import functorch
+        >>> import torch
+        >>> from tensordict import TensorDict
         >>> from torch import nn
-        >>> import torch, functorch
+        >>> from torchrl.data import OneHotDiscreteTensorSpec
+        >>> from torchrl.modules.tensordict_module.actors import DistributionalQValueHook, Actor
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
         >>> nbins = 3
         >>> class CustomDistributionalQval(nn.Module):
@@ -448,10 +442,12 @@ class QValueActor(Actor):
     This class hooks the module such that it returns a one-hot encoding of the argmax value.
 
     Examples:
-        >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
-        >>> from torchrl.modules.tensordict_module.actors import QValueActor
+        >>> import functorch
+        >>> import torch
+        >>> from tensordict import TensorDict
         >>> from torch import nn
-        >>> import torch, functorch
+        >>> from torchrl.data import OneHotDiscreteTensorSpec
+        >>> from torchrl.modules.tensordict_module.actors import QValueActor
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
         >>> module = nn.Linear(4, 4)
         >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
@@ -488,10 +484,12 @@ class DistributionalQValueActor(QValueActor):
     This class hooks the module such that it returns a one-hot encoding of the argmax value on its support.
 
     Examples:
-        >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
-        >>> from torchrl.modules import DistributionalQValueActor, MLP
+        >>> import functorch
+        >>> import torch
+        >>> from tensordict import TensorDict
         >>> from torch import nn
-        >>> import torch, functorch
+        >>> from torchrl.data import OneHotDiscreteTensorSpec
+        >>> from torchrl.modules import DistributionalQValueActor, MLP
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
         >>> nbins = 3
         >>> module = MLP(out_features=(nbins, 4), depth=2)
@@ -570,10 +568,11 @@ class ActorValueOperator(TensorDictSequential):
         value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
-        >>> from torchrl.modules.tensordict_module import ProbabilisticActor
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
-        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorValueOperator, NormalParamWrapper
         >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.modules.tensordict_module import ProbabilisticActor
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
+        >>> from torchrl.modules import ValueOperator, TanhNormal, ActorValueOperator, NormalParamWrapper
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
         >>> td_module_hidden = TensorDictModule(
@@ -695,10 +694,11 @@ class ActorCriticOperator(ActorValueOperator):
         value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
-        >>> from torchrl.modules.tensordict_module import ProbabilisticActor
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
-        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper, MLP
         >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.modules.tensordict_module import ProbabilisticActor
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
+        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper, MLP
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
         >>> td_module_hidden = TensorDictModule(
@@ -824,9 +824,11 @@ class ActorCriticWrapper(TensorDictSequential):
         value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
-        >>> from torchrl.modules.tensordict_module.deprec import ProbabilisticActor_deprecated        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
-        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticWrapper
         >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
+        >>> from torchrl.modules.tensordict_module.deprec import ProbabilisticActor_deprecated
+        >>> from torchrl.modules import ValueOperator, TanhNormal, ActorCriticWrapper
         >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
         >>> module_action = torch.nn.Linear(4, 8)
         >>> td_module_action = ProbabilisticActor_deprecated(

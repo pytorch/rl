@@ -22,20 +22,18 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 import torch
-from torch import Tensor, nn
-
-from torchrl.data import CompositeSpec
-from torchrl.data.tensordict.tensordict import (
+from tensordict.tensordict import (
     LazyStackedTensorDict,
     TensorDict,
     TensorDictBase,
 )
+from torch import Tensor, nn
+
+from torchrl.data import CompositeSpec
 from torchrl.modules.tensordict_module.common import TensorDictModule
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
 )
-
-__all__ = ["TensorDictSequential"]
 
 
 class TensorDictSequential(TensorDictModule):
@@ -57,10 +55,12 @@ class TensorDictSequential(TensorDictModule):
 
     TensorDictSequence supports functional, modular and vmap coding:
     Examples:
+        >>> import functorch
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.modules import TanhNormal, TensorDictSequential, NormalParamWrapper
         >>> from torchrl.modules.tensordict_module import ProbabilisticTensorDictModule
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import  TanhNormal, TensorDictSequential, NormalParamWrapper
-        >>> import torch, functorch
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
         >>> spec1 = NdUnboundedContinuousTensorSpec(4)
         >>> net1 = NormalParamWrapper(torch.nn.Linear(4, 8))
@@ -142,7 +142,7 @@ class TensorDictSequential(TensorDictModule):
             if isinstance(module, TensorDictModule) or hasattr(module, "spec"):
                 spec.update(module.spec)
             else:
-                spec.update(CompositeSpec(**{key: None for key in module.out_keys}))
+                spec.update(CompositeSpec({key: None for key in module.out_keys}))
         super().__init__(
             spec=spec,
             module=nn.ModuleList(list(modules)),
@@ -391,7 +391,8 @@ class TensorDictSequential(TensorDictModule):
             A tuple of parameter and buffer tuples
 
         Examples:
-            >>> from torchrl.data import NdUnboundedContinuousTensorSpec, TensorDict
+            >>> from tensordict import TensorDict
+            >>> from torchrl.data import NdUnboundedContinuousTensorSpec
             >>> lazy_module1 = nn.LazyLinear(4)
             >>> lazy_module2 = nn.LazyLinear(3)
             >>> spec1 = NdUnboundedContinuousTensorSpec(18)

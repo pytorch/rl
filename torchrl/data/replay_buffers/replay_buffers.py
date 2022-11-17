@@ -11,6 +11,11 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple, Union, Dict
 
 import numpy as np
 import torch
+from tensordict.tensordict import (
+    TensorDictBase,
+    _stack as stack_td,
+    LazyStackedTensorDict,
+)
 from torch import Tensor
 
 from torchrl._torchrl import (
@@ -25,19 +30,7 @@ from torchrl.data.replay_buffers.utils import (
     _to_numpy,
     _to_torch,
 )
-from torchrl.data.tensordict.tensordict import (
-    TensorDictBase,
-    _stack as stack_td,
-    LazyStackedTensorDict,
-)
 from torchrl.data.utils import DEVICE_TYPING
-
-__all__ = [
-    "ReplayBuffer",
-    "PrioritizedReplayBuffer",
-    "TensorDictReplayBuffer",
-    "TensorDictPrioritizedReplayBuffer",
-]
 
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
@@ -730,6 +723,13 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
 
 
 class InPlaceSampler:
+    """A sampler to write tennsordicts in-place.
+
+    To be used cautiously as this may lead to unexpected behaviour (i.e. tensordicts
+    overwritten during execution).
+
+    """
+
     def __init__(self, device: Optional[DEVICE_TYPING] = None):
         self.out = None
         if device is None:

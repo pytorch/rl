@@ -7,9 +7,9 @@ import math
 from typing import Callable, Optional, Tuple
 
 import torch
+from tensordict.tensordict import TensorDictBase, TensorDict
 from torch import distributions as d
 
-from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.utils import distance_loss
 from ..modules.tensordict_module import ProbabilisticTensorDictModule
@@ -80,7 +80,9 @@ class PPOLoss(LossModule):
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self.device))
         self.loss_critic_type = loss_critic_type
-        self.advantage_module = advantage_module.to(self.device)
+        self.advantage_module = advantage_module
+        if self.advantage_module is not None:
+            self.advantage_module = advantage_module.to(self.device)
 
     def reset(self) -> None:
         pass

@@ -17,6 +17,7 @@ from mocking_classes import (
     DiscreteActionVecPolicy,
     MockSerialEnv,
 )
+from tensordict.tensordict import TensorDict, assert_allclose_td
 from torch import nn
 from torchrl._utils import seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
@@ -29,10 +30,8 @@ from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     CompositeSpec,
     NdUnboundedContinuousTensorSpec,
-    TensorDict,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
@@ -594,9 +593,8 @@ def test_collector_consistency(num_env, env_name, seed=100):
 @pytest.mark.parametrize("collector_class", [SyncDataCollector, aSyncDataCollector])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
-    """
-    Tests that various frames_per_batch lead to the same results
-    """
+    """Tests that various frames_per_batch lead to the same results."""
+
     if num_env == 1:
 
         def env_fn(seed):
@@ -838,7 +836,7 @@ def test_excluded_keys(collector_class, exclude):
         return ContinuousActionVecMockEnv()
 
     dummy_env = make_env()
-    obs_spec = dummy_env.observation_spec["next_observation"]
+    obs_spec = dummy_env.observation_spec["observation"]
     policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])
     policy = Actor(policy_module, spec=dummy_env.action_spec)
     policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
@@ -870,9 +868,9 @@ def test_excluded_keys(collector_class, exclude):
 @pytest.mark.parametrize(
     "collector_class",
     [
-        SyncDataCollector,
         MultiaSyncDataCollector,
         MultiSyncDataCollector,
+        SyncDataCollector,
     ],
 )
 @pytest.mark.parametrize("init_random_frames", [0, 50])
@@ -895,7 +893,13 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     policy_kwargs = {
         "module": net,
         "in_keys": ["observation", "hidden1", "hidden2"],
-        "out_keys": ["action", "hidden1", "hidden2", "next_hidden1", "next_hidden2"],
+        "out_keys": [
+            "action",
+            "hidden1",
+            "hidden2",
+            ("next", "hidden1"),
+            ("next", "hidden2"),
+        ],
     }
     if explicit_spec:
         hidden_spec = NdUnboundedContinuousTensorSpec((1, hidden_size))
@@ -903,8 +907,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
             action=UnboundedContinuousTensorSpec(),
             hidden1=hidden_spec,
             hidden2=hidden_spec,
-            next_hidden1=hidden_spec,
-            next_hidden2=hidden_spec,
+            next=CompositeSpec(hidden1=hidden_spec, hidden2=hidden_spec),
         )
 
     policy = TensorDictModule(**policy_kwargs)
@@ -928,23 +931,24 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
 
     collector = collector_class(**collector_kwargs)
 
-    keys = [
+    keys = {
         "action",
         "done",
         "hidden1",
         "hidden2",
         "mask",
-        "next_hidden1",
-        "next_hidden2",
-        "next_observation",
+        ("next", "hidden1"),
+        ("next", "hidden2"),
+        ("next", "observation"),
+        "next",
         "observation",
         "reward",
         "step_count",
         "traj_ids",
-    ]
+    }
     b = next(iter(collector))
 
-    assert set(b.keys()) == set(keys)
+    assert set(b.keys(True)) == keys
     collector.shutdown()
     del collector
 
