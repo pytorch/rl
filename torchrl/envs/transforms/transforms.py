@@ -1532,7 +1532,9 @@ class RewardScaling(Transform):
 
     def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
         if self.standard_normal:
-            return (reward - self.loc) / self.scale
+            loc = self.loc
+            scale = self.scale
+            return (reward - loc) / scale
         else:
             reward.mul_(self.scale).add_(self.loc)
             return reward
