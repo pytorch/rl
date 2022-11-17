@@ -8,9 +8,9 @@ dm-control, dm-lab, model-based environments as well as custom environments.
 The goal is to be able to swap environments in an experiment with little or no effort,
 even if these environments are simulated using different libraries.
 TorchRL offers some out-of-the-box environment wrappers under :obj:`torchrl.envs.libs`,
-which we hope are easily imitated for other libraries.
+which we hope can be easily imitated for other libraries.
 The parent class :obj:`EnvBase` is a :obj:`torch.nn.Module` subclass that implements
-the typical environment methods using :obj:`TensorDict` instances. This allows this
+some typical environment methods using :obj:`TensorDict` as a data organiser. This allows this
 class to be generic and to handle an arbitrary number of input and outputs, as well as
 nested or batched data structures.
 
@@ -22,8 +22,10 @@ Each env will have the following attributes:
   (this is the responsibility of the backend, with which TorchRL can do little). The device of
   an environment just represents the device where the data is to be expected when input to the
   environment or retrieved from it. TorchRL takes care of mapping the data to the desired device.
-  This is especially useful for transforms (see below).
-- :obj:`env.observation_spec`: a :obj:`CompositeSpec` object containing all the observation keys.
+  This is especially useful for transforms (see below). For parametric environments (e.g.
+  model-based environments), the device does represent the hardware that will be used to
+  compute the operations.
+- :obj:`env.observation_spec`: a :obj:`CompositeSpec` object containing all the observation key-spec pairs.
 - :obj:`env.input_spec`: a :obj:`CompositeSpec` object containing all the input keys (:obj:`"action"` and others).
 - :obj:`env.action_spec`: a :obj:`TensorSpec` object representing the action spec.
 - :obj:`env.reward_spec`: a :obj:`TensorSpec` object representing the reward spec.
