@@ -26,9 +26,6 @@ jobs:
       run: ldd --version
     - name: Checkout
       uses: actions/checkout@v2
-    # Setup a tmate session
-    - name: Setup tmate session
-      uses: mxschmitt/action-tmate@v3
     # Update references
     - name: Update pip
       run: |
@@ -77,6 +74,8 @@ jobs:
         cd ./docs
         sphinx-build ./source _local_build
         cd ..
+    - name: Setup tmate session
+      uses: mxschmitt/action-tmate@v3
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
