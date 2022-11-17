@@ -37,40 +37,37 @@ jobs:
       run: |
         echo "$HOME/miniconda/bin" >> $GITHUB_PATH
         echo "CONDA=$HOME/miniconda" >> $GITHUB_PATH
-    - name: create conda env
+    - name: create and activate conda env
       run: |
         $HOME/miniconda/bin/conda create --name build_binary python=${{ matrix.python-version }}
         $HOME/miniconda/bin/conda info
-    - name: check python version no Conda
-      run: |
-        python --version
+        $HOME/miniconda/bin/conda activate build_binary
     - name: check python version
       run: |
-        $HOME/miniconda/bin/conda run -n build_binary python --version
+        python --version
     - name: setup Path
       run: |
         echo /usr/local/bin >> $GITHUB_PATH
     - name: Install PyTorch
       shell: bash
       run: |
-        $HOME/miniconda/bin/conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
+        python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
     - name: Install tensordict
       run: |
-        python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
+        python3 -m pip install git+https://github.com/pytorch-labs/tensordict.git
     - name: Install TorchRL
       run: |
-        $HOME/miniconda/bin/conda run -n build_binary python -m pip install -e .
+        python -m pip install -e .
     - name: Test torchrl installation
       shell: bash
       run: |
         mkdir _tmp
         cd _tmp
-        $HOME/miniconda/bin/conda run -n build_binary \
-          python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv"
+        python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv"
         cd ..
     - name: Build the docset
       run: |
-        $HOME/miniconda/bin/conda run -n build_binary python -m pip install -r docs/requirements.txt
+        python -m pip install -r docs/requirements.txt
         cd ./docs
         make html
         cd ..
