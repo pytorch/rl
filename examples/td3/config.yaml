@@ -14,6 +14,7 @@ prb: 0
 lr: 3e-4
 policy_update_delay: 2
 multi_step: 1
+n_steps_return: 2
 init_random_frames: 25000
 activation: relu
 gSDE: 0
