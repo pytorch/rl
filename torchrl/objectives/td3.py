@@ -5,20 +5,19 @@
 
 from __future__ import annotations
 
-from typing import Tuple
 from numbers import Number
 
 import torch
 
 from tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.modules import TensorDictModule
-from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
+
 from torchrl.objectives.utils import (
     distance_loss,
     hold_out_params,
     next_state_value as get_next_state_value,
 )
-from ..envs.utils import set_exploration_mode, step_mdp
+from ..envs.utils import set_exploration_mode
 from .common import LossModule, _has_functorch
 
 
@@ -80,8 +79,7 @@ class TD3Loss(LossModule):
             "value_network",
             self.num_qvalue_nets,
             create_target_params=self.delay_value,
-            compare_against=list(actor_network.parameters())
-                            + list(value_network.parameters()),
+            compare_against=list(actor_network.parameters()),
         )
 
         self.actor_in_keys = actor_network.in_keys
