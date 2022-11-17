@@ -14,7 +14,6 @@ import torch.cuda
 from hydra.core.config_store import ConfigStore
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import AdditiveGaussianWrapper
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
