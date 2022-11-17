@@ -1520,6 +1520,8 @@ class RewardScaling(Transform):
         if in_keys is None:
             in_keys = ["reward"]
         super().__init__(in_keys=in_keys)
+        self.standard_normal = standard_normal
+
         if not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc)
         if not isinstance(scale, torch.Tensor):
