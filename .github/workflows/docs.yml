@@ -17,8 +17,8 @@ jobs:
     steps:
     - name: Install deps
       run: |
-        sudo apt-get update -y
-        sudo apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev
+        apt-get update -y
+        apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev
     - name: Debugging with ssh
       uses: lhotari/action-upterm@v1
     - name: Check ldd --version
@@ -28,8 +28,8 @@ jobs:
     # Update references
     - name: Update pip
       run: |
-        sudo sudo apt-get install python3.8 
-        sudo pip3 install --upgrade pip
+        apt-get install python3.8 
+        pip3 install --upgrade pip
     - name: Setup conda
       run: |
         rm -rf $HOME/miniconda
