@@ -26,6 +26,9 @@ jobs:
       run: ldd --version
     - name: Checkout
       uses: actions/checkout@v2
+    # Setup a tmate session
+    - name: Setup tmate session
+      uses: mxschmitt/action-tmate@v3
     # Update references
     - name: Update pip
       run: |
