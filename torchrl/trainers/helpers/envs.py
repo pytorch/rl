@@ -5,7 +5,7 @@
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Callable, Optional, Union, Any, Sequence
+from typing import Callable, Optional, Union, Any, Sequence, Tuple
 
 import torch
 
@@ -349,7 +349,7 @@ def parallel_env_constructor(
 def get_stats_random_rollout(
     cfg: "DictConfig",  # noqa: F821
     proof_environment: EnvBase = None,
-    keys: Optional[list[str, str]] = None,
+    keys: Optional[Tuple[str, str]] = None,
 ):
     """Gathers stas (loc and scale) from an environment using random rollouts.
 
