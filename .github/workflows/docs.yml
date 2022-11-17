@@ -14,6 +14,8 @@ jobs:
          - os: linux.4xlarge.nvidia.gpu
            python-version: 3.8
     steps:
+    - name: Debugging with ssh
+      uses: lhotari/action-upterm@v1
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
