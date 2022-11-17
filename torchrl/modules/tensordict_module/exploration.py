@@ -175,6 +175,8 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         safe: Optional[bool] = True,
     ):
         super().__init__(policy)
+        if sigma_end > sigma_init:
+            raise RuntimeError("sigma should decrease over time or be constant")
         self.register_buffer("sigma_init", torch.tensor([sigma_init]))
         self.register_buffer("sigma_end", torch.tensor([sigma_end]))
         self.annealing_num_steps = annealing_num_steps
