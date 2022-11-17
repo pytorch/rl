@@ -29,6 +29,7 @@ __all__ = [
     "DdpgCnnQNet",
     "DdpgMlpActor",
     "DdpgMlpQNet",
+    "TD3MlpQNet",
     "LSTMNet",
 ]
 
@@ -970,6 +971,85 @@ class DdpgMlpQNet(nn.Module):
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         value = self.mlp2(torch.cat([self.mlp1(observation), action], -1))
         return value
+
+
+class TD3MlpQNet(nn.Module):
+    """TD3 Q-value MLP class.
+
+    Presented in "Addressing Function Approximation Error in Actor-Critic Methods",
+    https://arxiv.org/pdf/1802.09477.pdf
+    
+    Compared to the DDPG Q-value MLP class the TD3 Q-value MLP class concatenates the action twice to the MLP inputs.
+
+    The TD3 Q-value network takes as input an observation and an action, and returns a scalar from it.
+    Because actions are integrated later than observations, two networks are created.
+
+    Args:
+        mlp_net_kwargs_net1 (dict, optional): kwargs for MLP.
+            Default: {
+            'in_features': None,
+            'out_features': 400,
+            'depth': 0,
+            'num_cells': [],
+            'activation_class': nn.ELU,
+            'bias_last_layer': True,
+            'activate_last_layer': True,
+        }
+        mlp_net_kwargs_net2
+            Default: {
+            'in_features': None,
+            'out_features': 1,
+            'depth': 1,
+            'num_cells': [300, ],
+            'activation_class': nn.ELU,
+            'bias_last_layer': True,
+        }
+        device (Optional[DEVICE_TYPING]): device to create the module on.
+    """
+
+    def __init__(
+        self,
+        mlp_net_kwargs_net1: Optional[dict] = None,
+        mlp_net_kwargs_net2: Optional[dict] = None,
+        device: Optional[DEVICE_TYPING] = None,
+    ):
+        super().__init__()
+        mlp1_net_default_kwargs = {
+            "in_features": None,
+            "out_features": 400,
+            "depth": 0,
+            "num_cells": [],
+            "activation_class": nn.ELU,
+            "bias_last_layer": True,
+            "activate_last_layer": True,
+        }
+        mlp_net_kwargs_net1: Dict = (
+            mlp_net_kwargs_net1 if mlp_net_kwargs_net1 is not None else dict()
+        )
+        mlp1_net_default_kwargs.update(mlp_net_kwargs_net1)
+        self.mlp1 = MLP(device=device, **mlp1_net_default_kwargs)
+
+        mlp2_net_default_kwargs = {
+            "in_features": None,
+            "out_features": 1,
+            "num_cells": [
+                300,
+            ],
+            "activation_class": nn.ELU,
+            "bias_last_layer": True,
+        }
+        mlp_net_kwargs_net2 = (
+            mlp_net_kwargs_net2 if mlp_net_kwargs_net2 is not None else dict()
+        )
+        mlp2_net_default_kwargs.update(mlp_net_kwargs_net2)
+        self.mlp2 = MLP(device=device, **mlp2_net_default_kwargs)
+        ddpg_init_last_layer(self.mlp2[-1], 6e-3, device=device)
+
+    def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+        x = self.mlp1(torch.cat([observation, action], -1))
+        value = self.mlp2(torch.cat([x, action], -1))
+        return value
+
 
 
 class LSTMNet(nn.Module):

@@ -10,6 +10,7 @@ from .dreamer import DreamerValueLoss, DreamerActorLoss, DreamerModelLoss
 from .ppo import PPOLoss, ClipPPOLoss, KLPENPPOLoss
 from .redq import REDQLoss
 from .sac import SACLoss
+from .td3 import TD3Loss
 from .utils import (
     SoftUpdate,
     HardUpdate,

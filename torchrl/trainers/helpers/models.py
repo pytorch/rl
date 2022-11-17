@@ -52,6 +52,7 @@ from torchrl.modules.models.models import (
     DdpgCnnQNet,
     DdpgMlpActor,
     DdpgMlpQNet,
+    TD3MlpQNet,
     DuelingCnnDQNet,
     LSTMNet,
     MLP,
@@ -92,6 +93,7 @@ __all__ = [
     "make_sac_model",
     "make_redq_model",
     "make_dreamer",
+    "make_td3_actor",
 ]
 
 
@@ -932,6 +934,182 @@ def make_sac_model(
     return model
 
 
+def make_td3_actor(
+    proof_environment: EnvBase,
+    cfg: "DictConfig",  # noqa: F821
+    actor_net_kwargs: Optional[dict] = None,
+    qvalue_net_kwargs: Optional[dict] = None,
+    device: DEVICE_TYPING = "cpu",
+) -> torch.nn.ModuleList:
+    """TD3 constructor helper function.
+
+    Args:
+        proof_environment (EnvBase): a dummy environment to retrieve the observation and action spec
+        cfg (DictConfig): contains arguments of the DDPG script
+        actor_net_kwargs (dict, optional): kwargs to be used for the policy network (either DdpgCnnActor or
+            DdpgMlpActor).
+        value_net_kwargs (dict, optional): kwargs to be used for the policy network (either DdpgCnnQNet or
+            DdpgMlpQNet).
+        device (torch.device, optional): device on which the model must be cast. Default is "cpu".
+
+    Returns:
+         An actor and a value operators for TD3.
+
+    For more details on DDPG, refer to "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    https://arxiv.org/pdf/1509.02971.pdf.
+
+    Examples:
+        >>> from torchrl.trainers.helpers.models import make_ddpg_actor
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> import hydra
+        >>> from hydra.core.config_store import ConfigStore
+        >>> import dataclasses
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
+        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> device = torch.device("cpu")
+        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
+        ...                    (DDPGModelConfig, EnvConfig)
+        ...                   for config_field in dataclasses.fields(config_cls)]
+        >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+        >>> cs = ConfigStore.instance()
+        >>> cs.store(name="config", node=Config)
+        >>> with initialize(config_path=None):
+        >>>     cfg = compose(config_name="config")
+        >>> actor, value = make_ddpg_actor(
+        ...     proof_environment,
+        ...     device=device,
+        ...     cfg=cfg)
+        >>> td = proof_environment.reset()
+        >>> print(actor(td))
+        TensorDict(
+            fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                param: Tensor(torch.Size([6]), dtype=torch.float32),
+                action: Tensor(torch.Size([6]), dtype=torch.float32)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
+        >>> print(value(td))
+        TensorDict(
+            fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                param: Tensor(torch.Size([6]), dtype=torch.float32),
+                action: Tensor(torch.Size([6]), dtype=torch.float32),
+                state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
+    """
+
+
+    from_pixels = cfg.from_pixels
+    # TD3 does not use noisy layer but could be a nice option 
+    noisy = cfg.noisy
+
+    actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
+    qvalue_net_kwargs = qvalue_net_kwargs if qvalue_net_kwargs is not None else dict()
+
+    linear_layer_class = torch.nn.Linear if not noisy else NoisyLinear
+
+    env_specs = proof_environment.specs
+    out_features = env_specs["action_spec"].shape[0]
+
+    actor_net_default_kwargs = {
+        "action_dim": out_features,
+        "mlp_net_kwargs": {
+            "layer_class": linear_layer_class,
+            "activation_class": ACTIVATIONS[cfg.activation],
+        },
+    }
+    actor_net_default_kwargs.update(actor_net_kwargs)
+    if from_pixels:
+        in_keys = ["pixels"]
+        actor_net_default_kwargs["conv_net_kwargs"] = {
+            "activation_class": ACTIVATIONS[cfg.activation]
+        }
+        actor_net = DdpgCnnActor(**actor_net_default_kwargs)
+        out_keys = ["param", "hidden"]
+        
+        value_net_default_kwargs = {
+            "mlp_net_kwargs": {
+                "layer_class": linear_layer_class,
+                "activation_class": ACTIVATIONS[cfg.activation],
+            },
+            "conv_net_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
+        }
+        value_net_default_kwargs.update(qvalue_net_kwargs)
+
+        in_keys_qvalue = ["pixels", "action"]
+        qvalue_net = DdpgCnnQNet(**value_net_default_kwargs)
+    else:
+        in_keys = ["observation_vector"]
+        actor_net = DdpgMlpActor(**actor_net_default_kwargs)
+        out_keys = ["param"]
+        qvalue_net_default_kwargs1 = {"activation_class": ACTIVATIONS[cfg.activation]}
+        qvalue_net_default_kwargs1.update(
+            qvalue_net_kwargs.get(
+                "mlp_net_kwargs_net1",
+                {
+                    "layer_class": linear_layer_class,
+                    "activation_class": ACTIVATIONS[cfg.activation],
+                    "bias_last_layer": True,
+                },
+            )
+        )
+        qvalue_net_default_kwargs2 = {
+            "num_cells": [300],
+            "activation_class": ACTIVATIONS[cfg.activation],
+            "bias_last_layer": True,
+        }
+        qvalue_net_default_kwargs2.update(
+            qvalue_net_kwargs.get(
+                "mlp_net_kwargs_net2",
+                {
+                    "layer_class": linear_layer_class,
+                },
+            )
+        )
+        qvalue_net = TD3MlpQNet(
+            mlp_net_kwargs_net1=qvalue_net_default_kwargs1,
+            mlp_net_kwargs_net2=qvalue_net_default_kwargs2,
+        )
+        in_keys_qvalue = in_keys + ["action"]
+        
+    actor_module = TensorDictModule(actor_net, in_keys=in_keys, out_keys=out_keys)
+
+    # We use a ProbabilisticActor to make sure that we map the network output to the right space using a TanhDelta
+    # distribution.
+    actor = ProbabilisticActor(
+        module=actor_module,
+        dist_in_keys=["param"],
+        spec=CompositeSpec(action=env_specs["action_spec"]),
+        safe=True,
+        distribution_class=TanhDelta,
+        distribution_kwargs={
+            "min": env_specs["action_spec"].space.minimum,
+            "max": env_specs["action_spec"].space.maximum,
+        },
+    )
+    
+    qvalue = ValueOperator(
+        in_keys=in_keys_qvalue,
+        module=qvalue_net,
+    )
+    model = nn.ModuleList([actor, qvalue]).to(device)
+
+    # init nets
+    with torch.no_grad(), set_exploration_mode("random"):
+        td = proof_environment.rollout(1000)
+        td = td.to(device)
+        for net in model:
+            net(td)
+    del td
+    return model
+
+
 def make_redq_model(
     proof_environment: EnvBase,
     cfg: "DictConfig",  # noqa: F821
@@ -1536,6 +1714,25 @@ class DDPGModelConfig:
     activation: str = "tanh"
     # activation function, either relu or elu or tanh, Default=tanh
 
+@dataclass
+class TD3ModelConfig:
+
+    noisy: bool = False
+    # whether to use NoisyLinearLayers in the value network.
+    gauss_exploration: bool = True
+    # wraps the policy in an Gaussian exploration wrapper. 
+    gauss_mean: float = 0.0
+    # mean of the Gaussian distribution for noise sampling
+    gauss_std: float = 0.1
+    # standard deviation of the Gaussian distribution for noise sampling
+    distributional: bool = False
+    # whether a distributional loss should be used (TODO: not implemented yet).
+    atoms: int = 51
+    # number of atoms used for the distributional loss (TODO)
+    gSDE: bool = False
+    # if True, exploration is achieved using the gSDE technique.
+    activation: str = "tanh"
+    # activation function, either relu or elu or tanh, Default=tanh
 
 @dataclass
 class REDQModelConfig:

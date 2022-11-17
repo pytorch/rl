@@ -12,6 +12,7 @@ __all__ = [
     "make_target_updater",
     "make_ppo_loss",
     "make_redq_loss",
+    "make_td3_loss",
 ]
 
 from typing import Optional, Tuple, Any
@@ -27,6 +28,7 @@ from torchrl.objectives import (
     PPOLoss,
     SACLoss,
     SoftUpdate,
+    TD3Loss,
 )
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.deprecated import REDQLoss_deprecated
@@ -148,6 +150,28 @@ def make_redq_loss(
     return loss_module, target_net_updater
 
 
+def make_td3_loss(model, cfg) -> Tuple[TD3Loss, Optional[TargetNetUpdater]]:
+    """Builds the TD3 loss module."""
+    actor, value_net = model
+    loss_kwargs = {}
+    if cfg.distributional:
+        raise NotImplementedError
+    else:
+        loss_kwargs.update({"loss_function": cfg.loss_function})
+        loss_class = TD3Loss
+    if cfg.loss not in ("single", "double"):
+        raise NotImplementedError
+    double_loss = cfg.loss == "double"
+    loss_kwargs.update({"delay_actor": double_loss, "delay_value": double_loss})
+    loss_module = loss_class(actor,
+                             value_net,
+                             gamma=cfg.gamma,
+                             policy_update_delay=cfg.policy_update_delay,
+                             **loss_kwargs)
+    target_net_updater = make_target_updater(cfg, loss_module)
+    return loss_module, target_net_updater
+
+
 def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[TargetNetUpdater]]:
     """Builds the DDPG loss module."""
     actor, value_net = model
@@ -234,6 +258,8 @@ class LossConfig:
     # REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.
     target_entropy: Any = None
     # Target entropy for the policy distribution. Default is None (auto calculated as the `target_entropy = -action_dim`)
+    policy_update_delay: int = 1
+    # Delayed policy update as suggested in the original TD3 paper (https://arxiv.org/abs/1802.09477) default to 1 as only td3 uses it
 
 
 @dataclass

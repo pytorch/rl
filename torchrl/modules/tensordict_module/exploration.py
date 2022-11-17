@@ -145,6 +145,8 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             default: 0.1
         annealing_num_steps (int, optional): number of steps it will take for
             sigma to reach the :obj:`sigma_end` value.
+        mean (float, optional): mean of each output element’s normal distribution.
+        std (float, optional): standard deviation of each output element’s normal distribution.
         action_key (str, optional): if the policy module has more than one output key,
             its output spec will be of type CompositeSpec. One needs to know where to
             find the action spec.
@@ -165,6 +167,8 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         sigma_init: float = 1.0,
         sigma_end: float = 0.1,
         annealing_num_steps: int = 1000,
+        mean: float = 0.0,
+        std: float = 1.0,
         action_key: str = "action",
         spec: Optional[TensorSpec] = None,
         safe: Optional[bool] = True,
@@ -172,9 +176,9 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         super().__init__(policy)
         self.register_buffer("sigma_init", torch.tensor([sigma_init]))
         self.register_buffer("sigma_end", torch.tensor([sigma_end]))
-        if self.sigma_end > self.sigma_init:
-            raise RuntimeError("sigma should decrease over time or be constant")
         self.annealing_num_steps = annealing_num_steps
+        self.register_buffer("mean", torch.tensor([mean]))
+        self.register_buffer("std", torch.tensor([std]))
         self.register_buffer("sigma", torch.tensor([sigma_init]))
         self.action_key = action_key
         self.spec = (
@@ -206,8 +210,9 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
         sigma = self.sigma.item()
-        noise = torch.randn(action.shape, device=action.device) * sigma
-        action = action + noise
+        noise = torch.normal(mean=torch.ones(action.shape) * self.mean.item(),
+                             std=torch.ones(action.shape) * self.std.item()).to(action.device)
+        action = action + noise * sigma
         spec = self.spec
         if isinstance(spec, CompositeSpec):
             spec = spec[self.action_key]
@@ -227,7 +232,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             out = self._add_noise(out)
             tensordict.set(self.action_key, out)
         return tensordict
-
+    
 
 class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     """Ornstein-Uhlenbeck exploration policy wrapper.
