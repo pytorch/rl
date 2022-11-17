@@ -14,8 +14,8 @@ prb: 0
 lr: 3e-4
 policy_update_delay: 2
 multi_step: 1
-init_random_frames: 10000
-activation: elu
+init_random_frames: 25000
+activation: relu
 gSDE: 0
 from_pixels: 0
 #collector_devices: [cuda:1,cuda:1,cuda:1,cuda:1]
@@ -29,7 +29,7 @@ max_frames_per_traj: -1
 weight_decay: 0.0
 init_env_steps: 10000
 record_frames: 10000
-loss_function: smooth_l1
+loss_function: l2
 batch_transform: 1
 buffer_prefetch: 64
 norm_stats: 1
