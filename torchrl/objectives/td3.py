@@ -80,7 +80,8 @@ class TD3Loss(LossModule):
             "value_network",
             self.num_qvalue_nets,
             create_target_params=self.delay_value,
-            compare_against=list(actor_network.parameters()),
+            compare_against=list(actor_network.parameters())
+                            + list(value_network.parameters()),
         )
 
         self.actor_in_keys = actor_network.in_keys
@@ -103,20 +104,11 @@ class TD3Loss(LossModule):
 
         """
         self.update_iter += 1
-        # Create input values from tensordict input
-        obs_keys = self.actor_in_keys
-        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
-        transition_batch_td = tensordict.select(
-            "reward", "done", *next_obs_keys, *obs_keys, "action"
-        )
-        observation_td = transition_batch_td.select( 
-            *obs_keys
-        )  # to avoid overwriting keys
-        next_observation_td = step_mdp(transition_batch_td).select( 
-            *self.actor_network.in_keys
-        )  # next_observation ->
 
-        observations_td = torch.stack([observation_td, next_observation_td], 0) 
+        observation_td = tensordict.select(*self.actor_in_keys)
+        next_observation_td = tensordict["next"].select(*self.actor_in_keys)
+
+        observations_td = torch.stack([observation_td, next_observation_td], 0)
         observations_td = observations_td.contiguous()
 
         # cat params
@@ -163,9 +155,9 @@ class TD3Loss(LossModule):
                 .expand(
                     self.num_qvalue_nets, *actor_output_td[1].batch_size
                 ),  # state and action for q value prediction and q loss
-                transition_batch_td.select(*self.value_net_in_keys).expand(
+                tensordict.select(*self.value_net_in_keys).expand(
                     self.num_qvalue_nets,
-                    *transition_batch_td.select(*self.value_net_in_keys).batch_size,
+                    *tensordict.select(*self.value_net_in_keys).batch_size,
                 ),
             ],
             0,
