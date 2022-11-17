@@ -44,8 +44,7 @@ jobs:
       run: |
         $HOME/miniconda/bin/conda create --name build_binary python=${{ matrix.python-version }}
         $HOME/miniconda/bin/conda info
-        source ~/.bashrc
-        $HOME/miniconda/bin/conda activate build_binary
+        $HOME/miniconda/bin/activate build_binary
     - name: check python version
       run: |
         python --version
