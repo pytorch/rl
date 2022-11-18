@@ -102,17 +102,17 @@ lmbda = 0.95
 # episodes has been collected.
 total_frames = 500
 # Random frames used to initialize the replay buffer.
-init_random_frames = 500
+init_random_frames = 100
 # Frames in each batch collected.
-frames_per_batch = 256
+frames_per_batch = 32
 # Optimization steps per batch collected
 n_optim = 4
 # Frames sampled from the replay buffer at each optimization step
-batch_size = 256
+batch_size = 32
 # Size of the replay buffer in terms of frames
 buffer_size = min(total_frames, 100000)
 # Number of environments run in parallel in each data collector
-n_workers = 2
+n_workers = 1
 
 device = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
 
