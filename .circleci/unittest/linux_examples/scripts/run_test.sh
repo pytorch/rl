@@ -36,7 +36,8 @@ coverage run examples/ddpg/ddpg.py \
   collector_devices=cuda:0 \
   optim_steps_per_batch=1 \
   record_video=True \
-  record_frames=4
+  record_frames=4 \
+  buffer_size=120
 coverage run examples/dqn/dqn.py \
   total_frames=14 \
   init_random_frames=10 \
@@ -47,5 +48,6 @@ coverage run examples/dqn/dqn.py \
   collector_devices=cuda:0 \
   optim_steps_per_batch=1 \
   record_video=True \
-  record_frames=4
+  record_frames=4 \
+  buffer_size=120
 coverage xml -i
