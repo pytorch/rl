@@ -68,12 +68,12 @@ jobs:
         cd _tmp
         python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv"
         cd ..
-    - name: Sphinx Build
-      uses: ammaraskar/sphinx-action@master
-      with:
-        docs-folder: "docs/"
-        pre-build-command: "python -m pip install -r ./requirements.txt"
-        build-command: "MUJOCO_GL=egl sphinx-build ./source _local_build"
+    - name: Build the docset
+      run: |
+        python -m pip install -r docs/requirements.txt
+        cd ./docs
+        MUJOCO_GL=egl sphinx-build -Q --keep-going ./source _local_build
+        cd ..
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
     - name: Get output time
