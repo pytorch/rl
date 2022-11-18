@@ -1312,9 +1312,13 @@ class TestTransforms:
         reward_scaling(td)
         for key in keys_total:
             if standard_normal:
-                assert (td.get(key) == ((td_copy.get(key) - loc) / scale)).all()
+                original_key = td.get(key)
+                scaled_key = (td_copy.get(key) - loc) / scale
+                torch.testing.assert_close(original_key, scaled_key)
             else:
-                assert (td.get(key) == td_copy.get(key).mul_(scale).add_(loc)).all()
+                original_key = td.get(key)
+                scaled_key = td_copy.get(key) * scale + loc
+                torch.testing.assert_close(original_key, scaled_key)
         assert (td.get("dont touch") == td_copy.get("dont touch")).all()
 
         if len(keys_total) == 1:
