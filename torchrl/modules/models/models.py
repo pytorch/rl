@@ -464,18 +464,12 @@ class ConvNet(nn.Sequential):
         return layers
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-
-        if len(inputs.shape) == 5:
-            B, L = inputs.shape[0:2]
-            inputs = inputs.view(B * L, *inputs.shape[2:])
-        else:
-            L = None
-
+        *batch, C, L, W = inputs.shape
+        if len(batch) > 1:
+            inputs = inputs.flatten(0, len(batch) - 1)
         out = super(ConvNet, self).forward(inputs)
-
-        if L:
-            out = out.view(B, L, *out.shape[1:])
-
+        if len(batch) > 1:
+            out = out.unflatten(0, batch)
         return out
 
 
