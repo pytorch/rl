@@ -62,7 +62,6 @@ class TD3Loss(LossModule):
         self.delay_value = delay_value
         self.max_action = max_action
         self.policy_update_delay = policy_update_delay
-        self.previous_policy_loss = 0.0
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
         self.update_iter = 0
@@ -227,9 +226,8 @@ class TD3Loss(LossModule):
         if self.update_iter % self.policy_update_delay == 0:
             loss_actor = - state_action_value_actor[0].mean()
             out_dict.update({"loss_actor": loss_actor.mean()})
-            self.previous_policy_loss = loss_actor.mean().detach()
         else:
-            out_dict.update({"loss_actor": self.previous_policy_loss})
+             out_dict.update({"loss_actor": 0.0})
         
         td_out = TensorDict(
             out_dict,

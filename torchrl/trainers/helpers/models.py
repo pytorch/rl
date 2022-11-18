@@ -932,24 +932,24 @@ def make_td3_actor(
     device: DEVICE_TYPING = "cpu",
 ) -> torch.nn.ModuleList:
     """TD3 constructor helper function.
-
+    
     Args:
         proof_environment (EnvBase): a dummy environment to retrieve the observation and action spec
-        cfg (DictConfig): contains arguments of the DDPG script
+        cfg (DictConfig): contains arguments of the TD3 script
         actor_net_kwargs (dict, optional): kwargs to be used for the policy network (either DdpgCnnActor or
-            DdpgMlpActor).
+            DDPGMlpActor).
         value_net_kwargs (dict, optional): kwargs to be used for the policy network (either DdpgCnnQNet or
-            DdpgMlpQNet).
+            TD3MlpQNet).
         device (torch.device, optional): device on which the model must be cast. Default is "cpu".
 
     Returns:
          An actor and a value operators for TD3.
 
-    For more details on DDPG, refer to "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
-    https://arxiv.org/pdf/1509.02971.pdf.
+    For more details on TD3, refer to "Addressing Function Approximation Error in Actor-Critic Methods",
+    https://arxiv.org/pdf/1802.09477.pdf.
 
     Examples:
-        >>> from torchrl.trainers.helpers.models import make_ddpg_actor
+        >>> from torchrl.trainers.helpers.models import make_td3_actor
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
@@ -959,7 +959,7 @@ def make_td3_actor(
         ...    CatTensors(["next_observation"], "next_observation_vector")))
         >>> device = torch.device("cpu")
         >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
-        ...                    (DDPGModelConfig, EnvConfig)
+        ...                    (TD3ModelConfig, EnvConfig)
         ...                   for config_field in dataclasses.fields(config_cls)]
         >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
         >>> cs = ConfigStore.instance()
@@ -1784,7 +1784,8 @@ class DDPGModelConfig:
 
 @dataclass
 class TD3ModelConfig:
-
+    """TD3 model config struct."""
+    
     noisy: bool = False
     # whether to use NoisyLinearLayers in the value network.
     gauss_exploration: bool = True
