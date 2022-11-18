@@ -164,7 +164,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         recorder_rm = TransformedEnv(recorder.base_env)
         for transform in recorder.transform:
             if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform)
+                recorder_rm.append_transform(transform.clone())
     else:
         recorder_rm = recorder
 
