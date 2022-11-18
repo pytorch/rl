@@ -307,7 +307,7 @@ def call_record(
     if cfg.record_video and record._count % cfg.record_interval == 0:
         world_model_td = sampled_tensordict
 
-        true_pixels = recover_pixels(world_model_td["next_pixels"], stats)
+        true_pixels = recover_pixels(world_model_td[("next", "pixels")], stats)
 
         reco_pixels = recover_pixels(world_model_td["next", "reco_pixels"], stats)
         with autocast(dtype=torch.float16):

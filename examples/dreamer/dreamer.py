@@ -126,7 +126,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         stats = get_stats_random_rollout(
             cfg,
             proof_environment=transformed_env_constructor(cfg)(),
-            key="next_pixels" if cfg.from_pixels else "next_observation_vector",
+            key=("next", "pixels") if cfg.from_pixels else ("next", "observation_vector"),
         )
         stats = {k: v.clone() for k, v in stats.items()}
     elif cfg.from_pixels:
