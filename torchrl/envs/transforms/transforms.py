@@ -1534,9 +1534,12 @@ class RewardScaling(Transform):
         if self.standard_normal:
             loc = self.loc
             scale = self.scale
-            return (reward - loc) / scale
+            reward = (reward - loc) / scale
+            return reward
         else:
-            reward.mul_(self.scale).add_(self.loc)
+            scale = self.scale
+            loc = self.loc
+            reward = reward * scale + loc
             return reward
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
