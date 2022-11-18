@@ -35,7 +35,8 @@ coverage run examples/ddpg/ddpg.py \
   env_per_collector=1 \
   collector_devices=cuda:0 \
   optim_steps_per_batch=1 \
-  record_video=True
+  record_video=True \
+  record_frames=4
 coverage run examples/dqn/dqn.py \
   total_frames=14 \
   init_random_frames=10 \
@@ -45,5 +46,6 @@ coverage run examples/dqn/dqn.py \
   env_per_collector=1 \
   collector_devices=cuda:0 \
   optim_steps_per_batch=1 \
-  record_video=True
+  record_video=True \
+  record_frames=4
 coverage xml -i
