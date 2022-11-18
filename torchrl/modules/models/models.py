@@ -971,7 +971,7 @@ class TD3MlpQNet(nn.Module):
 
     Presented in "Addressing Function Approximation Error in Actor-Critic Methods",
     https://arxiv.org/pdf/1802.09477.pdf
-    
+
     Compared to the DDPG Q-value MLP class the TD3 Q-value MLP class concatenates the action twice to the MLP inputs.
 
     The TD3 Q-value network takes as input an observation and an action, and returns a scalar from it.
@@ -1042,7 +1042,6 @@ class TD3MlpQNet(nn.Module):
         x = self.mlp1(torch.cat([observation, action], -1))
         value = self.mlp2(torch.cat([x, action], -1))
         return value
-
 
 
 class LSTMNet(nn.Module):

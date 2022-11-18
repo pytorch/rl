@@ -12,7 +12,7 @@ from datetime import datetime
 import hydra
 import torch.cuda
 from hydra.core.config_store import ConfigStore
-from torchrl.envs import ParallelEnv, EnvCreator
+from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import AdditiveGaussianWrapper
 from torchrl.record import VideoRecorder
@@ -22,21 +22,15 @@ from torchrl.trainers.helpers.collectors import (
 )
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
+    EnvConfig,
     get_stats_random_rollout,
     parallel_env_constructor,
     transformed_env_constructor,
-    EnvConfig,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.losses import make_td3_loss, LossConfig 
-from torchrl.trainers.helpers.models import (
-    make_td3_actor,
-    TD3ModelConfig,
-)
-from torchrl.trainers.helpers.replay_buffer import (
-    make_replay_buffer,
-    ReplayArgsConfig,
-)
+from torchrl.trainers.helpers.losses import LossConfig, make_td3_loss
+from torchrl.trainers.helpers.models import make_td3_actor, TD3ModelConfig
+from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
 
 config_fields = [
@@ -148,7 +142,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if device == torch.device("cpu"):
         # mostly for debugging
         actor_model_explore.share_memory()
-    
+
     # set to None as we dont use gSDE
     action_dim_gsde, state_dim_gsde = None, None
 

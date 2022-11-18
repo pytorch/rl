@@ -213,8 +213,10 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
         sigma = self.sigma.item()
-        noise = torch.normal(mean=torch.ones(action.shape) * self.mean.item(),
-                             std=torch.ones(action.shape) * self.std.item()).to(action.device)
+        noise = torch.normal(
+            mean=torch.ones(action.shape) * self.mean.item(),
+            std=torch.ones(action.shape) * self.std.item(),
+        ).to(action.device)
         action = action + noise * sigma
         spec = self.spec
         if isinstance(spec, CompositeSpec):
@@ -235,7 +237,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             out = self._add_noise(out)
             tensordict.set(self.action_key, out)
         return tensordict
-    
+
 
 class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     """Ornstein-Uhlenbeck exploration policy wrapper.

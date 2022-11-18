@@ -9,7 +9,8 @@ from numbers import Number
 
 import torch
 
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
+
 from torchrl.modules import TensorDictModule
 
 from torchrl.objectives.utils import (
@@ -18,7 +19,7 @@ from torchrl.objectives.utils import (
     next_state_value as get_next_state_value,
 )
 from ..envs.utils import set_exploration_mode
-from .common import LossModule, _has_functorch
+from .common import _has_functorch, LossModule
 
 
 class TD3Loss(LossModule):
@@ -67,7 +68,7 @@ class TD3Loss(LossModule):
         self.update_iter = 0
         self.priority_key = priority_key
         self.num_qvalue_nets = 2
-        
+
         self.convert_to_functional(
             actor_network,
             "actor_network",
@@ -109,7 +110,9 @@ class TD3Loss(LossModule):
         observations_td = observations_td.contiguous()
 
         # cat params
-        target_actor_network_params_detach = hold_out_params(self.target_actor_network_params).params
+        target_actor_network_params_detach = hold_out_params(
+            self.target_actor_network_params
+        ).params
         actor_params = [
             torch.stack([p1, p2], 0)
             for p1, p2 in zip(
@@ -130,23 +133,27 @@ class TD3Loss(LossModule):
                 buffers=actor_buffers,
                 vmap=(0, 0, 0),
             )
-        
+
         # add noise to target policy
-        noise = torch.normal(mean=torch.zeros(actor_output_td[1]["action"].shape),
-                             std=torch.ones(actor_output_td[1]["action"].shape) * self.policy_noise).to(actor_output_td[1].device)
+        noise = torch.normal(
+            mean=torch.zeros(actor_output_td[1]["action"].shape),
+            std=torch.ones(actor_output_td[1]["action"].shape) * self.policy_noise,
+        ).to(actor_output_td[1].device)
         noise = noise.clamp(-self.noise_clip, self.noise_clip)
-        
-        next_action = (actor_output_td[1]["action"] + noise).clamp(-self.max_action, self.max_action)
+
+        next_action = (actor_output_td[1]["action"] + noise).clamp(
+            -self.max_action, self.max_action
+        )
         actor_output_td[1].set("action", next_action, inplace=True)
         # repeat tensordict_actor to match the qvalue size
 
         tensordict_qval = torch.cat(
-            [   # state with current policy action for actor loss
+            [  # state with current policy action for actor loss
                 actor_output_td[0]
                 .select(*self.value_net_in_keys)
                 .expand(
                     self.num_qvalue_nets, *actor_output_td[0].batch_size
-                ), # next state with noisy next action for target q value estimation
+                ),  # next state with noisy next action for target q value estimation
                 actor_output_td[1]
                 .select(*self.value_net_in_keys)
                 .expand(
@@ -159,35 +166,44 @@ class TD3Loss(LossModule):
             ],
             0,
         )
-        
+
         # cat params
         q_params_detach = hold_out_params(self.value_network_params).params
-        target_value_network_params_detach = hold_out_params(self.target_value_network_params).params
+        target_value_network_params_detach = hold_out_params(
+            self.target_value_network_params
+        ).params
         value_params = [
             torch.cat([p1, p2, p3], 0)
             for p1, p2, p3 in zip(
-                q_params_detach, target_value_network_params_detach, self.value_network_params
+                q_params_detach,
+                target_value_network_params_detach,
+                self.value_network_params,
             )
         ]
         value_buffers = [
             torch.cat([p1, p2, p3], 0)
             for p1, p2, p3 in zip(
-                self.value_network_buffers, self.target_value_network_buffers, self.value_network_buffers
+                self.value_network_buffers,
+                self.target_value_network_buffers,
+                self.value_network_buffers,
             )
         ]
-
 
         tensordict_qval = self.value_network(
             tensordict_qval,
             tensordict_out=TensorDict({}, tensordict_qval.shape),
             params=value_params,
             buffers=value_buffers,
-            vmap=(0, 0, 0,),
+            vmap=(
+                0,
+                0,
+                0,
+            ),
             # TensorDict vmap will take care of expanding the tuple as needed
         )
 
-        state_action_value =  tensordict_qval.get("state_action_value").squeeze(-1)
-        
+        state_action_value = tensordict_qval.get("state_action_value").squeeze(-1)
+
         # need to split as we stacked different values
         (
             state_action_value_actor,
@@ -197,7 +213,7 @@ class TD3Loss(LossModule):
             [self.num_qvalue_nets, self.num_qvalue_nets, self.num_qvalue_nets],
             dim=0,
         )
-        
+
         # calc q loss
         target_qvalue = target_qvalues.min(0)[0].detach()
         target_value = get_next_state_value(
@@ -205,30 +221,30 @@ class TD3Loss(LossModule):
             gamma=self.gamma,
             pred_next_val=target_qvalue,
         )
-        
+
         td_error = (pred_qval - target_value).pow(2)
         loss_qval = distance_loss(
             pred_qval,
             target_value.expand_as(pred_qval),
             loss_function=self.loss_function,
         ).mean(0)
-        
-        
+
         tensordict.set("td_error", td_error.detach().max(0)[0])
-        out_dict ={"loss_qvalue": loss_qval.mean(),
-                   "td_error": td_error.detach().max(0)[0],
-                   "state_action_value_actor": state_action_value_actor.mean().detach(),
-                   "next_state_value": target_qvalues.mean().detach(),
-                   "target_value": target_value.mean().detach(),
-            }
-        
+        out_dict = {
+            "loss_qvalue": loss_qval.mean(),
+            "td_error": td_error.detach().max(0)[0],
+            "state_action_value_actor": state_action_value_actor.mean().detach(),
+            "next_state_value": target_qvalues.mean().detach(),
+            "target_value": target_value.mean().detach(),
+        }
+
         # calc actor loss every policy delayed steps
         if self.update_iter % self.policy_update_delay == 0:
-            loss_actor = - state_action_value_actor[0].mean()
+            loss_actor = -state_action_value_actor[0].mean()
             out_dict.update({"loss_actor": loss_actor.mean()})
         else:
-             out_dict.update({"loss_actor": 0.0})
-        
+            out_dict.update({"loss_actor": 0.0})
+
         td_out = TensorDict(
             out_dict,
             [],

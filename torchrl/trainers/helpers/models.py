@@ -7,24 +7,24 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import torch
-from torch import nn, distributions as d
+from torch import distributions as d, nn
 
 from torchrl.data import (
     CompositeSpec,
-    NdUnboundedContinuousTensorSpec,
     DiscreteTensorSpec,
+    NdUnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs import TransformedEnv, TensorDictPrimer
+from torchrl.envs import TensorDictPrimer, TransformedEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     ActorValueOperator,
     NoisyLinear,
-    TensorDictModule,
-    ProbabilisticTensorDictModule,
     NormalParamWrapper,
+    ProbabilisticTensorDictModule,
+    TensorDictModule,
     TensorDictSequential,
 )
 from torchrl.modules.distributions import (
@@ -34,16 +34,14 @@ from torchrl.modules.distributions import (
     TanhNormal,
     TruncatedNormal,
 )
-from torchrl.modules.distributions.continuous import (
-    SafeTanhTransform,
-)
+from torchrl.modules.distributions.continuous import SafeTanhTransform
 from torchrl.modules.models.exploration import LazygSDEModule
 from torchrl.modules.models.model_based import (
     DreamerActor,
-    ObsEncoder,
     ObsDecoder,
-    RSSMPrior,
+    ObsEncoder,
     RSSMPosterior,
+    RSSMPrior,
     RSSMRollout,
 )
 from torchrl.modules.models.models import (
@@ -52,11 +50,11 @@ from torchrl.modules.models.models import (
     DdpgCnnQNet,
     DdpgMlpActor,
     DdpgMlpQNet,
-    TD3MlpQNet,
     DuelingCnnDQNet,
+    DuelingMlpDQNet,
     LSTMNet,
     MLP,
-    DuelingMlpDQNet,
+    TD3MlpQNet,
 )
 from torchrl.modules.tensordict_module import (
     Actor,
@@ -65,12 +63,10 @@ from torchrl.modules.tensordict_module import (
 )
 from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
-    ValueOperator,
     ProbabilisticActor,
+    ValueOperator,
 )
-from torchrl.modules.tensordict_module.world_models import (
-    WorldModelWrapper,
-)
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from torchrl.trainers.helpers import transformed_env_constructor
 
 DISTRIBUTIONS = {
@@ -932,7 +928,7 @@ def make_td3_actor(
     device: DEVICE_TYPING = "cpu",
 ) -> torch.nn.ModuleList:
     """TD3 constructor helper function.
-    
+
     Args:
         proof_environment (EnvBase): a dummy environment to retrieve the observation and action spec
         cfg (DictConfig): contains arguments of the TD3 script
@@ -994,7 +990,7 @@ def make_td3_actor(
             is_shared=False)
     """
     from_pixels = cfg.from_pixels
-    # TD3 does not use noisy layer but could be a nice option 
+    # TD3 does not use noisy layer but could be a nice option
     noisy = cfg.noisy
 
     actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
@@ -1020,7 +1016,7 @@ def make_td3_actor(
         }
         actor_net = DdpgCnnActor(**actor_net_default_kwargs)
         out_keys = ["param", "hidden"]
-        
+
         value_net_default_kwargs = {
             "mlp_net_kwargs": {
                 "layer_class": linear_layer_class,
@@ -1065,7 +1061,7 @@ def make_td3_actor(
             mlp_net_kwargs_net2=qvalue_net_default_kwargs2,
         )
         in_keys_qvalue = in_keys + ["action"]
-        
+
     actor_module = TensorDictModule(actor_net, in_keys=in_keys, out_keys=out_keys)
 
     # We use a ProbabilisticActor to make sure that we map the network output to the right space using a TanhDelta
@@ -1081,7 +1077,7 @@ def make_td3_actor(
             "max": env_specs["action_spec"].space.maximum,
         },
     )
-    
+
     qvalue = ValueOperator(
         in_keys=in_keys_qvalue,
         module=qvalue_net,
@@ -1780,14 +1776,15 @@ class DDPGModelConfig:
     activation: str = "tanh"
     # activation function, either relu or elu or tanh, Default=tanh
 
+
 @dataclass
 class TD3ModelConfig:
     """TD3 model config struct."""
-    
+
     noisy: bool = False
     # whether to use NoisyLinearLayers in the value network.
     gauss_exploration: bool = True
-    # wraps the policy in an Gaussian exploration wrapper. 
+    # wraps the policy in an Gaussian exploration wrapper.
     gauss_mean: float = 0.0
     # mean of the Gaussian distribution for noise sampling
     gauss_std: float = 0.1
@@ -1800,6 +1797,7 @@ class TD3ModelConfig:
     # if True, exploration is achieved using the gSDE technique.
     activation: str = "tanh"
     # activation function, either relu or elu or tanh, Default=tanh
+
 
 @dataclass
 class REDQModelConfig:

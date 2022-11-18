@@ -4,9 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Any
+from typing import Any, Optional, Tuple
 
-from torchrl.modules import ActorValueOperator, ActorCriticOperator
+from torchrl.modules import ActorCriticOperator, ActorValueOperator
 from torchrl.objectives import (
     ClipPPOLoss,
     DDPGLoss,
@@ -152,11 +152,13 @@ def make_td3_loss(model, cfg) -> Tuple[TD3Loss, Optional[TargetNetUpdater]]:
         raise NotImplementedError
     double_loss = cfg.loss == "double"
     loss_kwargs.update({"delay_actor": double_loss, "delay_value": double_loss})
-    loss_module = loss_class(actor,
-                             value_net,
-                             gamma=cfg.gamma,
-                             policy_update_delay=cfg.policy_update_delay,
-                             **loss_kwargs)
+    loss_module = loss_class(
+        actor,
+        value_net,
+        gamma=cfg.gamma,
+        policy_update_delay=cfg.policy_update_delay,
+        **loss_kwargs,
+    )
     target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
 
