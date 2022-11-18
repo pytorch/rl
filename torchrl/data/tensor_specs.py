@@ -433,7 +433,7 @@ class BoundedTensorSpec(TensorSpec):
             return out
         else:
             interval = self.space.maximum - self.space.minimum
-            r = torch.rand(*interval.shape, device=interval.device)
+            r = torch.rand(*shape, *interval.shape, device=interval.device)
             r = interval * r
             r = self.space.minimum + r
             r = r.to(self.dtype).to(self.device)
@@ -1278,12 +1278,13 @@ class CompositeSpec(TensorSpec):
     def rand(self, shape=None) -> TensorDictBase:
         if shape is None:
             shape = torch.Size([])
+        _dict = {
+            key: self[key].rand(shape)
+            for key in self.keys(True)
+            if isinstance(key, str) and self[key] is not None
+        }
         return TensorDict(
-            {
-                key: self[key].rand(shape)
-                for key in self.keys(True)
-                if isinstance(key, str) and self[key] is not None
-            },
+            _dict,
             batch_size=shape,
         )
 

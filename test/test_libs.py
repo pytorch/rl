@@ -301,7 +301,7 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
         assert fake_td.get(key).device == td0.get(key).device
 
 
-@pytest.mark.skipif(IS_OSX, reason="rendeing unstable on osx, skipping")
+@pytest.mark.skipif(IS_OSX, reason="rendering unstable on osx, skipping")
 @pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
 @pytest.mark.parametrize(
     "env_lib,env_args,env_kwargs",
