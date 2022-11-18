@@ -104,19 +104,19 @@ def _gym_to_torchrl_spec_transform(
 
 
 def _get_envs(to_dict=False) -> List:
-    envs = _get_envs_internal()
+    envs = _get_gym_envs()
     envs = list(envs)
     envs = sorted(envs)
-    return sorted(list(envs))
+    return envs
 
 
 @implement_for("gym", None, "0.26.0")
-def _get_envs_internal():  # noqa: F811
+def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.env_specs.keys()
 
 
 @implement_for("gym", "0.26.0", None)
-def _get_envs_internal():  # noqa: F811
+def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.keys()
 
 
@@ -193,15 +193,15 @@ class GymWrapper(GymLikeEnv):
                     "PixelObservationWrapper cannot be used to wrap an environment"
                     "that is already a PixelObservationWrapper instance."
                 )
-            env = self._build_env_internal(env, pixels_only)
+            env = self._build_gym_env(env, pixels_only)
         return env
 
     @implement_for("gym", None, "0.26.0")
-    def _build_env_internal(self, env, pixels_only):  # noqa: F811
+    def _build_gym_env(self, env, pixels_only):  # noqa: F811
         return PixelObservationWrapper(env, pixels_only=pixels_only)
 
     @implement_for("gym", "0.26.0", None)
-    def _build_env_internal(self, env, pixels_only):  # noqa: F811
+    def _build_gym_env(self, env, pixels_only):  # noqa: F811
         if env.render_mode:
             return PixelObservationWrapper(env, pixels_only=pixels_only)
 
@@ -223,35 +223,34 @@ class GymWrapper(GymLikeEnv):
     def lib(self) -> ModuleType:
         return gym
 
-    @implement_for("gym", None, "0.19.0")
-    def _set_seed(self, seed: int) -> int:  # noqa: F811
-        if self._seed_calls_reset:
-            self.reset(seed=seed)
-        else:
-            self._seed_calls_reset = False
-            self._env.seed(seed=seed)
-
-        return seed
-
-    @implement_for("gym", "0.19.0", None)
     def _set_seed(self, seed: int) -> int:  # noqa: F811
         if self._seed_calls_reset is None:
-            try:
-                self.reset(seed=seed)
-                self._seed_calls_reset = True
-            except TypeError as err:
-                warnings.warn(
-                    f"reset with seed kwarg returned an exception: {err}.\n"
-                    f"Calling env.seed from now on."
-                )
-                self._seed_calls_reset = False
-                self._env.seed(seed=seed)
+            # Determine basing on gym version whether `reset` is called when setting seed.
+            self._set_seed_initial(seed)
         elif self._seed_calls_reset:
             self.reset(seed=seed)
-        elif not self._seed_calls_reset:
+        else:
             self._env.seed(seed=seed)
 
         return seed
+
+    @implement_for("gym", None, "0.19.0")
+    def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
+        self._seed_calls_reset = False
+        self._env.seed(seed=seed)
+
+    @implement_for("gym", "0.19.0", None)
+    def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
+        try:
+            self.reset(seed=seed)
+            self._seed_calls_reset = True
+        except TypeError as err:
+            warnings.warn(
+                f"reset with seed kwarg returned an exception: {err}.\n"
+                f"Calling env.seed from now on."
+            )
+            self._seed_calls_reset = False
+            self._env.seed(seed=seed)
 
     def _make_specs(self, env: "gym.Env") -> None:
         self.action_spec = _gym_to_torchrl_spec_transform(
@@ -316,15 +315,25 @@ class GymEnv(GymWrapper):
 
     def __init__(self, env_name, disable_env_checker=None, **kwargs):
         kwargs["env_name"] = env_name
-        if gym_version >= version.parse("0.24.0"):
-            kwargs["disable_env_checker"] = (
-                disable_env_checker if disable_env_checker is not None else True
-            )
-        elif disable_env_checker is not None:
+        self._set_gym_args(kwargs, disable_env_checker)
+        super().__init__(**kwargs)
+
+    @implement_for("gym", None, "0.24.0")
+    def _set_gym_args(  # noqa: F811
+        self, kwargs, disable_env_checker: bool = None
+    ) -> None:
+        if disable_env_checker is not None:
             raise RuntimeError(
                 "disable_env_checker should only be set if gym version is > 0.24"
             )
-        super().__init__(**kwargs)
+
+    @implement_for("gym", "0.24.0", None)
+    def _set_gym_args(  # noqa: F811
+        self, kwargs, disable_env_checker: bool = None
+    ) -> None:
+        kwargs["disable_env_checker"] = (
+            disable_env_checker if disable_env_checker is not None else True
+        )
 
     def _build_env(
         self,
@@ -338,8 +347,7 @@ class GymEnv(GymWrapper):
                 f" {self.git_url}"
             )
         from_pixels = kwargs.get("from_pixels", False)
-        if from_pixels and gym_version > version.parse("0.25.0"):
-            kwargs.setdefault("render_mode", "rgb_array")
+        self._set_gym_default(kwargs, from_pixels)
         if "from_pixels" in kwargs:
             del kwargs["from_pixels"]
         pixels_only = kwargs.get("pixels_only", True)
@@ -371,6 +379,16 @@ class GymEnv(GymWrapper):
                 else:
                     raise err
         return super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
+
+    @implement_for("gym", None, "0.25.1")
+    def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
+        # Do nothing for older gym versions.
+        pass
+
+    @implement_for("gym", "0.25.1", None)
+    def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
+        if from_pixels:
+            kwargs.setdefault("render_mode", "rgb_array")
 
     @property
     def env_name(self):
