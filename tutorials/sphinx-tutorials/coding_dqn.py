@@ -100,7 +100,7 @@ lmbda = 0.95
 # This is harder to do with our data collectors since they return batches of N collected frames, where N is a constant.
 # However, one can easily get the same restriction on number of episodes by breaking the training loop when a certain number
 # episodes has been collected.
-total_frames = 5000
+total_frames = 500
 # Random frames used to initialize the replay buffer.
 init_random_frames = 500
 # Frames in each batch collected.
