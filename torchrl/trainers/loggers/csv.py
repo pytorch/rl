@@ -43,7 +43,7 @@ class CSVExperiment:
             self.log_dir, "videos", "_".join([tag, str(global_step)]) + ".pt"
         )
         path_to_create = Path(str(filepath)).parent
-        os.makedirs(path_to_create)
+        os.makedirs(path_to_create, exist_ok=True)
         torch.save(vid_tensor, filepath)
 
     def add_text(self, tag, text, global_step: Optional[int] = None):
