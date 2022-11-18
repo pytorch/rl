@@ -993,8 +993,6 @@ def make_td3_actor(
             device=cpu,
             is_shared=False)
     """
-
-
     from_pixels = cfg.from_pixels
     # TD3 does not use noisy layer but could be a nice option 
     noisy = cfg.noisy
