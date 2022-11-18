@@ -71,7 +71,7 @@ jobs:
     - name: Sphinx Build
       uses: ammaraskar/sphinx-action@0.4
       with:
-        docs-folder: "docs/"
+        docs-folder: "docs/source/"
         build-command: "MUJOCO_GL=egl sphinx-build ./source _local_build"
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
