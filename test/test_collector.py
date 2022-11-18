@@ -316,12 +316,7 @@ def test_collector_env_reset():
     torch.manual_seed(0)
     def make_env():
         return GymEnv(PONG_VERSIONED, frame_skip=4)
-    env = make_env()
-    print(env)
-    print(env.fake_tensordict())
     env = SerialEnv(2, make_env)
-    print(env)
-    print(env.fake_tensordict())
     # env = SerialEnv(3, lambda: GymEnv("CartPole-v1", frame_skip=4))
     env.set_seed(0)
     collector = SyncDataCollector(
