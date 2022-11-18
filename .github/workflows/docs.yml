@@ -73,13 +73,11 @@ jobs:
       run: |
         python -m pip install -r docs/requirements.txt
         cd ./docs
-        MUJOCO_GL=egl sphinx-build --keep-going ./source _local_build
+        timeout 10 MUJOCO_GL=egl sphinx-build --keep-going ./source _local_build || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         cd ..
     - name: Setup tmate session
-      if: always()
       uses: mxschmitt/action-tmate@v3
     - name: Get output time
-      if: always()
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
       uses: JamesIves/github-pages-deploy-action@releases/v3
