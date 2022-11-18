@@ -146,7 +146,7 @@ def test_convnet(
 ):
     torch.manual_seed(seed)
     batch = 2
-    seq_length = 2
+    seq_len = 2
     convnet = ConvNet(
         in_features=in_features,
         depth=depth,
@@ -166,9 +166,10 @@ def test_convnet(
     )
     if in_features is None:
         in_features = 5
-    x = torch.randn(batch, seq_length, in_features, input_size, input_size, device=device)
+    x = torch.randn(batch, seq_len, in_features, input_size, input_size, device=device)
     y = convnet(x)
-    assert y.shape == torch.Size([batch, seq_length, expected_features])
+    assert y.shape == torch.Size([batch, seq_len, expected_features])
+
 
 @pytest.mark.parametrize(
     "layer_class",
