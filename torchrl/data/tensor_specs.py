@@ -419,8 +419,8 @@ class BoundedTensorSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         a, b = self.space
-        shape = [*shape, *self.shape]
         if self.dtype in (torch.float, torch.double, torch.half):
+            shape = [*shape, *self.shape]
             out = (
                 torch.zeros(shape, dtype=self.dtype, device=self.device).uniform_()
                 * (b - a)
