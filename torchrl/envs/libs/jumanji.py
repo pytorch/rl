@@ -1,9 +1,9 @@
+import dataclasses
 from typing import Optional, Dict, Union
 
 import numpy as np
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase, make_tensordict
-import dataclasses
 
 from torchrl.data import (
     DEVICE_TYPING,
@@ -29,20 +29,24 @@ except ImportError as err:
     IMPORT_ERR = str(err)
 
 
-def _ndarray_to_tensor(value, device) -> torch.Tensor:
-    value = np.asarray(value)
+def _ndarray_to_tensor(value: Union[jnp.ndarray, np.ndarray], device) -> torch.Tensor:
+    # tensor doesn't support conversion from jnp.ndarray.
+    if isinstance(value, jnp.ndarray):
+        value = np.asarray(value)
+    # tensor doesn't support unsigned dtypes.
     if value.dtype == np.uint16:
         value = value.astype(np.int16)
     elif value.dtype == np.uint32:
         value = value.astype(np.int32)
     elif value.dtype == np.uint64:
         value = value.astype(np.int64)
+    # convert to tensor.
     return torch.tensor(value).to(device)
 
 
 def _object_to_tensordict(obj, device, batch_size) -> TensorDictBase:
     t = {}
-    if isinstance(obj, tuple) and hasattr(obj, "_fields"):
+    if isinstance(obj, tuple) and hasattr(obj, "_fields"):  # named tuple
         _iter = obj._fields
     elif dataclasses.is_dataclass(obj):
         _iter = (field.name for field in dataclasses.fields(obj))
@@ -50,7 +54,7 @@ def _object_to_tensordict(obj, device, batch_size) -> TensorDictBase:
         raise NotImplementedError(f"unsupported data type {type(obj)}")
     for name in _iter:
         value = getattr(obj, name)
-        if isinstance(value, (list, jnp.ndarray, np.ndarray)):
+        if isinstance(value, (jnp.ndarray, np.ndarray)):
             t[name] = _ndarray_to_tensor(value, device=device)
         else:
             t[name] = _object_to_tensordict(value, device, batch_size)
@@ -65,8 +69,10 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
         if isinstance(value, TensorDictBase):
             t[name] = _tensordict_to_object(value, getattr(object_example, name))
         else:
-            value_example = getattr(object_example, name)
-            t[name] = value.detach().numpy().reshape(value_example.shape).astype(value_example.dtype)
+            example = getattr(object_example, name)
+            t[name] = (
+                value.detach().numpy().reshape(example.shape).astype(example.dtype)
+            )
     return object_type(**t)
 
 
@@ -134,7 +140,10 @@ def _torchrl_data_to_spec_transform(data) -> TensorSpec:
             )
     elif isinstance(data, TensorDict):
         return CompositeSpec(
-            **{key: _torchrl_data_to_spec_transform(value) for key, value in data.items()}
+            **{
+                key: _torchrl_data_to_spec_transform(value)
+                for key, value in data.items()
+            }
         )
     else:
         raise TypeError(f"Unsupported data type {type(data)}")
