@@ -69,14 +69,17 @@ jobs:
         python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv"
         cd ..
     - name: Build the docset
+      id: build doc
       run: |
         python -m pip install -r docs/requirements.txt
         cd ./docs
         MUJOCO_GL=egl sphinx-build --keep-going ./source _local_build
         cd ..
     - name: Setup tmate session
+      if: always()
       uses: mxschmitt/action-tmate@v3
     - name: Get output time
+      if: always()
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
       uses: JamesIves/github-pages-deploy-action@releases/v3
