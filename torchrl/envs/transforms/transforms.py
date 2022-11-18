@@ -9,23 +9,11 @@ import collections
 import multiprocessing as mp
 from copy import deepcopy, copy
 from textwrap import indent
-from typing import Any, List, Optional, OrderedDict, Sequence, Union
-from warnings import warn
+from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
-from torch import nn, Tensor
-
-try:
-    from torchvision.transforms.functional import center_crop
-    from torchvision.transforms.functional_tensor import (
-        resize,
-    )  # as of now resize is imported from torchvision
-
-    _has_tv = True
-except ImportError:
-    _has_tv = False
-
 from tensordict.tensordict import TensorDictBase, TensorDict
+from torch import nn, Tensor
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -39,11 +27,21 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
-from torchrl.envs.transforms.utils import FiniteTensor
+from torchrl.envs.transforms.utils import check_finite
 from torchrl.envs.utils import step_mdp
 
 
-IMAGE_KEYS = ["next_pixels"]
+try:
+    from torchvision.transforms.functional import center_crop
+    from torchvision.transforms.functional_tensor import (
+        resize,
+    )  # as of now resize is imported from torchvision
+
+    _has_tv = True
+except ImportError:
+    _has_tv = False
+
+IMAGE_KEYS = ["pixels"]
 _MAX_NOOPS_TRIALS = 10
 
 
@@ -54,7 +52,7 @@ def _apply_to_composite(function):
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if in_key in observation_spec.keys():
                     d[out_key] = function(self, observation_spec[in_key])
-            return CompositeSpec(**d)
+            return CompositeSpec(d)
         else:
             return function(self, observation_spec)
 
@@ -96,6 +94,9 @@ class Transform(nn.Module):
         out_keys_inv: Optional[Sequence[str]] = None,
     ):
         super().__init__()
+        if isinstance(in_keys, str):
+            in_keys = [in_keys]
+
         self.in_keys = in_keys
         if out_keys is None:
             out_keys = copy(self.in_keys)
@@ -135,14 +136,22 @@ class Transform(nn.Module):
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         self._check_inplace()
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys():
+            if in_key in tensordict.keys(include_nested=True):
                 observation = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(out_key, observation, inplace=self.inplace)
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        self._call(tensordict)
+        tensordict = self._call(tensordict)
         return tensordict
+        # raise NotImplementedError("""`Transform.forward` is currently not implemented (reserved for usage beyond envs). Use `Transform._step` instead.""")
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # placeholder when we'll move to tensordict['next']
+        # tensordict["next"] = self._call(tensordict.get("next"))
+        out = self._call(tensordict)
+        # print(out, tensordict, out is tensordict, (out==tensordict).all())
+        return out
 
     def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         if self.invertible:
@@ -153,7 +162,7 @@ class Transform(nn.Module):
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._check_inplace()
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-            if in_key in tensordict.keys():
+            if in_key in tensordict.keys(include_nested=True):
                 observation = self._inv_apply_transform(tensordict.get(in_key))
                 tensordict.set(out_key, observation, inplace=self.inplace)
         return tensordict
@@ -420,11 +429,17 @@ but got an object of type {type(transform)}."""
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # selected_keys = [key for key in tensordict.keys() if "action" in key]
         # tensordict_in = tensordict.select(*selected_keys).clone()
-        tensordict_in = self.transform.inv(tensordict.clone(recurse=False))
-        tensordict_out = self.base_env.step(tensordict_in)
+        tensordict = tensordict.clone()
+        tensordict_in = self.transform.inv(tensordict)
+        tensordict_out = self.base_env._step(tensordict_in)
         # tensordict should already have been processed by the transforms
         # for logging purposes
-        tensordict_out = self.transform(tensordict_out)
+        tensordict_out = tensordict_out.update(
+            tensordict.exclude(*tensordict_out.keys())
+        )
+        next_tensordict = self.transform._step(tensordict_out)
+        tensordict_out.update(next_tensordict, inplace=False)
+
         return tensordict_out
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -434,9 +449,7 @@ but got an object of type {type(transform)}."""
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         if tensordict is not None:
             tensordict = tensordict.clone(recurse=False)
-        out_tensordict = self.base_env.reset(
-            tensordict=tensordict, execute_step=False, **kwargs
-        )
+        out_tensordict = self.base_env.reset(tensordict=tensordict, **kwargs)
         out_tensordict = self.transform.reset(out_tensordict)
         out_tensordict = self.transform(out_tensordict)
         return out_tensordict
@@ -467,15 +480,15 @@ but got an object of type {type(transform)}."""
     def is_closed(self, value: bool):
         self.base_env.is_closed = value
 
-    def is_done_get_fn(self) -> bool:
+    @property
+    def is_done(self) -> bool:
         if self._is_done is None:
             return self.base_env.is_done
         return self._is_done.all()
 
-    def is_done_set_fn(self, val: torch.Tensor) -> None:
+    @is_done.setter
+    def is_done(self, val: torch.Tensor) -> None:
         self._is_done = val
-
-    is_done = property(is_done_get_fn, is_done_set_fn)
 
     def close(self):
         self.base_env.close()
@@ -590,9 +603,9 @@ class ObservationTransform(Transform):
     ):
         if in_keys is None:
             in_keys = [
-                "next_observation",
-                "next_pixels",
-                "next_observation_state",
+                "observation",
+                "pixels",
+                "observation_state",
             ]
         super(ObservationTransform, self).__init__(in_keys=in_keys, out_keys=out_keys)
 
@@ -616,9 +629,14 @@ class Compose(Transform):
         for t in self.transforms:
             t.set_parent(self)
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
             tensordict = t(tensordict)
+        return tensordict
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for t in self.transforms:
+            tensordict = t._step(tensordict)
         return tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -725,13 +743,13 @@ class ToTensorImage(ObservationTransform):
             observations.
 
     Examples:
-        >>> transform = ToTensorImage(in_keys=["next_pixels"])
+        >>> transform = ToTensorImage(in_keys=["pixels"])
         >>> ri = torch.randint(0, 255, (1,1,10,11,3), dtype=torch.uint8)
         >>> td = TensorDict(
-        ...     {"next_pixels": ri},
+        ...     {"pixels": ri},
         ...     [1, 1])
         >>> _ = transform(td)
-        >>> obs = td.get("next_pixels")
+        >>> obs = td.get("pixels")
         >>> print(obs.shape, obs.dtype)
         torch.Size([1, 1, 3, 10, 11]) torch.float32
     """
@@ -1109,6 +1127,11 @@ class UnsqueezeTransform(Transform):
             self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
         return super().forward(tensordict)
 
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._unsqueeze_dim_orig >= 0:
+            self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
+        return super()._step(tensordict)
+
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = observation.unsqueeze(self.unsqueeze_dim)
         return observation
@@ -1193,6 +1216,11 @@ class SqueezeTransform(UnsqueezeTransform):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return super().inv(tensordict)
 
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # placeholder for when we'll move to 'next' indexing for steps
+        # return super().inv(tensordict["next"])
+        return super().inv(tensordict)
+
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
         return super().forward(tensordict)
 
@@ -1246,19 +1274,30 @@ class ObservationNorm(ObservationTransform):
     Examples:
         >>> torch.set_default_tensor_type(torch.DoubleTensor)
         >>> r = torch.randn(100, 3)*torch.randn(3) + torch.randn(3)
-        >>> td = TensorDict({'next_obs': r}, [100])
+        >>> td = TensorDict({'obs': r}, [100])
         >>> transform = ObservationNorm(
-        ...     loc = td.get('next_obs').mean(0),
-        ...     scale = td.get('next_obs').std(0),
-        ...     in_keys=["next_obs"],
+        ...     loc = td.get('obs').mean(0),
+        ...     scale = td.get('obs').std(0),
+        ...     in_keys=["obs"],
         ...     standard_normal=True)
         >>> _ = transform(td)
-        >>> print(torch.isclose(td.get('next_obs').mean(0),
+        >>> print(torch.isclose(td.get('obs').mean(0),
         ...     torch.zeros(3)).all())
-        Tensor(True)
+        tensor(True)
         >>> print(torch.isclose(td.get('next_obs').std(0),
         ...     torch.ones(3)).all())
-        Tensor(True)
+        tensor(True)
+
+    The normalisation stats can be automatically computed:
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> torch.manual_seed(0)
+        >>> env = GymEnv("Pendulum-v1")
+        >>> env = TransformedEnv(env, ObservationNorm(in_keys=["observation"]))
+        >>> env.set_seed(0)
+        >>> env.transform.init_stats(100)
+        >>> print(env.transform.loc, env.transform.scale)
+        tensor([-1.3752e+01, -6.5087e-03,  2.9294e-03], dtype=torch.float32) tensor([14.9636,  2.5608,  0.6408], dtype=torch.float32)
 
     """
 
@@ -1266,31 +1305,92 @@ class ObservationNorm(ObservationTransform):
 
     def __init__(
         self,
-        loc: Union[float, torch.Tensor],
-        scale: Union[float, torch.Tensor],
+        loc: Optional[float, torch.Tensor] = None,
+        scale: Optional[float, torch.Tensor] = None,
         in_keys: Optional[Sequence[str]] = None,
         # observation_spec_key: =None,
         standard_normal: bool = False,
     ):
         if in_keys is None:
             in_keys = [
-                "next_observation",
-                "next_pixels",
-                "next_observation_state",
+                "observation",
+                "pixels",
+                "observation_state",
             ]
         super().__init__(in_keys=in_keys)
-        if not isinstance(loc, torch.Tensor):
+        self.standard_normal = standard_normal
+        self.eps = 1e-6
+
+        if loc is not None and not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc, dtype=torch.float)
-        if not isinstance(scale, torch.Tensor):
+
+        if scale is not None and not isinstance(scale, torch.Tensor):
             scale = torch.tensor(scale, dtype=torch.float)
+            scale = scale.clamp_min(self.eps)
 
         # self.observation_spec_key = observation_spec_key
-        self.standard_normal = standard_normal
         self.register_buffer("loc", loc)
-        eps = 1e-6
-        self.register_buffer("scale", scale.clamp_min(eps))
+        self.register_buffer("scale", scale)
+
+    def init_stats(
+        self,
+        num_iter: int,
+        reduce_dim: Union[int, Tuple[int]] = 0,
+        key: Optional[str] = None,
+    ) -> None:
+        """Initializes the loc and scale stats of the parent environment.
+
+        Normalization constant should ideally make the observation statistics approach
+        those of a standard Gaussian distribution. This method computes a location
+        and scale tensor that will empirically compute the mean and standard
+        deviation of a Gaussian distribution fitted on data generated randomly with
+        the parent environment for a given number of steps.
+
+        Args:
+            num_iter (int): number of random iterations to run in the environment.
+            reduce_dim (int, optional): dimension to compute the mean and std over.
+                Defaults to 0.
+            key (str, optional): if provided, the summary statistics will be
+                retrieved from that key in the resulting tensordicts.
+                Otherwise, the first key in :obj:`ObservationNorm.in_keys` will be used.
+
+        """
+        if self.loc is not None or self.scale is not None:
+            raise RuntimeError(
+                f"Loc/Scale are already initialized: ({self.loc}, {self.scale})"
+            )
+
+        if len(self.in_keys) > 1 and key is None:
+            raise RuntimeError(
+                "Transform has multiple in_keys but no specific key was passed as an argument"
+            )
+        key = self.in_keys[0] if key is None else key
+
+        parent = self.parent
+        collected_frames = 0
+        data = []
+        while collected_frames < num_iter:
+            tensordict = parent.rollout(max_steps=num_iter)
+            collected_frames += tensordict.numel()
+            data.append(tensordict.get(key))
+
+        data = torch.cat(data, reduce_dim)
+        loc = data.mean(reduce_dim)
+        scale = data.std(reduce_dim)
+
+        if not self.standard_normal:
+            loc = loc / scale
+            scale = 1 / scale
+
+        self.register_buffer("loc", loc)
+        self.register_buffer("scale", scale.clamp_min(self.eps))
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+        if self.loc is None or self.scale is None:
+            raise RuntimeError(
+                "Loc/Scale have not been initialized. Either pass in values in the constructor "
+                "or call the init_stats method"
+            )
         if self.standard_normal:
             loc = self.loc
             scale = self.scale
@@ -1452,18 +1552,8 @@ class FiniteTensorDictCheck(Transform):
         super().__init__(in_keys=[])
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        source = {}
-        for key, item in tensordict.items():
-            try:
-                source[key] = FiniteTensor(item)
-            except RuntimeError as err:
-                if str(err).rfind("FiniteTensor encountered") > -1:
-                    raise ValueError(f"Found non-finite elements in {key}")
-                else:
-                    raise RuntimeError(str(err))
-
-        finite_tensordict = TensorDict(batch_size=tensordict.batch_size, source=source)
-        return finite_tensordict
+        tensordict.apply(check_finite)
+        return tensordict
 
 
 class DoubleToFloat(Transform):
@@ -1471,10 +1561,10 @@ class DoubleToFloat(Transform):
 
     Examples:
         >>> td = TensorDict(
-        ...     {'next_obs': torch.ones(1, dtype=torch.double)}, [])
-        >>> transform = DoubleToFloat(in_keys=["next_obs"])
+        ...     {'obs': torch.ones(1, dtype=torch.double)}, [])
+        >>> transform = DoubleToFloat(in_keys=["obs"])
         >>> _ = transform(td)
-        >>> print(td.get("next_obs").dtype)
+        >>> print(td.get("obs").dtype)
         torch.float32
 
     """
@@ -1530,7 +1620,7 @@ class DoubleToFloat(Transform):
 
     def __repr__(self) -> str:
         s = (
-            f"{self.__class__.__name__}(in_keys={self.in_keys}, out_keys={self.out_keys},"
+            f"{self.__class__.__name__}(in_keys={self.in_keys}, out_keys={self.out_keys}, "
             f"in_keys_inv={self.in_keys_inv}, out_keys_inv={self.out_keys_inv})"
         )
         return s
@@ -1579,7 +1669,7 @@ class CatTensors(Transform):
     def __init__(
         self,
         in_keys: Optional[Sequence[str]] = None,
-        out_key: str = "next_observation_vector",
+        out_key: str = "observation_vector",
         dim: int = -1,
         del_keys: bool = True,
         unsqueeze_if_oor: bool = False,
@@ -1592,7 +1682,6 @@ class CatTensors(Transform):
                 )
         else:
             in_keys = sorted(list(in_keys))
-            self._check_in_keys(in_keys, out_key)
         if type(out_key) != str:
             raise Exception("CatTensors requires out_key to be of type string")
         # super().__init__(in_keys=in_keys)
@@ -1601,15 +1690,6 @@ class CatTensors(Transform):
         self.del_keys = del_keys
         self.unsqueeze_if_oor = unsqueeze_if_oor
 
-    def _check_in_keys(self, in_keys, out_key):
-        if not out_key.startswith("next_") and all(
-            key.startswith("next_") for key in in_keys
-        ):
-            warn(
-                f"It seems that 'next_'-like keys are being concatenated to a non 'next_' key {out_key}. This may result in unwanted behaviours, and the 'next_' flag is missing from the output key."
-                f"Consider renaming the out_key to 'next_{out_key}'"
-            )
-
     def _find_in_keys(self):
         parent = self.parent
         obs_spec = parent.observation_spec
@@ -1617,7 +1697,6 @@ class CatTensors(Transform):
         for key, value in obs_spec.items():
             if len(value.shape) == 1:
                 in_keys.append(key)
-        self._check_in_keys(in_keys, self.out_keys[0])
         return sorted(in_keys)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1625,7 +1704,7 @@ class CatTensors(Transform):
             self.in_keys = self._find_in_keys()
             self._initialized = True
 
-        if all([key in tensordict.keys() for key in self.in_keys]):
+        if all([key in tensordict.keys(include_nested=True) for key in self.in_keys]):
             values = [tensordict.get(key) for key in self.in_keys]
             if self.unsqueeze_if_oor:
                 pos_idx = self.dim > 0
@@ -1647,7 +1726,7 @@ class CatTensors(Transform):
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
                 f" {sorted(list(self.in_keys))} but got a TensorDict with keys"
-                f" {sorted(list(tensordict.keys()))}"
+                f" {sorted(list(tensordict.keys(include_nested=True)))}"
             )
         return tensordict
 
@@ -1798,8 +1877,7 @@ class NoopResetEnv(Transform):
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Do no-op action for a number of steps in [1, noop_max]."""
         parent = self.parent
-        keys = tensordict.keys()
-        keys = [key for key in keys if not key.startswith("next_")]
+        # keys = tensordict.keys()
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
@@ -1808,7 +1886,8 @@ class NoopResetEnv(Transform):
 
         while i < noops:
             i += 1
-            tensordict = parent.rand_step(step_mdp(tensordict))
+            tensordict = parent.rand_step(tensordict)
+            tensordict = step_mdp(tensordict)
             if parent.is_done:
                 parent.reset()
                 i = 0
@@ -1819,19 +1898,19 @@ class NoopResetEnv(Transform):
                     break
         if parent.is_done:
             raise RuntimeError("NoopResetEnv concluded with done environment")
-        td = step_mdp(
-            tensordict, exclude_done=False, exclude_reward=True, exclude_action=True
-        )
+        # td = step_mdp(
+        #     tensordict, exclude_done=False, exclude_reward=True, exclude_action=True
+        # )
 
-        for k in keys:
-            if k not in td.keys():
-                td.set(k, tensordict.get(k))
+        # for k in keys:
+        #     if k not in td.keys():
+        #         td.set(k, tensordict.get(k))
 
-        # replace the next_ prefix
-        for out_key in parent.observation_spec:
-            td.rename_key(out_key[5:], out_key)
+        # # replace the next_ prefix
+        # for out_key in parent.observation_spec:
+        #     td.rename_key(out_key[5:], out_key)
 
-        return td
+        return tensordict
 
     def __repr__(self) -> str:
         random = self.random
@@ -1909,13 +1988,14 @@ class TensorDictPrimer(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         for key, spec in self.primers.items():
-            if key in observation_spec:
-                raise RuntimeError(
-                    f"The key {key} is already in the observation_spec. This means "
-                    f"that the value reset by TensorDictPrimer will confict with the "
-                    f"value obtained through the call to `env.reset()`. Consider renaming "
-                    f"the {key} key."
-                )
+            # deprecating this with the new "next_" logic where we expect keys to collide
+            # if key in observation_spec:
+            #     raise RuntimeError(
+            #         f"The key {key} is already in the observation_spec. This means "
+            #         f"that the value reset by TensorDictPrimer will confict with the "
+            #         f"value obtained through the call to `env.reset()`. Consider renaming "
+            #         f"the {key} key."
+            #     )
             observation_spec[key] = spec.to(self.device)
         return observation_spec
 
@@ -2026,7 +2106,7 @@ class VecNorm(Transform):
 
     Args:
         in_keys (iterable of str, optional): keys to be updated.
-            default: ["next_observation", "reward"]
+            default: ["observation", "reward"]
         shared_td (TensorDictBase, optional): A shared tensordict containing the
             keys of the transform.
         decay (number, optional): decay rate of the moving average.
@@ -2046,9 +2126,9 @@ class VecNorm(Transform):
         ...         _ = env.reset()
         ...     tds += [td]
         >>> tds = torch.stack(tds, 0)
-        >>> print((abs(tds.get("next_observation").mean(0))<0.2).all())
+        >>> print((abs(tds.get(("next", "observation")).mean(0))<0.2).all())
         tensor(True)
-        >>> print((abs(tds.get("next_observation").std(0)-1)<0.2).all())
+        >>> print((abs(tds.get(("next", "observation")).std(0)-1)<0.2).all())
         tensor(True)
 
     """
@@ -2066,7 +2146,7 @@ class VecNorm(Transform):
         if lock is None:
             lock = mp.Lock()
         if in_keys is None:
-            in_keys = ["next_observation", "reward"]
+            in_keys = ["observation", "reward"]
         super().__init__(in_keys)
         self._td = shared_td
         if shared_td is not None and not (
@@ -2096,7 +2176,7 @@ class VecNorm(Transform):
             self.lock.acquire()
 
         for key in self.in_keys:
-            if key not in tensordict.keys():
+            if key not in tensordict.keys(include_nested=True):
                 continue
             self._init(tensordict, key)
             # update and standardize
@@ -2183,7 +2263,7 @@ class VecNorm(Transform):
     @staticmethod
     def build_td_for_shared_vecnorm(
         env: EnvBase,
-        keys_prefix: Optional[Sequence[str]] = None,
+        keys: Optional[Sequence[str]] = None,
         memmap: bool = False,
     ) -> TensorDictBase:
         """Creates a shared tensordict for normalization across processes.
@@ -2191,8 +2271,8 @@ class VecNorm(Transform):
         Args:
             env (EnvBase): example environment to be used to create the
                 tensordict
-            keys_prefix (iterable of str, optional): prefix of the keys that
-                have to be normalized. Default is `["next_", "reward"]`
+            keys (iterable of str, optional): keys that
+                have to be normalized. Default is `["next", "reward"]`
             memmap (bool): if True, the resulting tensordict will be cast into
                 memmory map (using `memmap_()`). Otherwise, the tensordict
                 will be placed in shared memory.
@@ -2205,7 +2285,7 @@ class VecNorm(Transform):
             >>> queue = mp.Queue()
             >>> env = make_env()
             >>> td_shared = VecNorm.build_td_for_shared_vecnorm(env,
-            ...     ["next_observation", "reward"])
+            ...     ["next", "reward"])
             >>> assert td_shared.is_shared()
             >>> queue.put(td_shared)
             >>> # on workers
@@ -2213,20 +2293,20 @@ class VecNorm(Transform):
             >>> env = TransformedEnv(make_env(), v)
 
         """
-        if keys_prefix is None:
-            keys_prefix = ["next_", "reward"]
+        raise NotImplementedError("this feature is currently put on hold.")
+        sep = ".-|-."
+        if keys is None:
+            keys = ["next", "reward"]
         td = make_tensordict(env)
-        keys = set(
-            key
-            for key in td.keys()
-            if any(key.startswith(_prefix) for _prefix in keys_prefix)
-        )
+        keys = set(key for key in td.keys() if key in keys)
         td_select = td.select(*keys)
+        td_select = td_select.flatten_keys(sep)
         if td.batch_dims:
             raise RuntimeError(
                 f"VecNorm should be used with non-batched environments. "
                 f"Got batch_size={td.batch_size}"
             )
+        keys = list(td_select.keys())
         for key in keys:
             td_select.set(key + "_ssq", td_select.get(key).clone())
             td_select.set(
@@ -2239,7 +2319,8 @@ class VecNorm(Transform):
                 ),
             )
             td_select.rename_key(key, key + "_sum")
-        td_select.zero_()
+        td_select.exclude(*keys).zero_()
+        td_select = td_select.unflatten_keys(sep)
         if memmap:
             return td_select.memmap_()
         return td_select.share_memory_()

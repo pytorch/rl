@@ -55,13 +55,18 @@ from torchrl.modules.functional_modules import (
 )
 
 
-def _check_all_str(list_of_str):
-    if isinstance(list_of_str, str):
+def _check_all_str(list_of_str, first_level=True):
+    if isinstance(list_of_str, str) and first_level:
         raise RuntimeError(
             f"Expected a list of strings but got a string: {list_of_str}"
         )
-    if any(not isinstance(key, str) for key in list_of_str):
-        raise TypeError(f"Expected a list of strings but got: {list_of_str}")
+    elif not isinstance(list_of_str, str):
+        try:
+            return [_check_all_str(item, False) for item in list_of_str]
+        except Exception as err:
+            raise TypeError(
+                f"Expected a list of strings but got: {list_of_str} that raised the following error: {err}."
+            )
 
 
 def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
@@ -226,7 +231,7 @@ class TensorDictModule(nn.Module):
 
         if set(spec.keys()) != set(self.out_keys):
             raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {spec.keys()} and {self.out_keys} respectively"
+                f"spec keys and out_keys do not match, got: {set(spec.keys())} and {set(self.out_keys)} respectively"
             )
 
         self._spec = spec

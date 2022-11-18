@@ -33,7 +33,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
         ...         self.observation_spec = CompositeSpec(
-        ...             next_hidden_observation=NdUnboundedContinuousTensorSpec((4,))
+        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,))
         ...         )
         ...         self.input_spec = CompositeSpec(
         ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
@@ -56,7 +56,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         ...     TensorDictModule(
         ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
         ...         in_keys=["hidden_observation", "action"],
-        ...         out_keys=["next_hidden_observation"],
+        ...         out_keys=["hidden_observation"],
         ...     ),
         ...     TensorDictModule(
         ...         nn.Linear(4, 1),
@@ -72,7 +72,12 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
                 action: Tensor(torch.Size([10, 1]), dtype=torch.float32),
                 done: Tensor(torch.Size([10, 1]), dtype=torch.bool),
                 hidden_observation: Tensor(torch.Size([10, 4]), dtype=torch.float32),
-                next_hidden_observation: Tensor(torch.Size([10, 4]), dtype=torch.float32),
+                next: LazyStackedTensorDict(
+                    fields={
+                        hidden_observation: Tensor(torch.Size([10, 4]), dtype=torch.float32)},
+                    batch_size=torch.Size([10]),
+                    device=cpu,
+                    is_shared=False),
                 reward: Tensor(torch.Size([10, 1]), dtype=torch.float32)},
             batch_size=torch.Size([10]),
             device=cpu,

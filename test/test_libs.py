@@ -300,8 +300,11 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
         )
     env = env_lib(*env_args, **env_kwargs)
     td = env.rollout(max_steps=5)
-    td0 = td[0]
+    td0 = td[0].flatten_keys(".")
     fake_td = env.fake_tensordict()
+
+    fake_td = fake_td.flatten_keys(".")
+    td = td.flatten_keys(".")
     assert set(fake_td.keys()) == set(td.keys())
     for key in fake_td.keys():
         assert fake_td.get(key).shape == td.get(key)[0].shape

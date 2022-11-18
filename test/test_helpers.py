@@ -631,36 +631,40 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "action",
             "belief",
             "done",
-            "next_belief",
-            "next_encoded_latents",
-            "next_pixels",
-            "next_pixels_orig",
-            "next_posterior_mean",
-            "next_posterior_std",
-            "next_prior_mean",
-            "next_prior_std",
-            "next_state",
+            ("next", "belief"),
+            ("next", "encoded_latents"),
+            ("next", "pixels"),
+            ("next", "pixels_orig"),
+            ("next", "posterior_mean"),
+            ("next", "posterior_std"),
+            ("next", "prior_mean"),
+            ("next", "prior_std"),
+            ("next", "state"),
             "pixels",
             "pixels_orig",
             "reward",
             "state",
-            "next_reco_pixels",
+            ("next", "reco_pixels"),
+            "next",
         }
-        assert set(out.keys()) == expected_keys
+        assert set(out.keys(True)) == expected_keys
 
         simulated_data = model_based_env.rollout(3)
         expected_keys = {
             "action",
             "belief",
             "done",
-            "next_belief",
-            "next_state",
-            "pixels",
+            ("next", "belief"),
+            ("next", "state"),
+            ("next", "pixels"),
+            ("next", "pixels_orig"),
             "pixels_orig",
+            "pixels",
             "reward",
             "state",
+            "next",
         }
-        assert expected_keys == set(simulated_data.keys())
+        assert expected_keys == set(simulated_data.keys(True))
 
         simulated_action = actor_model(model_based_env.reset())
         real_action = actor_model(proof_environment.reset())
