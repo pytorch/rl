@@ -647,7 +647,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         interval = self.space.maximum - self.space.minimum
-        r = torch.rand(interval.shape, device=interval.device)
+        r = torch.rand(*shape, *interval.shape, device=interval.device)
         r = r * interval
         r = self.space.minimum + r
         r = r.to(self.dtype)
