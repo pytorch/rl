@@ -116,7 +116,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         stats = get_stats_random_rollout(
             cfg,
             proof_env,
-            keys=("next", "pixels") if cfg.from_pixels else ("next", "observation_vector"),
+            key="pixels" if cfg.from_pixels else "observation_vector",
         )
         # make sure proof_env is closed
         proof_env.close()

@@ -349,7 +349,7 @@ def parallel_env_constructor(
 def get_stats_random_rollout(
     cfg: "DictConfig",  # noqa: F821
     proof_environment: EnvBase = None,
-    keys: Optional[Tuple[str, str]] = None,
+    key: Optional[str] = None,
 ):
     """Gathers stas (loc and scale) from an environment using random rollouts.
 
@@ -378,11 +378,11 @@ def get_stats_random_rollout(
     while n < cfg.init_env_steps:
         _td_stats = proof_environment.rollout(max_steps=cfg.init_env_steps)
         n += _td_stats.numel()
-        val = _td_stats.get(keys[0]).get(keys[1]).cpu()
+        val = _td_stats.get(key).cpu()
         val_stats.append(val)
         del _td_stats, val
     val_stats = torch.cat(val_stats, 0)
-    key = keys[1]
+
     if key is None:
         keys = list(proof_environment.observation_spec.keys())
         key = keys.pop()
