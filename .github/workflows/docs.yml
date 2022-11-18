@@ -69,9 +69,10 @@ jobs:
         python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv"
         cd ..
     - name: Sphinx Build
-      uses: ammaraskar/sphinx-action@0.4
+      uses: ammaraskar/sphinx-action@master
       with:
-        docs-folder: "docs/source/"
+        docs-folder: "docs/"
+        pre-build-command: "python -m pip install -r ./requirements.txt"
         build-command: "MUJOCO_GL=egl sphinx-build ./source _local_build"
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
