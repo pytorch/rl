@@ -50,9 +50,10 @@ def _test_fake_tensordict(env: EnvBase):
     fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
     fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     fake_tensordict = fake_tensordict.to_tensordict()
-    fake_tensordict.zero_()
-    real_tensordict.zero_()
-    assert (fake_tensordict == real_tensordict).all()
+    assert (
+        fake_tensordict.apply(lambda x: torch.zeros_like(x))
+        == real_tensordict.apply(lambda x: torch.zeros_like(x))
+    ).all()
     for key in keys2:
         assert fake_tensordict[key].shape == real_tensordict[key].shape
 
@@ -69,10 +70,10 @@ def _check_dtype(key, value, obs_spec, input_spec):
             _check_dtype(_key, _value, obs_spec, input_spec)
         return
     elif key in input_spec.keys(yield_nesting_keys=True):
-        assert input_spec[key].is_in(value)
+        assert input_spec[key].is_in(value), (input_spec[key], value)
         return
     elif key in obs_spec.keys(yield_nesting_keys=True):
-        assert obs_spec[key].is_in(value)
+        assert obs_spec[key].is_in(value), (input_spec[key], value)
         return
     else:
         raise KeyError(key)
