@@ -26,7 +26,7 @@ export MKL_THREADING_LAYER=GNU
 
 coverage run -m pytest test/smoke_test.py -v --durations 20
 coverage run -m pytest test/smoke_test_deps.py -v --durations 20
-coverage run -m python examples/ddpg/ddpg.py \
+coverage run examples/ddpg/ddpg.py \
   total_frames=14 \
   init_random_frames=10 \
   batch_size=10 \
@@ -36,7 +36,7 @@ coverage run -m python examples/ddpg/ddpg.py \
   collector_devices=cuda:0 \
   optim_steps_per_batch=1 \
   record_video=True
-coverage run -m python examples/dqn/dqn.py \
+coverage run examples/dqn/dqn.py \
   total_frames=14 \
   init_random_frames=10 \
   batch_size=10 \
