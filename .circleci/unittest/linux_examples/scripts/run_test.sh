@@ -76,7 +76,6 @@ coverage run examples/sac/sac.py \
   buffer_size=120
 coverage run examples/ppo/ppo.py \
   total_frames=14 \
-  init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
   num_workers=2 \
