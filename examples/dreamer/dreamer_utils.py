@@ -354,7 +354,7 @@ def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
         recorder_rm = TransformedEnv(recorder.base_env)
         for transform in recorder.transform:
             if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform)
+                recorder_rm.append_transform(transform.clone())
     else:
         recorder_rm = recorder
 
