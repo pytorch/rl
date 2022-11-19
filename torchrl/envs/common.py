@@ -646,11 +646,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def fake_tensordict(self) -> TensorDictBase:
         """Returns a fake tensordict with key-value pairs that match in shape, device and dtype what can be expected during an environment rollout."""
         input_spec = self.input_spec
-        fake_input = input_spec.zero(self.batch_size)
+        fake_input = input_spec.rand(self.batch_size)
         observation_spec = self.observation_spec
-        fake_obs = observation_spec.zero(self.batch_size)
+        fake_obs = observation_spec.rand(self.batch_size)
         reward_spec = self.reward_spec
-        fake_reward = reward_spec.zero(self.batch_size)
+        fake_reward = reward_spec.rand(self.batch_size)
         fake_td = TensorDict(
             {
                 **fake_obs,
