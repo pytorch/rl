@@ -479,13 +479,15 @@ class TestPlanner:
             planning_horizon=10,
             optim_steps=2,
             num_candidates=100,
-            num_top_k_candidates=2,
+            top_k=2,
         )
         td = env.reset(TensorDict({}, batch_size=batch_size).to(device))
         td_copy = td.clone()
         td = planner(td)
-        assert td.get("action").shape[1:] == env.action_spec.shape
-
+        assert (
+            td.get("action").shape[-len(env.action_spec.shape) :]
+            == env.action_spec.shape
+        )
         assert env.action_spec.is_in(td.get("action"))
 
         for key in td.keys():
