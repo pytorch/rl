@@ -249,20 +249,22 @@ class TestRB:
         S = 100
         if storage_type == "list":
             storage = ListStorage(S)
-            collate_fn = lambda x: torch.stack(x, 0)
         elif storage_type == "memmap":
             storage = LazyMemmapStorage(S)
-            collate_fn = lambda x: x
         else:
             raise NotImplementedError
 
         if prioritized:
             replay_buffer = TensorDictPrioritizedReplayBuffer(
-                S, 1.1, 0.9, storage=storage, collate_fn=collate_fn
+                S,
+                1.1,
+                0.9,
+                storage=storage,
             )
         else:
             replay_buffer = TensorDictReplayBuffer(
-                S, storage=storage, collate_fn=collate_fn
+                S,
+                storage=storage,
             )
 
         N = 9
