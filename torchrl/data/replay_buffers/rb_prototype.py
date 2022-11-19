@@ -6,9 +6,9 @@ from typing import Any, Callable, Optional, Sequence, Union, Tuple, List
 import torch
 from tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 
-from .replay_buffers import pin_memory_output, stack_tensors, stack_td
+from .replay_buffers import pin_memory_output, stack_td
 from .samplers import Sampler, RandomSampler
-from .storages import Storage, ListStorage
+from .storages import Storage, ListStorage, _get_default_collate
 from .utils import INT_CLASSES, _to_numpy, accept_remote_rref_udf_invocation
 from .writers import Writer, RoundRobinWriter
 
@@ -47,7 +47,11 @@ class ReplayBuffer:
         self._writer = writer if writer is not None else RoundRobinWriter()
         self._writer.register_storage(self._storage)
 
-        self._collate_fn = collate_fn or stack_tensors
+        self._collate_fn = (
+            collate_fn
+            if collate_fn is not None
+            else _get_default_collate(self._storage)
+        )
         self._pin_memory = pin_memory
 
         self._prefetch = bool(prefetch)
