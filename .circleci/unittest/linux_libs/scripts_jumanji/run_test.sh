@@ -29,7 +29,7 @@ export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
 #mv 10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
 # this workflow only tests the libs
-python -c "import habitat;import habitat.utils.gym_definitions"
+python -c "import jumanji"
 
 coverage run -m pytest test/test_libs.py --instafail -v --durations 20 --capture no -k TestJumanji
 coverage xml -i

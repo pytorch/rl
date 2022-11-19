@@ -436,7 +436,7 @@ jobs:
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_libs/scripts_jumanji/install.sh
       - run:
           name: Run tests
-          command: bash .circleci/unittest/linux_optdeps/scripts/run_test.sh
+          command: bash .circleci/unittest/scripts_jumanji/scripts/run_test.sh
       - run:
           name: Codecov upload
           command: |
