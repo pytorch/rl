@@ -417,7 +417,10 @@ def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
 
 
 def _collate_list_tensordict(x):
-    return torch.stack(x, 0).to_tensordict()
+    out = torch.stack(x, 0)
+    if isinstance(out, TensorDictBase):
+        return out.to_tensordict()
+    return out
 
 
 def _collate_list_tensors(*x):
@@ -425,7 +428,9 @@ def _collate_list_tensors(*x):
 
 
 def _collate_contiguous(x):
-    return x.to_tensordict()
+    if isinstance(x, TensorDictBase):
+        return x.to_tensordict()
+    return x.clone()
 
 
 def _get_default_collate(storage, _is_tensordict=True):

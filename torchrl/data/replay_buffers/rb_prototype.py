@@ -6,7 +6,7 @@ from typing import Any, Callable, Optional, Sequence, Union, Tuple, List
 import torch
 from tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 
-from .replay_buffers import pin_memory_output, stack_td
+from .replay_buffers import pin_memory_output
 from .samplers import Sampler, RandomSampler
 from .storages import Storage, ListStorage, _get_default_collate
 from .utils import INT_CLASSES, _to_numpy, accept_remote_rref_udf_invocation
@@ -173,12 +173,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
     """
 
     def __init__(self, priority_key: str = "td_error", **kw) -> None:
-        if not kw.get("collate_fn"):
-
-            def collate_fn(x):
-                return stack_td(x, 0, contiguous=True)
-
-            kw["collate_fn"] = collate_fn
         super().__init__(**kw)
         self.priority_key = priority_key
 
