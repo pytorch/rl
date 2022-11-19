@@ -29,7 +29,7 @@ except ImportError as err:
     IMPORT_ERR = str(err)
 
 
-def _ndarray_to_tensor(value: Union[jnp.ndarray, np.ndarray], device) -> torch.Tensor:
+def _ndarray_to_tensor(value: Union["jnp.ndarray", np.ndarray], device) -> torch.Tensor:
     # tensor doesn't support conversion from jnp.ndarray.
     if isinstance(value, jnp.ndarray):
         value = np.asarray(value)
@@ -44,7 +44,8 @@ def _ndarray_to_tensor(value: Union[jnp.ndarray, np.ndarray], device) -> torch.T
     return torch.tensor(value).to(device)
 
 
-def _object_to_tensordict(obj, device, batch_size) -> TensorDictBase:
+def _object_to_tensordict(obj: Union, device, batch_size) -> TensorDictBase:
+    """Converts a namedtuple or a dataclass to a TensorDict."""
     t = {}
     if isinstance(obj, tuple) and hasattr(obj, "_fields"):  # named tuple
         _iter = obj._fields
@@ -62,6 +63,7 @@ def _object_to_tensordict(obj, device, batch_size) -> TensorDictBase:
 
 
 def _tensordict_to_object(tensordict: TensorDictBase, object_example):
+    """Converts a TensorDict to a namedtuple or a dataclass."""
     object_type = type(object_example)
     t = {}
     for name in tensordict.keys():
