@@ -15,6 +15,7 @@ from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs.libs.dm_control import _has_dmc
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
 from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
+from torchrl.envs.libs.jumanji import JumanjiEnv, _has_jumanji
 
 if _has_gym:
     import gym
@@ -300,7 +301,7 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
         assert fake_td.get(key).device == td0.get(key).device
 
 
-@pytest.mark.skipif(IS_OSX, reason="rendeing unstable on osx, skipping")
+@pytest.mark.skipif(IS_OSX, reason="rendering unstable on osx, skipping")
 @pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
 @pytest.mark.parametrize(
     "env_lib,env_args,env_kwargs",
@@ -352,6 +353,91 @@ class TestHabitat:
         env = HabitatEnv(envname)
         rollout = env.rollout(3)
         _test_fake_tensordict(env)
+
+
+@pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
+@pytest.mark.parametrize("envname", ["Snake-6x6-v0", "TSP50-v0"])
+class TestJumanji:
+    def test_jumanji_seeding(self, envname):
+        final_seed = []
+        tdreset = []
+        tdrollout = []
+        for _ in range(2):
+            env = JumanjiEnv(envname)
+            torch.manual_seed(0)
+            np.random.seed(0)
+            final_seed.append(env.set_seed(0))
+            tdreset.append(env.reset())
+            tdrollout.append(env.rollout(max_steps=50))
+            env.close()
+            del env
+        assert final_seed[0] == final_seed[1]
+        assert_allclose_td(*tdreset)
+        assert_allclose_td(*tdrollout)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_jumanji_batch_size(self, envname, batch_size):
+        env = JumanjiEnv(envname, batch_size=batch_size)
+        env.set_seed(0)
+        tdreset = env.reset()
+        tdrollout = env.rollout(max_steps=50)
+        env.close()
+        del env
+        assert tdreset.batch_size == batch_size
+        assert tdrollout.batch_size[:-1] == batch_size
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_jumanji_spec_rollout(self, envname, batch_size):
+        env = JumanjiEnv(envname, batch_size=batch_size)
+        env.set_seed(0)
+        _test_fake_tensordict(env)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_jumanji_consistency(self, envname, batch_size):
+        import jax
+        import jax.numpy as jnp
+        import numpy as onp
+
+        env = JumanjiEnv(envname, batch_size=batch_size)
+        obs_keys = list(env.observation_spec.keys(True))
+        env.set_seed(1)
+        rollout = env.rollout(10)
+
+        env.set_seed(1)
+        key = env.key
+        base_env = env._env
+        key, *keys = jax.random.split(key, np.prod(batch_size) + 1)
+        state, timestep = jax.vmap(base_env.reset)(jnp.stack(keys))
+        # state = env._reshape(state)
+        # timesteps.append(timestep)
+        for i in range(rollout.shape[-1]):
+            action = rollout[..., i]["action"]
+            # state = env._flatten(state)
+            action = env._flatten(env.read_action(action))
+            state, timestep = jax.vmap(base_env.step)(state, action)
+            # state = env._reshape(state)
+            # timesteps.append(timestep)
+            checked = False
+            for _key in obs_keys:
+                if isinstance(_key, str):
+                    _key = (_key,)
+                try:
+                    t2 = getattr(timestep, _key[0])
+                except AttributeError:
+                    try:
+                        t2 = getattr(timestep.observation, _key[0])
+                    except AttributeError:
+                        continue
+                t1 = rollout[..., i][("next", *_key)]
+                for __key in _key[1:]:
+                    t2 = getattr(t2, _key)
+                t2 = torch.tensor(onp.asarray(t2)).view_as(t1)
+                torch.testing.assert_close(t1, t2)
+                checked = True
+            if not checked:
+                raise AttributeError(
+                    f"None of the keys matched: {rollout}, {list(timestep.__dict__.keys())}"
+                )
 
 
 if __name__ == "__main__":
