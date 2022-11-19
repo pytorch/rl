@@ -83,5 +83,6 @@ coverage run examples/ppo/ppo.py \
   collector_devices=cuda:0 \
   optim_steps_per_batch=1 \
   record_video=True \
-  record_frames=4
+  record_frames=4 \
+  lr_scheduler=
 coverage xml -i
