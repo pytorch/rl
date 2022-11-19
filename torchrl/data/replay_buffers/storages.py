@@ -421,3 +421,30 @@ def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
         )
     elif _CKPT_BACKEND == "torch":
         return mem_map_tensor._tensor
+
+
+def _collate_list_tensordict(x):
+    out = torch.stack(x, 0)
+    if isinstance(out, TensorDictBase):
+        return out.to_tensordict()
+    return out
+
+
+def _collate_list_tensors(*x):
+    return tuple(torch.stack(_x, 0) for _x in zip(*x))
+
+
+def _collate_contiguous(x):
+    if isinstance(x, TensorDictBase):
+        return x.to_tensordict()
+    return x.clone()
+
+
+def _get_default_collate(storage, _is_tensordict=True):
+    if isinstance(storage, ListStorage):
+        if _is_tensordict:
+            return _collate_list_tensordict
+        else:
+            return _collate_list_tensors
+    elif isinstance(storage, (LazyTensorStorage, LazyMemmapStorage)):
+        return _collate_contiguous
