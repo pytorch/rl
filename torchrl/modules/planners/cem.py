@@ -52,7 +52,7 @@ class CEMPlanner(MPCPlannerBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
         ...         self.observation_spec = CompositeSpec(
-        ...             next_hidden_observation=NdUnboundedContinuousTensorSpec((4,))
+        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,))
         ...         )
         ...         self.input_spec = CompositeSpec(
         ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
@@ -61,13 +61,17 @@ class CEMPlanner(MPCPlannerBase):
         ...         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
-        ...         tensordict = TensorDict({},
+        ...         tensordict = TensorDict(
+        ...             {},
         ...             batch_size=self.batch_size,
         ...             device=self.device,
         ...         )
-        ...         tensordict = tensordict.update(self.input_spec.rand(self.batch_size))
-        ...         tensordict = tensordict.update(self.observation_spec.rand(self.batch_size))
+        ...         tensordict = tensordict.update(
+        ...             self.input_spec.rand(self.batch_size))
+        ...         tensordict = tensordict.update(
+        ...             self.observation_spec.rand(self.batch_size))
         ...         return tensordict
+        ...
         >>> from torchrl.modules import MLP, WorldModelWrapper
         >>> import torch.nn as nn
         >>> world_model = WorldModelWrapper(
@@ -91,7 +95,12 @@ class CEMPlanner(MPCPlannerBase):
                 action: Tensor(torch.Size([5, 1]), dtype=torch.float32),
                 done: Tensor(torch.Size([5, 1]), dtype=torch.bool),
                 hidden_observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
-                next_hidden_observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
+                next: LazyStackedTensorDict(
+                    fields={
+                        hidden_observation: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
+                    batch_size=torch.Size([5]),
+                    device=cpu,
+                    is_shared=False),
                 reward: Tensor(torch.Size([5, 1]), dtype=torch.float32)},
             batch_size=torch.Size([5]),
             device=cpu,
@@ -192,7 +201,8 @@ class CEMPlanner(MPCPlannerBase):
             container.set_(
                 ("stats", "_action_stds"), best_actions.std(dim=K_DIM, keepdim=True)
             )
-        return container.get(("stats", "_action_means"))
+        action_means = container.get(("stats", "_action_means"))
+        return action_means[..., 0, 0, :]
 
 
 class _PrecomputedActionsSequentialSetter:
