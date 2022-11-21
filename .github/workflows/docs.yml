@@ -21,7 +21,7 @@ jobs:
     - name: Install deps
       run: |
         apt-get update -y
-        apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git=2.38
+        apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
@@ -48,6 +48,8 @@ jobs:
     - name: check python version
       run: |
         python --version
+    - name: Check git version
+      run: git version
     - name: setup Path
       run: |
         echo /usr/local/bin >> $GITHUB_PATH
