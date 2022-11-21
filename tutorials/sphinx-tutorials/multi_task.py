@@ -27,10 +27,10 @@ env1_obs_keys = list(env1.observation_spec.keys())
 env1 = TransformedEnv(
     env1,
     Compose(
-        CatTensors(env1_obs_keys, "next_observation_stand", del_keys=False),
-        CatTensors(env1_obs_keys, "next_observation"),
+        CatTensors(env1_obs_keys, "observation_stand", del_keys=False),
+        CatTensors(env1_obs_keys, "observation"),
         DoubleToFloat(
-            in_keys=["next_observation_stand", "next_observation"],
+            in_keys=["observation_stand", "observation"],
             in_keys_inv=["action"],
         ),
     ),
@@ -40,10 +40,10 @@ env2_obs_keys = list(env2.observation_spec.keys())
 env2 = TransformedEnv(
     env2,
     Compose(
-        CatTensors(env2_obs_keys, "next_observation_walk", del_keys=False),
-        CatTensors(env2_obs_keys, "next_observation"),
+        CatTensors(env2_obs_keys, "observation_walk", del_keys=False),
+        CatTensors(env2_obs_keys, "observation"),
         DoubleToFloat(
-            in_keys=["next_observation_walk", "next_observation"],
+            in_keys=["observation_walk", "observation"],
             in_keys_inv=["action"],
         ),
     ),
@@ -127,10 +127,10 @@ def env1_maker():
     return TransformedEnv(
         DMControlEnv("humanoid", "stand"),
         Compose(
-            CatTensors(env1_obs_keys, "next_observation_stand", del_keys=False),
-            CatTensors(env1_obs_keys, "next_observation"),
+            CatTensors(env1_obs_keys, "observation_stand", del_keys=False),
+            CatTensors(env1_obs_keys, "observation"),
             DoubleToFloat(
-                in_keys=["next_observation_stand", "next_observation"],
+                in_keys=["observation_stand", "observation"],
                 in_keys_inv=["action"],
             ),
         ),
@@ -141,10 +141,10 @@ def env2_maker():
     return TransformedEnv(
         DMControlEnv("humanoid", "walk"),
         Compose(
-            CatTensors(env2_obs_keys, "next_observation_walk", del_keys=False),
-            CatTensors(env2_obs_keys, "next_observation"),
+            CatTensors(env2_obs_keys, "observation_walk", del_keys=False),
+            CatTensors(env2_obs_keys, "observation"),
             DoubleToFloat(
-                in_keys=["next_observation_walk", "next_observation"],
+                in_keys=["observation_walk", "observation"],
                 in_keys_inv=["action"],
             ),
         ),

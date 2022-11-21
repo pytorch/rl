@@ -303,7 +303,7 @@ from torchrl.envs import (
 
 base_env = GymEnv("Pendulum-v1", frame_skip=3, from_pixels=True, pixels_only=False)
 env = TransformedEnv(base_env, Compose(NoopResetEnv(3), ToTensorImage()))
-env.append_transform(ObservationNorm(in_keys=["next_pixels"], loc=2, scale=1))
+env.append_transform(ObservationNorm(in_keys=["pixels"], loc=2, scale=1))
 
 ###############################################################################
 # Transforms
@@ -319,7 +319,7 @@ from torchrl.envs import (
 
 base_env = GymEnv("Pendulum-v1", frame_skip=3, from_pixels=True, pixels_only=False)
 env = TransformedEnv(base_env, Compose(NoopResetEnv(3), ToTensorImage()))
-env.append_transform(ObservationNorm(in_keys=["next_pixels"], loc=2, scale=1))
+env.append_transform(ObservationNorm(in_keys=["pixels"], loc=2, scale=1))
 
 ###############################################################################
 
@@ -342,7 +342,7 @@ base_env = ParallelEnv(
 env = TransformedEnv(
     base_env, Compose(NoopResetEnv(3), ToTensorImage())
 )  # applies transforms on batch of envs
-env.append_transform(ObservationNorm(in_keys=["next_pixels"], loc=2, scale=1))
+env.append_transform(ObservationNorm(in_keys=["pixels"], loc=2, scale=1))
 env.reset()
 
 ###############################################################################
@@ -702,7 +702,7 @@ loss_fn = DDPGLoss(actor, value, gamma=0.99)
 tensordict = TensorDict(
     {
         "observation": torch.randn(10, 3),
-        "next_observation": torch.randn(10, 3),
+        "next": {"observation": torch.randn(10, 3)},
         "reward": torch.randn(10, 1),
         "action": torch.randn(10, 1),
         "done": torch.zeros(10, 1, dtype=torch.bool),

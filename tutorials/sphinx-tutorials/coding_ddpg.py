@@ -162,12 +162,12 @@ def make_transformed_env(
         ]
         double_to_float_inv_list += ["action"]
 
-    # We concatenate all states into a single "next_observation_vector"
-    # even if there is a single tensor, it'll be renamed in "next_observation_vector".
+    # We concatenate all states into a single "observation_vector"
+    # even if there is a single tensor, it'll be renamed in "observation_vector".
     # This facilitates the downstream operations as we know the name of the output tensor.
     # In some environments (not half-cheetah), there may be more than one observation vector: in this case this code snippet will concatenate them all.
     selected_keys = list(env.observation_spec.keys())
-    out_key = "next_observation_vector"
+    out_key = "observation_vector"
     env.append_transform(CatTensors(in_keys=selected_keys, out_key=out_key))
 
     #  we normalize the states
@@ -269,7 +269,7 @@ def get_env_stats():
     proof_env.set_seed(seed)
     stats = get_stats_random_rollout(
         proof_env,
-        key="next_observation_vector",
+        key="observation_vector",
     )
     # make sure proof_env is closed
     proof_env.close()
@@ -590,12 +590,11 @@ scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(
 #   In the case of DDPG, the value if of the state-action pair,
 #   hence the first name is used.
 # - The ``step_mdp`` helper function returns a new TensorDict that essentially
-#   does the ``obs = next_obs``. In other words, it will return a new
+#   does the ``obs = next_obs`` step. In other words, it will return a new
 #   tensordict where the values that are related to the next state (next
 #   observations of various type) are selected and written as if they were
 #   current. This makes it possible to pass this new tensordict to the policy or
-#   value network (which expects an ``"observation_vector"`` key, not
-#   ``"next_observation_vector"``.
+#   value network.
 # - When using prioritized replay buffer, a priority key is added to the
 #   sampled tensordict (named ``"td_error"`` by default). Then, this
 #   TensorDict will be fed back to the replay buffer using the ``update_priority``

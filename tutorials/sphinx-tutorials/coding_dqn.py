@@ -167,10 +167,8 @@ def make_env(parallel=False, m=0, s=1):
             ToTensorImage(),
             GrayScale(),
             Resize(64, 64),
-            ObservationNorm(
-                in_keys=["next_pixels"], loc=m, scale=s, standard_normal=True
-            ),
-            CatFrames(4, in_keys=["next_pixels"]),
+            ObservationNorm(in_keys=["pixels"], loc=m, scale=s, standard_normal=True),
+            CatFrames(4, in_keys=["pixels"]),
         ),
     )
     return env
@@ -195,14 +193,12 @@ m, s
 # *goal is to balance the pole by applying forces in the left and right*
 # *direction on the cart.*
 
-# we add a CatTensors transform to copy the "next_pixels" before it's being replaced by its grayscale, resized version
-dummy_env.transform.insert(
-    0, CatTensors(["next_pixels"], "next_pixels_save", del_keys=False)
-)
+# we add a CatTensors transform to copy the "pixels" before it's being replaced by its grayscale, resized version
+dummy_env.transform.insert(0, CatTensors(["pixels"], "pixels_save", del_keys=False))
 # we omit the policy from the rollout call: this will generate random actions from the env.action_spec attribute
 eval_rollout = dummy_env.rollout(max_steps=10000).cpu()
 
-# imageio.mimwrite('cartpole_random.mp4', eval_rollout["next_pixels_save"].numpy(), fps=30)
+# imageio.mimwrite('cartpole_random.mp4', eval_rollout["pixels_save"].numpy(), fps=30)
 # Video('cartpole_random.mp4', width=480, height=360)
 
 ###############################################################################
@@ -870,15 +866,13 @@ if len(traj_lengths):
 # If all goes well, the duration should be significantly longer than with the
 # initial, random rollout.
 
-dummy_env.transform.insert(
-    0, CatTensors(["next_pixels"], "next_pixels_save", del_keys=False)
-)
+dummy_env.transform.insert(0, CatTensors(["pixels"], "pixels_save", del_keys=False))
 eval_rollout = dummy_env.rollout(max_steps=10000, policy=actor, auto_reset=True).cpu()
 eval_rollout
 
 ###############################################################################
 
-# imageio.mimwrite('cartpole.mp4', eval_rollout["next_pixels_save"].numpy(), fps=30);
+# imageio.mimwrite('cartpole.mp4', eval_rollout["pixels_save"].numpy(), fps=30);
 # Video('cartpole.mp4', width=480, height=360) #the width and height option as additional thing new in Ipython 7.6.1
 
 ###############################################################################

@@ -116,9 +116,9 @@ tensordict
 env.rand_step()
 
 ###############################################################################
-# The new key ``"next_observation"`` (as all keys starting with ``"next_"``)
-# have a special role in TorchRL: they indicate that they come after the key
-# with the same name but without the prefix.
+# The new key ``("next", "observation")`` (as all keys under the ``"next"``
+# tensordict) have a special role in TorchRL: they indicate that they come
+# after the key with the same name but without the prefix.
 #
 # We provide a function ``step_mdp`` that executes a step in the tensordict:
 # it returns a new tensordict updated such that *t < -t'*:
@@ -130,7 +130,9 @@ tensordict_tprime = step_mdp(tensordict)
 
 print(tensordict_tprime)
 print(
-    (tensordict_tprime.get("observation") == tensordict.get("next_observation")).all()
+    (
+        tensordict_tprime.get("observation") == tensordict.get(("next", "observation"))
+    ).all()
 )
 
 ###############################################################################
@@ -160,7 +162,7 @@ print(tensordict_rollout)
 
 (
     tensordict_rollout.get("observation")[1:]
-    == tensordict_rollout.get("next_observation")[:-1]
+    == tensordict_rollout.get(("next", "observation"))[:-1]
 ).all()
 
 
@@ -321,12 +323,9 @@ from torchrl.envs.transforms import CatTensors
 env = DMControlEnv("acrobot", "swingup")
 print("keys before concat: ", env.reset())
 
-# make sure to work with "next_key" as this is what step will return
 env = TransformedEnv(
     env,
-    CatTensors(
-        in_keys=["next_orientations", "next_velocity"], out_key="next_observation"
-    ),
+    CatTensors(in_keys=["orientations", "velocity"], out_key="observation"),
 )
 print("keys after concat: ", env.reset())
 
@@ -353,9 +352,7 @@ print("keys after concat: ", env.reset())
 env = DMControlEnv("acrobot", "swingup")
 env = TransformedEnv(env)
 env.append_transform(
-    CatTensors(
-        in_keys=["next_orientations", "next_velocity"], out_key="next_observation"
-    )
+    CatTensors(in_keys=["orientations", "velocity"], out_key="observation")
 )
 env.append_transform(GrayScale())
 
@@ -384,9 +381,7 @@ from torchrl.envs.transforms import CatTensors, GrayScale, TransformedEnv
 env = DMControlEnv("acrobot", "swingup")
 env = TransformedEnv(env)
 env.append_transform(
-    CatTensors(
-        in_keys=["next_orientations", "next_velocity"], out_key="next_observation"
-    )
+    CatTensors(in_keys=["orientations", "velocity"], out_key="observation")
 )
 
 if torch.has_cuda and torch.cuda.device_count():
@@ -644,9 +639,9 @@ from torchrl.envs.transforms import VecNorm, TransformedEnv
 
 make_env = EnvCreator(lambda: TransformedEnv(GymEnv("CartPole-v1"), VecNorm(decay=1.0)))
 env = ParallelEnv(3, make_env)
-make_env.state_dict()["_extra_state"]["td"]["next_observation_count"].fill_(0.0)
-make_env.state_dict()["_extra_state"]["td"]["next_observation_ssq"].fill_(0.0)
-make_env.state_dict()["_extra_state"]["td"]["next_observation_sum"].fill_(0.0)
+make_env.state_dict()["_extra_state"]["td"]["next", "observation_count"].fill_(0.0)
+make_env.state_dict()["_extra_state"]["td"]["next", "observation_ssq"].fill_(0.0)
+make_env.state_dict()["_extra_state"]["td"]["next", "observation_sum"].fill_(0.0)
 
 tensordict = env.rollout(max_steps=5)
 
@@ -663,7 +658,7 @@ print("std: :", tensordict.get("observation").view(-1, 3).std(0))  # Approx 1
 
 print(
     "update counts: ",
-    make_env.state_dict()["_extra_state"]["td"]["next_observation_count"],
+    make_env.state_dict()["_extra_state"]["td"][("next", "observation_count")],
 )
 
 env.close()
