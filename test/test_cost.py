@@ -65,6 +65,7 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
 )
 from torchrl.objectives import (
+    A2CLoss,
     ClipPPOLoss,
     DDPGLoss,
     DistributionalDQNLoss,
@@ -1617,13 +1618,12 @@ class TestPPO:
         )
         return td
 
-    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_ppo(self, loss_class, device, gradient_mode, advantage):
+    def test_ppo(self, device, gradient_mode, advantage):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_ppo(device=device)
+        td = self._create_seq_mock_data_a2c(device=device)
 
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
@@ -1642,7 +1642,7 @@ class TestPPO:
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(
+        loss_fn = A2CLoss(
             actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
         )
 
@@ -1698,6 +1698,239 @@ class TestPPO:
             raise NotImplementedError
 
         loss_fn = loss_class(
+            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
+        )
+
+        floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
+
+        loss = floss_fn(params, buffers, td)
+        loss_critic = loss["loss_critic"]
+        loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
+        loss_critic.backward(retain_graph=True)
+        # check that grads are independent and non null
+        named_parameters = loss_fn.named_parameters()
+        if _has_functorch:
+            for (name, _), p in zip(named_parameters, params):
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" not in name
+                    assert "critic" in name
+                if p.grad is None:
+                    assert "actor" in name
+                    assert "critic" not in name
+        else:
+            for key, p in params.flatten_keys(".").items():
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" not in key
+                    assert "value" in key or "critic" in key
+                if p.grad is None:
+                    assert "actor" in key
+                    assert "value" not in key and "critic" not in key
+
+        if _has_functorch:
+            for param in params:
+                param.grad = None
+        else:
+            for param in params.flatten_keys(".").values():
+                param.grad = None
+        loss_objective.backward()
+        named_parameters = loss_fn.named_parameters()
+        if _has_functorch:
+            for (name, _), p in zip(named_parameters, params):
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" in name
+                    assert "critic" not in name
+                if p.grad is None:
+                    assert "actor" not in name
+                    assert "critic" in name
+            for param in params:
+                param.grad = None
+        else:
+            for key, p in params.flatten_keys(".").items():
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" in key
+                    assert "value" not in key and "critic" not in key
+                if p.grad is None:
+                    assert "actor" not in key
+                    assert "value" in key or "critic" in key
+            for param in params.flatten_keys(".").values():
+                param.grad = None
+
+
+class TestA2C:
+    seed = 0
+
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # Actor
+        action_spec = NdBoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
+        actor = ProbabilisticActor(
+            module=module,
+            distribution_class=TanhNormal,
+            dist_in_keys=["loc", "scale"],
+            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
+        )
+        return actor.to(device)
+
+    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        module = nn.Linear(obs_dim, 1)
+        value = ValueOperator(
+            module=module,
+            in_keys=["observation"],
+        )
+        return value.to(device)
+
+    def _create_mock_distributional_actor(
+        self, batch=2, obs_dim=3, action_dim=4, atoms=0, vmin=1, vmax=5
+    ):
+        raise NotImplementedError
+
+    def _create_mock_data_a2c(
+        self, batch=2, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
+        # create a tensordict
+        obs = torch.randn(batch, obs_dim, device=device)
+        next_obs = torch.randn(batch, obs_dim, device=device)
+        if atoms:
+            raise NotImplementedError
+        else:
+            action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
+        reward = torch.randn(batch, 1, device=device)
+        done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        td = TensorDict(
+            batch_size=(batch,),
+            source={
+                "observation": obs,
+                "next": {"observation": next_obs},
+                "done": done,
+                "reward": reward,
+                "action": action,
+                "sample_log_prob": torch.randn_like(action[..., :1]) / 10,
+            },
+            device=device,
+        )
+        return td
+
+    def _create_seq_mock_data_a2c(
+        self, batch=2, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
+        # create a tensordict
+        total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
+        obs = total_obs[:, :T]
+        next_obs = total_obs[:, 1:]
+        if atoms:
+            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+                -1, 1
+            )
+        else:
+            action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+        reward = torch.randn(batch, T, 1, device=device)
+        done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        params_mean = torch.randn_like(action) / 10
+        params_scale = torch.rand_like(action) / 10
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "done": done,
+                "mask": mask,
+                "reward": reward * mask.to(obs.dtype),
+                "action": action * mask.to(obs.dtype),
+                "sample_log_prob": torch.randn_like(action[..., :1])
+                / 10
+                * mask.to(obs.dtype),
+                "loc": params_mean * mask.to(obs.dtype),
+                "scale": params_scale * mask.to(obs.dtype),
+            },
+            device=device,
+        )
+        return td
+
+    @pytest.mark.parametrize("gradient_mode", (True, False))
+    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_a2c(self, loss_class, device, gradient_mode, advantage):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_ac2(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        if advantage == "gae":
+            advantage = GAE(
+                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        elif advantage == "td":
+            advantage = TDEstimate(
+                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        elif advantage == "td_lambda":
+            advantage = TDLambdaEstimate(
+                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        else:
+            raise NotImplementedError
+
+        loss_fn = A2CLoss(
+            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
+        )
+
+        loss = loss_fn(td)
+        loss_critic = loss["loss_critic"]
+        loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
+        loss_critic.backward(retain_graph=True)
+        # check that grads are independent and non null
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" not in name
+                assert "critic" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "critic" not in name
+
+        value.zero_grad()
+        loss_objective.backward()
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "critic" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "critic" in name
+        actor.zero_grad()
+
+    @pytest.mark.parametrize("gradient_mode", (True, False))
+    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_a2c_diff(self, device, gradient_mode, advantage):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_a2c(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        if advantage == "gae":
+            advantage = GAE(
+                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        elif advantage == "td":
+            advantage = TDEstimate(
+                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        elif advantage == "td_lambda":
+            advantage = TDLambdaEstimate(
+                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        else:
+            raise NotImplementedError
+
+        loss_fn = A2CLoss(
             actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
         )
 
