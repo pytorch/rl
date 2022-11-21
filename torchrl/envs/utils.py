@@ -24,12 +24,11 @@ def step_mdp(
     exclude_reward: bool = True,
     exclude_done: bool = True,
     exclude_action: bool = True,
+    _run_check: bool = True,
 ) -> TensorDictBase:
     """Creates a new tensordict that reflects a step in time of the input tensordict.
 
-    Given a tensordict retrieved after a step, returns another tensordict with all the :obj:`'next_'` prefixes are removed,
-    i.e. all the :obj:`'next_some_other_string'` keys will be renamed onto :obj:`'some_other_string'` keys.
-
+    Given a tensordict retrieved after a step, returns the :obj:`"next"` indexed-tensordict.
 
     Args:
         tensordict (TensorDictBase): tensordict with keys to be renamed
@@ -47,7 +46,7 @@ def step_mdp(
             Default is True.
 
     Returns:
-         A new tensordict (or next_tensordict) with the "next_*" keys renamed without the "next_" prefix.
+         A new tensordict (or next_tensordict) containing the tensors of the t+1 step.
 
     Examples:
     This funtion allows for this kind of loop to be used:
@@ -79,19 +78,13 @@ def step_mdp(
         prohibited.add("action")
     else:
         other_keys.append("action")
-    keys = [key for key in tensordict.keys() if key.startswith("next_")]
-    if len(keys) == 0:
-        raise RuntimeError(
-            "There was no key starting with 'next_' in the provided TensorDict: ",
-            tensordict,
-        )
-    new_keys = [key[5:] for key in keys]
-    prohibited = prohibited.union(keys).union(new_keys)
+
+    prohibited.add("next")
     if keep_other:
         other_keys = [key for key in tensordict.keys() if key not in prohibited]
-    select_tensordict = tensordict.select(*other_keys, *keys)
-    for new_key, key in zip(new_keys, keys):
-        select_tensordict.rename_key(key, new_key, safe=True)
+    select_tensordict = tensordict.select(*other_keys)
+    select_tensordict = select_tensordict.update(tensordict.get("next"))
+
     if next_tensordict is not None:
         return next_tensordict.update(select_tensordict)
     else:

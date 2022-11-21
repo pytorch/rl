@@ -93,13 +93,13 @@ def make_env_transforms(
         if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation())
-        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["next_pixels"]))
+        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
-        env.append_transform(ObservationNorm(**obs_stats, in_keys=["next_pixels"]))
+        env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -122,8 +122,8 @@ def make_env_transforms(
     )
 
     default_dict = {
-        "next_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
-        "next_belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
+        "state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
+        "belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
     }
     env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -307,9 +307,9 @@ def call_record(
     if cfg.record_video and record._count % cfg.record_interval == 0:
         world_model_td = sampled_tensordict
 
-        true_pixels = recover_pixels(world_model_td["next_pixels"], stats)
+        true_pixels = recover_pixels(world_model_td[("next", "pixels")], stats)
 
-        reco_pixels = recover_pixels(world_model_td["next_reco_pixels"], stats)
+        reco_pixels = recover_pixels(world_model_td["next", "reco_pixels"], stats)
         with autocast(dtype=torch.float16):
             world_model_td = world_model_td.select("state", "belief", "reward")
             world_model_td = model_based_env.rollout(
@@ -319,7 +319,7 @@ def call_record(
                 tensordict=world_model_td[:, 0],
             )
         imagine_pxls = recover_pixels(
-            model_based_env.decode_obs(world_model_td)["next_reco_pixels"],
+            model_based_env.decode_obs(world_model_td)["next", "reco_pixels"],
             stats,
         )
 
@@ -354,7 +354,7 @@ def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
         recorder_rm = TransformedEnv(recorder.base_env)
         for transform in recorder.transform:
             if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform)
+                recorder_rm.append_transform(transform.clone())
     else:
         recorder_rm = recorder
 

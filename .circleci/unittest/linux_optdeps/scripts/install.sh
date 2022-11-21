@@ -42,7 +42,7 @@ pip install git+https://github.com/pytorch-labs/tensordict
 python -c "import functorch"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+pip3 install -e .
 
 # smoke test
 python -c "import torchrl"

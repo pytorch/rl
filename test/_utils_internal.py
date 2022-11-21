@@ -11,9 +11,7 @@ from functools import wraps
 # this returns relative path from current file.
 import pytest
 import torch.cuda
-from tensordict.tensordict import TensorDictBase
 from torchrl._utils import seed_generator
-from torchrl.data import CompositeSpec
 from torchrl.envs import EnvBase
 
 
@@ -49,10 +47,13 @@ def _test_fake_tensordict(env: EnvBase):
     keys1 = set(fake_tensordict.keys())
     keys2 = set(real_tensordict.keys())
     assert keys1 == keys2
-    fake_tensordict = fake_tensordict.expand(3).to_tensordict()
-    fake_tensordict.zero_()
-    real_tensordict.zero_()
-    assert (fake_tensordict == real_tensordict).all()
+    fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
+    fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
+    fake_tensordict = fake_tensordict.to_tensordict()
+    assert (
+        fake_tensordict.apply(lambda x: torch.zeros_like(x))
+        == real_tensordict.apply(lambda x: torch.zeros_like(x))
+    ).all()
     for key in keys2:
         assert fake_tensordict[key].shape == real_tensordict[key].shape
 
@@ -62,27 +63,20 @@ def _test_fake_tensordict(env: EnvBase):
 
 
 def _check_dtype(key, value, obs_spec, input_spec):
-    if key.startswith("next_"):
+    if key in {"reward", "done"}:
         return
-    if isinstance(value, TensorDictBase):
+    elif key == "next":
         for _key, _value in value.items():
-            if isinstance(obs_spec, CompositeSpec) and "next_" + key in obs_spec.keys():
-                _check_dtype(_key, _value, obs_spec["next_" + key], input_spec=None)
-            elif isinstance(input_spec, CompositeSpec) and key in input_spec.keys():
-                _check_dtype(_key, _value, obs_spec=None, input_spec=input_spec[key])
-            else:
-                raise KeyError(f"key '{_key}' is unknown.")
+            _check_dtype(_key, _value, obs_spec, input_spec)
+        return
+    elif key in input_spec.keys(yield_nesting_keys=True):
+        assert input_spec[key].is_in(value), (input_spec[key], value)
+        return
+    elif key in obs_spec.keys(yield_nesting_keys=True):
+        assert obs_spec[key].is_in(value), (input_spec[key], value)
+        return
     else:
-        if obs_spec is not None and "next_" + key in obs_spec.keys():
-            assert (
-                obs_spec["next_" + key].dtype is value.dtype
-            ), f"{obs_spec['next_' + key].dtype} vs {value.dtype} for {key}"
-        elif input_spec is not None and key in input_spec.keys():
-            assert (
-                input_spec[key].dtype is value.dtype
-            ), f"{input_spec[key].dtype} vs {value.dtype} for {key}"
-        else:
-            assert key in {"done", "reward"}, (key, obs_spec, input_spec)
+        raise KeyError(key)
 
 
 # Decorator to retry upon certain Exceptions.
@@ -112,3 +106,11 @@ def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
         return f_retry  # true decorator
 
     return deco_retry
+
+
+@pytest.fixture
+def dtype_fixture():
+    dtype = torch.get_default_dtype()
+    torch.set_default_dtype(torch.double)
+    yield dtype
+    torch.set_default_dtype(dtype)

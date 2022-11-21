@@ -84,7 +84,7 @@ def _gym_to_torchrl_spec_transform(
     elif isinstance(spec, (Dict,)):
         spec_out = {}
         for k in spec.keys():
-            spec_out["next_" + k] = _gym_to_torchrl_spec_transform(
+            spec_out[k] = _gym_to_torchrl_spec_transform(
                 spec[k],
                 device=device,
                 categorical_action_encoding=categorical_action_encoding,
@@ -244,11 +244,9 @@ class GymWrapper(GymLikeEnv):
         )
         if not isinstance(self.observation_spec, CompositeSpec):
             if self.from_pixels:
-                self.observation_spec = CompositeSpec(next_pixels=self.observation_spec)
+                self.observation_spec = CompositeSpec(pixels=self.observation_spec)
             else:
-                self.observation_spec = CompositeSpec(
-                    next_observation=self.observation_spec
-                )
+                self.observation_spec = CompositeSpec(observation=self.observation_spec)
         self.reward_spec = UnboundedContinuousTensorSpec(
             device=self.device,
         )
@@ -314,7 +312,7 @@ class GymEnv(GymWrapper):
         if not _has_gym:
             raise RuntimeError(
                 f"gym not found, unable to create {env_name}. "
-                f"Consider downloading and installing dm_control from"
+                f"Consider downloading and installing gym from"
                 f" {self.git_url}"
             )
         from_pixels = kwargs.get("from_pixels", False)

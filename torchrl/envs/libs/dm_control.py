@@ -49,7 +49,7 @@ def _dmcontrol_to_torchrl_spec_transform(
 ) -> TensorSpec:
     if isinstance(spec, collections.OrderedDict):
         spec = {
-            "next_" + k: _dmcontrol_to_torchrl_spec_transform(item, device=device)
+            k: _dmcontrol_to_torchrl_spec_transform(item, device=device)
             for k, item in spec.items()
         }
         return CompositeSpec(**spec)

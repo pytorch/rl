@@ -124,13 +124,13 @@ def make_env_transforms(
         if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation())
-        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["next_pixels"]))
+        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
-        env.append_transform(ObservationNorm(**obs_stats, in_keys=["next_pixels"]))
+        env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -154,12 +154,11 @@ def make_env_transforms(
         selected_keys = [
             key
             for key in env.observation_spec.keys()
-            if ("pixels" not in key)
-            and (key.replace("next_", "") not in env.input_spec.keys())
+            if ("pixels" not in key) and (key not in env.input_spec.keys())
         ]
 
-        # even if there is a single tensor, it'll be renamed in "next_observation_vector"
-        out_key = "next_observation_vector"
+        # even if there is a single tensor, it'll be renamed in "observation_vector"
+        out_key = "observation_vector"
         env.append_transform(CatTensors(in_keys=selected_keys, out_key=out_key))
 
         if not vecnorm:
@@ -273,8 +272,15 @@ def transformed_env_constructor(
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
-                "categorical_action_encoding": categorical_action_encoding,
             }
+            if env_library is GymEnv:
+                env_kwargs.update(
+                    {"categorical_action_encoding": categorical_action_encoding}
+                )
+            elif categorical_action_encoding:
+                raise NotImplementedError(
+                    "categorical_action_encoding=True is currently only compatible with GymEnvs."
+                )
             if env_library is DMControlEnv:
                 env_kwargs.update({"task_name": env_task})
             env_kwargs.update(kwargs)
@@ -393,7 +399,7 @@ def get_stats_random_rollout(
                 "thus get_stats_random_rollout cannot infer which to compute the stats of."
             )
 
-    if key == "next_pixels":
+    if key == "pixels":
         m = val_stats.mean()
         s = val_stats.std()
     else:

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import os
 from collections import defaultdict
+from pathlib import Path
 from typing import Optional
 
 import torch
@@ -41,6 +42,8 @@ class CSVExperiment:
         filepath = os.path.join(
             self.log_dir, "videos", "_".join([tag, str(global_step)]) + ".pt"
         )
+        path_to_create = Path(str(filepath)).parent
+        os.makedirs(path_to_create, exist_ok=True)
         torch.save(vid_tensor, filepath)
 
     def add_text(self, tag, text, global_step: Optional[int] = None):
