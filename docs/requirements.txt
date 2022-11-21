@@ -26,3 +26,4 @@ ipython
 imageio
 imageio[ffmpeg]
 imageio[pyav]
+mujoco-py

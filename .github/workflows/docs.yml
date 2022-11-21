@@ -75,8 +75,6 @@ jobs:
         cd ./docs
         timeout 7m sphinx-build ./source _local_build || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         cd ..
-    - name: Setup tmate session
-      uses: mxschmitt/action-tmate@v3
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
