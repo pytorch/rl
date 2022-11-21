@@ -5,6 +5,7 @@
 
 import torch
 from tensordict.tensordict import TensorDictBase, TensorDict
+from torch import nn
 
 from torchrl.envs import EnvBase
 from torchrl.modules.planners.common import MPCPlannerBase
@@ -14,19 +15,23 @@ class MPPIlanner(MPCPlannerBase):
     def __init__(
         self,
         env: EnvBase,
+        advantage_module: nn.Module,
         planning_horizon: int,
         optim_steps: int,
         num_candidates: int,
         top_k: int,
         reward_key: str = "reward",
         action_key: str = "action",
+        temperature: float = 1.0,
     ):
         super().__init__(env=env, action_key=action_key)
+        self.advantage_module = advantage_module
         self.planning_horizon = planning_horizon
         self.optim_steps = optim_steps
         self.num_candidates = num_candidates
         self.top_k = top_k
         self.reward_key = reward_key
+        self.register_buffer("temperature", torch.tensor(temperature))
 
     def planning(self, tensordict: TensorDictBase) -> torch.Tensor:
         batch_size = tensordict.batch_size
@@ -48,7 +53,12 @@ class MPPIlanner(MPCPlannerBase):
             self.planning_horizon,
             *self.action_spec.shape,
         )
-        TIME_DIM = len(self.action_spec.shape) - 3
+        adv_topk_shape = (
+            *batch_size,
+            self.top_k,
+            1,
+            1,
+        )
         K_DIM = len(self.action_spec.shape) - 4
         expanded_original_tensordict = (
             tensordict.unsqueeze(-1)
@@ -92,24 +102,31 @@ class MPPIlanner(MPCPlannerBase):
                 auto_reset=False,
                 tensordict=optim_tensordict,
             )
+            # compute advantage
+            self.advantage_module(optim_tensordict)
+            # get advantage of the current state
+            advantage = optim_tensordict["advantage"][..., :1, :]
+            # get top-k trajectories
+            _, top_k = advantage.topk(self.top_k, dim=K_DIM)
+            # get omega weights for each top-k trajectory
+            vals = advantage.gather(K_DIM, top_k.expand(adv_topk_shape))
+            Omegas = (self.temperature * vals).exp()
 
-            sum_rewards = optim_tensordict.get(self.reward_key).sum(
-                dim=TIME_DIM, keepdim=True
-            )
-            _, top_k = sum_rewards.topk(self.top_k, dim=K_DIM)
-            top_k = top_k.expand(action_topk_shape)
-            # get omega weights
-            Omegas = (self.temp * vals).exp()
+            # gather best actions
+            best_actions = actions.gather(K_DIM, top_k.expand(action_topk_shape))
 
-            best_actions = actions.gather(K_DIM, top_k)
-            _action_means = (Omegas * best_actions).sum(dim=K_DIM, keepdim=True) / Omegas.sum(K_DIM, True)
-            _action_stds = ((Omegas * (best_actions - _action_means).pow(2)).sum(dim=K_DIM, keepdim=True) / Omegas.sum(K_DIM, True)).sqrt()
-            container.set_(
-                ("stats", "_action_means"), _action_means
-            )
-            container.set_(
-                ("stats", "_action_stds"), _action_stds
-            )
+            # compute weighted average
+            _action_means = (Omegas * best_actions).sum(
+                dim=K_DIM, keepdim=True
+            ) / Omegas.sum(K_DIM, True)
+            _action_stds = (
+                (Omegas * (best_actions - _action_means).pow(2)).sum(
+                    dim=K_DIM, keepdim=True
+                )
+                / Omegas.sum(K_DIM, True)
+            ).sqrt()
+            container.set_(("stats", "_action_means"), _action_means)
+            container.set_(("stats", "_action_stds"), _action_stds)
         action_means = container.get(("stats", "_action_means"))
         return action_means[..., 0, 0, :]
 
