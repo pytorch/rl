@@ -7,24 +7,24 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import torch
-from torch import nn, distributions as d
+from torch import distributions as d, nn
 
 from torchrl.data import (
     CompositeSpec,
-    NdUnboundedContinuousTensorSpec,
     DiscreteTensorSpec,
+    NdUnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs import TransformedEnv, TensorDictPrimer
+from torchrl.envs import TensorDictPrimer, TransformedEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     ActorValueOperator,
     NoisyLinear,
-    TensorDictModule,
-    ProbabilisticTensorDictModule,
     NormalParamWrapper,
+    ProbabilisticTensorDictModule,
+    TensorDictModule,
     TensorDictSequential,
 )
 from torchrl.modules.distributions import (
@@ -34,16 +34,14 @@ from torchrl.modules.distributions import (
     TanhNormal,
     TruncatedNormal,
 )
-from torchrl.modules.distributions.continuous import (
-    SafeTanhTransform,
-)
+from torchrl.modules.distributions.continuous import SafeTanhTransform
 from torchrl.modules.models.exploration import LazygSDEModule
 from torchrl.modules.models.model_based import (
     DreamerActor,
-    ObsEncoder,
     ObsDecoder,
-    RSSMPrior,
+    ObsEncoder,
     RSSMPosterior,
+    RSSMPrior,
     RSSMRollout,
 )
 from torchrl.modules.models.models import (
@@ -53,9 +51,9 @@ from torchrl.modules.models.models import (
     DdpgMlpActor,
     DdpgMlpQNet,
     DuelingCnnDQNet,
+    DuelingMlpDQNet,
     LSTMNet,
     MLP,
-    DuelingMlpDQNet,
 )
 from torchrl.modules.tensordict_module import (
     Actor,
@@ -64,12 +62,10 @@ from torchrl.modules.tensordict_module import (
 )
 from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
-    ValueOperator,
     ProbabilisticActor,
+    ValueOperator,
 )
-from torchrl.modules.tensordict_module.world_models import (
-    WorldModelWrapper,
-)
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from torchrl.trainers.helpers import transformed_env_constructor
 
 DISTRIBUTIONS = {

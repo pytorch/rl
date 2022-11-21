@@ -12,28 +12,23 @@ from datetime import datetime
 import hydra
 import torch.cuda
 from hydra.core.config_store import ConfigStore
-from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.envs.transforms import RewardScaling
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.objectives.value import TDEstimate
-from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
     OnPolicyCollectorConfig,
 )
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
+    EnvConfig,
     get_stats_random_rollout,
     parallel_env_constructor,
     transformed_env_constructor,
-    EnvConfig,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.losses import make_a2c_loss, A2CLossConfig
-from torchrl.trainers.helpers.models import (
-    make_a2c_model,
-    A2CModelConfig,
-)
+from torchrl.trainers.helpers.losses import A2CLossConfig, make_a2c_loss
+from torchrl.trainers.helpers.models import A2CModelConfig, make_a2c_model
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
 
 config_fields = [

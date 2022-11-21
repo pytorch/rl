@@ -4,17 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Any
+from typing import Any, Optional, Tuple
 
-from torchrl.modules import ActorValueOperator, ActorCriticOperator
+from torchrl.modules import ActorCriticOperator, ActorValueOperator
 from torchrl.objectives import (
+    A2CLoss,
     ClipPPOLoss,
     DDPGLoss,
     DistributionalDQNLoss,
     DQNLoss,
     HardUpdate,
     KLPENPPOLoss,
-    A2CLoss,
     PPOLoss,
     SACLoss,
     SoftUpdate,
@@ -193,7 +193,7 @@ def make_a2c_loss(model, cfg) -> A2CLoss:
         "critic": critic_model,
         "loss_critic_type": cfg.critic_loss_function,
         "entropy_coef": cfg.entropy_coef,
-        "advantage_module": advantage
+        "advantage_module": advantage,
     }
 
     loss_module = A2CLoss(**kwargs)
