@@ -298,7 +298,11 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
 @pytest.mark.skipif(not _has_gym, reason="gym library is not installed")
 def test_collector_env_reset():
     torch.manual_seed(0)
-    env = SerialEnv(2, lambda: GymEnv(PONG_VERSIONED, frame_skip=4))
+
+    def make_env():
+        return GymEnv(PONG_VERSIONED, frame_skip=4)
+
+    env = SerialEnv(2, make_env)
     # env = SerialEnv(3, lambda: GymEnv("CartPole-v1", frame_skip=4))
     env.set_seed(0)
     collector = SyncDataCollector(

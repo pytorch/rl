@@ -12,6 +12,7 @@ conda activate ./env
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
     version="cpu"
+    echo "Using cpu build"
 else
     if [[ ${#CU_VERSION} -eq 4 ]]; then
         CUDA_VERSION="${CU_VERSION:2:1}.${CU_VERSION:3:1}"
@@ -27,22 +28,19 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
-    # use pip to install pytorch as conda can frequently pick older release
-#    conda install -y pytorch cpuonly -c pytorch-nightly
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+    pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 else
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
+    pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 fi
-
-# install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict
 
 # smoke test
 python -c "import functorch"
 
-printf "* Installing torchrl\n"
-pip3 install -e .
+# install snapshot
+pip install git+https://github.com/pytorch/torchsnapshot
 
-# smoke test
-python -c "import torchrl"
+# install tensordict
+pip install git+https://github.com/pytorch-labs/tensordict
+
+printf "* Installing torchrl\n"
+python setup.py develop

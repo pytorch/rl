@@ -248,3 +248,6 @@ Libraries
     gym.GymWrapper
     dm_control.DMControlEnv
     dm_control.DMControlWrapper
+    jumanji.JumanjiEnv
+    jumanji.JumanjiWrapper
+    habitat.HabitatEnv

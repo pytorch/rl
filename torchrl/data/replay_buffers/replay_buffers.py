@@ -13,7 +13,6 @@ import numpy as np
 import torch
 from tensordict.tensordict import (
     TensorDictBase,
-    _stack as stack_td,
     LazyStackedTensorDict,
 )
 from torch import Tensor
@@ -24,7 +23,11 @@ from torchrl._torchrl import (
     SumSegmentTreeFp32,
     SumSegmentTreeFp64,
 )
-from torchrl.data.replay_buffers.storages import Storage, ListStorage
+from torchrl.data.replay_buffers.storages import (
+    Storage,
+    ListStorage,
+    _get_default_collate,
+)
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 from torchrl.data.replay_buffers.utils import (
     _to_numpy,
@@ -118,9 +121,11 @@ class ReplayBuffer:
         self._storage = storage
         self._capacity = size
         self._cursor = 0
-        if collate_fn is None:
-            collate_fn = stack_tensors
-        self._collate_fn = collate_fn
+        self._collate_fn = (
+            collate_fn
+            if collate_fn is not None
+            else _get_default_collate(self._storage)
+        )
         self._pin_memory = pin_memory
 
         self._prefetch = prefetch is not None and prefetch > 0
@@ -558,11 +563,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
         prefetch: Optional[int] = None,
         storage: Optional[Storage] = None,
     ):
-        if collate_fn is None:
-
-            def collate_fn(x):
-                return stack_td(x, 0, contiguous=True)
-
         super().__init__(size, collate_fn, pin_memory, prefetch, storage=storage)
 
 
@@ -606,11 +606,6 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         prefetch: Optional[int] = None,
         storage: Optional[Storage] = None,
     ) -> None:
-        if collate_fn is None:
-
-            def collate_fn(x):
-                return stack_td(x, 0, contiguous=True)
-
         super(TensorDictPrioritizedReplayBuffer, self).__init__(
             size=size,
             alpha=alpha,
