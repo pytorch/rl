@@ -29,7 +29,7 @@ jobs:
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     # Update references
     - name: Update pip
       run: |
@@ -84,7 +84,7 @@ jobs:
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
-      uses: JamesIves/github-pages-deploy-action@releases/v3
+      uses: JamesIves/github-pages-deploy-action@releases/v4
       with:
           ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: gh-pages # The branch the action should deploy to.
