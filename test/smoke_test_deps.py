@@ -2,7 +2,7 @@ import argparse
 import tempfile
 
 import pytest
-from torchrl._utils import implement_for
+from _utils_internal import PONG_VERSIONED
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 
@@ -35,7 +35,7 @@ def test_gym():
     import gym  # noqa: F401
 
     assert _has_gym
-    env = GymEnv(_pong_versioned())
+    env = GymEnv(PONG_VERSIONED)
     env.reset()
 
 
@@ -52,16 +52,6 @@ def test_tb():
             # OS error could be raised randomly
             # depending on the test machine
             test_rounds -= 1
-
-
-@implement_for("gym", None, "0.21")
-def _pong_versioned():  # noqa: F811
-    return "Pong-v4"
-
-
-@implement_for("gym", "0.21", None)
-def _pong_versioned():  # noqa: F811
-    return "ALE/Pong-v5"
 
 
 if __name__ == "__main__":

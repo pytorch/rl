@@ -13,7 +13,7 @@ import pytest
 import torch.cuda
 from torchrl._utils import seed_generator, implement_for
 from torchrl.envs import EnvBase
-
+from torchrl.envs.libs.gym import _has_gym
 
 # Specified for test_utils.py
 __version__ = "0.3"
@@ -29,8 +29,8 @@ HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
 def _set_gym_environments():  # noqa: F811
     global CARTPOLE_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED, HALFCHEETAH_VERSIONED
 
-    PENDULUM_VERSIONED = "Pendulum-v0"
     CARTPOLE_VERSIONED = "CartPole-v0"
+    PENDULUM_VERSIONED = "Pendulum-v0"
     PONG_VERSIONED = "Pong-v4"
     HALFCHEETAH_VERSIONED = "HalfCheetah-v2"
 
@@ -45,7 +45,8 @@ def _set_gym_environments():  # noqa: F811
     HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
 
 
-_set_gym_environments()
+if _has_gym:
+    _set_gym_environments()
 
 
 def get_relative_path(curr_file, *path_components):
