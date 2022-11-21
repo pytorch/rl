@@ -445,7 +445,9 @@ frames_per_batch = (
 gamma = 0.99
 tau = 0.005  # Decay factor for the target network
 prb = True  # If True, a Prioritized replay buffer will be used
-buffer_size = min(total_frames, 1000000 // frame_skip)  # Number of frames stored in the buffer
+buffer_size = min(
+    total_frames, 1000000 // frame_skip
+)  # Number of frames stored in the buffer
 buffer_scratch_dir = "/tmp/"
 n_steps_forward = 3
 

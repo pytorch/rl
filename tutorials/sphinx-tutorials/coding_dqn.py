@@ -66,6 +66,7 @@ from torchrl.envs.utils import set_exploration_mode
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import QValueActor, EGreedyWrapper, DuelingCnnDQNet
 
+
 def is_notebook() -> bool:
     try:
         shell = get_ipython().__class__.__name__
