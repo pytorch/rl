@@ -1785,11 +1785,6 @@ class TestA2C:
         )
         return value.to(device)
 
-    def _create_mock_distributional_actor(
-        self, batch=2, obs_dim=3, action_dim=4, atoms=0, vmin=1, vmax=5
-    ):
-        raise NotImplementedError
-
     def _create_mock_data_a2c(
         self, batch=2, obs_dim=3, action_dim=4, atoms=None, device="cpu"
     ):
@@ -1856,9 +1851,9 @@ class TestA2C:
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_a2c(self, loss_class, device, gradient_mode, advantage):
+    def test_a2c(self, device, gradient_mode, advantage):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_ac2(device=device)
+        td = self._create_seq_mock_data_a2c(device=device)
 
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
