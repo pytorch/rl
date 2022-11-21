@@ -148,10 +148,8 @@ class Transform(nn.Module):
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # placeholder when we'll move to tensordict['next']
-        # tensordict["next"] = self._call(tensordict.get("next"))
-        out = self._call(tensordict)
-        # print(out, tensordict, out is tensordict, (out==tensordict).all())
-        return out
+        tensordict["next"] = self._call(tensordict.get("next"))
+        return tensordict
 
     def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         if self.invertible:
