@@ -8,7 +8,12 @@ from copy import copy, deepcopy
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices, retry, dtype_fixture  # noqa
+from _utils_internal import (  # noqa
+    get_available_devices,
+    retry,
+    dtype_fixture,
+    PENDULUM_VERSIONED,
+)
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
@@ -58,18 +63,6 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
 )
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
-
-if _has_gym:
-    import gym
-    from packaging import version
-
-    gym_version = version.parse(gym.__version__)
-    PENDULUM_VERSIONED = (
-        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
-    )
-else:
-    # placeholders
-    PENDULUM_VERSIONED = "Pendulum-v1"
 
 TIMEOUT = 10.0
 

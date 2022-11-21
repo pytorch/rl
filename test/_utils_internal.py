@@ -11,12 +11,42 @@ from functools import wraps
 # this returns relative path from current file.
 import pytest
 import torch.cuda
-from torchrl._utils import seed_generator
+from torchrl._utils import seed_generator, implement_for
 from torchrl.envs import EnvBase
-
+from torchrl.envs.libs.gym import _has_gym
 
 # Specified for test_utils.py
 __version__ = "0.3"
+
+# Default versions of the environments.
+CARTPOLE_VERSIONED = "CartPole-v1"
+HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
+PENDULUM_VERSIONED = "Pendulum-v1"
+PONG_VERSIONED = "ALE/Pong-v5"
+
+
+@implement_for("gym", None, "0.21.0")
+def _set_gym_environments():  # noqa: F811
+    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
+
+    CARTPOLE_VERSIONED = "CartPole-v0"
+    HALFCHEETAH_VERSIONED = "HalfCheetah-v2"
+    PENDULUM_VERSIONED = "Pendulum-v0"
+    PONG_VERSIONED = "Pong-v4"
+
+
+@implement_for("gym", "0.21.0", None)
+def _set_gym_environments():  # noqa: F811
+    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
+
+    CARTPOLE_VERSIONED = "CartPole-v1"
+    HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
+    PENDULUM_VERSIONED = "Pendulum-v1"
+    PONG_VERSIONED = "ALE/Pong-v5"
+
+
+if _has_gym:
+    _set_gym_environments()
 
 
 def get_relative_path(curr_file, *path_components):

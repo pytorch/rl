@@ -3,16 +3,27 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+from sys import platform
 
 import numpy as np
 import pytest
 import torch
-from _utils_internal import _test_fake_tensordict
-from _utils_internal import get_available_devices
+from _utils_internal import (
+    _test_fake_tensordict,
+    get_available_devices,
+    HALFCHEETAH_VERSIONED,
+    PONG_VERSIONED,
+    PENDULUM_VERSIONED,
+)
 from packaging import version
+from tensordict.tensordict import assert_allclose_td
+from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
+from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.dm_control import _has_dmc
+from torchrl.envs.libs.gym import GymEnv, GymWrapper
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
 from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
 from torchrl.envs.libs.jumanji import JumanjiEnv, _has_jumanji
@@ -32,38 +43,7 @@ if _has_dmc:
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
 
-from sys import platform
-
-from tensordict.tensordict import assert_allclose_td
-from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
-from torchrl.envs.libs.gym import GymEnv, GymWrapper
-
 IS_OSX = platform == "darwin"
-
-if _has_gym:
-    from packaging import version
-
-    gym_version = version.parse(gym.__version__)
-    PENDULUM_VERSIONED = (
-        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
-    )
-    HC_VERSIONED = (
-        "HalfCheetah-v4" if gym_version > version.parse("0.20.0") else "HalfCheetah-v2"
-    )
-    PONG_VERSIONED = (
-        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
-    )
-
-    # if gym_version < version.parse("0.24.0") and torch.cuda.device_count() > 0:
-    #     from opengl_rendering import create_opengl_context
-    #
-    #     create_opengl_context()
-else:
-    # placeholders
-    PENDULUM_VERSIONED = "Pendulum-v1"
-    HC_VERSIONED = "HalfCheetah-v4"
-    PONG_VERSIONED = "ALE/Pong-v5"
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
@@ -123,10 +103,7 @@ class TestGym:
             base_env = gym.make(env_name, frameskip=frame_skip)
             frame_skip = 1
         else:
-            if gym_version < version.parse("0.26.0"):
-                base_env = gym.make(env_name)
-            else:
-                base_env = gym.make(env_name, render_mode="rgb_array")
+            base_env = _make_gym_environment(env_name)
 
         if from_pixels and not _is_from_pixels(base_env):
             base_env = PixelObservationWrapper(base_env, pixels_only=pixels_only)
@@ -162,6 +139,16 @@ class TestGym:
             pixels_only=pixels_only,
         )
         _test_fake_tensordict(env)
+
+
+@implement_for("gym", None, "0.26")
+def _make_gym_environment(env_name):  # noqa: F811
+    return gym.make(env_name)
+
+
+@implement_for("gym", "0.26", None)
+def _make_gym_environment(env_name):  # noqa: F811
+    return gym.make(env_name, render_mode="rgb_array")
 
 
 @pytest.mark.skipif(not _has_dmc, reason="no dm_control library found")
@@ -270,9 +257,9 @@ class TestDMControl:
     "env_lib,env_args,env_kwargs",
     [
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
-        [GymEnv, (HC_VERSIONED,), {"from_pixels": True}],
+        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
-        [GymEnv, (HC_VERSIONED,), {"from_pixels": False}],
+        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
         [GymEnv, (PONG_VERSIONED,), {}],
     ],
 )
@@ -307,9 +294,9 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
     "env_lib,env_args,env_kwargs",
     [
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
-        [GymEnv, (HC_VERSIONED,), {"from_pixels": True}],
+        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
-        [GymEnv, (HC_VERSIONED,), {"from_pixels": False}],
+        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
         [GymEnv, (PONG_VERSIONED,), {}],
     ],
 )
