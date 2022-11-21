@@ -73,7 +73,7 @@ jobs:
       run: |
         python -m pip install -r docs/requirements.txt
         cd ./docs
-        timeout 7m sphinx-build ./source _local_build || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        timeout 7m bash -ic "sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         cd ..
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
@@ -82,4 +82,4 @@ jobs:
       with:
           ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: gh-pages # The branch the action should deploy to.
-          FOLDER: docs/build/html # The folder the action should deploy.
+          FOLDER: docs/source/_local_build/html # The folder the action should deploy.
