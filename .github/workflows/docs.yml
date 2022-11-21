@@ -73,7 +73,7 @@ jobs:
       run: |
         python -m pip install -r docs/requirements.txt
         cd ./docs
-        timeout 7 sphinx-build ./source _local_build || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        timeout 7m sphinx-build ./source _local_build || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         cd ..
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
