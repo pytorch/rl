@@ -8,13 +8,13 @@ import warnings
 from typing import Callable, Optional, Tuple
 
 import torch
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
 
-from tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.modules import TensorDictModule
-from torchrl.objectives.utils import distance_loss
 from torchrl.modules.tensordict_module import ProbabilisticTensorDictModule
 from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import distance_loss
 
 
 class A2CLoss(LossModule):
@@ -135,7 +135,7 @@ class A2CLoss(LossModule):
         tensordict = tensordict.clone()
         advantage = tensordict.get(self.advantage_key)
         log_probs, dist = self._log_probs(tensordict)
-        loss = - (log_probs * advantage)
+        loss = -(log_probs * advantage)
         td_out = TensorDict({"loss_objective": loss.mean()}, [])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
@@ -145,4 +145,3 @@ class A2CLoss(LossModule):
             loss_critic = self.loss_critic(tensordict).mean()
             td_out.set("loss_critic", loss_critic.mean())
         return td_out
-
