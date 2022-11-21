@@ -12,12 +12,41 @@ from functools import wraps
 import pytest
 import torch.cuda
 from tensordict.tensordict import TensorDictBase
-from torchrl._utils import seed_generator
+from torchrl._utils import seed_generator, implement_for
 from torchrl.envs import EnvBase
 
 
 # Specified for test_utils.py
 __version__ = "0.3"
+
+# Default versions of the environments.
+CARTPOLE_VERSIONED = "CartPole-v1"
+PENDULUM_VERSIONED = "Pendulum-v1"
+PONG_VERSIONED = "ALE/Pong-v5"
+HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
+
+
+@implement_for("gym", None, "0.20.0")
+def _set_gym_environments():  # noqa: F811
+    global CARTPOLE_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED, HALFCHEETAH_VERSIONED
+
+    PENDULUM_VERSIONED = "Pendulum-v0"
+    CARTPOLE_VERSIONED = "CartPole-v0"
+    PONG_VERSIONED = "Pong-v4"
+    HALFCHEETAH_VERSIONED = "HalfCheetah-v2"
+
+
+@implement_for("gym", "0.20.0", None)
+def _set_gym_environments():  # noqa: F811
+    global CARTPOLE_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED, HALFCHEETAH_VERSIONED
+
+    CARTPOLE_VERSIONED = "CartPole-v1"
+    PENDULUM_VERSIONED = "Pendulum-v1"
+    PONG_VERSIONED = "ALE/Pong-v5"
+    HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
+
+
+_set_gym_environments()
 
 
 def get_relative_path(curr_file, *path_components):

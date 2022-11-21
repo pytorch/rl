@@ -8,8 +8,13 @@ from sys import platform
 import numpy as np
 import pytest
 import torch
-from _utils_internal import _test_fake_tensordict
-from _utils_internal import get_available_devices
+from _utils_internal import (
+    _test_fake_tensordict,
+    get_available_devices,
+    HALFCHEETAH_VERSIONED,
+    PONG_VERSIONED,
+    PENDULUM_VERSIONED,
+)
 from packaging import version
 from tensordict.tensordict import assert_allclose_td
 from torchrl._utils import implement_for
@@ -22,28 +27,16 @@ from torchrl.envs.libs.gym import GymEnv, GymWrapper
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
 from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
 
-
-@implement_for("gym", None, "0.20")
-def _import_pixel_observation_wrapper():  # noqa: F811
-    from torchrl.envs.libs.utils import (
-        GymPixelObservationWrapper as PixelObservationWrapper,
-    )
-
-    return PixelObservationWrapper
-
-
-@implement_for("gym", "0.20", None)
-def _import_pixel_observation_wrapper():  # noqa: F811
-    from gym.wrappers.pixel_observation import PixelObservationWrapper
-
-    return PixelObservationWrapper
-
-
 if _has_gym:
     import gym
 
     gym_version = version.parse(gym.__version__)
-    PixelObservationWrapper = _import_pixel_observation_wrapper()
+    if gym_version > version.parse("0.19"):
+        from gym.wrappers.pixel_observation import PixelObservationWrapper
+    else:
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as PixelObservationWrapper,
+        )
 
 if _has_dmc:
     from dm_control import suite
@@ -52,42 +45,12 @@ if _has_dmc:
 IS_OSX = platform == "darwin"
 
 
-@implement_for("gym", None, "0.21")
-def _pendulum_versioned():  # noqa: F811
-    return "Pendulum-v0"
-
-
-@implement_for("gym", "0.21", None)
-def _pendulum_versioned():  # noqa: F811
-    return "Pendulum-v1"
-
-
-@implement_for("gym", None, "0.21")
-def _hc_versioned():  # noqa: F811
-    return "HalfCheetah-v2"
-
-
-@implement_for("gym", "0.21", None)
-def _hc_versioned():  # noqa: F811
-    return "HalfCheetah-v4"
-
-
-@implement_for("gym", None, "0.21")
-def _pong_versioned():  # noqa: F811
-    return "Pong-v4"
-
-
-@implement_for("gym", "0.21", None)
-def _pong_versioned():  # noqa: F811
-    return "ALE/Pong-v5"
-
-
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize(
     "env_name",
     [
-        _pong_versioned(),
-        _pendulum_versioned(),
+        PONG_VERSIONED,
+        PENDULUM_VERSIONED,
     ],
 )
 @pytest.mark.parametrize("frame_skip", [1, 3])
@@ -101,10 +64,10 @@ def _pong_versioned():  # noqa: F811
 )
 class TestGym:
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
-        if env_name == _pong_versioned() and not from_pixels:
+        if env_name == PONG_VERSIONED and not from_pixels:
             raise pytest.skip("already pixel")
         elif (
-            env_name != _pong_versioned()
+            env_name != PONG_VERSIONED
             and from_pixels
             and (not torch.has_cuda or not torch.cuda.device_count())
         ):
@@ -135,7 +98,7 @@ class TestGym:
         final_seed0, final_seed1 = final_seed
         assert final_seed0 == final_seed1
 
-        if env_name == _pong_versioned():
+        if env_name == PONG_VERSIONED:
             base_env = gym.make(env_name, frameskip=frame_skip)
             frame_skip = 1
         else:
@@ -159,10 +122,10 @@ class TestGym:
         assert_allclose_td(tdrollout[0], rollout2, rtol=1e-4, atol=1e-4)
 
     def test_gym_fake_td(self, env_name, frame_skip, from_pixels, pixels_only):
-        if env_name == _pong_versioned() and not from_pixels:
+        if env_name == PONG_VERSIONED and not from_pixels:
             raise pytest.skip("already pixel")
         elif (
-            env_name != _pong_versioned()
+            env_name != PONG_VERSIONED
             and from_pixels
             and (not torch.has_cuda or not torch.cuda.device_count())
         ):
@@ -283,10 +246,10 @@ class TestDMControl:
     "env_lib,env_args,env_kwargs",
     [
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
-        [GymEnv, (_hc_versioned(),), {"from_pixels": True}],
+        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
-        [GymEnv, (_hc_versioned(),), {"from_pixels": False}],
-        [GymEnv, (_pong_versioned(),), {}],
+        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
+        [GymEnv, (PONG_VERSIONED,), {}],
     ],
 )
 def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
@@ -320,10 +283,10 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
     "env_lib,env_args,env_kwargs",
     [
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
-        [GymEnv, (_hc_versioned(),), {"from_pixels": True}],
+        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
-        [GymEnv, (_hc_versioned(),), {"from_pixels": False}],
-        [GymEnv, (_pong_versioned(),), {}],
+        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
+        [GymEnv, (PONG_VERSIONED,), {}],
     ],
 )
 @pytest.mark.parametrize("device", get_available_devices())

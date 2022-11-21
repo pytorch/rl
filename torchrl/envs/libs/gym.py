@@ -26,7 +26,6 @@ from ..utils import _classproperty
 
 try:
     import gym
-    from packaging import version
 
     _has_gym = True
 except ImportError:
@@ -49,9 +48,6 @@ if _has_gym:
         from torchrl.envs.libs.utils import (
             GymPixelObservationWrapper as PixelObservationWrapper,
         )
-    gym_version = version.parse(gym.__version__)
-    if gym_version >= version.parse("0.26.0"):
-        from gym.wrappers.compatibility import EnvCompatibility
 
 __all__ = ["GymWrapper", "GymEnv"]
 
@@ -202,6 +198,8 @@ class GymWrapper(GymLikeEnv):
 
     @implement_for("gym", "0.26.0", None)
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
+        from gym.wrappers.compatibility import EnvCompatibility
+
         if env.render_mode:
             return PixelObservationWrapper(env, pixels_only=pixels_only)
 
