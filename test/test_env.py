@@ -55,6 +55,7 @@ from torchrl.modules import (
 )
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
+gym_version = None
 if _has_gym:
     import gym
 
@@ -1034,7 +1035,7 @@ def test_batch_unlocked_with_batch_size(device):
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.skipif(
-    gym_version < version.parse("0.20.0"),
+    gym_version is None or gym_version < version.parse("0.20.0"),
     reason="older versions of half-cheetah do not have 'x_position' info key.",
 )
 def test_info_dict_reader(seed=0):

@@ -20,29 +20,29 @@ __version__ = "0.3"
 
 # Default versions of the environments.
 CARTPOLE_VERSIONED = "CartPole-v1"
+HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
 PENDULUM_VERSIONED = "Pendulum-v1"
 PONG_VERSIONED = "ALE/Pong-v5"
-HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
 
 
-@implement_for("gym", None, "0.20.0")
+@implement_for("gym", None, "0.21.0")
 def _set_gym_environments():  # noqa: F811
-    global CARTPOLE_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED, HALFCHEETAH_VERSIONED
+    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
 
     CARTPOLE_VERSIONED = "CartPole-v0"
+    HALFCHEETAH_VERSIONED = "HalfCheetah-v2"
     PENDULUM_VERSIONED = "Pendulum-v0"
     PONG_VERSIONED = "Pong-v4"
-    HALFCHEETAH_VERSIONED = "HalfCheetah-v2"
 
 
-@implement_for("gym", "0.20.0", None)
+@implement_for("gym", "0.21.0", None)
 def _set_gym_environments():  # noqa: F811
-    global CARTPOLE_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED, HALFCHEETAH_VERSIONED
+    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
 
     CARTPOLE_VERSIONED = "CartPole-v1"
+    HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
     PENDULUM_VERSIONED = "Pendulum-v1"
     PONG_VERSIONED = "ALE/Pong-v5"
-    HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
 
 
 if _has_gym:
