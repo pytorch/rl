@@ -1618,12 +1618,13 @@ class TestPPO:
         )
         return td
 
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_ppo(self, device, gradient_mode, advantage):
+    def test_ppo(self, loss_class, device, gradient_mode, advantage):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_a2c(device=device)
+        td = self._create_seq_mock_data_ppo(device=device)
 
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
@@ -1642,7 +1643,7 @@ class TestPPO:
         else:
             raise NotImplementedError
 
-        loss_fn = A2CLoss(
+        loss_fn = loss_class(
             actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
         )
 
