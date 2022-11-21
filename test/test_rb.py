@@ -52,12 +52,12 @@ from torchrl.envs.transforms.transforms import (
 )
 
 
-collate_fn_dict = {
-    ListStorage: lambda x: torch.stack(x, 0),
-    LazyTensorStorage: lambda x: x,
-    LazyMemmapStorage: lambda x: x,
-    None: lambda x: torch.stack(x, 0),
-}
+# collate_fn_dict = {
+#     ListStorage: lambda x: torch.stack(x, 0),
+#     LazyTensorStorage: lambda x: x,
+#     LazyMemmapStorage: lambda x: x,
+#     None: lambda x: torch.stack(x, 0),
+# }
 
 
 @pytest.mark.parametrize(
@@ -76,7 +76,6 @@ collate_fn_dict = {
 @pytest.mark.parametrize("size", [3, 100])
 class TestPrototypeBuffers:
     def _get_rb(self, rb_type, size, sampler, writer, storage):
-        collate_fn = collate_fn_dict[storage]
 
         if storage is not None:
             storage = storage(size)
@@ -87,9 +86,7 @@ class TestPrototypeBuffers:
 
         sampler = sampler(**sampler_args)
         writer = writer()
-        rb = rb_type(
-            collate_fn=collate_fn, storage=storage, sampler=sampler, writer=writer
-        )
+        rb = rb_type(storage=storage, sampler=sampler, writer=writer)
         return rb
 
     def _get_datum(self, rb_type):
@@ -174,7 +171,6 @@ class TestPrototypeBuffers:
         for d in new_data:
             found_similar = False
             for b in data:
-                print(b, d)
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())
                     b = b.exclude("index").select(*keys, strict=False)
@@ -214,7 +210,6 @@ def test_prototype_prb(priority_key, contiguous, device):
     np.random.seed(0)
     rb = rb_prototype.TensorDictReplayBuffer(
         sampler=samplers.PrioritizedSampler(5, alpha=0.7, beta=0.9),
-        collate_fn=None if contiguous else lambda x: torch.stack(x, 0),
         priority_key=priority_key,
     )
     td1 = TensorDict(
@@ -293,7 +288,6 @@ def test_rb_prototype_trajectories(stack):
             alpha=0.7,
             beta=0.9,
         ),
-        collate_fn=lambda x: torch.stack(x, 0),
         priority_key="td_error",
     )
     rb.extend(traj_td)
@@ -337,7 +331,6 @@ class TestBuffers:
     _default_params_td_prb = {"alpha": 0.8, "beta": 0.9}
 
     def _get_rb(self, rbtype, size, storage, prefetch):
-        collate_fn = collate_fn_dict[storage]
         if storage is not None:
             storage = storage(size)
         if rbtype is ReplayBuffer:
@@ -350,13 +343,7 @@ class TestBuffers:
             params = self._default_params_td_prb
         else:
             raise NotImplementedError(rbtype)
-        rb = rbtype(
-            size=size,
-            storage=storage,
-            prefetch=prefetch,
-            collate_fn=collate_fn,
-            **params
-        )
+        rb = rbtype(size=size, storage=storage, prefetch=prefetch, **params)
         return rb
 
     def _get_datum(self, rbtype):
@@ -482,7 +469,6 @@ def test_prb(priority_key, contiguous, device):
         5,
         alpha=0.7,
         beta=0.9,
-        collate_fn=None if contiguous else lambda x: torch.stack(x, 0),
         priority_key=priority_key,
     )
     td1 = TensorDict(
@@ -559,7 +545,6 @@ def test_rb_trajectories(stack):
         5,
         alpha=0.7,
         beta=0.9,
-        collate_fn=lambda x: torch.stack(x, 0),
         priority_key="td_error",
     )
     rb.extend(traj_td)
@@ -587,10 +572,14 @@ def test_shared_storage_prioritized_sampler():
     sampler1 = PrioritizedSampler(max_capacity=n, alpha=0.7, beta=1.1)
 
     rb0 = rb_prototype.ReplayBuffer(
-        storage=storage, writer=writer, sampler=sampler0, collate_fn=lambda x: x
+        storage=storage,
+        writer=writer,
+        sampler=sampler0,
     )
     rb1 = rb_prototype.ReplayBuffer(
-        storage=storage, writer=writer, sampler=sampler1, collate_fn=lambda x: x
+        storage=storage,
+        writer=writer,
+        sampler=sampler1,
     )
 
     data = TensorDict({"a": torch.arange(50)}, [50])
@@ -615,9 +604,11 @@ def test_legacy_rb_does_not_attach():
     storage = LazyMemmapStorage(n)
     writer = RoundRobinWriter()
     sampler = RandomSampler()
-    rb = ReplayBuffer(storage=storage, size=n, prefetch=0, collate_fn=lambda x: x)
+    rb = ReplayBuffer(storage=storage, size=n, prefetch=0)
     prb = rb_prototype.ReplayBuffer(
-        storage=storage, writer=writer, sampler=sampler, collate_fn=lambda x: x
+        storage=storage,
+        writer=writer,
+        sampler=sampler,
     )
 
     assert len(storage._attached_entities) == 1

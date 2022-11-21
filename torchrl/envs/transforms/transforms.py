@@ -215,11 +215,19 @@ class Transform(nn.Module):
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         if self.__dict__["_parent"] is not None:
-            raise AttributeError("parent of transform already set")
+            raise AttributeError(
+                "parent of transform already set. "
+                "Call `transform.clone()` to get a similar transform with no parent set."
+            )
         self.__dict__["_parent"] = parent
 
     def reset_parent(self) -> None:
         self.__dict__["_parent"] = None
+
+    def clone(self):
+        self_copy = copy(self)
+        self_copy.reset_parent()
+        return self_copy
 
     @property
     def parent(self) -> Optional[EnvBase]:
@@ -239,13 +247,8 @@ class Transform(nn.Module):
             if compose.parent:
                 # the parent of the compose must be a TransformedEnv
                 compose_parent = compose.parent
-                if not isinstance(compose_parent, TransformedEnv):
-                    raise ValueError(
-                        f"Compose parent was of type {type(compose_parent)} but expected TransformedEnv."
-                    )
                 if compose_parent.transform is not compose:
-                    comp_parent_trans = copy(compose_parent.transform)
-                    comp_parent_trans.reset_parent()
+                    comp_parent_trans = compose_parent.transform.clone()
                 else:
                     comp_parent_trans = None
                 out = TransformedEnv(
@@ -1504,6 +1507,12 @@ class RewardScaling(Transform):
     Args:
         loc (number or torch.Tensor): location of the affine transform
         scale (number or torch.Tensor): scale of the affine transform
+        standard_normal (bool, optional): if True, the transform will be
+
+            .. math::
+                reward = (reward-loc)/scale
+
+            as it is done for standardization. Default is `False`.
     """
 
     inplace = True
@@ -1513,10 +1522,13 @@ class RewardScaling(Transform):
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
         in_keys: Optional[Sequence[str]] = None,
+        standard_normal: bool = False,
     ):
         if in_keys is None:
             in_keys = ["reward"]
         super().__init__(in_keys=in_keys)
+        self.standard_normal = standard_normal
+
         if not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc)
         if not isinstance(scale, torch.Tensor):
@@ -1526,8 +1538,16 @@ class RewardScaling(Transform):
         self.register_buffer("scale", scale.clamp_min(1e-6))
 
     def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
-        reward.mul_(self.scale).add_(self.loc)
-        return reward
+        if self.standard_normal:
+            loc = self.loc
+            scale = self.scale
+            reward = (reward - loc) / scale
+            return reward
+        else:
+            scale = self.scale
+            loc = self.loc
+            reward = reward * scale + loc
+            return reward
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if isinstance(reward_spec, UnboundedContinuousTensorSpec):

@@ -368,28 +368,35 @@ class LazyMemmapStorage(LazyTensorStorage):
                 f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
             )
         else:
-            out = TensorDict({}, [self.max_size, *data.shape])
+            # out = TensorDict({}, [self.max_size, *data.shape])
             print("The storage is being created: ")
-            for key, tensor in sorted(data.items()):
-                if isinstance(tensor, TensorDictBase):
-                    out[key] = (
-                        tensor.expand(self.max_size)
-                        .clone()
-                        .zero_()
-                        .memmap_(prefix=self.scratch_dir)
-                        .to(self.device)
-                    )
-                else:
-                    out[key] = _value = MemmapTensor(
-                        self.max_size,
-                        *tensor.shape,
-                        device=self.device,
-                        dtype=tensor.dtype,
-                        prefix=self.scratch_dir,
-                    )
-                filesize = os.path.getsize(_value.filename) / 1024 / 1024
+            out = (
+                data.expand(self.max_size, *data.shape)
+                .to_tensordict()
+                .zero_()
+                .memmap_(prefix=self.scratch_dir)
+                .to(self.device)
+            )
+            for key, tensor in sorted(out.flatten_keys(".").items()):
+                # if isinstance(tensor, TensorDictBase):
+                #     out[key] = (
+                #         tensor.expand(self.max_size, *tensor.shape)
+                #         .clone()
+                #         .zero_()
+                #         .memmap_(prefix=self.scratch_dir)
+                #         .to(self.device)
+                #     )
+                # else:
+                #     out[key] = _value = MemmapTensor(
+                #         self.max_size,
+                #         *tensor.shape,
+                #         device=self.device,
+                #         dtype=tensor.dtype,
+                #         prefix=self.scratch_dir,
+                #     )
+                filesize = os.path.getsize(tensor.filename) / 1024 / 1024
                 print(
-                    f"\t{key}: {_value.filename}, {filesize} Mb of storage (size: {[self.max_size, *tensor.shape]})."
+                    f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {[self.max_size, *tensor.shape]})."
                 )
         self._storage = out
         self.initialized = True
@@ -414,3 +421,30 @@ def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
         )
     elif _CKPT_BACKEND == "torch":
         return mem_map_tensor._tensor
+
+
+def _collate_list_tensordict(x):
+    out = torch.stack(x, 0)
+    if isinstance(out, TensorDictBase):
+        return out.to_tensordict()
+    return out
+
+
+def _collate_list_tensors(*x):
+    return tuple(torch.stack(_x, 0) for _x in zip(*x))
+
+
+def _collate_contiguous(x):
+    if isinstance(x, TensorDictBase):
+        return x.to_tensordict()
+    return x.clone()
+
+
+def _get_default_collate(storage, _is_tensordict=True):
+    if isinstance(storage, ListStorage):
+        if _is_tensordict:
+            return _collate_list_tensordict
+        else:
+            return _collate_list_tensors
+    elif isinstance(storage, (LazyTensorStorage, LazyMemmapStorage)):
+        return _collate_contiguous
