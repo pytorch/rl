@@ -89,7 +89,7 @@ class A2CLoss(LossModule):
         # current log_prob of actions
         action = tensordict.get("action")
         if action.requires_grad:
-            raise RuntimeError("tensordict stored action requires grad.")
+            raise RuntimeError("tensordict stored action require grad.")
         tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
 
         dist, *_ = self.actor.get_dist(
@@ -104,7 +104,7 @@ class A2CLoss(LossModule):
             advantage_diff = tensordict.get(self.advantage_diff_key)
             if not advantage_diff.requires_grad:
                 raise RuntimeError(
-                    "value_target retrieved from tensordict does not requires grad."
+                    "value_target retrieved from tensordict does not require grad."
                 )
             loss_value = distance_loss(
                 advantage_diff,
