@@ -14,6 +14,7 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 import torch
 from tensordict.tensordict import TensorDictBase, TensorDict
 from torch import nn, Tensor
+from torchrl.data.replay_buffers.rb_prototype import ReplayBuffer
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -213,7 +214,7 @@ class Transform(nn.Module):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(keys={self.in_keys})"
 
-    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
+    def set_parent(self, parent) -> None:
         if self.__dict__["_parent"] is not None:
             raise AttributeError("parent of transform already set")
         self.__dict__["_parent"] = parent
@@ -228,7 +229,7 @@ class Transform(nn.Module):
         parent = self._parent
         if parent is None:
             return parent
-        if not isinstance(parent, EnvBase):
+        if not isinstance(parent, EnvBase) and not isinstance(parent, TransformedReplayBuffer):
             # if it's not an env, it should be a Compose transform
             if not isinstance(parent, Compose):
                 raise ValueError(
@@ -256,6 +257,8 @@ class Transform(nn.Module):
                 transform = copy(orig_trans)
                 transform.reset_parent()
                 out.append_transform(transform)
+        elif isinstance(parent, TransformedReplayBuffer):
+            return parent
         elif isinstance(parent, TransformedEnv):
             out = TransformedEnv(parent.base_env)
         else:
@@ -265,6 +268,32 @@ class Transform(nn.Module):
     def empty_cache(self):
         if self.parent is not None:
             self.parent.empty_cache()
+
+
+class TransformedReplayBuffer:
+
+    def __init__(
+        self, 
+        rb: ReplayBuffer,
+        transform: Optional[Transform]
+    ):
+        self.rb = rb
+        if isinstance(transform, Compose):
+            self.transform = transform
+        else:
+            self.transform = Compose(transform)
+        transform._parent = self
+
+    def sample(self, batch_size: int) -> Tuple[Any, dict]:
+        data, info = self.rb.sample(batch_size)
+        self.transform(data)
+        return data, info
+
+    def append_transform(self, transform: Transform):
+        self.transform.append(transform)
+
+    def insert_transform(self, index: int, transform: Transform):
+        self.transform.insert(index, transform)
 
 
 class TransformedEnv(EnvBase):
@@ -1029,10 +1058,11 @@ class FlattenObservation(ObservationTransform):
         first_dim: int = 0,
         last_dim: int = -3,
         in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
-        super().__init__(in_keys=in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.first_dim = first_dim
         self.last_dim = last_dim
 
@@ -1042,15 +1072,17 @@ class FlattenObservation(ObservationTransform):
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         out = super().set_parent(parent)
-        observation_spec = self.parent.observation_spec
-        for key in self.in_keys:
-            if key in observation_spec:
-                observation_spec = observation_spec[key]
-                if self.first_dim >= 0:
-                    self.first_dim = self.first_dim - len(observation_spec.shape)
-                if self.last_dim >= 0:
-                    self.last_dim = self.last_dim - len(observation_spec.shape)
-                break
+        # FIXME: Cannot run Compose(FlattenObservation)
+        if isinstance(parent, EnvBase):
+            observation_spec = self.parent.observation_spec
+            for key in self.in_keys:
+                if key in observation_spec:
+                    observation_spec = observation_spec[key]
+                    if self.first_dim >= 0:
+                        self.first_dim = self.first_dim - len(observation_spec.shape)
+                    if self.last_dim >= 0:
+                        self.last_dim = self.last_dim - len(observation_spec.shape)
+                    break
         return out
 
     @_apply_to_composite
@@ -1111,7 +1143,7 @@ class UnsqueezeTransform(Transform):
         if self._unsqueeze_dim_orig < 0:
             self._unsqueeze_dim = self._unsqueeze_dim_orig
         else:
-            parent = self.parent
+            parent = self.parent  # FIXME: Assumes parent exists and has batch_size
             batch_size = parent.batch_size
             self._unsqueeze_dim = self._unsqueeze_dim_orig + len(batch_size)
         return super().set_parent(parent)

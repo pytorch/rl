@@ -4,12 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+from functools import partial
 
 import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
 from tensordict.tensordict import assert_allclose_td, TensorDictBase, TensorDict
+from torchrl._utils import prod
 from torchrl.data import (
     PrioritizedReplayBuffer,
     ReplayBuffer,
@@ -28,6 +30,7 @@ from torchrl.data.replay_buffers.storages import (
     ListStorage,
 )
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.envs.transforms.transforms import *
 
 
 collate_fn_dict = {
@@ -182,6 +185,101 @@ class TestPrototypeBuffers:
         if not isinstance(b, bool):
             b = b.all()
         assert b
+
+    def test_transformed_replay_buffer(self, rb_type, sampler, writer, storage, size):
+        torch.manual_seed(0)
+        rb = self._get_rb(
+            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+        )
+        td = TensorDict({"observation": torch.randn(2, 4, 3, 16)}, [])
+        rb.add(td)
+        sampled, _ = rb.sample(1)
+        # assert sampled.get("observation").shape[0] == 4
+        flatten = FlattenObservation(
+            -2, -1, in_keys=["observation"], out_keys=["flattened"]
+        )
+        transformed_rb = TransformedReplayBuffer(rb, flatten)
+
+        sampled, _ = transformed_rb.sample(1)
+        assert sampled.get("flattened").shape[-1] == 48
+
+    def test_transformed_replay_buffer_append_transform(
+        self, rb_type, sampler, writer, storage, size
+    ):
+        rb = self._get_rb(
+            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+        )
+        td = TensorDict({"observation": torch.randn(2, 4, 3, 16)}, [])
+        rb.add(td)
+        transformed_rb = TransformedReplayBuffer(
+            rb,
+            FlattenObservation(-2, -1, in_keys=["observation"], out_keys=["flattened"]),
+        )
+        transformed_rb.append_transform(
+            FlattenObservation(-2, -1, in_keys=["flattened"])
+        )
+        sampled, _ = transformed_rb.sample(1)
+        assert sampled.get("flattened").shape[-1] == 192
+
+    def test_transformed_replay_buffer_insert_transform(
+        self, rb_type, sampler, writer, storage, size
+    ):
+        rb = self._get_rb(
+            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+        )
+        td = TensorDict({"observation": torch.randn(2, 4, 1, 3, 16)}, [])
+        rb.add(td)
+        transformed_rb = TransformedReplayBuffer(
+            rb,
+            FlattenObservation(
+                -2, -1, in_keys=["observation"], out_keys=["transformed"]
+            ),
+        )
+        transformed_rb.append_transform(
+            FlattenObservation(-2, -1, in_keys=["transformed"])
+        )
+        sampled, _ = transformed_rb.sample(1)
+        assert sampled.get("transformed").shape[-1] == 48
+        transformed_rb.insert_transform(
+            0, SqueezeTransform(-3, in_keys=["observation"])
+        )
+        sampled, _ = transformed_rb.sample(1)
+        assert sampled.get("transformed").shape[-1] == 192
+
+
+transforms = [
+            ToTensorImage,
+            partial(RewardClipping, clamp_min=0.1, clamp_max=0.9),
+            BinarizeReward,
+            partial(Resize, w=2, h=2),
+            partial(CenterCrop, w=1),
+            FlattenObservation,
+            partial(UnsqueezeTransform, unsqueeze_dim=0), # FIXME: Assumes existence of parent, cannot call Compose
+            partial(SqueezeTransform, squeeze_dim=0), # FIXME: Assumes existence of parent, cannot call Compose
+            GrayScale,
+            ObservationNorm,
+            CatFrames,
+            partial(RewardScaling, loc=1, scale=2),
+            FiniteTensorDictCheck,
+            DoubleToFloat,
+            CatTensors,
+            partial(DiscreteActionProjection, max_n=1, m=1),
+            NoopResetEnv,
+            TensorDictPrimer,
+            PinMemoryTransform,
+            gSDENoise,
+            VecNorm,
+        ]
+@pytest.mark.parametrize(
+    "transform", transforms
+)
+def test_transformed_replay_buffer_smoke(transform):
+    rb = ReplayBuffer()
+    td = TensorDict({"observation": torch.randn(2, 4, 3, 16)}, [])
+    rb.add(td)
+    transformed_rb = TransformedReplayBuffer(rb, transform())
+    transformed_rb.append_transform(transform())
+    transformed_rb.insert_transform(0, transform())
 
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
