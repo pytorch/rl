@@ -215,11 +215,19 @@ class Transform(nn.Module):
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         if self.__dict__["_parent"] is not None:
-            raise AttributeError("parent of transform already set")
+            raise AttributeError(
+                "parent of transform already set. "
+                "Call `transform.clone()` to get a similar transform with no parent set."
+            )
         self.__dict__["_parent"] = parent
 
     def reset_parent(self) -> None:
         self.__dict__["_parent"] = None
+
+    def clone(self):
+        self_copy = copy(self)
+        self_copy.reset_parent()
+        return self_copy
 
     @property
     def parent(self) -> EnvBase:
@@ -242,8 +250,7 @@ class Transform(nn.Module):
                     f"Compose parent was of type {type(compose_parent)} but expected TransformedEnv."
                 )
             if compose_parent.transform is not compose:
-                comp_parent_trans = copy(compose_parent.transform)
-                comp_parent_trans.reset_parent()
+                comp_parent_trans = compose_parent.transform.clone()
             else:
                 comp_parent_trans = None
             out = TransformedEnv(

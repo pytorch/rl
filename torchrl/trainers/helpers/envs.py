@@ -272,8 +272,15 @@ def transformed_env_constructor(
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
-                "categorical_action_encoding": categorical_action_encoding,
             }
+            if env_library is GymEnv:
+                env_kwargs.update(
+                    {"categorical_action_encoding": categorical_action_encoding}
+                )
+            elif categorical_action_encoding:
+                raise NotImplementedError(
+                    "categorical_action_encoding=True is currently only compatible with GymEnvs."
+                )
             if env_library is DMControlEnv:
                 env_kwargs.update({"task_name": env_task})
             env_kwargs.update(kwargs)
