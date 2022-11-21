@@ -222,12 +222,13 @@ class Transform(nn.Module):
         self.__dict__["_parent"] = None
 
     @property
-    def parent(self) -> EnvBase:
+    def parent(self) -> Optional[EnvBase]:
         if not hasattr(self, "_parent"):
             raise AttributeError("transform parent uninitialized")
         parent = self._parent
         if parent is None:
             return parent
+        out = None
         if not isinstance(parent, EnvBase):
             # if it's not an env, it should be a Compose transform
             if not isinstance(parent, Compose):
@@ -235,27 +236,28 @@ class Transform(nn.Module):
                     "A transform parent must be either another Compose transform or an environment object."
                 )
             compose = parent
-            # the parent of the compose must be a TransformedEnv
-            compose_parent = compose.parent
-            if not isinstance(compose_parent, TransformedEnv):
-                raise ValueError(
-                    f"Compose parent was of type {type(compose_parent)} but expected TransformedEnv."
+            if compose.parent:
+                # the parent of the compose must be a TransformedEnv
+                compose_parent = compose.parent
+                if not isinstance(compose_parent, TransformedEnv):
+                    raise ValueError(
+                        f"Compose parent was of type {type(compose_parent)} but expected TransformedEnv."
+                    )
+                if compose_parent.transform is not compose:
+                    comp_parent_trans = copy(compose_parent.transform)
+                    comp_parent_trans.reset_parent()
+                else:
+                    comp_parent_trans = None
+                out = TransformedEnv(
+                    compose_parent.base_env,
+                    transform=comp_parent_trans,
                 )
-            if compose_parent.transform is not compose:
-                comp_parent_trans = copy(compose_parent.transform)
-                comp_parent_trans.reset_parent()
-            else:
-                comp_parent_trans = None
-            out = TransformedEnv(
-                compose_parent.base_env,
-                transform=comp_parent_trans,
-            )
-            for orig_trans in compose.transforms:
-                if orig_trans is self:
-                    break
-                transform = copy(orig_trans)
-                transform.reset_parent()
-                out.append_transform(transform)
+                for orig_trans in compose.transforms:
+                    if orig_trans is self:
+                        break
+                    transform = copy(orig_trans)
+                    transform.reset_parent()
+                    out.append_transform(transform)
         elif isinstance(parent, TransformedEnv):
             out = TransformedEnv(parent.base_env)
         else:
@@ -1029,10 +1031,11 @@ class FlattenObservation(ObservationTransform):
         first_dim: int = 0,
         last_dim: int = -3,
         in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
-        super().__init__(in_keys=in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.first_dim = first_dim
         self.last_dim = last_dim
 
@@ -1042,15 +1045,16 @@ class FlattenObservation(ObservationTransform):
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         out = super().set_parent(parent)
-        observation_spec = self.parent.observation_spec
-        for key in self.in_keys:
-            if key in observation_spec:
-                observation_spec = observation_spec[key]
-                if self.first_dim >= 0:
-                    self.first_dim = self.first_dim - len(observation_spec.shape)
-                if self.last_dim >= 0:
-                    self.last_dim = self.last_dim - len(observation_spec.shape)
-                break
+        if isinstance(self.parent, EnvBase):
+            observation_spec = self.parent.observation_spec
+            for key in self.in_keys:
+                if key in observation_spec:
+                    observation_spec = observation_spec[key]
+                    if self.first_dim >= 0:
+                        self.first_dim = self.first_dim - len(observation_spec.shape)
+                    if self.last_dim >= 0:
+                        self.last_dim = self.last_dim - len(observation_spec.shape)
+                    break
         return out
 
     @_apply_to_composite
@@ -1110,7 +1114,7 @@ class UnsqueezeTransform(Transform):
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         if self._unsqueeze_dim_orig < 0:
             self._unsqueeze_dim = self._unsqueeze_dim_orig
-        else:
+        elif self.parent:
             parent = self.parent
             batch_size = parent.batch_size
             self._unsqueeze_dim = self._unsqueeze_dim_orig + len(batch_size)
