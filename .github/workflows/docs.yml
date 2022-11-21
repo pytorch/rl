@@ -77,11 +77,9 @@ jobs:
         cd ..
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
-    - name: Setup tmate session
-      uses: mxschmitt/action-tmate@v3
     - name: Deploy
       uses: JamesIves/github-pages-deploy-action@releases/v3
       with:
           ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: gh-pages # The branch the action should deploy to.
-          FOLDER: docs/source/_local_build/html # The folder the action should deploy.
+          FOLDER: docs/_local_build/ # The folder the action should deploy.
