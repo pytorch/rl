@@ -32,7 +32,7 @@ class ReplayBuffer:
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use Compose.
+            To chain transforms use the :obj:`Compose` class.
     """
 
     def __init__(

@@ -1048,16 +1048,15 @@ class FlattenObservation(ObservationTransform):
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         out = super().set_parent(parent)
-        if isinstance(self.parent, EnvBase):
-            observation_spec = self.parent.observation_spec
-            for key in self.in_keys:
-                if key in observation_spec:
-                    observation_spec = observation_spec[key]
-                    if self.first_dim >= 0:
-                        self.first_dim = self.first_dim - len(observation_spec.shape)
-                    if self.last_dim >= 0:
-                        self.last_dim = self.last_dim - len(observation_spec.shape)
-                    break
+        observation_spec = self.parent.observation_spec
+        for key in self.in_keys:
+            if key in observation_spec:
+                observation_spec = observation_spec[key]
+                if self.first_dim >= 0:
+                    self.first_dim = self.first_dim - len(observation_spec.shape)
+                if self.last_dim >= 0:
+                    self.last_dim = self.last_dim - len(observation_spec.shape)
+                break
         return out
 
     @_apply_to_composite
@@ -1117,7 +1116,7 @@ class UnsqueezeTransform(Transform):
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         if self._unsqueeze_dim_orig < 0:
             self._unsqueeze_dim = self._unsqueeze_dim_orig
-        elif self.parent:
+        else:
             parent = self.parent
             batch_size = parent.batch_size
             self._unsqueeze_dim = self._unsqueeze_dim_orig + len(batch_size)
