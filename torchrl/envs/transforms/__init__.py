@@ -28,5 +28,6 @@ from .transforms import (
     VecNorm,
     gSDENoise,
     TensorDictPrimer,
+    SqueezeTransform,
 )
-from .vip import VIPTransform
+from .vip import VIPTransform, VIPRewardTransform

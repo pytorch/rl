@@ -74,6 +74,10 @@ jobs:
         cd ./docs
         conda run -n build_binary make html
         cd ..
+    - name: Pull TensorDict docs
+      run: |
+        git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/build/html/tensordict
+        rm -rf docs/build/html/tensordict/.git
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
