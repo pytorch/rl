@@ -212,7 +212,7 @@ class SoftUpdate(TargetNetUpdater):
     def __init__(
         self,
         loss_module: Union[
-            "DQNLoss", "DDPGLoss", "SACLoss", "REDQLoss", "TD3Loss"  # fmt: skip # noqa: F821
+            "DQNLoss", "DDPGLoss", "SACLoss", "REDQLoss", "TD3Loss"  # noqa: F821
         ],
         eps: float = 0.999,
     ):
