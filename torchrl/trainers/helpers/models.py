@@ -539,7 +539,7 @@ def make_a2c_model(
         else:
             if cfg.lstm:
                 raise NotImplementedError(
-                    "lstm not yet compatible with shared mapping for PPO"
+                    "lstm not yet compatible with shared mapping for A2C"
                 )
             common_module = MLP(
                 num_cells=[
@@ -619,7 +619,7 @@ def make_a2c_model(
     else:
         if cfg.from_pixels:
             raise RuntimeError(
-                "PPO learnt from pixels require the shared_mapping to be set to True."
+                "A2C learnt from pixels require the shared_mapping to be set to True."
             )
         if cfg.lstm:
             policy_net = LSTMNet(
