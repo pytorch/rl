@@ -3,11 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Union
-
 import pkg_resources
 from tensordict.tensordict import TensorDictBase
-from torch.autograd.grad_mode import _DecoratorContextManager
+from tensordict.nn.probabilistic import (  # noqa
+    set_interaction_mode as set_exploration_mode,
+    interaction_mode as exploration_mode,
+)
 
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
@@ -150,38 +151,3 @@ SUPPORTED_LIBRARIES = {
     # "screeps": None,  # https://github.com/screeps/screeps
     # "ml-agents": None,
 }
-
-EXPLORATION_MODE = None
-
-
-class set_exploration_mode(_DecoratorContextManager):
-    """Sets the exploration mode of all ProbabilisticTDModules to the desired mode.
-
-    Args:
-        mode (str): mode to use when the policy is being called.
-
-    Examples:
-        >>> policy = Actor(action_spec, module=network, default_interaction_mode="mode")
-        >>> env.rollout(policy=policy, max_steps=100)  # rollout with the "mode" interaction mode
-        >>> with set_exploration_mode("random"):
-        >>>     env.rollout(policy=policy, max_steps=100)  # rollout with the "random" interaction mode
-
-    """
-
-    def __init__(self, mode: str = "mode"):
-        super().__init__()
-        self.mode = mode
-
-    def __enter__(self) -> None:
-        global EXPLORATION_MODE
-        self.prev = EXPLORATION_MODE
-        EXPLORATION_MODE = self.mode
-
-    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        global EXPLORATION_MODE
-        EXPLORATION_MODE = self.prev
-
-
-def exploration_mode() -> Union[str, None]:
-    """Returns the exploration mode currently set."""
-    return EXPLORATION_MODE
