@@ -3,4 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .mappings import mappings, inv_softplus, biased_softplus
+from .mappings import biased_softplus, inv_softplus, mappings
+
+__all__ = ["biased_softplus", "inv_softplus", "mappings"]

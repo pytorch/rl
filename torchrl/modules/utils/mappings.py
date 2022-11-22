@@ -3,48 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Callable, Union
+from typing import Callable
 
 import torch
-from torch import nn
+from tensordict.nn.utils import biased_softplus, inv_softplus
 
-
-def inv_softplus(bias: Union[float, torch.Tensor]) -> Union[float, torch.Tensor]:
-    """Inverse softplus function.
-
-    Args:
-        bias (float or tensor): the value to be softplus-inverted.
-    """
-    is_tensor = True
-    if not isinstance(bias, torch.Tensor):
-        is_tensor = False
-        bias = torch.tensor(bias)
-    out = bias.expm1().clamp_min(1e-6).log()
-    if not is_tensor and out.numel() == 1:
-        return out.item()
-    return out
-
-
-class biased_softplus(nn.Module):
-    """A biased softplus module.
-
-    The bias indicates the value that is to be returned when a zero-tensor is
-    passed through the transform.
-
-    Args:
-        bias (scalar): 'bias' of the softplus transform. If bias=1.0, then a _bias shift will be computed such that
-            softplus(0.0 + _bias) = bias.
-        min_val (scalar): minimum value of the transform.
-            default: 0.1
-    """
-
-    def __init__(self, bias: float, min_val: float = 0.01):
-        super().__init__()
-        self.bias = inv_softplus(bias - min_val)
-        self.min_val = min_val
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.nn.functional.softplus(x + self.bias) + self.min_val
+__all__ = ["biased_softplus", "expln", "inv_softplus", "mappings"]
 
 
 def expln(x):
