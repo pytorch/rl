@@ -6,6 +6,7 @@
 import argparse
 import dataclasses
 from time import sleep
+from omegaconf import open_dict
 
 import pytest
 import torch
@@ -47,6 +48,10 @@ from torchrl.trainers.helpers.models import (
     SACModelConfig,
     DreamerConfig,
     make_dreamer,
+)
+from torchrl.trainers.helpers.losses import (
+    make_a2c_loss,
+    A2CLossConfig,
 )
 
 TORCH_VERSION = version.parse(torch.__version__)
@@ -372,6 +377,7 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
         (config_field.name, config_field.type, config_field)
         for config_cls in (
             EnvConfig,
+            A2CLossConfig,
             A2CModelConfig,
         )
         for config_field in dataclasses.fields(config_cls)
@@ -480,6 +486,12 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
             raise
         proof_environment.close()
         del proof_environment
+
+        with open_dict(cfg):
+            cfg.advantage_in_loss = True
+            loss_fn = make_a2c_loss(actor_value, cfg)
+            cfg.advantage_in_loss = False
+            loss_fn = make_a2c_loss(actor_value, cfg)
 
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")

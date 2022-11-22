@@ -1785,32 +1785,6 @@ class TestA2C:
         )
         return value.to(device)
 
-    def _create_mock_data_a2c(
-        self, batch=2, obs_dim=3, action_dim=4, atoms=None, device="cpu"
-    ):
-        # create a tensordict
-        obs = torch.randn(batch, obs_dim, device=device)
-        next_obs = torch.randn(batch, obs_dim, device=device)
-        if atoms:
-            raise NotImplementedError
-        else:
-            action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
-        reward = torch.randn(batch, 1, device=device)
-        done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
-        td = TensorDict(
-            batch_size=(batch,),
-            source={
-                "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
-                "action": action,
-                "sample_log_prob": torch.randn_like(action[..., :1]) / 10,
-            },
-            device=device,
-        )
-        return td
-
     def _create_seq_mock_data_a2c(
         self, batch=2, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
     ):
@@ -1876,6 +1850,25 @@ class TestA2C:
             actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
         )
 
+        # Check error is raised when actions require grads
+        td["action"].requires_grad = True
+        with pytest.raises(
+            RuntimeError,
+            match="tensordict stored action require grad.",
+        ):
+            loss = loss_fn._log_probs(td)
+        td["action"].requires_grad = False
+
+        # Check error is raised when advantage_diff_key present and does not required grad
+        td[loss_fn.advantage_diff_key] = torch.randn_like(td["reward"])
+        with pytest.raises(
+            RuntimeError,
+            match="value_target retrieved from tensordict does not require grad.",
+        ):
+            loss = loss_fn.loss_critic(td)
+        td = td.exclude(loss_fn.advantage_diff_key)
+        assert loss_fn.advantage_diff_key not in td.keys()
+
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -1901,6 +1894,9 @@ class TestA2C:
                 assert "actor" not in name
                 assert "critic" in name
         actor.zero_grad()
+
+        # test reset
+        loss_fn.reset()
 
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
