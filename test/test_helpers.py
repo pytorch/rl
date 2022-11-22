@@ -10,7 +10,6 @@ from time import sleep
 import pytest
 import torch
 from _utils_internal import generate_seeds, get_available_devices
-from omegaconf import open_dict
 from torchrl._utils import timeit
 
 try:
@@ -367,6 +366,7 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
 @pytest.mark.parametrize("shared_mapping", [tuple(), ("shared_mapping=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
+    A2CModelConfig.advantage_in_loss = False
     if not gsde and exploration != "random":
         pytest.skip("no need to test this setting")
     flags = list(from_pixels + shared_mapping + gsde)
@@ -484,11 +484,10 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
         proof_environment.close()
         del proof_environment
 
-        with open_dict(cfg):
-            cfg.advantage_in_loss = True
-            loss_fn = make_a2c_loss(actor_value, cfg)
-            cfg.advantage_in_loss = False
-            loss_fn = make_a2c_loss(actor_value, cfg)
+        cfg.advantage_in_loss = False
+        loss_fn = make_a2c_loss(actor_value, cfg)
+        cfg.advantage_in_loss = True
+        loss_fn = make_a2c_loss(actor_value, cfg)
 
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
