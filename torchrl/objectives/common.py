@@ -8,7 +8,6 @@ from __future__ import annotations
 from typing import Iterator, Optional, Tuple, List, Union
 
 import torch
-
 from tensordict.nn.functional_modules import FunctionalModuleWithBuffers
 
 _has_functorch = False

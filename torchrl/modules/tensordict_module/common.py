@@ -15,9 +15,7 @@ from torchrl.data.utils import DEVICE_TYPING
 
 _has_functorch = False
 try:
-    import functorch
-    from functorch import FunctionalModule, FunctionalModuleWithBuffers, vmap
-    from functorch._src.make_functional import _swap_state
+    from functorch import FunctionalModule, FunctionalModuleWithBuffers
 
     _has_functorch = True
 except ImportError:
@@ -33,16 +31,9 @@ except ImportError:
 
 from tensordict.nn import TensorDictModule as _TensorDictModule
 from tensordict.tensordict import TensorDictBase
-from torch import nn, Tensor
+from torch import nn
 
-from torchrl.data import (
-    TensorSpec,
-    CompositeSpec,
-)
-from tensordict.nn.functional_modules import (
-    FunctionalModule as tdFunctionalModule,
-    FunctionalModuleWithBuffers as tdFunctionalModuleWithBuffers,
-)
+from torchrl.data import CompositeSpec, TensorSpec
 
 
 def _check_all_str(list_of_str, first_level=True):

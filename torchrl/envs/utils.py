@@ -4,11 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import pkg_resources
-from tensordict.tensordict import TensorDictBase
 from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     interaction_mode as exploration_mode,
 )
+from tensordict.tensordict import TensorDictBase
 
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 

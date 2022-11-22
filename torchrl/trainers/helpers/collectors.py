@@ -9,7 +9,6 @@ from typing import Callable, List, Optional, Type, Union, Dict, Any
 from tensordict.nn import TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
 
-
 from torchrl.collectors.collectors import (
     _DataCollector,
     SyncDataCollector,

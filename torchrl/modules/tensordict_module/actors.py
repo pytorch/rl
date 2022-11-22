@@ -6,9 +6,9 @@
 from typing import Optional, Sequence, Tuple, Union
 
 import torch
+from tensordict.nn import TensorDictModuleWrapper
 from torch import nn
 
-from tensordict.nn import TensorDictModuleWrapper
 from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, TensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import TensorDictModule
