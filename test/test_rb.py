@@ -682,7 +682,9 @@ transforms = [
         id="CenterCrop",
         marks=pytest.mark.skipif(not _has_tv, reason="needs torchvision dependency"),
     ),
-    pytest.param(partial(UnsqueezeTransform, unsqueeze_dim=-1), id="UnsqueezeTransform"),
+    pytest.param(
+        partial(UnsqueezeTransform, unsqueeze_dim=-1), id="UnsqueezeTransform"
+    ),
     pytest.param(partial(SqueezeTransform, squeeze_dim=-1), id="SqueezeTransform"),
     GrayScale,
     pytest.param(partial(ObservationNorm, loc=1, scale=2), id="ObservationNorm"),

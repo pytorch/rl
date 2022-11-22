@@ -1058,7 +1058,7 @@ class FlattenObservation(ObservationTransform):
                     if self.last_dim >= 0:
                         self.last_dim = self.last_dim - len(observation_spec.shape)
                     break
-        except ValueError:
+        except AttributeError:
             if self.first_dim >= 0 or self.last_dim >= 0:
                 raise ValueError(
                     f"FlattenObservation got first and last dim {self.first_dim} amd {self.last_dim}. "
