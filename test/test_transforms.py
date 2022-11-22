@@ -1995,7 +1995,9 @@ transforms = [
         marks=pytest.mark.skipif(not _has_tv, reason="needs torchvision dependency"),
     ),
     pytest.param(partial(FlattenObservation, first_dim=-3), id="FlattenObservation"),
-    pytest.param(partial(UnsqueezeTransform, unsqueeze_dim=-1), id="UnsqueezeTransform"),
+    pytest.param(
+        partial(UnsqueezeTransform, unsqueeze_dim=-1), id="UnsqueezeTransform"
+    ),
     pytest.param(partial(SqueezeTransform, squeeze_dim=-1), id="SqueezeTransform"),
     GrayScale,
     ObservationNorm,
