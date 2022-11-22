@@ -21,40 +21,40 @@ except ImportError:
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices, dtype_fixture  # noqa
+from _utils_internal import dtype_fixture, get_available_devices  # noqa
 from mocking_classes import ContinuousActionConvMockEnv
 
 # from torchrl.data.postprocs.utils import expand_as_right
-from tensordict.tensordict import assert_allclose_td, TensorDictBase, TensorDict
+from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right
 from torch import autograd, nn
 from torchrl.data import (
     CompositeSpec,
+    DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
-    DiscreteTensorSpec,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.envs.model_based.dreamer import DreamerEnv
-from torchrl.envs.transforms import TransformedEnv, TensorDictPrimer
+from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.modules import (
     DistributionalQValueActor,
+    ProbabilisticTensorDictModule,
     QValueActor,
     TensorDictModule,
     TensorDictSequential,
-    ProbabilisticTensorDictModule,
     WorldModelWrapper,
 )
 from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
 from torchrl.modules.models.model_based import (
+    DreamerActor,
     ObsDecoder,
     ObsEncoder,
     RSSMPosterior,
     RSSMPrior,
     RSSMRollout,
-    DreamerActor,
 )
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.actors import (
@@ -70,18 +70,15 @@ from torchrl.objectives import (
     DDPGLoss,
     DistributionalDQNLoss,
     DQNLoss,
+    DreamerActorLoss,
+    DreamerModelLoss,
+    DreamerValueLoss,
     KLPENPPOLoss,
     PPOLoss,
     SACLoss,
-    DreamerModelLoss,
-    DreamerActorLoss,
-    DreamerValueLoss,
 )
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.deprecated import (
-    DoubleREDQLoss_deprecated,
-    REDQLoss_deprecated,
-)
+from torchrl.objectives.deprecated import DoubleREDQLoss_deprecated, REDQLoss_deprecated
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.reinforce import ReinforceLoss
 from torchrl.objectives.utils import HardUpdate, hold_out_net, SoftUpdate

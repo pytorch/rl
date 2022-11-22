@@ -6,11 +6,11 @@
 import argparse
 import dataclasses
 from time import sleep
-from omegaconf import open_dict
 
 import pytest
 import torch
 from _utils_internal import generate_seeds, get_available_devices
+from omegaconf import open_dict
 from torchrl._utils import timeit
 
 try:
@@ -33,25 +33,22 @@ from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules.tensordict_module.common import _has_functorch
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import EnvConfig
+from torchrl.trainers.helpers.losses import A2CLossConfig, make_a2c_loss
 from torchrl.trainers.helpers.models import (
+    A2CModelConfig,
     DDPGModelConfig,
     DiscreteModelConfig,
+    DreamerConfig,
+    make_a2c_model,
     make_ddpg_actor,
     make_dqn_actor,
-    make_a2c_model,
+    make_dreamer,
     make_ppo_model,
     make_redq_model,
     make_sac_model,
-    A2CModelConfig,
     PPOModelConfig,
     REDQModelConfig,
     SACModelConfig,
-    DreamerConfig,
-    make_dreamer,
-)
-from torchrl.trainers.helpers.losses import (
-    make_a2c_loss,
-    A2CLossConfig,
 )
 
 TORCH_VERSION = version.parse(torch.__version__)
