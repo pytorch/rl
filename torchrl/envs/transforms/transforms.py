@@ -1031,7 +1031,7 @@ class FlattenObservation(ObservationTransform):
 
     def __init__(
         self,
-        first_dim: int = 0,
+        first_dim: int,
         last_dim: int = -3,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
