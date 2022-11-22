@@ -6,6 +6,7 @@
 import argparse
 import importlib
 from functools import partial
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -695,13 +696,16 @@ transforms = [
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform(transform):
     rb = rb_prototype.ReplayBuffer(
-        collate_fn=lambda x: torch.stack(x, 0),
         transform=transform(in_keys="observation"),
     )
 
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
     rb.add(td)
     rb.sample(1)
+
+    rb._transform = mock.MagicMock()
+    rb.sample(1)
+    assert rb._transform.called
 
 
 transforms = [
@@ -721,6 +725,10 @@ def test_smoke_replay_buffer_transform_no_inkeys(transform):
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
     rb.add(td)
     rb.sample(1)
+
+    rb._transform = mock.MagicMock()
+    rb.sample(1)
+    assert rb._transform.called
 
 
 if __name__ == "__main__":
