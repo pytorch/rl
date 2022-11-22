@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import importlib
 from functools import partial
 
 import numpy as np
@@ -51,13 +52,7 @@ from torchrl.envs.transforms.transforms import (
     PinMemoryTransform,
 )
 
-
-# collate_fn_dict = {
-#     ListStorage: lambda x: torch.stack(x, 0),
-#     LazyTensorStorage: lambda x: x,
-#     LazyMemmapStorage: lambda x: x,
-#     None: lambda x: torch.stack(x, 0),
-# }
+_has_tv = importlib.util.find_spec("torchvision") is not None
 
 
 @pytest.mark.parametrize(
@@ -676,8 +671,16 @@ transforms = [
         partial(RewardClipping, clamp_min=0.1, clamp_max=0.9), id="RewardClipping"
     ),
     BinarizeReward,
-    pytest.param(partial(Resize, w=2, h=2), id="Resize"),
-    pytest.param(partial(CenterCrop, w=1), id="CenterCrop"),
+    pytest.param(
+        partial(Resize, w=2, h=2),
+        id="Resize",
+        marks=pytest.mark.skipif(_has_tv, reason="needs torchvision dependency"),
+    ),
+    pytest.param(
+        partial(CenterCrop, w=1),
+        id="CenterCrop",
+        marks=pytest.mark.skipif(_has_tv, reason="needs torchvision dependency"),
+    ),
     pytest.param(partial(UnsqueezeTransform, unsqueeze_dim=0), id="UnsqueezeTransform"),
     pytest.param(partial(SqueezeTransform, squeeze_dim=0), id="SqueezeTransform"),
     GrayScale,

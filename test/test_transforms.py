@@ -1991,8 +1991,16 @@ transforms = [
         partial(RewardClipping, clamp_min=0.1, clamp_max=0.9), id="RewardClipping"
     ),
     BinarizeReward,
-    pytest.param(partial(Resize, w=2, h=2), id="Resize"),
-    pytest.param(partial(CenterCrop, w=1), id="CenterCrop"),
+    pytest.param(
+        partial(Resize, w=2, h=2),
+        id="Resize",
+        marks=pytest.mark.skipif(_has_tv, reason="needs torchvision dependency"),
+    ),
+    pytest.param(
+        partial(CenterCrop, w=1),
+        id="CenterCrop",
+        marks=pytest.mark.skipif(_has_tv, reason="needs torchvision dependency"),
+    ),
     FlattenObservation,
     pytest.param(partial(UnsqueezeTransform, unsqueeze_dim=0), id="UnsqueezeTransform"),
     pytest.param(partial(SqueezeTransform, squeeze_dim=0), id="SqueezeTransform"),
