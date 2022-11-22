@@ -499,7 +499,7 @@ class TestPlanner:
     def test_MPPI(self, device, batch_size, seed=1):
         torch.manual_seed(seed)
         env = MockBatchedUnLockedEnv(device=device)
-        value_net = nn.LazyLinear(1)
+        value_net = nn.LazyLinear(1, device=device)
         value_net = ValueOperator(value_net, in_keys=["observation"])
         advantage_module = TDLambdaEstimate(
             0.99,
