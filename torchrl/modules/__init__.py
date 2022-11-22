@@ -13,12 +13,12 @@ from .distributions import (
     OneHotCategorical,
     distributions_maps,
 )
-from .functional_modules import (
-    FunctionalModule,
-    FunctionalModuleWithBuffers,
-    extract_weights,
-    extract_buffers,
-)
+# from .functional_modules import (
+#     FunctionalModule,
+#     FunctionalModuleWithBuffers,
+#     extract_weights,
+#     extract_buffers,
+# )
 from .models import (
     NoisyLinear,
     NoisyLazyLinear,

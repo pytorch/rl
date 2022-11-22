@@ -15,7 +15,7 @@ try:
 
     _has_functorch = True
 except ImportError:
-    from torchrl.modules.functional_modules import (
+    from tensordict.nn.functional_modules import (
         FunctionalModule,
         FunctionalModuleWithBuffers,
     )

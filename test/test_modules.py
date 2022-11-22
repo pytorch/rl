@@ -11,6 +11,10 @@ from _utils_internal import get_available_devices
 from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
+from tensordict.nn.functional_modules import (
+    FunctionalModule,
+    FunctionalModuleWithBuffers,
+)
 from torch import nn
 from torchrl.data.tensor_specs import (
     DiscreteTensorSpec,
@@ -25,10 +29,6 @@ from torchrl.modules import (
     QValueActor,
     TensorDictModule,
     ValueOperator,
-)
-from torchrl.modules.functional_modules import (
-    FunctionalModule,
-    FunctionalModuleWithBuffers,
 )
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
 from torchrl.modules.models.model_based import (

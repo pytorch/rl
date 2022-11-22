@@ -6,7 +6,7 @@
 import argparse
 from copy import deepcopy
 
-from torchrl.modules.functional_modules import FunctionalModuleWithBuffers
+from tensordict.nn.functional_modules import FunctionalModuleWithBuffers
 
 _has_functorch = True
 try:

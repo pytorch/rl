@@ -9,7 +9,7 @@ from typing import Iterator, Optional, Tuple, List, Union
 
 import torch
 
-from torchrl.modules.functional_modules import FunctionalModuleWithBuffers
+from tensordict.nn.functional_modules import FunctionalModuleWithBuffers
 
 _has_functorch = False
 try:
