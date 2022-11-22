@@ -13,7 +13,7 @@ from .actors import (
     ActorCriticWrapper,
     DistributionalQValueActor,
 )
-from .common import TensorDictModule, TensorDictModuleWrapper
+from .common import TensorDictModule
 from .exploration import (
     EGreedyWrapper,
     AdditiveGaussianWrapper,

@@ -8,13 +8,14 @@ from typing import Optional, Union, List
 from warnings import warn
 
 import torch
+from tensordict.nn import TensorDictModuleWrapper
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
-from torchrl.modules import TensorDictModule, TensorDictModuleWrapper, reset_noise
+from torchrl.modules import TensorDictModule, reset_noise
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.trainers.loggers import Logger

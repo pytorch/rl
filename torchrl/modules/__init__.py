@@ -50,7 +50,6 @@ from .tensordict_module import (
     ActorCriticWrapper,
     DistributionalQValueActor,
     TensorDictModule,
-    TensorDictModuleWrapper,
     EGreedyWrapper,
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
