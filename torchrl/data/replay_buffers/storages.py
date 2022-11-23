@@ -240,7 +240,7 @@ class LazyTensorStorage(Storage):
             print("The storage is being created: ")
             for key, tensor in data.items():
                 if isinstance(tensor, TensorDictBase):
-                    out[key] = (
+                    out[key] = ( 
                         tensor.expand(
                             self.max_size,
                             *tensor.shape,
