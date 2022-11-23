@@ -628,7 +628,7 @@ def make_a2c_model(
                 mlp_kwargs={"num_cells": [64, 64], "out_features": 64},
             )
             in_keys_actor += ["hidden0", "hidden1"]
-            out_keys += ["hidden0", "hidden1", "next_hidden0", "next_hidden1"]
+            out_keys += ["hidden0", "hidden1", ("next", "hidden0"), ("next", "hidden1")]
         else:
             policy_net = MLP(
                 num_cells=[64, 64],

@@ -1,6 +1,6 @@
 # Environment
 env_library: gym  # env_library used for the simulated environment.
-env_name: HalfCheetah - v4  # name of the environment to be created. Default=Humanoid-v2
+env_name: HalfCheetah-v4  # name of the environment to be created. Default=Humanoid-v2
 frame_skip: 2  # frame_skip for the environment.
 
 # Logger
