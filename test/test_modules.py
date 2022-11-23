@@ -40,7 +40,7 @@ from torchrl.modules.models.model_based import (
     RSSMRollout,
 )
 from torchrl.modules.models.utils import SquashDims
-from torchrl.modules.planners.mppi import MPPIlanner
+from torchrl.modules.planners.mppi import MPPIPlanner
 from torchrl.objectives.value import TDLambdaEstimate
 
 
@@ -506,9 +506,10 @@ class TestPlanner:
             0.95,
             value_net,
         )
-        planner = MPPIlanner(
+        planner = MPPIPlanner(
             env,
             advantage_module,
+            temperature=1.0,
             planning_horizon=10,
             optim_steps=2,
             num_candidates=100,

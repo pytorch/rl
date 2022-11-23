@@ -11,18 +11,125 @@ from torchrl.envs import EnvBase
 from torchrl.modules.planners.common import MPCPlannerBase
 
 
-class MPPIlanner(MPCPlannerBase):
+class MPPIPlanner(MPCPlannerBase):
+    """MPPI Planner Module.
+
+    Reference:
+     - Model predictive path integral control using covariance variable importance
+     sampling. (Williams, G., Aldrich, A., and Theodorou, E. A.) https://arxiv.org/abs/1509.01149
+     - Temporal Difference Learning for Model Predictive Control
+    (Hansen N., Wang X., Su H.) https://arxiv.org/abs/2203.04955
+
+    This module will perform a MPPI planning step when given a TensorDict
+    containing initial states.
+
+    A call to the module returns the actions that empirically maximised the
+    returns given a planning horizon
+
+    Args:
+        env (EnvBase): The environment to perform the planning step on (can be
+            `ModelBasedEnv` or :obj:`EnvBase`).
+        planning_horizon (int): The length of the simulated trajectories
+        optim_steps (int): The number of optimization steps used by the MPC
+            planner
+        num_candidates (int): The number of candidates to sample from the
+            Gaussian distributions.
+        top_k (int): The number of top candidates to use to
+            update the mean and standard deviation of the Gaussian distribution.
+        reward_key (str, optional): The key in the TensorDict to use to
+            retrieve the reward. Defaults to "reward".
+        action_key (str, optional): The key in the TensorDict to use to store
+            the action. Defaults to "action"
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
+        >>> from torchrl.envs.model_based import ModelBasedEnvBase
+        >>> from torchrl.modules import TensorDictModule, ValueOperator
+        >>> from torchrl.objectives.value import TDLambdaEstimate
+        >>> class MyMBEnv(ModelBasedEnvBase):
+        ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
+        ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
+        ...         self.observation_spec = CompositeSpec(
+        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,))
+        ...         )
+        ...         self.input_spec = CompositeSpec(
+        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
+        ...             action=NdUnboundedContinuousTensorSpec((1,)),
+        ...         )
+        ...         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+        ...
+        ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
+        ...         tensordict = TensorDict(
+        ...             {},
+        ...             batch_size=self.batch_size,
+        ...             device=self.device,
+        ...         )
+        ...         tensordict = tensordict.update(
+        ...             self.input_spec.rand(self.batch_size))
+        ...         tensordict = tensordict.update(
+        ...             self.observation_spec.rand(self.batch_size))
+        ...         return tensordict
+        >>> from torchrl.modules import MLP, WorldModelWrapper
+        >>> import torch.nn as nn
+        >>> world_model = WorldModelWrapper(
+        ...     TensorDictModule(
+        ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
+        ...         in_keys=["hidden_observation", "action"],
+        ...         out_keys=["hidden_observation"],
+        ...     ),
+        ...     TensorDictModule(
+        ...         nn.Linear(4, 1),
+        ...         in_keys=["hidden_observation"],
+        ...         out_keys=["reward"],
+        ...     ),
+        ... )
+        >>> env = MyMBEnv(world_model)
+        >>> value_net = nn.Linear(4, 1)
+        >>> value_net = ValueOperator(value_net, in_keys=["hidden_observation"])
+        >>> adv = TDLambdaEstimate(
+        ...     0.99,
+        ...     0.95,
+        ...     value_net,
+        ... )
+        >>> # Build a planner and use it as actor
+        >>> planner = MPPIPlanner(
+        ...     env,
+        ...     adv,
+        ...     temperature=1.0,
+        ...     planning_horizon=10,
+        ...     optim_steps=11,
+        ...     num_candidates=7,
+        ...     top_k=3)
+        >>> env.rollout(5, planner)
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([5, 1]), dtype=torch.float32),
+                done: Tensor(torch.Size([5, 1]), dtype=torch.bool),
+                hidden_observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
+                next: LazyStackedTensorDict(
+                    fields={
+                        hidden_observation: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
+                    batch_size=torch.Size([5]),
+                    device=cpu,
+                    is_shared=False),
+                reward: Tensor(torch.Size([5, 1]), dtype=torch.float32)},
+            batch_size=torch.Size([5]),
+            device=cpu,
+            is_shared=False)
+    """
+
     def __init__(
         self,
         env: EnvBase,
         advantage_module: nn.Module,
+        temperature: float,
         planning_horizon: int,
         optim_steps: int,
         num_candidates: int,
         top_k: int,
         reward_key: str = "reward",
         action_key: str = "action",
-        temperature: float = 1.0,
     ):
         super().__init__(env=env, action_key=action_key)
         self.advantage_module = advantage_module
