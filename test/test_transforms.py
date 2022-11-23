@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 from copy import copy, deepcopy
+from functools import partial
 
 import numpy as np
 import pytest
@@ -54,6 +55,7 @@ from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.transforms import (
+    DiscreteActionProjection,
     _has_tv,
     CenterCrop,
     NoopResetEnv,
@@ -61,6 +63,7 @@ from torchrl.envs.transforms.transforms import (
     SqueezeTransform,
     TensorDictPrimer,
     UnsqueezeTransform,
+    gSDENoise,
 )
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 
@@ -1973,6 +1976,50 @@ def test_batch_unlocked_with_batch_size_transformed(device):
         RuntimeError, match="Expected a tensordict with shape==env.shape, "
     ):
         env.step(td_expanded)
+
+
+transforms = [
+    ToTensorImage,
+    pytest.param(
+        partial(RewardClipping, clamp_min=0.1, clamp_max=0.9), id="RewardClipping"
+    ),
+    BinarizeReward,
+    pytest.param(
+        partial(Resize, w=2, h=2),
+        id="Resize",
+        marks=pytest.mark.skipif(not _has_tv, reason="needs torchvision dependency"),
+    ),
+    pytest.param(
+        partial(CenterCrop, w=1),
+        id="CenterCrop",
+        marks=pytest.mark.skipif(not _has_tv, reason="needs torchvision dependency"),
+    ),
+    pytest.param(partial(FlattenObservation, first_dim=-3), id="FlattenObservation"),
+    pytest.param(
+        partial(UnsqueezeTransform, unsqueeze_dim=-1), id="UnsqueezeTransform"
+    ),
+    pytest.param(partial(SqueezeTransform, squeeze_dim=-1), id="SqueezeTransform"),
+    GrayScale,
+    ObservationNorm,
+    CatFrames,
+    pytest.param(partial(RewardScaling, loc=1, scale=2), id="RewardScaling"),
+    FiniteTensorDictCheck,
+    DoubleToFloat,
+    CatTensors,
+    pytest.param(
+        partial(DiscreteActionProjection, max_n=1, m=1), id="DiscreteActionProjection"
+    ),
+    NoopResetEnv,
+    TensorDictPrimer,
+    PinMemoryTransform,
+    gSDENoise,
+    VecNorm,
+]
+
+
+@pytest.mark.parametrize("transform", transforms)
+def test_smoke_compose_transform(transform):
+    Compose(transform())
 
 
 if __name__ == "__main__":

@@ -230,12 +230,13 @@ class Transform(nn.Module):
         return self_copy
 
     @property
-    def parent(self) -> EnvBase:
+    def parent(self) -> Optional[EnvBase]:
         if not hasattr(self, "_parent"):
             raise AttributeError("transform parent uninitialized")
         parent = self._parent
         if parent is None:
             return parent
+        out = None
         if not isinstance(parent, EnvBase):
             # if it's not an env, it should be a Compose transform
             if not isinstance(parent, Compose):
@@ -243,26 +244,23 @@ class Transform(nn.Module):
                     "A transform parent must be either another Compose transform or an environment object."
                 )
             compose = parent
-            # the parent of the compose must be a TransformedEnv
-            compose_parent = compose.parent
-            if not isinstance(compose_parent, TransformedEnv):
-                raise ValueError(
-                    f"Compose parent was of type {type(compose_parent)} but expected TransformedEnv."
+            if compose.parent:
+                # the parent of the compose must be a TransformedEnv
+                compose_parent = compose.parent
+                if compose_parent.transform is not compose:
+                    comp_parent_trans = compose_parent.transform.clone()
+                else:
+                    comp_parent_trans = None
+                out = TransformedEnv(
+                    compose_parent.base_env,
+                    transform=comp_parent_trans,
                 )
-            if compose_parent.transform is not compose:
-                comp_parent_trans = compose_parent.transform.clone()
-            else:
-                comp_parent_trans = None
-            out = TransformedEnv(
-                compose_parent.base_env,
-                transform=comp_parent_trans,
-            )
-            for orig_trans in compose.transforms:
-                if orig_trans is self:
-                    break
-                transform = copy(orig_trans)
-                transform.reset_parent()
-                out.append_transform(transform)
+                for orig_trans in compose.transforms:
+                    if orig_trans is self:
+                        break
+                    transform = copy(orig_trans)
+                    transform.reset_parent()
+                    out.append_transform(transform)
         elif isinstance(parent, TransformedEnv):
             out = TransformedEnv(parent.base_env)
         else:
@@ -1033,13 +1031,14 @@ class FlattenObservation(ObservationTransform):
 
     def __init__(
         self,
-        first_dim: int = 0,
+        first_dim: int,
         last_dim: int = -3,
         in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
-        super().__init__(in_keys=in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.first_dim = first_dim
         self.last_dim = last_dim
 
@@ -1059,7 +1058,7 @@ class FlattenObservation(ObservationTransform):
                     if self.last_dim >= 0:
                         self.last_dim = self.last_dim - len(observation_spec.shape)
                     break
-        except ValueError:
+        except AttributeError:
             if self.first_dim >= 0 or self.last_dim >= 0:
                 raise ValueError(
                     f"FlattenObservation got first and last dim {self.first_dim} amd {self.last_dim}. "
