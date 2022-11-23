@@ -51,6 +51,16 @@ PPO
     ClipPPOLoss
     KLPENPPOLoss
 
+A2C
+---
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    A2CLoss
+
+
 Returns
 -------
 .. currentmodule:: torchrl.objectives.value
