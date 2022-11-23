@@ -241,7 +241,10 @@ class LazyTensorStorage(Storage):
             for key, tensor in data.items():
                 if isinstance(tensor, TensorDictBase):
                     out[key] = (
-                        tensor.expand(self.max_size).clone().to(self.device).zero_()
+                        tensor.expand(
+                            self.max_size,
+                            *tensor.shape,
+                        ).clone().to(self.device).zero_()
                     )
                 else:
                     out[key] = torch.empty(
