@@ -21,12 +21,14 @@ from .losses import (
     make_dqn_loss,
     make_ddpg_loss,
     make_target_updater,
+    make_a2c_loss,
     make_ppo_loss,
     make_redq_loss,
 )
 from .models import (
     make_dqn_actor,
     make_ddpg_actor,
+    make_a2c_model,
     make_ppo_model,
     make_sac_model,
     make_redq_model,
