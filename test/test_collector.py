@@ -8,7 +8,7 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from _utils_internal import generate_seeds
+from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnv,
@@ -41,22 +41,6 @@ from torchrl.modules import (
     OrnsteinUhlenbeckProcessWrapper,
     TensorDictModule,
 )
-
-if _has_gym:
-    import gym
-    from packaging import version
-
-    gym_version = version.parse(gym.__version__)
-    PENDULUM_VERSIONED = (
-        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
-    )
-    PONG_VERSIONED = (
-        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
-    )
-else:
-    # placeholders
-    PENDULUM_VERSIONED = "Pendulum-v1"
-    PONG_VERSIONED = "ALE/Pong-v5"
 
 # torch.set_default_dtype(torch.double)
 
@@ -314,7 +298,11 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
 @pytest.mark.skipif(not _has_gym, reason="gym library is not installed")
 def test_collector_env_reset():
     torch.manual_seed(0)
-    env = SerialEnv(2, lambda: GymEnv(PONG_VERSIONED, frame_skip=4))
+
+    def make_env():
+        return GymEnv(PONG_VERSIONED, frame_skip=4)
+
+    env = SerialEnv(2, make_env)
     # env = SerialEnv(3, lambda: GymEnv("CartPole-v1", frame_skip=4))
     env.set_seed(0)
     collector = SyncDataCollector(

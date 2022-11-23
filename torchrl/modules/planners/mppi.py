@@ -5,25 +5,23 @@
 
 import torch
 from tensordict.tensordict import TensorDictBase, TensorDict
+from torch import nn
 
 from torchrl.envs import EnvBase
 from torchrl.modules.planners.common import MPCPlannerBase
 
 
-class CEMPlanner(MPCPlannerBase):
-    """CEMPlanner Module.
+class MPPIPlanner(MPCPlannerBase):
+    """MPPI Planner Module.
 
-    Reference: The cross-entropy method for optimization, Botev et al. 2013
+    Reference:
+     - Model predictive path integral control using covariance variable importance
+     sampling. (Williams, G., Aldrich, A., and Theodorou, E. A.) https://arxiv.org/abs/1509.01149
+     - Temporal Difference Learning for Model Predictive Control
+    (Hansen N., Wang X., Su H.) https://arxiv.org/abs/2203.04955
 
-    This module will perform a CEM planning step when given a TensorDict
+    This module will perform a MPPI planning step when given a TensorDict
     containing initial states.
-    The CEM planning step is performed by sampling actions from a Gaussian
-    distribution with zero mean and unit variance.
-    The sampled actions are then used to perform a rollout in the environment.
-    The cumulative rewards obtained with the rollout is then
-    ranked. We select the top-k episodes and use their actions to update the
-    mean and standard deviation of the actions distribution.
-    The CEM planning step is repeated for a specified number of steps.
 
     A call to the module returns the actions that empirically maximised the
     returns given a planning horizon
@@ -47,7 +45,8 @@ class CEMPlanner(MPCPlannerBase):
         >>> from tensordict import TensorDict
         >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
         >>> from torchrl.envs.model_based import ModelBasedEnvBase
-        >>> from torchrl.modules import TensorDictModule
+        >>> from torchrl.modules import TensorDictModule, ValueOperator
+        >>> from torchrl.objectives.value import TDLambdaEstimate
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
@@ -71,7 +70,6 @@ class CEMPlanner(MPCPlannerBase):
         ...         tensordict = tensordict.update(
         ...             self.observation_spec.rand(self.batch_size))
         ...         return tensordict
-        ...
         >>> from torchrl.modules import MLP, WorldModelWrapper
         >>> import torch.nn as nn
         >>> world_model = WorldModelWrapper(
@@ -87,8 +85,22 @@ class CEMPlanner(MPCPlannerBase):
         ...     ),
         ... )
         >>> env = MyMBEnv(world_model)
+        >>> value_net = nn.Linear(4, 1)
+        >>> value_net = ValueOperator(value_net, in_keys=["hidden_observation"])
+        >>> adv = TDLambdaEstimate(
+        ...     0.99,
+        ...     0.95,
+        ...     value_net,
+        ... )
         >>> # Build a planner and use it as actor
-        >>> planner = CEMPlanner(env, 10, 11, 7, 3)
+        >>> planner = MPPIPlanner(
+        ...     env,
+        ...     adv,
+        ...     temperature=1.0,
+        ...     planning_horizon=10,
+        ...     optim_steps=11,
+        ...     num_candidates=7,
+        ...     top_k=3)
         >>> env.rollout(5, planner)
         TensorDict(
             fields={
@@ -110,6 +122,8 @@ class CEMPlanner(MPCPlannerBase):
     def __init__(
         self,
         env: EnvBase,
+        advantage_module: nn.Module,
+        temperature: float,
         planning_horizon: int,
         optim_steps: int,
         num_candidates: int,
@@ -118,11 +132,13 @@ class CEMPlanner(MPCPlannerBase):
         action_key: str = "action",
     ):
         super().__init__(env=env, action_key=action_key)
+        self.advantage_module = advantage_module
         self.planning_horizon = planning_horizon
         self.optim_steps = optim_steps
         self.num_candidates = num_candidates
         self.top_k = top_k
         self.reward_key = reward_key
+        self.register_buffer("temperature", torch.tensor(temperature))
 
     def planning(self, tensordict: TensorDictBase) -> torch.Tensor:
         batch_size = tensordict.batch_size
@@ -144,7 +160,12 @@ class CEMPlanner(MPCPlannerBase):
             self.planning_horizon,
             *self.action_spec.shape,
         )
-        TIME_DIM = len(self.action_spec.shape) - 3
+        adv_topk_shape = (
+            *batch_size,
+            self.top_k,
+            1,
+            1,
+        )
         K_DIM = len(self.action_spec.shape) - 4
         expanded_original_tensordict = (
             tensordict.unsqueeze(-1)
@@ -188,19 +209,31 @@ class CEMPlanner(MPCPlannerBase):
                 auto_reset=False,
                 tensordict=optim_tensordict,
             )
+            # compute advantage
+            self.advantage_module(optim_tensordict)
+            # get advantage of the current state
+            advantage = optim_tensordict["advantage"][..., :1, :]
+            # get top-k trajectories
+            _, top_k = advantage.topk(self.top_k, dim=K_DIM)
+            # get omega weights for each top-k trajectory
+            vals = advantage.gather(K_DIM, top_k.expand(adv_topk_shape))
+            Omegas = (self.temperature * vals).exp()
 
-            sum_rewards = optim_tensordict.get(self.reward_key).sum(
-                dim=TIME_DIM, keepdim=True
-            )
-            _, top_k = sum_rewards.topk(self.top_k, dim=K_DIM)
-            top_k = top_k.expand(action_topk_shape)
-            best_actions = actions.gather(K_DIM, top_k)
-            container.set_(
-                ("stats", "_action_means"), best_actions.mean(dim=K_DIM, keepdim=True)
-            )
-            container.set_(
-                ("stats", "_action_stds"), best_actions.std(dim=K_DIM, keepdim=True)
-            )
+            # gather best actions
+            best_actions = actions.gather(K_DIM, top_k.expand(action_topk_shape))
+
+            # compute weighted average
+            _action_means = (Omegas * best_actions).sum(
+                dim=K_DIM, keepdim=True
+            ) / Omegas.sum(K_DIM, True)
+            _action_stds = (
+                (Omegas * (best_actions - _action_means).pow(2)).sum(
+                    dim=K_DIM, keepdim=True
+                )
+                / Omegas.sum(K_DIM, True)
+            ).sqrt()
+            container.set_(("stats", "_action_means"), _action_means)
+            container.set_(("stats", "_action_stds"), _action_stds)
         action_means = container.get(("stats", "_action_means"))
         return action_means[..., 0, 0, :]
 

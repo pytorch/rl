@@ -103,7 +103,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         stats = get_stats_random_rollout(
             cfg,
             proof_env,
-            key=("next", "pixels") if cfg.from_pixels else ("next", "observation_vector"),
+            key=("next", "pixels")
+            if cfg.from_pixels
+            else ("next", "observation_vector"),
         )
         # make sure proof_env is closed
         proof_env.close()
@@ -162,7 +164,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         recorder_rm = TransformedEnv(recorder.base_env)
         for transform in recorder.transform:
             if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform)
+                recorder_rm.append_transform(transform.clone())
     else:
         recorder_rm = recorder
 

@@ -463,6 +463,15 @@ class ConvNet(nn.Sequential):
             layers.append(Squeeze2dLayer())
         return layers
 
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        *batch, C, L, W = inputs.shape
+        if len(batch) > 1:
+            inputs = inputs.flatten(0, len(batch) - 1)
+        out = super(ConvNet, self).forward(inputs)
+        if len(batch) > 1:
+            out = out.unflatten(0, batch)
+        return out
+
 
 class DuelingMlpDQNet(nn.Module):
     """Creates a Dueling MLP Q-network.

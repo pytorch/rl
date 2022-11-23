@@ -4,11 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 from copy import copy, deepcopy
+from functools import partial
 
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices, retry, dtype_fixture  # noqa
+from _utils_internal import (  # noqa
+    get_available_devices,
+    retry,
+    dtype_fixture,
+    PENDULUM_VERSIONED,
+)
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
@@ -49,6 +55,7 @@ from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.transforms import (
+    DiscreteActionProjection,
     _has_tv,
     CenterCrop,
     NoopResetEnv,
@@ -56,20 +63,9 @@ from torchrl.envs.transforms.transforms import (
     SqueezeTransform,
     TensorDictPrimer,
     UnsqueezeTransform,
+    gSDENoise,
 )
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
-
-if _has_gym:
-    import gym
-    from packaging import version
-
-    gym_version = version.parse(gym.__version__)
-    PENDULUM_VERSIONED = (
-        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
-    )
-else:
-    # placeholders
-    PENDULUM_VERSIONED = "Pendulum-v1"
 
 TIMEOUT = 10.0
 
@@ -1289,13 +1285,16 @@ class TestTransforms:
     @pytest.mark.parametrize("loc", [1, 5])
     @pytest.mark.parametrize("keys", [None, ["reward_1"]])
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_reward_scaling(self, batch, scale, loc, keys, device):
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    def test_reward_scaling(self, batch, scale, loc, keys, device, standard_normal):
         torch.manual_seed(0)
         if keys is None:
             keys_total = set([])
         else:
             keys_total = set(keys)
-        reward_scaling = RewardScaling(in_keys=keys, scale=scale, loc=loc)
+        reward_scaling = RewardScaling(
+            in_keys=keys, scale=scale, loc=loc, standard_normal=standard_normal
+        )
         td = TensorDict(
             {
                 **{key: torch.randn(*batch, 1, device=device) for key in keys_total},
@@ -1308,13 +1307,17 @@ class TestTransforms:
         td_copy = td.clone()
         reward_scaling(td)
         for key in keys_total:
-            assert (td.get(key) == td_copy.get(key).mul_(scale).add_(loc)).all()
+            if standard_normal:
+                original_key = td.get(key)
+                scaled_key = (td_copy.get(key) - loc) / scale
+                torch.testing.assert_close(original_key, scaled_key)
+            else:
+                original_key = td.get(key)
+                scaled_key = td_copy.get(key) * scale + loc
+                torch.testing.assert_close(original_key, scaled_key)
         assert (td.get("dont touch") == td_copy.get("dont touch")).all()
-        if len(keys_total) == 0:
-            assert (
-                td.get("reward") == td_copy.get("reward").mul_(scale).add_(loc)
-            ).all()
-        elif len(keys_total) == 1:
+
+        if len(keys_total) == 1:
             reward_spec = UnboundedContinuousTensorSpec(device=device)
             reward_spec = reward_scaling.transform_reward_spec(reward_spec)
             assert reward_spec.shape == torch.Size([1])
@@ -1973,6 +1976,50 @@ def test_batch_unlocked_with_batch_size_transformed(device):
         RuntimeError, match="Expected a tensordict with shape==env.shape, "
     ):
         env.step(td_expanded)
+
+
+transforms = [
+    ToTensorImage,
+    pytest.param(
+        partial(RewardClipping, clamp_min=0.1, clamp_max=0.9), id="RewardClipping"
+    ),
+    BinarizeReward,
+    pytest.param(
+        partial(Resize, w=2, h=2),
+        id="Resize",
+        marks=pytest.mark.skipif(not _has_tv, reason="needs torchvision dependency"),
+    ),
+    pytest.param(
+        partial(CenterCrop, w=1),
+        id="CenterCrop",
+        marks=pytest.mark.skipif(not _has_tv, reason="needs torchvision dependency"),
+    ),
+    pytest.param(partial(FlattenObservation, first_dim=-3), id="FlattenObservation"),
+    pytest.param(
+        partial(UnsqueezeTransform, unsqueeze_dim=-1), id="UnsqueezeTransform"
+    ),
+    pytest.param(partial(SqueezeTransform, squeeze_dim=-1), id="SqueezeTransform"),
+    GrayScale,
+    ObservationNorm,
+    CatFrames,
+    pytest.param(partial(RewardScaling, loc=1, scale=2), id="RewardScaling"),
+    FiniteTensorDictCheck,
+    DoubleToFloat,
+    CatTensors,
+    pytest.param(
+        partial(DiscreteActionProjection, max_n=1, m=1), id="DiscreteActionProjection"
+    ),
+    NoopResetEnv,
+    TensorDictPrimer,
+    PinMemoryTransform,
+    gSDENoise,
+    VecNorm,
+]
+
+
+@pytest.mark.parametrize("transform", transforms)
+def test_smoke_compose_transform(transform):
+    Compose(transform())
 
 
 if __name__ == "__main__":

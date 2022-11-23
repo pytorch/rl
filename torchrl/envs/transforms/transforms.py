@@ -230,12 +230,13 @@ class Transform(nn.Module):
         return self_copy
 
     @property
-    def parent(self) -> EnvBase:
+    def parent(self) -> Optional[EnvBase]:
         if not hasattr(self, "_parent"):
             raise AttributeError("transform parent uninitialized")
         parent = self._parent
         if parent is None:
             return parent
+        out = None
         if not isinstance(parent, EnvBase):
             # if it's not an env, it should be a Compose transform
             if not isinstance(parent, Compose):
@@ -243,26 +244,23 @@ class Transform(nn.Module):
                     "A transform parent must be either another Compose transform or an environment object."
                 )
             compose = parent
-            # the parent of the compose must be a TransformedEnv
-            compose_parent = compose.parent
-            if not isinstance(compose_parent, TransformedEnv):
-                raise ValueError(
-                    f"Compose parent was of type {type(compose_parent)} but expected TransformedEnv."
+            if compose.parent:
+                # the parent of the compose must be a TransformedEnv
+                compose_parent = compose.parent
+                if compose_parent.transform is not compose:
+                    comp_parent_trans = compose_parent.transform.clone()
+                else:
+                    comp_parent_trans = None
+                out = TransformedEnv(
+                    compose_parent.base_env,
+                    transform=comp_parent_trans,
                 )
-            if compose_parent.transform is not compose:
-                comp_parent_trans = compose_parent.transform.clone()
-            else:
-                comp_parent_trans = None
-            out = TransformedEnv(
-                compose_parent.base_env,
-                transform=comp_parent_trans,
-            )
-            for orig_trans in compose.transforms:
-                if orig_trans is self:
-                    break
-                transform = copy(orig_trans)
-                transform.reset_parent()
-                out.append_transform(transform)
+                for orig_trans in compose.transforms:
+                    if orig_trans is self:
+                        break
+                    transform = copy(orig_trans)
+                    transform.reset_parent()
+                    out.append_transform(transform)
         elif isinstance(parent, TransformedEnv):
             out = TransformedEnv(parent.base_env)
         else:
@@ -1033,13 +1031,14 @@ class FlattenObservation(ObservationTransform):
 
     def __init__(
         self,
-        first_dim: int = 0,
+        first_dim: int,
         last_dim: int = -3,
         in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
-        super().__init__(in_keys=in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.first_dim = first_dim
         self.last_dim = last_dim
 
@@ -1049,15 +1048,26 @@ class FlattenObservation(ObservationTransform):
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         out = super().set_parent(parent)
-        observation_spec = self.parent.observation_spec
-        for key in self.in_keys:
-            if key in observation_spec:
-                observation_spec = observation_spec[key]
-                if self.first_dim >= 0:
-                    self.first_dim = self.first_dim - len(observation_spec.shape)
-                if self.last_dim >= 0:
-                    self.last_dim = self.last_dim - len(observation_spec.shape)
-                break
+        try:
+            observation_spec = self.parent.observation_spec
+            for key in self.in_keys:
+                if key in observation_spec:
+                    observation_spec = observation_spec[key]
+                    if self.first_dim >= 0:
+                        self.first_dim = self.first_dim - len(observation_spec.shape)
+                    if self.last_dim >= 0:
+                        self.last_dim = self.last_dim - len(observation_spec.shape)
+                    break
+        except AttributeError:
+            if self.first_dim >= 0 or self.last_dim >= 0:
+                raise ValueError(
+                    f"FlattenObservation got first and last dim {self.first_dim} amd {self.last_dim}. "
+                    f"Those values assume that the observation spec is known, which requires the "
+                    f"parent environment to be set. "
+                    f"Consider setting the parent environment beforehand (ie passing the transform "
+                    f"to `TransformedEnv.append_transform()`) or setting strictly negative "
+                    f"flatten dimensions to the transform."
+                )
         return out
 
     @_apply_to_composite
@@ -1119,7 +1129,15 @@ class UnsqueezeTransform(Transform):
             self._unsqueeze_dim = self._unsqueeze_dim_orig
         else:
             parent = self.parent
-            batch_size = parent.batch_size
+            try:
+                batch_size = parent.batch_size
+            except AttributeError:
+                raise ValueError(
+                    f"Got the unsqueeze dimension {self._unsqueeze_dim_orig} which is greater or equal to zero. "
+                    f"However this requires to know what the parent environment is, but it has not been provided. "
+                    f"Consider providing a negative dimension or setting the transform using the "
+                    f"`TransformedEnv.append_transform()` method."
+                )
             self._unsqueeze_dim = self._unsqueeze_dim_orig + len(batch_size)
         return super().set_parent(parent)
 
@@ -1507,6 +1525,12 @@ class RewardScaling(Transform):
     Args:
         loc (number or torch.Tensor): location of the affine transform
         scale (number or torch.Tensor): scale of the affine transform
+        standard_normal (bool, optional): if True, the transform will be
+
+            .. math::
+                reward = (reward-loc)/scale
+
+            as it is done for standardization. Default is `False`.
     """
 
     inplace = True
@@ -1516,10 +1540,13 @@ class RewardScaling(Transform):
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
         in_keys: Optional[Sequence[str]] = None,
+        standard_normal: bool = False,
     ):
         if in_keys is None:
             in_keys = ["reward"]
         super().__init__(in_keys=in_keys)
+        self.standard_normal = standard_normal
+
         if not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc)
         if not isinstance(scale, torch.Tensor):
@@ -1529,8 +1556,16 @@ class RewardScaling(Transform):
         self.register_buffer("scale", scale.clamp_min(1e-6))
 
     def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
-        reward.mul_(self.scale).add_(self.loc)
-        return reward
+        if self.standard_normal:
+            loc = self.loc
+            scale = self.scale
+            reward = (reward - loc) / scale
+            return reward
+        else:
+            scale = self.scale
+            loc = self.loc
+            reward = reward * scale + loc
+            return reward
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if isinstance(reward_spec, UnboundedContinuousTensorSpec):
