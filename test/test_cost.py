@@ -21,40 +21,40 @@ except ImportError:
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices, dtype_fixture  # noqa
+from _utils_internal import dtype_fixture, get_available_devices  # noqa
 from mocking_classes import ContinuousActionConvMockEnv
 
 # from torchrl.data.postprocs.utils import expand_as_right
-from tensordict.tensordict import assert_allclose_td, TensorDictBase, TensorDict
+from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right
 from torch import autograd, nn
 from torchrl.data import (
     CompositeSpec,
+    DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
-    DiscreteTensorSpec,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.envs.model_based.dreamer import DreamerEnv
-from torchrl.envs.transforms import TransformedEnv, TensorDictPrimer
+from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.modules import (
     DistributionalQValueActor,
+    ProbabilisticTensorDictModule,
     QValueActor,
     TensorDictModule,
     TensorDictSequential,
-    ProbabilisticTensorDictModule,
     WorldModelWrapper,
 )
 from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
 from torchrl.modules.models.model_based import (
+    DreamerActor,
     ObsDecoder,
     ObsEncoder,
     RSSMPosterior,
     RSSMPrior,
     RSSMRollout,
-    DreamerActor,
 )
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.actors import (
@@ -65,22 +65,20 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
 )
 from torchrl.objectives import (
+    A2CLoss,
     ClipPPOLoss,
     DDPGLoss,
     DistributionalDQNLoss,
     DQNLoss,
+    DreamerActorLoss,
+    DreamerModelLoss,
+    DreamerValueLoss,
     KLPENPPOLoss,
     PPOLoss,
     SACLoss,
-    DreamerModelLoss,
-    DreamerActorLoss,
-    DreamerValueLoss,
 )
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.deprecated import (
-    DoubleREDQLoss_deprecated,
-    REDQLoss_deprecated,
-)
+from torchrl.objectives.deprecated import DoubleREDQLoss_deprecated, REDQLoss_deprecated
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.reinforce import ReinforceLoss
 from torchrl.objectives.utils import HardUpdate, hold_out_net, SoftUpdate
@@ -1698,6 +1696,230 @@ class TestPPO:
             raise NotImplementedError
 
         loss_fn = loss_class(
+            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
+        )
+
+        floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
+
+        loss = floss_fn(params, buffers, td)
+        loss_critic = loss["loss_critic"]
+        loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
+        loss_critic.backward(retain_graph=True)
+        # check that grads are independent and non null
+        named_parameters = loss_fn.named_parameters()
+        if _has_functorch:
+            for (name, _), p in zip(named_parameters, params):
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" not in name
+                    assert "critic" in name
+                if p.grad is None:
+                    assert "actor" in name
+                    assert "critic" not in name
+        else:
+            for key, p in params.flatten_keys(".").items():
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" not in key
+                    assert "value" in key or "critic" in key
+                if p.grad is None:
+                    assert "actor" in key
+                    assert "value" not in key and "critic" not in key
+
+        if _has_functorch:
+            for param in params:
+                param.grad = None
+        else:
+            for param in params.flatten_keys(".").values():
+                param.grad = None
+        loss_objective.backward()
+        named_parameters = loss_fn.named_parameters()
+        if _has_functorch:
+            for (name, _), p in zip(named_parameters, params):
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" in name
+                    assert "critic" not in name
+                if p.grad is None:
+                    assert "actor" not in name
+                    assert "critic" in name
+            for param in params:
+                param.grad = None
+        else:
+            for key, p in params.flatten_keys(".").items():
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" in key
+                    assert "value" not in key and "critic" not in key
+                if p.grad is None:
+                    assert "actor" not in key
+                    assert "value" in key or "critic" in key
+            for param in params.flatten_keys(".").values():
+                param.grad = None
+
+
+class TestA2C:
+    seed = 0
+
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # Actor
+        action_spec = NdBoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
+        actor = ProbabilisticActor(
+            module=module,
+            distribution_class=TanhNormal,
+            dist_in_keys=["loc", "scale"],
+            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
+        )
+        return actor.to(device)
+
+    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        module = nn.Linear(obs_dim, 1)
+        value = ValueOperator(
+            module=module,
+            in_keys=["observation"],
+        )
+        return value.to(device)
+
+    def _create_seq_mock_data_a2c(
+        self, batch=2, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
+        # create a tensordict
+        total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
+        obs = total_obs[:, :T]
+        next_obs = total_obs[:, 1:]
+        if atoms:
+            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+                -1, 1
+            )
+        else:
+            action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+        reward = torch.randn(batch, T, 1, device=device)
+        done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        params_mean = torch.randn_like(action) / 10
+        params_scale = torch.rand_like(action) / 10
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "done": done,
+                "mask": mask,
+                "reward": reward * mask.to(obs.dtype),
+                "action": action * mask.to(obs.dtype),
+                "sample_log_prob": torch.randn_like(action[..., :1])
+                / 10
+                * mask.to(obs.dtype),
+                "loc": params_mean * mask.to(obs.dtype),
+                "scale": params_scale * mask.to(obs.dtype),
+            },
+            device=device,
+        )
+        return td
+
+    @pytest.mark.parametrize("gradient_mode", (True, False))
+    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_a2c(self, device, gradient_mode, advantage):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_a2c(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        if advantage == "gae":
+            advantage = GAE(
+                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        elif advantage == "td":
+            advantage = TDEstimate(
+                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        elif advantage == "td_lambda":
+            advantage = TDLambdaEstimate(
+                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        else:
+            raise NotImplementedError
+
+        loss_fn = A2CLoss(
+            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
+        )
+
+        # Check error is raised when actions require grads
+        td["action"].requires_grad = True
+        with pytest.raises(
+            RuntimeError,
+            match="tensordict stored action require grad.",
+        ):
+            loss = loss_fn._log_probs(td)
+        td["action"].requires_grad = False
+
+        # Check error is raised when advantage_diff_key present and does not required grad
+        td[loss_fn.advantage_diff_key] = torch.randn_like(td["reward"])
+        with pytest.raises(
+            RuntimeError,
+            match="value_target retrieved from tensordict does not require grad.",
+        ):
+            loss = loss_fn.loss_critic(td)
+        td = td.exclude(loss_fn.advantage_diff_key)
+        assert loss_fn.advantage_diff_key not in td.keys()
+
+        loss = loss_fn(td)
+        loss_critic = loss["loss_critic"]
+        loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
+        loss_critic.backward(retain_graph=True)
+        # check that grads are independent and non null
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" not in name
+                assert "critic" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "critic" not in name
+
+        value.zero_grad()
+        loss_objective.backward()
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "critic" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "critic" in name
+        actor.zero_grad()
+
+        # test reset
+        loss_fn.reset()
+
+    @pytest.mark.parametrize("gradient_mode", (True, False))
+    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_a2c_diff(self, device, gradient_mode, advantage):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_a2c(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        if advantage == "gae":
+            advantage = GAE(
+                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        elif advantage == "td":
+            advantage = TDEstimate(
+                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        elif advantage == "td_lambda":
+            advantage = TDLambdaEstimate(
+                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        else:
+            raise NotImplementedError
+
+        loss_fn = A2CLoss(
             actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
         )
 
