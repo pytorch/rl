@@ -26,8 +26,8 @@ export MKL_THREADING_LAYER=GNU
 
 coverage run -m pytest test/smoke_test.py -v --durations 20
 coverage run -m pytest test/smoke_test_deps.py -v --durations 20
-coverage run -m python examples/ddpg/ddpg.py \
-  total_frames=14 \
+coverage run examples/ddpg/ddpg.py \
+  total_frames=48 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -35,9 +35,11 @@ coverage run -m python examples/ddpg/ddpg.py \
   env_per_collector=1 \
   collector_devices=cuda:0 \
   optim_steps_per_batch=1 \
-  record_video=True
-coverage run -m python examples/dqn/dqn.py \
-  total_frames=14 \
+  record_video=True \
+  record_frames=4 \
+  buffer_size=120
+coverage run examples/dqn/dqn.py \
+  total_frames=48 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -45,5 +47,55 @@ coverage run -m python examples/dqn/dqn.py \
   env_per_collector=1 \
   collector_devices=cuda:0 \
   optim_steps_per_batch=1 \
-  record_video=True
+  record_video=True \
+  record_frames=4 \
+  buffer_size=120
+coverage run examples/redq/redq.py \
+  total_frames=48 \
+  init_random_frames=10 \
+  batch_size=10 \
+  frames_per_batch=16 \
+  num_workers=2 \
+  env_per_collector=1 \
+  collector_devices=cuda:0 \
+  optim_steps_per_batch=1 \
+  record_video=True \
+  record_frames=4 \
+  buffer_size=120
+coverage run examples/sac/sac.py \
+  total_frames=48 \
+  init_random_frames=10 \
+  batch_size=10 \
+  frames_per_batch=16 \
+  num_workers=2 \
+  env_per_collector=1 \
+  collector_devices=cuda:0 \
+  optim_steps_per_batch=1 \
+  record_video=True \
+  record_frames=4 \
+  buffer_size=120
+coverage run examples/ppo/ppo.py \
+  total_frames=48 \
+  batch_size=10 \
+  frames_per_batch=16 \
+  num_workers=2 \
+  env_per_collector=1 \
+  collector_devices=cuda:0 \
+  optim_steps_per_batch=1 \
+  record_video=True \
+  record_frames=4 \
+  lr_scheduler=
+coverage run examples/dreamer/dreamer.py \
+  total_frames=48 \
+  init_random_frames=10 \
+  batch_size=10 \
+  frames_per_batch=200 \
+  num_workers=2 \
+  env_per_collector=1 \
+  collector_devices=cuda:0 \
+  optim_steps_per_batch=1 \
+  record_video=True \
+  record_frames=4 \
+  buffer_size=120 \
+  rssm_hidden_dim=17
 coverage xml -i

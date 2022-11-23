@@ -126,7 +126,9 @@ def test_mlp(
 )
 @pytest.mark.parametrize("squeeze_output", [False])
 @pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("batch", [(2,), (2, 2)])
 def test_convnet(
+    batch,
     in_features,
     depth,
     num_cells,
@@ -147,7 +149,6 @@ def test_convnet(
     seed=0,
 ):
     torch.manual_seed(seed)
-    batch = 2
     convnet = ConvNet(
         in_features=in_features,
         depth=depth,
@@ -167,9 +168,9 @@ def test_convnet(
     )
     if in_features is None:
         in_features = 5
-    x = torch.randn(batch, in_features, input_size, input_size, device=device)
+    x = torch.randn(*batch, in_features, input_size, input_size, device=device)
     y = convnet(x)
-    assert y.shape == torch.Size([batch, expected_features])
+    assert y.shape == torch.Size([*batch, expected_features])
 
 
 @pytest.mark.parametrize(

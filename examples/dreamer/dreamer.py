@@ -248,6 +248,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # To be closer to the paper, we would need to fill it with trajectories of lentgh 1000 and then sample subsequences of length batch_length.
 
         # tensordict = tensordict.reshape(-1, cfg.batch_length)
+        print(tensordict.shape)
         replay_buffer.extend(tensordict.cpu())
         logger.log_scalar(
             "r_training",

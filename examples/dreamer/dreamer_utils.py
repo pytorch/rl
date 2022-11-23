@@ -92,7 +92,7 @@ def make_env_transforms(
         env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
-        env.append_transform(FlattenObservation())
+        env.append_transform(FlattenObservation(0))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
@@ -354,7 +354,7 @@ def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
         recorder_rm = TransformedEnv(recorder.base_env)
         for transform in recorder.transform:
             if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform)
+                recorder_rm.append_transform(transform.clone())
     else:
         recorder_rm = recorder
 

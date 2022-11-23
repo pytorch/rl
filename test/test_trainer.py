@@ -249,20 +249,22 @@ class TestRB:
         S = 100
         if storage_type == "list":
             storage = ListStorage(S)
-            collate_fn = lambda x: torch.stack(x, 0)
         elif storage_type == "memmap":
             storage = LazyMemmapStorage(S)
-            collate_fn = lambda x: x
         else:
             raise NotImplementedError
 
         if prioritized:
             replay_buffer = TensorDictPrioritizedReplayBuffer(
-                S, 1.1, 0.9, storage=storage, collate_fn=collate_fn
+                S,
+                1.1,
+                0.9,
+                storage=storage,
             )
         else:
             replay_buffer = TensorDictReplayBuffer(
-                S, storage=storage, collate_fn=collate_fn
+                S,
+                storage=storage,
             )
 
         N = 9
@@ -371,16 +373,13 @@ class TestRB:
         def make_storage():
             if storage_type == "list":
                 storage = ListStorage(S)
-                collate_fn = lambda x: torch.stack(x, 0)
             elif storage_type == "tensor":
                 storage = LazyTensorStorage(S)
-                collate_fn = lambda x: x
             elif storage_type == "memmap":
                 storage = LazyMemmapStorage(S)
-                collate_fn = lambda x: x
             else:
                 raise NotImplementedError
-            return storage, collate_fn
+            return storage
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             if backend == "torch":
@@ -391,14 +390,18 @@ class TestRB:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
 
-            storage, collate_fn = make_storage()
+            storage = make_storage()
             if prioritized:
                 replay_buffer = TensorDictPrioritizedReplayBuffer(
-                    S, 1.1, 0.9, storage=storage, collate_fn=collate_fn
+                    S,
+                    1.1,
+                    0.9,
+                    storage=storage,
                 )
             else:
                 replay_buffer = TensorDictReplayBuffer(
-                    S, storage=storage, collate_fn=collate_fn
+                    S,
+                    storage=storage,
                 )
 
             rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
@@ -413,6 +416,7 @@ class TestRB:
                 [batch],
             )
             trainer._process_batch_hook(td)
+            # sample from rb
             td_out = trainer._process_optim_batch_hook(td)
             if prioritized:
                 td_out.set(replay_buffer.priority_key, torch.rand(N))
@@ -420,14 +424,18 @@ class TestRB:
             trainer.save_trainer(True)
 
             trainer2 = mocking_trainer()
-            storage2, _ = make_storage()
+            storage2 = make_storage()
             if prioritized:
                 replay_buffer2 = TensorDictPrioritizedReplayBuffer(
-                    S, 1.1, 0.9, storage=storage2, collate_fn=collate_fn
+                    S,
+                    1.1,
+                    0.9,
+                    storage=storage2,
                 )
             else:
                 replay_buffer2 = TensorDictReplayBuffer(
-                    S, storage=storage2, collate_fn=collate_fn
+                    S,
+                    storage=storage2,
                 )
             N = 9
             rb_trainer2 = ReplayBufferTrainer(
