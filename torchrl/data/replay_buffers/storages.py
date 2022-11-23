@@ -7,11 +7,11 @@ import abc
 import os
 from collections import OrderedDict
 from copy import copy
-from typing import Any, Dict, Sequence, Union
+from typing import Any, Sequence, Union, Dict
 
 import torch
 from tensordict.memmap import MemmapTensor
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.tensordict import TensorDictBase, TensorDict
 
 from torchrl._utils import _CKPT_BACKEND
 from torchrl.data.replay_buffers.utils import INT_CLASSES
@@ -236,26 +236,13 @@ class LazyTensorStorage(Storage):
                 dtype=data.dtype,
             )
         else:
-            out = TensorDict({}, [self.max_size, *data.shape])
-            print("The storage is being created: ")
-            for key, tensor in data.items():
-                if isinstance(tensor, TensorDictBase):
-                    out[key] = ( 
-                        tensor.expand(
-                            self.max_size,
-                            *tensor.shape,
-                        )
-                        .clone()
-                        .to(self.device)
-                        .zero_()
-                    )
-                else:
-                    out[key] = torch.empty(
-                        self.max_size,
-                        *tensor.shape,
-                        device=self.device,
-                        dtype=tensor.dtype,
-                    )
+            out = (
+                data.expand(self.max_size, *data.shape)
+                    .to_tensordict()
+                    .zero_()
+                    .clone()
+                    .to(self.device)
+            )
 
         self._storage = out
         self.initialized = True
