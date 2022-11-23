@@ -76,6 +76,7 @@ sphinx_gallery_conf = {
     "doc_module": ("torchrl",),
     "filename_pattern": "reference/generated/tutorials/",  # files to parse
     "notebook_images": "reference/generated/tutorials/media/",  # images to parse
+    'download_all_examples': True,
 }
 
 napoleon_use_ivar = True
