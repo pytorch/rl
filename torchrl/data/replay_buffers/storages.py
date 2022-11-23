@@ -7,11 +7,11 @@ import abc
 import os
 from collections import OrderedDict
 from copy import copy
-from typing import Any, Sequence, Union, Dict
+from typing import Any, Dict, Sequence, Union
 
 import torch
 from tensordict.memmap import MemmapTensor
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import _CKPT_BACKEND
 from torchrl.data.replay_buffers.utils import INT_CLASSES
@@ -244,7 +244,10 @@ class LazyTensorStorage(Storage):
                         tensor.expand(
                             self.max_size,
                             *tensor.shape,
-                        ).clone().to(self.device).zero_()
+                        )
+                        .clone()
+                        .to(self.device)
+                        .zero_()
                     )
                 else:
                     out[key] = torch.empty(
