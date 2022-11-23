@@ -4,6 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import importlib
+from functools import partial
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -28,14 +31,29 @@ from torchrl.data.replay_buffers.storages import (
     ListStorage,
 )
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.envs.transforms.transforms import (
+    CatTensors,
+    FlattenObservation,
+    SqueezeTransform,
+    ToTensorImage,
+    RewardClipping,
+    BinarizeReward,
+    Resize,
+    CenterCrop,
+    UnsqueezeTransform,
+    GrayScale,
+    ObservationNorm,
+    CatFrames,
+    RewardScaling,
+    DoubleToFloat,
+    VecNorm,
+    DiscreteActionProjection,
+    FiniteTensorDictCheck,
+    gSDENoise,
+    PinMemoryTransform,
+)
 
-
-# collate_fn_dict = {
-#     ListStorage: lambda x: torch.stack(x, 0),
-#     LazyTensorStorage: lambda x: x,
-#     LazyMemmapStorage: lambda x: x,
-#     None: lambda x: torch.stack(x, 0),
-# }
+_has_tv = importlib.util.find_spec("torchvision") is not None
 
 
 @pytest.mark.parametrize(
@@ -592,6 +610,127 @@ def test_legacy_rb_does_not_attach():
     assert len(storage._attached_entities) == 1
     assert prb in storage._attached_entities
     assert rb not in storage._attached_entities
+
+
+def test_append_transform():
+    rb = rb_prototype.ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0))
+    td = TensorDict(
+        {
+            "observation": torch.randn(2, 4, 3, 16),
+            "observation2": torch.randn(2, 4, 3, 16),
+        },
+        [],
+    )
+    rb.add(td)
+    flatten = CatTensors(
+        in_keys=["observation", "observation2"], out_key="observation_cat"
+    )
+
+    rb.append_transform(flatten)
+
+    sampled, _ = rb.sample(1)
+    assert sampled.get("observation_cat").shape[-1] == 32
+
+
+def test_init_transform():
+    flatten = FlattenObservation(
+        -2, -1, in_keys=["observation"], out_keys=["flattened"]
+    )
+
+    rb = rb_prototype.ReplayBuffer(
+        collate_fn=lambda x: torch.stack(x, 0), transform=flatten
+    )
+
+    td = TensorDict({"observation": torch.randn(2, 4, 3, 16)}, [])
+    rb.add(td)
+    sampled, _ = rb.sample(1)
+    assert sampled.get("flattened").shape[-1] == 48
+
+
+def test_insert_transform():
+    flatten = FlattenObservation(
+        -2, -1, in_keys=["observation"], out_keys=["flattened"]
+    )
+    rb = rb_prototype.ReplayBuffer(
+        collate_fn=lambda x: torch.stack(x, 0), transform=flatten
+    )
+    td = TensorDict({"observation": torch.randn(2, 4, 3, 16, 1)}, [])
+    rb.add(td)
+
+    rb.insert_transform(0, SqueezeTransform(-1, in_keys=["observation"]))
+
+    sampled, _ = rb.sample(1)
+    assert sampled.get("flattened").shape[-1] == 48
+
+    with pytest.raises(ValueError):
+        rb.insert_transform(10, SqueezeTransform(-1, in_keys=["observation"]))
+
+
+transforms = [
+    ToTensorImage,
+    pytest.param(
+        partial(RewardClipping, clamp_min=0.1, clamp_max=0.9), id="RewardClipping"
+    ),
+    BinarizeReward,
+    pytest.param(
+        partial(Resize, w=2, h=2),
+        id="Resize",
+        marks=pytest.mark.skipif(not _has_tv, reason="needs torchvision dependency"),
+    ),
+    pytest.param(
+        partial(CenterCrop, w=1),
+        id="CenterCrop",
+        marks=pytest.mark.skipif(not _has_tv, reason="needs torchvision dependency"),
+    ),
+    pytest.param(
+        partial(UnsqueezeTransform, unsqueeze_dim=-1), id="UnsqueezeTransform"
+    ),
+    pytest.param(partial(SqueezeTransform, squeeze_dim=-1), id="SqueezeTransform"),
+    GrayScale,
+    pytest.param(partial(ObservationNorm, loc=1, scale=2), id="ObservationNorm"),
+    CatFrames,
+    pytest.param(partial(RewardScaling, loc=1, scale=2), id="RewardScaling"),
+    DoubleToFloat,
+    VecNorm,
+]
+
+
+@pytest.mark.parametrize("transform", transforms)
+def test_smoke_replay_buffer_transform(transform):
+    rb = rb_prototype.ReplayBuffer(
+        transform=transform(in_keys="observation"),
+    )
+
+    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
+    rb.add(td)
+    rb.sample(1)
+
+    rb._transform = mock.MagicMock()
+    rb.sample(1)
+    assert rb._transform.called
+
+
+transforms = [
+    partial(DiscreteActionProjection, max_n=1, m=1),
+    FiniteTensorDictCheck,
+    gSDENoise,
+    PinMemoryTransform,
+]
+
+
+@pytest.mark.parametrize("transform", transforms)
+def test_smoke_replay_buffer_transform_no_inkeys(transform):
+    rb = rb_prototype.ReplayBuffer(
+        collate_fn=lambda x: torch.stack(x, 0), transform=transform()
+    )
+
+    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
+    rb.add(td)
+    rb.sample(1)
+
+    rb._transform = mock.MagicMock()
+    rb.sample(1)
+    assert rb._transform.called
 
 
 if __name__ == "__main__":

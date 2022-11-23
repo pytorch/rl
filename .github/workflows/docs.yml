@@ -84,6 +84,10 @@ jobs:
         cd ./docs
         timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         cd ..
+    - name: Pull TensorDict docs
+      run: |
+        git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/build/html/tensordict
+        rm -rf docs/build/html/tensordict/.git
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
