@@ -109,7 +109,7 @@ exclude_patterns = []
 # a list of builtin themes.
 #
 html_theme = "pytorch_sphinx_theme"
-html_theme_path = ["_static"]
+html_theme_path = [pytorch_sphinx_theme.get_html_theme_path()]
 html_theme_options = {
     'pytorch_project': 'torchrl',
     'collapse_navigation': False,
