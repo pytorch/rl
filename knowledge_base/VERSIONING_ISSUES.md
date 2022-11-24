@@ -11,7 +11,7 @@ ImportError: /usr/local/lib/python3.7/dist-packages/torchrl/_torchrl.so: undefin
 2. ``` !pip install torchrl ```
 3. ``` import torchrl ```
 
-On Colab you can solve the issue by running:
+In Colab you can solve the issue by running:
 ``` 
 !pip3 install torch --extra-index-url https://download.pytorch.org/whl/cpu -U 
 ```
