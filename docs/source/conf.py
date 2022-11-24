@@ -61,6 +61,7 @@ language = "en"
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
+    "sphinx.ext.viewcode",
     "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
@@ -107,10 +108,21 @@ exclude_patterns = []
 # a list of builtin themes.
 #
 html_theme = "pytorch_sphinx_theme"
-html_theme_path = [pytorch_sphinx_theme.get_html_theme_path()]
+html_theme_path = ["_static"]
+html_theme_options = {
+    'pytorch_project': 'torchrl',
+    'collapse_navigation': False,
+    'display_version': True,
+    'logo_only': False,
+    'analytics_id': 'UA-117752657-2',
+}
+html_css_files = [
+        'https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css',
+        'css/custom.css'
+    ]
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = "PyTorchdoc"
+htmlhelp_basename = "PyTorchRLdoc"
 
 autosummary_generate = True
 
