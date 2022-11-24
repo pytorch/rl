@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 import warnings
 from typing import Iterable, Optional, Type, Union
 
@@ -25,10 +26,10 @@ except ImportError:
         "may be affected. Consider installing functorch and/or upgrating pytorch."
     )
 
-    class FunctionalModule:
+    class FunctionalModule:  # noqa: D101
         pass
 
-    class FunctionalModuleWithBuffers:
+    class FunctionalModuleWithBuffers:  # noqa: D101
         pass
 
 
@@ -54,33 +55,44 @@ def _check_all_str(list_of_str, first_level=True):
 
 
 def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
-    spec = module.spec
-    if len(module.out_keys) > 1 and not isinstance(spec, CompositeSpec):
-        raise RuntimeError(
-            "safe TensorDictModules with multiple out_keys require a CompositeSpec with matching keys. Got "
-            f"keys {module.out_keys}."
-        )
-    elif not isinstance(spec, CompositeSpec):
-        out_key = module.out_keys[0]
-        keys = [out_key]
-        values = [spec]
-    else:
-        keys = list(spec.keys())
-        values = [spec[key] for key in keys]
-    for _spec, _key in zip(values, keys):
-        if _spec is None:
-            continue
-        if not _spec.is_in(tensordict_out.get(_key)):
-            try:
-                tensordict_out.set_(
-                    _key,
-                    _spec.project(tensordict_out.get(_key)),
-                )
-            except RuntimeError:
-                tensordict_out.set(
-                    _key,
-                    _spec.project(tensordict_out.get(_key)),
-                )
+    try:
+        spec = module.spec
+        if len(module.out_keys) > 1 and not isinstance(spec, CompositeSpec):
+            raise RuntimeError(
+                "safe TensorDictModules with multiple out_keys require a CompositeSpec with matching keys. Got "
+                f"keys {module.out_keys}."
+            )
+        elif not isinstance(spec, CompositeSpec):
+            out_key = module.out_keys[0]
+            keys = [out_key]
+            values = [spec]
+        else:
+            keys = list(spec.keys())
+            values = [spec[key] for key in keys]
+        for _spec, _key in zip(values, keys):
+            if _spec is None:
+                continue
+            if not _spec.is_in(tensordict_out.get(_key)):
+                try:
+                    tensordict_out.set_(
+                        _key,
+                        _spec.project(tensordict_out.get(_key)),
+                    )
+                except RuntimeError:
+                    tensordict_out.set(
+                        _key,
+                        _spec.project(tensordict_out.get(_key)),
+                    )
+    except RuntimeError as err:
+        if re.search(
+            "attempting to use a Tensor in some data-dependent control flow", str(err)
+        ):
+            # "_is_stateless" in module.__dict__ and module._is_stateless:
+            raise RuntimeError(
+                f"vmap cannot be used with safe=True, consider turning the safe mode off. (original error message: {err})"
+            )
+        else:
+            raise err
 
 
 class TensorDictModule(_TensorDictModule):
