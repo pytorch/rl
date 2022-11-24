@@ -11,7 +11,13 @@ import numpy as np
 import pytest
 import torch
 import yaml
-from _utils_internal import get_available_devices
+from _utils_internal import (
+    CARTPOLE_VERSIONED,
+    get_available_devices,
+    HALFCHEETAH_VERSIONED,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+)
 from mocking_classes import (
     ActionObsMergeLinear,
     DiscreteActionConvMockEnv,
@@ -49,30 +55,11 @@ from torchrl.modules import (
 )
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
+gym_version = None
 if _has_gym:
     import gym
 
     gym_version = version.parse(gym.__version__)
-    PENDULUM_VERSIONED = (
-        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
-    )
-    CARTPOLE_VERSIONED = (
-        "CartPole-v1" if gym_version > version.parse("0.20.0") else "CartPole-v0"
-    )
-    PONG_VERSIONED = (
-        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
-    )
-    HALFCHEETAH_VERSIONED = (
-        "HalfCheetah-v4" if gym_version > version.parse("0.20.0") else "HalfCheetah-v2"
-    )
-else:
-    # placeholder
-    gym_version = version.parse("0.0.1")
-
-    # placeholders
-    PENDULUM_VERSIONED = "Pendulum-v1"
-    CARTPOLE_VERSIONED = "CartPole-v1"
-    PONG_VERSIONED = "ALE/Pong-v5"
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -402,7 +389,9 @@ class TestParallel:
             env_make = [lambda: DMControlEnv("humanoid", tasks[0])] * 3
         else:
             single_task = False
-            env_make = [lambda: DMControlEnv("humanoid", task) for task in tasks]
+            env_make = [
+                lambda task=task: DMControlEnv("humanoid", task) for task in tasks
+            ]
 
         if not share_individual_td and not single_task:
             with pytest.raises(
@@ -1048,7 +1037,7 @@ def test_batch_unlocked_with_batch_size(device):
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.skipif(
-    gym_version < version.parse("0.20.0"),
+    gym_version is None or gym_version < version.parse("0.20.0"),
     reason="older versions of half-cheetah do not have 'x_position' info key.",
 )
 def test_info_dict_reader(seed=0):

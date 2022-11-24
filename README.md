@@ -350,9 +350,11 @@ If you would like to contribute to new features, check our [call for contributio
 A series of [examples](examples/) are provided with an illustrative purpose:
 - [DQN (and add-ons up to Rainbow)](examples/dqn/dqn.py)
 - [DDPG](examples/ddpg/ddpg.py)
+- [A2C](examples/a2c/a2c.py)
 - [PPO](examples/ppo/ppo.py)
 - [SAC](examples/sac/sac.py)
 - [REDQ](examples/redq/redq.py)
+- [Dreamer](examples/dreamer/dreamer.py)
 
 and many more to come!
 

@@ -8,7 +8,7 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from _utils_internal import generate_seeds
+from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnv,
@@ -17,7 +17,7 @@ from mocking_classes import (
     DiscreteActionVecPolicy,
     MockSerialEnv,
 )
-from tensordict.tensordict import TensorDict, assert_allclose_td
+from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
@@ -41,22 +41,6 @@ from torchrl.modules import (
     OrnsteinUhlenbeckProcessWrapper,
     TensorDictModule,
 )
-
-if _has_gym:
-    import gym
-    from packaging import version
-
-    gym_version = version.parse(gym.__version__)
-    PENDULUM_VERSIONED = (
-        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
-    )
-    PONG_VERSIONED = (
-        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
-    )
-else:
-    # placeholders
-    PENDULUM_VERSIONED = "Pendulum-v1"
-    PONG_VERSIONED = "ALE/Pong-v5"
 
 # torch.set_default_dtype(torch.double)
 
@@ -324,10 +308,10 @@ def test_collector_env_reset():
     collector = SyncDataCollector(
         env, total_frames=10000, frames_per_batch=10000, split_trajs=False
     )
-    for data in collector:
+    for _data in collector:
         continue
-    steps = data["step_count"][..., 1:, :]
-    done = data["done"][..., :-1, :]
+    steps = _data["step_count"][..., 1:, :]
+    done = _data["done"][..., :-1, :]
     # we don't want just one done
     assert done.sum() > 3
     # check that after a done, the next step count is always 1
@@ -337,8 +321,8 @@ def test_collector_env_reset():
     # check that if step is 1, then the env was done before
     assert (steps == 1)[done].all()
     # check that split traj has a minimum total reward of -21 (for pong only)
-    data = split_trajectories(data)
-    assert data["reward"].sum(-2).min() == -21
+    _data = split_trajectories(_data)
+    assert _data["reward"].sum(-2).min() == -21
 
 
 @pytest.mark.parametrize("num_env", [1, 3])

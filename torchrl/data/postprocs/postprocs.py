@@ -132,7 +132,7 @@ class MultiStep(nn.Module):
         self.register_buffer(
             "gammas",
             torch.tensor(
-                [gamma ** i for i in range(n_steps_max + 1)],
+                [gamma**i for i in range(n_steps_max + 1)],
                 dtype=torch.float,
             ).reshape(1, 1, -1),
         )

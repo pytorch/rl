@@ -11,16 +11,16 @@ from copy import deepcopy
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
 from time import sleep
-from typing import Callable, Optional, Sequence, Union, Any, List, Dict
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 from warnings import warn
 
 import torch
 from tensordict import TensorDict
-from tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
+from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 
 from torchrl._utils import _check_for_faulty_process
-from torchrl.data import TensorSpec, CompositeSpec
+from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
@@ -172,7 +172,7 @@ class _BatchedEnv(EnvBase):
                     "share_individual_td must be set to None or True when using multi-task batched environments"
                 )
             share_individual_td = True
-        create_env_kwargs = dict() if create_env_kwargs is None else create_env_kwargs
+        create_env_kwargs = {} if create_env_kwargs is None else create_env_kwargs
         if isinstance(create_env_kwargs, dict):
             create_env_kwargs = [
                 deepcopy(create_env_kwargs) for _ in range(num_workers)
@@ -407,17 +407,17 @@ class _BatchedEnv(EnvBase):
                 )
         else:
             if self._single_task:
-                self.env_input_keys = sorted(list(self.input_spec.keys()))
+                self.env_input_keys = sorted(self.input_spec.keys())
             else:
                 env_input_keys = set()
                 for meta_data in self.meta_data:
                     env_input_keys = env_input_keys.union(
                         meta_data.specs["input_spec"].keys()
                     )
-                self.env_input_keys = sorted(list(env_input_keys))
+                self.env_input_keys = sorted(env_input_keys)
             if not len(self.env_input_keys):
                 raise RuntimeError(
-                    f"found 0 action keys in {sorted(list(self.selected_keys))}"
+                    f"found 0 action keys in {sorted(self.selected_keys)}"
                 )
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(

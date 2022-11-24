@@ -12,14 +12,12 @@ from datetime import datetime
 import hydra
 import torch.cuda
 from hydra.core.config_store import ConfigStore
-from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.envs.transforms import RewardScaling
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
-from torchrl.record import VideoRecorder
+from torchrl.objectives.value import TDEstimate
 from torchrl.trainers.helpers.collectors import (
-    make_collector_offpolicy,
-    OffPolicyCollectorConfig,
+    make_collector_onpolicy,
+    OnPolicyCollectorConfig,
 )
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
@@ -29,46 +27,35 @@ from torchrl.trainers.helpers.envs import (
     transformed_env_constructor,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.losses import LossConfig, make_ddpg_loss
-from torchrl.trainers.helpers.models import DDPGModelConfig, make_ddpg_actor
-from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
+from torchrl.trainers.helpers.losses import A2CLossConfig, make_a2c_loss
+from torchrl.trainers.helpers.models import A2CModelConfig, make_a2c_model
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
 
 config_fields = [
     (config_field.name, config_field.type, config_field)
     for config_cls in (
         TrainerConfig,
-        OffPolicyCollectorConfig,
+        OnPolicyCollectorConfig,
         EnvConfig,
-        LossConfig,
-        DDPGModelConfig,
+        A2CLossConfig,
+        A2CModelConfig,
         LoggerConfig,
-        ReplayArgsConfig,
     )
     for config_field in dataclasses.fields(config_cls)
 ]
+
 Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
 cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
 
-DEFAULT_REWARD_SCALING = {
-    "Hopper-v1": 5,
-    "Walker2d-v1": 5,
-    "HalfCheetah-v1": 5,
-    "cheetah": 5,
-    "Ant-v2": 5,
-    "Humanoid-v2": 20,
-    "humanoid": 100,
-}
 
-
-@hydra.main(version_base=None, config_path=".", config_name="config")
+@hydra.main(version_base=None, config_path="", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
 
     if not isinstance(cfg.reward_scaling, float):
-        cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(cfg.env_name, 5.0)
+        cfg.reward_scaling = 1.0
 
     device = (
         torch.device("cpu")
@@ -78,7 +65,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     exp_name = "_".join(
         [
-            "DDPG",
+            "A2C",
             cfg.exp_name,
             str(uuid.uuid4())[:8],
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
@@ -87,20 +74,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if cfg.logger == "tensorboard":
         from torchrl.trainers.loggers.tensorboard import TensorboardLogger
 
-        logger = TensorboardLogger(log_dir="ddpg_logging", exp_name=exp_name)
+        logger = TensorboardLogger(log_dir="a2c_logging", exp_name=exp_name)
     elif cfg.logger == "csv":
         from torchrl.trainers.loggers.csv import CSVLogger
 
-        logger = CSVLogger(log_dir="ddpg_logging", exp_name=exp_name)
+        logger = CSVLogger(log_dir="a2c_logging", exp_name=exp_name)
     elif cfg.logger == "wandb":
         from torchrl.trainers.loggers.wandb import WandbLogger
 
-        logger = WandbLogger(log_dir="ddpg_logging", exp_name=exp_name)
+        logger = WandbLogger(log_dir="a2c_logging", exp_name=exp_name)
     elif cfg.logger == "mlflow":
         from torchrl.trainers.loggers.mlflow import MLFlowLogger
 
         logger = MLFlowLogger(
-            tracking_uri=pathlib.Path(os.path.abspath("ddpg_logging")).as_uri(),
+            tracking_uri=pathlib.Path(os.path.abspath("a2c_logging")).as_uri(),
             exp_name=exp_name,
         )
     video_tag = exp_name if cfg.record_video else ""
@@ -111,9 +98,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         stats = get_stats_random_rollout(
             cfg,
             proof_env,
-            key=("next", "pixels")
-            if cfg.from_pixels
-            else ("next", "observation_vector"),
+            key="pixels" if cfg.from_pixels else "observation_vector",
         )
         # make sure proof_env is closed
         proof_env.close()
@@ -123,31 +108,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg=cfg, use_env_creator=False, stats=stats
     )()
 
-    model = make_ddpg_actor(
+    model = make_a2c_model(
         proof_env,
         cfg=cfg,
         device=device,
     )
-    loss_module, target_net_updater = make_ddpg_loss(model, cfg)
+    actor_model = model.get_policy_operator()
 
-    actor_model_explore = model[0]
-    if cfg.ou_exploration:
-        if cfg.gSDE:
-            raise RuntimeError("gSDE and ou_exploration are incompatible")
-        actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-            actor_model_explore,
-            annealing_num_steps=cfg.annealing_frames,
-            sigma=cfg.ou_sigma,
-            theta=cfg.ou_theta,
-        ).to(device)
-    if device == torch.device("cpu"):
-        # mostly for debugging
-        actor_model_explore.share_memory()
-
+    loss_module = make_a2c_loss(model, cfg)
     if cfg.gSDE:
         with torch.no_grad(), set_exploration_mode("random"):
             # get dimensions to build the parallel env
-            proof_td = actor_model_explore(proof_env.reset().to(device))
+            proof_td = model(proof_env.reset().to(device))
         action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
         del proof_td
     else:
@@ -161,17 +133,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         state_dim_gsde=state_dim_gsde,
     )
 
-    collector = make_collector_offpolicy(
+    collector = make_collector_onpolicy(
         make_env=create_env_fn,
-        actor_model_explore=actor_model_explore,
+        actor_model_explore=actor_model,
         cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device} if device >= 0 else {}
-        #     for device in args.env_rendering_devices
-        # ],
     )
-
-    replay_buffer = make_replay_buffer(device, cfg)
 
     recorder = transformed_env_constructor(
         cfg,
@@ -182,23 +148,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         use_env_creator=False,
     )()
 
-    # remove video recorder from recorder to have matching state_dict keys
-    if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env)
-        for transform in recorder.transform:
-            if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform.clone())
-    else:
-        recorder_rm = recorder
-
-    if isinstance(create_env_fn, ParallelEnv):
-        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-        create_env_fn.close()
-    elif isinstance(create_env_fn, EnvCreator):
-        recorder_rm.load_state_dict(create_env_fn().state_dict())
-    else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
-
     # reset reward scaling
     for t in recorder.transform:
         if isinstance(t, RewardScaling):
@@ -206,15 +155,29 @@ def main(cfg: "DictConfig"):  # noqa: F821
             t.loc.fill_(0.0)
 
     trainer = make_trainer(
-        collector,
-        loss_module,
-        recorder,
-        target_net_updater,
-        actor_model_explore,
-        replay_buffer,
-        logger,
-        cfg,
+        collector=collector,
+        loss_module=loss_module,
+        recorder=recorder,
+        target_net_updater=None,
+        policy_exploration=actor_model,
+        replay_buffer=None,
+        logger=logger,
+        cfg=cfg,
     )
+
+    if not cfg.advantage_in_loss:
+        critic_model = model.get_value_operator()
+        advantage = TDEstimate(
+            cfg.gamma,
+            value_network=critic_model,
+            average_rewards=True,
+            gradient_mode=False,
+        )
+        advantage = advantage.to(device)
+        trainer.register_op(
+            "process_optim_batch",
+            advantage,
+        )
 
     final_seed = collector.set_seed(cfg.seed)
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")

@@ -1,16 +1,18 @@
 import collections
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Optional, Sequence, Union, Tuple, List
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import torch
-from tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
+from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
+
+from torchrl.envs.transforms.transforms import Compose, Transform
 
 from .replay_buffers import pin_memory_output
-from .samplers import Sampler, RandomSampler
-from .storages import Storage, ListStorage, _get_default_collate
-from .utils import INT_CLASSES, _to_numpy, accept_remote_rref_udf_invocation
-from .writers import Writer, RoundRobinWriter
+from .samplers import RandomSampler, Sampler
+from .storages import _get_default_collate, ListStorage, Storage
+from .utils import _to_numpy, accept_remote_rref_udf_invocation, INT_CLASSES
+from .writers import RoundRobinWriter, Writer
 
 
 class ReplayBuffer:
@@ -30,6 +32,8 @@ class ReplayBuffer:
             samples.
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
+        transform (Transform, optional): Transform to be executed when sample() is called.
+            To chain transforms use the :obj:`Compose` class.
     """
 
     def __init__(
@@ -40,6 +44,7 @@ class ReplayBuffer:
         collate_fn: Optional[Callable] = None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
+        transform: Optional[Transform] = None,
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)
@@ -62,6 +67,12 @@ class ReplayBuffer:
 
         self._replay_lock = threading.RLock()
         self._futures_lock = threading.RLock()
+        if transform is None:
+            transform = Compose()
+        elif not isinstance(transform, Compose):
+            transform = Compose(transform)
+        transform.eval()
+        self._transform = transform
 
     def __len__(self) -> int:
         with self._replay_lock:
@@ -131,6 +142,7 @@ class ReplayBuffer:
             data = self._storage[index]
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
+        data = self._transform(data)
         return data, info
 
     def sample(self, batch_size: int) -> Tuple[Any, dict]:
@@ -162,6 +174,29 @@ class ReplayBuffer:
 
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
         self._sampler.mark_update(index)
+
+    def append_transform(self, transform: Transform) -> None:
+        """Appends transform at the end.
+
+        Transforms are applied in order when `sample` is called.
+
+        Args:
+            transform (Transform): The transform to be appended
+        """
+        transform.eval()
+        self._transform.append(transform)
+
+    def insert_transform(self, index: int, transform: Transform) -> None:
+        """Inserts transform.
+
+        Transforms are executed in order when `sample` is called.
+
+        Args:
+            index (int): Position to insert the transform.
+            transform (Transform): The transform to be appended
+        """
+        transform.eval()
+        self._transform.insert(index, transform)
 
 
 class TensorDictReplayBuffer(ReplayBuffer):

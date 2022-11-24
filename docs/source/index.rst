@@ -6,6 +6,9 @@
 Welcome to the TorchRL Documentation!
 =====================================
 
+.. note::
+   The TensorDict class has been moved out of TorchRL into a dedicated library. Take a look at `the documentation <./tensordict>`_ or find the source code `on GitHub <https://github.com/pytorch-labs/tensordict>`_.
+
 TorchRL is an open-source Reinforcement Learning (RL) library for PyTorch.
 
 It provides pytorch and python-first, low and high level abstractions for RL that are intended to be efficient, modular, documented and properly tested.

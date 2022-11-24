@@ -3,9 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from dataclasses import dataclass
-from dataclasses import field as dataclass_field
-from typing import Callable, Optional, Union, Any, Sequence
+from dataclasses import dataclass, field as dataclass_field
+from typing import Any, Callable, Optional, Sequence, Union
 
 import torch
 
@@ -17,6 +16,7 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
+    CenterCrop,
     DoubleToFloat,
     FiniteTensorDictCheck,
     GrayScale,
@@ -27,9 +27,8 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
     VecNorm,
-    CenterCrop,
 )
-from torchrl.envs.transforms.transforms import gSDENoise, FlattenObservation
+from torchrl.envs.transforms.transforms import FlattenObservation, gSDENoise
 from torchrl.record.recorder import VideoRecorder
 from torchrl.trainers.loggers import Logger
 
@@ -123,7 +122,7 @@ def make_env_transforms(
         env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
-        env.append_transform(FlattenObservation())
+        env.append_transform(FlattenObservation(0))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
