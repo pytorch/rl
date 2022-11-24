@@ -1351,7 +1351,7 @@ class TestTransforms:
 
         env = ContinuousActionVecMockEnv()
         obs_spec = env.observation_spec
-        key = itertools.islice(obs_spec.keys(), 1)
+        (key,) = itertools.islice(obs_spec.keys(), 1)
         env = TransformedEnv(env)
 
         # we start by asking the spec. That will create the private attributes
