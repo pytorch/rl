@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import os
 from collections import OrderedDict
 from copy import deepcopy
@@ -24,7 +25,7 @@ from torchrl.data import TensorSpec, CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
-
+import envpool
 
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):
@@ -1068,3 +1069,307 @@ def _run_worker_pipe_shared_mem(
             else:
                 # don't send env through pipe
                 child_pipe.send(("_".join([cmd, "done"]), None))
+
+
+
+class MultiThreadedEnv(EnvBase):
+    """Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
+
+    Those queries will return a list of length equal to the number of workers containing the
+    values resulting from those queries.
+        >>> env = ParallelEnv(3, my_env_fun)
+        >>> custom_attribute_list = env.custom_attribute
+        >>> custom_method_list = env.custom_method(*args)
+
+    Args:
+
+    """
+
+    _verbose: bool = False
+    _excluded_wrapped_keys = [
+        "is_closed",
+        "parent_channels",
+        "batch_size",
+        "_dummy_env_str",
+    ]
+
+    def __init__(
+        self,
+        num_workers: int,
+        task_id: str,
+        env_type: str,
+        batch_size: int = None,
+        create_env_kwargs: Union[dict, Sequence[dict]] = None,
+        env_input_keys: Optional[Sequence[str]] = None,
+        pin_memory: bool = False,
+        selected_keys: Optional[Sequence[str]] = None,
+        excluded_keys: Optional[Sequence[str]] = None,
+        share_individual_td: Optional[bool] = None,
+        shared_memory: bool = True,
+        memmap: bool = False,
+        policy_proof: Optional[Callable] = None,
+        device: Optional[DEVICE_TYPING] = None,
+        allow_step_when_done: bool = False,
+    ):
+        if device is not None:
+            raise ValueError(
+                "Device setting for batched environment can't be done at initialization. "
+                "The device will be inferred from the constructed environment. "
+                "It can be set through the `to(device)` method."
+            )
+
+        super().__init__(device=None)
+        self.is_closed = True
+
+        self.policy_proof = policy_proof
+        self.num_workers = num_workers
+        self.task_id = task_id
+        self.env_type = env_type
+        self.create_env_kwargs = create_env_kwargs or {}
+        self.env_input_keys = env_input_keys
+        self.pin_memory = pin_memory
+        self.selected_keys = selected_keys
+        self.excluded_keys = excluded_keys
+        self.share_individual_td = bool(share_individual_td)
+        self.allow_step_when_done = allow_step_when_done
+        self._batch_size = batch_size or num_workers
+
+        self._observation_spec = None
+        self._reward_spec = None
+        self._device = None
+        self._dummy_env_str = None
+        self._seeds = None
+        # self._prepare_dummy_env(create_env_fn, create_env_kwargs)
+        # self._get_metadata(create_env_fn, create_env_kwargs)
+
+    # def _get_metadata(
+    #     self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
+    # ):
+    #     if self._single_task:
+    #         # if EnvCreator, the metadata are already there
+    #         self.meta_data = get_env_metadata(
+    #             create_env_fn[0], create_env_kwargs[0]
+    #         ).expand(self.num_workers)
+    #     else:
+    #         n_tasks = len(create_env_fn)
+    #         self.meta_data = []
+    #         for i in range(n_tasks):
+    #             self.meta_data.append(
+    #                 get_env_metadata(create_env_fn[i], create_env_kwargs[i])
+    #             )
+    #     self._set_properties()
+
+    def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
+        """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
+
+        Args:
+            kwargs (dict or list of dict): new kwargs to use with the environments
+
+        """
+        if isinstance(kwargs, dict):
+            for _kwargs in self.create_env_kwargs:
+                _kwargs.update(kwargs)
+        else:
+            for _kwargs, _new_kwargs in zip(self.create_env_kwargs, kwargs):
+                _kwargs.update(_new_kwargs)
+
+    # def _set_properties(self):
+    #     meta_data = deepcopy(self.meta_data)
+
+    #     self._batch_size = meta_data.batch_size
+    #     self._observation_spec = meta_data.specs["observation_spec"]
+    #     self._reward_spec = meta_data.specs["reward_spec"]
+    #     self._input_spec = meta_data.specs["input_spec"]
+    #     self._dummy_env_str = meta_data.env_str
+    #     self._device = meta_data.device
+    #     self._env_tensordict = meta_data.tensordict
+    #     self._batch_locked = meta_data.batch_locked
+
+
+    def state_dict(self) -> OrderedDict:
+        raise NotImplementedError
+
+    def load_state_dict(self, state_dict: OrderedDict) -> None:
+        raise NotImplementedError
+
+    @property
+    def batch_size(self) -> TensorSpec:
+        if "_batch_size" not in self.__dir__():
+            raise AttributeError("_batch_size is not initialized")
+        if self._batch_size is None:
+            self._set_properties()
+        return self._batch_size
+
+    @property
+    def device(self) -> torch.device:
+        if self._device is None:
+            self._set_properties()
+        return self._device
+
+    @device.setter
+    def device(self, value: DEVICE_TYPING) -> None:
+        self.to(value)
+
+    @property
+    def observation_spec(self) -> TensorSpec:
+        if self._observation_spec is None:
+            self._set_properties()
+        return self._observation_spec
+
+    @observation_spec.setter
+    def observation_spec(self, value: TensorSpec) -> None:
+        self._observation_spec = value
+
+    @property
+    def input_spec(self) -> TensorSpec:
+        if self._input_spec is None:
+            self._set_properties()
+        return self._input_spec
+
+    @input_spec.setter
+    def input_spec(self, value: TensorSpec) -> None:
+        self._input_spec = value
+
+    @property
+    def reward_spec(self) -> TensorSpec:
+        if self._reward_spec is None:
+            self._set_properties()
+        return self._reward_spec
+
+    @reward_spec.setter
+    def reward_spec(self, value: TensorSpec) -> None:
+        self._reward_spec = value
+
+    def is_done_set_fn(self, value: bool) -> None:
+        self._is_done = value.all()
+
+    def _start_workers(self) -> None:
+        """Starts the various envs."""
+        self._env = envpool.make(task_id=self.task_id, env_type=self.env_type, num_envs=self.num_workers, **self.create_env_kwargs)
+        self.is_closed = False
+
+    def __repr__(self) -> str:
+        if self._dummy_env_str is None:
+            self._dummy_env_str = self._set_properties()
+        return (
+            f"{self.__class__.__name__}("
+            f"\n\tenv={self._dummy_env_str}, "
+            f"\n\tbatch_size={self.batch_size})"
+        )
+
+    def close(self) -> None:
+        if self.is_closed:
+            raise RuntimeError("trying to close a closed environment")
+        if self._verbose:
+            print(f"closing {self.__class__.__name__}")
+
+        self.observation_spec = None
+        self.reward_spec = None
+
+        self._shutdown_workers()
+        self.is_closed = True
+
+
+    @_check_start
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+
+        action = tensordict.get("action")
+        #action_np = self.read_action(action)
+
+
+        step_output = self._env.step(action)
+
+        obs_dict, reward, done, info = self._output_transform(step_output)
+
+
+        ######### Create tensordict_out depending on gym vs dm
+        if reward is None:
+            reward = np.nan
+        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
+        done = self._to_tensor(done, dtype=torch.bool)
+        self.is_done = done
+
+        tensordict_out = TensorDict(
+            obs_dict, batch_size=tensordict.batch_size, device=self.device
+        )
+
+        tensordict_out.set("reward", reward)
+        tensordict_out.set("done", done)
+        if self.info_dict_reader is not None and info is not None:
+            self.info_dict_reader(info, tensordict_out)
+
+
+
+        return tensordict_out
+
+    def _parse_reset_workers(self, tensordict):
+
+        if tensordict is None or "reset_workers" not in tensordict:
+            return None
+        reset_workers = tensordict.get("reset_workers")
+        if reset_workers is None:
+            return None
+        return np.where(reset_workers)[0]
+
+
+
+
+    @_check_start
+    def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+
+        reset_workers = self._parse_reset_workers(tensordict)
+
+        reset_data = self._env.reset(reset_workers)
+        # if not isinstance(reset_data, tuple):
+        #     reset_data = (reset_data,)
+        tensordict_out = self._output_transform(reset_data)
+        return tensordict_out
+
+    def _output_transform(self, envpool_output):
+        obs = envpool_output
+        tensordict_out = TensorDict(
+            source={"source": obs},#self.read_obs(obs),
+            batch_size=self.batch_size,
+            #device=self.device,
+        )
+        self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
+        tensordict_out.set("done", self._is_done)
+        return tensordict_out
+
+
+    def _create_td(self):
+        pass
+
+
+    def _shutdown_workers(self) -> None:
+        raise NotImplementedError
+
+    def start(self) -> None:
+        if not self.is_closed:
+            raise RuntimeError("trying to start a environment that is not closed.")
+        self._start_workers()
+
+    def to(self, device: DEVICE_TYPING):
+        device = torch.device(device)
+        if device == self.device:
+            return self
+        self._device = device
+        self.meta_data = (
+            self.meta_data.to(device)
+            if self._single_task
+            else [meta_data.to(device) for meta_data in self.meta_data]
+        )
+        if not self.is_closed:
+            warn(
+                "Casting an open environment to another device requires closing and re-opening it. "
+                "This may have unexpected and unwanted effects (e.g. on seeding etc.)"
+            )
+            # the tensordicts must be re-created on device
+            super().to(device)
+            self.close()
+            self.start()
+        else:
+            self.input_spec = self.input_spec.to(device)
+            self.reward_spec = self.reward_spec.to(device)
+            self.observation_spec = self.observation_spec.to(device)
+        return self
