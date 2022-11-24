@@ -506,8 +506,7 @@ and not
 OS: macOS **** (x86_64)
 ```
 
-If you successfully install and you have a ```ImportError: /usr/local/lib/python3.7/dist-packages/torchrl/_torchrl.so: undefined symbol: _ZN8pybind116detail11type_casterIN2at6TensorEvE4loadENS_6handleEb``` when you try to import the module, most probably this is caused by an incompatibility with your torch package.
-Please install torch 1.13 or build the library from source. Please refer to this [versioning issues document](knowledge_base/VERSIONING_ISSUES.md) for a complete explanation.
+Versioning issues can cause error message of the type ```undefined symbol``` and such. For these, refer to the [versioning issues document](knowledge_base/VERSIONING_ISSUES.md) for a complete explanation and proposed workarounds.
 
 
 ## Running examples
