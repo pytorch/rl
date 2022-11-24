@@ -4,16 +4,16 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Type, Union, Dict, Any
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 from tensordict.nn import TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
 
 from torchrl.collectors.collectors import (
     _DataCollector,
-    SyncDataCollector,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
+    SyncDataCollector,
 )
 from torchrl.data import MultiStep
 from torchrl.envs import ParallelEnv

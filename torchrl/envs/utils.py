@@ -5,8 +5,8 @@
 
 import pkg_resources
 from tensordict.nn.probabilistic import (  # noqa
-    set_interaction_mode as set_exploration_mode,
     interaction_mode as exploration_mode,
+    set_interaction_mode as set_exploration_mode,
 )
 from tensordict.tensordict import TensorDictBase
 
