@@ -341,5 +341,5 @@ def next_state_value(
     done = done.to(torch.float)
     target_value = (1 - done) * pred_next_val_detach
     rewards = rewards.to(torch.float)
-    target_value = rewards + (gamma ** steps_to_next_obs) * target_value
+    target_value = rewards + (gamma**steps_to_next_obs) * target_value
     return target_value

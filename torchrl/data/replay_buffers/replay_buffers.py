@@ -7,14 +7,11 @@ import collections
 import concurrent.futures
 import threading
 from copy import deepcopy
-from typing import Any, Callable, List, Optional, Sequence, Tuple, Union, Dict
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict.tensordict import (
-    TensorDictBase,
-    LazyStackedTensorDict,
-)
+from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import Tensor
 
 from torchrl._torchrl import (
@@ -24,15 +21,11 @@ from torchrl._torchrl import (
     SumSegmentTreeFp64,
 )
 from torchrl.data.replay_buffers.storages import (
-    Storage,
-    ListStorage,
     _get_default_collate,
+    ListStorage,
+    Storage,
 )
-from torchrl.data.replay_buffers.utils import INT_CLASSES
-from torchrl.data.replay_buffers.utils import (
-    _to_numpy,
-    _to_torch,
-)
+from torchrl.data.replay_buffers.utils import _to_numpy, _to_torch, INT_CLASSES
 from torchrl.data.utils import DEVICE_TYPING
 
 

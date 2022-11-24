@@ -13,11 +13,8 @@ from datetime import date
 from pathlib import Path
 from typing import List
 
-from setuptools import setup, find_packages
-from torch.utils.cpp_extension import (
-    CppExtension,
-    BuildExtension,
-)
+from setuptools import find_packages, setup
+from torch.utils.cpp_extension import BuildExtension, CppExtension
 
 cwd = os.path.dirname(os.path.abspath(__file__))
 try:

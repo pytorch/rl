@@ -11,6 +11,7 @@ from _utils_internal import get_available_devices
 from scipy.stats import chisquare
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import (
+    _keys_to_empty_composite_spec,
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
@@ -20,7 +21,6 @@ from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
-    _keys_to_empty_composite_spec,
 )
 
 

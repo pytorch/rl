@@ -7,23 +7,23 @@ from __future__ import annotations
 
 import collections
 import multiprocessing as mp
-from copy import deepcopy, copy
+from copy import copy, deepcopy
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 
 from torchrl.data.tensor_specs import (
+    BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
     ContinuousBox,
+    DEVICE_TYPING,
     NdUnboundedContinuousTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
-    BinaryDiscreteTensorSpec,
-    DEVICE_TYPING,
 )
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F

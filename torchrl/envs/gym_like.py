@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import abc
 import warnings
-from typing import List, Optional, Sequence, Union, Tuple, Any, Dict
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch

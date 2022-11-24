@@ -12,7 +12,7 @@ from datetime import datetime
 import hydra
 import torch.cuda
 from hydra.core.config_store import ConfigStore
-from torchrl.envs import ParallelEnv, EnvCreator
+from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
@@ -23,21 +23,15 @@ from torchrl.trainers.helpers.collectors import (
 )
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
+    EnvConfig,
     get_stats_random_rollout,
     parallel_env_constructor,
     transformed_env_constructor,
-    EnvConfig,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.losses import make_ddpg_loss, LossConfig
-from torchrl.trainers.helpers.models import (
-    make_ddpg_actor,
-    DDPGModelConfig,
-)
-from torchrl.trainers.helpers.replay_buffer import (
-    make_replay_buffer,
-    ReplayArgsConfig,
-)
+from torchrl.trainers.helpers.losses import LossConfig, make_ddpg_loss
+from torchrl.trainers.helpers.models import DDPGModelConfig, make_ddpg_actor
+from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
 
 config_fields = [

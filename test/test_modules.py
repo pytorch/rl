@@ -14,8 +14,8 @@ from tensordict import TensorDict
 from torch import nn
 from torchrl.data.tensor_specs import (
     DiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
+    OneHotDiscreteTensorSpec,
 )
 from torchrl.modules import (
     ActorValueOperator,
@@ -33,10 +33,10 @@ from torchrl.modules.functional_modules import (
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
 from torchrl.modules.models.model_based import (
     DreamerActor,
-    ObsEncoder,
     ObsDecoder,
-    RSSMPrior,
+    ObsEncoder,
     RSSMPosterior,
+    RSSMPrior,
     RSSMRollout,
 )
 from torchrl.modules.models.utils import SquashDims

@@ -4,9 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 from .replay_buffers import (
-    ReplayBuffer,
     PrioritizedReplayBuffer,
-    TensorDictReplayBuffer,
+    ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
 )
-from .storages import Storage, ListStorage, LazyMemmapStorage, LazyTensorStorage
+from .storages import LazyMemmapStorage, LazyTensorStorage, ListStorage, Storage

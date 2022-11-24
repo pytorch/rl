@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import collections
 import os
-from typing import Optional, Tuple, Union, Dict, Any
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -15,10 +15,11 @@ from torchrl.data import (
     CompositeSpec,
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
-    TensorSpec,
     NdUnboundedDiscreteTensorSpec,
+    TensorSpec,
 )
-from ...data.utils import numpy_to_torch_dtype_dict, DEVICE_TYPING
+
+from ...data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
 from ..gym_like import GymLikeEnv
 
 if torch.has_cuda and torch.cuda.device_count() > 1:

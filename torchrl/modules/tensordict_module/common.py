@@ -9,15 +9,7 @@ import inspect
 import warnings
 from copy import deepcopy
 from textwrap import indent
-from typing import (
-    Any,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Type,
-    Union,
-)
+from typing import Any, Iterable, List, Optional, Sequence, Type, Union
 
 import torch
 
@@ -45,10 +37,7 @@ except ImportError:
 from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 
-from torchrl.data import (
-    TensorSpec,
-    CompositeSpec,
-)
+from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.modules.functional_modules import (
     FunctionalModule as rlFunctionalModule,
     FunctionalModuleWithBuffers as rlFunctionalModuleWithBuffers,

@@ -6,16 +6,15 @@
 import re
 from copy import deepcopy
 from textwrap import indent
-from typing import List, Sequence, Union, Type, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple, Type, Union
 
 from tensordict.tensordict import TensorDictBase
-from torch import Tensor
-from torch import distributions as d
+from torch import distributions as d, Tensor
 
 from torchrl.data import TensorSpec
 from torchrl.envs.utils import exploration_mode, set_exploration_mode
-from torchrl.modules.distributions import distributions_maps, Delta
-from torchrl.modules.tensordict_module.common import TensorDictModule, _check_all_str
+from torchrl.modules.distributions import Delta, distributions_maps
+from torchrl.modules.tensordict_module.common import _check_all_str, TensorDictModule
 
 
 class ProbabilisticTensorDictModule(TensorDictModule):

@@ -12,12 +12,8 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from tensordict.tensordict import assert_allclose_td, TensorDictBase, TensorDict
-from torchrl.data import (
-    PrioritizedReplayBuffer,
-    ReplayBuffer,
-    TensorDictReplayBuffer,
-)
+from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
+from torchrl.data import PrioritizedReplayBuffer, ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import (
     rb_prototype,
     samplers,
@@ -32,25 +28,25 @@ from torchrl.data.replay_buffers.storages import (
 )
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
 from torchrl.envs.transforms.transforms import (
+    BinarizeReward,
+    CatFrames,
     CatTensors,
+    CenterCrop,
+    DiscreteActionProjection,
+    DoubleToFloat,
+    FiniteTensorDictCheck,
     FlattenObservation,
+    GrayScale,
+    gSDENoise,
+    ObservationNorm,
+    PinMemoryTransform,
+    Resize,
+    RewardClipping,
+    RewardScaling,
     SqueezeTransform,
     ToTensorImage,
-    RewardClipping,
-    BinarizeReward,
-    Resize,
-    CenterCrop,
     UnsqueezeTransform,
-    GrayScale,
-    ObservationNorm,
-    CatFrames,
-    RewardScaling,
-    DoubleToFloat,
     VecNorm,
-    DiscreteActionProjection,
-    FiniteTensorDictCheck,
-    gSDENoise,
-    PinMemoryTransform,
 )
 
 _has_tv = importlib.util.find_spec("torchvision") is not None

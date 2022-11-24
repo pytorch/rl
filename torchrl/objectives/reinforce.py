@@ -1,10 +1,10 @@
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import TensorDictModule, ProbabilisticTensorDictModule
+from torchrl.modules import ProbabilisticTensorDictModule, TensorDictModule
 from torchrl.objectives import distance_loss
 from torchrl.objectives.common import LossModule
 

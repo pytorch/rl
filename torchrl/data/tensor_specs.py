@@ -12,19 +12,19 @@ from textwrap import indent
 from typing import (
     Any,
     Dict,
+    ItemsView,
+    KeysView,
     List,
     Optional,
     Sequence,
     Tuple,
     Union,
-    ItemsView,
-    KeysView,
     ValuesView,
 )
 
 import numpy as np
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import get_binary_env_var
 

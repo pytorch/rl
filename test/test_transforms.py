@@ -10,10 +10,10 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import (  # noqa
-    get_available_devices,
-    retry,
     dtype_fixture,
+    get_available_devices,
     PENDULUM_VERSIONED,
+    retry,
 )
 from mocking_classes import (
     ContinuousActionVecMockEnv,
@@ -25,11 +25,11 @@ from tensordict import TensorDict
 from torch import multiprocessing as mp, Tensor
 from torchrl._utils import prod
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
     UnboundedContinuousTensorSpec,
-    BoundedTensorSpec,
 )
 from torchrl.envs import (
     BinarizeReward,
@@ -55,15 +55,15 @@ from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.transforms import (
-    DiscreteActionProjection,
     _has_tv,
     CenterCrop,
+    DiscreteActionProjection,
+    gSDENoise,
     NoopResetEnv,
     PinMemoryTransform,
     SqueezeTransform,
     TensorDictPrimer,
     UnsqueezeTransform,
-    gSDENoise,
 )
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 

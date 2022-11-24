@@ -4,20 +4,20 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Type, Union, Dict, Any
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 from tensordict.tensordict import TensorDictBase
 
 from torchrl.collectors.collectors import (
     _DataCollector,
-    SyncDataCollector,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
+    SyncDataCollector,
 )
 from torchrl.data import MultiStep
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
-from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
+from torchrl.modules import ProbabilisticTensorDictModule, TensorDictModuleWrapper
 
 
 def sync_async_collector(
@@ -219,7 +219,7 @@ def _make_collector(
         env_kwargs = [_env_kwargs[0] for _env_kwargs in env_kwargs_split]
     else:
         env_fns = [
-            lambda: ParallelEnv(
+            lambda _env_fn=_env_fn, _env_kwargs=_env_kwargs: ParallelEnv(
                 num_workers=len(_env_fn),
                 create_env_fn=_env_fn,
                 create_env_kwargs=_env_kwargs,

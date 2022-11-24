@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Iterator, Optional, Tuple, List, Union
+from typing import Iterator, List, Optional, Tuple, Union
 
 import torch
 
@@ -25,7 +25,7 @@ except ImportError:
     )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import Parameter
 

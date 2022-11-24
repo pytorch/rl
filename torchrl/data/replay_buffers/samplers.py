@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Union, Tuple
+from typing import Any, Tuple, Union
 
 import numpy as np
 import torch
@@ -10,8 +10,9 @@ from torchrl._torchrl import (
     SumSegmentTreeFp32,
     SumSegmentTreeFp64,
 )
+
 from .storages import Storage
-from .utils import INT_CLASSES, _to_numpy
+from .utils import _to_numpy, INT_CLASSES
 
 
 class Sampler(ABC):
@@ -21,19 +22,23 @@ class Sampler(ABC):
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
         raise NotImplementedError
 
+    @abstractmethod
     def add(self, index: int) -> None:
-        pass
+        raise NotImplementedError
 
+    @abstractmethod
     def extend(self, index: torch.Tensor) -> None:
-        pass
+        raise NotImplementedError
 
+    @abstractmethod
     def update_priority(
         self, index: Union[int, torch.Tensor], priority: Union[float, torch.Tensor]
     ) -> dict:
-        pass
+        raise NotImplementedError
 
+    @abstractmethod
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
-        pass
+        raise NotImplementedError
 
     @property
     def default_priority(self) -> float:
