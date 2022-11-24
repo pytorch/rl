@@ -44,9 +44,9 @@ storage_options = {
 }
 
 storage_arg_options = {
-    "LazyMemmapStorage": dict(scratch_dir="/tmp/", device=torch.device("cpu")),
-    "LazyTensorStorage": dict(),
-    "ListStorage": dict(),
+    "LazyMemmapStorage": {"scratch_dir": "/tmp/", "device": torch.device("cpu")},
+    "LazyTensorStorage": {},
+    "ListStorage": {},
 }
 parser = argparse.ArgumentParser(
     description="RPC Replay Buffer Example",

@@ -184,7 +184,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             distribution_class = distributions_maps.get(distribution_class.lower())
         self.distribution_class = distribution_class
         self.distribution_kwargs = (
-            distribution_kwargs if distribution_kwargs is not None else dict()
+            distribution_kwargs if distribution_kwargs is not None else {}
         )
         self.n_empirical_estimate = n_empirical_estimate
         self._dist = None

@@ -143,7 +143,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         # if create_env_fn is not None:
         #     if create_env_kwargs is None:
-        #         create_env_kwargs = dict()
+        #         create_env_kwargs = {}
         #     self.create_env_fn = create_env_fn
         #     if isinstance(create_env_fn, EnvBase):
         #         env = create_env_fn

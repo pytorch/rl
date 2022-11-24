@@ -1723,7 +1723,7 @@ class CatTensors(Transform):
                     "Lazy call to CatTensors is only supported when `dim=-1`."
                 )
         else:
-            in_keys = sorted(list(in_keys))
+            in_keys = sorted(in_keys)
         if type(out_key) != str:
             raise Exception("CatTensors requires out_key to be of type string")
         # super().__init__(in_keys=in_keys)
@@ -1767,8 +1767,8 @@ class CatTensors(Transform):
         else:
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
-                f" {sorted(list(self.in_keys))} but got a TensorDict with keys"
-                f" {sorted(list(tensordict.keys(include_nested=True)))}"
+                f" {sorted(self.in_keys)} but got a TensorDict with keys"
+                f" {sorted(tensordict.keys(include_nested=True))}"
             )
         return tensordict
 
@@ -2340,7 +2340,7 @@ class VecNorm(Transform):
         if keys is None:
             keys = ["next", "reward"]
         td = make_tensordict(env)
-        keys = set(key for key in td.keys() if key in keys)
+        keys = {key for key in td.keys() if key in keys}
         td_select = td.select(*keys)
         td_select = td_select.flatten_keys(sep)
         if td.batch_dims:

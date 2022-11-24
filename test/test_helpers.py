@@ -88,9 +88,9 @@ def _assert_keys_match(td, expeceted_keys):
 @pytest.mark.skipif(not _has_tv, reason="No torchvision library found")
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("noisy", [tuple(), ("noisy=True",)])
-@pytest.mark.parametrize("distributional", [tuple(), ("distributional=True",)])
-@pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
+@pytest.mark.parametrize("noisy", [(), ("noisy=True",)])
+@pytest.mark.parametrize("distributional", [(), ("distributional=True",)])
+@pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
 @pytest.mark.parametrize(
     "categorical_action_encoding",
     [("categorical_action_encoding=True",), ("categorical_action_encoding=False",)],
@@ -154,8 +154,8 @@ def test_dqn_maker(
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [("from_pixels=True", "catframes=4"), tuple()])
-@pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
+@pytest.mark.parametrize("from_pixels", [("from_pixels=True", "catframes=4"), ()])
+@pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_ddpg_maker(device, from_pixels, gsde, exploration):
     if not gsde and exploration != "random":
@@ -237,9 +237,9 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
-@pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
-@pytest.mark.parametrize("shared_mapping", [tuple(), ("shared_mapping=True",)])
+@pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
+@pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
+@pytest.mark.parametrize("shared_mapping", [(), ("shared_mapping=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
     if not gsde and exploration != "random":
@@ -361,9 +361,9 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
-@pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
-@pytest.mark.parametrize("shared_mapping", [tuple(), ("shared_mapping=True",)])
+@pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
+@pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
+@pytest.mark.parametrize("shared_mapping", [(), ("shared_mapping=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
     A2CModelConfig.advantage_in_loss = False
@@ -493,9 +493,9 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
-@pytest.mark.parametrize("from_pixels", [tuple()])
-@pytest.mark.parametrize("tanh_loc", [tuple(), ("tanh_loc=True",)])
+@pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
+@pytest.mark.parametrize("from_pixels", [()])
+@pytest.mark.parametrize("tanh_loc", [(), ("tanh_loc=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
     if not gsde and exploration != "random":
@@ -624,8 +624,8 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
-@pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
+@pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
+@pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_redq_make(device, from_pixels, gsde, exploration):
     if not gsde and exploration != "random":
@@ -729,7 +729,7 @@ requires one-dimensional batches (for RNN and Conv nets for instance). If you'd 
 to see torch < 1.11 supported for dreamer, please submit an issue.""",
 )
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("tanh_loc", [tuple(), ("tanh_loc=True",)])
+@pytest.mark.parametrize("tanh_loc", [(), ("tanh_loc=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture):
 

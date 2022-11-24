@@ -72,7 +72,7 @@ class MockingCollector:
         pass
 
     def state_dict(self):
-        return dict()
+        return {}
 
     def load_state_dict(self, state_dict):
         pass

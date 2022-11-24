@@ -811,7 +811,7 @@ class TestTransforms:
     def test_compose_inv(self, keys_inv_1, keys_inv_2, device):
         torch.manual_seed(0)
         keys_to_transform = set(keys_inv_1 + keys_inv_2)
-        keys_total = set(["action_1", "action_2", "dont_touch"])
+        keys_total = {"action_1", "action_2", "dont_touch"}
         double2float_1 = DoubleToFloat(in_keys_inv=keys_inv_1)
         double2float_2 = DoubleToFloat(in_keys_inv=keys_inv_2)
         compose = Compose(double2float_1, double2float_2)
@@ -1289,7 +1289,7 @@ class TestTransforms:
     def test_reward_scaling(self, batch, scale, loc, keys, device, standard_normal):
         torch.manual_seed(0)
         if keys is None:
-            keys_total = set([])
+            keys_total = set()
         else:
             keys_total = set(keys)
         reward_scaling = RewardScaling(

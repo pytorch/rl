@@ -154,8 +154,8 @@ class TargetNetUpdater:
         for source, target in zip(self._sources.values(), self._targets.values()):
             if isinstance(source, TensorDictBase) and not source.is_empty():
                 # native functional modules
-                source = list(zip(*sorted(list(source.items()))))[1]
-                target = list(zip(*sorted(list(target.items()))))[1]
+                source = list(zip(*sorted(source.items())))[1]
+                target = list(zip(*sorted(target.items())))[1]
             elif isinstance(source, TensorDictBase) and source.is_empty():
                 continue
             for p_source, p_target in zip(source, target):
@@ -174,8 +174,8 @@ class TargetNetUpdater:
         for source, target in zip(self._sources.values(), self._targets.values()):
             if isinstance(source, TensorDictBase) and not source.is_empty():
                 # native functional modules
-                source = list(zip(*sorted(list(source.items()))))[1]
-                target = list(zip(*sorted(list(target.items()))))[1]
+                source = list(zip(*sorted(source.items())))[1]
+                target = list(zip(*sorted(target.items())))[1]
             elif isinstance(source, TensorDictBase) and source.is_empty():
                 continue
             for p_source, p_target in zip(source, target):
@@ -191,8 +191,8 @@ class TargetNetUpdater:
 
     def __repr__(self) -> str:
         string = (
-            f"{self.__class__.__name__}(sources={[name for name in self._sources]}, targets="
-            f"{[name for name in self._targets]})"
+            f"{self.__class__.__name__}(sources={list(self._sources)}, targets="
+            f"{list(self._targets)})"
         )
         return string
 

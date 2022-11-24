@@ -874,7 +874,7 @@ class TestSpec:
         sample = torch.stack([action_spec.rand() for _ in range(10000)], 0)
 
         sample_list = sample.argmax(-1)
-        sample_list = list([sum(sample_list == i).item() for i in range(10)])
+        sample_list = [sum(sample_list == i).item() for i in range(10)]
         assert chisquare(sample_list).pvalue > 0.1
 
         sample = action_spec.to_numpy(sample)
@@ -888,7 +888,7 @@ class TestSpec:
         sample = action_spec.rand((10000,))
 
         sample_list = sample[:, 0]
-        sample_list = list([sum(sample_list == i).item() for i in range(10)])
+        sample_list = [sum(sample_list == i).item() for i in range(10)]
         print(sample_list)
         assert chisquare(sample_list).pvalue > 0.1
 
@@ -917,11 +917,11 @@ class TestSpec:
         assert sample.ndim == 2, f"found shape: {sample.shape}"
 
         sample0 = sample[:, 0]
-        sample_list = list([sum(sample0 == i) for i in range(ns[0])])
+        sample_list = [sum(sample0 == i) for i in range(ns[0])]
         assert chisquare(sample_list).pvalue > 0.1
 
         sample1 = sample[:, 1]
-        sample_list = list([sum(sample1 == i) for i in range(ns[1])])
+        sample_list = [sum(sample1 == i) for i in range(ns[1])]
         assert chisquare(sample_list).pvalue > 0.1
 
     def test_categorical_action_spec_encode(self):

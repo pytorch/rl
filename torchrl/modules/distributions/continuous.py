@@ -144,7 +144,7 @@ class NormalParamWrapper(nn.Module):
 
     def forward(self, *tensors: torch.Tensor) -> Tuple[torch.Tensor]:
         net_output = self.operator(*tensors)
-        others = tuple()
+        others = ()
         if not isinstance(net_output, torch.Tensor):
             net_output, *others = net_output
         loc, scale = net_output.chunk(2, -1)

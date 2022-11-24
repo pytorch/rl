@@ -22,23 +22,19 @@ class Sampler(ABC):
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
         raise NotImplementedError
 
-    @abstractmethod
     def add(self, index: int) -> None:
-        raise NotImplementedError
+        return
 
-    @abstractmethod
     def extend(self, index: torch.Tensor) -> None:
-        raise NotImplementedError
+        return
 
-    @abstractmethod
     def update_priority(
         self, index: Union[int, torch.Tensor], priority: Union[float, torch.Tensor]
     ) -> dict:
-        raise NotImplementedError
+        return
 
-    @abstractmethod
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
-        raise NotImplementedError
+        return
 
     @property
     def default_priority(self) -> float:

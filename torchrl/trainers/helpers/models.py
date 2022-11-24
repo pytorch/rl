@@ -285,8 +285,8 @@ def make_ddpg_actor(
     from_pixels = cfg.from_pixels
     noisy = cfg.noisy
 
-    actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
-    value_net_kwargs = value_net_kwargs if value_net_kwargs is not None else dict()
+    actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else {}
+    value_net_kwargs = value_net_kwargs if value_net_kwargs is not None else {}
 
     linear_layer_class = torch.nn.Linear if not noisy else NoisyLinear
 

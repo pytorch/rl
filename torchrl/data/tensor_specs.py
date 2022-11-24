@@ -60,7 +60,7 @@ class invertible_dict(dict):
 
     def __init__(self, *args, inv_dict=None, **kwargs):
         if inv_dict is None:
-            inv_dict = dict()
+            inv_dict = {}
         super().__init__(*args, **kwargs)
         self.inv_dict = inv_dict
 
@@ -1403,4 +1403,4 @@ class _CompositeSpecKeysView:
                 yield key
 
     def __len__(self):
-        return len([k for k in self])
+        return len(list(self))

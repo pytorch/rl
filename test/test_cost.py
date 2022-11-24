@@ -976,8 +976,8 @@ class TestSAC:
         named_parameters = list(loss_fn.named_parameters())
         named_buffers = list(loss_fn.named_buffers())
 
-        assert len(set(p for n, p in named_parameters)) == len(list(named_parameters))
-        assert len(set(p for n, p in named_buffers)) == len(list(named_buffers))
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
@@ -1287,8 +1287,8 @@ class TestREDQ:
         named_parameters = list(loss_fn.named_parameters())
         named_buffers = list(loss_fn.named_buffers())
 
-        assert len(set(p for n, p in named_parameters)) == len(list(named_parameters))
-        assert len(set(p for n, p in named_buffers)) == len(list(named_buffers))
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
@@ -1365,8 +1365,8 @@ class TestREDQ:
         named_parameters = list(loss_fn.named_parameters())
         named_buffers = list(loss_fn.named_buffers())
 
-        assert len(set(p for n, p in named_parameters)) == len(list(named_parameters))
-        assert len(set(p for n, p in named_buffers)) == len(list(named_buffers))
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"

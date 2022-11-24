@@ -81,10 +81,10 @@ def _dmcontrol_to_torchrl_spec_transform(
 
 def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
     if not _has_dmc:
-        return dict()
+        return {}
     if not to_dict:
         return tuple(suite.BENCHMARKING) + tuple(suite.EXTRA)
-    d = dict()
+    d = {}
     for tup in suite.BENCHMARKING:
         env_name = tup[0]
         d.setdefault(env_name, []).append(tup[1])
