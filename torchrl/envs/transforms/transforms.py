@@ -1407,6 +1407,11 @@ class ObservationNorm(ObservationTransform):
             loc = loc / scale
             scale = 1 / scale
 
+        if not torch.isfinite(loc).all():
+            raise RuntimeError("Non-finite values found in loc")
+        if not torch.isfinite(scale).all():
+            raise RuntimeError("Non-finite values found in scale")
+
         self.register_buffer("loc", loc)
         self.register_buffer("scale", scale.clamp_min(self.eps))
 

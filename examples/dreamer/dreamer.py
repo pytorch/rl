@@ -35,7 +35,6 @@ from torchrl.trainers.helpers.collectors import (
 )
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
-    get_stats_random_rollout,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.models import (
@@ -123,20 +122,19 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Compute the stats of the observations
     if not cfg.vecnorm and cfg.norm_stats:
-        stats = get_stats_random_rollout(
-            cfg,
-            proof_environment=transformed_env_constructor(cfg)(),
-            key=("next", "pixels")
-            if cfg.from_pixels
-            else ("next", "observation_vector"),
-        )
-        stats = {k: v.clone() for k, v in stats.items()}
+        if not hasattr(cfg, "init_env_steps"):
+            raise AttributeError("init_env_steps missing from arguments.")
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
+    else:
+        stats = {"loc": 0.0, "scale": 1.0}
 
     # Create the different components of dreamer
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
         stats=stats,
+        stats_key=("next", "pixels")
+        if cfg.from_pixels
+        else ("next", "observation_vector"),
         cfg=cfg,
         device=device,
         use_decoder_in_env=True,

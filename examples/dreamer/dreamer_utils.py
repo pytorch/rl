@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Callable, Optional, Union, Any, Sequence
+from typing import Callable, Optional, Union, Any, Sequence, Tuple
 
 from torchrl.data import NdUnboundedContinuousTensorSpec
 from torchrl.envs import ParallelEnv
@@ -51,6 +51,7 @@ def make_env_transforms(
     logger,
     env_name,
     stats,
+    stats_key,
     norm_obs_only,
     env_library,
     action_dim_gsde,
@@ -94,12 +95,14 @@ def make_env_transforms(
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(0))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
+        obs_stats = {"standard_normal": True}
         if stats is None:
-            obs_stats = {"loc": 0.0, "scale": 1.0}
+            env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
+            env.transform[-1].init_stats(num_iter=cfg.init_env_steps, key=stats_key)
         else:
-            obs_stats = stats
-        obs_stats["standard_normal"] = True
-        env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
+            obs_stats.update(stats)
+            env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
+
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -137,6 +140,7 @@ def transformed_env_constructor(
     video_tag: str = "",
     logger: Optional[Logger] = None,
     stats: Optional[dict] = None,
+    stats_key: Union[str, Tuple[str, ...]] = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = False,
     custom_env_maker: Optional[Callable] = None,
@@ -154,6 +158,7 @@ def transformed_env_constructor(
         video_tag (str, optional): video tag to be passed to the Logger object
         logger (Logger, optional): logger associated with the script
         stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
+        stats_key (Tuple, optional): The key to use when computing the stats of the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
         use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,
@@ -225,6 +230,7 @@ def transformed_env_constructor(
             logger,
             env_name,
             stats,
+            stats_key,
             norm_obs_only,
             env_library,
             action_dim_gsde,

@@ -22,7 +22,6 @@ from torchrl.trainers.helpers.collectors import (
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     EnvConfig,
-    get_stats_random_rollout,
     parallel_env_constructor,
     transformed_env_constructor,
 )
@@ -94,18 +93,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     stats = None
     if not cfg.vecnorm and cfg.norm_stats:
-        proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
-        stats = get_stats_random_rollout(
-            cfg,
-            proof_env,
-            key="pixels" if cfg.from_pixels else "observation_vector",
-        )
-        # make sure proof_env is closed
-        proof_env.close()
+        if not hasattr(cfg, "init_env_steps"):
+            raise AttributeError("init_env_steps missing from arguments.")
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
+    else:
+        stats = {"loc": 0.0, "scale": 1.0}
     proof_env = transformed_env_constructor(
-        cfg=cfg, use_env_creator=False, stats=stats
+        cfg=cfg,
+        use_env_creator=False,
+        stats=stats,
+        stats_key="pixels" if cfg.from_pixels else "observation_vector"
     )()
 
     model = make_a2c_model(

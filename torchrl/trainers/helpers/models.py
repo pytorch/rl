@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union, Tuple
 
 import torch
 from torch import distributions as d, nn
@@ -1453,6 +1453,7 @@ def make_dreamer(
     value_key: str = "state_value",
     use_decoder_in_env: bool = False,
     stats: Optional[dict] = None,
+    stats_key: Union[str, Tuple[str, ...]] = None
 ) -> nn.ModuleList:
     """Create Dreamer components.
 
@@ -1469,7 +1470,7 @@ def make_dreamer(
             Defaults to False.
         stats (Optional[dict], optional): Stats to use for normalization.
             Defaults to None.
-
+        stats_key (Tuple, optional): The key to use when computing the stats of the `ObservationNorm` transform
     Returns:
         nn.TensorDictModel: Dreamer World model.
         nn.TensorDictModel: Dreamer Model based environnement.
@@ -1481,7 +1482,10 @@ def make_dreamer(
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
         proof_environment = transformed_env_constructor(
-            cfg=cfg, use_env_creator=False, stats=stats
+            cfg=cfg,
+            use_env_creator=False,
+            stats=stats,
+            stats_key=stats_key
         )()
 
     # Modules
