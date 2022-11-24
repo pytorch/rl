@@ -21,5 +21,3 @@ This is probably due to some incompatibility (tensor casting?) of torch C++ bind
 3. If you need to keep you current torch version, install from source. 
 
       ``` pip install git+https://github.com/pytorch/rl@<put_version_here> ```
-
-
