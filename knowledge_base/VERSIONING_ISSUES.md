@@ -1,7 +1,7 @@
 # Versioning Issues
 
 ## Pytorch version
-This issue is related to https://github.com/pytorch/rl/issues/689. Using PyTorch versions lower < 1.13 and installing stable package leads to the following error:
+This issue is related to https://github.com/pytorch/rl/issues/689. Using PyTorch versions <1.13 and installing stable package leads to undefined symbol errors. For example:
 ```
 ImportError: /usr/local/lib/python3.7/dist-packages/torchrl/_torchrl.so: undefined symbol: _ZN8pybind116detail11type_casterIN2at6TensorEvE4loadENS_6handleEb
 ```
@@ -13,11 +13,14 @@ This is probably due to some incompatibility (tensor casting?) of torch C++ bind
 2. ``` !pip install torchrl ```
 3. ``` import torchrl ```
 
+On Colab you can solve the issue by running:
+``` 
+!pip3 install torch --extra-index-url https://download.pytorch.org/whl/cpu -U 
+```
+before the ```!pip install torchrl``` command. This will install the latest pytorch. Instructions can be found [here](https://pytorch.org/get-started/locally/).
+
 ### Workarounds
-1. Install torch 1.13 or above.
-2. Install latest version of functorch. This version depends on torch 1.13 and will install it for you. 
-
-      ``` pip install functorch ```
-3. If you need to keep you current torch version, install from source. 
-
-      ``` pip install git+https://github.com/pytorch/rl@<put_version_here> ```
+There are two workarounds to this issue
+1. Install/upgrade to the latest pytorch release before installing torchrl.
+2. If you need to use a previous pytorch relase: Install functorch version related to your torch distribution: e.g. ``` pip install functorch==0.2.0 ```   
+      and install library from source ``` pip install git+https://github.com/pytorch/rl@<lib_version_here> ```.
