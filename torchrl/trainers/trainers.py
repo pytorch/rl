@@ -8,19 +8,18 @@ from __future__ import annotations
 import abc
 import pathlib
 import warnings
-from collections import OrderedDict, defaultdict
+from collections import defaultdict, OrderedDict
 from copy import deepcopy
 from textwrap import indent
-from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, List, Any
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import torch.nn
-from tensordict.tensordict import TensorDictBase, pad
+from tensordict.tensordict import pad, TensorDictBase
 from tensordict.utils import expand_right
 from torch import nn, optim
 
-from torchrl._utils import KeyDependentDefaultDict
-from torchrl._utils import _CKPT_BACKEND
+from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import (
     ReplayBuffer,
@@ -42,7 +41,7 @@ except ImportError:
     _has_tqdm = False
 
 try:
-    from torchsnapshot import StateDict, Snapshot
+    from torchsnapshot import Snapshot, StateDict
 
     _has_ts = True
 except ImportError:
@@ -406,7 +405,7 @@ class Trainer:
     def train(self):
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
-            self._pbar_str = dict()
+            self._pbar_str = {}
 
         for batch in self.collector:
             batch = self._process_batch_hook(batch)
@@ -1082,7 +1081,7 @@ class Recorder(TrainerHookBase):
                 self.recorder.train()
                 self.recorder.transform.dump(suffix=self.suffix)
 
-                out = dict()
+                out = {}
                 for key in self.log_keys:
                     value = td_record.get(key).float()
                     if key == "reward":

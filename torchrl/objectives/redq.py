@@ -9,12 +9,12 @@ from typing import Union
 
 import numpy as np
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.modules import TensorDictModule
-from torchrl.objectives.common import LossModule, _has_functorch
+from torchrl.objectives.common import _has_functorch, LossModule
 from torchrl.objectives.utils import (
     distance_loss,
     hold_out_params,

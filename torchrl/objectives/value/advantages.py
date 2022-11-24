@@ -3,19 +3,20 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Union, Optional, List
+from typing import List, Optional, Union
 
 import torch
 from tensordict.tensordict import TensorDictBase
-from torch import Tensor, nn
+from torch import nn, Tensor
 
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.value.functional import (
-    vec_generalized_advantage_estimate,
     td_lambda_advantage_estimate,
+    vec_generalized_advantage_estimate,
     vec_td_lambda_advantage_estimate,
 )
+
 from ..utils import hold_out_net
 from .functional import td_advantage_estimate
 

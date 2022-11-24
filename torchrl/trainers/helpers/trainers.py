@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from typing import Optional, Union, List
+from typing import List, Optional, Union
 from warnings import warn
 
 import torch
@@ -20,16 +20,16 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.trainers.loggers import Logger
 from torchrl.trainers.trainers import (
-    Trainer,
-    SelectKeys,
-    ReplayBufferTrainer,
-    LogReward,
-    RewardNormalizer,
     BatchSubSampler,
-    UpdateWeights,
-    Recorder,
-    CountFramesLog,
     ClearCudaCache,
+    CountFramesLog,
+    LogReward,
+    Recorder,
+    ReplayBufferTrainer,
+    RewardNormalizer,
+    SelectKeys,
+    Trainer,
+    UpdateWeights,
 )
 
 OPTIMIZERS = {

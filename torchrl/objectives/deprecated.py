@@ -1,6 +1,6 @@
 import math
 from numbers import Number
-from typing import Union, Tuple
+from typing import Tuple, Union
 
 import numpy as np
 import torch
@@ -11,9 +11,9 @@ from torch import Tensor
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.modules import TensorDictModule
 from torchrl.objectives import (
+    distance_loss,
     hold_out_params,
     next_state_value as get_next_state_value,
-    distance_loss,
 )
 from torchrl.objectives.common import LossModule
 

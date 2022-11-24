@@ -581,9 +581,11 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
         input_spec=None,
         reward_spec=None,
         from_pixels=True,
-        pixel_shape=[1, 7, 7],
+        pixel_shape=None,
         **kwargs,
     ):
+        if pixel_shape is None:
+            pixel_shape = [1, 7, 7]
         if observation_spec is None:
             cls.out_key = "pixels"
             observation_spec = CompositeSpec(

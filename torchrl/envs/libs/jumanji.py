@@ -1,19 +1,19 @@
 import dataclasses
-from typing import Optional, Dict, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase, make_tensordict
+from tensordict.tensordict import make_tensordict, TensorDict, TensorDictBase
 
 from torchrl.data import (
-    DEVICE_TYPING,
-    TensorSpec,
     CompositeSpec,
+    DEVICE_TYPING,
     DiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
     NdUnboundedDiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
+    TensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs import GymLikeEnv

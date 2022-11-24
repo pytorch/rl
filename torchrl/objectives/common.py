@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Iterator, Optional, Tuple, List, Union
+from typing import Iterator, List, Optional, Tuple, Union
 
 import torch
 from tensordict.nn.functional_modules import FunctionalModuleWithBuffers
@@ -24,7 +24,7 @@ except ImportError:
     )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import Parameter
 
@@ -43,7 +43,7 @@ class LossModule(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self._param_maps = dict()
+        self._param_maps = {}
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".
@@ -283,8 +283,8 @@ class LossModule(nn.Module):
         # module.module.param or such names. We assume that there is a constant prefix
         # and that, when sorted, all keys will match. We could check that the values
         # do match too.
-        keys1 = sorted(list(params.flatten_keys(".").keys()))
-        keys2 = sorted(list(params_vals.keys()))
+        keys1 = sorted(params.flatten_keys(".").keys())
+        keys2 = sorted(params_vals.keys())
         for key1, key2 in zip(keys1, keys2):
             params_vals.rename_key(key2, key1)
         params = params_vals.unflatten_keys(".")
@@ -340,7 +340,7 @@ class LossModule(nn.Module):
         name_buffers_target = "_target_" + buffer_name
         if create_target_params:
             target_params = getattr(self, param_name).detach().clone()
-            target_params_items = sorted(list(target_params.flatten_keys(".").items()))
+            target_params_items = sorted(target_params.flatten_keys(".").items())
             target_params_list = []
             for i, (key, val) in enumerate(target_params_items):
                 name = "_".join([name_params_target, str(i)])
@@ -362,9 +362,7 @@ class LossModule(nn.Module):
             )
 
             target_buffers = getattr(self, buffer_name).detach().clone()
-            target_buffers_items = sorted(
-                list(target_buffers.flatten_keys(".").items())
-            )
+            target_buffers_items = sorted(target_buffers.flatten_keys(".").items())
             target_buffers_list = []
             for i, (key, val) in enumerate(target_buffers_items):
                 name = "_".join([name_buffers_target, str(i)])

@@ -7,7 +7,7 @@ import math
 from typing import Optional, Sequence, Union
 
 import torch
-from torch import nn, distributions as d
+from torch import distributions as d, nn
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 
