@@ -47,8 +47,7 @@ coverage run examples/a2c/a2c.py \
   collector_devices=cuda:0 \
   optim_steps_per_batch=1 \
   record_video=True \
-  record_frames=4 \
-  buffer_size=120
+  record_frames=4
 coverage run examples/dqn/dqn.py \
   total_frames=48 \
   init_random_frames=10 \
