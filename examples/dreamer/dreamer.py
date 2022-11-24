@@ -8,12 +8,12 @@ import torch
 import torch.cuda
 import tqdm
 from dreamer_utils import (
-    parallel_env_constructor,
-    transformed_env_constructor,
     call_record,
+    EnvConfig,
     grad_norm,
     make_recorder_env,
-    EnvConfig,
+    parallel_env_constructor,
+    transformed_env_constructor,
 )
 from hydra.core.config_store import ConfigStore
 
@@ -38,14 +38,8 @@ from torchrl.trainers.helpers.envs import (
     get_stats_random_rollout,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.models import (
-    make_dreamer,
-    DreamerConfig,
-)
-from torchrl.trainers.helpers.replay_buffer import (
-    make_replay_buffer,
-    ReplayArgsConfig,
-)
+from torchrl.trainers.helpers.models import DreamerConfig, make_dreamer
+from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
 from torchrl.trainers.helpers.trainers import TrainerConfig
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
 

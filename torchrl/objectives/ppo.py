@@ -7,11 +7,12 @@ import math
 from typing import Callable, Optional, Tuple
 
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
 
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.utils import distance_loss
+
 from ..modules.tensordict_module import ProbabilisticTensorDictModule
 from .common import LossModule
 

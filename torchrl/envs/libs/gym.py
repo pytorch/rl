@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import warnings
 from types import ModuleType
-from typing import List, Dict
+from typing import Dict, List
 from warnings import warn
 
 import torch
@@ -19,9 +19,10 @@ from torchrl.data import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
+
 from ..._utils import implement_for
 from ...data.utils import numpy_to_torch_dtype_dict
-from ..gym_like import GymLikeEnv, default_info_dict_reader
+from ..gym_like import default_info_dict_reader, GymLikeEnv
 from ..utils import _classproperty
 
 try:

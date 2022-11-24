@@ -4,8 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 from .collectors import (
-    SyncDataCollector,
     aSyncDataCollector,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
+    SyncDataCollector,
 )

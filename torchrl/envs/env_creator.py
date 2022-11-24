@@ -84,7 +84,7 @@ class EnvCreator:
             self.create_env_fn = create_env_fn
 
         self.create_env_kwargs = (
-            create_env_kwargs if isinstance(create_env_kwargs, dict) else dict()
+            create_env_kwargs if isinstance(create_env_kwargs, dict) else {}
         )
         self.initialized = False
         self._meta_data = None
@@ -174,7 +174,7 @@ def get_env_metadata(
     ):
         # then env is a creator
         if kwargs is None:
-            kwargs = dict()
+            kwargs = {}
         env = env_or_creator(**kwargs)
         return EnvMetaData.build_metadata_from_env(env)
     elif isinstance(env_or_creator, EnvCreator):

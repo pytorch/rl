@@ -8,15 +8,16 @@ from __future__ import annotations
 import abc
 from copy import deepcopy
 from numbers import Number
-from typing import Any, Callable, Iterator, Optional, Union, Dict, Sequence
+from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import CompositeSpec, TensorSpec
-from .._utils import seed_generator, prod
+
+from .._utils import prod, seed_generator
 from ..data.utils import DEVICE_TYPING
 from .utils import get_available_libraries, step_mdp
 

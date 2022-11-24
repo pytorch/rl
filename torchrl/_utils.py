@@ -86,7 +86,7 @@ def seed_generator(seed):
 
     """
     max_seed_val = (
-        2 ** 32 - 1
+        2**32 - 1
     )  # https://discuss.pytorch.org/t/what-is-the-max-seed-you-can-set-up/145688
     rng = np.random.default_rng(seed)
     seed = int.from_bytes(rng.bytes(8), "big")

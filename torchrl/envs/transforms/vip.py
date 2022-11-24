@@ -11,19 +11,19 @@ from tensordict.tensordict import TensorDictBase
 from torch.hub import load_state_dict_from_url
 
 from torchrl.data.tensor_specs import (
-    TensorSpec,
     CompositeSpec,
     NdUnboundedContinuousTensorSpec,
+    TensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.transforms import (
-    ToTensorImage,
+    CatTensors,
     Compose,
+    FlattenObservation,
     ObservationNorm,
     Resize,
+    ToTensorImage,
     Transform,
-    CatTensors,
-    FlattenObservation,
     UnsqueezeTransform,
 )
 

@@ -3,8 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional, Union
-from typing import Tuple
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch

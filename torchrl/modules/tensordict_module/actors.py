@@ -8,7 +8,7 @@ from typing import Optional, Sequence, Tuple, Union
 import torch
 from torch import nn
 
-from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, TensorSpec
+from torchrl.data import CompositeSpec, TensorSpec, UnboundedContinuousTensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import (
     TensorDictModule,

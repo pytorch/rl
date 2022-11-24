@@ -24,17 +24,18 @@ except ImportError:
 
 from tensordict import TensorDict
 from torchrl.data import (
-    TensorDictPrioritizedReplayBuffer,
-    TensorDictReplayBuffer,
-    ListStorage,
     LazyMemmapStorage,
     LazyTensorStorage,
+    ListStorage,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.trainers import Recorder, Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
+    _has_ts,
     BatchSubSampler,
     CountFramesLog,
     LogReward,
@@ -43,7 +44,6 @@ from torchrl.trainers.trainers import (
     RewardNormalizer,
     SelectKeys,
     UpdateWeights,
-    _has_ts,
 )
 
 
@@ -72,7 +72,7 @@ class MockingCollector:
         pass
 
     def state_dict(self):
-        return dict()
+        return {}
 
     def load_state_dict(self, state_dict):
         pass
