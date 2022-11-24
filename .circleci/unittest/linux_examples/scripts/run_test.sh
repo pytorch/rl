@@ -40,7 +40,6 @@ coverage run examples/ddpg/ddpg.py \
   buffer_size=120
 coverage run examples/a2c/a2c.py \
   total_frames=48 \
-  init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
   num_workers=2 \
@@ -49,7 +48,7 @@ coverage run examples/a2c/a2c.py \
   optim_steps_per_batch=1 \
   record_video=True \
   record_frames=4 \
-  buffer_size=120
+  logger=csv
 coverage run examples/dqn/dqn.py \
   total_frames=48 \
   init_random_frames=10 \
