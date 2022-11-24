@@ -1403,4 +1403,7 @@ class _CompositeSpecKeysView:
                 yield key
 
     def __len__(self):
-        return len(list(self))
+        i = 0
+        for _ in self:
+            i += 1
+        return i
