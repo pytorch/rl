@@ -501,7 +501,14 @@ class TestTDModule:
         # vmap = True
         params = params.expand(10)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        td_out = vmap(tdmodule, (None, 0))(td, params)
+        if safe and spec_type == "bounded":
+            with pytest.raises(
+                RuntimeError, match="vmap cannot be used with safe=True"
+            ):
+                td_out = vmap(tdmodule, (None, 0))(td, params)
+            return
+        else:
+            td_out = vmap(tdmodule, (None, 0))(td, params)
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
@@ -582,7 +589,14 @@ class TestTDModule:
         # vmap = True
         params = params.expand(10)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        td_out = vmap(tdmodule, (None, 0))(td, params)
+        if safe and spec_type == "bounded":
+            with pytest.raises(
+                RuntimeError, match="vmap cannot be used with safe=True"
+            ):
+                td_out = vmap(tdmodule, (None, 0))(td, params)
+            return
+        else:
+            td_out = vmap(tdmodule, (None, 0))(td, params)
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
@@ -1170,7 +1184,15 @@ class TestTDSequence:
         # vmap = True
         params = params.expand(10)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        td_out = vmap(tdmodule, (None, 0))(td, params)
+        if safe and spec_type == "bounded":
+            with pytest.raises(
+                RuntimeError, match="vmap cannot be used with safe=True"
+            ):
+                td_out = vmap(tdmodule, (None, 0))(td, params)
+            return
+        else:
+            td_out = vmap(tdmodule, (None, 0))(td, params)
+
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
@@ -1247,7 +1269,14 @@ class TestTDSequence:
         # vmap = True
         params = params.expand(10)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        td_out = vmap(tdmodule, (None, 0))(td, params)
+        if safe and spec_type == "bounded":
+            with pytest.raises(
+                RuntimeError, match="vmap cannot be used with safe=True"
+            ):
+                td_out = vmap(tdmodule, (None, 0))(td, params)
+            return
+        else:
+            td_out = vmap(tdmodule, (None, 0))(td, params)
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
