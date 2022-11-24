@@ -489,8 +489,6 @@ python -c 'from torchrl.envs.libs.gym import GymEnv'
 ```
 If this is the case, consider executing torchrl from another location.
 
-
-
 On **MacOs**, we recommend installing XCode first.
 With Apple Silicon M1 chips, make sure you are using the arm64-built python
 (e.g. [here](https://betterprogramming.pub/how-to-install-pytorch-on-apple-m1-series-512b3ad9bc6)). Running the following lines of code
@@ -509,7 +507,7 @@ OS: macOS **** (x86_64)
 ```
 
 If you successfully install and you have a ```ImportError: /usr/local/lib/python3.7/dist-packages/torchrl/_torchrl.so: undefined symbol: _ZN8pybind116detail11type_casterIN2at6TensorEvE4loadENS_6handleEb``` when you try to import the module, most probably this is caused by an incompatibility with your torch package.
-Please install torch 1.13 or build the library from source. Please refer to [versioning issues](knowledge_base/VERSIONING_ISSUES.md) for a complete explanation.
+Please install torch 1.13 or build the library from source. Please refer to this [versioning issues document](knowledge_base/VERSIONING_ISSUES.md) for a complete explanation.
 
 
 ## Running examples
