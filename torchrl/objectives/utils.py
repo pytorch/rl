@@ -212,7 +212,11 @@ class SoftUpdate(TargetNetUpdater):
     def __init__(
         self,
         loss_module: Union[
-            "DQNLoss", "DDPGLoss", "SACLoss", "REDQLoss", "TD3Loss"  # noqa: F821
+            "DQNLoss",  # noqa: F821
+            "DDPGLoss",  # noqa: F821
+            "SACLoss",  # noqa: F821
+            "REDQLoss",  # noqa: F821
+            "TD3Loss",  # noqa: F821
         ],
         eps: float = 0.999,
     ):
@@ -343,5 +347,5 @@ def next_state_value(
     done = done.to(torch.float)
     target_value = (1 - done) * pred_next_val_detach
     rewards = rewards.to(torch.float)
-    target_value = rewards + (gamma**steps_to_next_obs) * target_value
+    target_value = rewards + (gamma ** steps_to_next_obs) * target_value
     return target_value
