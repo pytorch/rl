@@ -6,8 +6,6 @@
 import argparse
 from copy import deepcopy
 
-from tensordict.nn.functional_modules import FunctionalModuleWithBuffers
-
 _has_functorch = True
 try:
     import functorch
