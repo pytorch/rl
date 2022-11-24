@@ -24,10 +24,13 @@ except ImportError:
         "functional programming should work, but functionality and performance "
         "may be affected. Consider installing functorch and/or upgrating pytorch."
     )
-    from tensordict.nn.functional_modules import (
-        FunctionalModule,
-        FunctionalModuleWithBuffers,
-    )
+
+    class FunctionalModule:
+        pass
+
+    class FunctionalModuleWithBuffers:
+        pass
+
 
 from tensordict.nn import TensorDictModule as _TensorDictModule
 from tensordict.tensordict import TensorDictBase
