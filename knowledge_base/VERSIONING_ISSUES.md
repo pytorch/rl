@@ -5,8 +5,6 @@ This issue is related to https://github.com/pytorch/rl/issues/689. Using PyTorch
 ```
 ImportError: /usr/local/lib/python3.7/dist-packages/torchrl/_torchrl.so: undefined symbol: _ZN8pybind116detail11type_casterIN2at6TensorEvE4loadENS_6handleEb
 ```
-This is probably due to some incompatibility (tensor casting?) of torch C++ bindings between version 1.12 and 1.13. 
-
 
 ### How to reproduce
 1. Create an Colab Notebook (at 24/11/2022 Colab enviroment has Python 3.7 and Pytorch 1.12 installed by default).
