@@ -12,11 +12,11 @@ import pytest
 import torch
 import yaml
 from _utils_internal import (
-    get_available_devices,
     CARTPOLE_VERSIONED,
+    get_available_devices,
+    HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
-    HALFCHEETAH_VERSIONED,
 )
 from mocking_classes import (
     ActionObsMergeLinear,
@@ -389,7 +389,9 @@ class TestParallel:
             env_make = [lambda: DMControlEnv("humanoid", tasks[0])] * 3
         else:
             single_task = False
-            env_make = [lambda: DMControlEnv("humanoid", task) for task in tasks]
+            env_make = [
+                lambda task=task: DMControlEnv("humanoid", task) for task in tasks
+            ]
 
         if not share_individual_td and not single_task:
             with pytest.raises(

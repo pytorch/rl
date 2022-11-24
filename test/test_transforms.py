@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import itertools
 from copy import copy, deepcopy
 from functools import partial
 
@@ -10,10 +11,10 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import (  # noqa
-    get_available_devices,
-    retry,
     dtype_fixture,
+    get_available_devices,
     PENDULUM_VERSIONED,
+    retry,
 )
 from mocking_classes import (
     ContinuousActionVecMockEnv,
@@ -25,11 +26,11 @@ from tensordict import TensorDict
 from torch import multiprocessing as mp, Tensor
 from torchrl._utils import prod
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
     UnboundedContinuousTensorSpec,
-    BoundedTensorSpec,
 )
 from torchrl.envs import (
     BinarizeReward,
@@ -55,15 +56,15 @@ from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.transforms import (
-    DiscreteActionProjection,
     _has_tv,
     CenterCrop,
+    DiscreteActionProjection,
+    gSDENoise,
     NoopResetEnv,
     PinMemoryTransform,
     SqueezeTransform,
     TensorDictPrimer,
     UnsqueezeTransform,
-    gSDENoise,
 )
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 
@@ -811,7 +812,7 @@ class TestTransforms:
     def test_compose_inv(self, keys_inv_1, keys_inv_2, device):
         torch.manual_seed(0)
         keys_to_transform = set(keys_inv_1 + keys_inv_2)
-        keys_total = set(["action_1", "action_2", "dont_touch"])
+        keys_total = {"action_1", "action_2", "dont_touch"}
         double2float_1 = DoubleToFloat(in_keys_inv=keys_inv_1)
         double2float_2 = DoubleToFloat(in_keys_inv=keys_inv_2)
         compose = Compose(double2float_1, double2float_2)
@@ -1289,7 +1290,7 @@ class TestTransforms:
     def test_reward_scaling(self, batch, scale, loc, keys, device, standard_normal):
         torch.manual_seed(0)
         if keys is None:
-            keys_total = set([])
+            keys_total = set()
         else:
             keys_total = set(keys)
         reward_scaling = RewardScaling(
@@ -1336,7 +1337,7 @@ class TestTransforms:
     def test_append(self):
         env = ContinuousActionVecMockEnv()
         obs_spec = env.observation_spec
-        key = list(obs_spec.keys())[0]
+        (key,) = itertools.islice(obs_spec.keys(), 1)
 
         env = TransformedEnv(env)
         env.append_transform(CatFrames(N=4, cat_dim=-1, in_keys=[key]))
@@ -1350,7 +1351,7 @@ class TestTransforms:
 
         env = ContinuousActionVecMockEnv()
         obs_spec = env.observation_spec
-        key = list(obs_spec.keys())[0]
+        (key,) = itertools.islice(obs_spec.keys(), 1)
         env = TransformedEnv(env)
 
         # we start by asking the spec. That will create the private attributes

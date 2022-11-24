@@ -350,9 +350,11 @@ If you would like to contribute to new features, check our [call for contributio
 A series of [examples](examples/) are provided with an illustrative purpose:
 - [DQN (and add-ons up to Rainbow)](examples/dqn/dqn.py)
 - [DDPG](examples/ddpg/ddpg.py)
+- [A2C](examples/a2c/a2c.py)
 - [PPO](examples/ppo/ppo.py)
 - [SAC](examples/sac/sac.py)
 - [REDQ](examples/redq/redq.py)
+- [Dreamer](examples/dreamer/dreamer.py)
 
 and many more to come!
 
@@ -503,6 +505,9 @@ and not
 ```
 OS: macOS **** (x86_64)
 ```
+
+Versioning issues can cause error message of the type ```undefined symbol``` and such. For these, refer to the [versioning issues document](knowledge_base/VERSIONING_ISSUES.md) for a complete explanation and proposed workarounds.
+
 
 ## Running examples
 Examples are coded in a very similar way but the configuration may change from one algorithm to another (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)

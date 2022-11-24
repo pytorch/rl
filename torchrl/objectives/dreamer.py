@@ -8,11 +8,10 @@ import torch
 from tensordict import TensorDict
 
 from torchrl.envs.model_based.dreamer import DreamerEnv
-from torchrl.envs.utils import set_exploration_mode
-from torchrl.envs.utils import step_mdp
+from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import hold_out_net, distance_loss
+from torchrl.objectives.utils import distance_loss, hold_out_net
 from torchrl.objectives.value.functional import vec_td_lambda_return_estimate
 
 
@@ -113,8 +112,8 @@ class DreamerModelLoss(LossModule):
     ) -> torch.Tensor:
         kl = (
             torch.log(prior_std / posterior_std)
-            + (posterior_std ** 2 + (prior_mean - posterior_mean) ** 2)
-            / (2 * prior_std ** 2)
+            + (posterior_std**2 + (prior_mean - posterior_mean) ** 2)
+            / (2 * prior_std**2)
             - 0.5
         )
         if not self.global_average:

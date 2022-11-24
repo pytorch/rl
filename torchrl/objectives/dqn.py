@@ -11,11 +11,9 @@ from tensordict.tensordict import TensorDictBase
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import (
-    DistributionalQValueActor,
-    QValueActor,
-)
+from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
+
 from .common import LossModule
 from .utils import distance_loss, next_state_value
 
@@ -214,7 +212,7 @@ class DistributionalDQNLoss(LossModule):
         done = tensordict.get("done")
 
         steps_to_next_obs = tensordict.get("steps_to_next_obs", 1)
-        discount = self.gamma ** steps_to_next_obs
+        discount = self.gamma**steps_to_next_obs
 
         # Calculate current state probabilities (online network noise already
         # sampled)

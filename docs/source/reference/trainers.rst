@@ -164,6 +164,7 @@ Builders
     transformed_env_constructor
     parallel_env_constructor
     make_sac_loss
+    make_a2c_loss
     make_dqn_loss
     make_ddpg_loss
     make_target_updater
@@ -172,6 +173,7 @@ Builders
     make_dqn_actor
     make_ddpg_actor
     make_ppo_model
+    make_a2c_model
     make_sac_model
     make_redq_model
     make_replay_buffer

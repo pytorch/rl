@@ -5,18 +5,18 @@
 
 from .actors import (
     Actor,
-    ActorValueOperator,
-    ValueOperator,
-    ProbabilisticActor,
-    QValueActor,
     ActorCriticOperator,
     ActorCriticWrapper,
+    ActorValueOperator,
     DistributionalQValueActor,
+    ProbabilisticActor,
+    QValueActor,
+    ValueOperator,
 )
 from .common import TensorDictModule, TensorDictModuleWrapper
 from .exploration import (
-    EGreedyWrapper,
     AdditiveGaussianWrapper,
+    EGreedyWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
 from .probabilistic import ProbabilisticTensorDictModule

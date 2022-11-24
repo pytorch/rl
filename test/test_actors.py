@@ -1,8 +1,8 @@
 import pytest
 import torch
 from torchrl.modules.tensordict_module.actors import (
-    QValueHook,
     DistributionalQValueHook,
+    QValueHook,
 )
 
 

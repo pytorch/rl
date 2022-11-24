@@ -2,9 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from dataclasses import dataclass
-from dataclasses import field as dataclass_field
-from typing import Callable, Optional, Union, Any, Sequence
+from dataclasses import dataclass, field as dataclass_field
+from typing import Any, Callable, Optional, Sequence, Union
 
 from torchrl.data import NdUnboundedContinuousTensorSpec
 from torchrl.envs import ParallelEnv
@@ -14,6 +13,7 @@ from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     CatFrames,
+    CenterCrop,
     DoubleToFloat,
     GrayScale,
     NoopResetEnv,
@@ -22,12 +22,8 @@ from torchrl.envs.transforms import (
     RewardScaling,
     ToTensorImage,
     TransformedEnv,
-    CenterCrop,
 )
-from torchrl.envs.transforms.transforms import (
-    FlattenObservation,
-    TensorDictPrimer,
-)
+from torchrl.envs.transforms.transforms import FlattenObservation, TensorDictPrimer
 from torchrl.record.recorder import VideoRecorder
 from torchrl.trainers.loggers import Logger
 

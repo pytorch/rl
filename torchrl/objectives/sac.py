@@ -9,15 +9,13 @@ from typing import Tuple, Union
 
 import numpy as np
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
-from torchrl.modules import ProbabilisticActor
-from torchrl.modules import TensorDictModule
-from torchrl.modules.tensordict_module.actors import (
-    ActorCriticWrapper,
-)
+from torchrl.modules import ProbabilisticActor, TensorDictModule
+from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.utils import distance_loss, next_state_value
+
 from ..envs.utils import set_exploration_mode
 from .common import LossModule
 

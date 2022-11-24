@@ -12,12 +12,8 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from tensordict.tensordict import assert_allclose_td, TensorDictBase, TensorDict
-from torchrl.data import (
-    PrioritizedReplayBuffer,
-    ReplayBuffer,
-    TensorDictReplayBuffer,
-)
+from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
+from torchrl.data import PrioritizedReplayBuffer, ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import (
     rb_prototype,
     samplers,
@@ -32,25 +28,25 @@ from torchrl.data.replay_buffers.storages import (
 )
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
 from torchrl.envs.transforms.transforms import (
+    BinarizeReward,
+    CatFrames,
     CatTensors,
+    CenterCrop,
+    DiscreteActionProjection,
+    DoubleToFloat,
+    FiniteTensorDictCheck,
     FlattenObservation,
+    GrayScale,
+    gSDENoise,
+    ObservationNorm,
+    PinMemoryTransform,
+    Resize,
+    RewardClipping,
+    RewardScaling,
     SqueezeTransform,
     ToTensorImage,
-    RewardClipping,
-    BinarizeReward,
-    Resize,
-    CenterCrop,
     UnsqueezeTransform,
-    GrayScale,
-    ObservationNorm,
-    CatFrames,
-    RewardScaling,
-    DoubleToFloat,
     VecNorm,
-    DiscreteActionProjection,
-    FiniteTensorDictCheck,
-    gSDENoise,
-    PinMemoryTransform,
 )
 
 _has_tv = importlib.util.find_spec("torchvision") is not None
@@ -196,6 +192,34 @@ class TestPrototypeBuffers:
         if not isinstance(b, bool):
             b = b.all()
         assert b
+
+
+@pytest.mark.parametrize("max_size", [1000])
+@pytest.mark.parametrize("shape", [[3, 4]])
+@pytest.mark.parametrize("storage", [LazyTensorStorage, LazyMemmapStorage])
+class TestStorages:
+    def _get_nested_td(self, shape):
+        nested_td = TensorDict(
+            {
+                "key1": torch.ones(*shape),
+                "key2": torch.ones(*shape),
+                "next": TensorDict(
+                    {
+                        "key1": torch.ones(*shape),
+                        "key2": torch.ones(*shape),
+                    },
+                    shape,
+                ),
+            },
+            shape,
+        )
+        return nested_td
+
+    def test_init(self, max_size, shape, storage):
+        td = self._get_nested_td(shape)
+        mystorage = storage(max_size=max_size)
+        mystorage._init(td)
+        assert mystorage._storage.shape == (max_size, *shape)
 
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])

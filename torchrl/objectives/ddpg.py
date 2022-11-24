@@ -8,15 +8,12 @@ from __future__ import annotations
 from typing import Tuple
 
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.modules import TensorDictModule
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
-from torchrl.objectives.utils import (
-    distance_loss,
-    hold_out_params,
-    next_state_value,
-)
+from torchrl.objectives.utils import distance_loss, hold_out_params, next_state_value
+
 from ..envs.utils import set_exploration_mode
 from .common import LossModule
 

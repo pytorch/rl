@@ -32,8 +32,8 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import NormalParamWrapper, TanhNormal, TensorDictModule
 from torchrl.modules.tensordict_module.common import (
-    is_tensordict_compatible,
     ensure_tensordict_compatible,
+    is_tensordict_compatible,
 )
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,

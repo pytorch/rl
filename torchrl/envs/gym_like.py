@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import abc
+import itertools
 import warnings
-from typing import List, Optional, Sequence, Union, Tuple, Any, Dict
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -167,7 +168,7 @@ class GymLikeEnv(_EnvWrapper):
         if isinstance(observations, dict):
             observations = {key: value for key, value in observations.items()}
         if not isinstance(observations, (TensorDict, dict)):
-            key = list(self.observation_spec.keys())[0]
+            (key,) = itertools.islice(self.observation_spec.keys(), 1)
             observations = {key: observations}
         observations = self.observation_spec.encode(observations)
         return observations

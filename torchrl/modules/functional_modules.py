@@ -21,14 +21,14 @@ except ImportError:
 # Monky-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
 if _has_functorch:
     from functorch._src.vmap import (
-        _get_name,
-        tree_flatten,
-        _broadcast_to_and_flatten,
-        Tensor,
-        _validate_and_get_batch_size,
         _add_batch_dim,
-        tree_unflatten,
+        _broadcast_to_and_flatten,
+        _get_name,
         _remove_batch_dim,
+        _validate_and_get_batch_size,
+        Tensor,
+        tree_flatten,
+        tree_unflatten,
     )
 
     # Monkey-patches
@@ -100,7 +100,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             arg
             if in_dim is None
             else arg.apply(
-                lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
+                lambda _arg, in_dim=in_dim: _add_batch_dim(_arg, in_dim, vmap_level),
                 batch_size=[b for i, b in enumerate(arg.batch_size) if i != in_dim],
             )
             if isinstance(arg, TensorDictBase)
@@ -155,7 +155,9 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 out = _remove_batch_dim(batched_output, vmap_level, batch_size, out_dim)
             else:
                 out = batched_output.apply(
-                    lambda x: _remove_batch_dim(x, vmap_level, batch_size, out_dim),
+                    lambda x, out_dim=out_dim: _remove_batch_dim(
+                        x, vmap_level, batch_size, out_dim
+                    ),
                     batch_size=[batch_size, *batched_output.batch_size],
                 )
             flat_outputs.append(out)
