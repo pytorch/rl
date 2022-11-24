@@ -1336,7 +1336,7 @@ class TestTransforms:
     def test_append(self):
         env = ContinuousActionVecMockEnv()
         obs_spec = env.observation_spec
-        key = list(obs_spec.keys())[0]
+        (key,) = itertools.islice(obs_spec.keys(), 1)
 
         env = TransformedEnv(env)
         env.append_transform(CatFrames(N=4, cat_dim=-1, in_keys=[key]))
@@ -1350,7 +1350,7 @@ class TestTransforms:
 
         env = ContinuousActionVecMockEnv()
         obs_spec = env.observation_spec
-        key = list(obs_spec.keys())[0]
+        key = itertools.islice(obs_spec.keys(), 1)
         env = TransformedEnv(env)
 
         # we start by asking the spec. That will create the private attributes

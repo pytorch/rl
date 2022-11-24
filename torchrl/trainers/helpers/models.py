@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import itertools
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
@@ -165,7 +166,7 @@ def make_dqn_actor(
             "mlp_kwargs_output": {"num_cells": 512, "layer_class": linear_layer_class},
         }
         # automatically infer in key
-        in_key = list(env_specs["observation_spec"])[0]
+        (in_key,) = itertools.islice(env_specs["observation_spec"], 1)
 
     out_features = action_spec.shape[0]
     actor_class = QValueActor
