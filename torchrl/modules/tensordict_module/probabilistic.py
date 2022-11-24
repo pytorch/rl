@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Sequence, Union, Type, Optional
+from typing import Optional, Sequence, Type, Union
 
 from tensordict.nn import (
     ProbabilisticTensorDictModule as _ProbabilisticTensorDictModule,

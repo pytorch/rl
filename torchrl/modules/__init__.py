@@ -48,7 +48,6 @@ from .tensordict_module import (
     ActorValueOperator,
     AdditiveGaussianWrapper,
     DistributionalQValueActor,
-    TensorDictModule,
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
