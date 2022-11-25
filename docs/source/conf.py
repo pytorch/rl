@@ -62,11 +62,13 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.viewcode",
+    "sphinx.ext.aafig",
     "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinx_gallery.gen_gallery",
+    "sphinxcontrib.aafig",
     "myst_parser",
 ]
 
