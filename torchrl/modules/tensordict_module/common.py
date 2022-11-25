@@ -81,7 +81,7 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
 
 
 class SafeModule(TensorDictModule):
-    """A SafeModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
+    """An :obj:``SafeModule`` is a :obj:``tensordict.nn.TensorDictModule`` subclass that accepts a :obj:``TensorSpec`` as argument to control the output domain.
 
     Args:
         module (nn.Module): a nn.Module used to map the input to the output parameter space. Can be a functional

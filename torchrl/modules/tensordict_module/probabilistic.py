@@ -13,11 +13,7 @@ from torchrl.modules.tensordict_module.common import SafeModule
 
 
 class SafeProbabilisticModule(ProbabilisticTensorDictModule, SafeModule):
-    """A probabilistic TD Module.
-
-    `ProbabilisticTDModule` is a special case of a TDModule where the output is
-    sampled given some rule, specified by the input :obj:`default_interaction_mode`
-    argument and the :obj:`exploration_mode()` global function.
+    """A :obj:``SafeProbabilisticModule`` is an :obj:``tensordict.nn.ProbabilisticTensorDictModule`` subclass that accepts a :obj:``TensorSpec`` as argument to control the output domain.
 
     It consists in a wrapper around another TDModule that returns a tensordict
     updated with the distribution parameters. :obj:`SafeProbabilisticModule` is
