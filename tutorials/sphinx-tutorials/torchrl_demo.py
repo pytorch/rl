@@ -32,69 +32,69 @@ This demo was presented at ICML 2022 on the industry demo day.
 # **Content**: TODO: should the presentation get changed ?
 #
 # torchrl
-#
-# - collectors
-#    - collectors.py
-# - data
-#    - tensor_specs.py
-#    - postprocs
-#       - postprocs.py
-#    - replay_buffers
-#       - replay_buffers.py
-#       - storages.py
-# - envs
-#    - common.py
-#    - env_creator.py
-#    - gym_like.py
-#    - vec_env.py
-#    - libs
-#       - dm_control.py
-#       - gym.py
-#    - transforms
-#       - functional.py
-#       - transforms.py
-# - modules
-#    - distributions
-#       - continuous.py
-#       - discrete.py
-#    - models
-#       - models.py
-#       - exploration.py
-#    - tensordict_module
-#       - actors.py
-#       - common.py
-#       - exploration.py
-#       - probabilistic.py
-#       - sequence.py
-# - objectives
-#    - common.py
-#    - ddpg.py
-#    - dqn.py
-#    - functional.py
-#    - ppo.py
-#    - redq.py
-#    - reinforce.py
-#    - sac.py
-#    - utils.py
-#    - value
-#       - advantages.py
-#       - functional.py
-#       - pg.py
-#       - utils.py
-#       - vtrace.py
-# - record
-#       - recorder.py
-# - trainers
-#    - loggers
-#    - trainers.py
-#    - helpers
-#       - collectors.py
-#       - envs.py
-#       - loggers.py
-#       - losses.py
-#       - models.py
-#       - replay_buffer.py
-#       - trainers.py
+# │
+# ├── collectors
+# │   └── collectors.py
+# ├── data
+# │   ├── tensor_specs.py
+# │   ├── postprocs
+# │   │  └── postprocs.py
+# │   └── replay_buffers
+# │      ├── replay_buffers.py
+# │      └── storages.py
+# ├── envs
+# │   ├── common.py
+# │   ├── env_creator.py
+# │   ├── gym_like.py
+# │   ├── vec_env.py
+# │   ├── libs
+# │   │  ├── dm_control.py
+# │   │  └── gym.py
+# │   └── transforms
+# │      ├── functional.py
+# │      └── transforms.py
+# ├── modules
+# │   ├── distributions
+# │   │  ├── continuous.py
+# │   │  └── discrete.py
+# │   ├── models
+# │   │  ├── models.py
+# │   │  └── exploration.py
+# │   └── tensordict_module
+# │      ├── actors.py
+# │      ├── common.py
+# │      ├── exploration.py
+# │      ├── probabilistic.py
+# │      └── sequence.py
+# ├── objectives
+# │   ├── common.py
+# │   ├── ddpg.py
+# │   ├── dqn.py
+# │   ├── functional.py
+# │   ├── ppo.py
+# │   ├── redq.py
+# │   ├── reinforce.py
+# │   ├── sac.py
+# │   ├── utils.py
+# │   └── value
+# │      ├── advantages.py
+# │      ├── functional.py
+# │      ├── pg.py
+# │      ├── utils.py
+# │      └── vtrace.py
+# ├── record
+# │      └── recorder.py
+# └── trainers
+#     ├── loggers
+#     ├── trainers.py
+#     └── helpers
+#        ├── collectors.py
+#        ├── envs.py
+#        ├── loggers.py
+#        ├── losses.py
+#        ├── models.py
+#        ├── replay_buffer.py
+#        └── trainers.py
 #
 # Unlike other domains, RL is less about media than *algorithms*. As such, it
 # is harder to make truly independent components.

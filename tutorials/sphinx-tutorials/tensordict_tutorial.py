@@ -30,23 +30,25 @@ TensorDict
 # TODO: should these snippets be re-formatted?
 #
 # **Method A**
-
-# for i in range(optim_steps):
-#   images, labels = get_data_A()
-#   loss = loss_module(images, labels)
-#   loss.backward()
-#   optim.step()
-#   optim.zero_grad()
+#     .. code-block:: python
+#
+#       >>> for i in range(optim_steps):
+#       ...     images, labels = get_data_A()
+#       ...     loss = loss_module(images, labels)
+#       ...     loss.backward()
+#       ...     optim.step()
+#       ...     optim.zero_grad()
 
 ###############################################################################
 # **Method B**
-
-# for i in range(optim_steps):
-#   images, labels = get_data_B()
-#   loss = loss_module(images, labels)
-#   loss.backward()
-#   optim.step()
-#   optim.zero_grad()
+#     .. code-block:: python
+#
+#       >>> for i in range(optim_steps):
+#       ...     images, labels = get_data_B()
+#       ...     loss = loss_module(images, labels)
+#       ...     loss.backward()
+#       ...     optim.step()
+#       ...     optim.zero_grad()
 
 ###############################################################################
 # We can see that this limits the reusability of code. A lot of code has to be
@@ -55,13 +57,14 @@ TensorDict
 
 ###############################################################################
 # **General Method**
-
-# for i in range(optim_steps):
-#   images, labels = get_data()
-#   loss = loss_module(images, labels)
-#   loss.backward()
-#   optim.step()
-#   optim.zero_grad()
+#     .. code-block:: python
+#
+#       >>> for i in range(optim_steps):
+#       ...     images, labels = get_data()
+#       ...     loss = loss_module(images, labels)
+#       ...     loss.backward()
+#       ...     optim.step()
+#       ...     optim.zero_grad()
 
 ###############################################################################
 # We can now reuse the same training loop across datasets and losses.
@@ -71,12 +74,13 @@ TensorDict
 #
 # One could argue that you could achieve the same results with a dataset
 # that outputs a pytorch dict.
-
-# class DictDataset(Dataset):
-#   ...
-#   def __getitem__(self, idx)
-#       ...
-#       return {"images": image, "masks": mask}
+#     .. code-block:: python
+#
+#       >>> class DictDataset(Dataset):
+#       ...     ...
+#       ...     def __getitem__(self, idx)
+#       ...         ...
+#       ...         return {"images": image, "masks": mask}
 
 ###############################################################################
 # However to achieve this you would need to write a complicated collate
@@ -97,12 +101,13 @@ def collate_dict_fn(dict_list):
 # With TensorDicts this is now much simpler:
 #
 # **dataloader = Dataloader(DictDataset(), collate_fn = collate_dict_fn)**
-
-# class DictDataset(Dataset):
-#   ...
-#   def __getitem__(self, idx)
-#       ...
-#       return TensorDict({"images": image, "masks": mask})
+#     .. code-block:: python
+#
+#       >>> class DictDataset(Dataset):
+#       ...   ...
+#       ...   def __getitem__(self, idx)
+#       ...       ...
+#       ...       return TensorDict({"images": image, "masks": mask})
 
 ###############################################################################
 # Here, the collate function is as simple as:
