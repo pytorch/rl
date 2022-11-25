@@ -7,12 +7,13 @@ import math
 from typing import Callable, Optional, Tuple
 
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
 
-from torchrl.modules import TensorDictModule
+from torchrl.modules import SafeModule
 from torchrl.objectives.utils import distance_loss
-from ..modules.tensordict_module import ProbabilisticTensorDictModule
+
+from ..modules.tensordict_module import SafeProbabilisticModule
 from .common import LossModule
 
 
@@ -31,7 +32,7 @@ class PPOLoss(LossModule):
     https://arxiv.org/abs/1707.06347
 
     Args:
-        actor (ProbabilisticTensorDictModule): policy operator.
+        actor (SafeProbabilisticModule): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
@@ -51,8 +52,8 @@ class PPOLoss(LossModule):
 
     def __init__(
         self,
-        actor: ProbabilisticTensorDictModule,
-        critic: TensorDictModule,
+        actor: SafeProbabilisticModule,
+        critic: SafeModule,
         advantage_key: str = "advantage",
         advantage_diff_key: str = "value_error",
         entropy_bonus: bool = True,
@@ -170,7 +171,7 @@ class ClipPPOLoss(PPOLoss):
         loss = -min( weight * advantage, min(max(weight, 1-eps), 1+eps) * advantage)
 
     Args:
-        actor (ProbabilisticTensorDictModule): policy operator.
+        actor (SafeProbabilisticModule): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
@@ -192,8 +193,8 @@ class ClipPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: ProbabilisticTensorDictModule,
-        critic: TensorDictModule,
+        actor: SafeProbabilisticModule,
+        critic: SafeModule,
         advantage_key: str = "advantage",
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
@@ -276,7 +277,7 @@ class KLPENPPOLoss(PPOLoss):
     favouring a certain level of distancing between the two while still preventing them to be too much apart.
 
     Args:
-        actor (ProbabilisticTensorDictModule): policy operator.
+        actor (SafeProbabilisticModule): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
@@ -303,8 +304,8 @@ class KLPENPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: ProbabilisticTensorDictModule,
-        critic: TensorDictModule,
+        actor: SafeProbabilisticModule,
+        critic: SafeModule,
         advantage_key="advantage",
         dtarg: float = 0.01,
         beta: float = 1.0,

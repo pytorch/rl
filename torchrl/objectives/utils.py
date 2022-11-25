@@ -13,7 +13,7 @@ from torch import nn, Tensor
 from torch.nn import functional as F
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import TensorDictModule
+from torchrl.modules import SafeModule
 
 
 class _context_manager:
@@ -154,8 +154,8 @@ class TargetNetUpdater:
         for source, target in zip(self._sources.values(), self._targets.values()):
             if isinstance(source, TensorDictBase) and not source.is_empty():
                 # native functional modules
-                source = list(zip(*sorted(list(source.items()))))[1]
-                target = list(zip(*sorted(list(target.items()))))[1]
+                source = list(zip(*sorted(source.items())))[1]
+                target = list(zip(*sorted(target.items())))[1]
             elif isinstance(source, TensorDictBase) and source.is_empty():
                 continue
             for p_source, p_target in zip(source, target):
@@ -174,8 +174,8 @@ class TargetNetUpdater:
         for source, target in zip(self._sources.values(), self._targets.values()):
             if isinstance(source, TensorDictBase) and not source.is_empty():
                 # native functional modules
-                source = list(zip(*sorted(list(source.items()))))[1]
-                target = list(zip(*sorted(list(target.items()))))[1]
+                source = list(zip(*sorted(source.items())))[1]
+                target = list(zip(*sorted(target.items())))[1]
             elif isinstance(source, TensorDictBase) and source.is_empty():
                 continue
             for p_source, p_target in zip(source, target):
@@ -191,8 +191,8 @@ class TargetNetUpdater:
 
     def __repr__(self) -> str:
         string = (
-            f"{self.__class__.__name__}(sources={[name for name in self._sources]}, targets="
-            f"{[name for name in self._targets]})"
+            f"{self.__class__.__name__}(sources={list(self._sources)}, targets="
+            f"{list(self._targets)})"
         )
         return string
 
@@ -293,7 +293,7 @@ class hold_out_params(_context_manager):
 @torch.no_grad()
 def next_state_value(
     tensordict: TensorDictBase,
-    operator: Optional[TensorDictModule] = None,
+    operator: Optional[SafeModule] = None,
     next_val_key: str = "state_action_value",
     gamma: float = 0.99,
     pred_next_val: Optional[Tensor] = None,
@@ -341,5 +341,5 @@ def next_state_value(
     done = done.to(torch.float)
     target_value = (1 - done) * pred_next_val_detach
     rewards = rewards.to(torch.float)
-    target_value = rewards + (gamma ** steps_to_next_obs) * target_value
+    target_value = rewards + (gamma**steps_to_next_obs) * target_value
     return target_value

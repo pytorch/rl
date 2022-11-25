@@ -8,7 +8,7 @@ import os
 import platform
 import subprocess
 from pathlib import Path
-from subprocess import check_output, STDOUT, CalledProcessError
+from subprocess import CalledProcessError, check_output, STDOUT
 
 import torch
 from setuptools import Extension

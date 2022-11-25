@@ -12,8 +12,8 @@ from _utils_internal import (
     _test_fake_tensordict,
     get_available_devices,
     HALFCHEETAH_VERSIONED,
-    PONG_VERSIONED,
     PENDULUM_VERSIONED,
+    PONG_VERSIONED,
 )
 from packaging import version
 from tensordict.tensordict import assert_allclose_td
@@ -21,12 +21,10 @@ from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
-from torchrl.envs.libs.dm_control import _has_dmc
-from torchrl.envs.libs.gym import GymEnv, GymWrapper
-from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
-from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
-from torchrl.envs.libs.jumanji import JumanjiEnv, _has_jumanji
+from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
+from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
+from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
+from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 
 if _has_gym:
     import gym

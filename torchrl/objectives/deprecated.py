@@ -1,6 +1,6 @@
 import math
 from numbers import Number
-from typing import Union, Tuple
+from typing import Tuple, Union
 
 import numpy as np
 import torch
@@ -9,11 +9,11 @@ from tensordict.tensordict import TensorDictBase
 from torch import Tensor
 
 from torchrl.envs.utils import set_exploration_mode, step_mdp
-from torchrl.modules import TensorDictModule
+from torchrl.modules import SafeModule
 from torchrl.objectives import (
+    distance_loss,
     hold_out_params,
     next_state_value as get_next_state_value,
-    distance_loss,
 )
 from torchrl.objectives.common import LossModule
 
@@ -26,8 +26,8 @@ class REDQLoss_deprecated(LossModule):
     train a SAC-like algorithm.
 
     Args:
-        actor_network (TensorDictModule): the actor to be trained
-        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
+        actor_network (SafeModule): the actor to be trained
+        qvalue_network (SafeModule): a single Q-value network that will be multiplicated as many times as needed.
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
         sub_sample_len (int, optional): number of Q-value networks to be subsampled to evaluate the next state value
             Default is 2.
@@ -51,8 +51,8 @@ class REDQLoss_deprecated(LossModule):
 
     def __init__(
         self,
-        actor_network: TensorDictModule,
-        qvalue_network: TensorDictModule,
+        actor_network: SafeModule,
+        qvalue_network: SafeModule,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
         gamma: Number = 0.99,

@@ -11,11 +11,15 @@ from _utils_internal import get_available_devices
 from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
+from tensordict.nn.functional_modules import (
+    FunctionalModule,
+    FunctionalModuleWithBuffers,
+)
 from torch import nn
 from torchrl.data.tensor_specs import (
     DiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
+    OneHotDiscreteTensorSpec,
 )
 from torchrl.modules import (
     ActorValueOperator,
@@ -23,20 +27,16 @@ from torchrl.modules import (
     LSTMNet,
     ProbabilisticActor,
     QValueActor,
-    TensorDictModule,
+    SafeModule,
     ValueOperator,
-)
-from torchrl.modules.functional_modules import (
-    FunctionalModule,
-    FunctionalModuleWithBuffers,
 )
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
 from torchrl.modules.models.model_based import (
     DreamerActor,
-    ObsEncoder,
     ObsDecoder,
-    RSSMPrior,
+    ObsEncoder,
     RSSMPosterior,
+    RSSMPrior,
     RSSMRollout,
 )
 from torchrl.modules.models.utils import SquashDims
@@ -259,10 +259,10 @@ def test_value_based_policy_categorical(device):
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_actorcritic(device):
-    common_module = TensorDictModule(
+    common_module = SafeModule(
         spec=None, module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
     ).to(device)
-    module = TensorDictModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
+    module = SafeModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
     policy_operator = ProbabilisticActor(
         spec=None, module=module, dist_in_keys=["param"], return_log_prob=True
     ).to(device)
@@ -613,7 +613,7 @@ class TestDreamerComponents:
         ).to(device)
 
         rssm_rollout = RSSMRollout(
-            TensorDictModule(
+            SafeModule(
                 rssm_prior,
                 in_keys=["state", "belief", "action"],
                 out_keys=[
@@ -623,7 +623,7 @@ class TestDreamerComponents:
                     ("next", "belief"),
                 ],
             ),
-            TensorDictModule(
+            SafeModule(
                 rssm_posterior,
                 in_keys=[("next", "belief"), ("next", "encoded_latents")],
                 out_keys=[

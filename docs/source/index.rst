@@ -27,10 +27,21 @@ for :doc:`cost functions <reference/objectives>`, :ref:`returns <reference/objec
 
 TorchRL aims at a high modularity and good runtime performance.
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials:
+
+   tutorials/torchrl_demo
+   tutorials/tensordict_tutorial
+   tutorials/tensordict_module
+   tutorials/torch_envs
+   tutorials/multi_task
+   tutorials/coding_ddpg
+   tutorials/coding_dqn
 
 .. toctree::
-   :maxdepth: 3
-   :caption: Contents:
+   :maxdepth: 2
+   :caption: References:
 
    reference/index
    reference/knowledge_base

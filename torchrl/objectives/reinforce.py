@@ -1,10 +1,10 @@
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import TensorDictModule, ProbabilisticTensorDictModule
+from torchrl.modules import SafeModule, SafeProbabilisticModule
 from torchrl.objectives import distance_loss
 from torchrl.objectives.common import LossModule
 
@@ -19,9 +19,9 @@ class ReinforceLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticTensorDictModule,
+        actor_network: SafeProbabilisticModule,
         advantage_module: Callable[[TensorDictBase], TensorDictBase],
-        critic: Optional[TensorDictModule] = None,
+        critic: Optional[SafeModule] = None,
         delay_value: bool = False,
         gamma: float = 0.99,
         advantage_key: str = "advantage",

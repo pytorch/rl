@@ -9,13 +9,13 @@ import torch
 from tensordict.tensordict import TensorDictBase
 
 from torchrl.envs import EnvBase
-from torchrl.modules import TensorDictModule
+from torchrl.modules import SafeModule
 
 
-class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
+class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
     """MPCPlannerBase abstract Module.
 
-    This class inherits from :obj:`TensorDictModule`. Provided a :obj:`TensorDict`, this module will perform a Model Predictive Control (MPC) planning step.
+    This class inherits from :obj:`SafeModule`. Provided a :obj:`TensorDict`, this module will perform a Model Predictive Control (MPC) planning step.
     At the end of the planning step, the :obj:`MPCPlanner` will return a proposed action.
 
     Args:

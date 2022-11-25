@@ -12,23 +12,24 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from textwrap import indent
-from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Dict
+from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
+
 from .._utils import _check_for_faulty_process, prod
 from ..data import TensorSpec
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
 from ..envs.common import EnvBase
 from ..envs.vec_env import _BatchedEnv
-from ..modules.tensordict_module import ProbabilisticTensorDictModule, TensorDictModule
+from ..modules.tensordict_module import SafeModule, SafeProbabilisticModule
 from .utils import split_trajectories
 
 _TIMEOUT = 1.0
@@ -83,21 +84,21 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
 def _policy_is_tensordict_compatible(policy: nn.Module):
     sig = inspect.signature(policy.forward)
 
-    if isinstance(policy, TensorDictModule) or (
+    if isinstance(policy, SafeModule) or (
         len(sig.parameters) == 1
         and hasattr(policy, "in_keys")
         and hasattr(policy, "out_keys")
     ):
-        # if the policy is a TensorDictModule or takes a single argument and defines
+        # if the policy is a SafeModule or takes a single argument and defines
         # in_keys and out_keys then we assume it can already deal with TensorDict input
         # to forward and we return True
         return True
     elif not hasattr(policy, "in_keys") and not hasattr(policy, "out_keys"):
-        # if it's not a TensorDictModule, and in_keys and out_keys are not defined then
+        # if it's not a SafeModule, and in_keys and out_keys are not defined then
         # we assume no TensorDict compatibility and will try to wrap it.
         return False
 
-    # if in_keys or out_keys were defined but policy is not a TensorDictModule or
+    # if in_keys or out_keys were defined but policy is not a SafeModule or
     # accepts multiple arguments then it's likely the user is trying to do something
     # that will have undetermined behaviour, we raise an error
     raise TypeError(
@@ -106,7 +107,7 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
         "should take a single argument of type TensorDict to policy.forward and define "
         "both in_keys and out_keys. Alternatively, policy.forward can accept "
         "arbitrarily many tensor inputs and leave in_keys and out_keys undefined and "
-        "TorchRL will attempt to automatically wrap the policy with a TensorDictModule."
+        "TorchRL will attempt to automatically wrap the policy with a SafeModule."
     )
 
 
@@ -115,15 +116,13 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         self,
         policy: Optional[
             Union[
-                ProbabilisticTensorDictModule,
+                SafeProbabilisticModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
         ] = None,
         device: Optional[DEVICE_TYPING] = None,
         observation_spec: TensorSpec = None,
-    ) -> Tuple[
-        ProbabilisticTensorDictModule, torch.device, Union[None, Callable[[], dict]]
-    ]:
+    ) -> Tuple[SafeProbabilisticModule, torch.device, Union[None, Callable[[], dict]]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
 
         From a policy and a device, assigns the self.device attribute to
@@ -134,7 +133,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             create_env_fn (Callable or list of callables): an env creator
                 function (or a list of creators)
             create_env_kwargs (dictionary): kwargs for the env creator
-            policy (ProbabilisticTensorDictModule, optional): a policy to be used
+            policy (SafeProbabilisticModule, optional): a policy to be used
             device (int, str or torch.device, optional): device where to place
                 the policy
             observation_spec (TensorSpec, optional): spec of the observations
@@ -142,7 +141,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         # if create_env_fn is not None:
         #     if create_env_kwargs is None:
-        #         create_env_kwargs = dict()
+        #         create_env_kwargs = {}
         #     self.create_env_fn = create_env_fn
         #     if isinstance(create_env_fn, EnvBase):
         #         env = create_env_fn
@@ -162,13 +161,13 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             # callables should be supported as policies.
             if not _policy_is_tensordict_compatible(policy):
                 # policy is a nn.Module that doesn't operate on tensordicts directly
-                # so we attempt to auto-wrap policy with TensorDictModule
+                # so we attempt to auto-wrap policy with SafeModule
                 if observation_spec is None:
                     raise ValueError(
                         "Unable to read observation_spec from the environment. This is "
                         "required to check compatibility of the environment and policy "
                         "since the policy is a nn.Module that operates on tensors "
-                        "rather than a TensorDictModule or a nn.Module that accepts a "
+                        "rather than a SafeModule or a nn.Module that accepts a "
                         "TensorDict as input and defines in_keys and out_keys."
                     )
                 sig = inspect.signature(policy.forward)
@@ -182,18 +181,18 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                     if isinstance(output, tuple):
                         out_keys.extend(f"output{i+1}" for i in range(len(output) - 1))
 
-                    policy = TensorDictModule(
+                    policy = SafeModule(
                         policy, in_keys=list(sig.parameters), out_keys=out_keys
                     )
                 else:
                     raise TypeError(
                         "Arguments to policy.forward are incompatible with entries in "
                         "env.observation_spec. If you want TorchRL to automatically "
-                        "wrap your policy with a TensorDictModule then the arguments "
+                        "wrap your policy with a SafeModule then the arguments "
                         "to policy.forward must correspond one-to-one with entries in "
                         "env.observation_spec that are prefixed with 'next_'. For more "
                         "complex behaviour and more control you can consider writing "
-                        "your own TensorDictModule."
+                        "your own SafeModule."
                     )
 
         try:
@@ -306,7 +305,7 @@ class SyncDataCollector(_DataCollector):
         ],  # noqa: F821
         policy: Optional[
             Union[
-                ProbabilisticTensorDictModule,
+                SafeProbabilisticModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
         ] = None,
@@ -425,7 +424,6 @@ class SyncDataCollector(_DataCollector):
                 .to_tensordict()
                 .zero_()
             )
-
         # in addition to outputs of the policy, we add traj_ids and step_count to
         # _tensordict_out which will be collected during rollout
         if len(self.env.batch_size):
@@ -519,7 +517,7 @@ class SyncDataCollector(_DataCollector):
     def _cast_to_policy(self, td: TensorDictBase) -> TensorDictBase:
         policy_device = self.device
         if hasattr(self.policy, "in_keys"):
-            # some keys may be absent -- TensorDictModule is resilient to missing keys
+            # some keys may be absent -- SafeModule is resilient to missing keys
             td = td.select(*self.policy.in_keys, strict=False)
         if self._td_policy is None:
             self._td_policy = td.to(policy_device)
@@ -719,7 +717,7 @@ class _MultiDataCollector(_DataCollector):
 
     Args:
         create_env_fn (list of Callabled): list of Callables, each returning an instance of EnvBase
-        policy (Callable, optional): Instance of ProbabilisticTensorDictModule class.
+        policy (Callable, optional): Instance of SafeProbabilisticModule class.
             Must accept TensorDictBase object as input.
         total_frames (int): lower bound of the total number of frames returned by the collector. In parallel settings,
             the actual number of frames may well be greater than this as the closing signals are sent to the
@@ -778,7 +776,7 @@ class _MultiDataCollector(_DataCollector):
         create_env_fn: Sequence[Callable[[], EnvBase]],
         policy: Optional[
             Union[
-                ProbabilisticTensorDictModule,
+                SafeProbabilisticModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
         ] = None,
@@ -1305,7 +1303,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
 
     Args:
         create_env_fn (Callabled): Callable returning an instance of EnvBase
-        policy (Callable, optional): Instance of ProbabilisticTensorDictModule class.
+        policy (Callable, optional): Instance of SafeProbabilisticModule class.
             Must accept TensorDictBase object as input.
         total_frames (int): lower bound of the total number of frames returned
             by the collector. In parallel settings, the actual number of
@@ -1360,7 +1358,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         create_env_fn: Callable[[], EnvBase],
         policy: Optional[
             Union[
-                ProbabilisticTensorDictModule,
+                SafeProbabilisticModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
         ] = None,

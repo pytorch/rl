@@ -13,11 +13,8 @@ from datetime import date
 from pathlib import Path
 from typing import List
 
-from setuptools import setup, find_packages
-from torch.utils.cpp_extension import (
-    CppExtension,
-    BuildExtension,
-)
+from setuptools import find_packages, setup
+from torch.utils.cpp_extension import BuildExtension, CppExtension
 
 cwd = os.path.dirname(os.path.abspath(__file__))
 try:
@@ -144,10 +141,10 @@ def get_extensions():
     this_dir = os.path.dirname(os.path.abspath(__file__))
     extensions_dir = os.path.join(this_dir, "torchrl", "csrc")
 
-    extension_sources = set(
+    extension_sources = {
         os.path.join(extensions_dir, p)
         for p in glob.glob(os.path.join(extensions_dir, "*.cpp"))
-    )
+    }
     sources = list(extension_sources)
 
     ext_modules = [

@@ -11,7 +11,7 @@ from functools import wraps
 # this returns relative path from current file.
 import pytest
 import torch.cuda
-from torchrl._utils import seed_generator, implement_for
+from torchrl._utils import implement_for, seed_generator
 from torchrl.envs import EnvBase
 from torchrl.envs.libs.gym import _has_gym
 

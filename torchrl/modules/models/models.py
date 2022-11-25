@@ -174,14 +174,14 @@ class MLP(nn.Sequential):
         self._out_features_num = _out_features_num
         self.activation_class = activation_class
         self.activation_kwargs = (
-            activation_kwargs if activation_kwargs is not None else dict()
+            activation_kwargs if activation_kwargs is not None else {}
         )
         self.norm_class = norm_class
-        self.norm_kwargs = norm_kwargs if norm_kwargs is not None else dict()
+        self.norm_kwargs = norm_kwargs if norm_kwargs is not None else {}
         self.bias_last_layer = bias_last_layer
         self.single_bias_last_layer = single_bias_last_layer
         self.layer_class = layer_class
-        self.layer_kwargs = layer_kwargs if layer_kwargs is not None else dict()
+        self.layer_kwargs = layer_kwargs if layer_kwargs is not None else {}
         self.activate_last_layer = activate_last_layer
         if single_bias_last_layer:
             raise NotImplementedError
@@ -363,10 +363,10 @@ class ConvNet(nn.Sequential):
         self.in_features = in_features
         self.activation_class = activation_class
         self.activation_kwargs = (
-            activation_kwargs if activation_kwargs is not None else dict()
+            activation_kwargs if activation_kwargs is not None else {}
         )
         self.norm_class = norm_class
-        self.norm_kwargs = norm_kwargs if norm_kwargs is not None else dict()
+        self.norm_kwargs = norm_kwargs if norm_kwargs is not None else {}
         self.bias_last_layer = bias_last_layer
         self.aggregator_class = aggregator_class
         self.aggregator_kwargs = (
@@ -516,7 +516,7 @@ class DuelingMlpDQNet(nn.Module):
         super().__init__()
 
         mlp_kwargs_feature = (
-            mlp_kwargs_feature if mlp_kwargs_feature is not None else dict()
+            mlp_kwargs_feature if mlp_kwargs_feature is not None else {}
         )
         _mlp_kwargs_feature = {
             "num_cells": [256, 256],
@@ -533,9 +533,7 @@ class DuelingMlpDQNet(nn.Module):
             "num_cells": 512,
             "bias_last_layer": True,
         }
-        mlp_kwargs_output = (
-            mlp_kwargs_output if mlp_kwargs_output is not None else dict()
-        )
+        mlp_kwargs_output = mlp_kwargs_output if mlp_kwargs_output is not None else {}
         _mlp_kwargs_output.update(mlp_kwargs_output)
         self.out_features = out_features
         self.out_features_value = out_features_value
@@ -598,7 +596,7 @@ class DuelingCnnDQNet(nn.Module):
     ):
         super().__init__()
 
-        cnn_kwargs = cnn_kwargs if cnn_kwargs is not None else dict()
+        cnn_kwargs = cnn_kwargs if cnn_kwargs is not None else {}
         _cnn_kwargs = {
             "num_cells": [32, 64, 64],
             "strides": [4, 2, 1],
@@ -613,7 +611,7 @@ class DuelingCnnDQNet(nn.Module):
             "num_cells": 512,
             "bias_last_layer": True,
         }
-        mlp_kwargs = mlp_kwargs if mlp_kwargs is not None else dict()
+        mlp_kwargs = mlp_kwargs if mlp_kwargs is not None else {}
         _mlp_kwargs.update(mlp_kwargs)
         self.out_features = out_features
         self.out_features_value = out_features_value
@@ -748,7 +746,7 @@ class DdpgCnnActor(nn.Module):
             else {"output_size": (1, 1)},
             "squeeze_output": use_avg_pooling,
         }
-        conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else dict()
+        conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else {}
         conv_net_default_kwargs.update(conv_net_kwargs)
         mlp_net_default_kwargs = {
             "in_features": None,
@@ -758,7 +756,7 @@ class DdpgCnnActor(nn.Module):
             "activation_class": nn.ELU,
             "bias_last_layer": True,
         }
-        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else {}
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.convnet = ConvNet(device=device, **conv_net_default_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
@@ -808,7 +806,7 @@ class DdpgMlpActor(nn.Module):
             "activation_class": nn.ELU,
             "bias_last_layer": True,
         }
-        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else {}
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
         ddpg_init_last_layer(self.mlp[-1], 6e-3, device=device)
@@ -878,7 +876,7 @@ class DdpgCnnQNet(nn.Module):
             else {"output_size": (1, 1)},
             "squeeze_output": use_avg_pooling,
         }
-        conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else dict()
+        conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else {}
         conv_net_default_kwargs.update(conv_net_kwargs)
         mlp_net_default_kwargs = {
             "in_features": None,
@@ -888,7 +886,7 @@ class DdpgCnnQNet(nn.Module):
             "activation_class": nn.ELU,
             "bias_last_layer": True,
         }
-        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else {}
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.convnet = ConvNet(device=device, **conv_net_default_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
@@ -949,7 +947,7 @@ class DdpgMlpQNet(nn.Module):
             "activate_last_layer": True,
         }
         mlp_net_kwargs_net1: Dict = (
-            mlp_net_kwargs_net1 if mlp_net_kwargs_net1 is not None else dict()
+            mlp_net_kwargs_net1 if mlp_net_kwargs_net1 is not None else {}
         )
         mlp1_net_default_kwargs.update(mlp_net_kwargs_net1)
         self.mlp1 = MLP(device=device, **mlp1_net_default_kwargs)
@@ -964,7 +962,7 @@ class DdpgMlpQNet(nn.Module):
             "bias_last_layer": True,
         }
         mlp_net_kwargs_net2 = (
-            mlp_net_kwargs_net2 if mlp_net_kwargs_net2 is not None else dict()
+            mlp_net_kwargs_net2 if mlp_net_kwargs_net2 is not None else {}
         )
         mlp2_net_default_kwargs.update(mlp_net_kwargs_net2)
         self.mlp2 = MLP(device=device, **mlp2_net_default_kwargs)

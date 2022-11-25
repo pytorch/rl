@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from numbers import Number
-from typing import Dict, Sequence, Union, Optional, Tuple
+from typing import Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -144,7 +144,7 @@ class NormalParamWrapper(nn.Module):
 
     def forward(self, *tensors: torch.Tensor) -> Tuple[torch.Tensor]:
         net_output = self.operator(*tensors)
-        others = tuple()
+        others = ()
         if not isinstance(net_output, torch.Tensor):
             net_output, *others = net_output
         loc, scale = net_output.chunk(2, -1)
