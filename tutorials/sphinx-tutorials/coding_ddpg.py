@@ -92,6 +92,7 @@ from torchrl.trainers import Recorder
 # ``from_pixels=True`` which is passed when calling ``GymEnv`` or
 # ``DMControlEnv``.
 
+
 def make_env():
     """
     Create a base env
@@ -120,6 +121,7 @@ def make_env():
     env = env_library(*env_args, **env_kwargs)
     return env
 
+
 ###############################################################################
 # Transforms
 # ------------------------------
@@ -134,6 +136,7 @@ def make_env():
 #
 # We also leave the possibility to normalize the states: we will take care of
 # computing the normalizing constants later on.
+
 
 def make_transformed_env(
     env,
@@ -184,6 +187,7 @@ def make_transformed_env(
 
     return env
 
+
 ###############################################################################
 # Parallel execution
 # ------------------------------
@@ -192,6 +196,7 @@ def make_transformed_env(
 # execute the transform in the main process, or execute the transforms in
 # parallel. To leverage the vectorization capabilities of PyTorch, we adopt
 # the first method:
+
 
 def parallel_env_constructor(
     stats,
@@ -212,12 +217,14 @@ def parallel_env_constructor(
     env = make_transformed_env(parallel_env, stats, **env_kwargs)
     return env
 
+
 ###############################################################################
 # Normalization of the observations
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # To compute the normalizing statistics, we run an arbitrary number of random
 # steps in the environment and compute the mean and standard deviation of the
 # collected observations:
+
 
 def get_stats_random_rollout(proof_environment, key: Optional[str] = None):
     print("computing state stats")
@@ -252,6 +259,7 @@ def get_stats_random_rollout(proof_environment, key: Optional[str] = None):
     stats = {"loc": m, "scale": s}
     return stats
 
+
 def get_env_stats():
     """
     Gets the stats of an environment
@@ -266,10 +274,12 @@ def get_env_stats():
     proof_env.close()
     return stats
 
+
 ###############################################################################
 # Building the model
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # Let us now build the DDPG actor and QValue network.
+
 
 def make_ddpg_actor(
     stats,
@@ -326,6 +336,7 @@ def make_ddpg_actor(
 
     return actor, qnet
 
+
 ###############################################################################
 # Evaluator: building your recorder object
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -334,6 +345,7 @@ def make_ddpg_actor(
 # do this using a dedicated class, ``Recorder``, which executes the policy in
 # the environment at a given frequency and returns some statistics obtained
 # from these simulations. The following helper function builds this object:
+
 
 def make_recorder(actor_model_explore, stats):
     base_env = make_env()
@@ -349,6 +361,7 @@ def make_recorder(actor_model_explore, stats):
     )
     return recorder_obj
 
+
 ###############################################################################
 # Replay buffer
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -360,6 +373,7 @@ def make_recorder(actor_model_explore, stats):
 # store tensors on physical memory using a memory-mapped array. The following
 # function takes care of creating the replay buffer with the desired
 # hyperparameters:
+
 
 def make_replay_buffer(make_replay_buffer=3):
     if prb:
@@ -388,6 +402,7 @@ def make_replay_buffer(make_replay_buffer=3):
         )
     return replay_buffer
 
+
 ###############################################################################
 # Hyperparameters
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -401,9 +416,7 @@ reward_scaling = 5.0
 
 # execute on cuda if available
 device = (
-    torch.device("cpu")
-    if torch.cuda.device_count() == 0
-    else torch.device("cuda:0")
+    torch.device("cpu") if torch.cuda.device_count() == 0 else torch.device("cuda:0")
 )
 
 init_env_steps = 1000  # number of random steps used as for stats computation
@@ -633,7 +646,7 @@ for i, tensordict in enumerate(collector):
 
     # optimization steps
     if collected_frames >= init_random_frames:
-        for j in range(optim_steps_per_batch):
+        for _ in range(optim_steps_per_batch):
             # sample from replay buffer
             sampled_tensordict = replay_buffer.sample(batch_size).clone()
 
@@ -877,7 +890,7 @@ for i, tensordict in enumerate(collector):
 
     # optimization steps
     if collected_frames >= init_random_frames:
-        for j in range(optim_steps_per_batch):
+        for _ in range(optim_steps_per_batch):
             # sample from replay buffer
             sampled_tensordict = replay_buffer.sample(batch_size_traj)
             # reset the batch size temporarily, and exclude index whose shape is incompatible with the new size
@@ -898,9 +911,9 @@ for i, tensordict in enumerate(collector):
             # This is the crucial bit: we'll compute the TD(lambda) instead of a simple single step estimate
             done = sampled_tensordict["done"]
             reward = sampled_tensordict["reward"]
-            value = qnet(sampled_tensordict.view(-1)).view(
-                sampled_tensordict.shape
-            )["state_action_value"]
+            value = qnet(sampled_tensordict.view(-1)).view(sampled_tensordict.shape)[
+                "state_action_value"
+            ]
             advantage = vec_td_lambda_advantage_estimate(
                 gamma, lmbda, value, next_value, reward, done
             )

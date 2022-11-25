@@ -382,7 +382,7 @@ for j, data in enumerate(data_collector):
 
     # check that we have enough data to start training
     if sum(frames) > init_random_frames:
-        for i in range(n_optim):
+        for _ in range(n_optim):
             # sample from the RB and send to device
             sampled_data = replay_buffer.sample(batch_size)
             sampled_data = sampled_data.to(device, non_blocking=True)
@@ -624,7 +624,7 @@ for j, data in enumerate(data_collector):
         traj_lengths.append(data["step_count"][data["done"]].float().mean().item())
 
     if sum(frames) > init_random_frames:
-        for i in range(n_optim):
+        for _ in range(n_optim):
             sampled_data = replay_buffer.sample(batch_size // max_size)
             sampled_data = sampled_data.clone().to(device, non_blocking=True)
 

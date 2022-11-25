@@ -591,7 +591,7 @@ env.set_seed(0)
 max_steps = 100
 tensordict = env.reset()
 tensordicts = []
-for i in range(max_steps):
+for _ in range(max_steps):
     actor(tensordict)
     tensordicts.append(env.step(tensordict))
     tensordict = step_mdp(tensordict)  # roughly equivalent to obs = next_obs
