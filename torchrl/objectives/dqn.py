@@ -91,10 +91,15 @@ class DQNLoss(LossModule):
         td_copy = tensordict.clone()
         if td_copy.device != tensordict.device:
             raise RuntimeError(f"{tensordict} and {td_copy} have different devices")
+        assert hasattr(self.value_network, "_is_stateless")
+        print(
+            self.value_network,
+            self.value_network.__dict__["_is_stateless"],
+            id(self.value_network),
+        )
         self.value_network(
             td_copy,
             params=self.value_network_params,
-            buffers=self.value_network_buffers,
         )
 
         action = tensordict.get("action")
@@ -112,7 +117,6 @@ class DQNLoss(LossModule):
                 self.value_network,
                 gamma=self.gamma,
                 params=self.target_value_network_params,
-                buffers=self.target_value_network_buffers,
                 next_val_key="chosen_action_value",
             )
         priority_tensor = (pred_val_index - target_value).pow(2)

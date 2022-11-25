@@ -55,6 +55,7 @@ def _check_all_str(list_of_str, first_level=True):
 
 
 def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
+    print("forward hook", module, module.__dict__["_is_stateless"])
     try:
         spec = module.spec
         if len(module.out_keys) > 1 and not isinstance(spec, CompositeSpec):
