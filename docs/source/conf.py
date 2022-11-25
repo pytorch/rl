@@ -67,6 +67,7 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinx_gallery.gen_gallery",
+    "sphinxcontrib.aafig",
     "myst_parser",
 ]
 
