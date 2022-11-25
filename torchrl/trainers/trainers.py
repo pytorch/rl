@@ -322,7 +322,7 @@ class Trainer:
 
         elif dest == "optimizer":
             _check_input_output_typehint(
-                op, input=TensorDictBase, output=TensorDictBase
+                op, input=Tuple[TensorDictBase, bool, float, int], output=TensorDictBase
             )
             self._optimizer_ops.append((op, kwargs))
 
@@ -759,6 +759,12 @@ class OptimizerHook(TrainerHookBase):
         self.optimizer.zero_grad()
 
         return losses_td
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        pass
 
     def register(self, trainer, name="optimizer") -> None:
         trainer.register_op("optimizer", self)
