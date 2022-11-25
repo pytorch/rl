@@ -186,6 +186,9 @@ class Trainer:
         self._post_optim_log_ops = []
         self._pre_optim_ops = []
         self._post_loss_ops = []
+        self._optimizer_ops = []
+        if self.optimizer is not None:
+            self._optimizer_ops.append(OptimizerHook(self.optimizer))
         self._process_optim_batch_ops = []
         self._post_optim_ops = []
         self._modules = {}
@@ -317,6 +320,12 @@ class Trainer:
             )
             self._post_loss_ops.append((op, kwargs))
 
+        elif dest == "optimizer":
+            _check_input_output_typehint(
+                op, input=TensorDictBase, output=TensorDictBase
+            )
+            self._optimizer_ops.append((op, kwargs))
+
         elif dest == "post_steps":
             _check_input_output_typehint(op, input=None, output=None)
             self._post_steps_ops.append((op, kwargs))
@@ -386,6 +395,13 @@ class Trainer:
                 batch = out
         return batch
 
+    def _optimizer_hook(self, batch):
+        for i, (op, kwargs) in enumerate(self._optimizer_ops):
+            out = op(batch, self.clip_grad_norm, self.clip_norm, i, **kwargs)
+            if isinstance(out, TensorDictBase):
+                batch = out
+        return batch.detach()
+
     def _post_optim_hook(self):
         for op, kwargs in self._post_optim_ops:
             op(**kwargs)
@@ -440,16 +456,6 @@ class Trainer:
         print("shutting down collector")
         self.collector.shutdown()
 
-    def _optimizer_step(self, losses_td: TensorDictBase) -> TensorDictBase:
-        # sum all keys that start with 'loss_'
-        loss = sum([item for key, item in losses_td.items() if key.startswith("loss")])
-        loss.backward()
-
-        grad_norm = self._grad_clip()
-        self.optimizer.step()
-        self.optimizer.zero_grad()
-        return losses_td.detach().set("grad_norm", grad_norm)
-
     def optim_steps(self, batch: TensorDictBase) -> None:
         average_losses = None
 
@@ -462,7 +468,7 @@ class Trainer:
             losses_td = self.loss_module(sub_batch)
             self._post_loss_hook(sub_batch)
 
-            losses_detached = self._optimizer_step(losses_td)
+            losses_detached = self._optimizer_hook(losses_td)
             self._post_optim_hook()
             self._post_optim_log(sub_batch)
 
@@ -479,16 +485,6 @@ class Trainer:
                 optim_steps=self._optim_count,
                 **average_losses,
             )
-
-    def _grad_clip(self) -> float:
-        if self.clip_grad_norm:
-            gn = nn.utils.clip_grad_norm_(self._params, self.clip_norm)
-        else:
-            gn = sum(
-                [p.grad.pow(2).sum() for p in self._params if p.grad is not None]
-            ).sqrt()
-            nn.utils.clip_grad_value_(self._params, self.clip_norm)
-        return float(gn)
 
     def _log(self, log_pbar=False, **kwargs) -> None:
         collected_frames = self.collected_frames
@@ -693,6 +689,79 @@ class ReplayBufferTrainer(TrainerHookBase):
         trainer.register_op("batch_process", self.extend)
         trainer.register_op("process_optim_batch", self.sample)
         trainer.register_op("post_loss", self.update_priority)
+        trainer.register_module(name, self)
+
+
+class OptimizerHook(TrainerHookBase):
+    """Add an optimizer for one or more loss components.
+
+    Args:
+        optimizer (optim.Optimizer): An optimizer to apply to the loss_components.
+        loss_components (Sequence[str], optional): The keys in the loss TensorDict
+            for which the optimizer should be appled to the respective values.
+            If omitted, the optimizer is applied to all components with the
+            names starting with `loss_`.
+
+    Examples:
+        >>> optimizer_hook = OptimizerHook(optimizer, ["loss_actor"])
+        >>> trainer.register_op("optimizer", optimizer_hook)
+
+    """
+
+    def __init__(
+        self,
+        optimizer: optim.Optimizer,
+        loss_components: Optional[Sequence[str]] = None,
+    ):
+        if loss_components is not None and not loss_components:
+            raise ValueError(
+                "loss_components list cannot be empty. "
+                "Set to None to act on all components of the loss."
+            )
+
+        self.optimizer = optimizer
+        self.loss_components = loss_components
+        if self.loss_components is not None:
+            self.loss_components = set(self.loss_components)
+
+    def _grad_clip(self, clip_grad_norm: bool, clip_norm: float) -> float:
+        params = []
+        for param_group in self.optimizer.param_groups:
+            params += param_group["params"]
+
+        if clip_grad_norm:
+            gn = nn.utils.clip_grad_norm_(params, clip_norm)
+        else:
+            gn = sum([p.grad.pow(2).sum() for p in params if p.grad is not None]).sqrt()
+            nn.utils.clip_grad_value_(params, clip_norm)
+
+        return float(gn)
+
+    def __call__(
+        self,
+        losses_td: TensorDictBase,
+        clip_grad_norm: bool,
+        clip_norm: float,
+        index: int,
+    ) -> float:
+        loss_components = [
+            [item for key, item in losses_td.items() if key in self.loss_components]
+            if self.loss_components is not None
+            else [item for key, item in losses_td.items() if key.startswith("loss")]
+        ]
+        loss = sum(loss_components)
+        loss.backward()
+
+        grad_norm = self._grad_clip(clip_grad_norm, clip_norm)
+        losses_td[f"grad_norm_{index}"] = torch.tensor(grad_norm)
+
+        self.optimizer.step()
+        self.optimizer.zero_grad()
+
+        return losses_td
+
+    def register(self, trainer, name="optimizer") -> None:
+        trainer.register_op("optimizer", self)
         trainer.register_module(name, self)
 
 
