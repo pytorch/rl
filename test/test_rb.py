@@ -65,7 +65,7 @@ _has_tv = importlib.util.find_spec("torchvision") is not None
 )
 @pytest.mark.parametrize("writer", [writers.RoundRobinWriter])
 @pytest.mark.parametrize("storage", [ListStorage, LazyTensorStorage, LazyMemmapStorage])
-@pytest.mark.parametrize("size", [3, 100])
+@pytest.mark.parametrize("size", [3, 5, 100])
 class TestPrototypeBuffers:
     def _get_rb(self, rb_type, size, sampler, writer, storage):
 
@@ -123,6 +123,26 @@ class TestPrototypeBuffers:
             assert (s == data.select(*s.keys())).all()
         else:
             assert (s == data).all()
+
+    def test_cursor_position(self, rb_type, sampler, writer, storage, size):
+        storage = storage(size)
+        writer = writer()
+        writer.register_storage(storage)
+        batch1 = self._get_data(rb_type, size=5)
+        writer.extend(batch1)
+
+        # Added less data than storage max size
+        if size > 5:
+            assert writer._cursor == 5
+        # Added more data than storage max size
+        elif size < 5:
+            assert writer._cursor == 5 - size
+        # Added as data as storage max size
+        else:
+            assert writer._cursor == 0
+            batch2 = self._get_data(rb_type, size=size - 1)
+            writer.extend(batch2)
+            assert writer._cursor == size - 1
 
     def test_extend(self, rb_type, sampler, writer, storage, size):
         torch.manual_seed(0)
