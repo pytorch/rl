@@ -23,8 +23,8 @@ TensorDict modules
     ActorValueOperator
     ActorCriticOperator
     ActorCriticWrapper
-    is_tensordict_compatible
-    ensure_tensordict_compatible
+    tensordict_module.common.is_tensordict_compatible
+    tensordict_module.common.ensure_tensordict_compatible
 
 Hooks
 -----
@@ -101,6 +101,8 @@ Distributions
 Utils
 -----
 
+.. currentmodule:: torchrl.modules.utils
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template_noinherit.rst
@@ -108,5 +110,8 @@ Utils
     mappings
     inv_softplus
     biased_softplus
+
+.. currentmodule:: torchrl.modules.models.utils
+
     SqueezeLayer
     Squeeze2dLayer
