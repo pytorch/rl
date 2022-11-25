@@ -943,7 +943,7 @@ $("table").removeAttr("border");
 var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 if (downloadNote.length >= 1) {
     var tutorialUrlArray = $("#tutorial-type").text().split('/');
-        tutorialUrlArray[0] = tutorialUrlArray[0] + "_source"
+        tutorialUrlArray[0] = tutorialUrlArray[0] + "/sphinx-tutorials"
 
     var githubLink = "https://github.com/pytorch/rl/blob/main/" + tutorialUrlArray.join("/") + ".py",
         notebookLink = $(".reference.download")[1].href,
@@ -2071,7 +2071,7 @@ $("table").removeAttr("border");
 var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 if (downloadNote.length >= 1) {
     var tutorialUrlArray = $("#tutorial-type").text().split('/');
-        tutorialUrlArray[0] = tutorialUrlArray[0] + "_source"
+        tutorialUrlArray[0] = tutorialUrlArray[0] + "/sphinx-tutorials"
 
     var githubLink = "https://github.com/pytorch/rl/blob/main/" + tutorialUrlArray.join("/") + ".py",
         notebookLink = $(".reference.download")[1].href,
@@ -3199,7 +3199,7 @@ $("table").removeAttr("border");
 var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 if (downloadNote.length >= 1) {
     var tutorialUrlArray = $("#tutorial-type").text().split('/');
-        tutorialUrlArray[0] = tutorialUrlArray[0] + "_source"
+        tutorialUrlArray[0] = tutorialUrlArray[0] + "/sphinx-tutorials"
 
     var githubLink = "https://github.com/pytorch/rl/blob/main/" + tutorialUrlArray.join("/") + ".py",
         notebookLink = $(".reference.download")[1].href,
