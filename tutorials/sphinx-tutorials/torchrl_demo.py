@@ -84,7 +84,7 @@ This demo was presented at ICML 2022 on the industry demo day.
 #      │      ├── "utils.py"
 #      │      └── "vtrace.py"
 #      ├── "record"
-#      │      └── "recorder.py"
+#      │   └── "recorder.py"
 #      └── "trainers"
 #          ├── "loggers"
 #          │  ├── "common.py"
