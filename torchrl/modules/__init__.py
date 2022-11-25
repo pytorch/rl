@@ -54,7 +54,6 @@ from .tensordict_module import (
     ProbabilisticTensorDictModule,
     QValueActor,
     TensorDictModule,
-    TensorDictModuleWrapper,
     TensorDictSequential,
     ValueOperator,
     WorldModelWrapper,

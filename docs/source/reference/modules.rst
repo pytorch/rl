@@ -14,7 +14,6 @@ TensorDict modules
     TensorDictModule
     ProbabilisticTensorDictModule
     TensorDictSequential
-    TensorDictModuleWrapper
     Actor
     ProbabilisticActor
     ValueOperator
