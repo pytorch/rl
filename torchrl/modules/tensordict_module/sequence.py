@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Union
-
 from tensordict.nn import TensorDictSequential
 from torch import nn
 
@@ -130,24 +128,3 @@ class SafeSequential(TensorDictSequential, SafeModule):
             in_keys=in_keys,
             out_keys=out_keys,
         )
-
-    def select_subsequence(
-        self, in_keys: Iterable[str] = None, out_keys: Iterable[str] = None
-    ) -> "SafeSequential":
-        """Returns a new SafeSequential with only the modules that are necessary to compute the given output keys with the given input keys.
-
-        Args:
-            in_keys: input keys of the subsequence we want to select
-            out_keys: output keys of the subsequence we want to select
-
-        Returns:
-            A new SafeSequential with only the modules that are necessary acording to the given input and output keys.
-        """
-        td_sequential = super().select_subsequence(in_keys=in_keys, out_keys=out_keys)
-        return SafeSequential(*td_sequential.module)
-
-    def __getitem__(self, index: Union[int, slice]) -> SafeModule:
-        if isinstance(index, int):
-            return self.module.__getitem__(index)
-        else:
-            return SafeSequential(*self.module.__getitem__(index))
