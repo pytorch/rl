@@ -23,7 +23,7 @@ except ImportError:
     )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 from torch.nn import Parameter
 

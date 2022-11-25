@@ -14,7 +14,7 @@ try:
     FUNCTORCH_ERR = ""
 except ImportError as FUNCTORCH_ERR:
     _has_functorch = False
-    make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
+    # make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
 
 import numpy as np
 import pytest

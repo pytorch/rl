@@ -878,9 +878,7 @@ class TestTDSequence:
         net2 = nn.Linear(4, 4 * param_multiplier)
         net2 = NormalParamWrapper(net2)
 
-        net2 = SafeModule(
-            module=net2, in_keys=["hidden"], out_keys=["loc", "scale"]
-        )
+        net2 = SafeModule(module=net2, in_keys=["hidden"], out_keys=["loc", "scale"])
 
         if spec_type is None:
             spec = None
