@@ -658,7 +658,7 @@ print("std: :", tensordict.get("observation").view(-1, 3).std(0))  # Approx 1
 
 print(
     "update counts: ",
-    make_env.state_dict()["_extra_state"]["td"][("next", "observation_count")],
+    make_env.state_dict()["_extra_state"]["td"]["observation_count"],
 )
 
 env.close()
