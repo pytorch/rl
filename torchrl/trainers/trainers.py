@@ -743,7 +743,7 @@ class OptimizerHook(TrainerHookBase):
         clip_grad_norm: bool,
         clip_norm: float,
         index: int,
-    ) -> float:
+    ) -> TensorDictBase:
         loss_components = [
             [item for key, item in losses_td.items() if key in self.loss_components]
             if self.loss_components is not None
