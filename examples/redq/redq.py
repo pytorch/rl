@@ -119,7 +119,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         stats=stats,
         stats_key=("next", "pixels")
         if cfg.from_pixels
-        else ("next", "observation_vector")
+        else ("next", "observation_vector"),
     )()
     model = make_redq_model(
         proof_env,

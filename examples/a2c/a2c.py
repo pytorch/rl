@@ -103,7 +103,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg=cfg,
         use_env_creator=False,
         stats=stats,
-        stats_key="pixels" if cfg.from_pixels else "observation_vector"
+        stats_key="pixels" if cfg.from_pixels else "observation_vector",
     )()
 
     model = make_a2c_model(

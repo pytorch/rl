@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Callable, Optional, Sequence, Union, Tuple
+from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import torch
 

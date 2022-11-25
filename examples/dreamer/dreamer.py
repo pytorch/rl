@@ -33,9 +33,7 @@ from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     OffPolicyCollectorConfig,
 )
-from torchrl.trainers.helpers.envs import (
-    correct_for_frame_skip,
-)
+from torchrl.trainers.helpers.envs import correct_for_frame_skip
 from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.models import DreamerConfig, make_dreamer
 from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
