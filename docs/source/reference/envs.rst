@@ -50,7 +50,7 @@ With these, the following methods are implemented:
   having reproducible results.
 - :obj:`env.rollout(max_steps, policy)`: executes a rollout in the environment for
   a maximum number of steps :obj:`max_steps` and using a policy :obj:`policy`.
-  The policy should be coded using a :obj:`TensorDictModule` (or any other
+  The policy should be coded using a :obj:`SafeModule` (or any other
   :obj:`TensorDict`-compatible module).
 
 

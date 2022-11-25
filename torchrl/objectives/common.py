@@ -8,8 +8,7 @@ from __future__ import annotations
 from typing import Iterator, List, Optional, Tuple, Union
 
 import torch
-
-from torchrl.modules.functional_modules import FunctionalModuleWithBuffers
+from tensordict.nn.functional_modules import FunctionalModuleWithBuffers
 
 _has_functorch = False
 try:
@@ -29,7 +28,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import Parameter
 
-from torchrl.modules import TensorDictModule
+from torchrl.modules import SafeModule
 
 
 class LossModule(nn.Module):
@@ -65,7 +64,7 @@ class LossModule(nn.Module):
 
     def convert_to_functional(
         self,
-        module: TensorDictModule,
+        module: SafeModule,
         module_name: str,
         expand_dim: Optional[int] = None,
         create_target_params: bool = False,
@@ -90,7 +89,7 @@ class LossModule(nn.Module):
 
     def _convert_to_functional_functorch(
         self,
-        module: TensorDictModule,
+        module: SafeModule,
         module_name: str,
         expand_dim: Optional[int] = None,
         create_target_params: bool = False,
@@ -250,7 +249,7 @@ class LossModule(nn.Module):
 
     def _convert_to_functional_native(
         self,
-        module: TensorDictModule,
+        module: SafeModule,
         module_name: str,
         expand_dim: Optional[int] = None,
         create_target_params: bool = False,

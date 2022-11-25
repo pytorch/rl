@@ -11,10 +11,9 @@ TensorDict modules
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
-    TensorDictModule
-    ProbabilisticTensorDictModule
-    TensorDictSequential
-    TensorDictModuleWrapper
+    SafeModule
+    SafeProbabilisticModule
+    SafeSequential
     Actor
     ProbabilisticActor
     ValueOperator

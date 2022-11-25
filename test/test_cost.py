@@ -6,7 +6,7 @@
 import argparse
 from copy import deepcopy
 
-from torchrl.modules.functional_modules import FunctionalModuleWithBuffers
+from tensordict.nn.functional_modules import FunctionalModuleWithBuffers
 
 _has_functorch = True
 try:
@@ -41,10 +41,10 @@ from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.modules import (
     DistributionalQValueActor,
-    ProbabilisticTensorDictModule,
     QValueActor,
-    TensorDictModule,
-    TensorDictSequential,
+    SafeModule,
+    SafeProbabilisticModule,
+    SafeSequential,
     WorldModelWrapper,
 )
 from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
@@ -787,9 +787,7 @@ class TestSAC:
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = TensorDictModule(
-            net, in_keys=["observation"], out_keys=["loc", "scale"]
-        )
+        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             spec=CompositeSpec(action=action_spec, loc=None, scale=None),
             module=module,
@@ -1112,9 +1110,7 @@ class TestREDQ:
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = TensorDictModule(
-            net, in_keys=["observation"], out_keys=["loc", "scale"]
-        )
+        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
@@ -1167,13 +1163,9 @@ class TestREDQ:
             def forward(self, hidden, act):
                 return self.linear(torch.cat([hidden, act], -1))
 
-        common = TensorDictModule(
-            CommonClass(), in_keys=["observation"], out_keys=["hidden"]
-        )
+        common = SafeModule(CommonClass(), in_keys=["observation"], out_keys=["hidden"])
         actor_subnet = ProbabilisticActor(
-            TensorDictModule(
-                ActorClass(), in_keys=["hidden"], out_keys=["loc", "scale"]
-            ),
+            SafeModule(ActorClass(), in_keys=["hidden"], out_keys=["loc", "scale"]),
             dist_in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             return_log_prob=True,
@@ -1544,9 +1536,7 @@ class TestPPO:
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = TensorDictModule(
-            net, in_keys=["observation"], out_keys=["loc", "scale"]
-        )
+        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
@@ -1779,9 +1769,7 @@ class TestA2C:
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = TensorDictModule(
-            net, in_keys=["observation"], out_keys=["loc", "scale"]
-        )
+        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
@@ -2005,9 +1993,7 @@ class TestReinforce:
         gamma = 0.9
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
         net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
-        module = TensorDictModule(
-            net, in_keys=["observation"], out_keys=["loc", "scale"]
-        )
+        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor_net = ProbabilisticActor(
             module,
             distribution_class=TanhNormal,
@@ -2154,7 +2140,7 @@ class TestDreamer:
 
         # World Model and reward model
         rssm_rollout = RSSMRollout(
-            TensorDictModule(
+            SafeModule(
                 rssm_prior,
                 in_keys=["state", "belief", "action"],
                 out_keys=[
@@ -2164,7 +2150,7 @@ class TestDreamer:
                     ("next", "belief"),
                 ],
             ),
-            TensorDictModule(
+            SafeModule(
                 rssm_posterior,
                 in_keys=[("next", "belief"), ("next", "encoded_latents")],
                 out_keys=[
@@ -2178,20 +2164,20 @@ class TestDreamer:
             out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU
         )
         # World Model and reward model
-        world_modeler = TensorDictSequential(
-            TensorDictModule(
+        world_modeler = SafeSequential(
+            SafeModule(
                 obs_encoder,
                 in_keys=[("next", "pixels")],
                 out_keys=[("next", "encoded_latents")],
             ),
             rssm_rollout,
-            TensorDictModule(
+            SafeModule(
                 obs_decoder,
                 in_keys=[("next", "state"), ("next", "belief")],
                 out_keys=[("next", "reco_pixels")],
             ),
         )
-        reward_module = TensorDictModule(
+        reward_module = SafeModule(
             reward_module,
             in_keys=[("next", "state"), ("next", "belief")],
             out_keys=["reward"],
@@ -2225,8 +2211,8 @@ class TestDreamer:
         reward_module = MLP(
             out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU
         )
-        transition_model = TensorDictSequential(
-            TensorDictModule(
+        transition_model = SafeSequential(
+            SafeModule(
                 rssm_prior,
                 in_keys=["state", "belief", "action"],
                 out_keys=[
@@ -2237,7 +2223,7 @@ class TestDreamer:
                 ],
             ),
         )
-        reward_model = TensorDictModule(
+        reward_model = SafeModule(
             reward_module,
             in_keys=["state", "belief"],
             out_keys=["reward"],
@@ -2271,8 +2257,8 @@ class TestDreamer:
             num_cells=mlp_num_units,
             activation_class=nn.ELU,
         )
-        actor_model = ProbabilisticTensorDictModule(
-            TensorDictModule(
+        actor_model = SafeProbabilisticModule(
+            SafeModule(
                 actor_module,
                 in_keys=["state", "belief"],
                 out_keys=["loc", "scale"],
@@ -2294,7 +2280,7 @@ class TestDreamer:
         return actor_model
 
     def _create_value_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        value_model = TensorDictModule(
+        value_model = SafeModule(
             MLP(
                 out_features=1,
                 depth=3,
@@ -2396,7 +2382,7 @@ class TestDreamer:
         # test reconstruction
         with pytest.raises(ValueError, match="No observation decoder provided"):
             mb_env.decode_obs(rollout)
-        mb_env.obs_decoder = TensorDictModule(
+        mb_env.obs_decoder = SafeModule(
             nn.LazyLinear(4, device=device),
             in_keys=["state"],
             out_keys=["reco_observation"],
@@ -2915,13 +2901,13 @@ def test_shared_params(dest, expected_dtype, expected_device):
     if torch.cuda.device_count() == 0 and dest == "cuda":
         pytest.skip("no cuda device available")
     module_hidden = torch.nn.Linear(4, 4)
-    td_module_hidden = TensorDictModule(
+    td_module_hidden = SafeModule(
         module=module_hidden,
         spec=None,
         in_keys=["observation"],
         out_keys=["hidden"],
     )
-    module_action = TensorDictModule(
+    module_action = SafeModule(
         NormalParamWrapper(torch.nn.Linear(4, 8)),
         in_keys=["hidden"],
         out_keys=["loc", "scale"],

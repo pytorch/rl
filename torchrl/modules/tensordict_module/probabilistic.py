@@ -3,34 +3,25 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import re
-from copy import deepcopy
-from textwrap import indent
-from typing import List, Optional, Sequence, Tuple, Type, Union
+from typing import Optional, Sequence, Type, Union
 
-from tensordict.tensordict import TensorDictBase
-from torch import distributions as d, Tensor
+from tensordict.nn import ProbabilisticTensorDictModule
 
 from torchrl.data import TensorSpec
-from torchrl.envs.utils import exploration_mode, set_exploration_mode
-from torchrl.modules.distributions import Delta, distributions_maps
-from torchrl.modules.tensordict_module.common import _check_all_str, TensorDictModule
+from torchrl.modules.distributions import Delta
+from torchrl.modules.tensordict_module.common import SafeModule
 
 
-class ProbabilisticTensorDictModule(TensorDictModule):
-    """A probabilistic TD Module.
-
-    `ProbabilisticTDModule` is a special case of a TDModule where the output is
-    sampled given some rule, specified by the input :obj:`default_interaction_mode`
-    argument and the :obj:`exploration_mode()` global function.
+class SafeProbabilisticModule(ProbabilisticTensorDictModule, SafeModule):
+    """A :obj:``SafeProbabilisticModule`` is an :obj:``tensordict.nn.ProbabilisticTensorDictModule`` subclass that accepts a :obj:``TensorSpec`` as argument to control the output domain.
 
     It consists in a wrapper around another TDModule that returns a tensordict
-    updated with the distribution parameters. :obj:`ProbabilisticTensorDictModule` is
+    updated with the distribution parameters. :obj:`SafeProbabilisticModule` is
     responsible for constructing the distribution (through the :obj:`get_dist()` method)
     and/or sampling from this distribution (through a regular :obj:`__call__()` to the
     module).
 
-    A :obj:`ProbabilisticTensorDictModule` instance has two main features:
+    A :obj:`SafeProbabilisticModule` instance has two main features:
     - It reads and writes TensorDict objects
     - It uses a real mapping R^n -> R^m to create a distribution in R^d from
     which values can be sampled or computed.
@@ -39,8 +30,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
     the 'rsample', 'sample' method). The sampling step is skipped if the
     inner TDModule has already created the desired key-value pair.
 
-    By default, ProbabilisticTensorDictModule distribution class is a Delta
-    distribution, making ProbabilisticTensorDictModule a simple wrapper around
+    By default, SafeProbabilisticModule distribution class is a Delta
+    distribution, making SafeProbabilisticModule a simple wrapper around
     a deterministic mapping function.
 
     Args:
@@ -90,13 +81,13 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.data import NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import ProbabilisticTensorDictModule, TanhNormal, NormalParamWrapper
+        >>> from torchrl.modules import SafeProbabilisticModule, TanhNormal, NormalParamWrapper
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> spec = NdUnboundedContinuousTensorSpec(4)
         >>> net = NormalParamWrapper(torch.nn.GRUCell(4, 8))
         >>> fnet, params, buffers = functorch.make_functional_with_buffers(net)
-        >>> module = TensorDictModule(fnet, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
-        >>> td_module = ProbabilisticTensorDictModule(
+        >>> module = SafeModule(fnet, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
+        >>> td_module = SafeProbabilisticModule(
         ...    module=module,
         ...    spec=spec,
         ...    dist_in_keys=["loc", "scale"],
@@ -139,7 +130,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
 
     def __init__(
         self,
-        module: TensorDictModule,
+        module: SafeModule,
         dist_in_keys: Union[str, Sequence[str], dict],
         sample_out_key: Union[str, Sequence[str]],
         spec: Optional[TensorSpec] = None,
@@ -151,203 +142,21 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
     ):
-        in_keys = module.in_keys
-
-        # if the module returns the sampled key we wont be sampling it again
-        # then ProbabilisticTensorDictModule is presumably used to return the distribution using `get_dist`
-        if isinstance(dist_in_keys, str):
-            dist_in_keys = [dist_in_keys]
-        if isinstance(sample_out_key, str):
-            sample_out_key = [sample_out_key]
-        if not isinstance(dist_in_keys, dict):
-            dist_in_keys = {param_key: param_key for param_key in dist_in_keys}
-        for key in dist_in_keys.values():
-            if key not in module.out_keys:
-                raise RuntimeError(
-                    f"The key {key} could not be found in the wrapped module `{type(module)}.out_keys`."
-                )
-        module_out_keys = module.out_keys
-        self.sample_out_key = sample_out_key
-        _check_all_str(self.sample_out_key)
-        sample_out_key = [key for key in sample_out_key if key not in module_out_keys]
-        self._requires_sample = bool(len(sample_out_key))
-        out_keys = sample_out_key + module_out_keys
         super().__init__(
-            module=module, spec=spec, in_keys=in_keys, out_keys=out_keys, safe=safe
+            module=module,
+            dist_in_keys=dist_in_keys,
+            sample_out_key=sample_out_key,
+            default_interaction_mode=default_interaction_mode,
+            distribution_class=distribution_class,
+            distribution_kwargs=distribution_kwargs,
+            return_log_prob=return_log_prob,
+            cache_dist=cache_dist,
+            n_empirical_estimate=n_empirical_estimate,
         )
-        self.dist_in_keys = dist_in_keys
-        _check_all_str(self.dist_in_keys.keys())
-        _check_all_str(self.dist_in_keys.values())
-
-        self.default_interaction_mode = default_interaction_mode
-        if isinstance(distribution_class, str):
-            distribution_class = distributions_maps.get(distribution_class.lower())
-        self.distribution_class = distribution_class
-        self.distribution_kwargs = (
-            distribution_kwargs if distribution_kwargs is not None else {}
+        super(ProbabilisticTensorDictModule, self).__init__(
+            module=module,
+            spec=spec,
+            in_keys=self.in_keys,
+            out_keys=self.out_keys,
+            safe=safe,
         )
-        self.n_empirical_estimate = n_empirical_estimate
-        self._dist = None
-        self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
-        self.return_log_prob = return_log_prob
-
-    def _call_module(
-        self,
-        tensordict: TensorDictBase,
-        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        **kwargs,
-    ) -> TensorDictBase:
-        return self.module(tensordict, params=params, buffers=buffers, **kwargs)
-
-    def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
-        module_params = self.parameters(recurse=False)
-        if len(list(module_params)):
-            raise RuntimeError(
-                "make_functional_with_buffers cannot be called on ProbabilisticTensorDictModule"
-                "that contain parameters on the outer level."
-            )
-        if clone:
-            self_copy = deepcopy(self)
-        else:
-            self_copy = self
-
-        self_copy.module, other = self_copy.module.make_functional_with_buffers(
-            clone=True,
-            native=native,
-        )
-        return self_copy, other
-
-    def get_dist(
-        self,
-        tensordict: TensorDictBase,
-        tensordict_out: Optional[TensorDictBase] = None,
-        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        **kwargs,
-    ) -> Tuple[d.Distribution, TensorDictBase]:
-        interaction_mode = exploration_mode()
-        if interaction_mode is None:
-            interaction_mode = self.default_interaction_mode
-        with set_exploration_mode(interaction_mode):
-            tensordict_out = self._call_module(
-                tensordict,
-                tensordict_out=tensordict_out,
-                params=params,
-                buffers=buffers,
-                **kwargs,
-            )
-        dist = self.build_dist_from_params(tensordict_out)
-        return dist, tensordict_out
-
-    def build_dist_from_params(self, tensordict_out: TensorDictBase) -> d.Distribution:
-        try:
-            selected_td_out = tensordict_out.select(*self.dist_in_keys.values())
-            dist_kwargs = {
-                dist_key: selected_td_out[td_key]
-                for dist_key, td_key in self.dist_in_keys.items()
-            }
-            dist = self.distribution_class(**dist_kwargs)
-        except TypeError as err:
-            if "an unexpected keyword argument" in str(err):
-                raise TypeError(
-                    "distribution keywords and tensordict keys indicated by ProbabilisticTensorDictModule.dist_in_keys must match."
-                    f"Got this error message: \n{indent(str(err), 4 * ' ')}\nwith dist_in_keys={self.dist_in_keys}"
-                )
-            elif re.search(r"missing.*required positional arguments", str(err)):
-                raise TypeError(
-                    f"TensorDict with keys {tensordict_out.keys()} does not match the distribution {self.distribution_class} keywords."
-                )
-            else:
-                raise err
-        return dist
-
-    def forward(
-        self,
-        tensordict: TensorDictBase,
-        tensordict_out: Optional[TensorDictBase] = None,
-        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        **kwargs,
-    ) -> TensorDictBase:
-
-        dist, tensordict_out = self.get_dist(
-            tensordict,
-            tensordict_out=tensordict_out,
-            params=params,
-            buffers=buffers,
-            **kwargs,
-        )
-        if self._requires_sample:
-            out_tensors = self._dist_sample(dist, interaction_mode=exploration_mode())
-            if isinstance(out_tensors, Tensor):
-                out_tensors = (out_tensors,)
-            tensordict_out.update(
-                {key: value for key, value in zip(self.sample_out_key, out_tensors)}
-            )
-            if self.return_log_prob:
-                log_prob = dist.log_prob(*out_tensors)
-                tensordict_out.set("sample_log_prob", log_prob)
-        elif self.return_log_prob:
-            out_tensors = [tensordict_out.get(key) for key in self.sample_out_key]
-            log_prob = dist.log_prob(*out_tensors)
-            tensordict_out.set("sample_log_prob", log_prob)
-            # raise RuntimeError(
-            #     "ProbabilisticTensorDictModule.return_log_prob = True is incompatible with settings in which "
-            #     "the submodule is responsible for sampling. To manually gather the log-probability, call first "
-            #     "\n>>> dist, tensordict = tensordict_module.get_dist(tensordict)"
-            #     "\n>>> tensordict.set('sample_log_prob', dist.log_prob(tensordict.get(sample_key))"
-            # )
-        return tensordict_out
-
-    def _dist_sample(
-        self,
-        dist: d.Distribution,
-        *tensors: Tensor,
-        interaction_mode: bool = None,
-    ) -> Union[Tuple[Tensor], Tensor]:
-        if interaction_mode is None or interaction_mode == "":
-            interaction_mode = self.default_interaction_mode
-        if not isinstance(dist, d.Distribution):
-            raise TypeError(f"type {type(dist)} not recognised by _dist_sample")
-
-        if interaction_mode == "mode":
-            if hasattr(dist, "mode"):
-                return dist.mode
-            else:
-                raise NotImplementedError(
-                    f"method {type(dist)}.mode is not implemented"
-                )
-
-        elif interaction_mode == "median":
-            if hasattr(dist, "median"):
-                return dist.median
-            else:
-                raise NotImplementedError(
-                    f"method {type(dist)}.median is not implemented"
-                )
-
-        elif interaction_mode == "mean":
-            try:
-                return dist.mean
-            except (AttributeError, NotImplementedError):
-                if dist.has_rsample:
-                    return dist.rsample((self.n_empirical_estimate,)).mean(0)
-                else:
-                    return dist.sample((self.n_empirical_estimate,)).mean(0)
-
-        elif interaction_mode == "random":
-            if dist.has_rsample:
-                return dist.rsample()
-            else:
-                return dist.sample()
-        else:
-            raise NotImplementedError(f"unknown interaction_mode {interaction_mode}")
-
-    @property
-    def num_params(self):
-        return self.module.num_params
-
-    @property
-    def num_buffers(self):
-        return self.module.num_buffers
