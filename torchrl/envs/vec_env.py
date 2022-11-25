@@ -1320,16 +1320,18 @@ class MultiThreadedEnv(EnvBase):
         reset_workers = self._parse_reset_workers(tensordict)
 
         reset_data = self._env.reset(reset_workers)
+        print("---------- ", reset_data)
         # if not isinstance(reset_data, tuple):
         #     reset_data = (reset_data,)
         tensordict_out = self._output_transform(reset_data)
         return tensordict_out
 
     def _output_transform(self, envpool_output):
-        obs = envpool_output
+        obs, _ = envpool_output
         tensordict_out = TensorDict(
-            source={"source": obs},#self.read_obs(obs),
+            {"observation": obs}, #self.read_obs(obs),
             batch_size=self.batch_size,
+            device=self.device,
             #device=self.device,
         )
         self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)

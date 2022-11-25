@@ -34,4 +34,4 @@ from .transforms import (
     TensorDictPrimer,
     VIPTransform,
 )
-from .vec_env import SerialEnv, ParallelEnv
+from .vec_env import SerialEnv, ParallelEnv, MultiThreadedEnv
