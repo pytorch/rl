@@ -30,15 +30,13 @@ from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
 )
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import NormalParamWrapper, TanhNormal, TensorDictModule
+from torchrl.modules import NormalParamWrapper, SafeModule, TanhNormal
 from torchrl.modules.tensordict_module.common import (
     ensure_tensordict_compatible,
     is_tensordict_compatible,
 )
-from torchrl.modules.tensordict_module.probabilistic import (
-    ProbabilisticTensorDictModule,
-)
-from torchrl.modules.tensordict_module.sequence import TensorDictSequential
+from torchrl.modules.tensordict_module.probabilistic import SafeProbabilisticModule
+from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 
 class TestTDModule:
@@ -53,7 +51,7 @@ class TestTDModule:
             def forward(self, x):
                 return self.linear_1(x), self.linear_2(x), self.linear_3(x)
 
-        tensordict_module = TensorDictModule(
+        tensordict_module = SafeModule(
             MultiHeadLinear(5, 4, 3, 2),
             in_keys=["input"],
             out_keys=["out_1", "out_2", "out_3"],
@@ -68,7 +66,7 @@ class TestTDModule:
         assert td.get("out_3").shape == torch.Size([3, 2])
 
         # Using "_" key to ignore some output
-        tensordict_module = TensorDictModule(
+        tensordict_module = SafeModule(
             MultiHeadLinear(5, 4, 3, 2),
             in_keys=["input"],
             out_keys=["_", "_", "out_3"],
@@ -98,7 +96,7 @@ class TestTDModule:
 
         # warning due to "_" in spec keys
         with pytest.warns(UserWarning, match='got a spec with key "_"'):
-            tensordict_module = TensorDictModule(
+            tensordict_module = SafeModule(
                 MultiHeadLinear(5, 4, 3),
                 in_keys=["input"],
                 out_keys=["_", "out_2"],
@@ -129,7 +127,7 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tensordict_module = TensorDictModule(
+                tensordict_module = SafeModule(
                     module=net,
                     spec=spec,
                     in_keys=["in"],
@@ -138,7 +136,7 @@ class TestTDModule:
                 )
             return
         else:
-            tensordict_module = TensorDictModule(
+            tensordict_module = SafeModule(
                 module=net,
                 spec=spec,
                 in_keys=["in"],
@@ -171,7 +169,7 @@ class TestTDModule:
             net = nn.Linear(3, 4 * param_multiplier)
 
         in_keys = ["in"]
-        net = TensorDictModule(
+        net = SafeModule(
             module=NormalParamWrapper(net),
             spec=None,
             in_keys=in_keys,
@@ -206,7 +204,7 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tensordict_module = ProbabilisticTensorDictModule(
+                tensordict_module = SafeProbabilisticModule(
                     module=net,
                     spec=spec,
                     dist_in_keys=dist_in_keys,
@@ -216,7 +214,7 @@ class TestTDModule:
                 )
             return
         else:
-            tensordict_module = ProbabilisticTensorDictModule(
+            tensordict_module = SafeProbabilisticModule(
                 module=net,
                 spec=spec,
                 dist_in_keys=dist_in_keys,
@@ -260,7 +258,7 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tensordict_module = TensorDictModule(
+                tensordict_module = SafeModule(
                     spec=spec,
                     module=fnet,
                     in_keys=["in"],
@@ -269,7 +267,7 @@ class TestTDModule:
                 )
             return
         else:
-            tensordict_module = TensorDictModule(
+            tensordict_module = SafeModule(
                 spec=spec,
                 module=fnet,
                 in_keys=["in"],
@@ -298,7 +296,7 @@ class TestTDModule:
         in_keys = ["in"]
         net = NormalParamWrapper(net)
         fnet, params = make_functional(net)
-        tdnet = TensorDictModule(
+        tdnet = SafeModule(
             module=fnet, spec=None, in_keys=in_keys, out_keys=["loc", "scale"]
         )
 
@@ -322,7 +320,7 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tensordict_module = ProbabilisticTensorDictModule(
+                tensordict_module = SafeProbabilisticModule(
                     module=tdnet,
                     spec=spec,
                     dist_in_keys=["loc", "scale"],
@@ -332,7 +330,7 @@ class TestTDModule:
                 )
             return
         else:
-            tensordict_module = ProbabilisticTensorDictModule(
+            tensordict_module = SafeProbabilisticModule(
                 module=tdnet,
                 spec=spec,
                 dist_in_keys=["loc", "scale"],
@@ -361,7 +359,7 @@ class TestTDModule:
         net = nn.Linear(3, 4 * param_multiplier)
         in_keys = ["in"]
         net = NormalParamWrapper(net)
-        tdnet = TensorDictModule(
+        tdnet = SafeModule(
             module=net, spec=None, in_keys=in_keys, out_keys=["loc", "scale"]
         )
 
@@ -385,7 +383,7 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tensordict_module = ProbabilisticTensorDictModule(
+                tensordict_module = SafeProbabilisticModule(
                     module=tdnet,
                     spec=spec,
                     dist_in_keys=["loc", "scale"],
@@ -395,7 +393,7 @@ class TestTDModule:
                 )
             return
         else:
-            tensordict_module = ProbabilisticTensorDictModule(
+            tensordict_module = SafeProbabilisticModule(
                 module=tdnet,
                 spec=spec,
                 dist_in_keys=["loc", "scale"],
@@ -442,7 +440,7 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = TensorDictModule(
+                tdmodule = SafeModule(
                     spec=spec,
                     module=fnet,
                     in_keys=["in"],
@@ -451,7 +449,7 @@ class TestTDModule:
                 )
             return
         else:
-            tdmodule = TensorDictModule(
+            tdmodule = SafeModule(
                 spec=spec,
                 module=fnet,
                 in_keys=["in"],
@@ -480,7 +478,7 @@ class TestTDModule:
         in_keys = ["in"]
         net = NormalParamWrapper(net)
         fnet, params, buffers = make_functional_with_buffers(net)
-        tdnet = TensorDictModule(
+        tdnet = SafeModule(
             module=fnet, spec=None, in_keys=in_keys, out_keys=["loc", "scale"]
         )
 
@@ -504,7 +502,7 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = ProbabilisticTensorDictModule(
+                tdmodule = SafeProbabilisticModule(
                     module=tdnet,
                     spec=spec,
                     dist_in_keys=["loc", "scale"],
@@ -514,7 +512,7 @@ class TestTDModule:
                 )
             return
         else:
-            tdmodule = ProbabilisticTensorDictModule(
+            tdmodule = SafeProbabilisticModule(
                 module=tdnet,
                 spec=spec,
                 dist_in_keys=["loc", "scale"],
@@ -543,7 +541,7 @@ class TestTDModule:
         net = nn.BatchNorm1d(32 * param_multiplier)
         in_keys = ["in"]
         net = NormalParamWrapper(net)
-        tdnet = TensorDictModule(
+        tdnet = SafeModule(
             module=net, spec=None, in_keys=in_keys, out_keys=["loc", "scale"]
         )
 
@@ -567,7 +565,7 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                ProbabilisticTensorDictModule(
+                SafeProbabilisticModule(
                     module=tdnet,
                     spec=spec,
                     dist_in_keys=["loc", "scale"],
@@ -577,7 +575,7 @@ class TestTDModule:
                 )
             return
         else:
-            tdmodule = ProbabilisticTensorDictModule(
+            tdmodule = SafeProbabilisticModule(
                 module=tdnet,
                 spec=spec,
                 dist_in_keys=["loc", "scale"],
@@ -624,7 +622,7 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = TensorDictModule(
+                tdmodule = SafeModule(
                     spec=spec,
                     module=fnet,
                     in_keys=["in"],
@@ -633,7 +631,7 @@ class TestTDModule:
                 )
             return
         else:
-            tdmodule = TensorDictModule(
+            tdmodule = SafeModule(
                 spec=spec,
                 module=fnet,
                 in_keys=["in"],
@@ -690,7 +688,7 @@ class TestTDModule:
         net = NormalParamWrapper(net)
         in_keys = ["in"]
         fnet, params = make_functional(net)
-        tdnet = TensorDictModule(
+        tdnet = SafeModule(
             module=fnet, spec=None, in_keys=in_keys, out_keys=["loc", "scale"]
         )
 
@@ -714,7 +712,7 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = ProbabilisticTensorDictModule(
+                tdmodule = SafeProbabilisticModule(
                     module=tdnet,
                     spec=spec,
                     dist_in_keys=["loc", "scale"],
@@ -724,7 +722,7 @@ class TestTDModule:
                 )
             return
         else:
-            tdmodule = ProbabilisticTensorDictModule(
+            tdmodule = SafeProbabilisticModule(
                 module=tdnet,
                 spec=spec,
                 dist_in_keys=["loc", "scale"],
@@ -781,7 +779,7 @@ class TestTDModule:
         net = nn.Linear(3, 4 * param_multiplier)
         net = NormalParamWrapper(net)
         in_keys = ["in"]
-        tdnet = TensorDictModule(
+        tdnet = SafeModule(
             module=net, spec=None, in_keys=in_keys, out_keys=["loc", "scale"]
         )
 
@@ -805,7 +803,7 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = ProbabilisticTensorDictModule(
+                tdmodule = SafeProbabilisticModule(
                     module=tdnet,
                     spec=spec,
                     dist_in_keys=["loc", "scale"],
@@ -815,7 +813,7 @@ class TestTDModule:
                 )
             return
         else:
-            tdmodule = ProbabilisticTensorDictModule(
+            tdmodule = SafeProbabilisticModule(
                 module=tdnet,
                 spec=spec,
                 dist_in_keys=["loc", "scale"],
@@ -865,11 +863,11 @@ class TestTDModule:
 class TestTDSequence:
     def test_in_key_warning(self):
         with pytest.warns(UserWarning, match='key "_" is for ignoring output'):
-            tensordict_module = TensorDictModule(
+            tensordict_module = SafeModule(
                 nn.Linear(3, 4), in_keys=["_"], out_keys=["out1"]
             )
         with pytest.warns(UserWarning, match='key "_" is for ignoring output'):
-            tensordict_module = TensorDictModule(
+            tensordict_module = SafeModule(
                 nn.Linear(3, 4), in_keys=["_", "key2"], out_keys=["out1"]
             )
 
@@ -900,21 +898,21 @@ class TestTDSequence:
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
-            tdmodule1 = TensorDictModule(
+            tdmodule1 = SafeModule(
                 net1,
                 spec=None,
                 in_keys=["in"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            dummy_tdmodule = TensorDictModule(
+            dummy_tdmodule = SafeModule(
                 dummy_net,
                 spec=None,
                 in_keys=["hidden"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = TensorDictModule(
+            tdmodule2 = SafeModule(
                 spec=spec,
                 module=net2,
                 in_keys=["hidden"],
@@ -922,7 +920,7 @@ class TestTDSequence:
                 safe=False,
                 **kwargs,
             )
-            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -967,9 +965,7 @@ class TestTDSequence:
             dummy_net = nn.Linear(4, 4)
             net2 = nn.Linear(4, 4 * param_multiplier)
         net2 = NormalParamWrapper(net2)
-        net2 = TensorDictModule(
-            module=net2, in_keys=["hidden"], out_keys=["loc", "scale"]
-        )
+        net2 = SafeModule(module=net2, in_keys=["hidden"], out_keys=["loc", "scale"])
 
         if spec_type is None:
             spec = None
@@ -988,21 +984,21 @@ class TestTDSequence:
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
-            tdmodule1 = TensorDictModule(
+            tdmodule1 = SafeModule(
                 net1,
                 spec=None,
                 in_keys=["in"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            dummy_tdmodule = TensorDictModule(
+            dummy_tdmodule = SafeModule(
                 dummy_net,
                 spec=None,
                 in_keys=["hidden"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = ProbabilisticTensorDictModule(
+            tdmodule2 = SafeProbabilisticModule(
                 spec=spec,
                 module=net2,
                 dist_in_keys=["loc", "scale"],
@@ -1010,7 +1006,7 @@ class TestTDSequence:
                 safe=False,
                 **kwargs,
             )
-            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1068,24 +1064,24 @@ class TestTDSequence:
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
-            tdmodule1 = TensorDictModule(
+            tdmodule1 = SafeModule(
                 fnet1, spec=None, in_keys=["in"], out_keys=["hidden"], safe=False
             )
-            dummy_tdmodule = TensorDictModule(
+            dummy_tdmodule = SafeModule(
                 fdummy_net,
                 spec=None,
                 in_keys=["hidden"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = TensorDictModule(
+            tdmodule2 = SafeModule(
                 fnet2,
                 spec=spec,
                 in_keys=["hidden"],
                 out_keys=["out"],
                 safe=safe,
             )
-            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1129,9 +1125,7 @@ class TestTDSequence:
         fnet1, params1 = make_functional(net1)
         fdummy_net, _ = make_functional(dummy_net)
         fnet2, params2 = make_functional(net2)
-        fnet2 = TensorDictModule(
-            module=fnet2, in_keys=["hidden"], out_keys=["loc", "scale"]
-        )
+        fnet2 = SafeModule(module=fnet2, in_keys=["hidden"], out_keys=["loc", "scale"])
         if isinstance(params1, TensorDictBase):
             params = TensorDict({"0": params1, "1": params2}, [])
         else:
@@ -1154,17 +1148,17 @@ class TestTDSequence:
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
-            tdmodule1 = TensorDictModule(
+            tdmodule1 = SafeModule(
                 fnet1, spec=None, in_keys=["in"], out_keys=["hidden"], safe=False
             )
-            dummy_tdmodule = TensorDictModule(
+            dummy_tdmodule = SafeModule(
                 fdummy_net,
                 spec=None,
                 in_keys=["hidden"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = ProbabilisticTensorDictModule(
+            tdmodule2 = SafeProbabilisticModule(
                 fnet2,
                 spec=spec,
                 dist_in_keys=["loc", "scale"],
@@ -1172,7 +1166,7 @@ class TestTDSequence:
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1241,24 +1235,24 @@ class TestTDSequence:
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
-            tdmodule1 = TensorDictModule(
+            tdmodule1 = SafeModule(
                 fnet1, spec=None, in_keys=["in"], out_keys=["hidden"], safe=False
             )
-            dummy_tdmodule = TensorDictModule(
+            dummy_tdmodule = SafeModule(
                 fdummy_net,
                 spec=None,
                 in_keys=["hidden"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = TensorDictModule(
+            tdmodule2 = SafeModule(
                 fnet2,
                 spec=spec,
                 in_keys=["hidden"],
                 out_keys=["out"],
                 safe=safe,
             )
-            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1309,8 +1303,8 @@ class TestTDSequence:
         fnet1, params1, buffers1 = make_functional_with_buffers(net1)
         fdummy_net, _, _ = make_functional_with_buffers(dummy_net)
         # fnet2, params2, buffers2 = make_functional_with_buffers(net2)
-        # fnet2 = TensorDictModule(fnet2, in_keys=["hidden"], out_keys=["loc", "scale"])
-        net2 = TensorDictModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
+        # fnet2 = SafeModule(fnet2, in_keys=["hidden"], out_keys=["loc", "scale"])
+        net2 = SafeModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
         fnet2, (params2, buffers2) = net2.make_functional_with_buffers()
 
         if isinstance(params1, TensorDictBase):
@@ -1339,17 +1333,17 @@ class TestTDSequence:
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
-            tdmodule1 = TensorDictModule(
+            tdmodule1 = SafeModule(
                 fnet1, spec=None, in_keys=["in"], out_keys=["hidden"], safe=False
             )
-            dummy_tdmodule = TensorDictModule(
+            dummy_tdmodule = SafeModule(
                 fdummy_net,
                 spec=None,
                 in_keys=["hidden"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = ProbabilisticTensorDictModule(
+            tdmodule2 = SafeProbabilisticModule(
                 fnet2,
                 spec=spec,
                 dist_in_keys=["loc", "scale"],
@@ -1357,7 +1351,7 @@ class TestTDSequence:
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1403,7 +1397,7 @@ class TestTDSequence:
             nn.Linear(7, 7 * param_multiplier), nn.BatchNorm1d(7 * param_multiplier)
         )
         net2 = NormalParamWrapper(net2)
-        net2 = TensorDictModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
+        net2 = SafeModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
 
         if spec_type is None:
             spec = None
@@ -1422,10 +1416,10 @@ class TestTDSequence:
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
-            tdmodule1 = TensorDictModule(
+            tdmodule1 = SafeModule(
                 net1, spec=None, in_keys=["in"], out_keys=["hidden"], safe=False
             )
-            tdmodule2 = ProbabilisticTensorDictModule(
+            tdmodule2 = SafeProbabilisticModule(
                 net2,
                 spec=spec,
                 dist_in_keys=["loc", "scale"],
@@ -1433,7 +1427,7 @@ class TestTDSequence:
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
+            tdmodule = SafeSequential(tdmodule1, tdmodule2)
 
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers()
 
@@ -1480,28 +1474,28 @@ class TestTDSequence:
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
-            tdmodule1 = TensorDictModule(
+            tdmodule1 = SafeModule(
                 fnet1,
                 spec=None,
                 in_keys=["in"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            dummy_tdmodule = TensorDictModule(
+            dummy_tdmodule = SafeModule(
                 fdummy_net,
                 spec=None,
                 in_keys=["hidden"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = TensorDictModule(
+            tdmodule2 = SafeModule(
                 fnet2,
                 spec=spec,
                 in_keys=["hidden"],
                 out_keys=["out"],
                 safe=safe,
             )
-            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1568,7 +1562,7 @@ class TestTDSequence:
         net2 = nn.Linear(4, 4 * param_multiplier)
         net2 = NormalParamWrapper(net2)
         fnet2, params2 = make_functional(net2)
-        fnet2 = TensorDictModule(fnet2, in_keys=["hidden"], out_keys=["loc", "scale"])
+        fnet2 = SafeModule(fnet2, in_keys=["hidden"], out_keys=["loc", "scale"])
 
         params = params1 + params2
 
@@ -1589,14 +1583,14 @@ class TestTDSequence:
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
-            tdmodule1 = TensorDictModule(
+            tdmodule1 = SafeModule(
                 fnet1,
                 spec=None,
                 in_keys=["in"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = ProbabilisticTensorDictModule(
+            tdmodule2 = SafeProbabilisticModule(
                 fnet2,
                 spec=spec,
                 sample_out_key=["out"],
@@ -1604,7 +1598,7 @@ class TestTDSequence:
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
+            tdmodule = SafeSequential(tdmodule1, tdmodule2)
 
         # vmap = True
         params = [p.repeat(10, *[1 for _ in p.shape]) for p in params]
@@ -1662,7 +1656,7 @@ class TestTDSequence:
         else:
             fnet2 = net2
             params2 = None
-        fnet2 = TensorDictModule(fnet2, in_keys=["b"], out_keys=["loc", "scale"])
+        fnet2 = SafeModule(fnet2, in_keys=["b"], out_keys=["loc", "scale"])
 
         net3 = nn.Linear(4, 4 * param_multiplier)
         net3 = NormalParamWrapper(net3)
@@ -1671,21 +1665,21 @@ class TestTDSequence:
         else:
             fnet3 = net3
             params3 = None
-        fnet3 = TensorDictModule(fnet3, in_keys=["c"], out_keys=["loc", "scale"])
+        fnet3 = SafeModule(fnet3, in_keys=["c"], out_keys=["loc", "scale"])
 
         spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         spec = CompositeSpec(out=spec, loc=None, scale=None)
 
         kwargs = {"distribution_class": TanhNormal}
 
-        tdmodule1 = TensorDictModule(
+        tdmodule1 = SafeModule(
             fnet1,
             spec=None,
             in_keys=["a"],
             out_keys=["hidden"],
             safe=False,
         )
-        tdmodule2 = ProbabilisticTensorDictModule(
+        tdmodule2 = SafeProbabilisticModule(
             fnet2,
             spec=spec,
             sample_out_key=["out"],
@@ -1693,7 +1687,7 @@ class TestTDSequence:
             safe=True,
             **kwargs,
         )
-        tdmodule3 = ProbabilisticTensorDictModule(
+        tdmodule3 = SafeProbabilisticModule(
             fnet3,
             spec=spec,
             sample_out_key=["out"],
@@ -1701,7 +1695,7 @@ class TestTDSequence:
             safe=True,
             **kwargs,
         )
-        tdmodule = TensorDictSequential(
+        tdmodule = SafeSequential(
             tdmodule1, tdmodule2, tdmodule3, partial_tolerant=True
         )
 
@@ -1768,7 +1762,7 @@ def test_is_tensordict_compatible():
         def forward(self, x):
             return self.linear_1(x), self.linear_2(x), self.linear_3(x)
 
-    td_module = TensorDictModule(
+    td_module = SafeModule(
         MultiHeadLinear(5, 4, 3, 2),
         in_keys=["in_1", "in_2"],
         out_keys=["out_1", "out_2"],
@@ -1823,7 +1817,7 @@ def test_ensure_tensordict_compatible():
         def forward(self, x):
             return self.linear_1(x), self.linear_2(x), self.linear_3(x)
 
-    td_module = TensorDictModule(
+    td_module = SafeModule(
         MultiHeadLinear(5, 4, 3, 2),
         in_keys=["in_1", "in_2"],
         out_keys=["out_1", "out_2"],
@@ -1861,7 +1855,7 @@ def test_ensure_tensordict_compatible():
         out_keys=["out_1", "out_2", "out_3"],
     )
     assert set(ensured_module.in_keys) == {"x"}
-    assert isinstance(ensured_module, TensorDictModule)
+    assert isinstance(ensured_module, SafeModule)
 
 
 if __name__ == "__main__":

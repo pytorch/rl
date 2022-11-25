@@ -13,12 +13,12 @@ from .actors import (
     QValueActor,
     ValueOperator,
 )
-from .common import TensorDictModule
+from .common import SafeModule
 from .exploration import (
     AdditiveGaussianWrapper,
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from .probabilistic import ProbabilisticTensorDictModule
-from .sequence import TensorDictSequential
+from .probabilistic import SafeProbabilisticModule
+from .sequence import SafeSequential
 from .world_models import WorldModelWrapper

@@ -27,7 +27,7 @@ from torchrl.modules import (
     LSTMNet,
     ProbabilisticActor,
     QValueActor,
-    TensorDictModule,
+    SafeModule,
     ValueOperator,
 )
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
@@ -259,10 +259,10 @@ def test_value_based_policy_categorical(device):
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_actorcritic(device):
-    common_module = TensorDictModule(
+    common_module = SafeModule(
         spec=None, module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
     ).to(device)
-    module = TensorDictModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
+    module = SafeModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
     policy_operator = ProbabilisticActor(
         spec=None, module=module, dist_in_keys=["param"], return_log_prob=True
     ).to(device)
@@ -613,7 +613,7 @@ class TestDreamerComponents:
         ).to(device)
 
         rssm_rollout = RSSMRollout(
-            TensorDictModule(
+            SafeModule(
                 rssm_prior,
                 in_keys=["state", "belief", "action"],
                 out_keys=[
@@ -623,7 +623,7 @@ class TestDreamerComponents:
                     ("next", "belief"),
                 ],
             ),
-            TensorDictModule(
+            SafeModule(
                 rssm_posterior,
                 in_keys=[("next", "belief"), ("next", "encoded_latents")],
                 out_keys=[

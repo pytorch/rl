@@ -15,7 +15,7 @@ from tensordict.nn.functional_modules import (
     FunctionalModuleWithBuffers,
 )
 from torch import nn
-from torchrl.modules import TensorDictModule, TensorDictSequential
+from torchrl.modules import SafeModule, SafeSequential
 
 
 @pytest.mark.skipif(
@@ -77,7 +77,7 @@ def test_vmap_tdmodule(moduletype, batch_params):
         raise NotImplementedError
     if moduletype == "linear":
         fmodule, params = FunctionalModule._create_from(module)
-        tdmodule = TensorDictModule(fmodule, in_keys=["x"], out_keys=["y"])
+        tdmodule = SafeModule(fmodule, in_keys=["x"], out_keys=["y"])
         x = torch.randn(10, 1, 3)
         td = TensorDict({"x": x}, [10])
         if batch_params:
@@ -89,7 +89,7 @@ def test_vmap_tdmodule(moduletype, batch_params):
         assert y.shape == torch.Size([10, 1, 4])
     elif moduletype == "bn1":
         fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
-        tdmodule = TensorDictModule(fmodule, in_keys=["x"], out_keys=["y"])
+        tdmodule = SafeModule(fmodule, in_keys=["x"], out_keys=["y"])
         x = torch.randn(10, 2, 3)
         td = TensorDict({"x": x}, [10])
         if batch_params:
@@ -121,7 +121,7 @@ def test_vmap_tdmodule_nativebuilt(moduletype, batch_params):
     else:
         raise NotImplementedError
     if moduletype == "linear":
-        tdmodule = TensorDictModule(module, in_keys=["x"], out_keys=["y"])
+        tdmodule = SafeModule(module, in_keys=["x"], out_keys=["y"])
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers(native=True)
         x = torch.randn(10, 1, 3)
         td = TensorDict({"x": x}, [10])
@@ -134,7 +134,7 @@ def test_vmap_tdmodule_nativebuilt(moduletype, batch_params):
         y = td["y"]
         assert y.shape == torch.Size([10, 1, 4])
     elif moduletype == "bn1":
-        tdmodule = TensorDictModule(module, in_keys=["x"], out_keys=["y"])
+        tdmodule = SafeModule(module, in_keys=["x"], out_keys=["y"])
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers(native=True)
         x = torch.randn(10, 2, 3)
         td = TensorDict({"x": x}, [10])
@@ -173,10 +173,10 @@ def test_vmap_tdsequence(moduletype, batch_params):
     else:
         raise NotImplementedError
     if moduletype == "linear":
-        tdmodule1 = TensorDictModule(fmodule1, in_keys=["x"], out_keys=["y"])
-        tdmodule2 = TensorDictModule(fmodule2, in_keys=["y"], out_keys=["z"])
+        tdmodule1 = SafeModule(fmodule1, in_keys=["x"], out_keys=["y"])
+        tdmodule2 = SafeModule(fmodule2, in_keys=["y"], out_keys=["z"])
         params = TensorDict({"0": params1, "1": params2}, [])
-        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
+        tdmodule = SafeSequential(tdmodule1, tdmodule2)
         assert {"0", "1"} == set(params.keys())
         x = torch.randn(10, 1, 3)
         td = TensorDict({"x": x}, [10])
@@ -188,11 +188,11 @@ def test_vmap_tdsequence(moduletype, batch_params):
         z = td["z"]
         assert z.shape == torch.Size([10, 1, 5])
     elif moduletype == "bn1":
-        tdmodule1 = TensorDictModule(fmodule1, in_keys=["x"], out_keys=["y"])
-        tdmodule2 = TensorDictModule(fmodule2, in_keys=["y"], out_keys=["z"])
+        tdmodule1 = SafeModule(fmodule1, in_keys=["x"], out_keys=["y"])
+        tdmodule2 = SafeModule(fmodule2, in_keys=["y"], out_keys=["z"])
         params = TensorDict({"0": params1, "1": params2}, [])
         buffers = TensorDict({"0": buffers1, "1": buffers2}, [])
-        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
+        tdmodule = SafeSequential(tdmodule1, tdmodule2)
         assert {"0", "1"} == set(params.keys())
         assert {"0", "1"} == set(buffers.keys())
         x = torch.randn(10, 2, 3)
@@ -228,9 +228,9 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
     else:
         raise NotImplementedError
     if moduletype == "linear":
-        tdmodule1 = TensorDictModule(module1, in_keys=["x"], out_keys=["y"])
-        tdmodule2 = TensorDictModule(module2, in_keys=["y"], out_keys=["z"])
-        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
+        tdmodule1 = SafeModule(module1, in_keys=["x"], out_keys=["y"])
+        tdmodule2 = SafeModule(module2, in_keys=["y"], out_keys=["z"])
+        tdmodule = SafeSequential(tdmodule1, tdmodule2)
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers(native=True)
         assert {"0", "1"} == set(params.keys())
         x = torch.randn(10, 1, 3)
@@ -244,9 +244,9 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
         z = td["z"]
         assert z.shape == torch.Size([10, 1, 5])
     elif moduletype == "bn1":
-        tdmodule1 = TensorDictModule(module1, in_keys=["x"], out_keys=["y"])
-        tdmodule2 = TensorDictModule(module2, in_keys=["y"], out_keys=["z"])
-        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
+        tdmodule1 = SafeModule(module1, in_keys=["x"], out_keys=["y"])
+        tdmodule2 = SafeModule(module2, in_keys=["y"], out_keys=["z"])
+        tdmodule = SafeSequential(tdmodule1, tdmodule2)
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers(native=True)
         assert {"0", "1"} == set(params.keys())
         assert {"0", "1"} == set(buffers.keys())

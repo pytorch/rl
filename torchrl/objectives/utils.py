@@ -13,7 +13,7 @@ from torch import nn, Tensor
 from torch.nn import functional as F
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import TensorDictModule
+from torchrl.modules import SafeModule
 
 
 class _context_manager:
@@ -293,7 +293,7 @@ class hold_out_params(_context_manager):
 @torch.no_grad()
 def next_state_value(
     tensordict: TensorDictBase,
-    operator: Optional[TensorDictModule] = None,
+    operator: Optional[SafeModule] = None,
     next_val_key: str = "state_action_value",
     gamma: float = 0.99,
     pred_next_val: Optional[Tensor] = None,

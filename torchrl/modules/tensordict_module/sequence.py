@@ -7,15 +7,15 @@ from __future__ import annotations
 
 from typing import Iterable, Union
 
-from tensordict.nn import TensorDictSequential as _TensorDictSequential
+from tensordict.nn import TensorDictSequential
 from torch import nn
 
 from torchrl.data import CompositeSpec
-from torchrl.modules.tensordict_module.common import TensorDictModule
+from torchrl.modules.tensordict_module.common import SafeModule
 
 
-class TensorDictSequential(_TensorDictSequential, TensorDictModule):
-    """A sequence of TensorDictModules.
+class SafeSequential(TensorDictSequential, SafeModule):
+    """A sequence of SafeModules.
 
     Similarly to :obj:`nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
     each, this module will read and write over a tensordict by querying each of the input modules.
@@ -23,12 +23,12 @@ class TensorDictSequential(_TensorDictSequential, TensorDictModule):
     buffers) will be concatenated in a single list.
 
     Args:
-         modules (iterable of TensorDictModules): ordered sequence of TensorDictModule instances to be run sequentially.
+         modules (iterable of SafeModules): ordered sequence of SafeModule instances to be run sequentially.
          partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
             If so, the only module that will be executed are those who can be executed given the keys that
             are present.
             Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is :obj:`True` AND if the
-            stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
+            stack does not have the required keys, then SafeSequential will scan through the sub-tensordicts
             looking for those that have the required keys, if any.
 
     TensorDictSequence supports functional, modular and vmap coding:
@@ -37,14 +37,14 @@ class TensorDictSequential(_TensorDictSequential, TensorDictModule):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.data import NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import TanhNormal, TensorDictSequential, NormalParamWrapper
-        >>> from torchrl.modules.tensordict_module import ProbabilisticTensorDictModule
+        >>> from torchrl.modules import TanhNormal, SafeSequential, NormalParamWrapper
+        >>> from torchrl.modules.tensordict_module import SafeProbabilisticModule
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
         >>> spec1 = NdUnboundedContinuousTensorSpec(4)
         >>> net1 = NormalParamWrapper(torch.nn.Linear(4, 8))
         >>> fnet1, params1, buffers1 = functorch.make_functional_with_buffers(net1)
-        >>> fmodule1 = TensorDictModule(fnet1, in_keys=["input"], out_keys=["loc", "scale"])
-        >>> td_module1 = ProbabilisticTensorDictModule(
+        >>> fmodule1 = SafeModule(fnet1, in_keys=["input"], out_keys=["loc", "scale"])
+        >>> td_module1 = SafeProbabilisticModule(
         ...    module=fmodule1,
         ...    spec=spec1,
         ...    dist_in_keys=["loc", "scale"],
@@ -55,13 +55,13 @@ class TensorDictSequential(_TensorDictSequential, TensorDictModule):
         >>> spec2 = NdUnboundedContinuousTensorSpec(8)
         >>> module2 = torch.nn.Linear(4, 8)
         >>> fmodule2, params2, buffers2 = functorch.make_functional_with_buffers(module2)
-        >>> td_module2 = TensorDictModule(
+        >>> td_module2 = SafeModule(
         ...    module=fmodule2,
         ...    spec=spec2,
         ...    in_keys=["hidden"],
         ...    out_keys=["output"],
         ...    )
-        >>> td_module = TensorDictSequential(td_module1, td_module2)
+        >>> td_module = SafeSequential(td_module1, td_module2)
         >>> params = params1 + params2
         >>> buffers = buffers1 + buffers2
         >>> _ = td_module(td, params=params, buffers=buffers)
@@ -110,7 +110,7 @@ class TensorDictSequential(_TensorDictSequential, TensorDictModule):
 
     def __init__(
         self,
-        *modules: TensorDictModule,
+        *modules: SafeModule,
         partial_tolerant: bool = False,
     ):
         self.partial_tolerant = partial_tolerant
@@ -119,12 +119,12 @@ class TensorDictSequential(_TensorDictSequential, TensorDictModule):
 
         spec = CompositeSpec()
         for module in modules:
-            if isinstance(module, TensorDictModule) or hasattr(module, "spec"):
+            if isinstance(module, SafeModule) or hasattr(module, "spec"):
                 spec.update(module.spec)
             else:
                 spec.update(CompositeSpec({key: None for key in module.out_keys}))
 
-        super(_TensorDictSequential, self).__init__(
+        super(TensorDictSequential, self).__init__(
             spec=spec,
             module=nn.ModuleList(list(modules)),
             in_keys=in_keys,
@@ -133,21 +133,21 @@ class TensorDictSequential(_TensorDictSequential, TensorDictModule):
 
     def select_subsequence(
         self, in_keys: Iterable[str] = None, out_keys: Iterable[str] = None
-    ) -> "TensorDictSequential":
-        """Returns a new TensorDictSequential with only the modules that are necessary to compute the given output keys with the given input keys.
+    ) -> "SafeSequential":
+        """Returns a new SafeSequential with only the modules that are necessary to compute the given output keys with the given input keys.
 
         Args:
             in_keys: input keys of the subsequence we want to select
             out_keys: output keys of the subsequence we want to select
 
         Returns:
-            A new TensorDictSequential with only the modules that are necessary acording to the given input and output keys.
+            A new SafeSequential with only the modules that are necessary acording to the given input and output keys.
         """
         td_sequential = super().select_subsequence(in_keys=in_keys, out_keys=out_keys)
-        return TensorDictSequential(*td_sequential.module)
+        return SafeSequential(*td_sequential.module)
 
-    def __getitem__(self, index: Union[int, slice]) -> TensorDictModule:
+    def __getitem__(self, index: Union[int, slice]) -> SafeModule:
         if isinstance(index, int):
             return self.module.__getitem__(index)
         else:
-            return TensorDictSequential(*self.module.__getitem__(index))
+            return SafeSequential(*self.module.__getitem__(index))

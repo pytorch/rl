@@ -5,16 +5,14 @@
 
 from typing import Optional, Sequence, Type, Union
 
-from tensordict.nn import (
-    ProbabilisticTensorDictModule as _ProbabilisticTensorDictModule,
-)
+from tensordict.nn import ProbabilisticTensorDictModule
 
 from torchrl.data import TensorSpec
 from torchrl.modules.distributions import Delta
-from torchrl.modules.tensordict_module.common import TensorDictModule
+from torchrl.modules.tensordict_module.common import SafeModule
 
 
-class ProbabilisticTensorDictModule(_ProbabilisticTensorDictModule, TensorDictModule):
+class SafeProbabilisticModule(ProbabilisticTensorDictModule, SafeModule):
     """A probabilistic TD Module.
 
     `ProbabilisticTDModule` is a special case of a TDModule where the output is
@@ -22,12 +20,12 @@ class ProbabilisticTensorDictModule(_ProbabilisticTensorDictModule, TensorDictMo
     argument and the :obj:`exploration_mode()` global function.
 
     It consists in a wrapper around another TDModule that returns a tensordict
-    updated with the distribution parameters. :obj:`ProbabilisticTensorDictModule` is
+    updated with the distribution parameters. :obj:`SafeProbabilisticModule` is
     responsible for constructing the distribution (through the :obj:`get_dist()` method)
     and/or sampling from this distribution (through a regular :obj:`__call__()` to the
     module).
 
-    A :obj:`ProbabilisticTensorDictModule` instance has two main features:
+    A :obj:`SafeProbabilisticModule` instance has two main features:
     - It reads and writes TensorDict objects
     - It uses a real mapping R^n -> R^m to create a distribution in R^d from
     which values can be sampled or computed.
@@ -36,8 +34,8 @@ class ProbabilisticTensorDictModule(_ProbabilisticTensorDictModule, TensorDictMo
     the 'rsample', 'sample' method). The sampling step is skipped if the
     inner TDModule has already created the desired key-value pair.
 
-    By default, ProbabilisticTensorDictModule distribution class is a Delta
-    distribution, making ProbabilisticTensorDictModule a simple wrapper around
+    By default, SafeProbabilisticModule distribution class is a Delta
+    distribution, making SafeProbabilisticModule a simple wrapper around
     a deterministic mapping function.
 
     Args:
@@ -87,13 +85,13 @@ class ProbabilisticTensorDictModule(_ProbabilisticTensorDictModule, TensorDictMo
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.data import NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import ProbabilisticTensorDictModule, TanhNormal, NormalParamWrapper
+        >>> from torchrl.modules import SafeProbabilisticModule, TanhNormal, NormalParamWrapper
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> spec = NdUnboundedContinuousTensorSpec(4)
         >>> net = NormalParamWrapper(torch.nn.GRUCell(4, 8))
         >>> fnet, params, buffers = functorch.make_functional_with_buffers(net)
-        >>> module = TensorDictModule(fnet, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
-        >>> td_module = ProbabilisticTensorDictModule(
+        >>> module = SafeModule(fnet, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
+        >>> td_module = SafeProbabilisticModule(
         ...    module=module,
         ...    spec=spec,
         ...    dist_in_keys=["loc", "scale"],
@@ -136,7 +134,7 @@ class ProbabilisticTensorDictModule(_ProbabilisticTensorDictModule, TensorDictMo
 
     def __init__(
         self,
-        module: TensorDictModule,
+        module: SafeModule,
         dist_in_keys: Union[str, Sequence[str], dict],
         sample_out_key: Union[str, Sequence[str]],
         spec: Optional[TensorSpec] = None,
@@ -159,7 +157,7 @@ class ProbabilisticTensorDictModule(_ProbabilisticTensorDictModule, TensorDictMo
             cache_dist=cache_dist,
             n_empirical_estimate=n_empirical_estimate,
         )
-        super(_ProbabilisticTensorDictModule, self).__init__(
+        super(ProbabilisticTensorDictModule, self).__init__(
             module=module,
             spec=spec,
             in_keys=self.in_keys,

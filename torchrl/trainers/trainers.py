@@ -29,7 +29,7 @@ from torchrl.data import (
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import TensorDictModule
+from torchrl.modules import SafeModule
 from torchrl.objectives.common import LossModule
 from torchrl.trainers.loggers import Logger
 
@@ -1036,7 +1036,7 @@ class Recorder(TrainerHookBase):
         record_interval: int,
         record_frames: int,
         frame_skip: int,
-        policy_exploration: TensorDictModule,
+        policy_exploration: SafeModule,
         recorder: EnvBase,
         exploration_mode: str = "random",
         log_keys: Optional[List[str]] = None,

@@ -51,10 +51,10 @@ from .tensordict_module import (
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
-    ProbabilisticTensorDictModule,
     QValueActor,
-    TensorDictModule,
-    TensorDictSequential,
+    SafeModule,
+    SafeProbabilisticModule,
+    SafeSequential,
     ValueOperator,
     WorldModelWrapper,
 )

@@ -29,7 +29,7 @@ except ImportError:
         FunctionalModuleWithBuffers,
     )
 
-from tensordict.nn import TensorDictModule as _TensorDictModule
+from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDictBase
 from torch import nn
 
@@ -54,7 +54,7 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
     spec = module.spec
     if len(module.out_keys) > 1 and not isinstance(spec, CompositeSpec):
         raise RuntimeError(
-            "safe TensorDictModules with multiple out_keys require a CompositeSpec with matching keys. Got "
+            "safe SafeModules with multiple out_keys require a CompositeSpec with matching keys. Got "
             f"keys {module.out_keys}."
         )
     elif not isinstance(spec, CompositeSpec):
@@ -80,8 +80,8 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
                 )
 
 
-class TensorDictModule(_TensorDictModule):
-    """A TensorDictModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
+class SafeModule(TensorDictModule):
+    """A SafeModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
 
     Args:
         module (nn.Module): a nn.Module used to map the input to the output parameter space. Can be a functional
@@ -98,8 +98,8 @@ class TensorDictModule(_TensorDictModule):
             If this value is out of bounds, it is projected back onto the desired space using the :obj:`TensorSpec.project`
             method. Default is :obj:`False`.
 
-    Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can
-        be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional
+    Embedding a neural network in a SafeModule only requires to specify the input and output keys. The domain spec can
+        be passed along if needed. SafeModule support functional and regular :obj:`nn.Module` objects. In the functional
         case, the 'params' (and 'buffers') keyword argument must be specified:
 
     Examples:
@@ -107,12 +107,12 @@ class TensorDictModule(_TensorDictModule):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.data import NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import TensorDictModule
+        >>> from torchrl.modules import SafeModule
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> spec = NdUnboundedContinuousTensorSpec(8)
         >>> module = torch.nn.GRUCell(4, 8)
         >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
-        >>> td_fmodule = TensorDictModule(
+        >>> td_fmodule = SafeModule(
         ...    module=fmodule,
         ...    spec=spec,
         ...    in_keys=["input", "hidden"],
@@ -129,7 +129,7 @@ class TensorDictModule(_TensorDictModule):
             device=cpu)
 
     In the stateful case:
-        >>> td_module = TensorDictModule(
+        >>> td_module = SafeModule(
         ...    module=module,
         ...    spec=spec,
         ...    in_keys=["input", "hidden"],
@@ -165,7 +165,7 @@ class TensorDictModule(_TensorDictModule):
     def __init__(
         self,
         module: Union[
-            FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
+            FunctionalModule, FunctionalModuleWithBuffers, SafeModule, nn.Module
         ],
         in_keys: Iterable[str],
         out_keys: Iterable[str],
@@ -179,7 +179,7 @@ class TensorDictModule(_TensorDictModule):
         elif spec is not None and not isinstance(spec, CompositeSpec):
             if len(self.out_keys) > 1:
                 raise RuntimeError(
-                    f"got more than one out_key for the TensorDictModule: {self.out_keys},\nbut only one spec. "
+                    f"got more than one out_key for the SafeModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a CompositeSpec object or no spec at all."
                 )
             spec = CompositeSpec(**{self.out_keys[0]: spec})
@@ -208,7 +208,7 @@ class TensorDictModule(_TensorDictModule):
                 and all(_spec is None for _spec in spec.values())
             ):
                 raise RuntimeError(
-                    "`TensorDictModule(spec=None, safe=True)` is not a valid configuration as the tensor "
+                    "`SafeModule(spec=None, safe=True)` is not a valid configuration as the tensor "
                     "specs are not specified"
                 )
             self.register_forward_hook(_forward_hook_safe_action)
@@ -242,18 +242,18 @@ class TensorDictModule(_TensorDictModule):
         return tensordict
 
     def random_sample(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """See :obj:`TensorDictModule.random(...)`."""
+        """See :obj:`SafeModule.random(...)`."""
         return self.random(tensordict)
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> TensorDictModule:
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> SafeModule:
         if hasattr(self, "spec") and self.spec is not None:
             self.spec = self.spec.to(dest)
         out = super().to(dest)
         return out
 
 
-def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
-    """Returns `True` if a module can be used as a TensorDictModule, and False if it can't.
+def is_tensordict_compatible(module: Union[SafeModule, nn.Module]):
+    """Returns `True` if a module can be used as a SafeModule, and False if it can't.
 
     If the signature is misleading an error is raised.
 
@@ -291,21 +291,21 @@ def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
     """
     sig = inspect.signature(module.forward)
 
-    if isinstance(module, TensorDictModule) or (
+    if isinstance(module, SafeModule) or (
         len(sig.parameters) == 1
         and hasattr(module, "in_keys")
         and hasattr(module, "out_keys")
     ):
-        # if the module is a TensorDictModule or takes a single argument and defines
+        # if the module is a SafeModule or takes a single argument and defines
         # in_keys and out_keys then we assume it can already deal with TensorDict input
         # to forward and we return True
         return True
     elif not hasattr(module, "in_keys") and not hasattr(module, "out_keys"):
-        # if it's not a TensorDictModule, and in_keys and out_keys are not defined then
+        # if it's not a SafeModule, and in_keys and out_keys are not defined then
         # we assume no TensorDict compatibility and will try to wrap it.
         return False
 
-    # if in_keys or out_keys were defined but module is not a TensorDictModule or
+    # if in_keys or out_keys were defined but module is not a SafeModule or
     # accepts multiple arguments then it's likely the user is trying to do something
     # that will have undetermined behaviour, we raise an error
     raise TypeError(
@@ -314,18 +314,16 @@ def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
         "should take a single argument of type TensorDict to module.forward and define "
         "both in_keys and out_keys. Alternatively, module.forward can accept "
         "arbitrarily many tensor inputs and leave in_keys and out_keys undefined and "
-        "TorchRL will attempt to automatically wrap the module with a TensorDictModule."
+        "TorchRL will attempt to automatically wrap the module with a SafeModule."
     )
 
 
 def ensure_tensordict_compatible(
-    module: Union[
-        FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
-    ],
+    module: Union[FunctionalModule, FunctionalModuleWithBuffers, SafeModule, nn.Module],
     in_keys: Optional[Iterable[str]] = None,
     out_keys: Optional[Iterable[str]] = None,
     safe: bool = False,
-    wrapper_type: Optional[Type] = TensorDictModule,
+    wrapper_type: Optional[Type] = SafeModule,
 ):
     """Checks and ensures an object with forward method is TensorDict compatible."""
     if is_tensordict_compatible(module):
@@ -345,7 +343,7 @@ def ensure_tensordict_compatible(
     if not isinstance(module, nn.Module):
         raise TypeError(
             "Argument to ensure_tensordict_compatible should be either "
-            "a TensorDictModule or an nn.Module"
+            "a SafeModule or an nn.Module"
         )
 
     sig = inspect.signature(module.forward)
@@ -353,10 +351,10 @@ def ensure_tensordict_compatible(
         raise TypeError(
             "Arguments to module.forward are incompatible with entries in "
             "env.observation_spec. If you want TorchRL to automatically "
-            "wrap your module with a TensorDictModule then the arguments "
+            "wrap your module with a SafeModule then the arguments "
             "to module must correspond one-to-one with entries in "
             "in_keys. For more complex behaviour and more control you can "
-            "consider writing your own TensorDictModule."
+            "consider writing your own SafeModule."
         )
 
     # TODO: Check whether out_keys match (at least in number) if they are provided.

@@ -35,12 +35,7 @@ from torchrl.data import (
 from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.modules import (
-    Actor,
-    LSTMNet,
-    OrnsteinUhlenbeckProcessWrapper,
-    TensorDictModule,
-)
+from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
 
@@ -754,7 +749,7 @@ def test_update_weights(use_async):
         return ContinuousActionVecMockEnv()
 
     n_actions = ContinuousActionVecMockEnv().action_spec.shape[-1]
-    policy = TensorDictModule(
+    policy = SafeModule(
         torch.nn.LazyLinear(n_actions), in_keys=["observation"], out_keys=["action"]
     )
     policy(create_env().reset())
@@ -898,7 +893,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
             next=CompositeSpec(hidden1=hidden_spec, hidden2=hidden_spec),
         )
 
-    policy = TensorDictModule(**policy_kwargs)
+    policy = SafeModule(**policy_kwargs)
 
     env_maker = lambda: GymEnv(PENDULUM_VERSIONED)
 
@@ -985,12 +980,12 @@ class TestAutoWrap:
 
         if collector_class is not SyncDataCollector:
             assert all(
-                isinstance(p, TensorDictModule) for p in collector._policy_dict.values()
+                isinstance(p, SafeModule) for p in collector._policy_dict.values()
             )
             assert all(p.out_keys == out_keys for p in collector._policy_dict.values())
             assert all(p.module is policy for p in collector._policy_dict.values())
         else:
-            assert isinstance(collector.policy, TensorDictModule)
+            assert isinstance(collector.policy, SafeModule)
             assert collector.policy.out_keys == out_keys
             assert collector.policy.module is policy
 

@@ -11,14 +11,12 @@ from torch import nn
 
 from torchrl.data import CompositeSpec, TensorSpec, UnboundedContinuousTensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet
-from torchrl.modules.tensordict_module.common import TensorDictModule
-from torchrl.modules.tensordict_module.probabilistic import (
-    ProbabilisticTensorDictModule,
-)
-from torchrl.modules.tensordict_module.sequence import TensorDictSequential
+from torchrl.modules.tensordict_module.common import SafeModule
+from torchrl.modules.tensordict_module.probabilistic import SafeProbabilisticModule
+from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 
-class Actor(TensorDictModule):
+class Actor(SafeModule):
     """General class for deterministic actors in RL.
 
     The Actor class comes with default values for the out_keys (["action"])
@@ -70,7 +68,7 @@ class Actor(TensorDictModule):
         )
 
 
-class ProbabilisticActor(ProbabilisticTensorDictModule):
+class ProbabilisticActor(SafeProbabilisticModule):
     """General class for probabilistic actors in RL.
 
     The Actor class comes with default values for the out_keys (["action"])
@@ -89,7 +87,7 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
         >>> module = NormalParamWrapper(torch.nn.Linear(4, 8))
         >>> fmodule, params, buffers = functorch.make_functional_with_buffers(
         ...     module)
-        >>> tensordict_module = TensorDictModule(fmodule, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> tensordict_module = SafeModule(fmodule, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> td_module = ProbabilisticActor(
         ...    module=tensordict_module,
         ...    spec=action_spec,
@@ -112,7 +110,7 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
 
     def __init__(
         self,
-        module: TensorDictModule,
+        module: SafeModule,
         dist_in_keys: Union[str, Sequence[str]],
         sample_out_key: Optional[Sequence[str]] = None,
         spec: Optional[TensorSpec] = None,
@@ -136,7 +134,7 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
         )
 
 
-class ValueOperator(TensorDictModule):
+class ValueOperator(SafeModule):
     """General class for value functions in RL.
 
     The ValueOperator class comes with default values for the in_keys and
@@ -529,7 +527,7 @@ class DistributionalQValueActor(QValueActor):
         )
 
 
-class ActorValueOperator(TensorDictSequential):
+class ActorValueOperator(SafeSequential):
     """Actor-value operator.
 
     This class wraps together an actor and a value model that share a common observation embedding network:
@@ -561,9 +559,9 @@ class ActorValueOperator(TensorDictSequential):
     will both return a stand-alone TDModule with the dedicated functionality.
 
     Args:
-        common_operator (TensorDictModule): a common operator that reads observations and produces a hidden variable
-        policy_operator (TensorDictModule): a policy operator that reads the hidden variable and returns an action
-        value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
+        common_operator (SafeModule): a common operator that reads observations and produces a hidden variable
+        policy_operator (SafeModule): a policy operator that reads the hidden variable and returns an action
+        value_operator (SafeModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
         >>> import torch
@@ -573,14 +571,14 @@ class ActorValueOperator(TensorDictSequential):
         >>> from torchrl.modules import ValueOperator, TanhNormal, ActorValueOperator, NormalParamWrapper
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
-        >>> td_module_hidden = TensorDictModule(
+        >>> td_module_hidden = SafeModule(
         ...    module=module_hidden,
         ...    spec=spec_hidden,
         ...    in_keys=["observation"],
         ...    out_keys=["hidden"],
         ...    )
         >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
-        >>> module_action = TensorDictModule(
+        >>> module_action = SafeModule(
         ...     NormalParamWrapper(torch.nn.Linear(4, 8)),
         ...     in_keys=["hidden"],
         ...     out_keys=["loc", "scale"],
@@ -636,9 +634,9 @@ class ActorValueOperator(TensorDictSequential):
 
     def __init__(
         self,
-        common_operator: TensorDictModule,
-        policy_operator: TensorDictModule,
-        value_operator: TensorDictModule,
+        common_operator: SafeModule,
+        policy_operator: SafeModule,
+        value_operator: SafeModule,
     ):
         super().__init__(
             common_operator,
@@ -646,13 +644,13 @@ class ActorValueOperator(TensorDictSequential):
             value_operator,
         )
 
-    def get_policy_operator(self) -> TensorDictSequential:
+    def get_policy_operator(self) -> SafeSequential:
         """Returns a stand-alone policy operator that maps an observation to an action."""
-        return TensorDictSequential(self.module[0], self.module[1])
+        return SafeSequential(self.module[0], self.module[1])
 
-    def get_value_operator(self) -> TensorDictSequential:
+    def get_value_operator(self) -> SafeSequential:
         """Returns a stand-alone value network operator that maps an observation to a value estimate."""
-        return TensorDictSequential(self.module[0], self.module[2])
+        return SafeSequential(self.module[0], self.module[2])
 
 
 class ActorCriticOperator(ActorValueOperator):
@@ -687,9 +685,9 @@ class ActorCriticOperator(ActorValueOperator):
     parent object, as the value is computed based on the policy output.
 
     Args:
-        common_operator (TensorDictModule): a common operator that reads observations and produces a hidden variable
-        policy_operator (TensorDictModule): a policy operator that reads the hidden variable and returns an action
-        value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
+        common_operator (SafeModule): a common operator that reads observations and produces a hidden variable
+        policy_operator (SafeModule): a policy operator that reads the hidden variable and returns an action
+        value_operator (SafeModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
         >>> import torch
@@ -699,7 +697,7 @@ class ActorCriticOperator(ActorValueOperator):
         >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper, MLP
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
-        >>> td_module_hidden = TensorDictModule(
+        >>> td_module_hidden = SafeModule(
         ...    module=module_hidden,
         ...    spec=spec_hidden,
         ...    in_keys=["observation"],
@@ -707,7 +705,7 @@ class ActorCriticOperator(ActorValueOperator):
         ...    )
         >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
         >>> module_action = NormalParamWrapper(torch.nn.Linear(4, 8))
-        >>> module_action = TensorDictModule(module_action, in_keys=["hidden"], out_keys=["loc", "scale"])
+        >>> module_action = SafeModule(module_action, in_keys=["hidden"], out_keys=["loc", "scale"])
         >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
         ...    spec=spec_action,
@@ -791,7 +789,7 @@ class ActorCriticOperator(ActorValueOperator):
         )
 
 
-class ActorCriticWrapper(TensorDictSequential):
+class ActorCriticWrapper(SafeSequential):
     """Actor-value operator without common module.
 
     This class wraps together an actor and a value model that do not share a common observation embedding network:
@@ -818,8 +816,8 @@ class ActorCriticWrapper(TensorDictSequential):
     will both return a stand-alone TDModule with the dedicated functionality.
 
     Args:
-        policy_operator (TensorDictModule): a policy operator that reads the hidden variable and returns an action
-        value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
+        policy_operator (SafeModule): a policy operator that reads the hidden variable and returns an action
+        value_operator (SafeModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
         >>> import torch
@@ -875,18 +873,18 @@ class ActorCriticWrapper(TensorDictSequential):
 
     def __init__(
         self,
-        policy_operator: TensorDictModule,
-        value_operator: TensorDictModule,
+        policy_operator: SafeModule,
+        value_operator: SafeModule,
     ):
         super().__init__(
             policy_operator,
             value_operator,
         )
 
-    def get_policy_operator(self) -> TensorDictSequential:
+    def get_policy_operator(self) -> SafeSequential:
         """Returns a stand-alone policy operator that maps an observation to an action."""
         return self.module[0]
 
-    def get_value_operator(self) -> TensorDictSequential:
+    def get_value_operator(self) -> SafeSequential:
         """Returns a stand-alone value network operator that maps an observation to a value estimate."""
         return self.module[1]
