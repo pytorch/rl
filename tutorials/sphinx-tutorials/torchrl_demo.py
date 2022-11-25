@@ -29,82 +29,86 @@ This demo was presented at ICML 2022 on the industry demo day.
 # few dependencies as possible (python standard library, numpy and pytorch).
 # Common environment libraries (e.g. OpenAI gym) are only optional.
 #
-# **Content**: TODO: should the presentation get changed ?
+# **Content**:
+#    .. aafig::
 #
-# torchrl
-# │
-# ├── collectors
-# │   └── collectors.py
-# ├── data
-# │   ├── tensor_specs.py
-# │   ├── postprocs
-# │   │  └── postprocs.py
-# │   └── replay_buffers
-# │      ├── replay_buffers.py
-# │      └── storages.py
-# ├── envs
-# │   ├── common.py
-# │   ├── env_creator.py
-# │   ├── gym_like.py
-# │   ├── vec_env.py
-# │   ├── libs
-# │   │  ├── dm_control.py
-# │   │  └── gym.py
-# │   └── transforms
-# │      ├── functional.py
-# │      └── transforms.py
-# ├── modules
-# │   ├── distributions
-# │   │  ├── continuous.py
-# │   │  └── discrete.py
-# │   ├── models
-# │   │  ├── models.py
-# │   │  └── exploration.py
-# │   └── tensordict_module
-# │      ├── actors.py
-# │      ├── common.py
-# │      ├── exploration.py
-# │      ├── probabilistic.py
-# │      └── sequence.py
-# ├── objectives
-# │   ├── common.py
-# │   ├── ddpg.py
-# │   ├── dqn.py
-# │   ├── functional.py
-# │   ├── ppo.py
-# │   ├── redq.py
-# │   ├── reinforce.py
-# │   ├── sac.py
-# │   ├── utils.py
-# │   └── value
-# │      ├── advantages.py
-# │      ├── functional.py
-# │      ├── pg.py
-# │      ├── utils.py
-# │      └── vtrace.py
-# ├── record
-# │      └── recorder.py
-# └── trainers
-#     ├── loggers
-#     ├── trainers.py
-#     └── helpers
-#        ├── collectors.py
-#        ├── envs.py
-#        ├── loggers.py
-#        ├── losses.py
-#        ├── models.py
-#        ├── replay_buffer.py
-#        └── trainers.py
+#      torchrl
+#      │
+#      ├── collectors
+#      │   └── collectors.py
+#      ├── data
+#      │   ├── tensor_specs.py
+#      │   ├── postprocs
+#      │   │  └── postprocs.py
+#      │   └── replay_buffers
+#      │      ├── replay_buffers.py
+#      │      └── storages.py
+#      ├── envs
+#      │   ├── common.py
+#      │   ├── env_creator.py
+#      │   ├── gym_like.py
+#      │   ├── vec_env.py
+#      │   ├── libs
+#      │   │  ├── dm_control.py
+#      │   │  └── gym.py
+#      │   └── transforms
+#      │      ├── functional.py
+#      │      └── transforms.py
+#      ├── modules
+#      │   ├── distributions
+#      │   │  ├── continuous.py
+#      │   │  └── discrete.py
+#      │   ├── models
+#      │   │  ├── models.py
+#      │   │  └── exploration.py
+#      │   └── tensordict_module
+#      │      ├── actors.py
+#      │      ├── common.py
+#      │      ├── exploration.py
+#      │      ├── probabilistic.py
+#      │      └── sequence.py
+#      ├── objectives
+#      │   ├── common.py
+#      │   ├── ddpg.py
+#      │   ├── dqn.py
+#      │   ├── functional.py
+#      │   ├── ppo.py
+#      │   ├── redq.py
+#      │   ├── reinforce.py
+#      │   ├── sac.py
+#      │   ├── utils.py
+#      │   └── value
+#      │      ├── advantages.py
+#      │      ├── functional.py
+#      │      ├── pg.py
+#      │      ├── utils.py
+#      │      └── vtrace.py
+#      ├── record
+#      │      └── recorder.py
+#      └── trainers
+#          ├── loggers
+#          ├── trainers.py
+#          └── helpers
+#             ├── collectors.py
+#             ├── envs.py
+#             ├── loggers.py
+#             ├── losses.py
+#             ├── models.py
+#             ├── replay_buffer.py
+#             └── trainers.py
 #
 # Unlike other domains, RL is less about media than *algorithms*. As such, it
 # is harder to make truly independent components.
 #
 # What TorchRL is not:
-# - a collection of algorithms: we do not intend to provide SOTA implementations of RL algorithms,
+# * a collection of algorithms: we do not intend to provide SOTA implementations of RL algorithms,
 #   but we provide these algorithms only as examples of how to use the library.
-# - a research framework
+# * a research framework: modularity in TorchRL comes in two flavours. First, we try
+#   to build re-usable components, such that they can be easily swapped with each other.
+#   Second, we make our best such that components can be used independently of the rest
+#   of the library.
 #
-# TorchRL has very few core dependencies, mostly PyTorch and functorch. All
+# TorchRL has very few core dependencies, predominantly PyTorch and numpy. All
 # other dependencies (gym, torchvision, wandb / tensorboard) are optional.
 #
 # Data

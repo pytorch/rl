@@ -27,8 +27,6 @@ TensorDict
 #
 # In classical pytorch we would need to do the following:
 #
-# TODO: should these snippets be re-formatted?
-#
 # **Method A**
 #     .. code-block:: python
 #
