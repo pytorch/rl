@@ -13,8 +13,8 @@ try:
     import functorch
 
     make_functional_with_buffers = functorch.make_functional_with_buffers
-
-except ImportError:
+    FUNCTORCH_ERR = ""
+except ImportError as FUNCTORCH_ERR:
     _has_functorch = False
     make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
 
@@ -269,7 +269,9 @@ class TestDQN:
         )
         return td
 
-    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+    )
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize(
@@ -348,7 +350,9 @@ class TestDQN:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+    )
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
@@ -408,7 +412,7 @@ class TestDQN:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    @pytest.mark.skipif(_has_functorch, reason="functorch not installed")
+    @pytest.mark.skipif(_has_functorch, reason="functorch installed")
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
@@ -468,7 +472,9 @@ class TestDQN:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+    )
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_devices())
@@ -514,7 +520,7 @@ class TestDQN:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    @pytest.mark.skipif(_has_functorch, reason="functorch not installed")
+    @pytest.mark.skipif(_has_functorch, reason="functorch installed")
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_devices())
@@ -650,7 +656,9 @@ class TestDDPG:
         )
         return td
 
-    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+    )
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
     def test_ddpg(self, delay_actor, delay_value, device):
@@ -728,7 +736,9 @@ class TestDDPG:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+    )
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
@@ -872,7 +882,9 @@ class TestSAC:
         )
         return td
 
-    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+    )
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -982,7 +994,9 @@ class TestSAC:
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
-    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+    )
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
@@ -1086,7 +1100,9 @@ class TestSAC:
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 
-@pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 class TestREDQ:
     seed = 0
 
@@ -2874,7 +2890,10 @@ def test_custom_conv1d_tensor(device, gamma, N, T, rolling_gamma):
     torch.testing.assert_close(out, out_custom, rtol=1e-4, atol=1e-4)
 
 
-@pytest.mark.skipif(not _has_functorch, reason="no vmap allowed without functorch")
+@pytest.mark.skipif(
+    not _has_functorch,
+    reason=f"no vmap allowed without functorch, error: {FUNCTORCH_ERR}",
+)
 @pytest.mark.parametrize(
     "dest,expected_dtype,expected_device",
     list(
