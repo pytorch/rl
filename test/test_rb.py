@@ -424,6 +424,25 @@ class TestBuffers:
             raise NotImplementedError(rbtype)
         return data
 
+    def test_cursor_position2(self, rbtype, storage, size, prefetch):
+        torch.manual_seed(0)
+        rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
+        batch1 = self._get_data(rbtype, size=5)
+        rb.extend(batch1)
+
+        # Added less data than storage max size
+        if size > 5:
+            assert rb._cursor == 5
+        # Added more data than storage max size
+        elif size < 5:
+            assert rb._cursor == 5 - size
+        # Added as data as storage max size
+        else:
+            assert rb._cursor == 0
+            batch2 = self._get_data(rb_type, size=size - 1)
+            rb.extend(batch2)
+            assert rb._cursor == size - 1
+
     def test_add(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
