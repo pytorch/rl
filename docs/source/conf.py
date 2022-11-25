@@ -77,7 +77,7 @@ sphinx_gallery_conf = {
     "doc_module": ("torchrl",),
     "filename_pattern": "reference/generated/tutorials/",  # files to parse
     "notebook_images": "reference/generated/tutorials/media/",  # images to parse
-    'download_all_examples': True,
+    "download_all_examples": True,
 }
 
 napoleon_use_ivar = True
@@ -111,16 +111,16 @@ exclude_patterns = []
 html_theme = "pytorch_sphinx_theme"
 html_theme_path = [pytorch_sphinx_theme.get_html_theme_path()]
 html_theme_options = {
-    'pytorch_project': 'torchrl',
-    'collapse_navigation': False,
-    'display_version': True,
-    'logo_only': False,
-    'analytics_id': 'UA-117752657-2',
+    "pytorch_project": "torchrl",
+    "collapse_navigation": False,
+    "display_version": True,
+    "logo_only": False,
+    "analytics_id": "UA-117752657-2",
 }
 html_css_files = [
-        'https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css',
-        'css/custom.css'
-    ]
+    "https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css",
+    "css/custom.css",
+]
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = "PyTorchRLdoc"

@@ -125,9 +125,9 @@ import torch
 ###############################################################################
 
 from tensordict.tensordict import (
+    _PermutedTensorDict,
     _UnsqueezedTensorDict,
     _ViewedTensorDict,
-    _PermutedTensorDict,
     TensorDict,
 )
 

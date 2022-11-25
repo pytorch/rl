@@ -201,7 +201,7 @@ tensordict
 # Replay buffers
 # ------------------------------
 
-from torchrl.data import ReplayBuffer, PrioritizedReplayBuffer
+from torchrl.data import PrioritizedReplayBuffer, ReplayBuffer
 
 ###############################################################################
 
@@ -268,7 +268,7 @@ import gym
 # Envs
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-from torchrl.envs.libs.gym import GymWrapper, GymEnv
+from torchrl.envs.libs.gym import GymEnv, GymWrapper
 
 gym_env = gym.make("Pendulum-v1")
 env = GymWrapper(gym_env)
@@ -295,9 +295,9 @@ del env
 
 from torchrl.envs import (
     Compose,
+    NoopResetEnv,
     ObservationNorm,
     ToTensorImage,
-    NoopResetEnv,
     TransformedEnv,
 )
 
@@ -311,9 +311,9 @@ env.append_transform(ObservationNorm(in_keys=["pixels"], loc=2, scale=1))
 
 from torchrl.envs import (
     Compose,
+    NoopResetEnv,
     ObservationNorm,
     ToTensorImage,
-    NoopResetEnv,
     TransformedEnv,
 )
 
@@ -362,7 +362,7 @@ from torch import nn
 
 ###############################################################################
 
-from torchrl.modules import MLP, ConvNet
+from torchrl.modules import ConvNet, MLP
 from torchrl.modules.models.utils import SquashDims
 
 net = MLP(num_cells=[32, 64], out_features=4, activation_class=nn.ELU)
@@ -483,8 +483,11 @@ actor(tensordict)  # action is the default value
 ###############################################################################
 
 # Probabilistic modules
-from torchrl.modules import ProbabilisticTensorDictModule
-from torchrl.modules import TanhNormal, NormalParamWrapper
+from torchrl.modules import (
+    NormalParamWrapper,
+    ProbabilisticTensorDictModule,
+    TanhNormal,
+)
 
 td = TensorDict(
     {"input": torch.randn(3, 5)},
@@ -617,11 +620,11 @@ tensordict_rollout
 # Collectors
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-from torchrl.collectors import MultiSyncDataCollector, MultiaSyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector, MultiSyncDataCollector
 
 ###############################################################################
 
-from torchrl.envs import ParallelEnv, EnvCreator
+from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import TensorDictModule
 

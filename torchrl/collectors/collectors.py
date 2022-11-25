@@ -426,7 +426,6 @@ class SyncDataCollector(_DataCollector):
                 .to_tensordict()
                 .zero_()
             )
-
         # in addition to outputs of the policy, we add traj_ids and step_count to
         # _tensordict_out which will be collected during rollout
         if len(self.env.batch_size):

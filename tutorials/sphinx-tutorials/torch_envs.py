@@ -282,7 +282,7 @@ env.close()
 # ``torch.distribution``, where a ``TransformedDistribution`` object is
 # built around a ``base_dist`` distribution and (a sequence of) ``transforms``.
 
-from torchrl.envs.transforms import TransformedEnv, ToTensorImage
+from torchrl.envs.transforms import ToTensorImage, TransformedEnv
 
 # ToTensorImage transforms a numpy-like image into a tensor one,
 env = DMControlEnv("acrobot", "swingup", from_pixels=True, pixels_only=True)
@@ -522,7 +522,7 @@ parallel_env.close()
 
 ###############################################################################
 
-from torchrl.envs import ParallelEnv, TransformedEnv, ToTensorImage, Resize, Compose
+from torchrl.envs import Compose, ParallelEnv, Resize, ToTensorImage, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
 
 
@@ -560,12 +560,12 @@ from matplotlib import pyplot as plt
 # operations on the main process if possible.
 
 from torchrl.envs import (
-    ParallelEnv,
-    TransformedEnv,
-    ToTensorImage,
-    Resize,
     Compose,
     GrayScale,
+    ParallelEnv,
+    Resize,
+    ToTensorImage,
+    TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv
 
@@ -617,7 +617,7 @@ parallel_env.close()
 # In regular setting, using VecNorm is quite easy:
 
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import VecNorm, TransformedEnv
+from torchrl.envs.transforms import TransformedEnv, VecNorm
 
 env = TransformedEnv(GymEnv("Pendulum-v1"), VecNorm())
 tensordict = env.rollout(max_steps=100)
@@ -635,7 +635,7 @@ print("std: :", tensordict.get("observation").std(0))  # Approx 1
 
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import VecNorm, TransformedEnv
+from torchrl.envs.transforms import TransformedEnv, VecNorm
 
 make_env = EnvCreator(lambda: TransformedEnv(GymEnv("CartPole-v1"), VecNorm(decay=1.0)))
 env = ParallelEnv(3, make_env)

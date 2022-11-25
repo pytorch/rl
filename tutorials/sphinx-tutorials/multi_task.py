@@ -14,9 +14,9 @@ from torch import nn
 
 ##############################################################################
 
-from torchrl.envs import TransformedEnv, CatTensors, Compose, DoubleToFloat, ParallelEnv
+from torchrl.envs import CatTensors, Compose, DoubleToFloat, ParallelEnv, TransformedEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.modules import TensorDictModule, TensorDictSequential, MLP
+from torchrl.modules import MLP, TensorDictModule, TensorDictSequential
 
 ###############################################################################
 # We design two environments, one humanoid that must complete the stand task
