@@ -362,7 +362,7 @@ def test_rb_prototype_trajectories(stack):
         (TensorDictPrioritizedReplayBuffer, LazyMemmapStorage),
     ],
 )
-@pytest.mark.parametrize("size", [3, 100])
+@pytest.mark.parametrize("size", [3, 5, 100])
 @pytest.mark.parametrize("prefetch", [0])
 class TestBuffers:
     _default_params_rb = {}
@@ -439,7 +439,7 @@ class TestBuffers:
         # Added as data as storage max size
         else:
             assert rb._cursor == 0
-            batch2 = self._get_data(rb_type, size=size - 1)
+            batch2 = self._get_data(rbtype, size=size - 1)
             rb.extend(batch2)
             assert rb._cursor == size - 1
 
