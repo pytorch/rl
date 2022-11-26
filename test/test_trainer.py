@@ -40,6 +40,7 @@ from torchrl.trainers.trainers import (
     CountFramesLog,
     LogReward,
     mask_batch,
+    OptimizerHook,
     ReplayBufferTrainer,
     RewardNormalizer,
     SelectKeys,
@@ -82,7 +83,10 @@ class MockingLossModule(nn.Module):
     pass
 
 
-def mocking_trainer(file=None) -> Trainer:
+_mocking_optim = MockingOptim()
+
+
+def mocking_trainer(file=None, optimizer=_mocking_optim) -> Trainer:
     trainer = Trainer(
         MockingCollector(),
         *[
@@ -90,7 +94,7 @@ def mocking_trainer(file=None) -> Trainer:
         ]
         * 2,
         loss_module=MockingLossModule(),
-        optimizer=MockingOptim(),
+        optimizer=optimizer,
         save_trainer_file=file,
     )
     trainer._pbar_str = OrderedDict()
@@ -470,6 +474,159 @@ class TestRB:
         ReplayBufferTrainer.load_state_dict = ReplayBufferTrainer_load_state_dict
         TensorDict.state_dict = TensorDict_state_dict
         TensorDict.load_state_dict = TensorDict_load_state_dict
+
+
+class TestOptimizer:
+    @staticmethod
+    def _setup():
+        torch.manual_seed(0)
+        x = torch.randn(5, 10)
+        model1 = nn.Linear(10, 20)
+        model2 = nn.Linear(10, 20)
+        td = TensorDict(
+            {
+                "loss_1": model1(x).sum(),
+                "loss_2": model2(x).sum(),
+            },
+            batch_size=[],
+        )
+        model1_params = list(model1.parameters())
+        model2_params = list(model2.parameters())
+        all_params = model1_params + model2_params
+        return model1_params, model2_params, all_params, td
+
+    def test_optimizer_set_as_argument(self):
+        _, _, all_params, td = self._setup()
+
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+        trainer = mocking_trainer(optimizer=optimizer)
+
+        params_before = [torch.clone(p) for p in all_params]
+        td_out = trainer._optimizer_hook(td)
+        params_after = all_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(params_before, params_after)
+        )
+
+    def test_optimizer_set_as_hook(self):
+        _, _, all_params, td = self._setup()
+
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+        trainer = mocking_trainer(optimizer=None)
+        hook = OptimizerHook(optimizer)
+        hook.register(trainer)
+
+        params_before = [torch.clone(p) for p in all_params]
+        td_out = trainer._optimizer_hook(td)
+        params_after = all_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(params_before, params_after)
+        )
+
+    def test_optimizer_no_optimizer(self):
+        _, _, all_params, td = self._setup()
+
+        trainer = mocking_trainer(optimizer=None)
+
+        params_before = [torch.clone(p) for p in all_params]
+        td_out = trainer._optimizer_hook(td)
+        params_after = all_params
+
+        assert not [key for key in td_out.keys() if key.startswith("grad_norm_")]
+        assert all(
+            torch.equal(p_before, p_after)
+            for p_before, p_after in zip(params_before, params_after)
+        )
+
+    def test_optimizer_hook_loss_components_empty(self):
+        model = nn.Linear(10, 20)
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+        with pytest.raises(ValueError, match="loss_components list cannot be empty"):
+            OptimizerHook(optimizer, loss_components=[])
+
+    def test_optimizer_hook_loss_components_partial(self):
+        model1_params, model2_params, all_params, td = self._setup()
+
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+        trainer = mocking_trainer(optimizer=None)
+        hook = OptimizerHook(optimizer, loss_components=["loss_1"])
+        hook.register(trainer)
+
+        model1_params_before = [torch.clone(p) for p in model1_params]
+        model2_params_before = [torch.clone(p) for p in model2_params]
+        td_out = trainer._optimizer_hook(td)
+        model1_params_after = model1_params
+        model2_params_after = model2_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model1_params_before, model1_params_after)
+        )
+        assert all(
+            torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model2_params_before, model2_params_after)
+        )
+
+    def test_optimizer_hook_loss_components_none(self):
+        model1_params, model2_params, all_params, td = self._setup()
+
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+        trainer = mocking_trainer(optimizer=None)
+        hook = OptimizerHook(optimizer, loss_components=None)
+        hook.register(trainer)
+
+        model1_params_before = [torch.clone(p) for p in model1_params]
+        model2_params_before = [torch.clone(p) for p in model2_params]
+        td_out = trainer._optimizer_hook(td)
+        model1_params_after = model1_params
+        model2_params_after = model2_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model1_params_before, model1_params_after)
+        )
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model2_params_before, model2_params_after)
+        )
+
+    def test_optimizer_multiple_hooks(self):
+        model1_params, model2_params, _, td = self._setup()
+
+        trainer = mocking_trainer(optimizer=None)
+
+        optimizer1 = torch.optim.SGD(model1_params, lr=1e-3)
+        hook1 = OptimizerHook(optimizer1, loss_components=["loss_1"])
+        hook1.register(trainer, name="optimizer1")
+
+        optimizer2 = torch.optim.Adam(model2_params, lr=1e-4)
+        hook2 = OptimizerHook(optimizer2, loss_components=["loss_2"])
+        hook2.register(trainer, name="optimizer2")
+
+        model1_params_before = [torch.clone(p) for p in model1_params]
+        model2_params_before = [torch.clone(p) for p in model2_params]
+        td_out = trainer._optimizer_hook(td)
+        model1_params_after = model1_params
+        model2_params_after = model2_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert "grad_norm_1" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model1_params_before, model1_params_after)
+        )
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model2_params_before, model2_params_after)
+        )
 
 
 class TestLogReward:

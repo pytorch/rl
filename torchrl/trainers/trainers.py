@@ -155,9 +155,6 @@ class Trainer:
         self.loss_module = loss_module
         self.optimizer = optimizer
         self.logger = logger
-        self._params = []
-        for p in self.optimizer.param_groups:
-            self._params += p["params"]
 
         # seeding
         self.seed = seed
@@ -187,11 +184,13 @@ class Trainer:
         self._pre_optim_ops = []
         self._post_loss_ops = []
         self._optimizer_ops = []
-        if self.optimizer is not None:
-            self._optimizer_ops.append(OptimizerHook(self.optimizer))
         self._process_optim_batch_ops = []
         self._post_optim_ops = []
         self._modules = {}
+
+        if self.optimizer is not None:
+            optimizer_hook = OptimizerHook(self.optimizer)
+            optimizer_hook.register(self)
 
     def register_module(self, module_name: str, module: Any) -> None:
         if module_name in self._modules:
@@ -322,7 +321,7 @@ class Trainer:
 
         elif dest == "optimizer":
             _check_input_output_typehint(
-                op, input=Tuple[TensorDictBase, bool, float, int], output=TensorDictBase
+                op, input=[TensorDictBase, bool, float, int], output=TensorDictBase
             )
             self._optimizer_ops.append((op, kwargs))
 
@@ -744,11 +743,11 @@ class OptimizerHook(TrainerHookBase):
         clip_norm: float,
         index: int,
     ) -> TensorDictBase:
-        loss_components = [
+        loss_components = (
             [item for key, item in losses_td.items() if key in self.loss_components]
             if self.loss_components is not None
             else [item for key, item in losses_td.items() if key.startswith("loss")]
-        ]
+        )
         loss = sum(loss_components)
         loss.backward()
 
@@ -1283,7 +1282,9 @@ class CountFramesLog(TrainerHookBase):
         self.frame_count = state_dict["frame_count"]
 
 
-def _check_input_output_typehint(func: Callable, input: Type, output: Type):
+def _check_input_output_typehint(
+    func: Callable, input: Type | List[Type], output: Type
+):
     # Placeholder for a function that checks the types input / output against expectations
     return
 
