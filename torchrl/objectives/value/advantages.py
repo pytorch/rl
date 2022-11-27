@@ -46,7 +46,7 @@ class TDEstimate(nn.Module):
         super().__init__()
         self.register_buffer("gamma", torch.tensor(gamma))
         self.value_network = value_network
-        self.is_functional = value_network.is_functional
+        self.is_functional = "_is_stateless" in value_network.__dict__
 
         self.average_rewards = average_rewards
         self.gradient_mode = gradient_mode
@@ -57,9 +57,7 @@ class TDEstimate(nn.Module):
         tensordict: TensorDictBase,
         *unused_args,
         params: Optional[List[Tensor]] = None,
-        buffers: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
-        target_buffers: Optional[List[Tensor]] = None,
     ) -> TensorDictBase:
         """Computes the GAE given the data in tensordict.
 
@@ -93,8 +91,6 @@ class TDEstimate(nn.Module):
                 )
             if params is not None:
                 kwargs["params"] = params
-            if buffers is not None:
-                kwargs["buffers"] = buffers
             self.value_network(tensordict, **kwargs)
             value = tensordict.get(self.value_key)
 
@@ -107,10 +103,6 @@ class TDEstimate(nn.Module):
                 kwargs["params"] = target_params
             elif "params" in kwargs:
                 kwargs["params"] = [param.detach() for param in kwargs["params"]]
-            if target_buffers is not None:
-                kwargs["buffers"] = target_buffers
-            elif "buffers" in kwargs:
-                kwargs["buffers"] = [buffer.detach() for buffer in kwargs["buffers"]]
             self.value_network(step_td, **kwargs)
             next_value = step_td.get(self.value_key)
 
@@ -154,7 +146,7 @@ class TDLambdaEstimate(nn.Module):
         self.register_buffer("gamma", torch.tensor(gamma))
         self.register_buffer("lmbda", torch.tensor(lmbda))
         self.value_network = value_network
-        self.is_functional = value_network.is_functional
+        self.is_functional = "_is_stateless" in value_network.__dict__
         self.vectorized = vectorized
 
         self.average_rewards = average_rewards
@@ -166,9 +158,7 @@ class TDLambdaEstimate(nn.Module):
         tensordict: TensorDictBase,
         *unused_args,
         params: Optional[List[Tensor]] = None,
-        buffers: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
-        target_buffers: Optional[List[Tensor]] = None,
     ) -> TensorDictBase:
         """Computes the GAE given the data in tensordict.
 
@@ -204,8 +194,6 @@ class TDLambdaEstimate(nn.Module):
                 )
             if params is not None:
                 kwargs["params"] = params
-            if buffers is not None:
-                kwargs["buffers"] = buffers
             self.value_network(tensordict, **kwargs)
             value = tensordict.get(self.value_key)
 
@@ -218,10 +206,6 @@ class TDLambdaEstimate(nn.Module):
                 kwargs["params"] = target_params
             elif "params" in kwargs:
                 kwargs["params"] = [param.detach() for param in kwargs["params"]]
-            if target_buffers is not None:
-                kwargs["buffers"] = target_buffers
-            elif "buffers" in kwargs:
-                kwargs["buffers"] = [buffer.detach() for buffer in kwargs["buffers"]]
             self.value_network(step_td, **kwargs)
             next_value = step_td.get(self.value_key)
 
@@ -270,7 +254,7 @@ class GAE(nn.Module):
         self.register_buffer("gamma", torch.tensor(gamma))
         self.register_buffer("lmbda", torch.tensor(lmbda))
         self.value_network = value_network
-        self.is_functional = value_network.is_functional
+        self.is_functional = "_is_stateless" in value_network.__dict__
 
         self.average_rewards = average_rewards
         self.gradient_mode = gradient_mode
@@ -280,9 +264,7 @@ class GAE(nn.Module):
         tensordict: TensorDictBase,
         *unused_args,
         params: Optional[List[Tensor]] = None,
-        buffers: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
-        target_buffers: Optional[List[Tensor]] = None,
     ) -> TensorDictBase:
         """Computes the GAE given the data in tensordict.
 
@@ -316,8 +298,6 @@ class GAE(nn.Module):
                 )
             if params is not None:
                 kwargs["params"] = params
-            if buffers is not None:
-                kwargs["buffers"] = buffers
             self.value_network(tensordict, **kwargs)
             value = tensordict.get("state_value")
 
@@ -330,10 +310,6 @@ class GAE(nn.Module):
                 kwargs["params"] = target_params
             elif "params" in kwargs:
                 kwargs["params"] = [param.detach() for param in kwargs["params"]]
-            if target_buffers is not None:
-                kwargs["buffers"] = target_buffers
-            elif "buffers" in kwargs:
-                kwargs["buffers"] = [buffer.detach() for buffer in kwargs["buffers"]]
             self.value_network(step_td, **kwargs)
             next_value = step_td.get("state_value")
             done = tensordict.get("done")

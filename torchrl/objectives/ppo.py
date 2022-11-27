@@ -65,7 +65,9 @@ class PPOLoss(LossModule):
         advantage_module: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
     ):
         super().__init__()
-        self.convert_to_functional(actor, "actor")
+        self.convert_to_functional(
+            actor, "actor", funs_to_decorate=["forward", "get_dist"]
+        )
         # we want to make sure there are no duplicates in the params: the
         # params of critic must be refs to actor if they're shared
         self.convert_to_functional(critic, "critic", compare_against=self.actor_params)
@@ -106,7 +108,8 @@ class PPOLoss(LossModule):
         tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
 
         dist, *_ = self.actor.get_dist(
-            tensordict_clone, params=self.actor_params, buffers=self.actor_buffers
+            tensordict_clone,
+            params=self.actor_params,
         )
         log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
@@ -136,7 +139,6 @@ class PPOLoss(LossModule):
             value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
-                buffers=self.critic_buffers,
             ).get("state_value")
             value_target = advantage + value.detach()
             loss_value = distance_loss(
@@ -363,7 +365,8 @@ class KLPENPPOLoss(PPOLoss):
 
         previous_dist = self.actor.build_dist_from_params(tensordict_clone)
         current_dist, *_ = self.actor.get_dist(
-            tensordict_clone, params=self.actor_params, buffers=self.actor_buffers
+            tensordict_clone,
+            params=self.actor_params,
         )
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)

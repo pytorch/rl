@@ -92,11 +92,6 @@ class DQNLoss(LossModule):
         if td_copy.device != tensordict.device:
             raise RuntimeError(f"{tensordict} and {td_copy} have different devices")
         assert hasattr(self.value_network, "_is_stateless")
-        print(
-            self.value_network,
-            self.value_network.__dict__["_is_stateless"],
-            id(self.value_network),
-        )
         self.value_network(
             td_copy,
             params=self.value_network_params,
@@ -205,7 +200,7 @@ class DistributionalDQNLoss(LossModule):
                 "tensordict as input"
             )
         batch_size = tensordict.batch_size[0]
-        support = self.value_network.support
+        support = self.value_network_params["support"]
         atoms = support.numel()
         Vmin = support.min().item()
         Vmax = support.max().item()
@@ -224,7 +219,6 @@ class DistributionalDQNLoss(LossModule):
         self.value_network(
             td_clone,
             params=self.value_network_params,
-            buffers=self.value_network_buffers,
         )  # Log probabilities log p(s_t, ·; θonline)
         action_log_softmax = td_clone.get("action_value")
 
@@ -241,7 +235,6 @@ class DistributionalDQNLoss(LossModule):
             self.value_network(
                 next_td,
                 params=self.value_network_params,
-                buffers=self.value_network_buffers,
             )  # Probabilities p(s_t+n, ·; θonline)
 
             next_td_action = next_td.get("action")
@@ -253,7 +246,6 @@ class DistributionalDQNLoss(LossModule):
             self.value_network(
                 next_td,
                 params=self.target_value_network_params,
-                buffers=self.target_value_network_buffers,
             )  # Probabilities p(s_t+n, ·; θtarget)
             pns = next_td.get("action_value").exp()
             # Double-Q probabilities

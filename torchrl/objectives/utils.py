@@ -4,11 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
-from collections import OrderedDict
 from typing import Iterable, Optional, Union
 
 import torch
-from tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 
@@ -140,28 +139,28 @@ class TargetNetUpdater:
 
     @property
     def _targets(self):
-        return OrderedDict(
-            {name: getattr(self.loss_module, name) for name in self._target_names}
+        return TensorDict(
+            {name: getattr(self.loss_module, name) for name in self._target_names},
+            [],
         )
 
     @property
     def _sources(self):
-        return OrderedDict(
-            {name: getattr(self.loss_module, name) for name in self._source_names}
+        return TensorDict(
+            {name: getattr(self.loss_module, name) for name in self._source_names},
+            [],
         )
 
     def init_(self) -> None:
-        for source, target in zip(self._sources.values(), self._targets.values()):
-            if isinstance(source, TensorDictBase) and not source.is_empty():
-                # native functional modules
-                source = list(zip(*sorted(source.items())))[1]
-                target = list(zip(*sorted(target.items())))[1]
-            elif isinstance(source, TensorDictBase) and source.is_empty():
+        for key, source in self._sources.items(True):
+            if isinstance(source, TensorDictBase):
                 continue
-            for p_source, p_target in zip(source, target):
-                if p_target.requires_grad:
-                    raise RuntimeError("the target parameter is part of a graph.")
-                p_target.data.copy_(p_source.data)
+            key = ("_target_" + key[0], *key[1:])
+            target = self._targets[key]
+            # for p_source, p_target in zip(source, target):
+            if target.requires_grad:
+                raise RuntimeError("the target parameter is part of a graph.")
+            target.data.copy_(source.data)
         self.initialized = True
 
     def step(self) -> None:
@@ -170,21 +169,17 @@ class TargetNetUpdater:
                 f"{self.__class__.__name__} must be "
                 f"initialized (`{self.__class__.__name__}.init_()`) before calling step()"
             )
-
-        for source, target in zip(self._sources.values(), self._targets.values()):
-            if isinstance(source, TensorDictBase) and not source.is_empty():
-                # native functional modules
-                source = list(zip(*sorted(source.items())))[1]
-                target = list(zip(*sorted(target.items())))[1]
-            elif isinstance(source, TensorDictBase) and source.is_empty():
+        for key, source in self._sources.items(True):
+            if isinstance(source, TensorDictBase):
                 continue
-            for p_source, p_target in zip(source, target):
-                if p_target.requires_grad:
-                    raise RuntimeError("the target parameter is part of a graph.")
-                if p_source.is_leaf:
-                    self._step(p_source, p_target)
-                else:
-                    p_target.copy_(p_source)
+            key = ("_target_" + key[0], *key[1:])
+            target = self._targets[key]
+            if target.requires_grad:
+                raise RuntimeError("the target parameter is part of a graph.")
+            if target.is_leaf:
+                self._step(source, target)
+            else:
+                target.copy_(source)
 
     def _step(self, p_source: Tensor, p_target: Tensor) -> None:
         raise NotImplementedError
@@ -281,7 +276,10 @@ class hold_out_params(_context_manager):
     """Context manager to hold a list of parameters out of a computational graph."""
 
     def __init__(self, params: Iterable[Tensor]) -> None:
-        self.params = tuple(p.detach() for p in params)
+        if isinstance(params, TensorDictBase):
+            self.params = params.detach()
+        else:
+            self.params = tuple(p.detach() for p in params)
 
     def __enter__(self) -> None:
         return self.params
