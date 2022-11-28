@@ -457,7 +457,7 @@ def generate_stats_from_observation_norm(
 
     if (
         type(proof_environment.Transform) != Compose
-        and type(proof_environment.ObservationNorm) != Compose
+        and type(proof_environment.Transform) != ObservationNorm
     ):
         raise TypeError(
             f"Expected a Compose or ObservationNorm Transform for the TransformedEnv. "
