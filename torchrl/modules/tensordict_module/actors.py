@@ -76,25 +76,24 @@ class ProbabilisticActor(SafeProbabilisticModule):
     automatically translated into :obj:`spec = CompositeSpec(action=spec)`
 
     Examples:
-        >>> import functorch
         >>> import torch
         >>> from tensordict import TensorDict
+        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torchrl.data import NdBoundedTensorSpec
-        >>> from torchrl.modules import Actor, TanhNormal, NormalParamWrapper
+        >>> from torchrl.modules import ProbabilisticActor, NormalParamWrapper, SafeModule, TanhNormal
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
         >>> action_spec = NdBoundedTensorSpec(shape=torch.Size([4]),
         ...    minimum=-1, maximum=1)
         >>> module = NormalParamWrapper(torch.nn.Linear(4, 8))
-        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(
-        ...     module)
-        >>> tensordict_module = SafeModule(fmodule, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> params = make_functional(module)
+        >>> tensordict_module = SafeModule(module, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> td_module = ProbabilisticActor(
         ...    module=tensordict_module,
         ...    spec=action_spec,
         ...    dist_in_keys=["loc", "scale"],
         ...    distribution_class=TanhNormal,
         ...    )
-        >>> td = td_module(td, params=params, buffers=buffers)
+        >>> td = td_module(td, params=params)
         >>> td
         TensorDict(
             fields={
@@ -143,9 +142,9 @@ class ValueOperator(SafeModule):
     key is part of the in_keys list).
 
     Examples:
-        >>> import functorch
         >>> import torch
         >>> from tensordict import TensorDict
+        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch import nn
         >>> from torchrl.data import NdUnboundedContinuousTensorSpec
         >>> from torchrl.modules import ValueOperator
@@ -157,20 +156,20 @@ class ValueOperator(SafeModule):
         ...     def forward(self, obs, action):
         ...         return self.linear(torch.cat([obs, action], -1))
         >>> module = CustomModule()
-        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> td_module = ValueOperator(
-        ...    in_keys=["observation", "action"],
-        ...    module=fmodule,
-        ...    )
-        >>> td_module(td, params=params, buffers=buffers)
+        ...    in_keys=["observation", "action"], module=module
+        ... )
+        >>> params = make_functional(td_module)
+        >>> td_module(td, params=params)
         >>> print(td)
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([3, 2]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=None,
+            is_shared=False)
 
 
     """
@@ -210,28 +209,29 @@ class QValueHook:
             action component.
 
     Examples:
-        >>> import functorch
         >>> import torch
         >>> from tensordict import TensorDict
+        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch import nn
         >>> from torchrl.data import OneHotDiscreteTensorSpec
         >>> from torchrl.modules.tensordict_module.actors import QValueHook, Actor
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
         >>> module = nn.Linear(4, 4)
-        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
+        >>> params = make_functional(module)
         >>> hook = QValueHook("one_hot")
-        >>> _ = fmodule.register_forward_hook(hook)
+        >>> module.register_forward_hook(hook)
         >>> action_spec = OneHotDiscreteTensorSpec(4)
-        >>> qvalue_actor = Actor(module=fmodule, spec=action_spec, out_keys=["action", "action_value"])
-        >>> _ = qvalue_actor(td, params=params, buffers=buffers)
+        >>> qvalue_actor = Actor(module=module, spec=action_spec, out_keys=["action", "action_value"])
+        >>> qvalue_actor(td, params=params)
         >>> print(td)
         TensorDict(
-            fields={observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([5, 4]), dtype=torch.int64),
-                action_value: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
-            shared=False,
+                action_value: Tensor(torch.Size([5, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
             batch_size=torch.Size([5]),
-            device=cpu)
+            device=None,
+            is_shared=False)
 
     """
 
@@ -326,9 +326,9 @@ class DistributionalQValueHook(QValueHook):
             action component.
 
     Examples:
-        >>> import functorch
         >>> import torch
         >>> from tensordict import TensorDict
+        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch import nn
         >>> from torchrl.data import OneHotDiscreteTensorSpec
         >>> from torchrl.modules.tensordict_module.actors import DistributionalQValueHook, Actor
@@ -343,20 +343,21 @@ class DistributionalQValueHook(QValueHook):
         ...         return self.linear(x).view(-1, nbins, 4).log_softmax(-2)
         ...
         >>> module = CustomDistributionalQval()
-        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
+        >>> params = make_functional(module)
         >>> action_spec = OneHotDiscreteTensorSpec(4)
         >>> hook = DistributionalQValueHook("one_hot", support = torch.arange(nbins))
-        >>> _ = fmodule.register_forward_hook(hook)
-        >>> qvalue_actor = Actor(module=fmodule, spec=action_spec, out_keys=["action", "action_value"])
-        >>> _ = qvalue_actor(td, params=params, buffers=buffers)
+        >>> module.register_forward_hook(hook)
+        >>> qvalue_actor = Actor(module=module, spec=action_spec, out_keys=["action", "action_value"])
+        >>> qvalue_actor(td, params=params)
         >>> print(td)
         TensorDict(
-            fields={observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([5, 4]), dtype=torch.int64),
-                action_value: Tensor(torch.Size([5, 3, 4]), dtype=torch.float32)},
-            shared=False,
+                action_value: Tensor(torch.Size([5, 3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
             batch_size=torch.Size([5]),
-            device=cpu)
+            device=None,
+            is_shared=False)
 
     """
 
@@ -438,27 +439,27 @@ class QValueActor(Actor):
     This class hooks the module such that it returns a one-hot encoding of the argmax value.
 
     Examples:
-        >>> import functorch
         >>> import torch
         >>> from tensordict import TensorDict
+        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch import nn
         >>> from torchrl.data import OneHotDiscreteTensorSpec
         >>> from torchrl.modules.tensordict_module.actors import QValueActor
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
         >>> module = nn.Linear(4, 4)
-        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
+        >>> params= make_functional(module)
         >>> action_spec = OneHotDiscreteTensorSpec(4)
-        >>> qvalue_actor = QValueActor(module=fmodule, spec=action_spec)
-        >>> _ = qvalue_actor(td, params=params, buffers=buffers)
+        >>> qvalue_actor = QValueActor(module=module, spec=action_spec)
+        >>> qvalue_actor(td, params=params)
         >>> print(td)
         TensorDict(
             fields={
-                observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
                 action: Tensor(torch.Size([5, 4]), dtype=torch.int64),
                 action_value: Tensor(torch.Size([5, 4]), dtype=torch.float32),
-                chosen_action_value: Tensor(torch.Size([5, 1]), dtype=torch.float32)},
+                chosen_action_value: Tensor(torch.Size([5, 1]), dtype=torch.float32),
+                observation: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
             batch_size=torch.Size([5]),
-            device=cpu,
+            device=None,
             is_shared=False)
 
     """
@@ -480,7 +481,6 @@ class DistributionalQValueActor(QValueActor):
     This class hooks the module such that it returns a one-hot encoding of the argmax value on its support.
 
     Examples:
-        >>> import functorch
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torch import nn
@@ -491,15 +491,15 @@ class DistributionalQValueActor(QValueActor):
         >>> module = MLP(out_features=(nbins, 4), depth=2)
         >>> action_spec = OneHotDiscreteTensorSpec(4)
         >>> qvalue_actor = DistributionalQValueActor(module=module, spec=action_spec, support=torch.arange(nbins))
-        >>> _ = qvalue_actor(td)
+        >>> qvalue_actor(td)
         >>> print(td)
         TensorDict(
             fields={
-                observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
                 action: Tensor(torch.Size([5, 4]), dtype=torch.int64),
-                action_value: Tensor(torch.Size([5, 3, 4]), dtype=torch.float32)},
+                action_value: Tensor(torch.Size([5, 3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
             batch_size=torch.Size([5]),
-            device=cpu,
+            device=None,
             is_shared=False)
 
     """
@@ -566,7 +566,7 @@ class ActorValueOperator(SafeSequential):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.modules.tensordict_module import ProbabilisticActor
+        >>> from torchrl.modules import ProbabilisticActor, SafeModule
         >>> from torchrl.data import NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
         >>> from torchrl.modules import ValueOperator, TanhNormal, ActorValueOperator, NormalParamWrapper
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
@@ -601,34 +601,40 @@ class ActorValueOperator(SafeSequential):
         >>> td_clone = td_module(td.clone())
         >>> print(td_clone)
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 state_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=None,
+            is_shared=False)
         >>> td_clone = td_module.get_policy_operator()(td.clone())
         >>> print(td_clone)  # no value
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
+                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu)
-
+            device=None,
+            is_shared=False)
         >>> td_clone = td_module.get_value_operator()(td.clone())
         >>> print(td_clone)  # no action
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 state_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=None,
+            is_shared=False)
 
     """
 
@@ -692,7 +698,7 @@ class ActorCriticOperator(ActorValueOperator):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.modules.tensordict_module import ProbabilisticActor
+        >>> from torchrl.modules import ProbabilisticActor, SafeModule
         >>> from torchrl.data import NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
         >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper, MLP
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
@@ -734,7 +740,7 @@ class ActorCriticOperator(ActorValueOperator):
                 scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu,
+            device=None,
             is_shared=False)
         >>> td_clone = td_module.get_policy_operator()(td.clone())
         >>> print(td_clone)  # no value
@@ -747,7 +753,7 @@ class ActorCriticOperator(ActorValueOperator):
                 sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
                 scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu,
+            device=None,
             is_shared=False)
         >>> td_clone = td_module.get_critic_operator()(td.clone())
         >>> print(td_clone)  # no action
@@ -761,7 +767,7 @@ class ActorCriticOperator(ActorValueOperator):
                 scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu,
+            device=None,
             is_shared=False)
 
     """
@@ -823,13 +829,24 @@ class ActorCriticWrapper(SafeSequential):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.data import NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
-        >>> from torchrl.modules.tensordict_module.deprec import ProbabilisticActor_deprecated
-        >>> from torchrl.modules import ValueOperator, TanhNormal, ActorCriticWrapper
-        >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
-        >>> module_action = torch.nn.Linear(4, 8)
-        >>> td_module_action = ProbabilisticActor_deprecated(
-        ...    module=module_action,
-        ...    spec=spec_action,
+        >>> from torchrl.modules import (
+                ActorCriticWrapper,
+                ProbabilisticActor,
+                NormalParamWrapper,
+                SafeModule,
+                TanhNormal,
+                ValueOperator,
+            )
+        >>> action_spec = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
+        >>> action_module = SafeModule(
+                NormalParamWrapper(torch.nn.Linear(4, 8)),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            )
+        >>> td_module_action = ProbabilisticActor(
+        ...    module=action_module,
+        ...    spec=action_spec,
+        ...    dist_in_keys=["loc", "scale"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )
@@ -843,31 +860,37 @@ class ActorCriticWrapper(SafeSequential):
         >>> td_clone = td_module(td.clone())
         >>> print(td_clone)
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 state_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=None,
+            is_shared=False)
         >>> td_clone = td_module.get_policy_operator()(td.clone())
         >>> print(td_clone)  # no value
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
+                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu)
-
+            device=None,
+            is_shared=False)
         >>> td_clone = td_module.get_value_operator()(td.clone())
         >>> print(td_clone)  # no action
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 state_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=None,
+            is_shared=False)
 
     """
 
