@@ -117,7 +117,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Compute the stats of the observations
     if not cfg.vecnorm and cfg.norm_stats:
-        key =("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
+        key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
         stats = generate_stats_from_observation_norm(cfg, key)
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}

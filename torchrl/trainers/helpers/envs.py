@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Callable, Optional, Sequence, Union
+from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import torch
 
@@ -17,6 +17,7 @@ from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
     CenterCrop,
+    Compose,
     DoubleToFloat,
     FiniteTensorDictCheck,
     GrayScale,
@@ -27,7 +28,6 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
     VecNorm,
-    Compose,
 )
 from torchrl.envs.transforms.transforms import FlattenObservation, gSDENoise
 from torchrl.record.recorder import VideoRecorder
@@ -434,6 +434,18 @@ def generate_stats_from_observation_norm(
     proof_environment: EnvBase = None,
     key: Union[str, Tuple[str, ...]] = None,
 ):
+    """Generate stats (loc and scale) of a TransformedEnv using its ObservationNorm transform init_stats method.
+
+    Args:
+        cfg (DictConfig): a config object with `init_env_steps` field, indicating
+            the total number of frames to be collected to compute the stats.
+        proof_environment (EnvBase instance, optional): if provided, this env will
+            be used ot execute the rollouts. If not, it will be created using
+            the cfg object.
+        key (str, optional): if provided, the stats of this key will be gathered.
+            If not, it is expected that only one key exists in `env.observation_spec`.
+
+    """
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
         proof_environment = transformed_env_constructor(
@@ -443,9 +455,14 @@ def generate_stats_from_observation_norm(
     if not hasattr(cfg, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
-    if type(proof_environment.Transform) != Compose and type(proof_environment.ObservationNorm) != Compose:
-        raise TypeError(f"Expected a Compose or ObservationNorm Transform for the TransformedEnv. "
-                        f"Actual {type(proof_environment.Transform)}")
+    if (
+        type(proof_environment.Transform) != Compose
+        and type(proof_environment.ObservationNorm) != Compose
+    ):
+        raise TypeError(
+            f"Expected a Compose or ObservationNorm Transform for the TransformedEnv. "
+            f"Actual {type(proof_environment.Transform)}"
+        )
 
     if key is None:
         keys = list(proof_environment.observation_spec.keys())
@@ -462,7 +479,9 @@ def generate_stats_from_observation_norm(
             if type(transform) == ObservationNorm:
                 obs_norm_transforms.append(transform)
         if len(obs_norm_transforms) != 1:
-            raise RuntimeError(f"Expected 1 ObservationNorm Transform. Got {len(obs_norm_transforms)}")
+            raise RuntimeError(
+                f"Expected 1 ObservationNorm Transform. Got {len(obs_norm_transforms)}"
+            )
         obs_norm_transform = obs_norm_transforms[0]
     else:
         obs_norm_transform = proof_environment.Transform
@@ -478,6 +497,7 @@ def generate_stats_from_observation_norm(
         del proof_environment
 
     return {"loc": obs_norm_transform.loc, "scale": obs_norm_transform.scale}
+
 
 @dataclass
 class EnvConfig:

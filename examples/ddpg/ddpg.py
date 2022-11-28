@@ -13,7 +13,7 @@ import hydra
 import torch.cuda
 from hydra.core.config_store import ConfigStore
 from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.transforms import RewardScaling, TransformedEnv, Compose, ObservationNorm
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 from torchrl.record import VideoRecorder

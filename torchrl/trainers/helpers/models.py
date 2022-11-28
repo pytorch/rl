@@ -1470,6 +1470,7 @@ def make_dreamer(
             Defaults to False.
         stats (Optional[dict], optional): Stats to use for normalization.
             Defaults to None.
+
     Returns:
         nn.TensorDictModel: Dreamer World model.
         nn.TensorDictModel: Dreamer Model based environnement.
