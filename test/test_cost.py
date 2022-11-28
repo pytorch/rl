@@ -9,14 +9,15 @@ from copy import deepcopy
 from tensordict.nn.functional_modules import FunctionalModuleWithBuffers
 
 _has_functorch = True
+FUNCTORCH_ERR = ""
 try:
     import functorch
 
     make_functional_with_buffers = functorch.make_functional_with_buffers
-    FUNCTORCH_ERR = ""
-except ImportError as FUNCTORCH_ERR:
+except ImportError as err:
     _has_functorch = False
     make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
+    FUNCTORCH_ERR = str(err)
 
 import numpy as np
 import pytest
