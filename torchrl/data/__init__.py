@@ -25,6 +25,8 @@ from .tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     NdUnboundedDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
+    NdOneHotDiscreteTensorSpec,
+    CustomNdOneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
