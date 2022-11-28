@@ -126,7 +126,7 @@ def make_env_transforms(
         env.append_transform(FlattenObservation(0))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
         if stats is None:
-            obs_stats = {"loc": 0.0, "scale": 1.0}
+            obs_stats = {"loc": None, "scale": None}
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
@@ -163,7 +163,7 @@ def make_env_transforms(
 
         if not vecnorm:
             if stats is None:
-                _stats = {"loc": 0.0, "scale": 1.0}
+                _stats = {"loc": None, "scale": None}
             else:
                 _stats = stats
             env.append_transform(
@@ -456,12 +456,12 @@ def generate_stats_from_observation_norm(
         raise AttributeError("init_env_steps missing from arguments.")
 
     if (
-        type(proof_environment.Transform) != Compose
-        and type(proof_environment.Transform) != ObservationNorm
+        type(proof_environment.transform) != Compose
+        and type(proof_environment.transform) != ObservationNorm
     ):
         raise TypeError(
             f"Expected a Compose or ObservationNorm Transform for the TransformedEnv. "
-            f"Actual {type(proof_environment.Transform)}"
+            f"Actual {type(proof_environment.transform)}"
         )
 
     if key is None:
@@ -470,12 +470,12 @@ def generate_stats_from_observation_norm(
         if len(keys):
             raise RuntimeError(
                 f"More than one key exists in the observation_specs: {[key] + keys} were found, "
-                "thus get_stats_random_rollout cannot infer which to compute the stats of."
+                "thus generate_stats_from_observation_norm cannot infer which to compute the stats of."
             )
 
-    if type(proof_environment.Transform) == Compose:
+    if type(proof_environment.transform) == Compose:
         obs_norm_transforms = []
-        for transform in proof_environment.Transform:
+        for transform in proof_environment.transform:
             if type(transform) == ObservationNorm:
                 obs_norm_transforms.append(transform)
         if len(obs_norm_transforms) != 1:
@@ -484,7 +484,7 @@ def generate_stats_from_observation_norm(
             )
         obs_norm_transform = obs_norm_transforms[0]
     else:
-        obs_norm_transform = proof_environment.Transform
+        obs_norm_transform = proof_environment.transform
     obs_norm_transform.init_stats(num_iter=cfg.init_env_steps, key=key)
 
     if proof_env_is_none:

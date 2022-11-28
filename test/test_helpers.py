@@ -31,7 +31,10 @@ from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules.tensordict_module.common import _has_functorch
 from torchrl.trainers.helpers import transformed_env_constructor
-from torchrl.trainers.helpers.envs import EnvConfig
+from torchrl.trainers.helpers.envs import (
+    EnvConfig,
+    generate_stats_from_observation_norm
+)
 from torchrl.trainers.helpers.losses import A2CLossConfig, make_a2c_loss
 from torchrl.trainers.helpers.models import (
     A2CModelConfig,
@@ -55,6 +58,7 @@ if TORCH_VERSION < version.parse("1.12.0"):
     UNSQUEEZE_SINGLETON = True
 else:
     UNSQUEEZE_SINGLETON = False
+
 
 ## these tests aren't truly unitary but setting up a fake env for the
 # purpose of building a model with args is a lot of unstable scaffoldings
@@ -96,7 +100,7 @@ def _assert_keys_match(td, expeceted_keys):
     [("categorical_action_encoding=True",), ("categorical_action_encoding=False",)],
 )
 def test_dqn_maker(
-    device, noisy, distributional, from_pixels, categorical_action_encoding
+        device, noisy, distributional, from_pixels, categorical_action_encoding
 ):
     flags = list(noisy + distributional + from_pixels + categorical_action_encoding) + [
         "env_name=CartPole-v1"
@@ -274,8 +278,8 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
 
         if cfg.from_pixels and not cfg.shared_mapping:
             with pytest.raises(
-                RuntimeError,
-                match="PPO learnt from pixels require the shared_mapping to be set to True",
+                    RuntimeError,
+                    match="PPO learnt from pixels require the shared_mapping to be set to True",
             ):
                 actor_value = make_ppo_model(
                     proof_environment,
@@ -401,8 +405,8 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
 
         if cfg.from_pixels and not cfg.shared_mapping:
             with pytest.raises(
-                RuntimeError,
-                match="A2C learnt from pixels require the shared_mapping to be set to True",
+                    RuntimeError,
+                    match="A2C learnt from pixels require the shared_mapping to be set to True",
             ):
                 actor_value = make_a2c_model(
                     proof_environment,
@@ -732,7 +736,6 @@ to see torch < 1.11 supported for dreamer, please submit an issue.""",
 @pytest.mark.parametrize("tanh_loc", [(), ("tanh_loc=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture):
-
     transformed_env_constructor = dreamer_constructor_fixture
     flags = ["from_pixels=True", "catframes=1"]
 
@@ -860,6 +863,40 @@ def test_timeit():
     assert abs(val2[0] - w2) < 1e-2
     assert abs(val2[1] - n2 * w2) < 1
     assert val2[2] == n2
+
+
+@pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
+def test_stats_from_observation_norm(from_pixels):
+    flags = list(from_pixels)
+    config_fields = [
+        (config_field.name, config_field.type, config_field)
+        for config_cls in (
+            EnvConfig,
+            REDQModelConfig,
+        )
+        for config_field in dataclasses.fields(config_cls)
+    ]
+
+    Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+    cs = ConfigStore.instance()
+    cs.store(name="config", node=Config)
+    with initialize(version_base=None, config_path=None):
+        cfg = compose(config_name="config", overrides=flags)
+        env_maker = (
+            ContinuousActionConvMockEnvNumpy
+            if from_pixels
+            else ContinuousActionVecMockEnv
+        )
+        env = transformed_env_constructor(
+            cfg, use_env_creator=False, custom_env_maker=env_maker
+        )()
+        key = "pixels" if from_pixels else "observation_vector"
+
+        stats = generate_stats_from_observation_norm(cfg, proof_environment=env, key=key)
+
+        assert list(stats.keys()) == ['loc', 'scale']
+        assert stats["loc"].shape == env.observation_spec[key].shape
+        assert stats["scale"].shape == env.observation_spec[key].shape
 
 
 if __name__ == "__main__":
