@@ -23,6 +23,7 @@ from torchrl.trainers.helpers.collectors import (
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     EnvConfig,
+    generate_stats_from_observation_norm,
     parallel_env_constructor,
     transformed_env_constructor,
 )
@@ -96,19 +97,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     stats = None
     if not cfg.vecnorm and cfg.norm_stats:
-        if not hasattr(cfg, "init_env_steps"):
-            raise AttributeError("init_env_steps missing from arguments.")
+        proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
+        key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
+        stats = generate_stats_from_observation_norm(cfg, proof_env, key)
+        proof_env.close()
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
-    else:
-        stats = {"loc": 0.0, "scale": 1.0}
     proof_env = transformed_env_constructor(
         cfg=cfg,
         use_env_creator=False,
         stats=stats,
-        stats_key=("next", "pixels")
-        if cfg.from_pixels
-        else ("next", "observation_vector"),
     )()
     model = make_dqn_actor(
         proof_environment=proof_env,

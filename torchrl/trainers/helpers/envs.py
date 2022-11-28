@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Optional, Sequence, Union
 
 import torch
 
@@ -27,6 +27,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
     VecNorm,
+    Compose,
 )
 from torchrl.envs.transforms.transforms import FlattenObservation, gSDENoise
 from torchrl.record.recorder import VideoRecorder
@@ -79,7 +80,6 @@ def make_env_transforms(
     logger,
     env_name,
     stats,
-    stats_key,
     norm_obs_only,
     env_library,
     action_dim_gsde,
@@ -125,14 +125,12 @@ def make_env_transforms(
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(0))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
-        obs_stats = {"standard_normal": True}
         if stats is None:
-            env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
-            env.transform[-1].init_stats(num_iter=cfg.init_env_steps, key=stats_key)
+            obs_stats = {"loc": 0.0, "scale": 1.0}
         else:
-            obs_stats.update(stats)
-            env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
-
+            obs_stats = stats
+        obs_stats["standard_normal"] = True
+        env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -212,7 +210,6 @@ def transformed_env_constructor(
     video_tag: str = "",
     logger: Optional[Logger] = None,
     stats: Optional[dict] = None,
-    stats_key: Union[str, Tuple[str, ...]] = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = False,
     custom_env_maker: Optional[Callable] = None,
@@ -229,7 +226,6 @@ def transformed_env_constructor(
         video_tag (str, optional): video tag to be passed to the Logger object
         logger (Logger, optional): logger associated with the script
         stats (dict, optional): a dictionary containing the :obj:`loc` and :obj:`scale` for the `ObservationNorm` transform
-        stats_key (Tuple, optional): The key to use when computing the stats of the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
         use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,
@@ -306,7 +302,6 @@ def transformed_env_constructor(
             logger,
             env_name,
             stats,
-            stats_key,
             norm_obs_only,
             env_library,
             action_dim_gsde,
@@ -433,6 +428,56 @@ def get_stats_random_rollout(
         del proof_environment
     return stats
 
+
+def generate_stats_from_observation_norm(
+    cfg: "DictConfig",  # noqa: F821
+    proof_environment: EnvBase = None,
+    key: Union[str, Tuple[str, ...]] = None,
+):
+    proof_env_is_none = proof_environment is None
+    if proof_env_is_none:
+        proof_environment = transformed_env_constructor(
+            cfg=cfg, use_env_creator=False
+        )()
+
+    if not hasattr(cfg, "init_env_steps"):
+        raise AttributeError("init_env_steps missing from arguments.")
+
+    if type(proof_environment.Transform) != Compose and type(proof_environment.ObservationNorm) != Compose:
+        raise TypeError(f"Expected a Compose or ObservationNorm Transform for the TransformedEnv. "
+                        f"Actual {type(proof_environment.Transform)}")
+
+    if key is None:
+        keys = list(proof_environment.observation_spec.keys())
+        key = keys.pop()
+        if len(keys):
+            raise RuntimeError(
+                f"More than one key exists in the observation_specs: {[key] + keys} were found, "
+                "thus get_stats_random_rollout cannot infer which to compute the stats of."
+            )
+
+    if type(proof_environment.Transform) == Compose:
+        obs_norm_transforms = []
+        for transform in proof_environment.Transform:
+            if type(transform) == ObservationNorm:
+                obs_norm_transforms.append(transform)
+        if len(obs_norm_transforms) != 1:
+            raise RuntimeError(f"Expected 1 ObservationNorm Transform. Got {len(obs_norm_transforms)}")
+        obs_norm_transform = obs_norm_transforms[0]
+    else:
+        obs_norm_transform = proof_environment.Transform
+    obs_norm_transform.init_stats(num_iter=cfg.init_env_steps, key=key)
+
+    if proof_env_is_none:
+        proof_environment.close()
+        if (
+            proof_environment.device != torch.device("cpu")
+            and torch.cuda.device_count() > 0
+        ):
+            torch.cuda.empty_cache()
+        del proof_environment
+
+    return {"loc": obs_norm_transform.loc, "scale": obs_norm_transform.scale}
 
 @dataclass
 class EnvConfig:
