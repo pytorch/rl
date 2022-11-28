@@ -359,7 +359,6 @@ prev_traj_count = 0
 ###############################################################################
 # Training loop
 # ------------------------------
-# TODO: how to hide the cell output? a small plot is generated
 
 pbar = tqdm.tqdm(total=total_frames)
 for j, data in enumerate(data_collector):

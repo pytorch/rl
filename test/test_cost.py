@@ -14,7 +14,7 @@ try:
     FUNCTORCH_ERR = ""
 except ImportError as FUNCTORCH_ERR:
     _has_functorch = False
-    # make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
+    FUNCTORCH_ERR = str(err)
 
 import numpy as np
 import pytest
@@ -269,50 +269,7 @@ class TestDQN:
         )
         return td
 
-    # @pytest.mark.skipif(
-    #     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    # )
-    # @pytest.mark.parametrize("delay_value", (False, True))
-    # @pytest.mark.parametrize("device", get_available_devices())
-    # @pytest.mark.parametrize(
-    #     "action_spec_type", ("nd_bounded", "one_hot", "categorical")
-    # )
-    # @pytest.mark.parametrize("is_nn_module", (False, True))
-    # def test_dqn(self, delay_value, device, action_spec_type, is_nn_module):
-    #     torch.manual_seed(self.seed)
-    #     actor = self._create_mock_actor(
-    #         action_spec_type=action_spec_type, device=device, is_nn_module=is_nn_module
-    #     )
-    #     td = self._create_mock_data_dqn(
-    #         action_spec_type=action_spec_type, device=device
-    #     )
-    #     loss_fn = DQNLoss(actor, gamma=0.9, loss_function="l2", delay_value=delay_value)
-    #     with _check_td_steady(td):
-    #         loss = loss_fn(td)
-    #     assert loss_fn.priority_key in td.keys()
-    #
-    #     sum([item for _, item in loss.items()]).backward()
-    #     assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
-    #
-    #     # Check param update effect on targets
-    #     target_value = [p.clone() for p in loss_fn.target_value_network_params]
-    #     for p in loss_fn.parameters():
-    #         p.data += torch.randn_like(p)
-    #     target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
-    #     if loss_fn.delay_value:
-    #         assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
-    #     else:
-    #         assert not any(
-    #             (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
-    #         )
-    #
-    #     # check that policy is updated after parameter update
-    #     parameters = [p.clone() for p in actor.parameters()]
-    #     for p in loss_fn.parameters():
-    #         p.data += torch.randn_like(p)
-    #     assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    # @pytest.mark.skipif(_has_functorch, reason="functorch installed")
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize(
@@ -350,69 +307,6 @@ class TestDQN:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    # @pytest.mark.skipif(
-    #     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    # )
-    # @pytest.mark.parametrize("n", range(4))
-    # @pytest.mark.parametrize("delay_value", (False, True))
-    # @pytest.mark.parametrize("device", get_available_devices())
-    # @pytest.mark.parametrize(
-    #     "action_spec_type", ("nd_bounded", "one_hot", "categorical")
-    # )
-    # def test_dqn_batcher(self, n, delay_value, device, action_spec_type, gamma=0.9):
-    #     torch.manual_seed(self.seed)
-    #     actor = self._create_mock_actor(
-    #         action_spec_type=action_spec_type, device=device
-    #     )
-    #
-    #     td = self._create_seq_mock_data_dqn(
-    #         action_spec_type=action_spec_type, device=device
-    #     )
-    #     loss_fn = DQNLoss(
-    #         actor, gamma=gamma, loss_function="l2", delay_value=delay_value
-    #     )
-    #
-    #     ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
-    #     ms_td = ms(td.clone())
-    #
-    #     with _check_td_steady(ms_td):
-    #         loss_ms = loss_fn(ms_td)
-    #     assert loss_fn.priority_key in ms_td.keys()
-    #
-    #     with torch.no_grad():
-    #         loss = loss_fn(td)
-    #     if n == 0:
-    #         assert_allclose_td(td, ms_td.select(*list(td.keys())))
-    #         _loss = sum([item for _, item in loss.items()])
-    #         _loss_ms = sum([item for _, item in loss_ms.items()])
-    #         assert (
-    #             abs(_loss - _loss_ms) < 1e-3
-    #         ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
-    #     else:
-    #         with pytest.raises(AssertionError):
-    #             assert_allclose_td(loss, loss_ms)
-    #     sum([item for _, item in loss_ms.items()]).backward()
-    #     assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
-    #
-    #     # Check param update effect on targets
-    #     target_value = [p.clone() for p in loss_fn.target_value_network_params]
-    #     for p in loss_fn.parameters():
-    #         p.data += torch.randn_like(p)
-    #     target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
-    #     if loss_fn.delay_value:
-    #         assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
-    #     else:
-    #         assert not any(
-    #             (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
-    #         )
-    #
-    #     # check that policy is updated after parameter update
-    #     parameters = [p.clone() for p in actor.parameters()]
-    #     for p in loss_fn.parameters():
-    #         p.data += torch.randn_like(p)
-    #     assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
-
-    # @pytest.mark.skipif(_has_functorch, reason="functorch installed")
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
@@ -472,55 +366,6 @@ class TestDQN:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    # @pytest.mark.skipif(
-    #     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    # )
-    # @pytest.mark.parametrize("atoms", range(4, 10))
-    # @pytest.mark.parametrize("delay_value", (False, True))
-    # @pytest.mark.parametrize("device", get_devices())
-    # @pytest.mark.parametrize(
-    #     "action_spec_type", ("mult_one_hot", "one_hot", "categorical")
-    # )
-    # @pytest.mark.parametrize("is_nn_module", (False, True))
-    # def test_distributional_dqn(
-    #     self, atoms, delay_value, device, action_spec_type, is_nn_module, gamma=0.9
-    # ):
-    #     torch.manual_seed(self.seed)
-    #     actor = self._create_mock_distributional_actor(
-    #         action_spec_type=action_spec_type, atoms=atoms, is_nn_module=is_nn_module
-    #     ).to(device)
-    #
-    #     td = self._create_mock_data_dqn(
-    #         action_spec_type=action_spec_type, atoms=atoms
-    #     ).to(device)
-    #     loss_fn = DistributionalDQNLoss(actor, gamma=gamma, delay_value=delay_value)
-    #
-    #     with _check_td_steady(td):
-    #         loss = loss_fn(td)
-    #     assert loss_fn.priority_key in td.keys()
-    #
-    #     sum([item for _, item in loss.items()]).backward()
-    #     assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
-    #
-    #     # Check param update effect on targets
-    #     target_value = [p.clone() for p in loss_fn.target_value_network_params]
-    #     for p in loss_fn.parameters():
-    #         p.data += torch.randn_like(p)
-    #     target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
-    #     if loss_fn.delay_value:
-    #         assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
-    #     else:
-    #         assert not any(
-    #             (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
-    #         )
-    #
-    #     # check that policy is updated after parameter update
-    #     parameters = [p.clone() for p in actor.parameters()]
-    #     for p in loss_fn.parameters():
-    #         p.data += torch.randn_like(p)
-    #     assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
-
-    @pytest.mark.skipif(_has_functorch, reason="functorch installed")
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_devices())
