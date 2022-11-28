@@ -90,14 +90,12 @@ def make_env_transforms(
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(0))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
-
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
         env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
-
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0

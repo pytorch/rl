@@ -121,8 +121,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         stats = generate_stats_from_observation_norm(cfg, key)
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
-    else:
-        stats = {"loc": 0.0, "scale": 1.0}
 
     # Create the different components of dreamer
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
