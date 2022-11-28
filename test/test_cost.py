@@ -2781,12 +2781,11 @@ def test_shared_params(dest, expected_dtype, expected_device):
     assert len(loss.qvalue_network_params.flatten_keys().keys()) == 4
     for p in loss.actor_network_params.flatten_keys().values():
         assert isinstance(p, nn.Parameter) or isinstance(p, Buffer)
-    for i, (p1, p2) in enumerate(
-        zip(
-            loss.qvalue_network_params.flatten_keys().values(),
-            loss.actor_network_params.flatten_keys().values(),
-        )
+    for i, (key, value) in enumerate(
+        loss.qvalue_network_params.flatten_keys(",").items()
     ):
+        p1 = value
+        p2 = loss.actor_network_params[tuple(key.split(","))]
         assert (p1 == p2).all()
         if i == 1:
             break
