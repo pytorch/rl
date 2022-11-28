@@ -14,7 +14,7 @@ try:
     FUNCTORCH_ERR = ""
 except ImportError as FUNCTORCH_ERR:
     _has_functorch = False
-    FUNCTORCH_ERR = str(err)
+    FUNCTORCH_ERR = str(FUNCTORCH_ERR)
 
 import numpy as np
 import pytest
@@ -269,13 +269,12 @@ class TestDQN:
         )
         return td
 
-
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize(
         "action_spec_type", ("nd_bounded", "one_hot", "categorical")
     )
-    def test_dqn_nofunctorch(self, delay_value, device, action_spec_type):
+    def test_dqn(self, delay_value, device, action_spec_type):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(
             action_spec_type=action_spec_type, device=device
@@ -313,9 +312,7 @@ class TestDQN:
     @pytest.mark.parametrize(
         "action_spec_type", ("nd_bounded", "one_hot", "categorical")
     )
-    def test_dqn_batcher_nofunctorch(
-        self, n, delay_value, device, action_spec_type, gamma=0.9
-    ):
+    def test_dqn_batcher(self, n, delay_value, device, action_spec_type, gamma=0.9):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(
             action_spec_type=action_spec_type, device=device
@@ -372,7 +369,7 @@ class TestDQN:
     @pytest.mark.parametrize(
         "action_spec_type", ("mult_one_hot", "one_hot", "categorical")
     )
-    def test_distributional_dqn_nofunctorch(
+    def test_distributional_dqn(
         self, atoms, delay_value, device, action_spec_type, gamma=0.9
     ):
         torch.manual_seed(self.seed)
@@ -400,7 +397,10 @@ class TestDQN:
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
         else:
-            assert not (target_value == target_value2).any()
+            for key, val in target_value.flatten_keys(",").items():
+                if key in ("support",):
+                    continue
+                assert not (val == target_value2[tuple(key.split(","))]).any(), key
 
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
