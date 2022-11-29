@@ -315,9 +315,11 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration, actio
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
             "sample_log_prob",
-            "loc",
-            "scale",
         ]
+        if action_space == "continuous":
+            expected_keys += ["loc", "scale"]
+        else:
+            expected_keys += ["logits"]
         if shared_mapping:
             expected_keys += ["hidden"]
         if len(gsde):
@@ -461,9 +463,11 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration, actio
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
             "sample_log_prob",
-            "loc",
-            "scale",
         ]
+        if action_space == "continuous":
+            expected_keys += ["loc", "scale"]
+        else:
+            expected_keys += ["logits"]
         if shared_mapping:
             expected_keys += ["hidden"]
         if len(gsde):
