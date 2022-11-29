@@ -291,6 +291,18 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration, actio
                 )
             return
 
+        if action_space == "discrete" and cfg.gSDE:
+            with pytest.raises(
+                RuntimeError,
+                match="cannot use gSDE with discrete actions",
+            ):
+                actor_value = make_a2c_model(
+                    proof_environment,
+                    device=device,
+                    cfg=cfg,
+                )
+            return
+
         actor_value = make_ppo_model(
             proof_environment,
             device=device,
@@ -417,6 +429,18 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration, actio
             with pytest.raises(
                 RuntimeError,
                 match="A2C learnt from pixels require the shared_mapping to be set to True",
+            ):
+                actor_value = make_a2c_model(
+                    proof_environment,
+                    device=device,
+                    cfg=cfg,
+                )
+            return
+
+        if action_space == "discrete" and cfg.gSDE:
+            with pytest.raises(
+                RuntimeError,
+                match="cannot use gSDE with discrete actions",
             ):
                 actor_value = make_a2c_model(
                     proof_environment,

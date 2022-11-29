@@ -566,11 +566,11 @@ def make_a2c_model(
         shared_out_keys = ["hidden"]
         if not cfg.gSDE:
             if action_spec.domain == "continuous":
-                actor_net = NormalParamWrapper(
+                policy_net = NormalParamWrapper(
                     policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
                 )
             actor_module = SafeModule(
-                actor_net, in_keys=shared_out_keys, out_keys=dist_in_keys
+                policy_net, in_keys=shared_out_keys, out_keys=dist_in_keys
             )
         else:
             gSDE_state_key = "hidden"
@@ -641,11 +641,11 @@ def make_a2c_model(
 
         if not cfg.gSDE:
             if action_spec.domain == "continuous":
-                actor_net = NormalParamWrapper(
+                policy_net = NormalParamWrapper(
                     policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
                 )
             actor_module = SafeModule(
-                actor_net, in_keys=in_keys_actor, out_keys=dist_in_keys
+                policy_net, in_keys=in_keys_actor, out_keys=dist_in_keys
             )
         else:
             in_keys = in_keys_actor
