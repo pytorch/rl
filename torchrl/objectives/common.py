@@ -33,20 +33,6 @@ except ImportError:
     )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
-# def _parameters_to_tensordict(module: nn.Module, *args, **kwargs):
-#     # iterates over names parameters and writes them in the relevant tensordict
-#     prev_tensordict_name = ""
-#     for name, parameter in module.named_parameters():
-#         tensordict_name, *keys = name.split("_sep_")
-#         if tensordict_name != prev_tensordict_name:
-#             tensordict = getattr(module, "_"+tensordict_name)
-#         tensordict.set(keys, parameter)
-#     for name, parameter in module.named_buffers():
-#         tensordict_name, *keys = name.split("_sep_")
-#         if tensordict_name != prev_tensordict_name:
-#             tensordict = getattr(module, "_"+tensordict_name)
-#         tensordict.set(keys, parameter)
-
 
 class LossModule(nn.Module):
     """A parent class for RL losses.
