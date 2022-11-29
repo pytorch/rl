@@ -33,7 +33,7 @@ from torchrl.modules.tensordict_module.common import _has_functorch
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import (
     EnvConfig,
-    generate_stats_from_observation_norm
+    generate_stats_from_observation_norm,
 )
 from torchrl.trainers.helpers.losses import A2CLossConfig, make_a2c_loss
 from torchrl.trainers.helpers.models import (
@@ -100,7 +100,7 @@ def _assert_keys_match(td, expeceted_keys):
     [("categorical_action_encoding=True",), ("categorical_action_encoding=False",)],
 )
 def test_dqn_maker(
-        device, noisy, distributional, from_pixels, categorical_action_encoding
+    device, noisy, distributional, from_pixels, categorical_action_encoding
 ):
     flags = list(noisy + distributional + from_pixels + categorical_action_encoding) + [
         "env_name=CartPole-v1"
@@ -278,8 +278,8 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
 
         if cfg.from_pixels and not cfg.shared_mapping:
             with pytest.raises(
-                    RuntimeError,
-                    match="PPO learnt from pixels require the shared_mapping to be set to True",
+                RuntimeError,
+                match="PPO learnt from pixels require the shared_mapping to be set to True",
             ):
                 actor_value = make_ppo_model(
                     proof_environment,
@@ -405,8 +405,8 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
 
         if cfg.from_pixels and not cfg.shared_mapping:
             with pytest.raises(
-                    RuntimeError,
-                    match="A2C learnt from pixels require the shared_mapping to be set to True",
+                RuntimeError,
+                match="A2C learnt from pixels require the shared_mapping to be set to True",
             ):
                 actor_value = make_a2c_model(
                     proof_environment,
@@ -892,9 +892,11 @@ def test_stats_from_observation_norm(from_pixels):
         )()
         key = "pixels" if from_pixels else "observation_vector"
 
-        stats = generate_stats_from_observation_norm(cfg, proof_environment=env, key=key)
+        stats = generate_stats_from_observation_norm(
+            cfg, proof_environment=env, key=key
+        )
 
-        assert list(stats.keys()) == ['loc', 'scale']
+        assert list(stats.keys()) == ["loc", "scale"]
         assert stats["loc"].shape == env.observation_spec[key].shape
         assert stats["scale"].shape == env.observation_spec[key].shape
 
