@@ -24,7 +24,7 @@ from mocking_classes import ContinuousActionConvMockEnv
 from tensordict.nn import get_functional
 
 # from torchrl.data.postprocs.utils import expand_as_right
-from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
+from tensordict.tensordict import assert_allclose_td, TensorDictBase
 from tensordict.utils import expand_as_right
 from torch import autograd, nn
 from torchrl.data import (
@@ -2582,7 +2582,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
     for (key, source_val) in upd._sources.items(True, True):
         if not isinstance(key, tuple):
             key = (key,)
-        key = ("_target_" + key[0], *key[1:])
+        key = ("target_" + key[0], *key[1:])
         target_val = upd._targets[key]
         assert target_val.dtype is source_val.dtype, key
         assert target_val.device == source_val.device, key
@@ -2598,7 +2598,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             for (key, source_val) in upd._sources.items(True, True):
                 if not isinstance(key, tuple):
                     key = (key,)
-                key = ("_target_" + key[0], *key[1:])
+                key = ("target_" + key[0], *key[1:])
                 target_val = upd._targets[key]
                 if target_val.dtype == torch.long:
                     continue
@@ -2613,7 +2613,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         for (key, source_val) in upd._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
-            key = ("_target_" + key[0], *key[1:])
+            key = ("target_" + key[0], *key[1:])
             target_val = upd._targets[key]
             if target_val.dtype == torch.long:
                 continue
@@ -2626,7 +2626,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         for (key, source_val) in upd._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
-            key = ("_target_" + key[0], *key[1:])
+            key = ("target_" + key[0], *key[1:])
             target_val = upd._targets[key]
             if target_val.dtype == torch.long:
                 continue
@@ -2639,7 +2639,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
     for (key, source_val) in upd._sources.items(True, True):
         if not isinstance(key, tuple):
             key = (key,)
-        key = ("_target_" + key[0], *key[1:])
+        key = ("target_" + key[0], *key[1:])
         target_val = upd._targets[key]
         if target_val.dtype == torch.long:
             continue

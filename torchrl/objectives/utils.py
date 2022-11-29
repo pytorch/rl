@@ -155,7 +155,7 @@ class TargetNetUpdater:
         for key, source in self._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
-            key = ("_target_" + key[0], *key[1:])
+            key = ("target_" + key[0], *key[1:])
             target = self._targets[key]
             # for p_source, p_target in zip(source, target):
             if target.requires_grad:
@@ -172,7 +172,7 @@ class TargetNetUpdater:
         for key, source in self._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
-            key = ("_target_" + key[0], *key[1:])
+            key = ("target_" + key[0], *key[1:])
             target = self._targets[key]
             if target.requires_grad:
                 raise RuntimeError("the target parameter is part of a graph.")
