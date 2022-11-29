@@ -1833,35 +1833,7 @@ class PPOModelConfig:
     # if True, uses an LSTM for the policy.
     shared_mapping: bool = False
     # if True, the first layers of the actor-critic are shared.
-    shared_convnet_kwargs: dict = dict(
-        bias_last_layer=True,
-        depth=None,
-        num_cells=[32, 64, 64],
-        kernel_sizes=[8, 4, 3],
-        strides=[4, 2, 1],
-    )
-    # if the shared network is a CNN, these parameters will be used
-    shared_mlp_kwargs: dict = dict(
-        num_cells=[400],
-        out_features=300,
-    )
-    # if the shared network is a MLP, these parameters will be used
-    policy_mlp_kwargs: dict = dict(
-        num_cells=[256, 448],
-        out_features=1,  # will be overwritten
-    )
-    # parameters used for the MLP actor network
-    value_mlp_kwargs: dict = dict(
-        num_cells=[256, 448],
-        out_features=1,  # will be overwritten
-    )
-    # parameters used for the MLP value network
-    lstm_kwargs: dict = dict(
-        input_size=256,
-        hidden_size=256,
-    )
-    # if lstm is True, these parameters will be used for the network
-
+    
 
 @dataclass
 class A2CModelConfig:
