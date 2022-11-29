@@ -24,7 +24,7 @@ from mocking_classes import ContinuousActionConvMockEnv
 from tensordict.nn import get_functional
 
 # from torchrl.data.postprocs.utils import expand_as_right
-from tensordict.tensordict import assert_allclose_td, TensorDictBase
+from tensordict.tensordict import assert_allclose_td, TensorDict
 from tensordict.utils import expand_as_right
 from torch import autograd, nn
 from torchrl.data import (
