@@ -492,6 +492,7 @@ def make_a2c_model(
     specs = proof_environment.specs  # TODO: use env.sepcs
     action_spec = specs["action_spec"]
 
+    # Define input observation format for actor and critic
     if in_keys_actor is None and proof_environment.from_pixels:
         in_keys_actor = ["pixels"]
         in_keys_critic = ["pixels"]
@@ -501,6 +502,7 @@ def make_a2c_model(
     out_keys = ["action"]
 
     if action_spec.domain == "continuous":
+        dist_in_keys = ["loc", "scale"]
         out_features = (2 - cfg.gSDE) * action_spec.shape[-1]
         if cfg.distribution == "tanh_normal":
             policy_distribution_kwargs = {
@@ -520,6 +522,7 @@ def make_a2c_model(
         out_features = action_spec.shape[-1]
         policy_distribution_kwargs = {}
         policy_distribution_class = OneHotCategorical
+        dist_in_keys = ["logits"]
     else:
         raise NotImplementedError(
             f"actions with domain {action_spec.domain} are not supported"
@@ -560,16 +563,17 @@ def make_a2c_model(
             num_cells=[64],
             out_features=out_features,
         )
+
+        in_keys = ["hidden"]
         if not cfg.gSDE:
-            actor_net = NormalParamWrapper(
-                policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
-            )
-            in_keys = ["hidden"]
+            if action_spec.domain == "continuous":
+                actor_net = NormalParamWrapper(
+                    policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
+                )
             actor_module = SafeModule(
-                actor_net, in_keys=in_keys, out_keys=["loc", "scale"]
+                actor_net, in_keys=in_keys, out_keys=dist_in_keys
             )
         else:
-            in_keys = ["hidden"]
             gSDE_state_key = "hidden"
             actor_module = SafeModule(
                 policy_net,
@@ -601,7 +605,7 @@ def make_a2c_model(
         policy_operator = ProbabilisticActor(
             spec=CompositeSpec(action=action_spec),
             module=actor_module,
-            dist_in_keys=["loc", "scale"],
+            dist_in_keys=dist_in_keys,
             default_interaction_mode="random",
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
@@ -611,7 +615,7 @@ def make_a2c_model(
             num_cells=[64],
             out_features=1,
         )
-        value_operator = ValueOperator(value_net, in_keys=["hidden"])
+        value_operator = ValueOperator(value_net, in_keys=in_keys)
         actor_value = ActorValueOperator(
             common_operator=common_operator,
             policy_operator=policy_operator,
@@ -637,11 +641,12 @@ def make_a2c_model(
             )
 
         if not cfg.gSDE:
-            actor_net = NormalParamWrapper(
-                policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
-            )
+            if action_spec.domain == "continuous":
+                actor_net = NormalParamWrapper(
+                    policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
+                )
             actor_module = SafeModule(
-                actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale"]
+                actor_net, in_keys=in_keys_actor, out_keys=dist_in_keys
             )
         else:
             in_keys = in_keys_actor
@@ -676,7 +681,7 @@ def make_a2c_model(
         policy_po = ProbabilisticActor(
             actor_module,
             spec=action_spec,
-            dist_in_keys=["loc", "scale"],
+            dist_in_keys=dist_in_keys,
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
@@ -781,6 +786,7 @@ def make_ppo_model(
     specs = proof_environment.specs  # TODO: use env.sepcs
     action_spec = specs["action_spec"]
 
+    # Define input observation format for actor and critic
     if in_keys_actor is None and proof_environment.from_pixels:
         in_keys_actor = ["pixels"]
         in_keys_critic = ["pixels"]
@@ -790,6 +796,7 @@ def make_ppo_model(
     out_keys = ["action"]
 
     if action_spec.domain == "continuous":
+        dist_in_keys = ["loc", "scale"]
         out_features = (2 - cfg.gSDE) * action_spec.shape[-1]
         if cfg.distribution == "tanh_normal":
             policy_distribution_kwargs = {
@@ -809,6 +816,7 @@ def make_ppo_model(
         out_features = action_spec.shape[-1]
         policy_distribution_kwargs = {}
         policy_distribution_class = OneHotCategorical
+        dist_in_keys = ["logits"]
     else:
         raise NotImplementedError(
             f"actions with domain {action_spec.domain} are not supported"
@@ -833,7 +841,7 @@ def make_ppo_model(
                 )
             common_module = MLP(
                 num_cells=[
-                    400,
+                    64,
                 ],
                 out_features=hidden_features,
                 activate_last_layer=True,
@@ -846,19 +854,20 @@ def make_ppo_model(
         )
 
         policy_net = MLP(
-            num_cells=[200],
+            num_cells=[64],
             out_features=out_features,
         )
+
+        in_keys = ["hidden"]
         if not cfg.gSDE:
-            actor_net = NormalParamWrapper(
-                policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
-            )
-            in_keys = ["hidden"]
+            if action_spec.domain == "continuous":
+                actor_net = NormalParamWrapper(
+                    policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
+                )
             actor_module = SafeModule(
-                actor_net, in_keys=in_keys, out_keys=["loc", "scale"]
+                actor_net, in_keys=in_keys, out_keys=dist_in_keys
             )
         else:
-            in_keys = ["hidden"]
             gSDE_state_key = "hidden"
             actor_module = SafeModule(
                 policy_net,
@@ -882,7 +891,7 @@ def make_ppo_model(
                 actor_module,
                 SafeModule(
                     LazygSDEModule(transform=transform),
-                    in_keys=["action", gSDE_state_key, "_eps_gSDE"],
+                    in_keys=["action", gSDE_state_key, "_eps_gSD"],
                     out_keys=["loc", "scale", "action", "_eps_gSDE"],
                 ),
             )
@@ -890,17 +899,17 @@ def make_ppo_model(
         policy_operator = ProbabilisticActor(
             spec=CompositeSpec(action=action_spec),
             module=actor_module,
-            dist_in_keys=["loc", "scale"],
+            dist_in_keys=dist_in_keys,
             default_interaction_mode="random",
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
         )
         value_net = MLP(
-            num_cells=[200],
+            num_cells=[64],
             out_features=1,
         )
-        value_operator = ValueOperator(value_net, in_keys=["hidden"])
+        value_operator = ValueOperator(value_net, in_keys=in_keys)
         actor_value = ActorValueOperator(
             common_operator=common_operator,
             policy_operator=policy_operator,
@@ -914,23 +923,24 @@ def make_ppo_model(
         if cfg.lstm:
             policy_net = LSTMNet(
                 out_features=out_features,
-                lstm_kwargs={"input_size": 256, "hidden_size": 256},
-                mlp_kwargs={"num_cells": [256, 256], "out_features": 256},
+                lstm_kwargs={"input_size": 64, "hidden_size": 64},
+                mlp_kwargs={"num_cells": [64, 64], "out_features": 64},
             )
             in_keys_actor += ["hidden0", "hidden1"]
             out_keys += ["hidden0", "hidden1", ("next", "hidden0"), ("next", "hidden1")]
         else:
             policy_net = MLP(
-                num_cells=[400, 300],
+                num_cells=[64, 64],
                 out_features=out_features,
             )
 
         if not cfg.gSDE:
-            actor_net = NormalParamWrapper(
-                policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
-            )
+            if action_spec.domain == "continuous":
+                actor_net = NormalParamWrapper(
+                    policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
+                )
             actor_module = SafeModule(
-                actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale"]
+                actor_net, in_keys=in_keys_actor, out_keys=dist_in_keys
             )
         else:
             in_keys = in_keys_actor
@@ -965,7 +975,7 @@ def make_ppo_model(
         policy_po = ProbabilisticActor(
             actor_module,
             spec=action_spec,
-            dist_in_keys=["loc", "scale"],
+            dist_in_keys=dist_in_keys,
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
@@ -973,7 +983,7 @@ def make_ppo_model(
         )
 
         value_net = MLP(
-            num_cells=[400, 300],
+            num_cells=[64, 64],
             out_features=1,
         )
         value_po = ValueOperator(
@@ -1823,6 +1833,34 @@ class PPOModelConfig:
     # if True, uses an LSTM for the policy.
     shared_mapping: bool = False
     # if True, the first layers of the actor-critic are shared.
+    shared_convnet_kwargs: dict = dict(
+        bias_last_layer=True,
+        depth=None,
+        num_cells=[32, 64, 64],
+        kernel_sizes=[8, 4, 3],
+        strides=[4, 2, 1],
+    )
+    # if the shared network is a CNN, these parameters will be used
+    shared_mlp_kwargs: dict = dict(
+        num_cells=[400],
+        out_features=300,
+    )
+    # if the shared network is a MLP, these parameters will be used
+    policy_mlp_kwargs: dict = dict(
+        num_cells=[256, 448],
+        out_features=1,  # will be overwritten
+    )
+    # parameters used for the MLP actor network
+    value_mlp_kwargs: dict = dict(
+        num_cells=[256, 448],
+        out_features=1,  # will be overwritten
+    )
+    # parameters used for the MLP value network
+    lstm_kwargs: dict = dict(
+        input_size=256,
+        hidden_size=256,
+    )
+    # if lstm is True, these parameters will be used for the network
 
 
 @dataclass
