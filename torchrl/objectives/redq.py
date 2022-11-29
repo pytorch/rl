@@ -10,7 +10,6 @@ from typing import Union
 import numpy as np
 import torch
 
-from tensordict.nn import TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
@@ -191,16 +190,9 @@ class REDQLoss(LossModule):
                 tensordict_actor,
                 actor_params,
             )
-            if isinstance(self.actor_network, TensorDictSequential):
-                sample_key = self.actor_network[-1].sample_out_key[0]
-                tensordict_actor_dist = self.actor_network[-1].build_dist_from_params(
-                    td_params
-                )
-            else:
-                sample_key = self.actor_network.sample_out_key[0]
-                tensordict_actor_dist = self.actor_network.build_dist_from_params(
-                    td_params
-                )
+
+            sample_key = self.actor_network.sample_out_key[0]
+            tensordict_actor_dist = self.actor_network.build_dist_from_params(td_params)
             tensordict_actor[sample_key] = tensordict_actor_dist.rsample()
             tensordict_actor["sample_log_prob"] = tensordict_actor_dist.log_prob(
                 tensordict_actor[sample_key]

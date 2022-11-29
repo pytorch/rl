@@ -2921,6 +2921,8 @@ def test_shared_params(dest, expected_dtype, expected_device):
         loss.qvalue_network_params.items(include_nested=True, leaves_only=True)
     ):
         p1 = value
+        if isinstance(loss.actor_network, SafeProbabilisticModule):
+            key = ("module", *key) if isinstance(key, tuple) else ("module", key)
         p2 = loss.actor_network_params[key]
         assert (p1 == p2).all()
         if i == 1:
@@ -2943,6 +2945,8 @@ def test_shared_params(dest, expected_dtype, expected_device):
     for i, (key, qvalparam) in enumerate(
         loss.qvalue_network_params.items(include_nested=True, leaves_only=True)
     ):
+        if isinstance(loss.actor_network, SafeProbabilisticModule):
+            key = ("module", *key) if isinstance(key, tuple) else ("module", key)
         assert qvalparam.dtype is expected_dtype, (key, qvalparam)
         assert qvalparam.device == torch.device(expected_device), key
         assert (qvalparam == loss.actor_network_params[key]).all(), key

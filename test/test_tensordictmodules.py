@@ -701,9 +701,6 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td)
-
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
@@ -725,7 +722,6 @@ class TestTDSequence:
             dummy_net = nn.Linear(4, 4)
             net2 = nn.Linear(4, 4 * param_multiplier)
         net2 = NormalParamWrapper(net2)
-        net2 = SafeModule(module=net2, in_keys=["hidden"], out_keys=["loc", "scale"])
 
         if spec_type is None:
             spec = None
@@ -758,29 +754,32 @@ class TestTDSequence:
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = SafeProbabilisticModule(
+            tdmodule2 = SafeModule(
+                module=net2, in_keys=["hidden"], out_keys=["loc", "scale"]
+            )
+
+            tdmodule = SafeProbabilisticModule(
+                module=SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2),
                 spec=spec,
-                module=net2,
                 dist_in_keys=["loc", "scale"],
                 sample_out_key=["out"],
                 safe=False,
                 **kwargs,
             )
-            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
-        assert hasattr(tdmodule, "__setitem__")
-        assert len(tdmodule) == 3
-        tdmodule[1] = tdmodule2
-        assert len(tdmodule) == 3
+        assert hasattr(tdmodule.module, "__setitem__")
+        assert len(tdmodule.module) == 3
+        tdmodule.module[1] = tdmodule2
+        assert len(tdmodule.module) == 3
 
-        assert hasattr(tdmodule, "__delitem__")
-        assert len(tdmodule) == 3
-        del tdmodule[2]
-        assert len(tdmodule) == 2
+        assert hasattr(tdmodule.module, "__delitem__")
+        assert len(tdmodule.module) == 3
+        del tdmodule.module[2]
+        assert len(tdmodule.module) == 2
 
-        assert hasattr(tdmodule, "__getitem__")
-        assert tdmodule[0] is tdmodule1
-        assert tdmodule[1] is tdmodule2
+        assert hasattr(tdmodule.module, "__getitem__")
+        assert tdmodule.module[0] is tdmodule1
+        assert tdmodule.module[1] is tdmodule2
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tdmodule(td)
@@ -827,11 +826,7 @@ class TestTDSequence:
                 safe=False,
             )
             tdmodule2 = SafeModule(
-                net2,
-                spec=spec,
-                in_keys=["hidden"],
-                out_keys=["out"],
-                safe=safe,
+                net2, spec=spec, in_keys=["hidden"], out_keys=["out"], safe=safe
             )
             tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
@@ -858,9 +853,6 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td, params=params)
-
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
@@ -877,8 +869,6 @@ class TestTDSequence:
         dummy_net = nn.Linear(4, 4)
         net2 = nn.Linear(4, 4 * param_multiplier)
         net2 = NormalParamWrapper(net2)
-
-        net2 = SafeModule(module=net2, in_keys=["hidden"], out_keys=["loc", "scale"])
 
         if spec_type is None:
             spec = None
@@ -907,33 +897,36 @@ class TestTDSequence:
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = SafeProbabilisticModule(
-                net2,
+            tdmodule2 = SafeModule(
+                module=net2, in_keys=["hidden"], out_keys=["loc", "scale"]
+            )
+
+            tdmodule = SafeProbabilisticModule(
+                SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2),
                 spec=spec,
                 dist_in_keys=["loc", "scale"],
                 sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         params = make_functional(tdmodule, funs_to_decorate=["forward", "get_dist"])
 
-        assert hasattr(tdmodule, "__setitem__")
-        assert len(tdmodule) == 3
-        tdmodule[1] = tdmodule2
-        params["module", "1"] = params["module", "2"]
-        assert len(tdmodule) == 3
+        assert hasattr(tdmodule.module, "__setitem__")
+        assert len(tdmodule.module) == 3
+        tdmodule.module[1] = tdmodule2
+        params["module", "module", "1"] = params["module", "module", "2"]
+        assert len(tdmodule.module) == 3
 
-        assert hasattr(tdmodule, "__delitem__")
-        assert len(tdmodule) == 3
-        del tdmodule[2]
-        del params["module", "2"]
-        assert len(tdmodule) == 2
+        assert hasattr(tdmodule.module, "__delitem__")
+        assert len(tdmodule.module) == 3
+        del tdmodule.module[2]
+        del params["module", "module", "2"]
+        assert len(tdmodule.module) == 2
 
-        assert hasattr(tdmodule, "__getitem__")
-        assert tdmodule[0] is tdmodule1
-        assert tdmodule[1] is tdmodule2
+        assert hasattr(tdmodule.module, "__getitem__")
+        assert tdmodule.module[0] is tdmodule1
+        assert tdmodule.module[1] is tdmodule2
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tdmodule(td, params=params)
@@ -1015,9 +1008,6 @@ class TestTDSequence:
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
         tdmodule(td, params=params)
 
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td, params=params)
-
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 7])
 
@@ -1043,7 +1033,6 @@ class TestTDSequence:
             nn.Linear(7, 7 * param_multiplier), nn.BatchNorm1d(7 * param_multiplier)
         )
         net2 = NormalParamWrapper(net2)
-        net2 = SafeModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
 
         if spec_type is None:
             spec = None
@@ -1072,33 +1061,34 @@ class TestTDSequence:
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = SafeProbabilisticModule(
-                net2,
+            tdmodule2 = SafeModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
+
+            tdmodule = SafeProbabilisticModule(
+                module=SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2),
                 spec=spec,
                 dist_in_keys=["loc", "scale"],
                 sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         params = make_functional(tdmodule, ["forward", "get_dist"])
 
-        assert hasattr(tdmodule, "__setitem__")
-        assert len(tdmodule) == 3
-        tdmodule[1] = tdmodule2
-        params["module", "1"] = params["module", "2"]
-        assert len(tdmodule) == 3
+        assert hasattr(tdmodule.module, "__setitem__")
+        assert len(tdmodule.module) == 3
+        tdmodule.module[1] = tdmodule2
+        params["module", "module", "1"] = params["module", "module", "2"]
+        assert len(tdmodule.module) == 3
 
-        assert hasattr(tdmodule, "__delitem__")
-        assert len(tdmodule) == 3
-        del tdmodule[2]
-        del params["module", "2"]
-        assert len(tdmodule) == 2
+        assert hasattr(tdmodule.module, "__delitem__")
+        assert len(tdmodule.module) == 3
+        del tdmodule.module[2]
+        del params["module", "module", "2"]
+        assert len(tdmodule.module) == 2
 
-        assert hasattr(tdmodule, "__getitem__")
-        assert tdmodule[0] is tdmodule1
-        assert tdmodule[1] is tdmodule2
+        assert hasattr(tdmodule.module, "__getitem__")
+        assert tdmodule.module[0] is tdmodule1
+        assert tdmodule.module[1] is tdmodule2
 
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
         tdmodule(td, params=params)
@@ -1226,7 +1216,6 @@ class TestTDSequence:
 
         net2 = nn.Linear(4, 4 * param_multiplier)
         net2 = NormalParamWrapper(net2)
-        net2 = SafeModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
 
         if spec_type is None:
             spec = None
@@ -1252,15 +1241,16 @@ class TestTDSequence:
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = SafeProbabilisticModule(
-                net2,
+            tdmodule2 = SafeModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
+
+            tdmodule = SafeProbabilisticModule(
+                SafeSequential(tdmodule1, tdmodule2),
                 spec=spec,
                 sample_out_key=["out"],
                 dist_in_keys=["loc", "scale"],
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = SafeSequential(tdmodule1, tdmodule2)
 
         params = make_functional(tdmodule)
 

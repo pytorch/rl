@@ -650,8 +650,22 @@ class ActorValueOperator(SafeSequential):
             value_operator,
         )
 
-    def get_policy_operator(self) -> SafeSequential:
+    def get_policy_operator(self) -> SafeModule:
         """Returns a stand-alone policy operator that maps an observation to an action."""
+        if isinstance(self.module[1], SafeProbabilisticModule):
+            return SafeProbabilisticModule(
+                SafeSequential(self.module[0], self.module[1].module),
+                dist_in_keys=self.module[1].dist_in_keys,
+                sample_out_key=self.module[1].sample_out_key,
+                spec=self.module[1].spec,
+                safe=self.module[1].safe,
+                default_interaction_mode=self.module[1].default_interaction_mode,
+                distribution_class=self.module[1].distribution_class,
+                distribution_kwargs=self.module[1].distribution_kwargs,
+                return_log_prob=self.module[1].return_log_prob,
+                cache_dist=self.module[1].cache_dist,
+                n_empirical_estimate=self.module[1].n_empirical_estimate,
+            )
         return SafeSequential(self.module[0], self.module[1])
 
     def get_value_operator(self) -> SafeSequential:
