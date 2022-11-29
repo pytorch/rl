@@ -2580,7 +2580,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
     # total dist
     d0 = 0.0
     for (key, source_val) in upd._sources.items(True, True):
-            if not isinstance(key, tuple):
+        if not isinstance(key, tuple):
             key = (key,)
         key = ("_target_" + key[0], *key[1:])
         target_val = upd._targets[key]
