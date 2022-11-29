@@ -242,7 +242,9 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
 @pytest.mark.parametrize("shared_mapping", [(), ("shared_mapping=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 @pytest.mark.parametrize("action_space", ["discrete", "continuous"])
-def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration, action_space):
+def test_ppo_maker(
+    device, from_pixels, shared_mapping, gsde, exploration, action_space
+):
     if not gsde and exploration != "random":
         pytest.skip("no need to test this setting")
     flags = list(from_pixels + shared_mapping + gsde)
@@ -265,14 +267,14 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration, actio
 
         if from_pixels:
             if action_space == "continuous":
-                env_maker = (ContinuousActionConvMockEnvNumpy)
+                env_maker = ContinuousActionConvMockEnvNumpy
             else:
-                env_maker = (DiscreteActionConvMockEnvNumpy)
+                env_maker = DiscreteActionConvMockEnvNumpy
         else:
             if action_space == "continuous":
-                env_maker = (ContinuousActionVecMockEnv)
+                env_maker = ContinuousActionVecMockEnv
             else:
-                env_maker = (DiscreteActionVecMockEnv)
+                env_maker = DiscreteActionVecMockEnv
 
         env_maker = transformed_env_constructor(
             cfg, use_env_creator=False, custom_env_maker=env_maker
@@ -387,7 +389,9 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration, actio
 @pytest.mark.parametrize("shared_mapping", [(), ("shared_mapping=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 @pytest.mark.parametrize("action_space", ["discrete", "continuous"])
-def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration, action_space):
+def test_a2c_maker(
+    device, from_pixels, shared_mapping, gsde, exploration, action_space
+):
     A2CModelConfig.advantage_in_loss = False
     if not gsde and exploration != "random":
         pytest.skip("no need to test this setting")
@@ -413,14 +417,14 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration, actio
 
         if from_pixels:
             if action_space == "continuous":
-                env_maker = (ContinuousActionConvMockEnvNumpy)
+                env_maker = ContinuousActionConvMockEnvNumpy
             else:
-                env_maker = (DiscreteActionConvMockEnvNumpy)
+                env_maker = DiscreteActionConvMockEnvNumpy
         else:
             if action_space == "continuous":
-                env_maker = (ContinuousActionVecMockEnv)
+                env_maker = ContinuousActionVecMockEnv
             else:
-                env_maker = (DiscreteActionVecMockEnv)
+                env_maker = DiscreteActionVecMockEnv
 
         env_maker = transformed_env_constructor(
             cfg, use_env_creator=False, custom_env_maker=env_maker

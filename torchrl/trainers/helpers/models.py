@@ -567,7 +567,8 @@ def make_a2c_model(
         if not cfg.gSDE:
             if action_spec.domain == "continuous":
                 policy_net = NormalParamWrapper(
-                    policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
+                    policy_net,
+                    scale_mapping=f"biased_softplus_{cfg.default_policy_scale}",
                 )
             actor_module = SafeModule(
                 policy_net, in_keys=shared_out_keys, out_keys=dist_in_keys
@@ -642,7 +643,8 @@ def make_a2c_model(
         if not cfg.gSDE:
             if action_spec.domain == "continuous":
                 policy_net = NormalParamWrapper(
-                    policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
+                    policy_net,
+                    scale_mapping=f"biased_softplus_{cfg.default_policy_scale}",
                 )
             actor_module = SafeModule(
                 policy_net, in_keys=in_keys_actor, out_keys=dist_in_keys
@@ -860,7 +862,8 @@ def make_ppo_model(
         if not cfg.gSDE:
             if action_spec.domain == "continuous":
                 policy_net = NormalParamWrapper(
-                    policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
+                    policy_net,
+                    scale_mapping=f"biased_softplus_{cfg.default_policy_scale}",
                 )
             actor_module = SafeModule(
                 policy_net, in_keys=shared_out_keys, out_keys=dist_in_keys
@@ -935,7 +938,8 @@ def make_ppo_model(
         if not cfg.gSDE:
             if action_spec.domain == "continuous":
                 policy_net = NormalParamWrapper(
-                    policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
+                    policy_net,
+                    scale_mapping=f"biased_softplus_{cfg.default_policy_scale}",
                 )
             actor_module = SafeModule(
                 policy_net, in_keys=in_keys_actor, out_keys=dist_in_keys
