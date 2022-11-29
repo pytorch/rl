@@ -29,7 +29,7 @@ class Buffer(torch.Tensor, metaclass=_ParameterMeta):
             :ref:`locally-disable-grad-doc` for more details. Default: `True`
     """
 
-    def __new__(cls, data=None, requires_grad=True):
+    def __new__(cls, data=None, requires_grad=False):
         if data is None:
             data = torch.empty(0)
         if type(data) is torch.Tensor or type(data) is Buffer:

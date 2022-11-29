@@ -524,11 +524,11 @@ class TestDDPG:
 
         assert all(
             (p.grad is None) or (p.grad == 0).all()
-            for p in loss_fn._value_network_params
+            for p in loss_fn.value_network_params.values(True, True)
         )
         assert all(
             (p.grad is None) or (p.grad == 0).all()
-            for p in loss_fn._actor_network_params
+            for p in loss_fn.actor_network_params.values(True, True)
         )
         # check that losses are independent
         for k in loss.keys():
@@ -538,20 +538,20 @@ class TestDDPG:
             if k == "loss_actor":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn._value_network_params
+                    for p in loss_fn.value_network_params.values(True, True)
                 )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn._actor_network_params
+                    for p in loss_fn.actor_network_params.values(True, True)
                 )
             elif k == "loss_value":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn._actor_network_params
+                    for p in loss_fn.actor_network_params.values(True, True)
                 )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn._value_network_params
+                    for p in loss_fn.value_network_params.values(True, True)
                 )
             else:
                 raise NotImplementedError(k)
@@ -1215,29 +1215,30 @@ class TestREDQ:
             if k == "loss_actor":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn._qvalue_network_params
+                    for p in loss_fn.qvalue_network_params.values(True, True)
                 )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn._actor_network_params
+                    for p in loss_fn.actor_network_params.values(True, True)
                 )
             elif k == "loss_qvalue":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn._actor_network_params
+                    for p in loss_fn.actor_network_params.values(True, True)
                 )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn._qvalue_network_params
+                    for p in loss_fn.qvalue_network_params.values(True, True)
+                    if isinstance(p, nn.Parameter)
                 )
             elif k == "loss_alpha":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn._actor_network_params
+                    for p in loss_fn.actor_network_params.values(True, True)
                 )
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn._qvalue_network_params
+                    for p in loss_fn.qvalue_network_params.values(True, True)
                 )
             else:
                 raise NotImplementedError(k)
@@ -1261,13 +1262,19 @@ class TestREDQ:
             p.data *= 0
 
         counter = 0
-        for p in loss_fn.qvalue_network_params.flatten_keys(".").values():
+        for key, p in loss_fn.qvalue_network_params.items(True, True):
+            if not isinstance(key, tuple):
+                key = (key,)
             if not isinstance(p, nn.Parameter):
                 counter += 1
-                assert (p == loss_fn._param_maps[p]).all()
+                key = "_sep_".join(["qvalue_network", *key])
+                mapped_param = next(
+                    (k for k, val in loss_fn._param_maps.items() if val == key)
+                )
+                assert (p == getattr(loss_fn, mapped_param)).all()
                 assert (p == 0).all()
-        assert counter == len(loss_fn._actor_network_params)
-        assert counter == len(loss_fn.actor_network_params.flatten_keys().keys())
+        assert counter == len(loss_fn._actor_network_params.keys(True, True))
+        assert counter == len(loss_fn.actor_network_params.keys(True, True))
 
         # check that params of the original actor are those of the loss_fn
         for p in actor.parameters():
@@ -1438,6 +1445,29 @@ class TestPPO:
         )
         return value.to(device)
 
+    def _create_mock_actor_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # Actor
+        action_spec = NdBoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        base_layer = nn.Linear(obs_dim, 5)
+        net = NormalParamWrapper(
+            nn.Sequential(base_layer, nn.Linear(5, 2 * action_dim))
+        )
+        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        actor = ProbabilisticActor(
+            module=module,
+            distribution_class=TanhNormal,
+            dist_in_keys=["loc", "scale"],
+            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
+        )
+        module = nn.Sequential(base_layer, nn.Linear(5, 1))
+        value = ValueOperator(
+            module=module,
+            in_keys=["observation"],
+        )
+        return actor.to(device), value.to(device)
+
     def _create_mock_distributional_actor(
         self, batch=2, obs_dim=3, action_dim=4, atoms=0, vmin=1, vmax=5
     ):
@@ -1541,25 +1571,101 @@ class TestPPO:
         loss_critic.backward(retain_graph=True)
         # check that grads are independent and non null
         named_parameters = loss_fn.named_parameters()
+        counter = 0
         for name, p in named_parameters:
             if p.grad is not None and p.grad.norm() > 0.0:
+                counter += 1
                 assert "actor" not in name
                 assert "critic" in name
             if p.grad is None:
                 assert "actor" in name
                 assert "critic" not in name
+        assert counter == 2
+
+        value.zero_grad()
+        loss_objective.backward()
+        counter = 0
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                counter += 1
+                assert "actor" in name
+                assert "critic" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "critic" in name
+        assert counter == 2
+        actor.zero_grad()
+
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_ppo_shared(self, loss_class, device, advantage):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_ppo(device=device)
+
+        actor, value = self._create_mock_actor_value(device=device)
+        if advantage == "gae":
+            advantage = GAE(
+                gamma=0.9,
+                lmbda=0.9,
+                value_network=value,
+                gradient_mode=False,
+            )
+        elif advantage == "td":
+            advantage = TDEstimate(
+                gamma=0.9,
+                value_network=value,
+                gradient_mode=False,
+            )
+        elif advantage == "td_lambda":
+            advantage = TDLambdaEstimate(
+                gamma=0.9,
+                lmbda=0.9,
+                value_network=value,
+                gradient_mode=False,
+            )
+        else:
+            raise NotImplementedError
+        loss_fn = loss_class(
+            actor,
+            value,
+            gamma=0.9,
+            loss_critic_type="l2",
+            advantage_module=advantage,
+        )
+
+        loss = loss_fn(td)
+        loss_critic = loss["loss_critic"]
+        loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
+        loss_critic.backward(retain_graph=True)
+        # check that grads are independent and non null
+        named_parameters = loss_fn.named_parameters()
+        counter = 0
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                counter += 1
+                assert "actor" not in name
+                assert "critic" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "critic" not in name
+        assert counter == 2
 
         value.zero_grad()
         loss_objective.backward()
         named_parameters = loss_fn.named_parameters()
+        counter = 0
         for name, p in named_parameters:
             if p.grad is not None and p.grad.norm() > 0.0:
+                counter += 1
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
                 assert "actor" not in name
                 assert "critic" in name
         actor.zero_grad()
+        assert counter == 4
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
@@ -1591,58 +1697,41 @@ class TestPPO:
         )
 
         floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
-
+        # fill params with zero
+        for p in params:
+            p.data.zero_()
+        # assert len(list(floss_fn.parameters())) == 0
         loss = floss_fn(params, buffers, td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
         # check that grads are independent and non null
         named_parameters = loss_fn.named_parameters()
-        if _has_functorch:
-            for (name, _), p in zip(named_parameters, params):
-                if p.grad is not None and p.grad.norm() > 0.0:
-                    assert "actor" not in name
-                    assert "critic" in name
-                if p.grad is None:
-                    assert "actor" in name
-                    assert "critic" not in name
-        else:
-            for key, p in params.flatten_keys(".").items():
-                if p.grad is not None and p.grad.norm() > 0.0:
-                    assert "actor" not in key
-                    assert "value" in key or "critic" in key
-                if p.grad is None:
-                    assert "actor" in key
-                    assert "value" not in key and "critic" not in key
+        for (name, _), p in zip(named_parameters, params):
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" not in name
+                assert "critic" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "critic" not in name
 
-        if _has_functorch:
-            for param in params:
-                param.grad = None
-        else:
-            for param in params.flatten_keys(".").values():
-                param.grad = None
+        for param in params:
+            param.grad = None
         loss_objective.backward()
         named_parameters = loss_fn.named_parameters()
-        if _has_functorch:
-            for (name, _), p in zip(named_parameters, params):
-                if p.grad is not None and p.grad.norm() > 0.0:
-                    assert "actor" in name
-                    assert "critic" not in name
-                if p.grad is None:
-                    assert "actor" not in name
-                    assert "critic" in name
-            for param in params:
-                param.grad = None
-        else:
-            for key, p in params.flatten_keys(".").items():
-                if p.grad is not None and p.grad.norm() > 0.0:
-                    assert "actor" in key
-                    assert "value" not in key and "critic" not in key
-                if p.grad is None:
-                    assert "actor" not in key
-                    assert "value" in key or "critic" in key
-            for param in params.flatten_keys(".").values():
-                param.grad = None
+
+        for (name, other_p), p in zip(named_parameters, params):
+            assert other_p.shape == p.shape
+            assert other_p.dtype == p.dtype
+            assert other_p.device == p.device
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "critic" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "critic" in name
+        for param in params:
+            param.grad = None
 
 
 class TestA2C:
@@ -1742,7 +1831,7 @@ class TestA2C:
             RuntimeError,
             match="tensordict stored action require grad.",
         ):
-            loss = loss_fn._log_probs(td)
+            _ = loss_fn._log_probs(td)
         td["action"].requires_grad = False
 
         # Check error is raised when advantage_diff_key present and does not required grad
@@ -2380,21 +2469,28 @@ def test_hold_out():
 @pytest.mark.parametrize("mode", ["hard", "soft"])
 @pytest.mark.parametrize("value_network_update_interval", [100, 1000])
 @pytest.mark.parametrize("device", get_available_devices())
-def test_updater(mode, value_network_update_interval, device):
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        torch.float64,
+        torch.float32,
+    ],
+)
+def test_updater(mode, value_network_update_interval, device, dtype):
     torch.manual_seed(100)
 
     class custom_module_error(nn.Module):
         def __init__(self):
             super().__init__()
-            self._target_params = [torch.randn(3, 4)]
-            self._target_error_params = [torch.randn(3, 4)]
+            self.target_params = [torch.randn(3, 4)]
+            self.target_error_params = [torch.randn(3, 4)]
             self.params = nn.ParameterList(
                 [nn.Parameter(torch.randn(3, 4, requires_grad=True))]
             )
 
     module = custom_module_error().to(device)
     with pytest.raises(
-        RuntimeError, match="Your module seems to have a _target tensor list "
+        RuntimeError, match="Your module seems to have a target tensor list "
     ):
         if mode == "hard":
             upd = HardUpdate(module, value_network_update_interval)
@@ -2417,7 +2513,9 @@ def test_updater(mode, value_network_update_interval, device):
                 else:
                     target.data += 10
 
-    module = custom_module().to(device)
+    module = custom_module().to(device).to(dtype)
+    _ = module.module1_params
+    _ = module.target_module1_params
     if mode == "hard":
         upd = HardUpdate(
             module, value_network_update_interval=value_network_update_interval
@@ -2425,25 +2523,19 @@ def test_updater(mode, value_network_update_interval, device):
     elif mode == "soft":
         upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
     upd.init_()
-    for _, v in upd._targets.items():
-        if isinstance(v, TensorDictBase):
-            for _v in v.values():
-                if _v.dtype is not torch.int64:
-                    _v.copy_(torch.randn_like(_v))
-                else:
-                    _v += 10
+    for _, _v in upd._targets.items(True, True):
+        if _v.dtype is not torch.int64:
+            _v.copy_(torch.randn_like(_v))
         else:
-            for _v in v:
-                if _v.dtype is not torch.int64:
-                    _v.copy_(torch.randn_like(_v))
-                else:
-                    _v += 10
+            _v += 10
 
     # total dist
     d0 = 0.0
     for (key, source_val) in upd._sources.flatten_keys(",").items():
-        key = "_target_" + key
+        key = "target_" + key
         target_val = upd._targets[tuple(key.split(","))]
+        assert target_val.dtype is source_val.dtype, key
+        assert target_val.device == source_val.device, key
         if target_val.dtype == torch.long:
             continue
         d0 += (target_val - source_val).norm().item()
@@ -2454,7 +2546,7 @@ def test_updater(mode, value_network_update_interval, device):
             # test that no update is occuring until value_network_update_interval
             d1 = 0.0
             for (key, source_val) in upd._sources.flatten_keys(",").items():
-                key = tuple(("_target_" + key).split(","))
+                key = tuple(("target_" + key).split(","))
                 target_val = upd._targets[key]
                 if target_val.dtype == torch.long:
                     continue
@@ -2467,7 +2559,7 @@ def test_updater(mode, value_network_update_interval, device):
         # test that a new update has occured
         d1 = 0.0
         for (key, source_val) in upd._sources.flatten_keys(",").items():
-            key = tuple(("_target_" + key).split(","))
+            key = tuple(("target_" + key).split(","))
             target_val = upd._targets[key]
             if target_val.dtype == torch.long:
                 continue
@@ -2478,7 +2570,7 @@ def test_updater(mode, value_network_update_interval, device):
         upd.step()
         d1 = 0.0
         for (key, source_val) in upd._sources.flatten_keys(",").items():
-            key = tuple(("_target_" + key).split(","))
+            key = tuple(("target_" + key).split(","))
             target_val = upd._targets[key]
             if target_val.dtype == torch.long:
                 continue
@@ -2489,7 +2581,7 @@ def test_updater(mode, value_network_update_interval, device):
     upd.step()
     d2 = 0.0
     for (key, source_val) in upd._sources.flatten_keys(",").items():
-        key = tuple(("_target_" + key).split(","))
+        key = tuple(("target_" + key).split(","))
         target_val = upd._targets[key]
         if target_val.dtype == torch.long:
             continue
