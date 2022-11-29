@@ -152,10 +152,10 @@ class TargetNetUpdater:
         )
 
     def init_(self) -> None:
-        for key, source in self._sources.items(True):
-            if isinstance(source, TensorDictBase):
-                continue
-            key = ("target_" + key[0], *key[1:])
+        for key, source in self._sources.items(True, True):
+            if not isinstance(key, tuple):
+                key = (key,)
+            key = ("_target_" + key[0], *key[1:])
             target = self._targets[key]
             # for p_source, p_target in zip(source, target):
             if target.requires_grad:
@@ -169,10 +169,10 @@ class TargetNetUpdater:
                 f"{self.__class__.__name__} must be "
                 f"initialized (`{self.__class__.__name__}.init_()`) before calling step()"
             )
-        for key, source in self._sources.items(True):
-            if isinstance(source, TensorDictBase):
-                continue
-            key = ("target_" + key[0], *key[1:])
+        for key, source in self._sources.items(True, True):
+            if not isinstance(key, tuple):
+                key = (key,)
+            key = ("_target_" + key[0], *key[1:])
             target = self._targets[key]
             if target.requires_grad:
                 raise RuntimeError("the target parameter is part of a graph.")

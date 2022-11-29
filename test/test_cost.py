@@ -788,54 +788,78 @@ class TestSAC:
             if k == "loss_actor":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params.flatten_keys().values()
+                    for p in loss_fn.value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.flatten_keys().values()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.flatten_keys().values()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
             elif k == "loss_value":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.flatten_keys().values()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.flatten_keys().values()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params.flatten_keys().values()
+                    for p in loss_fn.value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
             elif k == "loss_qvalue":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.flatten_keys().values()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params.flatten_keys().values()
+                    for p in loss_fn.value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.flatten_keys().values()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
             elif k == "loss_alpha":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.flatten_keys().values()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params.flatten_keys().values()
+                    for p in loss_fn.value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.flatten_keys().values()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
             else:
                 raise NotImplementedError(k)
@@ -923,29 +947,41 @@ class TestSAC:
         # Check param update effect on targets
         target_actor = [
             p.clone()
-            for p in loss_fn.target_actor_network_params.flatten_keys().values()
+            for p in loss_fn.target_actor_network_params.values(
+                include_nested=True, leaves_only=True
+            )
         ]
         target_qvalue = [
             p.clone()
-            for p in loss_fn.target_qvalue_network_params.flatten_keys().values()
+            for p in loss_fn.target_qvalue_network_params.values(
+                include_nested=True, leaves_only=True
+            )
         ]
         target_value = [
             p.clone()
-            for p in loss_fn.target_value_network_params.flatten_keys().values()
+            for p in loss_fn.target_value_network_params.values(
+                include_nested=True, leaves_only=True
+            )
         ]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
         target_actor2 = [
             p.clone()
-            for p in loss_fn.target_actor_network_params.flatten_keys().values()
+            for p in loss_fn.target_actor_network_params.values(
+                include_nested=True, leaves_only=True
+            )
         ]
         target_qvalue2 = [
             p.clone()
-            for p in loss_fn.target_qvalue_network_params.flatten_keys().values()
+            for p in loss_fn.target_qvalue_network_params.values(
+                include_nested=True, leaves_only=True
+            )
         ]
         target_value2 = [
             p.clone()
-            for p in loss_fn.target_value_network_params.flatten_keys().values()
+            for p in loss_fn.target_value_network_params.values(
+                include_nested=True, leaves_only=True
+            )
         ]
         if loss_fn.delay_actor:
             assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
@@ -1140,29 +1176,41 @@ class TestREDQ:
             if k == "loss_actor":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.flatten_keys(".").values()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.flatten_keys(".").values()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
             elif k == "loss_qvalue":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.flatten_keys(".").values()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.flatten_keys(".").values()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
             elif k == "loss_alpha":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.flatten_keys(".").values()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.flatten_keys(".").values()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
                 )
             else:
                 raise NotImplementedError(k)
@@ -1380,19 +1428,19 @@ class TestREDQ:
             assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
 
         # Check param update effect on targets
-        target_actor = (
-            loss_fn.target_actor_network_params.clone().flatten_keys().values()
+        target_actor = loss_fn.target_actor_network_params.clone().values(
+            include_nested=True, leaves_only=True
         )
-        target_qvalue = (
-            loss_fn.target_qvalue_network_params.clone().flatten_keys().values()
+        target_qvalue = loss_fn.target_qvalue_network_params.clone().values(
+            include_nested=True, leaves_only=True
         )
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        target_actor2 = (
-            loss_fn.target_actor_network_params.clone().flatten_keys().values()
+        target_actor2 = loss_fn.target_actor_network_params.clone().values(
+            include_nested=True, leaves_only=True
         )
-        target_qvalue2 = (
-            loss_fn.target_qvalue_network_params.clone().flatten_keys().values()
+        target_qvalue2 = loss_fn.target_qvalue_network_params.clone().values(
+            include_nested=True, leaves_only=True
         )
         if loss_fn.delay_actor:
             assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
@@ -1918,7 +1966,7 @@ class TestA2C:
                     assert "actor" in name
                     assert "critic" not in name
         else:
-            for key, p in params.flatten_keys(".").items():
+            for key, p in params.items(include_nested=True, leaves_only=True):
                 if p.grad is not None and p.grad.norm() > 0.0:
                     assert "actor" not in key
                     assert "value" in key or "critic" in key
@@ -1930,7 +1978,7 @@ class TestA2C:
             for param in params:
                 param.grad = None
         else:
-            for param in params.flatten_keys(".").values():
+            for param in params.values(include_nested=True, leaves_only=True):
                 param.grad = None
         loss_objective.backward()
         named_parameters = loss_fn.named_parameters()
@@ -1945,14 +1993,14 @@ class TestA2C:
             for param in params:
                 param.grad = None
         else:
-            for key, p in params.flatten_keys(".").items():
+            for key, p in params.items(include_nested=True, leaves_only=True):
                 if p.grad is not None and p.grad.norm() > 0.0:
                     assert "actor" in key
                     assert "value" not in key and "critic" not in key
                 if p.grad is None:
                     assert "actor" not in key
                     assert "value" in key or "critic" in key
-            for param in params.flatten_keys(".").values():
+            for param in params.values(include_nested=True, leaves_only=True):
                 param.grad = None
 
 
@@ -2504,10 +2552,10 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             self.convert_to_functional(module1, "module1", create_target_params=True)
             module2 = torch.nn.BatchNorm2d(10).eval()
             self.module2 = module2
-            iterator_params = self.target_module1_params.values(True)
+            iterator_params = self.target_module1_params.values(
+                include_nested=True, leaves_only=True
+            )
             for target in iterator_params:
-                if isinstance(target, TensorDictBase):
-                    continue
                 if target.dtype is not torch.int64:
                     target.data.normal_()
                 else:
@@ -2531,9 +2579,11 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
     # total dist
     d0 = 0.0
-    for (key, source_val) in upd._sources.flatten_keys(",").items():
-        key = "target_" + key
-        target_val = upd._targets[tuple(key.split(","))]
+    for (key, source_val) in upd._sources.items(True, True):
+        if not isinstance(key, tuple):
+            key = (key,)
+        key = ("_target_" + key[0], *key[1:])
+        target_val = upd._targets[key]
         assert target_val.dtype is source_val.dtype, key
         assert target_val.device == source_val.device, key
         if target_val.dtype == torch.long:
@@ -2545,8 +2595,10 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         for i in range(value_network_update_interval + 1):
             # test that no update is occuring until value_network_update_interval
             d1 = 0.0
-            for (key, source_val) in upd._sources.flatten_keys(",").items():
-                key = tuple(("target_" + key).split(","))
+            for (key, source_val) in upd._sources.items(True, True):
+                if not isinstance(key, tuple):
+                    key = (key,)
+                key = ("_target_" + key[0], *key[1:])
                 target_val = upd._targets[key]
                 if target_val.dtype == torch.long:
                     continue
@@ -2558,8 +2610,10 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         assert upd.counter == 0
         # test that a new update has occured
         d1 = 0.0
-        for (key, source_val) in upd._sources.flatten_keys(",").items():
-            key = tuple(("target_" + key).split(","))
+        for (key, source_val) in upd._sources.items(True, True):
+            if not isinstance(key, tuple):
+                key = (key,)
+            key = ("_target_" + key[0], *key[1:])
             target_val = upd._targets[key]
             if target_val.dtype == torch.long:
                 continue
@@ -2569,8 +2623,10 @@ def test_updater(mode, value_network_update_interval, device, dtype):
     elif mode == "soft":
         upd.step()
         d1 = 0.0
-        for (key, source_val) in upd._sources.flatten_keys(",").items():
-            key = tuple(("target_" + key).split(","))
+        for (key, source_val) in upd._sources.items(True, True):
+            if not isinstance(key, tuple):
+                key = (key,)
+            key = ("_target_" + key[0], *key[1:])
             target_val = upd._targets[key]
             if target_val.dtype == torch.long:
                 continue
@@ -2580,8 +2636,10 @@ def test_updater(mode, value_network_update_interval, device, dtype):
     upd.init_()
     upd.step()
     d2 = 0.0
-    for (key, source_val) in upd._sources.flatten_keys(",").items():
-        key = tuple(("target_" + key).split(","))
+    for (key, source_val) in upd._sources.items(True, True):
+        if not isinstance(key, tuple):
+            key = (key,)
+        key = ("_target_" + key[0], *key[1:])
         target_val = upd._targets[key]
         if target_val.dtype == torch.long:
             continue
@@ -2869,15 +2927,19 @@ def test_shared_params(dest, expected_dtype, expected_device):
         p.data += torch.randn_like(p)
 
     assert len(list(loss.parameters())) == 6
-    assert len(loss.actor_network_params.flatten_keys().keys()) == 4
-    assert len(loss.qvalue_network_params.flatten_keys().keys()) == 4
-    for p in loss.actor_network_params.flatten_keys().values():
+    assert (
+        len(loss.actor_network_params.keys(include_nested=True, leaves_only=True)) == 4
+    )
+    assert (
+        len(loss.qvalue_network_params.keys(include_nested=True, leaves_only=True)) == 4
+    )
+    for p in loss.actor_network_params.values(include_nested=True, leaves_only=True):
         assert isinstance(p, nn.Parameter) or isinstance(p, Buffer)
     for i, (key, value) in enumerate(
-        loss.qvalue_network_params.flatten_keys(",").items()
+        loss.qvalue_network_params.items(include_nested=True, leaves_only=True)
     ):
         p1 = value
-        p2 = loss.actor_network_params[tuple(key.split(","))]
+        p2 = loss.actor_network_params[key]
         assert (p1 == p2).all()
         if i == 1:
             break
@@ -2892,18 +2954,16 @@ def test_shared_params(dest, expected_dtype, expected_device):
     else:
         loss = loss.to(dest)
 
-    for p in loss.actor_network_params.flatten_keys().values():
+    for p in loss.actor_network_params.values(include_nested=True, leaves_only=True):
         assert isinstance(p, nn.Parameter)
         assert p.dtype is expected_dtype
         assert p.device == torch.device(expected_device)
     for i, (key, qvalparam) in enumerate(
-        loss.qvalue_network_params.flatten_keys(",").items()
+        loss.qvalue_network_params.items(include_nested=True, leaves_only=True)
     ):
         assert qvalparam.dtype is expected_dtype, (key, qvalparam)
         assert qvalparam.device == torch.device(expected_device), key
-        assert (
-            qvalparam == loss.actor_network_params[tuple(key.split(","))]
-        ).all(), key
+        assert (qvalparam == loss.actor_network_params[key]).all(), key
         if i == 1:
             break
 

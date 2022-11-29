@@ -272,15 +272,15 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
         )
     env = env_lib(*env_args, **env_kwargs)
     td = env.rollout(max_steps=5)
-    td0 = td[0].flatten_keys(".")
+    td0 = td[0]
     fake_td = env.fake_tensordict()
 
-    fake_td = fake_td.flatten_keys(".")
-    td = td.flatten_keys(".")
-    assert set(fake_td.keys()) == set(td.keys())
-    for key in fake_td.keys():
+    assert set(fake_td.keys(include_nested=True, leaves_only=True)) == set(
+        td.keys(include_nested=True, leaves_only=True)
+    )
+    for key in fake_td.keys(include_nested=True, leaves_only=True):
         assert fake_td.get(key).shape == td.get(key)[0].shape
-    for key in fake_td.keys():
+    for key in fake_td.keys(include_nested=True, leaves_only=True):
         assert fake_td.get(key).shape == td0.get(key).shape
         assert fake_td.get(key).dtype == td0.get(key).dtype
         assert fake_td.get(key).device == td0.get(key).device

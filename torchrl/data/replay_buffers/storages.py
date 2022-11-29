@@ -370,7 +370,9 @@ class LazyMemmapStorage(LazyTensorStorage):
                 .memmap_(prefix=self.scratch_dir)
                 .to(self.device)
             )
-            for key, tensor in sorted(out.flatten_keys(".").items()):
+            for key, tensor in sorted(
+                out.items(include_nested=True, leaves_only=True), key=str
+            ):
                 filesize = os.path.getsize(tensor.filename) / 1024 / 1024
                 print(
                     f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
