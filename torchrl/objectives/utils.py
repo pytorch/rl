@@ -186,8 +186,8 @@ class TargetNetUpdater:
 
     def __repr__(self) -> str:
         string = (
-            f"{self.__class__.__name__}(sources={list(self._sources)}, targets="
-            f"{list(self._targets)})"
+            f"{self.__class__.__name__}(sources={self._sources}, targets="
+            f"{self._targets})"
         )
         return string
 
