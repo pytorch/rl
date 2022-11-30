@@ -1922,7 +1922,9 @@ class TestA2C:
         # test reset
         loss_fn.reset()
 
-    @pytest.mark.skipif(not _has_functorch, reason=f"functorch not found, {FUNCTORCH_ERR}")
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found, {FUNCTORCH_ERR}"
+    )
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
     @pytest.mark.parametrize("device", get_available_devices())
