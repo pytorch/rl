@@ -65,7 +65,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
                 [ 0.0000,  0.0000,  0.0000,  0.0000],
                 [ 0.0000,  0.0000,  0.0000,  0.0000],
                 [ 0.0000,  0.0000,  0.0000,  0.0000],
-                [ 0.0000,  0.0000,  0.0000,  0.0000]], grad_fn=<CopyBackwards>)
+                [ 0.0000,  0.0000,  0.0000,  0.0000]], grad_fn=<AddBackward0>)
 
     """
 
@@ -285,10 +285,19 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         >>> torch.manual_seed(0)
         >>> spec = NdBoundedTensorSpec(-1, 1, torch.Size([4]))
         >>> module = torch.nn.Linear(4, 4, bias=False)
-        >>> policy = Actor(spec, module=module)
+        >>> policy = Actor(module=module, spec=spec)
         >>> explorative_policy = OrnsteinUhlenbeckProcessWrapper(policy)
         >>> td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
         >>> print(explorative_policy(td))
+        TensorDict(
+            fields={
+                _ou_prev_noise: Tensor(torch.Size([10, 4]), dtype=torch.float32),
+                _ou_steps: Tensor(torch.Size([10, 1]), dtype=torch.int64),
+                action: Tensor(torch.Size([10, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([10, 4]), dtype=torch.float32)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False)
     """
 
     def __init__(
