@@ -1715,6 +1715,7 @@ class TestPPO:
         actor.zero_grad()
         assert counter == 4
 
+    @pytest.mark.skipif(not _has_functorch, f"functorch not found, {FUNCTORCH_ERR}")
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
@@ -1921,6 +1922,7 @@ class TestA2C:
         # test reset
         loss_fn.reset()
 
+    @pytest.mark.skipif(not _has_functorch, f"functorch not found, {FUNCTORCH_ERR}")
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
     @pytest.mark.parametrize("device", get_available_devices())
@@ -1957,51 +1959,27 @@ class TestA2C:
         loss_critic.backward(retain_graph=True)
         # check that grads are independent and non null
         named_parameters = loss_fn.named_parameters()
-        if _has_functorch:
-            for (name, _), p in zip(named_parameters, params):
-                if p.grad is not None and p.grad.norm() > 0.0:
-                    assert "actor" not in name
-                    assert "critic" in name
-                if p.grad is None:
-                    assert "actor" in name
-                    assert "critic" not in name
-        else:
-            for key, p in params.items(include_nested=True, leaves_only=True):
-                if p.grad is not None and p.grad.norm() > 0.0:
-                    assert "actor" not in key
-                    assert "value" in key or "critic" in key
-                if p.grad is None:
-                    assert "actor" in key
-                    assert "value" not in key and "critic" not in key
+        for (name, _), p in zip(named_parameters, params):
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" not in name
+                assert "critic" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "critic" not in name
 
-        if _has_functorch:
-            for param in params:
-                param.grad = None
-        else:
-            for param in params.values(include_nested=True, leaves_only=True):
-                param.grad = None
+        for param in params:
+            param.grad = None
         loss_objective.backward()
         named_parameters = loss_fn.named_parameters()
-        if _has_functorch:
-            for (name, _), p in zip(named_parameters, params):
-                if p.grad is not None and p.grad.norm() > 0.0:
-                    assert "actor" in name
-                    assert "critic" not in name
-                if p.grad is None:
-                    assert "actor" not in name
-                    assert "critic" in name
-            for param in params:
-                param.grad = None
-        else:
-            for key, p in params.items(include_nested=True, leaves_only=True):
-                if p.grad is not None and p.grad.norm() > 0.0:
-                    assert "actor" in key
-                    assert "value" not in key and "critic" not in key
-                if p.grad is None:
-                    assert "actor" not in key
-                    assert "value" in key or "critic" in key
-            for param in params.values(include_nested=True, leaves_only=True):
-                param.grad = None
+        for (name, _), p in zip(named_parameters, params):
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "critic" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "critic" in name
+        for param in params:
+            param.grad = None
 
 
 class TestReinforce:
