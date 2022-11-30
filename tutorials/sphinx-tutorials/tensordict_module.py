@@ -6,7 +6,7 @@ We recommand reading the TensorDict tutorial before going through this one.
 """
 ##############################################################################
 # For a convenient usage of the ``TensorDict`` class with ``nn.Module``,
-# TorchRL provides an interface between the two named ``TensorDictModule``.
+# :obj:`tensordict` provides an interface between the two named ``TensorDictModule``.
 # The ``TensorDictModule`` class is an ``nn.Module`` that takes a
 # ``TensorDict`` as input when called.
 # It is up to the user to define the keys to be read as input and output.
@@ -17,7 +17,7 @@ We recommand reading the TensorDict tutorial before going through this one.
 import torch
 import torch.nn as nn
 from tensordict import TensorDict
-from torchrl.modules import TensorDictModule, TensorDictSequential
+from tensordict.nn import TensorDictModule, TensorDictSequential
 
 ###############################################################################
 # Example 1: Simple usage
@@ -143,10 +143,10 @@ assert split_and_merge_linear(tensordict)["output"].shape == torch.Size([5, 13])
 ###############################################################################
 # Example 5: Compatibility with functorch
 # -----------------------------------------
-# ``TensorDictModule`` comes with its own ``make_functional_with_buffers``
-# method to make it functional (you should not be using
-# ``functorch.make_functional_with_buffers(tensordictmodule)``, that will
-# not work in general).
+# tensordict.nn is compatible with functorch. It also comes with its own functional
+# utilities. Let us have a look:
+
+import functorch
 
 tensordict = TensorDict({"a": torch.randn(5, 3)}, batch_size=[5])
 
@@ -155,29 +155,39 @@ splitlinear = TensorDictModule(
     in_keys=["a"],
     out_keys=["output_1", "output_2"],
 )
-func, (params, buffers) = splitlinear.make_functional_with_buffers()
-func(tensordict, params=params, buffers=buffers)
+func, params, buffers = functorch.make_functional_with_buffers(splitlinear)
+print(func(params, buffers, tensordict))
 
 ###############################################################################
-# We can also use the ``vmap`` operator, here's an example of
-# model ensembling with it:
+# This can be used with the vmap operator. For example, we use 3 replicas of the
+# params and buffers and execute a vectorized map over these for a single batch
+# of data:
+
+params_expand = [p.expand(3, *p.shape) for p in params]
+buffers_expand = [p.expand(3, *p.shape) for p in buffers]
+print(functorch.vmap(func, (0, 0, None))(params_expand, buffers_expand, tensordict))
+
+###############################################################################
+# We can also use the native :obj:`get_functional()` function from tensordict.nn,
+# which modifies the module to make it accept the parameters as regular inputs:
+
+from tensordict.nn import make_functional
 
 tensordict = TensorDict({"a": torch.randn(5, 3)}, batch_size=[5])
 num_models = 10
 model = TensorDictModule(nn.Linear(3, 4), in_keys=["a"], out_keys=["output"])
-fmodel, (params, buffers) = model.make_functional_with_buffers()
-params = [torch.randn(num_models, *p.shape, device=p.device) for p in params]
-buffers = [torch.randn(num_models, *b.shape, device=b.device) for b in buffers]
-result_td = fmodel(tensordict, params=params, buffers=buffers, vmap=True)
+params = make_functional(model)
+# we stack two groups of parameters to show the vmap usage:
+params = torch.stack([params, params.apply(lambda x: torch.zeros_like(x))], 0)
+result_td = functorch.vmap(model, (None, 0))(tensordict, params)
 print("the output tensordict shape is: ", result_td.shape)
 
+
+from tensordict.nn import ProbabilisticTensorDictModule
 
 ###############################################################################
 # Do's and don't with TensorDictModule
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Don't use ``nn.Module`` wrappers with ``TensorDictModule`` componants.
-# This would break some of ``TensorDictModule`` features such as ``functorch``
-# compatibility.
 #
 # Don't use ``nn.Sequence``, similar to ``nn.Module``, it would break features
 # such as ``functorch`` compatibility. Do use ``TensorDictSequential`` instead.
@@ -188,14 +198,6 @@ print("the output tensordict shape is: ", result_td.shape)
 #   tensordict = module(tensordict)  # ok!
 #
 #   tensordict_out = module(tensordict)  # don't!
-#
-# Don't use ``make_functional_with_buffers`` from ``functorch`` directly but
-# use ``TensorDictModule.make_functional_with_buffers`` instead.
-#
-# TensorDictModule for RL
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# TorchRL provides a few RL-specific ``TensorDictModule`` instances that
-# serves domain-specific needs.
 #
 # ``ProbabilisticTensorDictModule``
 # ----------------------------------
@@ -214,11 +216,7 @@ print("the output tensordict shape is: ", result_td.shape)
 # One can find the parameters in the output tensordict as well as the log
 # probability if needed.
 
-from torchrl.modules import (
-    NormalParamWrapper,
-    ProbabilisticTensorDictModule,
-    TanhNormal,
-)
+from torchrl.modules import NormalParamWrapper, TanhNormal
 
 td = TensorDict(
     {"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)},

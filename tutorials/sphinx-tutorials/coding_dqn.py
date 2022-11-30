@@ -44,9 +44,11 @@ Coding a pixel-based DQN using TorchRL
 
 import torch
 import tqdm
+from functorch import vmap
 from IPython import display
 from matplotlib import pyplot as plt
 from tensordict import TensorDict
+from tensordict.nn import get_functional
 from torch import nn
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
@@ -251,18 +253,16 @@ def make_model():
     print("Q-value network results:", tensordict)
 
     # make functional
-    factor, (_, buffers) = actor.make_functional_with_buffers(clone=True, native=True)
-    # making functional creates a copy of the params, which we don't want (i.e. we want the parameters from `actor` to match those in the params object),
-    # hence we create the params object in a second step
-    params = TensorDict({k: v for k, v in net.named_parameters()}, []).unflatten_keys(
-        "."
-    )
+    # here's an explicit way of creating the parameters and buffer tensordict.
+    # Alternatively, we could have used `params = make_functional(actor)` from
+    # tensordict.nn
+    params = TensorDict({k: v for k, v in actor.named_parameters()}, [])
+    buffers = TensorDict({k: v for k, v in actor.named_buffers()}, [])
+    params = params.update(buffers).unflatten_keys(".")  # creates a nested TensorDict
+    factor = get_functional(actor)
 
     # creating the target parameters is fairly easy with tensordict:
-    params_target, buffers_target = (
-        params.to_tensordict().detach(),
-        buffers.to_tensordict().detach(),
-    )
+    (params_target,) = (params.to_tensordict().detach(),)
 
     # we wrap our actor in an EGreedyWrapper for data collection
     actor_explore = EGreedyWrapper(
@@ -272,7 +272,7 @@ def make_model():
         eps_end=eps_greedy_val_env,
     )
 
-    return factor, actor, actor_explore, params, buffers, params_target, buffers_target
+    return factor, actor, actor_explore, params, params_target
 
 
 ###############################################################################
@@ -286,14 +286,10 @@ def make_model():
     actor,
     actor_explore,
     params,
-    buffers,
     params_target,
-    buffers_target,
 ) = make_model()
 params_flat = params.flatten_keys(".")
-buffers_flat = buffers.flatten_keys(".")
 params_target_flat = params_target.flatten_keys(".")
-buffers_target_flat = buffers_target.flatten_keys(".")
 
 ###############################################################################
 # Regular DQN
@@ -393,7 +389,7 @@ for j, data in enumerate(data_collector):
 
             # Compute action value (of the action actually taken) at time t
             sampled_data_out = sampled_data.select(*actor.in_keys)
-            sampled_data_out = factor(sampled_data_out, params=params, buffers=buffers)
+            sampled_data_out = factor(sampled_data_out, params=params)
             action_value = sampled_data_out["action_value"]
             action_value = (action_value * action.to(action_value.dtype)).sum(-1)
             with torch.no_grad():
@@ -402,7 +398,6 @@ for j, data in enumerate(data_collector):
                 next_value = factor(
                     tdstep.select(*actor.in_keys),
                     params=params_target,
-                    buffers=buffers_target,
                 )["chosen_action_value"].squeeze(-1)
                 exp_value = reward + gamma * next_value * (1 - done)
             assert exp_value.shape == action_value.shape
@@ -420,9 +415,6 @@ for j, data in enumerate(data_collector):
             for (key, p1) in params_flat.items():
                 p2 = params_target_flat[key]
                 params_target_flat.set_(key, tau * p1.data + (1 - tau) * p2.data)
-            for (key, p1) in buffers_flat.items():
-                p2 = buffers_target_flat[key]
-                buffers_target_flat.set_(key, tau * p1.data + (1 - tau) * p2.data)
 
         pbar.set_description(
             f"error: {error: 4.4f}, value: {action_value.mean(): 4.4f}"
@@ -513,7 +505,7 @@ torch.save(
         "grad_vals": grad_vals,
         "traj_lengths_training": traj_lengths,
         "traj_count": traj_count,
-        "weights": (params, buffers),
+        "weights": (params,),
     },
     "saved_results_td0.pt",
 )
@@ -548,14 +540,10 @@ from torchrl.objectives.value.functional import vec_td_lambda_advantage_estimate
     actor,
     actor_explore,
     params,
-    buffers,
     params_target,
-    buffers_target,
 ) = make_model()
 params_flat = params.flatten_keys(".")
-buffers_flat = buffers.flatten_keys(".")
 params_target_flat = params_target.flatten_keys(".")
-buffers_target_flat = buffers_target.flatten_keys(".")
 
 ###############################################################################
 
@@ -632,19 +620,15 @@ for j, data in enumerate(data_collector):
             action = sampled_data["action"].clone()
 
             sampled_data_out = sampled_data.select(*actor.in_keys)
-            sampled_data_out = factor(
-                sampled_data_out, params=params, buffers=buffers, vmap=(None, None, 0)
-            )
+            sampled_data_out = vmap(factor, (0, None))(sampled_data_out, params)
             action_value = sampled_data_out["action_value"]
             action_value = (action_value * action.to(action_value.dtype)).sum(-1, True)
             with torch.no_grad():
                 tdstep = step_mdp(sampled_data)
-                next_value = factor(
-                    tdstep.select(*actor.in_keys),
-                    params=params_target,
-                    buffers=buffers_target,
-                    vmap=(None, None, 0),
-                )["chosen_action_value"]
+                next_value = vmap(factor, (0, None))(
+                    tdstep.select(*actor.in_keys), params
+                )
+                next_value = next_value["chosen_action_value"]
             error = vec_td_lambda_advantage_estimate(
                 gamma,
                 lmbda,
@@ -671,9 +655,6 @@ for j, data in enumerate(data_collector):
             for (key, p1) in params_flat.items():
                 p2 = params_target_flat[key]
                 params_target_flat.set_(key, tau * p1.data + (1 - tau) * p2.data)
-            for (key, p1) in buffers_flat.items():
-                p2 = buffers_target_flat[key]
-                buffers_target_flat.set_(key, tau * p1.data + (1 - tau) * p2.data)
 
         pbar.set_description(
             f"error: {error: 4.4f}, value: {action_value.mean(): 4.4f}"
@@ -765,7 +746,7 @@ torch.save(
         "grad_vals": grad_vals,
         "traj_lengths_training": traj_lengths,
         "traj_count": traj_count,
-        "weights": (params, buffers),
+        "weights": (params,),
     },
     "saved_results_tdlambda.pt",
 )
