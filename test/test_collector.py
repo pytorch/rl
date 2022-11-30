@@ -17,6 +17,7 @@ from mocking_classes import (
     DiscreteActionVecPolicy,
     MockSerialEnv,
 )
+from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import seed_generator
@@ -980,12 +981,12 @@ class TestAutoWrap:
 
         if collector_class is not SyncDataCollector:
             assert all(
-                isinstance(p, SafeModule) for p in collector._policy_dict.values()
+                isinstance(p, TensorDictModule) for p in collector._policy_dict.values()
             )
             assert all(p.out_keys == out_keys for p in collector._policy_dict.values())
             assert all(p.module is policy for p in collector._policy_dict.values())
         else:
-            assert isinstance(collector.policy, SafeModule)
+            assert isinstance(collector.policy, TensorDictModule)
             assert collector.policy.out_keys == out_keys
             assert collector.policy.module is policy
 
