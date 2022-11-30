@@ -3,10 +3,16 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .continuous import *
-from .continuous import __all__ as _all_continuous
-from .discrete import *
-from .discrete import __all__ as _all_discrete
+from .continuous import (
+    __all__ as _all_continuous,
+    Delta,
+    IndependentNormal,
+    NormalParamWrapper,
+    TanhDelta,
+    TanhNormal,
+    TruncatedNormal,
+)
+from .discrete import __all__ as _all_discrete, OneHotCategorical
 
 distributions_maps = {
     distribution_class.lower(): eval(distribution_class)

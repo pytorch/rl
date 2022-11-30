@@ -2,15 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import argparse
 import time
 import warnings
 
 import pytest
 import torch
+from tensordict import SavedTensorDict, TensorDict
 from torch import multiprocessing as mp
-from torchrl.data import SavedTensorDict
-from torchrl.data import TensorDict
 
 
 class TestShared:
@@ -36,10 +35,10 @@ class TestShared:
         proc.start()
         command_pipe_child.close()
         command_pipe_parent.recv()
-        for key, item in subtd.items():
+        for item in subtd.values():
             assert (item == 0).all()
 
-        for key, item in td[0].items():
+        for item in td[0].values():
             assert (item == 0).all()
         command_pipe_parent.close()
         proc.join()
@@ -112,7 +111,7 @@ class TestStack:
         command_pipe_parent.send("stack" if stack else "serial")
         time_spent = command_pipe_parent.recv()
         print(f"stack {stack}: time={time_spent}")
-        for key, item in td.items():
+        for item in td.values():
             assert (item == 0).all()
         proc.join()
         command_pipe_parent.close()
@@ -200,23 +199,27 @@ def test_memmap(idx, dtype, large_scale=False):
     print("\nTesting writing to TD")
     for i in range(2):
         t0 = time.time()
-        td_sm[idx].update_(td_to_copy)
+        sub_td_sm = td_sm.get_sub_tensordict(idx)
+        sub_td_sm.update_(td_to_copy)
         if i == 1:
             print(f"sm td: {time.time() - t0:4.4f} sec")
-        torch.testing.assert_allclose(td_sm[idx].get("a"), td_to_copy.get("a"))
+        torch.testing.assert_close(sub_td_sm.get("a"), td_to_copy.get("a"))
 
         t0 = time.time()
-        td_memmap[idx].update_(td_to_copy)
+        sub_td_sm = td_memmap.get_sub_tensordict(idx)
+        sub_td_sm.update_(td_to_copy)
         if i == 1:
             print(f"memmap td: {time.time() - t0:4.4f} sec")
-        torch.testing.assert_allclose(td_memmap[idx].get("a"), td_to_copy.get("a"))
+        torch.testing.assert_close(sub_td_sm.get("a")._tensor, td_to_copy.get("a"))
 
         t0 = time.time()
-        td_saved[idx].update_(td_to_copy)
+        sub_td_sm = td_saved.get_sub_tensordict(idx)
+        sub_td_sm.update_(td_to_copy)
         if i == 1:
             print(f"saved td: {time.time() - t0:4.4f} sec")
-        torch.testing.assert_allclose(td_saved[idx].get("a"), td_to_copy.get("a"))
+        torch.testing.assert_close(sub_td_sm.get("a"), td_to_copy.get("a"))
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "--capture", "no"])
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

@@ -13,52 +13,53 @@ try:
 except ImportError:
     center_crop_fn = None
 
-from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.envs.transforms import ObservationTransform, Transform
+from tensordict.tensordict import TensorDictBase
 
-__all__ = ["VideoRecorder", "TensorDictRecorder"]
+from torchrl.envs.transforms import ObservationTransform, Transform
+from torchrl.trainers.loggers import Logger
 
 
 class VideoRecorder(ObservationTransform):
-    """
-    Video Recorder transform.
+    """Video Recorder transform.
+
     Will record a series of observations from an environment and write them
-    to a TensorBoard SummaryWriter object when needed.
+    to a Logger object when needed.
 
     Args:
-        writer (SummaryWriter): a tb.SummaryWriter instance where the video
+        logger (Logger): a Logger instance where the video
             should be written.
-        tag (str): the video tag in the writer.
-        keys_in (Sequence[str], optional): keys to be read to produce the video.
-            Default is `"next_pixels"`.
+        tag (str): the video tag in the logger.
+        in_keys (Sequence[str], optional): keys to be read to produce the video.
+            Default is :obj:`"pixels"`.
         skip (int): frame interval in the output video.
             Default is 2.
         center_crop (int, optional): value of square center crop.
         make_grid (bool, optional): if True, a grid is created assuming that a
             tensor of shape [B x W x H x 3] is provided, with B being the batch
             size. Default is True.
+
     """
 
     def __init__(
         self,
-        writer: "SummaryWriter",
+        logger: Logger,
         tag: str,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
         skip: int = 2,
         center_crop: Optional[int] = None,
         make_grid: bool = True,
         **kwargs,
     ) -> None:
-        if keys_in is None:
-            keys_in = ["next_pixels"]
+        if in_keys is None:
+            in_keys = ["pixels"]
 
-        super().__init__(keys_in=keys_in)
+        super().__init__(in_keys=in_keys)
         video_kwargs = {"fps": 6}
         video_kwargs.update(kwargs)
         self.video_kwargs = video_kwargs
         self.iter = 0
         self.skip = skip
-        self.writer = writer
+        self.logger = logger
         self.tag = tag
         self.count = 0
         self.center_crop = center_crop
@@ -68,10 +69,6 @@ class VideoRecorder(ObservationTransform):
                 "Could not load center_crop from torchvision. Make sure torchvision is installed."
             )
         self.obs = []
-        try:
-            import moviepy  # noqa
-        except ImportError:
-            raise Exception("moviepy not found, VideoRecorder cannot be created")
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         if not (observation.shape[-1] == 3 or observation.ndimension() == 2):
@@ -109,7 +106,7 @@ class VideoRecorder(ObservationTransform):
         return observation
 
     def dump(self, suffix: Optional[str] = None) -> None:
-        """Writes the video to the self.writer attribute.
+        """Writes the video to the self.logger attribute.
 
         Args:
             suffix (str, optional): a suffix for the video to be recorded
@@ -120,12 +117,13 @@ class VideoRecorder(ObservationTransform):
             tag = "_".join([self.tag, suffix])
         obs = torch.stack(self.obs, 0).unsqueeze(0).cpu()
         del self.obs
-        self.writer.add_video(
-            tag=tag,
-            vid_tensor=obs,
-            global_step=self.iter,
-            **self.video_kwargs,
-        )
+        if self.logger is not None:
+            self.logger.log_video(
+                name=tag,
+                video=obs,
+                step=self.iter,
+                **self.video_kwargs,
+            )
         del obs
         self.iter += 1
         self.count = 0
@@ -133,15 +131,15 @@ class VideoRecorder(ObservationTransform):
 
 
 class TensorDictRecorder(Transform):
-    """
-    TensorDict recorder.
-    When the 'dump' method is called, this class will save a stack of the tensordict resulting from `env.step(td)` in a
+    """TensorDict recorder.
+
+    When the 'dump' method is called, this class will save a stack of the tensordict resulting from :obj:`env.step(td)` in a
     file with a prefix defined by the out_file_base argument.
 
     Args:
         out_file_base (str): a string defining the prefix of the file where the tensordict will be written.
         skip_reset (bool): if True, the first TensorDict of the list will be discarded (usually the tensordict
-            resulting from the call to `env.reset()`)
+            resulting from the call to :obj:`env.reset()`)
             default: True
         skip (int): frame interval for the saved tensordict.
             default: 4
@@ -153,12 +151,12 @@ class TensorDictRecorder(Transform):
         out_file_base: str,
         skip_reset: bool = True,
         skip: int = 4,
-        keys_in: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
     ) -> None:
-        if keys_in is None:
-            keys_in = []
+        if in_keys is None:
+            in_keys = []
 
-        super().__init__(keys_in=keys_in)
+        super().__init__(in_keys=in_keys)
         self.iter = 0
         self.out_file_base = out_file_base
         self.td = []
@@ -166,12 +164,12 @@ class TensorDictRecorder(Transform):
         self.skip = skip
         self.count = 0
 
-    def _call(self, td: _TensorDict) -> _TensorDict:
+    def _call(self, td: TensorDictBase) -> TensorDictBase:
         self.count += 1
         if self.count % self.skip == 0:
             _td = td
-            if self.keys_in:
-                _td = td.select(*self.keys_in).clone()
+            if self.in_keys:
+                _td = td.select(*self.in_keys).to_tensordict()
             self.td.append(_td)
         return td
 

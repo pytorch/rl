@@ -8,16 +8,12 @@ import os
 import platform
 import subprocess
 from pathlib import Path
-from subprocess import check_output, STDOUT, CalledProcessError
+from subprocess import CalledProcessError, check_output, STDOUT
 
 import torch
 from setuptools import Extension
 from setuptools.command.build_ext import build_ext
 
-__all__ = [
-    "get_ext_modules",
-    "CMakeBuild",
-]
 
 _THIS_DIR = Path(__file__).parent.resolve()
 _ROOT_DIR = _THIS_DIR.parent.parent.resolve()

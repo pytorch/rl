@@ -4,27 +4,21 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Type, Union, Dict, Any
+from typing import Any, Callable, Dict, List, Optional, Type, Union
+
+from tensordict.nn import TensorDictModuleWrapper
+from tensordict.tensordict import TensorDictBase
 
 from torchrl.collectors.collectors import (
     _DataCollector,
-    _MultiDataCollector,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
+    SyncDataCollector,
 )
 from torchrl.data import MultiStep
-from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs import ParallelEnv
-
-__all__ = [
-    "sync_sync_collector",
-    "sync_async_collector",
-    "make_collector_offpolicy",
-    "make_collector_onpolicy",
-]
-
-from torchrl.envs.common import _EnvClass
-from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
+from torchrl.envs.common import EnvBase
+from torchrl.modules import SafeProbabilisticModule
 
 
 def sync_async_collector(
@@ -34,8 +28,7 @@ def sync_async_collector(
     num_collectors: Optional[int] = None,
     **kwargs,
 ) -> MultiaSyncDataCollector:
-    """
-    Runs asynchronous collectors, each running synchronous environments.
+    """Runs asynchronous collectors, each running synchronous environments.
 
     .. aafig::
 
@@ -70,7 +63,7 @@ def sync_async_collector(
     and the policy should handle those envs in batch.
 
     Args:
-        env_fns: Callable (or list of Callables) returning an instance of _EnvClass class.
+        env_fns: Callable (or list of Callables) returning an instance of EnvBase class.
         env_kwargs: Optional. Dictionary (or list of dictionaries) containing the kwargs for the environment being created.
         num_env_per_collector: Number of environments per data collector. The product
             num_env_per_collector * num_collectors should be less or equal to the number of workers available.
@@ -78,7 +71,6 @@ def sync_async_collector(
         **kwargs: Other kwargs passed to the data collectors
 
     """
-
     return _make_collector(
         MultiaSyncDataCollector,
         env_fns=env_fns,
@@ -95,9 +87,8 @@ def sync_sync_collector(
     num_env_per_collector: Optional[int] = None,
     num_collectors: Optional[int] = None,
     **kwargs,
-) -> MultiSyncDataCollector:
-    """
-    Runs synchronous collectors, each running synchronous environments.
+) -> Union[SyncDataCollector, MultiSyncDataCollector]:
+    """Runs synchronous collectors, each running synchronous environments.
 
     E.g.
 
@@ -141,7 +132,7 @@ def sync_sync_collector(
     and the policy should handle those envs in batch.
 
     Args:
-        env_fns: Callable (or list of Callables) returning an instance of _EnvClass class.
+        env_fns: Callable (or list of Callables) returning an instance of EnvBase class.
         env_kwargs: Optional. Dictionary (or list of dictionaries) containing the kwargs for the environment being created.
         num_env_per_collector: Number of environments per data collector. The product
             num_env_per_collector * num_collectors should be less or equal to the number of workers available.
@@ -149,6 +140,19 @@ def sync_sync_collector(
         **kwargs: Other kwargs passed to the data collectors
 
     """
+    if num_collectors == 1:
+        if "devices" in kwargs:
+            kwargs["device"] = kwargs.pop("devices")
+        if "passing_devices" in kwargs:
+            kwargs["passing_device"] = kwargs.pop("passing_devices")
+        return _make_collector(
+            SyncDataCollector,
+            env_fns=env_fns,
+            env_kwargs=env_kwargs,
+            num_env_per_collector=num_env_per_collector,
+            num_collectors=num_collectors,
+            **kwargs,
+        )
     return _make_collector(
         MultiSyncDataCollector,
         env_fns=env_fns,
@@ -163,7 +167,7 @@ def _make_collector(
     collector_class: Type,
     env_fns: Union[Callable, List[Callable]],
     env_kwargs: Optional[Union[dict, List[dict]]],
-    policy: Callable[[_TensorDict], _TensorDict],
+    policy: Callable[[TensorDictBase], TensorDictBase],
     max_frames_per_traj: int = -1,
     frames_per_batch: int = 200,
     total_frames: Optional[int] = None,
@@ -171,9 +175,9 @@ def _make_collector(
     num_env_per_collector: Optional[int] = None,
     num_collectors: Optional[int] = None,
     **kwargs,
-) -> _MultiDataCollector:
+) -> _DataCollector:
     if env_kwargs is None:
-        env_kwargs = dict()
+        env_kwargs = {}
     if isinstance(env_fns, list):
         num_env = len(env_fns)
         if num_env_per_collector is None:
@@ -216,7 +220,7 @@ def _make_collector(
         env_kwargs = [_env_kwargs[0] for _env_kwargs in env_kwargs_split]
     else:
         env_fns = [
-            lambda: ParallelEnv(
+            lambda _env_fn=_env_fn, _env_kwargs=_env_kwargs: ParallelEnv(
                 num_workers=len(_env_fn),
                 create_env_fn=_env_fn,
                 create_env_kwargs=_env_kwargs,
@@ -224,6 +228,13 @@ def _make_collector(
             for _env_fn, _env_kwargs in zip(env_fns_split, env_kwargs_split)
         ]
         env_kwargs = None
+    if collector_class is SyncDataCollector:
+        if len(env_fns) > 1:
+            raise RuntimeError(
+                f"Something went wrong: expected a single env constructor but got {len(env_fns)}"
+            )
+        env_fns = env_fns[0]
+        env_kwargs = env_kwargs[0]
     return collector_class(
         create_env_fn=env_fns,
         create_env_kwargs=env_kwargs,
@@ -237,17 +248,16 @@ def _make_collector(
 
 
 def make_collector_offpolicy(
-    make_env: Callable[[], _EnvClass],
-    actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    cfg: "DictConfig",
+    make_env: Callable[[], EnvBase],
+    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticModule],
+    cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
-    """
-    Returns a data collector for off-policy algorithms.
+    """Returns a data collector for off-policy algorithms.
 
     Args:
         make_env (Callable): environment creator
-        actor_model_explore (TensorDictModule): Model instance used for evaluation and exploration update
+        actor_model_explore (SafeModule): Model instance used for evaluation and exploration update
         cfg (DictConfig): config for creating collector object
         make_env_kwargs (dict): kwargs for the env creator
 
@@ -290,7 +300,7 @@ def make_collector_offpolicy(
         "passing_devices": cfg.collector_devices,
         "init_random_frames": cfg.init_random_frames,
         "pin_memory": cfg.pin_memory,
-        "split_trajs": ms is not None,
+        "split_trajs": True,
         # trajectories must be separated if multi-step is used
         "init_with_lag": cfg.init_with_lag,
         "exploration_mode": cfg.exploration_mode,
@@ -302,11 +312,20 @@ def make_collector_offpolicy(
 
 
 def make_collector_onpolicy(
-    make_env: Callable[[], _EnvClass],
-    actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    cfg: "DictConfig",
+    make_env: Callable[[], EnvBase],
+    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticModule],
+    cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
+    """Makes a collector in on-policy settings.
+
+    Args:
+        make_env (Callable): environment creator
+        actor_model_explore (SafeModule): Model instance used for evaluation and exploration update
+        cfg (DictConfig): config for creating collector object
+        make_env_kwargs (dict): kwargs for the env creator
+
+    """
     collector_helper = sync_sync_collector
 
     ms = None
@@ -348,6 +367,8 @@ def make_collector_onpolicy(
 
 @dataclass
 class OnPolicyCollectorConfig:
+    """On-policy collector config struct."""
+
     collector_devices: Any = field(default_factory=lambda: ["cpu"])
     # device on which the data collector should store the trajectories to be passed to this script.
     # If the collector device differs from the policy device (cuda:0 if available), then the
@@ -391,6 +412,8 @@ class OnPolicyCollectorConfig:
 
 @dataclass
 class OffPolicyCollectorConfig(OnPolicyCollectorConfig):
+    """Off-policy collector config struct."""
+
     multi_step: bool = False
     # whether or not multi-step rewards should be used.
     n_steps_return: int = 3

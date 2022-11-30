@@ -4,20 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
+from typing import Any, Optional, Tuple
 
-__all__ = [
-    "make_sac_loss",
-    "make_dqn_loss",
-    "make_ddpg_loss",
-    "make_target_updater",
-    "make_ppo_loss",
-    "make_redq_loss",
-]
-
-from typing import Optional, Tuple, Any
-
-from torchrl.modules import ActorValueOperator, ActorCriticOperator
+from torchrl.modules import ActorCriticOperator, ActorValueOperator
 from torchrl.objectives import (
+    A2CLoss,
     ClipPPOLoss,
     DDPGLoss,
     DistributionalDQNLoss,
@@ -28,17 +19,18 @@ from torchrl.objectives import (
     SACLoss,
     SoftUpdate,
 )
-from torchrl.objectives.costs.common import LossModule
-from torchrl.objectives.costs.redq import REDQLoss
+from torchrl.objectives.common import LossModule
+from torchrl.objectives.deprecated import REDQLoss_deprecated
 
-# from torchrl.objectives.costs.redq import REDQLoss
-from torchrl.objectives.costs.utils import _TargetNetUpdate
-from torchrl.objectives.returns.advantages import GAE
+# from torchrl.objectives.redq import REDQLoss
+
+from torchrl.objectives.utils import TargetNetUpdater
+from torchrl.objectives.value.advantages import GAE, TDEstimate
 
 
 def make_target_updater(
-    cfg: "DictConfig", loss_module: LossModule
-) -> Optional[_TargetNetUpdate]:
+    cfg: "DictConfig", loss_module: LossModule  # noqa: F821
+) -> Optional[TargetNetUpdater]:
     """Builds a target network weight update object."""
     if cfg.loss == "double":
         if not cfg.hard_update:
@@ -61,7 +53,7 @@ def make_target_updater(
     return target_net_updater
 
 
-def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
+def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[TargetNetUpdater]]:
     """Builds the SAC loss module."""
     loss_kwargs = {}
     if hasattr(cfg, "distributional") and cfg.distributional:
@@ -111,7 +103,9 @@ def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
     return loss_module, target_net_updater
 
 
-def make_redq_loss(model, cfg) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
+def make_redq_loss(
+    model, cfg
+) -> Tuple[REDQLoss_deprecated, Optional[TargetNetUpdater]]:
     """Builds the REDQ loss module."""
     loss_kwargs = {}
     if hasattr(cfg, "distributional") and cfg.distributional:
@@ -119,7 +113,7 @@ def make_redq_loss(model, cfg) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
     else:
         loss_kwargs.update({"loss_function": cfg.loss_function})
         loss_kwargs.update({"delay_qvalue": cfg.loss == "double"})
-        loss_class = REDQLoss
+        loss_class = REDQLoss_deprecated
     if isinstance(model, ActorValueOperator):
         actor_model = model.get_policy_operator()
         qvalue_model = model.get_value_operator()
@@ -145,7 +139,7 @@ def make_redq_loss(model, cfg) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
     return loss_module, target_net_updater
 
 
-def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
+def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[TargetNetUpdater]]:
     """Builds the DDPG loss module."""
     actor, value_net = model
     loss_kwargs = {}
@@ -163,7 +157,7 @@ def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
     return loss_module, target_net_updater
 
 
-def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
+def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[TargetNetUpdater]]:
     """Builds the DQN loss module."""
     loss_kwargs = {}
     if cfg.distributional:
@@ -179,6 +173,34 @@ def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
     return loss_module, target_net_updater
 
 
+def make_a2c_loss(model, cfg) -> A2CLoss:
+    """Builds the A2C loss module."""
+    actor_model = model.get_policy_operator()
+    critic_model = model.get_value_operator()
+
+    if cfg.advantage_in_loss:
+        advantage = TDEstimate(
+            gamma=cfg.gamma,
+            value_network=critic_model,
+            average_rewards=True,
+            gradient_mode=False,
+        )
+    else:
+        advantage = None
+
+    kwargs = {
+        "actor": actor_model,
+        "critic": critic_model,
+        "loss_critic_type": cfg.critic_loss_function,
+        "entropy_coef": cfg.entropy_coef,
+        "advantage_module": advantage,
+    }
+
+    loss_module = A2CLoss(**kwargs)
+
+    return loss_module
+
+
 def make_ppo_loss(model, cfg) -> PPOLoss:
     """Builds the PPO loss module."""
     loss_dict = {
@@ -190,13 +212,16 @@ def make_ppo_loss(model, cfg) -> PPOLoss:
     actor_model = model.get_policy_operator()
     critic_model = model.get_value_operator()
 
-    advantage = GAE(
-        cfg.gamma,
-        cfg.lmbda,
-        value_network=critic_model,
-        average_rewards=True,
-        gradient_mode=False,
-    )
+    if cfg.advantage_in_loss:
+        advantage = GAE(
+            cfg.gamma,
+            cfg.lmbda,
+            value_network=critic_model,
+            average_rewards=True,
+            gradient_mode=False,
+        )
+    else:
+        advantage = None
     loss_module = loss_dict[cfg.loss](
         actor=actor_model,
         critic=critic_model,
@@ -209,6 +234,8 @@ def make_ppo_loss(model, cfg) -> PPOLoss:
 
 @dataclass
 class LossConfig:
+    """Generic Loss config struct."""
+
     loss: str = "double"
     # whether double or single SAC loss should be used. Default=double
     hard_update: bool = False
@@ -231,7 +258,25 @@ class LossConfig:
 
 
 @dataclass
+class A2CLossConfig:
+    """A2C Loss config struct."""
+
+    gamma: float = 0.99
+    # Decay factor for return computation. Default=0.99.
+    entropy_coef: float = 1e-3
+    # Entropy factor for the A2C loss
+    critic_coef: float = 1.0
+    # Critic factor for the A2C loss
+    critic_loss_function: str = "smooth_l1"
+    # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
+    advantage_in_loss: bool = False
+    # if True, the advantage is computed on the sub-batch.
+
+
+@dataclass
 class PPOLossConfig:
+    """PPO Loss config struct."""
+
     loss: str = "clip"
     # PPO loss class, either clip or kl or base/<empty>. Default=clip
     gamma: float = 0.99
@@ -242,3 +287,5 @@ class PPOLossConfig:
     # Entropy factor for the PPO loss
     loss_function: str = "smooth_l1"
     # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
+    advantage_in_loss: bool = False
+    # if True, the advantage is computed on the sub-batch.

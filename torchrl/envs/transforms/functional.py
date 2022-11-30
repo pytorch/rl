@@ -28,6 +28,7 @@ def _assert_channels(img: Tensor, permitted: List[int]) -> None:
 
 
 def rgb_to_grayscale(img: Tensor, num_output_channels: int = 1) -> Tensor:
+    """Turns an RGB image into grayscale."""
     if img.ndim < 3:
         raise TypeError(
             "Input image tensor should have at least 3 dimensions, but found"

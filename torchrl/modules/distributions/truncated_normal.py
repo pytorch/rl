@@ -21,9 +21,9 @@ CONST_LOG_SQRT_2PI_E = 0.5 * math.log(2 * math.pi * math.e)
 
 
 class TruncatedStandardNormal(Distribution):
-    """
-    Truncated Standard Normal distribution
-    https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+    """Truncated Standard Normal distribution.
+
+    Source: https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
     """
 
     arg_constraints = {
@@ -98,7 +98,7 @@ class TruncatedStandardNormal(Distribution):
 
     @staticmethod
     def _little_phi(x):
-        return (-(x ** 2) * 0.5).exp() * CONST_INV_SQRT_2PI
+        return (-(x**2) * 0.5).exp() * CONST_INV_SQRT_2PI
 
     def _big_phi(self, x):
         phi = 0.5 * (1 + (x * CONST_INV_SQRT_2).erf())
@@ -121,9 +121,11 @@ class TruncatedStandardNormal(Distribution):
     def log_prob(self, value):
         if self._validate_args:
             self._validate_sample(value)
-        return CONST_LOG_INV_SQRT_2PI - self._log_Z - (value ** 2) * 0.5
+        return CONST_LOG_INV_SQRT_2PI - self._log_Z - (value**2) * 0.5
 
-    def rsample(self, sample_shape=torch.Size()):
+    def rsample(self, sample_shape=None):
+        if sample_shape is None:
+            sample_shape = torch.Size([])
         shape = self._extended_shape(sample_shape)
         p = torch.empty(shape, device=self.a.device).uniform_(
             self._dtype_min_gt_0, self._dtype_max_lt_1
@@ -132,8 +134,8 @@ class TruncatedStandardNormal(Distribution):
 
 
 class TruncatedNormal(TruncatedStandardNormal):
-    """
-    Truncated Normal distribution
+    """Truncated Normal distribution.
+
     https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
     """
 
@@ -149,7 +151,7 @@ class TruncatedNormal(TruncatedStandardNormal):
         super(TruncatedNormal, self).__init__(a, b, validate_args=validate_args)
         self._log_scale = self.scale.log()
         self._mean = self._mean * self.scale + self.loc
-        self._variance = self._variance * self.scale ** 2
+        self._variance = self._variance * self.scale**2
         self._entropy += self._log_scale
 
     def _to_std_rv(self, value):

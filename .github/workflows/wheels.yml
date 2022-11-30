@@ -4,7 +4,7 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches:
-      - release/0.0.1a0
+      - release/0.0.3
 
 jobs:
 
@@ -13,21 +13,20 @@ jobs:
     strategy:
       matrix:
         python_version: [["3.7", "cp37-cp37m"], ["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
-        cuda_support: [["", "--extra-index-url https://download.pytorch.org/whl/cpu", "\"['cpu', '11.3', '11.6']\"", "cpu"], ["+cu102", "", "\"['10.2']\"", "cuda102"]]
+        cuda_support: [["", "--extra-index-url https://download.pytorch.org/whl/cpu", "\"['cpu', '11.3', '11.6']\"", "cpu"]]
     container: pytorch/manylinux-${{ matrix.cuda_support[3] }}
     steps:
       - name: Checkout torchrl
         uses: actions/checkout@v2
-      - name: Install PyTorch 1.12 RC
+      - name: Install PyTorch RC
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install torch==1.12 ${{ matrix.cuda_support[1] }}
-          python3 -mpip install "git+https://github.com/pytorch/functorch.git@release/0.2"
+          python3 -mpip install torch ${{ matrix.cuda_support[1] }}
       - name: Build wheel
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install wheel
-          BUILD_VERSION=0.0.1a0 python3 setup.py bdist_wheel
+          BUILD_VERSION=0.0.3 python3 setup.py bdist_wheel
           # NB: wheels have the linux_x86_64 tag so we rename to manylinux1
           # find . -name 'dist/*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
@@ -60,15 +59,14 @@ jobs:
           architecture: x64
       - name: Checkout torchrl
         uses: actions/checkout@v2
-      - name: Install PyTorch 1.12 RC
+      - name: Install PyTorch RC
         run: |
-          python3 -mpip install torch==1.12 --extra-index-url https://download.pytorch.org/whl/cpu
-          python3 -mpip install "git+https://github.com/pytorch/functorch.git@release/0.2"
+          python3 -mpip install torch --extra-index-url https://download.pytorch.org/whl/cpu
       - name: Build wheel
         run: |
           export CC=clang CXX=clang++
           python3 -mpip install wheel
-          BUILD_VERSION=0.0.1a0 python3 setup.py bdist_wheel
+          BUILD_VERSION=0.0.3 python3 setup.py bdist_wheel
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:
@@ -95,13 +93,15 @@ jobs:
           architecture: x64
       - name: Checkout torchrl
         uses: actions/checkout@v2
-      - name: Install PyTorch 1.12 RC
+      - name: Install PyTorch RC
         run: |
-          python3 -mpip install torch==1.12 torchvision --extra-index-url https://download.pytorch.org/whl/cpu
-          python3 -mpip install "git+https://github.com/pytorch/functorch.git@release/0.2"
+          python3 -mpip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
       - name: Upgrade pip
         run: |
           python3 -mpip install --upgrade pip
+      - name: Install tensordict
+        run: |
+          python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
       - name: Install test dependencies
         run: |
           python3 -mpip install numpy pytest pytest-cov codecov unittest-xml-reporting pillow>=4.1.1 scipy av networkx expecttest pyyaml

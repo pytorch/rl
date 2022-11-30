@@ -1,4 +1,8 @@
-#[tool.usort]
+[tool.usort]
+first_party_detection = false
+
+[build-system]
+requires = ["setuptools", "wheel", "torch"]
 
 first_party_detection = false
 

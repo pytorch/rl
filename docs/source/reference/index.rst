@@ -2,11 +2,12 @@ API Reference
 =============
 
 .. toctree::
-    :maxdepth: 1
+    :maxdepth: 3
 
-    agents
     collectors
     data
     envs
     modules
     objectives
+    trainers
+    utils

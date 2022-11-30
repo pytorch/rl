@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import collections
 import os
-from typing import Optional, Tuple, Union, Dict
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -15,9 +15,11 @@ from torchrl.data import (
     CompositeSpec,
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
+    NdUnboundedDiscreteTensorSpec,
     TensorSpec,
 )
-from ...data.utils import numpy_to_torch_dtype_dict, DEVICE_TYPING
+
+from ...data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
 from ..gym_like import GymLikeEnv
 
 if torch.has_cuda and torch.cuda.device_count() > 1:
@@ -34,8 +36,9 @@ try:
 
     _has_dmc = True
 
-except ImportError:
+except ImportError as err:
     _has_dmc = False
+    IMPORT_ERR = str(err)
 
 __all__ = ["DMControlEnv", "DMControlWrapper"]
 
@@ -47,7 +50,7 @@ def _dmcontrol_to_torchrl_spec_transform(
 ) -> TensorSpec:
     if isinstance(spec, collections.OrderedDict):
         spec = {
-            "next_" + k: _dmcontrol_to_torchrl_spec_transform(item, device=device)
+            k: _dmcontrol_to_torchrl_spec_transform(item, device=device)
             for k, item in spec.items()
         }
         return CompositeSpec(**spec)
@@ -64,19 +67,25 @@ def _dmcontrol_to_torchrl_spec_transform(
     elif isinstance(spec, dm_env.specs.Array):
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdUnboundedContinuousTensorSpec(
-            shape=spec.shape, dtype=dtype, device=device
-        )
+        if dtype in (torch.float, torch.double, torch.half):
+            return NdUnboundedContinuousTensorSpec(
+                shape=spec.shape, dtype=dtype, device=device
+            )
+        else:
+            return NdUnboundedDiscreteTensorSpec(
+                shape=spec.shape, dtype=dtype, device=device
+            )
+
     else:
-        raise NotImplementedError
+        raise NotImplementedError(type(spec))
 
 
-def _get_envs(to_dict: bool = True) -> dict:
+def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
     if not _has_dmc:
-        return dict()
+        return {}
     if not to_dict:
         return tuple(suite.BENCHMARKING) + tuple(suite.EXTRA)
-    d = dict()
+    d = {}
     for tup in suite.BENCHMARKING:
         env_name = tup[0]
         d.setdefault(env_name, []).append(tup[1])
@@ -94,8 +103,7 @@ def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
 
 
 class DMControlWrapper(GymLikeEnv):
-    """
-    DeepMind Control lab environment wrapper.
+    """DeepMind Control lab environment wrapper.
 
     Args:
         env (dm_control.suite env): environment instance
@@ -108,6 +116,7 @@ class DMControlWrapper(GymLikeEnv):
         >>> td = env.rand_step()
         >>> print(td)
         >>> print(env.available_envs)
+
     """
 
     git_url = "https://github.com/deepmind/dm_control"
@@ -126,6 +135,7 @@ class DMControlWrapper(GymLikeEnv):
         from_pixels: bool = False,
         render_kwargs: Optional[dict] = None,
         pixels_only: bool = False,
+        camera_id: Union[int, str] = 0,
         **kwargs,
     ):
         self.from_pixels = from_pixels
@@ -133,7 +143,7 @@ class DMControlWrapper(GymLikeEnv):
 
         if from_pixels:
             self._set_egl_device(self.device)
-            self.render_kwargs = {"camera_id": 0}
+            self.render_kwargs = {"camera_id": camera_id}
             if render_kwargs is not None:
                 self.render_kwargs.update(render_kwargs)
             env = pixels.Wrapper(
@@ -143,7 +153,7 @@ class DMControlWrapper(GymLikeEnv):
             )
         return env
 
-    def _make_specs(self, env: "gym.Env") -> None:
+    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         # specs are defined when first called
         return
 
@@ -190,7 +200,7 @@ class DMControlWrapper(GymLikeEnv):
         return _seed
 
     def _output_transform(
-        self, timestep_tuple: Tuple["TimeStep"]
+        self, timestep_tuple: Tuple["TimeStep"]  # noqa: F821
     ) -> Tuple[np.ndarray, float, bool]:
         if type(timestep_tuple) is not tuple:
             timestep_tuple = (timestep_tuple,)
@@ -201,16 +211,18 @@ class DMControlWrapper(GymLikeEnv):
         return observation, reward, done
 
     @property
-    def action_spec(self) -> TensorSpec:
-        if self._action_spec is None:
-            self._action_spec = _dmcontrol_to_torchrl_spec_transform(
-                self._env.action_spec(), device=self.device
+    def input_spec(self) -> TensorSpec:
+        if self._input_spec is None:
+            self._input_spec = CompositeSpec(
+                action=_dmcontrol_to_torchrl_spec_transform(
+                    self._env.action_spec(), device=self.device
+                )
             )
-        return self._action_spec
+        return self._input_spec
 
-    @action_spec.setter
-    def action_spec(self, value: TensorSpec) -> None:
-        self._action_spec = value
+    @input_spec.setter
+    def input_spec(self, value: TensorSpec) -> None:
+        self._input_spec = value
 
     @property
     def observation_spec(self) -> TensorSpec:
@@ -243,8 +255,7 @@ class DMControlWrapper(GymLikeEnv):
 
 
 class DMControlEnv(DMControlWrapper):
-    """
-    DeepMind Control lab environment wrapper.
+    """DeepMind Control lab environment wrapper.
 
     Args:
         env_name (str): name of the environment
@@ -260,9 +271,16 @@ class DMControlEnv(DMControlWrapper):
         >>> td = env.rand_step()
         >>> print(td)
         >>> print(env.available_envs)
+
     """
 
     def __init__(self, env_name, task_name, **kwargs):
+        if not _has_dmc:
+            raise ImportError(
+                f"""dm_control python package was not found. Please install this dependency.
+(Got the error message: {IMPORT_ERR}).
+"""
+            )
         kwargs["env_name"] = env_name
         kwargs["task_name"] = task_name
         super().__init__(**kwargs)
@@ -294,9 +312,14 @@ class DMControlEnv(DMControlWrapper):
         if _seed is not None:
             random_state = np.random.RandomState(_seed)
             kwargs = {"random": random_state}
+        camera_id = kwargs.pop("camera_id", 0)
         env = suite.load(env_name, task_name, task_kwargs=kwargs)
         return super()._build_env(
-            env, from_pixels=from_pixels, pixels_only=pixels_only, **kwargs
+            env,
+            from_pixels=from_pixels,
+            pixels_only=pixels_only,
+            camera_id=camera_id,
+            **kwargs,
         )
 
     def rebuild_with_kwargs(self, **new_kwargs):

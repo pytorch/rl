@@ -14,4 +14,4 @@ dependencies:
     - expecttest
     - pyyaml
     - scipy
-    - hydra-core
+    - coverage

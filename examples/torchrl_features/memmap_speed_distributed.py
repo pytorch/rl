@@ -9,7 +9,7 @@ import time
 import configargparse
 import torch
 import torch.distributed.rpc as rpc
-from torchrl.data.tensordict import MemmapTensor
+from tensordict import MemmapTensor
 
 parser = configargparse.ArgumentParser()
 parser.add_argument("--rank", default=-1, type=int)

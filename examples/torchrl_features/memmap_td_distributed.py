@@ -9,8 +9,8 @@ import time
 import configargparse
 import torch
 import torch.distributed.rpc as rpc
-from torchrl.data import TensorDict
-from torchrl.data.tensordict.memmap import set_transfer_ownership
+from tensordict import TensorDict
+from tensordict.memmap import set_transfer_ownership
 
 parser = configargparse.ArgumentParser()
 parser.add_argument("--world_size", default=2, type=int)
@@ -89,9 +89,9 @@ if __name__ == "__main__":
             time.sleep(1)
             t0 = time.time()
             for w in range(1, args.world_size):
-                fut0 = rpc.rpc_async(f"worker{w}", get_tensordict, args=tuple())
+                fut0 = rpc.rpc_async(f"worker{w}", get_tensordict, args=())
                 fut0.wait()
-                fut1 = rpc.rpc_async(f"worker{w}", tensordict_add, args=tuple())
+                fut1 = rpc.rpc_async(f"worker{w}", tensordict_add, args=())
                 tensordict2 = fut1.wait()
                 tensordict2.clone()
             print("time: ", time.time() - t0)
@@ -99,7 +99,7 @@ if __name__ == "__main__":
             time.sleep(1)
             t0 = time.time()
             waiters = [
-                rpc.remote(f"worker{w}", get_tensordict, args=tuple())
+                rpc.remote(f"worker{w}", get_tensordict, args=())
                 for w in range(1, args.world_size)
             ]
             td = torch.stack([waiter.to_here() for waiter in waiters], 0).contiguous()
@@ -107,7 +107,7 @@ if __name__ == "__main__":
 
             t0 = time.time()
             waiters = [
-                rpc.remote(f"worker{w}", tensordict_add, args=tuple())
+                rpc.remote(f"worker{w}", tensordict_add, args=())
                 for w in range(1, args.world_size)
             ]
             td = torch.stack([waiter.to_here() for waiter in waiters], 0).contiguous()
@@ -118,9 +118,9 @@ if __name__ == "__main__":
         elif args.task == 2:
             time.sleep(1)
             t0 = time.time()
-            # waiters = [rpc.rpc_async(f"worker{w}", get_tensordict, args=tuple()) for w in range(1, args.world_size)]
+            # waiters = [rpc.rpc_async(f"worker{w}", get_tensordict, args=()) for w in range(1, args.world_size)]
             waiters = [
-                rpc.remote(f"worker{w}", get_tensordict, args=tuple())
+                rpc.remote(f"worker{w}", get_tensordict, args=())
                 for w in range(1, args.world_size)
             ]
             # td = torch.stack([waiter.wait() for waiter in waiters], 0).clone()
@@ -129,7 +129,7 @@ if __name__ == "__main__":
             t0 = time.time()
             if args.memmap:
                 waiters = [
-                    rpc.remote(f"worker{w}", tensordict_add_noreturn, args=tuple())
+                    rpc.remote(f"worker{w}", tensordict_add_noreturn, args=())
                     for w in range(1, args.world_size)
                 ]
                 print("temp t: ", time.time() - t0)
@@ -139,7 +139,7 @@ if __name__ == "__main__":
                 print("temp t: ", time.time() - t0)
             else:
                 waiters = [
-                    rpc.remote(f"worker{w}", tensordict_add, args=tuple())
+                    rpc.remote(f"worker{w}", tensordict_add, args=())
                     for w in range(1, args.world_size)
                 ]
                 print("temp t: ", time.time() - t0)
@@ -153,14 +153,14 @@ if __name__ == "__main__":
             time.sleep(1)
             t0 = time.time()
             waiters = [
-                rpc.remote(f"worker{w}", get_tensordict, args=tuple())
+                rpc.remote(f"worker{w}", get_tensordict, args=())
                 for w in range(1, args.world_size)
             ]
             td = torch.stack([waiter.to_here() for waiter in waiters], 0)
             print("time to receive objs: ", time.time() - t0)
             t0 = time.time()
             waiters = [
-                rpc.remote(f"worker{w}", tensordict_add, args=tuple())
+                rpc.remote(f"worker{w}", tensordict_add, args=())
                 for w in range(1, args.world_size)
             ]
             print("temp t: ", time.time() - t0)
