@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 import warnings
 from typing import Iterable, Optional, Type, Union
 
@@ -24,10 +25,13 @@ except ImportError:
         "functional programming should work, but functionality and performance "
         "may be affected. Consider installing functorch and/or upgrating pytorch."
     )
-    from tensordict.nn.functional_modules import (
-        FunctionalModule,
-        FunctionalModuleWithBuffers,
-    )
+
+    class FunctionalModule:  # noqa: D101
+        pass
+
+    class FunctionalModuleWithBuffers:  # noqa: D101
+        pass
+
 
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDictBase
@@ -51,33 +55,44 @@ def _check_all_str(list_of_str, first_level=True):
 
 
 def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
-    spec = module.spec
-    if len(module.out_keys) > 1 and not isinstance(spec, CompositeSpec):
-        raise RuntimeError(
-            "safe SafeModules with multiple out_keys require a CompositeSpec with matching keys. Got "
-            f"keys {module.out_keys}."
-        )
-    elif not isinstance(spec, CompositeSpec):
-        out_key = module.out_keys[0]
-        keys = [out_key]
-        values = [spec]
-    else:
-        keys = list(spec.keys())
-        values = [spec[key] for key in keys]
-    for _spec, _key in zip(values, keys):
-        if _spec is None:
-            continue
-        if not _spec.is_in(tensordict_out.get(_key)):
-            try:
-                tensordict_out.set_(
-                    _key,
-                    _spec.project(tensordict_out.get(_key)),
-                )
-            except RuntimeError:
-                tensordict_out.set(
-                    _key,
-                    _spec.project(tensordict_out.get(_key)),
-                )
+    try:
+        spec = module.spec
+        if len(module.out_keys) > 1 and not isinstance(spec, CompositeSpec):
+            raise RuntimeError(
+                "safe SafeModules with multiple out_keys require a CompositeSpec with matching keys. Got "
+                f"keys {module.out_keys}."
+            )
+        elif not isinstance(spec, CompositeSpec):
+            out_key = module.out_keys[0]
+            keys = [out_key]
+            values = [spec]
+        else:
+            keys = list(spec.keys())
+            values = [spec[key] for key in keys]
+        for _spec, _key in zip(values, keys):
+            if _spec is None:
+                continue
+            if not _spec.is_in(tensordict_out.get(_key)):
+                try:
+                    tensordict_out.set_(
+                        _key,
+                        _spec.project(tensordict_out.get(_key)),
+                    )
+                except RuntimeError:
+                    tensordict_out.set(
+                        _key,
+                        _spec.project(tensordict_out.get(_key)),
+                    )
+    except RuntimeError as err:
+        if re.search(
+            "attempting to use a Tensor in some data-dependent control flow", str(err)
+        ):
+            # "_is_stateless" in module.__dict__ and module._is_stateless:
+            raise RuntimeError(
+                f"vmap cannot be used with safe=True, consider turning the safe mode off. (original error message: {err})"
+            )
+        else:
+            raise err
 
 
 class SafeModule(TensorDictModule):
@@ -103,34 +118,35 @@ class SafeModule(TensorDictModule):
         case, the 'params' (and 'buffers') keyword argument must be specified:
 
     Examples:
-        >>> import functorch
         >>> import torch
         >>> from tensordict import TensorDict
+        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torchrl.data import NdUnboundedContinuousTensorSpec
         >>> from torchrl.modules import SafeModule
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> spec = NdUnboundedContinuousTensorSpec(8)
         >>> module = torch.nn.GRUCell(4, 8)
-        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> td_fmodule = SafeModule(
-        ...    module=fmodule,
+        ...    module=module,
         ...    spec=spec,
         ...    in_keys=["input", "hidden"],
         ...    out_keys=["output"],
         ...    )
-        >>> td_functional = td_fmodule(td.clone(), params=params, buffers=buffers)
+        >>> params = make_functional(td_fmodule)
+        >>> td_functional = td_fmodule(td.clone(), params=params)
         >>> print(td_functional)
         TensorDict(
-            fields={input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 hidden: Tensor(torch.Size([3, 8]), dtype=torch.float32),
+                input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 output: Tensor(torch.Size([3, 8]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=None,
+            is_shared=False)
 
     In the stateful case:
         >>> td_module = SafeModule(
-        ...    module=module,
+        ...    module=torch.nn.GRUCell(4, 8),
         ...    spec=spec,
         ...    in_keys=["input", "hidden"],
         ...    out_keys=["output"],
@@ -138,27 +154,29 @@ class SafeModule(TensorDictModule):
         >>> td_stateful = td_module(td.clone())
         >>> print(td_stateful)
         TensorDict(
-            fields={input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 hidden: Tensor(torch.Size([3, 8]), dtype=torch.float32),
+                input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 output: Tensor(torch.Size([3, 8]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=None,
+            is_shared=False)
 
     One can use a vmap operator to call the functional module. In this case the tensordict is expanded to match the
     batch size (i.e. the tensordict isn't modified in-place anymore):
         >>> # Model ensemble using vmap
-        >>> params_repeat = tuple(param.expand(4, *param.shape).contiguous().normal_() for param in params)
-        >>> buffers_repeat = tuple(param.expand(4, *param.shape).contiguous().normal_() for param in buffers)
-        >>> td_vmap = td_fmodule(td.clone(), params=params_repeat, buffers=buffers_repeat, vmap=True)
+        >>> from functorch import vmap
+        >>> params_repeat = params.expand(4, *params.shape)
+        >>> td_vmap = vmap(td_fmodule, (None, 0))(td.clone(), params_repeat)
         >>> print(td_vmap)
         TensorDict(
-            fields={input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
+            fields={
                 hidden: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
+                input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 output: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([4, 3]),
-            device=cpu)
+            device=None,
+            is_shared=False)
 
     """
 

@@ -67,9 +67,7 @@ class ReinforceLoss(LossModule):
         tensordict = self.advantage_module(
             tensordict,
             params=self.critic_params,
-            buffers=self.critic_buffers,
             target_params=self.target_critic_params,
-            target_buffers=self.target_critic_buffers,
         )
         advantage = tensordict.get(self.advantage_key)
 
@@ -77,7 +75,6 @@ class ReinforceLoss(LossModule):
         tensordict = self.actor_network(
             tensordict,
             params=self.actor_network_params,
-            buffers=self.actor_network_buffers,
         )
 
         log_prob = tensordict.get("sample_log_prob")
@@ -108,14 +105,12 @@ class ReinforceLoss(LossModule):
                 next_value = self.critic(
                     next_td,
                     params=self.critic_params,
-                    buffers=self.critic_buffers,
                 ).get("state_value")
                 value_target = reward + next_value * self.gamma
             tensordict_select = tensordict.select(*self.critic.in_keys).clone()
             value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
-                buffers=self.critic_buffers,
             ).get("state_value")
 
             loss_value = distance_loss(
