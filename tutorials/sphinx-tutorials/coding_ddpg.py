@@ -40,6 +40,7 @@ import torch
 import torch.cuda
 import tqdm
 from matplotlib import pyplot as plt
+from tensordict.nn import TensorDictModule
 from torch import nn, optim
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import (
@@ -64,7 +65,6 @@ from torchrl.modules import (
     MLP,
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
-    TensorDictModule,
     ValueOperator,
 )
 from torchrl.modules.distributions.continuous import TanhDelta
