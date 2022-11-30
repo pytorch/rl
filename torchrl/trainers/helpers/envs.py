@@ -429,12 +429,17 @@ def get_stats_random_rollout(
     return stats
 
 
-def generate_stats_from_observation_norm(
+def generate_stats_from_observation_norms(
     cfg: "DictConfig",  # noqa: F821
     proof_environment: EnvBase = None,
     key: Union[str, Tuple[str, ...]] = None,
 ):
-    """Generate stats (loc and scale) of a TransformedEnv using its ObservationNorm transform init_stats method.
+    """Generate stats (loc and scale) of the uninitialized ObservationNorm transforms of a TransformedEnv using its init_stats method.
+
+    Returns a list of (idx, stats) where idx represents the index in the Compose transform of the
+    uninitialized ObservationNorm.
+
+    If the TransformedEnv transform is of type ObservationNorm, the index will be set to 0
 
     Args:
         cfg (DictConfig): a config object with `init_env_steps` field, indicating
@@ -473,19 +478,24 @@ def generate_stats_from_observation_norm(
                 "thus generate_stats_from_observation_norm cannot infer which to compute the stats of."
             )
 
+    obs_norm_transforms = []
     if type(proof_environment.transform) == Compose:
-        obs_norm_transforms = []
-        for transform in proof_environment.transform:
-            if type(transform) == ObservationNorm:
-                obs_norm_transforms.append(transform)
-        if len(obs_norm_transforms) != 1:
-            raise RuntimeError(
-                f"Expected 1 ObservationNorm Transform. Got {len(obs_norm_transforms)}"
-            )
-        obs_norm_transform = obs_norm_transforms[0]
+        for idx, transform in enumerate(proof_environment.transform):
+            if (
+                type(transform) == ObservationNorm
+                and transform.loc is None
+                and transform.scale is None
+            ):
+                obs_norm_transforms.append((idx, transform))
     else:
-        obs_norm_transform = proof_environment.transform
-    obs_norm_transform.init_stats(num_iter=cfg.init_env_steps, key=key)
+        obs_norm_transforms.append((0, proof_environment.transform))
+
+    stats = []
+    for (idx, transform) in obs_norm_transforms:
+        # the ObservationNorm transforms should be naturally sorted by index, so we can simply compute their init_stats
+        # one after another
+        transform.init_stats(num_iter=cfg.init_env_steps, key=key)
+        stats.append((idx, {"loc": transform.loc, "scale": transform.scale}))
 
     if proof_env_is_none:
         proof_environment.close()
@@ -496,7 +506,7 @@ def generate_stats_from_observation_norm(
             torch.cuda.empty_cache()
         del proof_environment
 
-    return {"loc": obs_norm_transform.loc, "scale": obs_norm_transform.scale}
+    return stats
 
 
 @dataclass

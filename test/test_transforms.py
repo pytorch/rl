@@ -952,6 +952,22 @@ class TestTransforms:
         with pytest.raises(RuntimeError, match=err_msg):
             transform.init_stats(num_iter=11)
 
+    def test_observationnorm_initialization_order_error(self):
+        base_env = ContinuousActionVecMockEnv()
+        t_env = TransformedEnv(base_env)
+
+        transform1 = ObservationNorm(in_keys=["next_observation"])
+        transform2 = ObservationNorm(in_keys=["next_observation"])
+        t_env.append_transform(transform1)
+        t_env.append_transform(transform2)
+
+        err_msg = (
+            "ObservationNorms need to be initialized in the right order."
+            "Trying to initialize an ObservationNorm while a parent ObservationNorm transform is still uninitialized"
+        )
+        with pytest.raises(RuntimeError, match=err_msg):
+            transform2.init_stats(num_iter=10, key="observation")
+
     def test_observationnorm_uninitialized_stats_error(self):
         transform = ObservationNorm(in_keys=["next_observation", "next_pixels"])
 

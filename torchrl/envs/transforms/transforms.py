@@ -1391,7 +1391,21 @@ class ObservationNorm(ObservationTransform):
             )
         key = self.in_keys[0] if key is None else key
 
+        def raise_initialization_exception(module):
+            if (
+                isinstance(module, ObservationNorm)
+                and module.scale is None
+                and module.loc is None
+            ):
+                raise RuntimeError(
+                    "ObservationNorms need to be initialized in the right order."
+                    "Trying to initialize an ObservationNorm "
+                    "while a parent ObservationNorm transform is still uninitialized"
+                )
+
         parent = self.parent
+        parent.apply(raise_initialization_exception)
+
         collected_frames = 0
         data = []
         while collected_frames < num_iter:

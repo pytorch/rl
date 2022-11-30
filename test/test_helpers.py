@@ -27,13 +27,14 @@ from mocking_classes import (
 )
 from packaging import version
 from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs.transforms import ObservationNorm
 from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules.tensordict_module.common import _has_functorch
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import (
     EnvConfig,
-    generate_stats_from_observation_norm,
+    generate_stats_from_observation_norms,
 )
 from torchrl.trainers.helpers.losses import A2CLossConfig, make_a2c_loss
 from torchrl.trainers.helpers.models import (
@@ -881,6 +882,7 @@ def test_stats_from_observation_norm(from_pixels):
     cs = ConfigStore.instance()
     cs.store(name="config", node=Config)
     with initialize(version_base=None, config_path=None):
+        key = "pixels" if from_pixels else "observation_vector"
         cfg = compose(config_name="config", overrides=flags)
         env_maker = (
             ContinuousActionConvMockEnvNumpy
@@ -890,15 +892,21 @@ def test_stats_from_observation_norm(from_pixels):
         env = transformed_env_constructor(
             cfg, use_env_creator=False, custom_env_maker=env_maker
         )()
-        key = "pixels" if from_pixels else "observation_vector"
+        env.append_transform(ObservationNorm(in_keys=[key]))
 
-        stats = generate_stats_from_observation_norm(
+        stats = generate_stats_from_observation_norms(
             cfg, proof_environment=env, key=key
         )
 
-        assert list(stats.keys()) == ["loc", "scale"]
-        assert stats["loc"].shape == env.observation_spec[key].shape
-        assert stats["scale"].shape == env.observation_spec[key].shape
+        assert len(stats) == 2
+
+        assert list(stats[0][1].keys()) == ["loc", "scale"]
+        assert list(stats[1][1].keys()) == ["loc", "scale"]
+
+        assert stats[0][1]["loc"].shape == env.observation_spec[key].shape
+        assert stats[0][1]["loc"].shape == env.observation_spec[key].shape
+        assert stats[1][1]["scale"].shape == env.observation_spec[key].shape
+        assert stats[1][1]["scale"].shape == env.observation_spec[key].shape
 
 
 if __name__ == "__main__":

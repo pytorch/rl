@@ -35,7 +35,7 @@ from torchrl.trainers.helpers.collectors import (
 )
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
-    generate_stats_from_observation_norm,
+    generate_stats_from_observation_norms,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.models import DreamerConfig, make_dreamer
@@ -113,15 +113,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
-    stats = None
-
     # Compute the stats of the observations
     if not cfg.vecnorm and cfg.norm_stats:
         key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
-        stats = generate_stats_from_observation_norm(cfg, key)
+        _, stats = generate_stats_from_observation_norms(cfg, key)[0]
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
-
+    else:
+        stats = {"loc": 0.0, "scale": 1.0}
     # Create the different components of dreamer
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
         stats=stats,
