@@ -24,11 +24,13 @@ from torchrl.objectives.utils import (
 
 try:
     from functorch import vmap
+
     FUNCTORCH_ERR = ""
     _has_functorch = True
 except ImportError as err:
     FUNCTORCH_ERR = str(err)
     _has_functorch = False
+
 
 class REDQLoss(LossModule):
     """REDQ Loss module.
