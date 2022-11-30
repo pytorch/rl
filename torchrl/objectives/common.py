@@ -25,6 +25,7 @@ try:
     import functorch as ft  # noqa
 
     _has_functorch = True
+    FUNCTORCH_ERR = ""
 except ImportError:
     print(
         "failed to import functorch. TorchRL's features that do not require "

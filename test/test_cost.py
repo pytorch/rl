@@ -12,9 +12,9 @@ try:
 
     make_functional_with_buffers = ft.make_functional_with_buffers
     FUNCTORCH_ERR = ""
-except ImportError as FUNCTORCH_ERR:
+except ImportError as err:
     _has_functorch = False
-    FUNCTORCH_ERR = str(FUNCTORCH_ERR)
+    FUNCTORCH_ERR = str(err)
 
 import numpy as np
 import pytest

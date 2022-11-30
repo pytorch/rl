@@ -77,7 +77,7 @@ class REDQLoss_deprecated(LossModule):
     ):
         if not _has_functorch:
             raise ImportError(
-                f"REDQ requires functorch to be installed (error raised: {FUNCTORCH_ERR})"
+                f"Failed to import functorch with error message:\n{FUNCTORCH_ERR}"
             )
         super().__init__()
         self.convert_to_functional(
