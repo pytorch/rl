@@ -373,7 +373,7 @@ def get_stats_random_rollout(
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
         proof_environment = transformed_env_constructor(
-            cfg=cfg, use_env_creator=False
+            cfg=cfg, use_env_creator=False, stats={"loc": 0.0, "scale": 1.0}
         )()
 
     print("computing state stats")

@@ -126,10 +126,13 @@ def test_dqn_maker(
             DiscreteActionConvMockEnvNumpy if from_pixels else DiscreteActionVecMockEnv
         )
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker(
-            categorical_action_encoding=cfg.categorical_action_encoding
+            categorical_action_encoding=cfg.categorical_action_encoding,
         )
 
         actor = make_dqn_actor(proof_environment, cfg, device)
@@ -189,7 +192,10 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
             else ContinuousActionVecMockEnv
         )
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker()
         actor, value = make_ddpg_actor(proof_environment, device=device, cfg=cfg)
@@ -273,7 +279,10 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
             else ContinuousActionVecMockEnv
         )
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker()
 
@@ -400,7 +409,10 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
             else ContinuousActionVecMockEnv
         )
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker()
 
@@ -533,7 +545,10 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             else ContinuousActionVecMockEnv
         )
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker()
 
@@ -660,7 +675,10 @@ def test_redq_make(device, from_pixels, gsde, exploration):
             else ContinuousActionVecMockEnv
         )
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker()
 
@@ -756,7 +774,10 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
         cfg = compose(config_name="config", overrides=flags)
         env_maker = ContinuousActionConvMockEnvNumpy
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker().to(device)
         model = make_dreamer(
@@ -890,7 +911,9 @@ def test_stats_from_observation_norm(from_pixels):
             else ContinuousActionVecMockEnv
         )
         env = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
         )()
         env.append_transform(ObservationNorm(in_keys=[key]))
 
