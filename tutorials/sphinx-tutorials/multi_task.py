@@ -9,14 +9,21 @@ This tutorial details how multi-task policies and batched environments can be us
 # can compute actions in diverse settings using a distinct set of weights.
 # You will also be able to execute diverse environments in parallel.
 
+# sphinx_gallery_start_ignore
+import warnings
+
+warnings.filterwarnings("ignore")
+# sphinx_gallery_end_ignore
+
 import torch
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 
 ##############################################################################
 
 from torchrl.envs import CatTensors, Compose, DoubleToFloat, ParallelEnv, TransformedEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.modules import MLP, TensorDictModule, TensorDictSequential
+from torchrl.modules import MLP
 
 ###############################################################################
 # We design two environments, one humanoid that must complete the stand task
