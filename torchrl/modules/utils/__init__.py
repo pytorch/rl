@@ -8,7 +8,7 @@ from collections import OrderedDict
 import torch
 from packaging import version
 
-if torch.__version__ >= version.parse("1.12.0"):
+if version.parse(torch.__version__) >= version.parse("1.12.0"):
     from torch.nn.parameter import _disabled_torch_function_impl, _ParameterMeta
 else:
     from torch.nn.parameter import _disabled_torch_function_impl

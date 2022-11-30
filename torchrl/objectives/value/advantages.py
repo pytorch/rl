@@ -46,11 +46,17 @@ class TDEstimate(nn.Module):
         super().__init__()
         self.register_buffer("gamma", torch.tensor(gamma))
         self.value_network = value_network
-        self.is_functional = "_is_stateless" in value_network.__dict__
 
         self.average_rewards = average_rewards
         self.gradient_mode = gradient_mode
         self.value_key = value_key
+
+    @property
+    def is_functional(self):
+        return (
+            "_is_stateless" in self.value_network.__dict__
+            and self.value_network.__dict__["_is_stateless"]
+        )
 
     def forward(
         self,
@@ -146,12 +152,18 @@ class TDLambdaEstimate(nn.Module):
         self.register_buffer("gamma", torch.tensor(gamma))
         self.register_buffer("lmbda", torch.tensor(lmbda))
         self.value_network = value_network
-        self.is_functional = "_is_stateless" in value_network.__dict__
         self.vectorized = vectorized
 
         self.average_rewards = average_rewards
         self.gradient_mode = gradient_mode
         self.value_key = value_key
+
+    @property
+    def is_functional(self):
+        return (
+            "_is_stateless" in self.value_network.__dict__
+            and self.value_network.__dict__["_is_stateless"]
+        )
 
     def forward(
         self,
@@ -254,10 +266,16 @@ class GAE(nn.Module):
         self.register_buffer("gamma", torch.tensor(gamma))
         self.register_buffer("lmbda", torch.tensor(lmbda))
         self.value_network = value_network
-        self.is_functional = "_is_stateless" in value_network.__dict__
 
         self.average_rewards = average_rewards
         self.gradient_mode = gradient_mode
+
+    @property
+    def is_functional(self):
+        return (
+            "_is_stateless" in self.value_network.__dict__
+            and self.value_network.__dict__["_is_stateless"]
+        )
 
     def forward(
         self,
