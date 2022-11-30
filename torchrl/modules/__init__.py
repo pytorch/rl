@@ -13,13 +13,6 @@ from .distributions import (
     TanhNormal,
     TruncatedNormal,
 )
-
-# from .functional_modules import (
-#     FunctionalModule,
-#     FunctionalModuleWithBuffers,
-#     extract_weights,
-#     extract_buffers,
-# )
 from .models import (
     ConvNet,
     DdpgCnnActor,

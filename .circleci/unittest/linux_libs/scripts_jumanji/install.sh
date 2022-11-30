@@ -35,8 +35,11 @@ else
     pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu116 --force-reinstall
 fi
 
+# install tensordict
+pip install git+https://github.com/pytorch-labs/tensordict
+
 # smoke test
-python -c "import functorch"
+python -c "import functorch;import tensordict"
 
 printf "* Installing torchrl\n"
 pip3 install -e .
