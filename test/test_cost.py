@@ -1715,7 +1715,9 @@ class TestPPO:
         actor.zero_grad()
         assert counter == 4
 
-    @pytest.mark.skipif(not _has_functorch, f"functorch not found, {FUNCTORCH_ERR}")
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found, {FUNCTORCH_ERR}"
+    )
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
