@@ -10,19 +10,25 @@ from typing import Union
 import numpy as np
 import torch
 
-from functorch import vmap
 from tensordict.nn import TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.modules import SafeModule
-from torchrl.objectives.common import _has_functorch, LossModule
+from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     distance_loss,
     next_state_value as get_next_state_value,
 )
 
+try:
+    from functorch import vmap
+    FUNCTORCH_ERR = ""
+    _has_functorch = True
+except ImportError as err:
+    FUNCTORCH_ERR = str(err)
+    _has_functorch = False
 
 class REDQLoss(LossModule):
     """REDQ Loss module.
@@ -77,7 +83,9 @@ class REDQLoss(LossModule):
         gSDE: bool = False,
     ):
         if not _has_functorch:
-            raise ImportError("REDQ requires functorch to be installed.")
+            raise ImportError(
+                f"REDQ requires functorch to be installed (error raised: {FUNCTORCH_ERR})"
+            )
 
         super().__init__()
         self.convert_to_functional(

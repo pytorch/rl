@@ -5,7 +5,6 @@ from typing import Tuple, Union
 import numpy as np
 import torch
 
-from functorch import vmap
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
 from torch import Tensor
@@ -18,6 +17,13 @@ from torchrl.objectives import (
 )
 from torchrl.objectives.common import LossModule
 
+try:
+    from functorch import vmap
+    FUNCTORCH_ERR = ""
+    _has_functorch = True
+except ImportError as err:
+    FUNCTORCH_ERR = str(err)
+    _has_functorch = False
 
 class REDQLoss_deprecated(LossModule):
     """REDQ Loss module.
@@ -67,6 +73,10 @@ class REDQLoss_deprecated(LossModule):
         delay_qvalue: bool = True,
         gSDE: bool = False,
     ):
+        if not _has_functorch:
+            raise ImportError(
+                f"REDQ requires functorch to be installed (error raised: {FUNCTORCH_ERR})"
+            )
         super().__init__()
         self.convert_to_functional(
             actor_network,

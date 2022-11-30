@@ -44,5 +44,9 @@ fi
 # install tensordict
 pip install git+https://github.com/pytorch-labs/tensordict
 
+# smoke test
+python -c "import tensordict"
+
 printf "* Installing torchrl\n"
 python setup.py develop
+python -c "import torchrl"
