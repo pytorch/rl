@@ -887,6 +887,7 @@ def test_timeit():
     assert val2[2] == n2
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
 def test_stats_from_observation_norm(from_pixels):
     flags = list(from_pixels)
