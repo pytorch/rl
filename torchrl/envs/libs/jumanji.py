@@ -44,18 +44,28 @@ def _ndarray_to_tensor(value: Union["jnp.ndarray", np.ndarray], device) -> torch
     return torch.tensor(value).to(device)
 
 
+def _object_to_dict(obj) -> dict:
+    if isinstance(obj, tuple) and hasattr(obj, "_fields"):  # named tuple
+        return dict(zip(obj._fields, obj))
+    elif dataclasses.is_dataclass(obj):
+        return {
+            field.name: getattr(obj, field.name)
+            for field in dataclasses.fields(obj)
+        }
+    elif isinstance(obj, dict):
+        return obj
+    else:
+        raise NotImplementedError(f"unsupported data type {type(obj)}")
+
+
 def _object_to_tensordict(obj: Union, device, batch_size) -> TensorDictBase:
     """Converts a namedtuple or a dataclass to a TensorDict."""
     t = {}
-    if isinstance(obj, tuple) and hasattr(obj, "_fields"):  # named tuple
-        _iter = obj._fields
-    elif dataclasses.is_dataclass(obj):
-        _iter = (field.name for field in dataclasses.fields(obj))
-    else:
-        raise NotImplementedError(f"unsupported data type {type(obj)}")
-    for name in _iter:
-        value = getattr(obj, name)
-        if isinstance(value, (jnp.ndarray, np.ndarray)):
+    _dict = _object_to_dict(obj)
+    for name, value in _dict.items():
+        if isinstance(value, (np.number, int, float)):
+            t[name] = _ndarray_to_tensor(np.asarray([value]), device=device)
+        elif isinstance(value, (jnp.ndarray, np.ndarray)):
             t[name] = _ndarray_to_tensor(value, device=device)
         else:
             t[name] = _object_to_tensordict(value, device, batch_size)
@@ -64,18 +74,18 @@ def _object_to_tensordict(obj: Union, device, batch_size) -> TensorDictBase:
 
 def _tensordict_to_object(tensordict: TensorDictBase, object_example):
     """Converts a TensorDict to a namedtuple or a dataclass."""
-    object_type = type(object_example)
     t = {}
+    _dict = _object_to_dict(object_example)
     for name in tensordict.keys():
+        example = _dict[name]
         value = tensordict[name]
         if isinstance(value, TensorDictBase):
-            t[name] = _tensordict_to_object(value, getattr(object_example, name))
+            t[name] = _tensordict_to_object(value, example)
         else:
-            example = getattr(object_example, name)
             t[name] = (
                 value.detach().numpy().reshape(example.shape).astype(example.dtype)
             )
-    return object_type(**t)
+    return type(object_example)(**t)
 
 
 def _jumanji_to_torchrl_spec_transform(

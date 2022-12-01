@@ -88,7 +88,8 @@ def _test_fake_tensordict(env: EnvBase):
         assert fake_tensordict[key].shape == real_tensordict[key].shape
 
     # test dtypes
-    for key, value in real_tensordict.unflatten_keys(".").items():
+    real_tensordict = env.rollout(3) # Empty structures will be missing in flattened keys.
+    for key, value in real_tensordict.items():
         _check_dtype(key, value, env.observation_spec, env.input_spec)
 
 

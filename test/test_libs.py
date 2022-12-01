@@ -25,6 +25,7 @@ from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrappe
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
+from torchrl.envs.libs.brax import _has_brax, BraxEnv
 
 if _has_gym:
     import gym
@@ -423,6 +424,44 @@ class TestJumanji:
                 raise AttributeError(
                     f"None of the keys matched: {rollout}, {list(timestep.__dict__.keys())}"
                 )
+
+
+@pytest.mark.skipif(not _has_brax, reason="brax not installed")
+@pytest.mark.parametrize("envname", ["ant"])
+class TestBrax:
+    def test_brax_seeding(self, envname):
+        final_seed = []
+        tdreset = []
+        tdrollout = []
+        for _ in range(2):
+            env = BraxEnv(envname)
+            torch.manual_seed(0)
+            np.random.seed(0)
+            final_seed.append(env.set_seed(0))
+            tdreset.append(env.reset())
+            tdrollout.append(env.rollout(max_steps=50))
+            env.close()
+            del env
+        assert final_seed[0] == final_seed[1]
+        assert_allclose_td(*tdreset)
+        assert_allclose_td(*tdrollout)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_brax_batch_size(self, envname, batch_size):
+        env = BraxEnv(envname, batch_size=batch_size)
+        env.set_seed(0)
+        tdreset = env.reset()
+        tdrollout = env.rollout(max_steps=50)
+        env.close()
+        del env
+        assert tdreset.batch_size == batch_size
+        assert tdrollout.batch_size[:-1] == batch_size
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_brax_spec_rollout(self, envname, batch_size):
+        env = BraxEnv(envname, batch_size=batch_size)
+        env.set_seed(0)
+        _test_fake_tensordict(env)
 
 
 if __name__ == "__main__":
