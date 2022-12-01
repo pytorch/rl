@@ -104,7 +104,7 @@ Here's another example of an off-policy training loop in TorchRL (assuming that 
   ```
   </details>
 
-Check our TorchRL-specific [TensorDict tutorial](tutorials/tensordict.ipynb) for more information.
+Check our TorchRL-specific [TensorDict tutorial](https://pytorch.org/rl/tutorials/tensordict_tutorial.html) for more information.
 
 The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible!
 
@@ -141,7 +141,7 @@ The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py)
   ```
   </details>
 
-  The corresponding [tutorial](tutorials/tensordictmodule.ipynb) provides more context about its features.
+  The corresponding [tutorial](https://pytorch.org/rl/tutorials/tensordict_module.html) provides more context about its features.
 
 
 
@@ -358,8 +358,8 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 
 and many more to come!
 
-We also provide [tutorials and demos](tutorials) that give a sense of what the
-library can do.
+We also provide [tutorials and demos](tutorials/README.md) that give a sense of
+what the library can do.
 
 ## Installation
 Create a conda environment where the packages will be installed.
