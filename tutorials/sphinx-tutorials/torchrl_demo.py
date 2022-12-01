@@ -124,6 +124,12 @@ This demo was presented at ICML 2022 on the industry demo day.
 # TensorDict
 # ------------------------------
 
+# sphinx_gallery_start_ignore
+import warnings
+
+warnings.filterwarnings("ignore")
+# sphinx_gallery_end_ignore
+
 import torch
 from tensordict import TensorDict
 
@@ -172,7 +178,9 @@ tensordict.batch_size, tensordict["key 1"]
 # Here are some other functionalities of TensorDict.
 
 print(
-    "view(-1): ", tensordict.view(-1).batch_size, tensordict.view(-1).get("key 1").shape
+    "view(-1): ",
+    tensordict.view(-1).batch_size,
+    tensordict.view(-1).get("key 1").shape,
 )
 
 print("to device: ", tensordict.to("cpu"))
@@ -348,7 +356,8 @@ print("last transform parent: ", env.transform[2].parent)
 from torchrl.envs import ParallelEnv
 
 base_env = ParallelEnv(
-    4, lambda: GymEnv("Pendulum-v1", frame_skip=3, from_pixels=True, pixels_only=False)
+    4,
+    lambda: GymEnv("Pendulum-v1", frame_skip=3, from_pixels=True, pixels_only=False),
 )
 env = TransformedEnv(
     base_env, Compose(NoopResetEnv(3), ToTensorImage())
@@ -384,7 +393,10 @@ print(net(torch.randn(10, 3)).shape)
 # Example of a CNN model:
 
 cnn = ConvNet(
-    num_cells=[32, 64], kernel_sizes=[8, 4], strides=[2, 1], aggregator_class=SquashDims
+    num_cells=[32, 64],
+    kernel_sizes=[8, 4],
+    strides=[2, 1],
+    aggregator_class=SquashDims,
 )
 print(cnn)
 print(cnn(torch.randn(10, 3, 32, 32)).shape)  # last tensor is squashed
@@ -393,7 +405,7 @@ print(cnn(torch.randn(10, 3, 32, 32)).shape)  # last tensor is squashed
 # TensorDictModules
 # ------------------------------
 
-from torchrl.modules import TensorDictModule
+from tensordict.nn import TensorDictModule
 
 tensordict = TensorDict({"key 1": torch.randn(10, 3)}, batch_size=[10])
 module = nn.Linear(3, 4)
@@ -405,7 +417,7 @@ print(tensordict)
 # Sequences of Modules
 # ------------------------------
 
-from torchrl.modules import TensorDictSequential
+from tensordict.nn import TensorDictSequential
 
 backbone_module = nn.Linear(5, 3)
 backbone = TensorDictModule(
@@ -446,20 +458,21 @@ print(tensordict)
 # Functional Programming (Ensembling / Meta-RL)
 # ----------------------------------------------
 
-fsequence, (params, buffers) = sequence.make_functional_with_buffers()
-len(list(fsequence.parameters()))  # functional modules have no parameters
+from tensordict.nn import make_functional
+
+params = make_functional(sequence)
+len(list(sequence.parameters()))  # functional modules have no parameters
 
 ###############################################################################
 
-fsequence(tensordict, params=params, buffers=buffers)
+sequence(tensordict, params)
 
 ###############################################################################
 
-params_expand = [p.expand(4, *p.shape) for p in params]
-buffers_expand = [b.expand(4, *b.shape) for b in buffers]
-tensordict_exp = fsequence(
-    tensordict, params=params_expand, buffers=buffers, vmap=(0, 0, None)
-)
+import functorch
+
+params_expand = params.expand(4)
+tensordict_exp = functorch.vmap(sequence, (None, 0))(tensordict, params_expand)
 print(tensordict_exp)
 
 ###############################################################################
@@ -468,10 +481,11 @@ print(tensordict_exp)
 
 torch.manual_seed(0)
 from torchrl.data import NdBoundedTensorSpec
+from torchrl.modules import SafeModule
 
 spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
 base_module = nn.Linear(5, 3)
-module = TensorDictModule(
+module = SafeModule(
     module=base_module, spec=spec, in_keys=["obs"], out_keys=["action"], safe=True
 )
 tensordict = TensorDict({"obs": torch.randn(5)}, batch_size=[])
@@ -491,14 +505,12 @@ actor = Actor(base_module, in_keys=["obs"])
 tensordict = TensorDict({"obs": torch.randn(5)}, batch_size=[])
 actor(tensordict)  # action is the default value
 
+from tensordict.nn import ProbabilisticTensorDictModule
+
 ###############################################################################
 
 # Probabilistic modules
-from torchrl.modules import (
-    NormalParamWrapper,
-    ProbabilisticTensorDictModule,
-    TanhNormal,
-)
+from torchrl.modules import NormalParamWrapper, TanhNormal
 
 td = TensorDict(
     {"input": torch.randn(3, 5)},
@@ -572,7 +584,7 @@ env = GymEnv("Pendulum-v1")
 
 action_spec = env.action_spec
 actor_module = nn.Linear(3, 1)
-actor = TensorDictModule(
+actor = SafeModule(
     actor_module, spec=action_spec, in_keys=["observation"], out_keys=["action"]
 )
 
@@ -628,6 +640,8 @@ tensordict_rollout
 
 (tensordict_rollout == tensordicts_prealloc).all()
 
+from tensordict.nn import TensorDictModule
+
 # Collectors
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -637,7 +651,6 @@ from torchrl.collectors import MultiaSyncDataCollector, MultiSyncDataCollector
 
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.modules import TensorDictModule
 
 # EnvCreator makes sure that we can send a lambda function from process to process
 parallel_env = ParallelEnv(3, EnvCreator(lambda: GymEnv("Pendulum-v1")))
@@ -666,6 +679,8 @@ for i, d in enumerate(collector):
         print(d)  # trajectories are split automatically in [6 workers x 10 steps]
     collector.update_policy_weights_()  # make sure that our policies have the latest weights if working on multiple devices
 print(i)
+collector.shutdown()
+del collector
 
 ###############################################################################
 
@@ -685,6 +700,7 @@ for i, d in enumerate(collector):
         print(d)  # trajectories are split automatically in [6 workers x 10 steps]
     collector.update_policy_weights_()  # make sure that our policies have the latest weights if working on multiple devices
 print(i)
+collector.shutdown()
 del collector
 
 ###############################################################################
@@ -728,11 +744,11 @@ loss_td = loss_fn(tensordict)
 
 ###############################################################################
 
-loss_td
+print(loss_td)
 
 ###############################################################################
 
-tensordict
+print(tensordict)
 
 ###############################################################################
 # State of the Library

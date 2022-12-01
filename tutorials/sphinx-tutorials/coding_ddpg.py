@@ -32,6 +32,12 @@ Coding DDPG using TorchRL
 
 # Make all the necessary imports for training
 
+# sphinx_gallery_start_ignore
+import warnings
+
+warnings.filterwarnings("ignore")
+# sphinx_gallery_end_ignore
+
 from copy import deepcopy
 from typing import Optional
 
@@ -40,6 +46,7 @@ import torch
 import torch.cuda
 import tqdm
 from matplotlib import pyplot as plt
+from tensordict.nn import TensorDictModule
 from torch import nn, optim
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import (
@@ -64,7 +71,6 @@ from torchrl.modules import (
     MLP,
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
-    TensorDictModule,
     ValueOperator,
 )
 from torchrl.modules.distributions.continuous import TanhDelta
