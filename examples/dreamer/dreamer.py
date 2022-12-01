@@ -131,7 +131,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         use_decoder_in_env=True,
         action_key="action",
         value_key="state_value",
-        proof_environment=transformed_env_constructor(cfg)(),
+        proof_environment=transformed_env_constructor(
+            cfg, stats={"loc": 0.0, "scale": 1.0}
+        )(),
     )
 
     # reward normalization
