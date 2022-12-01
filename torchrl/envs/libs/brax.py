@@ -1,18 +1,24 @@
 from typing import Dict, Optional, Union
 
-import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from torchrl.data import CompositeSpec, NdBoundedTensorSpec, NdUnboundedContinuousTensorSpec
+from torchrl.data import (
+    CompositeSpec,
+    NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
+)
 from torchrl.envs.common import _EnvWrapper
-from torchrl.envs.libs.jumanji import _object_to_tensordict, _tensordict_to_object, _torchrl_data_to_spec_transform
+from torchrl.envs.libs.jumanji import (
+    _object_to_tensordict,
+    _tensordict_to_object,
+    _torchrl_data_to_spec_transform,
+)
 
 try:
     import brax
     import brax.envs
     import brax.io.torch
-    from brax import jumpy as jp
     import jax
-    import numpy as np
+    from brax import jumpy as jp
 
     _has_brax = True
 except ImportError as err:
@@ -33,7 +39,7 @@ class BraxWrapper(_EnvWrapper):
     """
 
     git_url = "https://github.com/google/brax"
-    
+
     @property
     def lib(self):
         return brax
@@ -79,20 +85,15 @@ class BraxWrapper(_EnvWrapper):
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
         self._input_spec = CompositeSpec(
             action=NdBoundedTensorSpec(
-                minimum=-1,
-                maximum=1,
-                shape=(env.action_size,),
-                device=self.device
+                minimum=-1, maximum=1, shape=(env.action_size,), device=self.device
             )
         )
         self._reward_spec = NdUnboundedContinuousTensorSpec(
-            shape=(),
-            device=self.device
+            shape=(), device=self.device
         )
         self._observation_spec = CompositeSpec(
             observation=NdUnboundedContinuousTensorSpec(
-                shape=(env.observation_size,),
-                device=self.device
+                shape=(env.observation_size,), device=self.device
             )
         )
         # extract state spec from instance
@@ -135,7 +136,6 @@ class BraxWrapper(_EnvWrapper):
             device=self.device,
         )
         return tensordict_out
-
 
     def _step(
         self,

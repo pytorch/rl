@@ -21,11 +21,11 @@ from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
-from torchrl.envs.libs.brax import _has_brax, BraxEnv
 
 if _has_gym:
     import gym

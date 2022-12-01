@@ -49,8 +49,7 @@ def _object_to_dict(obj) -> dict:
         return dict(zip(obj._fields, obj))
     elif dataclasses.is_dataclass(obj):
         return {
-            field.name: getattr(obj, field.name)
-            for field in dataclasses.fields(obj)
+            field.name: getattr(obj, field.name) for field in dataclasses.fields(obj)
         }
     elif isinstance(obj, dict):
         return obj
