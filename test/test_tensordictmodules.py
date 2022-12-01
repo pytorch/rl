@@ -80,7 +80,7 @@ class TestTDModule:
                 self.linear_1 = nn.Linear(in_1, out_1)
                 self.linear_2 = nn.Linear(in_1, out_2)
 
-            def forward(self, x):
+            def forward(self, x):  # pragma: no cover
                 return self.linear_1(x), self.linear_2(x)
 
         spec_dict = {
@@ -176,7 +176,7 @@ class TestTDModule:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
-        else:
+        else:  # pragma: no cover
             raise NotImplementedError
         spec = (
             CompositeSpec(out=spec, **{out_key: None for out_key in out_keys})
@@ -189,7 +189,7 @@ class TestTDModule:
             dist_in_keys = ["loc", "scale"]
         elif out_keys == ["loc_1", "scale_1"]:
             dist_in_keys = {"loc": "loc_1", "scale": "scale_1"}
-        else:
+        else:  # pragma: no cover
             raise NotImplementedError
 
         if safe and spec is None:
@@ -299,7 +299,7 @@ class TestTDModule:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
-        else:
+        else:  # pragma: no cover
             raise NotImplementedError
         spec = (
             CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
@@ -411,7 +411,7 @@ class TestTDModule:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 32)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(32)
-        else:
+        else:  # pragma: no cover
             raise NotImplementedError
         spec = (
             CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
@@ -515,8 +515,6 @@ class TestTDModule:
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
-        elif safe and spec_type == "bounded":
-            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -528,8 +526,6 @@ class TestTDModule:
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
-        elif safe and spec_type == "bounded":
-            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
     @pytest.mark.skipif(
         not _has_functorch, reason="vmap can only be used with functorch"
@@ -551,7 +547,7 @@ class TestTDModule:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
-        else:
+        else:  # pragma: no cover
             raise NotImplementedError
         spec = (
             CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
@@ -603,8 +599,6 @@ class TestTDModule:
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
-        elif safe and spec_type == "bounded":
-            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -616,8 +610,6 @@ class TestTDModule:
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
-        elif safe and spec_type == "bounded":
-            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
 
 class TestTDSequence:
@@ -729,7 +721,7 @@ class TestTDSequence:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
-        else:
+        else:  # pragma: no cover
             raise NotImplementedError
         spec = (
             CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
@@ -876,7 +868,7 @@ class TestTDSequence:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
-        else:
+        else:  # pragma: no cover
             raise NotImplementedError
         spec = (
             CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
@@ -1040,7 +1032,7 @@ class TestTDSequence:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 7)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(7)
-        else:
+        else:  # pragma: no cover
             raise NotImplementedError
         spec = (
             CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
@@ -1187,8 +1179,6 @@ class TestTDSequence:
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
-        elif safe and spec_type == "bounded":
-            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -1200,8 +1190,6 @@ class TestTDSequence:
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
-        elif safe and spec_type == "bounded":
-            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
     @pytest.mark.skipif(
         not _has_functorch, reason="vmap can only be used with functorch"
@@ -1223,7 +1211,7 @@ class TestTDSequence:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
-        else:
+        else:  # pragma: no cover
             raise NotImplementedError
         spec = (
             CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
@@ -1271,8 +1259,6 @@ class TestTDSequence:
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
-        elif safe and spec_type == "bounded":
-            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -1284,8 +1270,6 @@ class TestTDSequence:
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
-        elif safe and spec_type == "bounded":
-            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
     @pytest.mark.parametrize("functional", [True, False])
     def test_submodule_sequence(self, functional):
@@ -1419,7 +1403,7 @@ def test_is_tensordict_compatible():
             self.linear_2 = nn.Linear(in_1, out_2)
             self.linear_3 = nn.Linear(in_1, out_3)
 
-        def forward(self, x):
+        def forward(self, x):  # pragma: no cover
             return self.linear_1(x), self.linear_2(x), self.linear_3(x)
 
     td_module = SafeModule(
@@ -1434,7 +1418,7 @@ def test_is_tensordict_compatible():
             self.in_keys = in_keys
             self.out_keys = out_keys
 
-        def forward(self, tensordict):
+        def forward(self, tensordict):  # pragma: no cover
             pass
 
     compatible_nn_module = MockCompatibleModule(
@@ -1444,7 +1428,7 @@ def test_is_tensordict_compatible():
     assert is_tensordict_compatible(compatible_nn_module)
 
     class MockIncompatibleModuleNoKeys(nn.Module):
-        def forward(self, input):
+        def forward(self, input):  # pragma: no cover
             pass
 
     incompatible_nn_module_no_keys = MockIncompatibleModuleNoKeys()
@@ -1455,7 +1439,7 @@ def test_is_tensordict_compatible():
             self.in_keys = in_keys
             self.out_keys = out_keys
 
-        def forward(self, input_1, input_2):
+        def forward(self, input_1, input_2):  # pragma: no cover
             pass
 
     incompatible_nn_module_multi_args = MockIncompatibleModuleMultipleArgs(
@@ -1474,7 +1458,7 @@ def test_ensure_tensordict_compatible():
             self.linear_2 = nn.Linear(in_1, out_2)
             self.linear_3 = nn.Linear(in_1, out_3)
 
-        def forward(self, x):
+        def forward(self, x):  # pragma: no cover
             return self.linear_1(x), self.linear_2(x), self.linear_3(x)
 
     td_module = SafeModule(
@@ -1490,10 +1474,7 @@ def test_ensure_tensordict_compatible():
         ensure_tensordict_compatible(td_module, out_keys=["output"])
 
     class NonNNModule:
-        def __init__(self):
-            pass
-
-        def forward(self, x):
+        def forward(self, x):  # pragma: no cover
             pass
 
     non_nn_module = NonNNModule()
@@ -1501,7 +1482,7 @@ def test_ensure_tensordict_compatible():
         ensure_tensordict_compatible(non_nn_module)
 
     class ErrorNNModule(nn.Module):
-        def forward(self, in_1, in_2):
+        def forward(self, in_1, in_2):  # pragma: no cover
             pass
 
     error_nn_module = ErrorNNModule()
@@ -1518,6 +1499,6 @@ def test_ensure_tensordict_compatible():
     assert isinstance(ensured_module, SafeModule)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
