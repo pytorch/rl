@@ -321,7 +321,9 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
 
         if cfg.gSDE:
             if cfg.shared_mapping:
-                tsf_loc = actor[-1].module[-1].module.transform(td_clone.get("loc"))
+                tsf_loc = (
+                    actor.module[-1].module[-1].module.transform(td_clone.get("loc"))
+                )
             else:
                 tsf_loc = actor.module[-1].module.transform(td_clone.get("loc"))
 
@@ -448,7 +450,9 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
 
         if cfg.gSDE:
             if cfg.shared_mapping:
-                tsf_loc = actor[-1].module[-1].module.transform(td_clone.get("loc"))
+                tsf_loc = (
+                    actor.module[-1].module[-1].module.transform(td_clone.get("loc"))
+                )
             else:
                 tsf_loc = actor.module[-1].module.transform(td_clone.get("loc"))
 
