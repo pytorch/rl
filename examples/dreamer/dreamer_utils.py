@@ -91,7 +91,7 @@ def make_env_transforms(
         env.append_transform(FlattenObservation(0))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
         if stats is None:
-            obs_stats = {"loc": 0.0, "scale": 1.0}
+            obs_stats = {"loc": None, "scale": None}
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
