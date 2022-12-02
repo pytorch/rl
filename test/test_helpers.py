@@ -244,7 +244,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
 @pytest.mark.parametrize("action_space", ["discrete", "continuous"])
 def test_ppo_maker(
     device, from_pixels, shared_mapping, gsde, exploration, action_space
-): 
+):
     if not gsde and exploration != "random":
         pytest.skip("no need to test this setting")
     flags = list(from_pixels + shared_mapping + gsde)
