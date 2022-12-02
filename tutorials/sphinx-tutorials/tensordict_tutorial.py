@@ -84,6 +84,12 @@ TensorDict
 # However to achieve this you would need to write a complicated collate
 # function that make sure that every modality is aggregated properly.
 
+# sphinx_gallery_start_ignore
+import warnings
+
+warnings.filterwarnings("ignore")
+# sphinx_gallery_end_ignore
+
 
 def collate_dict_fn(dict_list):
     final_dict = {}
@@ -122,6 +128,7 @@ def collate_dict_fn(dict_list):
 #
 # TensorDict structure
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 
 import torch
 

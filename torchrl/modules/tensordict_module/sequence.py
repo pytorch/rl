@@ -31,76 +31,73 @@ class SafeSequential(TensorDictSequential, SafeModule):
 
     TensorDictSequence supports functional, modular and vmap coding:
     Examples:
-        >>> import functorch
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import TanhNormal, SafeSequential, NormalParamWrapper
+        >>> from tensordict.nn.functional_modules import make_functional
+        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
+        >>> from torchrl.modules import TanhNormal, SafeSequential, SafeModule, NormalParamWrapper
         >>> from torchrl.modules.tensordict_module import SafeProbabilisticModule
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
-        >>> spec1 = NdUnboundedContinuousTensorSpec(4)
+        >>> spec1 = CompositeSpec(hidden=NdUnboundedContinuousTensorSpec(4), loc=None, scale=None)
         >>> net1 = NormalParamWrapper(torch.nn.Linear(4, 8))
-        >>> fnet1, params1, buffers1 = functorch.make_functional_with_buffers(net1)
-        >>> fmodule1 = SafeModule(fnet1, in_keys=["input"], out_keys=["loc", "scale"])
+        >>> module1 = SafeModule(net1, in_keys=["input"], out_keys=["loc", "scale"])
         >>> td_module1 = SafeProbabilisticModule(
-        ...    module=fmodule1,
-        ...    spec=spec1,
-        ...    dist_in_keys=["loc", "scale"],
-        ...    sample_out_key=["hidden"],
-        ...    distribution_class=TanhNormal,
-        ...    return_log_prob=True,
-        ...    )
+        ...     module=module1,
+        ...     spec=spec1,
+        ...     dist_in_keys=["loc", "scale"],
+        ...     sample_out_key=["hidden"],
+        ...     distribution_class=TanhNormal,
+        ...     return_log_prob=True,
+        ... )
         >>> spec2 = NdUnboundedContinuousTensorSpec(8)
         >>> module2 = torch.nn.Linear(4, 8)
-        >>> fmodule2, params2, buffers2 = functorch.make_functional_with_buffers(module2)
         >>> td_module2 = SafeModule(
-        ...    module=fmodule2,
+        ...    module=module2,
         ...    spec=spec2,
         ...    in_keys=["hidden"],
         ...    out_keys=["output"],
         ...    )
         >>> td_module = SafeSequential(td_module1, td_module2)
-        >>> params = params1 + params2
-        >>> buffers = buffers1 + buffers2
-        >>> _ = td_module(td, params=params, buffers=buffers)
+        >>> params = make_functional(td_module)
+        >>> td_module(td, params=params)
         >>> print(td)
         TensorDict(
             fields={
+                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                output: Tensor(torch.Size([3, 8]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                output: Tensor(torch.Size([3, 8]), dtype=torch.float32)},
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu,
+            device=None,
             is_shared=False)
-
         >>> # The module spec aggregates all the input specs:
         >>> print(td_module.spec)
         CompositeSpec(
             hidden: NdUnboundedContinuousTensorSpec(
-                 shape=torch.Size([4]),space=None,device=cpu,dtype=torch.float32,domain=continuous),
+                shape=torch.Size([4]), space=None, device=cpu, dtype=torch.float32, domain=continuous),
+            loc: None,
+            scale: None,
             output: NdUnboundedContinuousTensorSpec(
-                 shape=torch.Size([8]),space=None,device=cpu,dtype=torch.float32,domain=continuous))
+                shape=torch.Size([8]), space=None, device=cpu, dtype=torch.float32, domain=continuous))
 
     In the vmap case:
-        >>> params = tuple(p.expand(4, *p.shape).contiguous().normal_() for p in params)
-        >>> buffers = tuple(b.expand(4, *b.shape).contiguous().normal_() for p in buffers)
-        >>> td_vmap = td_module(td, params=params, buffers=buffers, vmap=True)
+        >>> from functorch import vmap
+        >>> params = params.expand(4, *params.shape)
+        >>> td_vmap = vmap(td_module, (None, 0))(td, params)
         >>> print(td_vmap)
         TensorDict(
             fields={
+                hidden: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 loc: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
-                scale: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
+                output: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([4, 3, 1]), dtype=torch.float32),
-                output: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32)},
+                scale: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([4, 3]),
-            device=cpu,
+            device=None,
             is_shared=False)
-
 
     """
 
