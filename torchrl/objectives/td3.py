@@ -143,7 +143,6 @@ class TD3Loss(LossModule):
             -self.max_action, self.max_action
         )
         actor_output_td[1].set("action", next_action, inplace=True)
-        # repeat tensordict_actor to match the qvalue size
 
         tensordict_qval = torch.cat(
             [  # state with current policy action for actor loss
@@ -220,17 +219,26 @@ class TD3Loss(LossModule):
             pred_next_val=target_qvalue,
         )
 
-        td_error = (pred_qval - target_value).pow(2)
         loss_qval = distance_loss(
             pred_qval,
             target_value.expand_as(pred_qval),
             loss_function=self.loss_function,
-        ).mean(0)
+        ).sum(0)
 
-        tensordict.set("td_error", td_error.detach().max(0)[0])
+        td_error = (pred_qval - target_value.expand_as(pred_qval)).pow(2).mean(0)
+        td_error = td_error.detach()
+        td_error = td_error.unsqueeze(tensordict.ndimension())
+        if tensordict.device is not None:
+            td_error = td_error.to(tensordict.device)
+        tensordict.set(
+            "td_error",
+            td_error,
+            inplace=True,
+        )
+        
         out_dict = {
             "loss_qvalue": loss_qval.mean(),
-            "td_error": td_error.detach().max(0)[0],
+            # "td_error": td_error.detach().max(0)[0].mean(),
             "state_action_value_actor": state_action_value_actor.mean().detach(),
             "next_state_value": target_qvalues.mean().detach(),
             "target_value": target_value.mean().detach(),
@@ -241,7 +249,7 @@ class TD3Loss(LossModule):
             loss_actor = -state_action_value_actor[0].mean()
             out_dict.update({"loss_actor": loss_actor.mean()})
         else:
-            out_dict.update({"loss_actor": 0.0})
+            out_dict.update({"loss_actor": torch.FloatTensor([0.0]).squeeze()})
 
         td_out = TensorDict(
             out_dict,
