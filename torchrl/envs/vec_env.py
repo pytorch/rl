@@ -1089,7 +1089,7 @@ class MultiThreadedEnv(EnvBase):
 
     _verbose: bool = False
     _excluded_wrapped_keys = [
-        #"is_closed",
+        "is_closed",
         "parent_channels",
         "batch_size",
         "_dummy_env_str",
@@ -1278,10 +1278,12 @@ class MultiThreadedEnv(EnvBase):
                         )
                     )
             else:
-                self.action_spec = _gym_to_torchrl_spec_transform(
+                self._input_spec = CompositeSpec(
+                        action=_dmcontrol_to_torchrl_spec_transform( #_gym_to_torchrl_spec_transform(
                 action_spec,
                 device=self.device,
             )
+                )
 
         print(f"returning self._input_spec={self._input_spec}")
         return self._input_spec
@@ -1361,20 +1363,26 @@ class MultiThreadedEnv(EnvBase):
             f"\n\tbatch_size={self.batch_size})"
         )
 
+    # def close(self) -> None:
+    #     print(f"self.is_closed = {self.is_closed}")
+    #     if self.is_closed:
+    #         raise RuntimeError("trying to close a closed environment")
+    #     if self._verbose:
+    #         print(f"closing {self.__class__.__name__}")
+
+    #     # self.observation_spec = None
+    #     # self.reward_spec = None
+
+    #     #self._shutdown_workers()
+    #     print("attempting to set is_closed = True")
+    #     self.is_closed = True
+    #     print("finished setting is_closed = True")
+
     def close(self) -> None:
-        print(f"self.is_closed = {self.is_closed}")
-        if self.is_closed:
-            raise RuntimeError("trying to close a closed environment")
-        if self._verbose:
-            print(f"closing {self.__class__.__name__}")
-
-        # self.observation_spec = None
-        # self.reward_spec = None
-
-        #self._shutdown_workers()
-        print("attempting to set is_closed = True")
         self.is_closed = True
-        print("finished setting is_closed = True")
+
+    def __del__(self):
+        pass
 
 
     @_check_start
@@ -1388,7 +1396,7 @@ class MultiThreadedEnv(EnvBase):
         print(f"got step output {step_output}")
 
 
-        tensordict_out = self._output_transform(step_output)
+        tensordict_out = self._output_transform_step(step_output)
         print(f"got _output_transform_output {tensordict_out}")
 
         #obs_dict, reward, done, info = self._output_transform(step_output)
@@ -1434,27 +1442,50 @@ class MultiThreadedEnv(EnvBase):
         print("---------- ", self._device)
         # if not isinstance(reset_data, tuple):
         #     reset_data = (reset_data,)
-        tensordict_out = self._output_transform(reset_data)
+        tensordict_out = self._output_transform_reset(reset_data)
         return tensordict_out
 
-    def _output_transform(self, envpool_output):
+    def _output_transform_reset(self, envpool_output):
         print("---- envpool_output -----")
         print(envpool_output)
         if self.env_type == "gym":
             obs, _ = envpool_output
+            #reward = torch.zeros(self.num_workers)
+        else:
+            obs = envpool_output.observation.obs
+            #reward = envpool_output.reward
+        tensordict_out = TensorDict(
+            {"observation": torch.tensor(obs),
+             #"reward": torch.tensor(reward)
+             },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+        self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
+        tensordict_out.set("done", self._is_done)
+        return tensordict_out
+
+
+    def _output_transform_step(self, envpool_output):
+        print("---- envpool_output -----")
+        print(envpool_output)
+        if self.env_type == "gym":
+            obs, reward, done, info, env_ids = envpool_output
         else:
             obs = envpool_output.observation.obs
             reward = envpool_output.reward
         tensordict_out = TensorDict(
             {"observation": torch.tensor(obs),
-            "reward": torch.tensor(reward)}, #self.read_obs(obs),
+             "reward": torch.tensor(reward)
+             },
             batch_size=self.batch_size,
             device=self.device,
-            #device=self.device,
         )
         self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
         tensordict_out.set("done", self._is_done)
         return tensordict_out
+
+
 
 
     def _create_td(self):
