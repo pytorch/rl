@@ -24,8 +24,9 @@ from torchrl.trainers.helpers.collectors import (
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     EnvConfig,
-    generate_stats_from_observation_norms,
+    initialize_observation_norm_transforms,
     parallel_env_constructor,
+    retrieve_observation_norms_state_dict,
     transformed_env_constructor,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
@@ -105,20 +106,25 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
     video_tag = exp_name if cfg.record_video else ""
 
+    key, init_env_steps, stats = None, None, None
     if not cfg.vecnorm and cfg.norm_stats:
-        proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
+        if not hasattr(cfg, "init_env_steps"):
+            raise AttributeError("init_env_steps missing from arguments.")
         key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
-        _, stats = generate_stats_from_observation_norms(cfg, proof_env, key)[0]
-        proof_env.close()
+        init_env_steps = cfg.init_env_steps
+        stats = {"loc": None, "scale": None}
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
-    else:
-        stats = {"loc": 0.0, "scale": 1.0}
+
     proof_env = transformed_env_constructor(
         cfg=cfg,
-        use_env_creator=False,
         stats=stats,
+        use_env_creator=False,
     )()
+    initialize_observation_norm_transforms(
+        proof_environment=proof_env, num_iter=init_env_steps, key=key
+    )
+    _, obs_norm_state_dict = retrieve_observation_norms_state_dict(proof_env)[0]
 
     model = make_ddpg_actor(
         proof_env,
@@ -151,9 +157,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         action_dim_gsde, state_dim_gsde = None, None
 
     proof_env.close()
+
     create_env_fn = parallel_env_constructor(
         cfg=cfg,
-        stats=stats,
+        obs_norm_state_dict=obs_norm_state_dict,
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
@@ -174,7 +181,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg,
         video_tag=video_tag,
         norm_obs_only=True,
-        stats=stats,
+        obs_norm_state_dict=obs_norm_state_dict,
         logger=logger,
         use_env_creator=False,
     )()

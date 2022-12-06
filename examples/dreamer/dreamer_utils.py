@@ -52,6 +52,7 @@ def make_env_transforms(
     action_dim_gsde,
     state_dim_gsde,
     batch_dims=0,
+    obs_norm_state_dict=None,
 ):
     env = TransformedEnv(env)
 
@@ -95,7 +96,10 @@ def make_env_transforms(
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
-        env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
+        obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
+        if obs_norm_state_dict:
+            obs_norm.load_state_dict(obs_norm_state_dict)
+        env.append_transform(obs_norm)
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -141,6 +145,7 @@ def transformed_env_constructor(
     action_dim_gsde: Optional[int] = None,
     state_dim_gsde: Optional[int] = None,
     batch_dims: Optional[int] = 0,
+    obs_norm_state_dict: Optional[dict] = None,
 ) -> Union[Callable, EnvCreator]:
     """
     Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
@@ -171,6 +176,8 @@ def transformed_env_constructor(
         batch_dims (int, optional): number of dimensions of a batch of data. If a single env is
             used, it should be 0 (default). If multiple envs are being transformed in parallel,
             it should be set to 1 (or the number of dims of the batch).
+        obs_norm_state_dict (dict, optional): the state_dict of the ObservationNorm transform to be loaded
+            into the environment
     """
 
     def make_transformed_env(**kwargs) -> TransformedEnv:
@@ -226,6 +233,7 @@ def transformed_env_constructor(
             action_dim_gsde,
             state_dim_gsde,
             batch_dims=batch_dims,
+            obs_norm_state_dict=obs_norm_state_dict,
         )
 
     if use_env_creator:
@@ -335,12 +343,12 @@ def grad_norm(optimizer: torch.optim.Optimizer):
     return sum_of_sq.sqrt().detach().item()
 
 
-def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
+def make_recorder_env(cfg, video_tag, obs_norm_state_dict, logger, create_env_fn):
     recorder = transformed_env_constructor(
         cfg,
         video_tag=video_tag,
         norm_obs_only=True,
-        stats=stats,
+        obs_norm_state_dict=obs_norm_state_dict,
         logger=logger,
         use_env_creator=False,
     )()

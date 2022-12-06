@@ -34,7 +34,7 @@ from torchrl.modules.tensordict_module.common import _has_functorch
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import (
     EnvConfig,
-    generate_stats_from_observation_norms,
+    initialize_observation_norm_transforms,
 )
 from torchrl.trainers.helpers.losses import A2CLossConfig, make_a2c_loss
 from torchrl.trainers.helpers.models import (
@@ -915,22 +915,18 @@ def test_stats_from_observation_norm(from_pixels):
             cfg,
             use_env_creator=False,
             custom_env_maker=env_maker,
+            stats={"loc": None, "scale": None},
         )()
         env.append_transform(ObservationNorm(in_keys=[key]))
 
-        stats = generate_stats_from_observation_norms(
-            cfg, proof_environment=env, key=key
+        pre_init_state_dict = env.transform.state_dict()
+        initialize_observation_norm_transforms(
+            proof_environment=env, num_iter=cfg.init_env_steps, key=key
         )
+        post_init_state_dict = env.transform.state_dict()
 
-        assert len(stats) == 2
-
-        assert list(stats[0][1].keys()) == ["loc", "scale"]
-        assert list(stats[1][1].keys()) == ["loc", "scale"]
-
-        assert stats[0][1]["loc"].shape == env.observation_spec[key].shape
-        assert stats[0][1]["loc"].shape == env.observation_spec[key].shape
-        assert stats[1][1]["scale"].shape == env.observation_spec[key].shape
-        assert stats[1][1]["scale"].shape == env.observation_spec[key].shape
+        # assert that we have at least initialized the ObservationNorm appended in the test
+        assert len(pre_init_state_dict) < len(post_init_state_dict)
 
 
 if __name__ == "__main__":

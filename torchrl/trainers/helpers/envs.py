@@ -33,7 +33,6 @@ from torchrl.envs.transforms.transforms import FlattenObservation, gSDENoise
 from torchrl.record.recorder import VideoRecorder
 from torchrl.trainers.loggers import Logger
 
-
 LIBS = {
     "gym": GymEnv,
     "dm_control": DMControlEnv,
@@ -85,6 +84,7 @@ def make_env_transforms(
     action_dim_gsde,
     state_dim_gsde,
     batch_dims=0,
+    obs_norm_state_dict=None,
 ):
     """Creates the typical transforms for and env."""
     env = TransformedEnv(env)
@@ -126,11 +126,17 @@ def make_env_transforms(
         env.append_transform(FlattenObservation(0))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
         if stats is None:
-            obs_stats = {"loc": None, "scale": None}
+            obs_stats = {
+                "loc": torch.zeros(env.observation_spec["pixels"].shape),
+                "scale": torch.ones(env.observation_spec["pixels"].shape),
+            }
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
-        env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
+        obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
+        if obs_norm_state_dict:
+            obs_norm.load_state_dict(obs_norm_state_dict)
+        env.append_transform(obs_norm)
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -163,12 +169,18 @@ def make_env_transforms(
 
         if not vecnorm:
             if stats is None:
-                _stats = {"loc": None, "scale": None}
+                _stats = {
+                    "loc": torch.zeros(env.observation_spec[out_key].shape),
+                    "scale": torch.ones(env.observation_spec[out_key].shape),
+                }
             else:
                 _stats = stats
-            env.append_transform(
-                ObservationNorm(**_stats, in_keys=[out_key], standard_normal=True)
+            obs_norm = ObservationNorm(
+                **_stats, in_keys=[out_key], standard_normal=True
             )
+            if obs_norm_state_dict:
+                obs_norm.load_state_dict(obs_norm_state_dict)
+            env.append_transform(obs_norm)
         else:
             env.append_transform(
                 VecNorm(
@@ -202,6 +214,7 @@ def make_env_transforms(
         )
 
     env.append_transform(FiniteTensorDictCheck())
+
     return env
 
 
@@ -218,6 +231,7 @@ def transformed_env_constructor(
     action_dim_gsde: Optional[int] = None,
     state_dim_gsde: Optional[int] = None,
     batch_dims: Optional[int] = 0,
+    obs_norm_state_dict: Optional[dict] = None,
 ) -> Union[Callable, EnvCreator]:
     """Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
@@ -247,6 +261,8 @@ def transformed_env_constructor(
         batch_dims (int, optional): number of dimensions of a batch of data. If a single env is
             used, it should be 0 (default). If multiple envs are being transformed in parallel,
             it should be set to 1 (or the number of dims of the batch).
+        obs_norm_state_dict (dict, optional): the state_dict of the ObservationNorm transform to be loaded into the
+            environment
     """
 
     def make_transformed_env(**kwargs) -> TransformedEnv:
@@ -307,6 +323,7 @@ def transformed_env_constructor(
             action_dim_gsde,
             state_dim_gsde,
             batch_dims=batch_dims,
+            obs_norm_state_dict=obs_norm_state_dict,
         )
 
     if use_env_creator:
@@ -429,45 +446,31 @@ def get_stats_random_rollout(
     return stats
 
 
-def generate_stats_from_observation_norms(
-    cfg: "DictConfig",  # noqa: F821
-    proof_environment: EnvBase = None,
+def initialize_observation_norm_transforms(
+    proof_environment: EnvBase,
+    num_iter: int = 1000,
     key: Union[str, Tuple[str, ...]] = None,
 ):
-    """Generate stats (loc and scale) of the uninitialized ObservationNorm transforms of a TransformedEnv using its init_stats method.
+    """Calling init_stats on all uninitialised ObservationNorms transform of a TransformedEnv.
 
-    Returns a list of (idx, stats) where idx represents the index in the Compose transform of the
-    uninitialized ObservationNorm.
-
-    If the TransformedEnv transform is of type ObservationNorm, the index will be set to 0
+    If an ObservationNorm already has non-null loc or stats, it will be skipped.
+    If the transform of the environment does not contain any ObservationNorm, nothing will happen.
+    If no key is provided but the observations of the Environment contains more than one key, an exception will
+    be raised.
 
     Args:
-        cfg (DictConfig): a config object with `init_env_steps` field, indicating
-            the total number of frames to be collected to compute the stats.
         proof_environment (EnvBase instance, optional): if provided, this env will
             be used ot execute the rollouts. If not, it will be created using
             the cfg object.
+        num_iter (int): Number of iterations used for initializing the ObservationNorms
         key (str, optional): if provided, the stats of this key will be gathered.
             If not, it is expected that only one key exists in `env.observation_spec`.
 
     """
-    proof_env_is_none = proof_environment is None
-    if proof_env_is_none:
-        proof_environment = transformed_env_constructor(
-            cfg=cfg, use_env_creator=False
-        )()
-
-    if not hasattr(cfg, "init_env_steps"):
-        raise AttributeError("init_env_steps missing from arguments.")
-
-    if (
-        type(proof_environment.transform) != Compose
-        and type(proof_environment.transform) != ObservationNorm
+    if not isinstance(proof_environment.transform, Compose) and not isinstance(
+        proof_environment.transform, ObservationNorm
     ):
-        raise TypeError(
-            f"Expected a Compose or ObservationNorm Transform for the TransformedEnv. "
-            f"Actual {type(proof_environment.transform)}"
-        )
+        return
 
     if key is None:
         keys = list(proof_environment.observation_spec.keys())
@@ -478,35 +481,41 @@ def generate_stats_from_observation_norms(
                 "thus generate_stats_from_observation_norm cannot infer which to compute the stats of."
             )
 
-    obs_norm_transforms = []
-    if type(proof_environment.transform) == Compose:
-        for idx, transform in enumerate(proof_environment.transform):
+    if isinstance(proof_environment.transform, Compose):
+        for transform in proof_environment.transform:
             if (
-                type(transform) == ObservationNorm
+                isinstance(transform, ObservationNorm)
                 and transform.loc is None
                 and transform.scale is None
             ):
-                obs_norm_transforms.append((idx, transform))
-    else:
-        obs_norm_transforms.append((0, proof_environment.transform))
+                transform.init_stats(num_iter=num_iter, key=key)
+    elif (
+        proof_environment.transform.loc is None
+        and proof_environment.transform.scale is None
+    ):
+        proof_environment.transform.init_stats(num_iter=num_iter, key=key)
 
-    stats = []
-    for (idx, transform) in obs_norm_transforms:
-        # the ObservationNorm transforms should be naturally sorted by index, so we can simply compute their init_stats
-        # one after another
-        transform.init_stats(num_iter=cfg.init_env_steps, key=key)
-        stats.append((idx, {"loc": transform.loc, "scale": transform.scale}))
 
-    if proof_env_is_none:
-        proof_environment.close()
-        if (
-            proof_environment.device != torch.device("cpu")
-            and torch.cuda.device_count() > 0
-        ):
-            torch.cuda.empty_cache()
-        del proof_environment
+def retrieve_observation_norms_state_dict(proof_environment: TransformedEnv):
+    """Traverse the transforms of the environment and retrieve the ObservationNorm state dicts.
 
-    return stats
+    Returns a list of tuple (idx, state_dict) for each ObservationNorm transform in proof_environment
+    If the environment transform does not contain any ObservationNorm, returns an empty list
+
+    Args:
+        proof_environment (EnvBase instance, optional): the TransformedEnv to retrieve the ObservationNorm state dict from
+    """
+    obs_norm_state_dicts = []
+
+    if isinstance(proof_environment.transform, Compose):
+        for idx, transform in enumerate(proof_environment.transform):
+            if isinstance(transform, ObservationNorm):
+                obs_norm_state_dicts.append((idx, transform.state_dict()))
+
+    if isinstance(proof_environment.transform, ObservationNorm):
+        obs_norm_state_dicts.append((0, proof_environment.transform.state_dict()))
+
+    return obs_norm_state_dicts
 
 
 @dataclass
