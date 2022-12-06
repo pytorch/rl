@@ -22,15 +22,15 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
+from torchrl._utils import _check_for_faulty_process, prod
+from torchrl.collectors.utils import split_trajectories
+from torchrl.data import TensorSpec
+from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
+from torchrl.envs.common import EnvBase
+
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
-
-from .._utils import _check_for_faulty_process, prod
-from ..data import TensorSpec
-from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
-from ..envs.common import EnvBase
-from ..envs.vec_env import _BatchedEnv
-from .utils import split_trajectories
+from torchrl.envs.vec_env import _BatchedEnv
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
@@ -296,6 +296,48 @@ class SyncDataCollector(_DataCollector):
             updated. This feature should be used cautiously: if the same tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
             Default is False.
+
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torch import nn
+        >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+        >>> collector = SyncDataCollector(
+        ...     create_env_fn=env_maker,
+        ...     policy=policy,
+        ...     total_frames=2000,
+        ...     max_frames_per_traj=50,
+        ...     frames_per_batch=200,
+        ...     init_random_frames=-1,
+        ...     reset_at_each_iter=False,
+        ...     device="cpu",
+        ...     passing_device="cpu",
+        ... )
+        >>> for i, data in enumerate(collector):
+        ...     if i == 2:
+        ...         print(data)
+        ...         break
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                done: Tensor(torch.Size([4, 50, 1]), dtype=torch.bool),
+                mask: Tensor(torch.Size([4, 50, 1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([4, 50, 3]), dtype=torch.float32)},
+                    batch_size=torch.Size([4, 50]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([4, 50, 3]), dtype=torch.float32),
+                reward: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                step_count: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                traj_ids: Tensor(torch.Size([4, 50, 1, 1]), dtype=torch.float32)},
+            batch_size=torch.Size([4, 50]),
+            device=cpu,
+            is_shared=False)
+        >>> del collector
+
     """
 
     def __init__(
@@ -471,8 +513,10 @@ class SyncDataCollector(_DataCollector):
             seed will be incremented for each of these. The resulting seed is the seed of the last environment.
 
         Examples:
+            >>> from torchrl.envs import ParallelEnv
+            >>> from torchrl.envs.libs.gym import GymEnv
             >>> env_fn = lambda: GymEnv("Pendulum-v1")
-            >>> env_fn_parallel = lambda: ParallelEnv(6, env_fn)
+            >>> env_fn_parallel = ParallelEnv(6, env_fn)
             >>> collector = SyncDataCollector(env_fn_parallel)
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
@@ -1094,6 +1138,48 @@ class MultiSyncDataCollector(_MultiDataCollector):
     trajectory and the start of the next collection.
     This class can be safely used with online RL algorithms.
 
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torch import nn
+        >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+        >>> collector = MultiSyncDataCollector(
+        ...     create_env_fn=[env_maker, env_maker],
+        ...     policy=policy,
+        ...     total_frames=2000,
+        ...     max_frames_per_traj=50,
+        ...     frames_per_batch=200,
+        ...     init_random_frames=-1,
+        ...     reset_at_each_iter=False,
+        ...     devices="cpu",
+        ...     passing_devices="cpu",
+        ... )
+        >>> for i, data in enumerate(collector):
+        ...     if i == 2:
+        ...         print(data)
+        ...         break
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                done: Tensor(torch.Size([4, 50, 1]), dtype=torch.bool),
+                mask: Tensor(torch.Size([4, 50, 1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([4, 50, 3]), dtype=torch.float32)},
+                    batch_size=torch.Size([4, 50]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([4, 50, 3]), dtype=torch.float32),
+                reward: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                step_count: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                traj_ids: Tensor(torch.Size([4, 50, 1, 1]), dtype=torch.float32)},
+            batch_size=torch.Size([4, 50]),
+            device=cpu,
+            is_shared=False)
+        >>> collector.shutdown()
+        >>> del collector
+
     """
 
     __doc__ += _MultiDataCollector.__doc__
@@ -1188,6 +1274,48 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     The collection keeps on occuring on all processes even between the time
     the batch of rollouts is collected and the next call to the iterator.
     This class can be safely used with offline RL algorithms.
+
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torch import nn
+        >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+        >>> collector = MultiaSyncDataCollector(
+        ...     create_env_fn=[env_maker, env_maker],
+        ...     policy=policy,
+        ...     total_frames=2000,
+        ...     max_frames_per_traj=50,
+        ...     frames_per_batch=200,
+        ...     init_random_frames=-1,
+        ...     reset_at_each_iter=False,
+        ...     devices="cpu",
+        ...     passing_devices="cpu",
+        ... )
+        >>> for i, data in enumerate(collector):
+        ...     if i == 2:
+        ...         print(data)
+        ...         break
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                done: Tensor(torch.Size([4, 50, 1]), dtype=torch.bool),
+                mask: Tensor(torch.Size([4, 50, 1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([4, 50, 3]), dtype=torch.float32)},
+                    batch_size=torch.Size([4, 50]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([4, 50, 3]), dtype=torch.float32),
+                reward: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                step_count: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                traj_ids: Tensor(torch.Size([4, 50, 1, 1]), dtype=torch.float32)},
+            batch_size=torch.Size([4, 50]),
+            device=cpu,
+            is_shared=False)
+        >>> collector.shutdown()
+        >>> del collector
 
     """
 
