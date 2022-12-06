@@ -768,7 +768,7 @@ class _MultiDataCollector(_DataCollector):
             workers only once the total number of frames has been collected on the server.
         create_env_kwargs (dict, optional): A (list of) dictionaries with the arguments used to create an environment
         max_frames_per_traj: Maximum steps per trajectory. Note that a trajectory can span over multiple batches
-            (unless reset_at_each_iter is set to True, see below). Once a trajectory reaches n_steps_max,
+            (unless reset_at_each_iter is set to True, see below). Once a traje tory reaches n_steps_max,
             the environment is reset. If the environment wraps multiple environments together, the number of steps
             is tracked for each environment independently. Negative values are allowed, in which case this argument
             is ignored.
