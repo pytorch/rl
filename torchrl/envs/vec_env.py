@@ -28,6 +28,7 @@ from torchrl.envs.env_creator import get_env_metadata
 from torchrl.envs.libs.dm_control import _dmcontrol_to_torchrl_spec_transform
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 import envpool
+from dm_env.specs import BoundedArray
 
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):
@@ -1269,13 +1270,19 @@ class MultiThreadedEnv(EnvBase):
         print("inside input_spec")
         if self._input_spec is None:
             action_spec = self._env.spec.action_spec()
+            if action_spec.shape == ():
+                action_spec = BoundedArray(shape=(1,), dtype=action_spec.dtype,
+                                                        name=action_spec.name,
+                                                        minimum=action_spec.minimum,
+                                                        maximum=action_spec.maximum)
             if self.env_type == "dm":
                     print(f"_input_spec is None")
                     print(f"action_spec = {action_spec}")
-                    self._input_spec = CompositeSpec(
-                        action=_dmcontrol_to_torchrl_spec_transform(
-                            action_spec, device=self.device
+                    transformed_spec = _dmcontrol_to_torchrl_spec_transform(
+                            action_spec, device=self.device,
                         )
+                    self._input_spec = CompositeSpec(
+                        action=transformed_spec
                     )
             else:
                 self._input_spec = CompositeSpec(
@@ -1391,6 +1398,8 @@ class MultiThreadedEnv(EnvBase):
         action = tensordict.get("action")
         #action_np = self.read_action(action)
 
+        if action.shape[1] == 1:
+            action = action.flatten()
         print(f"sending action {action}")
         step_output = self._env.step(action.numpy())
         print(f"got step output {step_output}")
