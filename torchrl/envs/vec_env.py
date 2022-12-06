@@ -1122,7 +1122,7 @@ class MultiThreadedEnv(EnvBase):
         #     )
         self._device = device
         self.is_closed = False
-        self.task_id = task_id
+        self.task_id = task_id.replace("ALE/", "")
         self.num_workers = num_workers
         self.env_type = env_type
         self.create_env_kwargs = create_env_kwargs or {}
@@ -1146,26 +1146,7 @@ class MultiThreadedEnv(EnvBase):
 
         self._dummy_env_str = None
         self._seeds = None
-        print(f"finished __init__ self._device={self._device}")
-        # self._prepare_dummy_env(create_env_fn, create_env_kwargs)
-        # self._get_metadata(create_env_fn, create_env_kwargs)
-
-    # def _get_metadata(
-    #     self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
-    # ):
-    #     if self._single_task:
-    #         # if EnvCreator, the metadata are already there
-    #         self.meta_data = get_env_metadata(
-    #             create_env_fn[0], create_env_kwargs[0]
-    #         ).expand(self.num_workers)
-    #     else:
-    #         n_tasks = len(create_env_fn)
-    #         self.meta_data = []
-    #         for i in range(n_tasks):
-    #             self.meta_data.append(
-    #                 get_env_metadata(create_env_fn[i], create_env_kwargs[i])
-    #             )
-    #     self._set_properties()
+        self.flatten = False
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
@@ -1180,19 +1161,6 @@ class MultiThreadedEnv(EnvBase):
         else:
             for _kwargs, _new_kwargs in zip(self.create_env_kwargs, kwargs):
                 _kwargs.update(_new_kwargs)
-
-    # def _set_properties(self):
-    #     meta_data = deepcopy(self.meta_data)
-
-    #     self._batch_size = meta_data.batch_size
-    #     self._observation_spec = meta_data.specs["observation_spec"]
-    #     self._reward_spec = meta_data.specs["reward_spec"]
-    #     self._input_spec = meta_data.specs["input_spec"]
-    #     self._dummy_env_str = meta_data.env_str
-    #     self._device = meta_data.device
-    #     self._env_tensordict = meta_data.tensordict
-    #     self._batch_locked = meta_data.batch_locked
-
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
@@ -1225,44 +1193,6 @@ class MultiThreadedEnv(EnvBase):
         print(f"self.input_spec={self.input_spec}")
         return self.input_spec["action"]
 
-    # @action_spec.setter
-    # def action_spec(self, value: TensorSpec) -> None:
-    #     if self._input_spec is None:
-    #         self._input_spec = CompositeSpec(action=value)
-    #     else:
-    #         self._input_spec["action"] = value
-
-    # @property
-    # def observation_spec(self) -> TensorSpec:
-    #     if self._observation_spec is None:
-    #         self._set_properties()
-    #     return self._observation_spec
-
-    # @observation_spec.setter
-    # def observation_spec(self, value: TensorSpec) -> None:
-    #     self._observation_spec = value
-
-    # @property
-    # def input_spec(self) -> TensorSpec:
-    #     if self._input_spec is None:
-    #         self._set_properties()
-    #     return self._input_spec
-
-    # @input_spec.setter
-    # def input_spec(self, value: TensorSpec) -> None:
-    #     self._input_spec = value
-
-    # @property
-    # def reward_spec(self) -> TensorSpec:
-    #     if self._reward_spec is None:
-    #         self._set_properties()
-    #     return self._reward_spec
-
-    # @reward_spec.setter
-    # def reward_spec(self, value: TensorSpec) -> None:
-    #     self._reward_spec = value
-
-
 
     @property
     def input_spec(self) -> TensorSpec:
@@ -1271,6 +1201,7 @@ class MultiThreadedEnv(EnvBase):
         if self._input_spec is None:
             action_spec = self._env.spec.action_spec()
             if action_spec.shape == ():
+                self.flatten = True
                 action_spec = BoundedArray(shape=(1,), dtype=action_spec.dtype,
                                                         name=action_spec.name,
                                                         minimum=action_spec.minimum,
@@ -1338,29 +1269,6 @@ class MultiThreadedEnv(EnvBase):
         self._env = envpool.make(task_id=self.task_id, env_type=self.env_type, num_envs=self.num_workers, **self.create_env_kwargs)
         self.is_closed = False
 
-
-    # def _make_specs(self) -> None:
-    #     obs_spec = self._env.spec.observation_spec()
-    #     action_spec = self._env.spec.action_spec()
-    #     if self.env_type == "dm":
-    #         self.action_spec = _dmcontrol_to_torchrl_spec_transform(
-    #             action_spec,
-    #             device=self.device
-    #         )
-    #         self.observation_spec = _dmcontrol_to_torchrl_spec_transform(
-    #             obs_spec,
-    #             device=self.device
-    #         )
-    #         if not isinstance(self.observation_spec, CompositeSpec):
-    #             if self.from_pixels:
-    #                 self.observation_spec = CompositeSpec(pixels=self.observation_spec)
-    #             else:
-    #                 self.observation_spec = CompositeSpec(observation=self.observation_spec)
-    #         self.reward_spec = UnboundedContinuousTensorSpec(
-    #         device=self.device,
-    #     )
-
-
     def __repr__(self) -> str:
         if self._dummy_env_str is None:
             self._dummy_env_str = self._set_properties()
@@ -1398,7 +1306,9 @@ class MultiThreadedEnv(EnvBase):
         action = tensordict.get("action")
         #action_np = self.read_action(action)
 
-        if action.shape[1] == 1:
+        # if action.shape[1] == 1:
+        #     action = action.flatten()
+        if self.flatten:
             action = action.flatten()
         print(f"sending action {action}")
         step_output = self._env.step(action.numpy())
@@ -1407,25 +1317,6 @@ class MultiThreadedEnv(EnvBase):
 
         tensordict_out = self._output_transform_step(step_output)
         print(f"got _output_transform_output {tensordict_out}")
-
-        #obs_dict, reward, done, info = self._output_transform(step_output)
-
-
-        # ######### Create tensordict_out depending on gym vs dm
-        # if reward is None:
-        #     reward = np.nan
-        # reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
-        # done = self._to_tensor(done, dtype=torch.bool)
-        # self.is_done = done
-
-        # tensordict_out = TensorDict(
-        #     obs_dict, batch_size=tensordict.batch_size, device=self.device
-        # )
-
-        # tensordict_out.set("reward", reward)
-        # tensordict_out.set("done", done)
-        # if self.info_dict_reader is not None and info is not None:
-        #     self.info_dict_reader(info, tensordict_out)
 
         return tensordict_out
 
@@ -1459,10 +1350,8 @@ class MultiThreadedEnv(EnvBase):
         print(envpool_output)
         if self.env_type == "gym":
             obs, _ = envpool_output
-            #reward = torch.zeros(self.num_workers)
         else:
             obs = envpool_output.observation.obs
-            #reward = envpool_output.reward
         tensordict_out = TensorDict(
             {"observation": torch.tensor(obs),
              #"reward": torch.tensor(reward)
@@ -1476,8 +1365,6 @@ class MultiThreadedEnv(EnvBase):
 
 
     def _output_transform_step(self, envpool_output):
-        print("---- envpool_output -----")
-        print(envpool_output)
         if self.env_type == "gym":
             obs, reward, done, info, env_ids = envpool_output
         else:
@@ -1514,11 +1401,6 @@ class MultiThreadedEnv(EnvBase):
         if device == self.device:
             return self
         self._device = device
-        # self.meta_data = (
-        #     self.meta_data.to(device)
-        #     if self._single_task
-        #     else [meta_data.to(device) for meta_data in self.meta_data]
-        # )
         if not self.is_closed:
             warn(
                 "Casting an open environment to another device requires closing and re-opening it. "
