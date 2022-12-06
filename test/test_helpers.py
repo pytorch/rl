@@ -252,7 +252,10 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
 @pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
 @pytest.mark.parametrize("shared_mapping", [(), ("shared_mapping=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
-def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
+@pytest.mark.parametrize("action_space", ["discrete", "continuous"])
+def test_ppo_maker(
+    device, from_pixels, shared_mapping, gsde, exploration, action_space
+):
     if not gsde and exploration != "random":
         pytest.skip("no need to test this setting")
     flags = list(from_pixels + shared_mapping + gsde)
@@ -273,11 +276,17 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
         # if gsde and from_pixels:
         #     pytest.skip("gsde and from_pixels are incompatible")
 
-        env_maker = (
-            ContinuousActionConvMockEnvNumpy
-            if from_pixels
-            else ContinuousActionVecMockEnv
-        )
+        if from_pixels:
+            if action_space == "continuous":
+                env_maker = ContinuousActionConvMockEnvNumpy
+            else:
+                env_maker = DiscreteActionConvMockEnvNumpy
+        else:
+            if action_space == "continuous":
+                env_maker = ContinuousActionVecMockEnv
+            else:
+                env_maker = DiscreteActionVecMockEnv
+
         env_maker = transformed_env_constructor(
             cfg,
             use_env_creator=False,
@@ -298,6 +307,18 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
                 )
             return
 
+        if action_space == "discrete" and cfg.gSDE:
+            with pytest.raises(
+                RuntimeError,
+                match="cannot use gSDE with discrete actions",
+            ):
+                actor_value = make_a2c_model(
+                    proof_environment,
+                    device=device,
+                    cfg=cfg,
+                )
+            return
+
         actor_value = make_ppo_model(
             proof_environment,
             device=device,
@@ -310,9 +331,11 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
             "sample_log_prob",
-            "loc",
-            "scale",
         ]
+        if action_space == "continuous":
+            expected_keys += ["loc", "scale"]
+        else:
+            expected_keys += ["logits"]
         if shared_mapping:
             expected_keys += ["hidden"]
         if len(gsde):
@@ -379,7 +402,10 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
 @pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
 @pytest.mark.parametrize("shared_mapping", [(), ("shared_mapping=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
-def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
+@pytest.mark.parametrize("action_space", ["discrete", "continuous"])
+def test_a2c_maker(
+    device, from_pixels, shared_mapping, gsde, exploration, action_space
+):
     A2CModelConfig.advantage_in_loss = False
     if not gsde and exploration != "random":
         pytest.skip("no need to test this setting")
@@ -403,11 +429,17 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
         # if gsde and from_pixels:
         #     pytest.skip("gsde and from_pixels are incompatible")
 
-        env_maker = (
-            ContinuousActionConvMockEnvNumpy
-            if from_pixels
-            else ContinuousActionVecMockEnv
-        )
+        if from_pixels:
+            if action_space == "continuous":
+                env_maker = ContinuousActionConvMockEnvNumpy
+            else:
+                env_maker = DiscreteActionConvMockEnvNumpy
+        else:
+            if action_space == "continuous":
+                env_maker = ContinuousActionVecMockEnv
+            else:
+                env_maker = DiscreteActionVecMockEnv
+
         env_maker = transformed_env_constructor(
             cfg,
             use_env_creator=False,
@@ -428,6 +460,18 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
                 )
             return
 
+        if action_space == "discrete" and cfg.gSDE:
+            with pytest.raises(
+                RuntimeError,
+                match="cannot use gSDE with discrete actions",
+            ):
+                actor_value = make_a2c_model(
+                    proof_environment,
+                    device=device,
+                    cfg=cfg,
+                )
+            return
+
         actor_value = make_a2c_model(
             proof_environment,
             device=device,
@@ -440,9 +484,11 @@ def test_a2c_maker(device, from_pixels, shared_mapping, gsde, exploration):
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
             "sample_log_prob",
-            "loc",
-            "scale",
         ]
+        if action_space == "continuous":
+            expected_keys += ["loc", "scale"]
+        else:
+            expected_keys += ["logits"]
         if shared_mapping:
             expected_keys += ["hidden"]
         if len(gsde):
