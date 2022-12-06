@@ -25,6 +25,8 @@ from torchrl.data import TensorSpec, CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
+from torchrl.envs.libs.dm_control import _dmcontrol_to_torchrl_spec_transform
+from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 import envpool
 
 def _check_start(fun):
@@ -1087,7 +1089,7 @@ class MultiThreadedEnv(EnvBase):
 
     _verbose: bool = False
     _excluded_wrapped_keys = [
-        "is_closed",
+        #"is_closed",
         "parent_channels",
         "batch_size",
         "_dummy_env_str",
@@ -1108,24 +1110,27 @@ class MultiThreadedEnv(EnvBase):
         shared_memory: bool = True,
         memmap: bool = False,
         policy_proof: Optional[Callable] = None,
-        device: Optional[DEVICE_TYPING] = None,
+        device: Optional[DEVICE_TYPING] = "cpu",
         allow_step_when_done: bool = False,
     ):
-        if device is not None:
-            raise ValueError(
-                "Device setting for batched environment can't be done at initialization. "
-                "The device will be inferred from the constructed environment. "
-                "It can be set through the `to(device)` method."
-            )
-
-        super().__init__(device=None)
-        self.is_closed = True
-
-        self.policy_proof = policy_proof
-        self.num_workers = num_workers
+        # if device is not None:
+        #     raise ValueError(
+        #         "Device setting for batched environment can't be done at initialization. "
+        #         "The device will be inferred from the constructed environment. "
+        #         "It can be set through the `to(device)` method."
+        #     )
+        self._device = device
+        self.is_closed = False
         self.task_id = task_id
+        self.num_workers = num_workers
         self.env_type = env_type
         self.create_env_kwargs = create_env_kwargs or {}
+        super().__init__(device=device)
+
+
+        self.policy_proof = policy_proof
+
+
         self.env_input_keys = env_input_keys
         self.pin_memory = pin_memory
         self.selected_keys = selected_keys
@@ -1136,9 +1141,11 @@ class MultiThreadedEnv(EnvBase):
 
         self._observation_spec = None
         self._reward_spec = None
-        self._device = None
+        self._input_spec = None
+
         self._dummy_env_str = None
         self._seeds = None
+        print(f"finished __init__ self._device={self._device}")
         # self._prepare_dummy_env(create_env_fn, create_env_kwargs)
         # self._get_metadata(create_env_fn, create_env_kwargs)
 
@@ -1202,6 +1209,7 @@ class MultiThreadedEnv(EnvBase):
 
     @property
     def device(self) -> torch.device:
+        print(f"accessed property!!! self._device={self._device}")
         if self._device is None:
             self._set_properties()
         return self._device
@@ -1211,19 +1219,71 @@ class MultiThreadedEnv(EnvBase):
         self.to(value)
 
     @property
-    def observation_spec(self) -> TensorSpec:
-        if self._observation_spec is None:
-            self._set_properties()
-        return self._observation_spec
+    def action_spec(self) -> TensorSpec:
+        print(f"inside action_spec")
+        print(f"self.input_spec={self.input_spec}")
+        return self.input_spec["action"]
 
-    @observation_spec.setter
-    def observation_spec(self, value: TensorSpec) -> None:
-        self._observation_spec = value
+    # @action_spec.setter
+    # def action_spec(self, value: TensorSpec) -> None:
+    #     if self._input_spec is None:
+    #         self._input_spec = CompositeSpec(action=value)
+    #     else:
+    #         self._input_spec["action"] = value
+
+    # @property
+    # def observation_spec(self) -> TensorSpec:
+    #     if self._observation_spec is None:
+    #         self._set_properties()
+    #     return self._observation_spec
+
+    # @observation_spec.setter
+    # def observation_spec(self, value: TensorSpec) -> None:
+    #     self._observation_spec = value
+
+    # @property
+    # def input_spec(self) -> TensorSpec:
+    #     if self._input_spec is None:
+    #         self._set_properties()
+    #     return self._input_spec
+
+    # @input_spec.setter
+    # def input_spec(self, value: TensorSpec) -> None:
+    #     self._input_spec = value
+
+    # @property
+    # def reward_spec(self) -> TensorSpec:
+    #     if self._reward_spec is None:
+    #         self._set_properties()
+    #     return self._reward_spec
+
+    # @reward_spec.setter
+    # def reward_spec(self, value: TensorSpec) -> None:
+    #     self._reward_spec = value
+
+
 
     @property
     def input_spec(self) -> TensorSpec:
+
+        print("inside input_spec")
         if self._input_spec is None:
-            self._set_properties()
+            action_spec = self._env.spec.action_spec()
+            if self.env_type == "dm":
+                    print(f"_input_spec is None")
+                    print(f"action_spec = {action_spec}")
+                    self._input_spec = CompositeSpec(
+                        action=_dmcontrol_to_torchrl_spec_transform(
+                            action_spec, device=self.device
+                        )
+                    )
+            else:
+                self.action_spec = _gym_to_torchrl_spec_transform(
+                action_spec,
+                device=self.device,
+            )
+
+        print(f"returning self._input_spec={self._input_spec}")
         return self._input_spec
 
     @input_spec.setter
@@ -1231,14 +1291,27 @@ class MultiThreadedEnv(EnvBase):
         self._input_spec = value
 
     @property
+    def observation_spec(self) -> TensorSpec:
+        if self._observation_spec is None:
+            self._observation_spec = _dmcontrol_to_torchrl_spec_transform(
+                self._env.spec.observation_spec(), device=self.device
+            )
+        return self._observation_spec
+
+    @observation_spec.setter
+    def observation_spec(self, value: TensorSpec) -> None:
+        self._observation_spec = value
+
+    @property
     def reward_spec(self) -> TensorSpec:
         if self._reward_spec is None:
-            self._set_properties()
+            self._reward_spec = _dmcontrol_to_torchrl_spec_transform(
+                self._env.spec.reward_spec(), device=self.device
+            )
         return self._reward_spec
 
-    @reward_spec.setter
-    def reward_spec(self, value: TensorSpec) -> None:
-        self._reward_spec = value
+
+
 
     def is_done_set_fn(self, value: bool) -> None:
         self._is_done = value.all()
@@ -1247,6 +1320,29 @@ class MultiThreadedEnv(EnvBase):
         """Starts the various envs."""
         self._env = envpool.make(task_id=self.task_id, env_type=self.env_type, num_envs=self.num_workers, **self.create_env_kwargs)
         self.is_closed = False
+
+
+    # def _make_specs(self) -> None:
+    #     obs_spec = self._env.spec.observation_spec()
+    #     action_spec = self._env.spec.action_spec()
+    #     if self.env_type == "dm":
+    #         self.action_spec = _dmcontrol_to_torchrl_spec_transform(
+    #             action_spec,
+    #             device=self.device
+    #         )
+    #         self.observation_spec = _dmcontrol_to_torchrl_spec_transform(
+    #             obs_spec,
+    #             device=self.device
+    #         )
+    #         if not isinstance(self.observation_spec, CompositeSpec):
+    #             if self.from_pixels:
+    #                 self.observation_spec = CompositeSpec(pixels=self.observation_spec)
+    #             else:
+    #                 self.observation_spec = CompositeSpec(observation=self.observation_spec)
+    #         self.reward_spec = UnboundedContinuousTensorSpec(
+    #         device=self.device,
+    #     )
+
 
     def __repr__(self) -> str:
         if self._dummy_env_str is None:
@@ -1258,16 +1354,19 @@ class MultiThreadedEnv(EnvBase):
         )
 
     def close(self) -> None:
+        print(f"self.is_closed = {self.is_closed}")
         if self.is_closed:
             raise RuntimeError("trying to close a closed environment")
         if self._verbose:
             print(f"closing {self.__class__.__name__}")
 
-        self.observation_spec = None
-        self.reward_spec = None
+        # self.observation_spec = None
+        # self.reward_spec = None
 
-        self._shutdown_workers()
+        #self._shutdown_workers()
+        print("attempting to set is_closed = True")
         self.is_closed = True
+        print("finished setting is_closed = True")
 
 
     @_check_start
@@ -1316,20 +1415,26 @@ class MultiThreadedEnv(EnvBase):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-
+        print("entered _reset")
         reset_workers = self._parse_reset_workers(tensordict)
+        print("finished _reset workeres")
 
         reset_data = self._env.reset(reset_workers)
-        print("---------- ", reset_data)
+        print("---------- ", self._device)
         # if not isinstance(reset_data, tuple):
         #     reset_data = (reset_data,)
         tensordict_out = self._output_transform(reset_data)
         return tensordict_out
 
     def _output_transform(self, envpool_output):
-        obs, _ = envpool_output
+        print("---- envpool_output -----")
+        print(envpool_output)
+        if self.env_type == "gym":
+            obs, _ = envpool_output
+        else:
+            obs = envpool_output.observation.obs
         tensordict_out = TensorDict(
-            {"observation": obs}, #self.read_obs(obs),
+            {"observation": torch.tensor(obs)}, #self.read_obs(obs),
             batch_size=self.batch_size,
             device=self.device,
             #device=self.device,
@@ -1356,11 +1461,11 @@ class MultiThreadedEnv(EnvBase):
         if device == self.device:
             return self
         self._device = device
-        self.meta_data = (
-            self.meta_data.to(device)
-            if self._single_task
-            else [meta_data.to(device) for meta_data in self.meta_data]
-        )
+        # self.meta_data = (
+        #     self.meta_data.to(device)
+        #     if self._single_task
+        #     else [meta_data.to(device) for meta_data in self.meta_data]
+        # )
         if not self.is_closed:
             warn(
                 "Casting an open environment to another device requires closing and re-opening it. "
