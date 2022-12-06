@@ -62,12 +62,9 @@ cs.store(name="config", node=Config)
 
 
 def retrieve_stats_from_state_dict(obs_norm_state_dict):
-    scale_key = [x for x in obs_norm_state_dict.keys() if x.endswith(".scale")]
-    loc_key = [x for x in obs_norm_state_dict.keys() if x.endswith(".loc")]
-
     return {
-        "loc": obs_norm_state_dict[loc_key],
-        "scale": obs_norm_state_dict[scale_key],
+        "loc": obs_norm_state_dict["loc"],
+        "scale": obs_norm_state_dict["scale"],
     }
 
 
