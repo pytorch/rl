@@ -21,7 +21,7 @@ from tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from torch import multiprocessing as mp
 
 from torchrl._utils import _check_for_faulty_process
-from torchrl.data import TensorSpec, CompositeSpec
+from torchrl.data import TensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
@@ -1137,7 +1137,7 @@ class MultiThreadedEnv(EnvBase):
         self.excluded_keys = excluded_keys
         self.share_individual_td = bool(share_individual_td)
         self.allow_step_when_done = allow_step_when_done
-        self._batch_size = batch_size or num_workers
+        self._batch_size = torch.Size([batch_size or num_workers])
 
         self._observation_spec = None
         self._reward_spec = None
@@ -1293,9 +1293,13 @@ class MultiThreadedEnv(EnvBase):
     @property
     def observation_spec(self) -> TensorSpec:
         if self._observation_spec is None:
+            obs_spec = self._env.spec.observation_spec().obs
+            print(f"obs_spec={obs_spec}")
             self._observation_spec = _dmcontrol_to_torchrl_spec_transform(
-                self._env.spec.observation_spec(), device=self.device
+                obs_spec, device=self.device
             )
+            self._observation_spec = CompositeSpec(observation=self._observation_spec)
+        print(f"returning self._observation_spec={self._observation_spec}")
         return self._observation_spec
 
     @observation_spec.setter
@@ -1305,9 +1309,13 @@ class MultiThreadedEnv(EnvBase):
     @property
     def reward_spec(self) -> TensorSpec:
         if self._reward_spec is None:
-            self._reward_spec = _dmcontrol_to_torchrl_spec_transform(
-                self._env.spec.reward_spec(), device=self.device
+            # self._reward_spec = _dmcontrol_to_torchrl_spec_transform(
+            #     self._env.spec.reward_spec(), device=self.device
+            # )
+            self._reward_spec = UnboundedContinuousTensorSpec(
+                device=self.device,
             )
+
         return self._reward_spec
 
 
@@ -1375,29 +1383,32 @@ class MultiThreadedEnv(EnvBase):
         action = tensordict.get("action")
         #action_np = self.read_action(action)
 
-
-        step_output = self._env.step(action)
-
-        obs_dict, reward, done, info = self._output_transform(step_output)
-
-
-        ######### Create tensordict_out depending on gym vs dm
-        if reward is None:
-            reward = np.nan
-        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
-        done = self._to_tensor(done, dtype=torch.bool)
-        self.is_done = done
-
-        tensordict_out = TensorDict(
-            obs_dict, batch_size=tensordict.batch_size, device=self.device
-        )
-
-        tensordict_out.set("reward", reward)
-        tensordict_out.set("done", done)
-        if self.info_dict_reader is not None and info is not None:
-            self.info_dict_reader(info, tensordict_out)
+        print(f"sending action {action}")
+        step_output = self._env.step(action.numpy())
+        print(f"got step output {step_output}")
 
 
+        tensordict_out = self._output_transform(step_output)
+        print(f"got _output_transform_output {tensordict_out}")
+
+        #obs_dict, reward, done, info = self._output_transform(step_output)
+
+
+        # ######### Create tensordict_out depending on gym vs dm
+        # if reward is None:
+        #     reward = np.nan
+        # reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
+        # done = self._to_tensor(done, dtype=torch.bool)
+        # self.is_done = done
+
+        # tensordict_out = TensorDict(
+        #     obs_dict, batch_size=tensordict.batch_size, device=self.device
+        # )
+
+        # tensordict_out.set("reward", reward)
+        # tensordict_out.set("done", done)
+        # if self.info_dict_reader is not None and info is not None:
+        #     self.info_dict_reader(info, tensordict_out)
 
         return tensordict_out
 
@@ -1433,8 +1444,10 @@ class MultiThreadedEnv(EnvBase):
             obs, _ = envpool_output
         else:
             obs = envpool_output.observation.obs
+            reward = envpool_output.reward
         tensordict_out = TensorDict(
-            {"observation": torch.tensor(obs)}, #self.read_obs(obs),
+            {"observation": torch.tensor(obs),
+            "reward": torch.tensor(reward)}, #self.read_obs(obs),
             batch_size=self.batch_size,
             device=self.device,
             #device=self.device,
