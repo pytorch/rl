@@ -991,13 +991,17 @@ class LSTMNet(nn.Module):
         >>> batch = 7
         >>> time_steps = 6
         >>> in_features = 4
+        >>> out_features = 10
+        >>> hidden_size = 5
         >>> net = LSTMNet(
         ...     out_features,
         ...     {"input_size": hidden_size, "hidden_size": hidden_size},
         ...     {"out_features": hidden_size},
         ... )
         >>> # test single step vs multi-step
-        >>> x = torch.randn(batch, time_steps, in_features)
+        >>> x = torch.randn(batch, time_steps, in_features)  # >3 dims = multi-step
+        >>> y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(x)
+        >>> x = torch.randn(batch, in_features)  # 2 dims = single step
         >>> y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(x)
 
     """
