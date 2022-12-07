@@ -1729,7 +1729,9 @@ class CatTensors(Transform):
         # super().__init__(in_keys=in_keys)
         super(CatTensors, self).__init__(in_keys=in_keys, out_keys=[out_key])
         self.dim = dim
-        self.del_keys = del_keys
+        self._del_keys = del_keys
+        if self._del_keys:
+            self._keys_to_exclude = [key for key in in_keys if key != out_key]
         self.unsqueeze_if_oor = unsqueeze_if_oor
 
     def _find_in_keys(self):
@@ -1762,8 +1764,8 @@ class CatTensors(Transform):
 
             out_tensor = torch.cat(values, dim=self.dim)
             tensordict.set(self.out_keys[0], out_tensor)
-            if self.del_keys:
-                tensordict.exclude(*self.in_keys, inplace=True)
+            if self._del_keys:
+                tensordict.exclude(*self._keys_to_exclude, inplace=True)
         else:
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
@@ -1813,10 +1815,9 @@ class CatTensors(Transform):
             dtype=spec0.dtype,
             device=device,
         )
-        if self.del_keys:
-            for key in self.in_keys:
-                if key != self.out_keys[0]:
-                    del observation_spec[key]
+        if self._del_keys:
+            for key in self._keys_to_exclude:
+                del observation_spec[key]
         return observation_spec
 
     def __repr__(self) -> str:
