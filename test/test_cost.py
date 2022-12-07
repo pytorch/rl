@@ -43,6 +43,7 @@ from torchrl.modules import (
     QValueActor,
     SafeModule,
     SafeProbabilisticModule,
+    SafeProbabilisticSequential,
     SafeSequential,
     WorldModelWrapper,
 )
@@ -648,10 +649,10 @@ class TestSAC:
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
-            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
             module=module,
+            in_keys=["loc", "scale"],
+            spec=action_spec,
             distribution_class=TanhNormal,
-            dist_in_keys=["loc", "scale"],
         )
         return actor.to(device)
 
@@ -1026,10 +1027,10 @@ class TestREDQ:
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             module=module,
+            in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             return_log_prob=True,
-            dist_in_keys=["loc", "scale"],
-            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
+            spec=action_spec,
         )
         return actor.to(device)
 
@@ -1079,7 +1080,7 @@ class TestREDQ:
         common = SafeModule(CommonClass(), in_keys=["observation"], out_keys=["hidden"])
         actor_subnet = ProbabilisticActor(
             SafeModule(ActorClass(), in_keys=["hidden"], out_keys=["loc", "scale"]),
-            dist_in_keys=["loc", "scale"],
+            in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             return_log_prob=True,
         )
@@ -1480,8 +1481,8 @@ class TestPPO:
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
-            dist_in_keys=["loc", "scale"],
-            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
+            in_keys=["loc", "scale"],
+            spec=action_spec,
         )
         return actor.to(device)
 
@@ -1506,8 +1507,8 @@ class TestPPO:
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
-            dist_in_keys=["loc", "scale"],
-            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
+            in_keys=["loc", "scale"],
+            spec=action_spec,
         )
         module = nn.Sequential(base_layer, nn.Linear(5, 1))
         value = ValueOperator(
@@ -1797,9 +1798,9 @@ class TestA2C:
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             module=module,
+            in_keys=["loc", "scale"],
+            spec=action_spec,
             distribution_class=TanhNormal,
-            dist_in_keys=["loc", "scale"],
-            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
         )
         return actor.to(device)
 
@@ -2002,10 +2003,8 @@ class TestReinforce:
             module,
             distribution_class=TanhNormal,
             return_log_prob=True,
-            dist_in_keys=["loc", "scale"],
-            spec=CompositeSpec(
-                action=NdUnboundedContinuousTensorSpec(n_act), loc=None, scale=None
-            ),
+            in_keys=["loc", "scale"],
+            spec=NdUnboundedContinuousTensorSpec(n_act),
         )
         if advantage == "gae":
             advantage_module = GAE(
@@ -2261,16 +2260,18 @@ class TestDreamer:
             num_cells=mlp_num_units,
             activation_class=nn.ELU,
         )
-        actor_model = SafeProbabilisticModule(
+        actor_model = SafeProbabilisticSequential(
             SafeModule(
                 actor_module,
                 in_keys=["state", "belief"],
                 out_keys=["loc", "scale"],
             ),
-            dist_in_keys=["loc", "scale"],
-            sample_out_key="action",
-            default_interaction_mode="random",
-            distribution_class=TanhNormal,
+            SafeProbabilisticModule(
+                in_keys=["loc", "scale"],
+                out_keys="action",
+                default_interaction_mode="random",
+                distribution_class=TanhNormal,
+            ),
         )
         with torch.no_grad():
             td = TensorDict(
@@ -2871,17 +2872,14 @@ def test_shared_params(dest, expected_dtype, expected_device):
     )
     td_module_action = ProbabilisticActor(
         module=module_action,
+        in_keys=["loc", "scale"],
+        out_keys=["action"],
         spec=None,
-        dist_in_keys=["loc", "scale"],
-        sample_out_key=["action"],
         distribution_class=TanhNormal,
         return_log_prob=True,
     )
     module_value = torch.nn.Linear(4, 1)
-    td_module_value = ValueOperator(
-        module=module_value,
-        in_keys=["hidden"],
-    )
+    td_module_value = ValueOperator(module=module_value, in_keys=["hidden"])
     td_module = ActorValueOperator(td_module_hidden, td_module_action, td_module_value)
 
     class MyLoss(LossModule):

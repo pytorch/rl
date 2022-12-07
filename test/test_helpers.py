@@ -211,7 +211,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
             raise
 
         if cfg.gSDE:
-            tsf_loc = actor.module[-1].module.transform(td.get("loc"))
+            tsf_loc = actor.module[0].module[-1].module.transform(td.get("loc"))
             if exploration == "random":
                 with pytest.raises(AssertionError):
                     torch.testing.assert_close(td.get("action"), tsf_loc)
@@ -344,9 +344,11 @@ def test_ppo_maker(
 
         if cfg.gSDE:
             if cfg.shared_mapping:
-                tsf_loc = actor[-1].module[-1].module.transform(td_clone.get("loc"))
+                tsf_loc = actor[-2].module[-1].module.transform(td_clone.get("loc"))
             else:
-                tsf_loc = actor.module[-1].module.transform(td_clone.get("loc"))
+                tsf_loc = (
+                    actor.module[0].module[-1].module.transform(td_clone.get("loc"))
+                )
 
             if exploration == "random":
                 with pytest.raises(AssertionError):
@@ -494,9 +496,11 @@ def test_a2c_maker(
 
         if cfg.gSDE:
             if cfg.shared_mapping:
-                tsf_loc = actor[-1].module[-1].module.transform(td_clone.get("loc"))
+                tsf_loc = actor[-2].module[-1].module.transform(td_clone.get("loc"))
             else:
-                tsf_loc = actor.module[-1].module.transform(td_clone.get("loc"))
+                tsf_loc = (
+                    actor.module[0].module[-1].module.transform(td_clone.get("loc"))
+                )
 
             if exploration == "random":
                 with pytest.raises(AssertionError):
@@ -606,7 +610,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             expected_keys += ["_eps_gSDE"]
 
         if cfg.gSDE:
-            tsf_loc = actor.module[-1].module.transform(td_clone.get("loc"))
+            tsf_loc = actor.module[0].module[-1].module.transform(td_clone.get("loc"))
             if exploration == "random":
                 with pytest.raises(AssertionError):
                     torch.testing.assert_close(td_clone.get("action"), tsf_loc)
@@ -735,7 +739,7 @@ def test_redq_make(device, from_pixels, gsde, exploration):
             raise
 
         if cfg.gSDE:
-            tsf_loc = actor.module[-1].module.transform(td.get("loc"))
+            tsf_loc = actor.module[0].module[-1].module.transform(td.get("loc"))
             if exploration == "random":
                 with pytest.raises(AssertionError):
                     torch.testing.assert_close(td.get("action"), tsf_loc)

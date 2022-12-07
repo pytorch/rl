@@ -18,7 +18,7 @@ from torchrl.collectors.collectors import (
 from torchrl.data import MultiStep
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
-from torchrl.modules import SafeProbabilisticModule
+from torchrl.modules import SafeProbabilisticSequential
 
 
 def sync_async_collector(
@@ -249,7 +249,7 @@ def _make_collector(
 
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticModule],
+    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticSequential],
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
@@ -313,7 +313,7 @@ def make_collector_offpolicy(
 
 def make_collector_onpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticModule],
+    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticSequential],
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:

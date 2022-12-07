@@ -270,24 +270,23 @@ The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py)
     )
     # Wrap the policy module in NormalParamsWrapper, such that the output
     # tensor is split in loc and scale, and scale is mapped onto a positive space
-    policy_module = NormalParamsWrapper(
-        MLP(
-            num_cells=[64, 64],
-            out_features=32,
-            activation=nn.ELU,
-        )
-    )
-    # Wrap the nn.Module in a SafeProbabilisticModule, indicating how
-    # to build the torch.distribution.Distribution object and what to do with it
-    policy_module = SafeProbabilisticModule(  # stochastic policy
-        SafeModule(
-            policy_module,
-            in_keys=["hidden"],
-            out_keys=["loc", "scale"],
+    policy_module = SafeModule(
+        NormalParamsWrapper(
+            MLP(num_cells=[64, 64], out_features=32, activation=nn.ELU)
         ),
-        dist_in_keys=["loc", "scale"],
-        sample_out_key="action",
-        distribution_class=TanhNormal,
+        in_keys=["hidden"],
+        out_keys=["loc", "scale"],
+    )
+    # Use a SafeProbabilisticSequential to combine the SafeModule with a
+    # SafeProbabilisticModule, indicating how to build the
+    # torch.distribution.Distribution object and what to do with it
+    policy_module = SafeProbabilisticSequential(  # stochastic policy
+        policy_module,
+        SafeProbabilisticModule(
+            in_keys=["loc", "scale"],
+            out_keys="action",
+            distribution_class=TanhNormal,
+        ),
     )
     value_module = MLP(
         num_cells=[64, 64],
