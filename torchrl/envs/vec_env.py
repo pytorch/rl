@@ -1147,6 +1147,7 @@ class MultiThreadedEnv(EnvBase):
         self._dummy_env_str = None
         self._seeds = None
         self.flatten = False
+        self.obs = torch.empty(self.num_workers, *self.observation_spec["observation"].shape)
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
@@ -1322,7 +1323,7 @@ class MultiThreadedEnv(EnvBase):
 
     def _parse_reset_workers(self, tensordict):
 
-        if tensordict is None or "reset_workers" not in tensordict:
+        if tensordict is None or "reset_workers" not in tensordict.keys():
             return None
         reset_workers = tensordict.get("reset_workers")
         if reset_workers is None:
@@ -1334,26 +1335,33 @@ class MultiThreadedEnv(EnvBase):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        print("entered _reset")
+        print(f"entered _reset: tensordict={tensordict}")
         reset_workers = self._parse_reset_workers(tensordict)
-        print("finished _reset workeres")
+        print(f"finished _reset workeres: {reset_workers}")
 
         reset_data = self._env.reset(reset_workers)
         print("---------- ", self._device)
         # if not isinstance(reset_data, tuple):
         #     reset_data = (reset_data,)
-        tensordict_out = self._output_transform_reset(reset_data)
+        tensordict_out = self._output_transform_reset(reset_data, reset_workers)
         return tensordict_out
 
-    def _output_transform_reset(self, envpool_output):
+    def _output_transform_reset(self, envpool_output, reset_workers):
         print("---- envpool_output -----")
         print(envpool_output)
         if self.env_type == "gym":
-            obs, _ = envpool_output
+            obs = envpool_output
         else:
             obs = envpool_output.observation.obs
+        if reset_workers is not None:
+            for i, worker in enumerate(reset_workers):
+                print(f"setting worker {worker}: obs={obs}, i={i}, {self.obs}=self.obs, worker={worker}")
+                self.obs[worker] = torch.tensor(obs[i])
+        else:
+            self.obs = torch.tensor(obs)
+
         tensordict_out = TensorDict(
-            {"observation": torch.tensor(obs),
+            {"observation": self.obs,
              #"reward": torch.tensor(reward)
              },
             batch_size=self.batch_size,
@@ -1366,7 +1374,7 @@ class MultiThreadedEnv(EnvBase):
 
     def _output_transform_step(self, envpool_output):
         if self.env_type == "gym":
-            obs, reward, done, info, env_ids = envpool_output
+            obs, reward, done, info = envpool_output
         else:
             obs = envpool_output.observation.obs
             reward = envpool_output.reward

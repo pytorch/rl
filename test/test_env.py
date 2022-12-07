@@ -45,7 +45,7 @@ from torchrl.envs.transforms import (
     TransformedEnv,
 )
 from torchrl.envs.utils import step_mdp
-from torchrl.envs.vec_env import ParallelEnv, SerialEnv
+from torchrl.envs.vec_env import ParallelEnv, SerialEnv, MultiThreadedEnv
 from torchrl.modules import (
     Actor,
     ActorCriticOperator,
@@ -247,6 +247,10 @@ def _make_envs(
     env_serial = SerialEnv(
         N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
     )
+    env_multithread = MultiThreadedEnv(
+        N, env_name, env_type="gym",
+    )
+
     if transformed_out:
         if env_name == "ALE/Pong-v5":
 
@@ -267,6 +271,10 @@ def _make_envs(
             )
             env_serial = TransformedEnv(
                 env_serial,
+                t_out(),
+            )
+            env_multithread = TransformedEnv(
+                env_multithread,
                 t_out(),
             )
         else:
@@ -295,8 +303,12 @@ def _make_envs(
                 env_serial,
                 t_out(),
             )
+            env_multithread = TransformedEnv(
+                env_multithread,
+                t_out(),
+            )
 
-    return env_parallel, env_serial, env0
+    return env_parallel, env_serial, env_multithread, env0
 
 
 class TestModelBasedEnvBase:
@@ -474,7 +486,7 @@ class TestParallel:
     def test_parallel_env(
         self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=3
     ):
-        env_parallel, env_serial, env0 = _make_envs(
+        env_parallel, env_serial, _, env0 = _make_envs(
             env_name,
             frame_skip,
             transformed_in=transformed_in,
@@ -513,6 +525,56 @@ class TestParallel:
             td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
         ), f"{td.shape}, {td.get('done').sum(1)}"
         env_parallel.close()
+        # env_serial.close()  # never opened
+        env0.close()
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
+    @pytest.mark.parametrize("frame_skip", [4, 1])
+    @pytest.mark.parametrize("transformed_in", [False, True])
+    @pytest.mark.parametrize("transformed_out", [False, True])
+    def test_multithreaded_env(
+        self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=7
+    ):
+        _, _, env_multithreaded, env0 = _make_envs(
+            env_name,
+            frame_skip,
+            transformed_in=transformed_in,
+            transformed_out=transformed_out,
+            N=N,
+        )
+
+        td = TensorDict(
+            source={"action": env0.action_spec.rand((N,))},
+            batch_size=[
+                N,
+            ],
+        )
+        td1 = env_multithreaded.step(td)
+        assert not td1.is_shared()
+        assert "done" in td1.keys()
+        assert "reward" in td1.keys()
+
+        with pytest.raises(RuntimeError):
+            # number of actions does not match number of workers
+            td = TensorDict(
+                source={"action": env0.action_spec.rand((N - 1,))}, batch_size=[N - 1]
+            )
+            td1 = env_multithreaded.step(td)
+
+        td_reset = TensorDict(
+            source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
+            batch_size=[
+                N,
+            ],
+        )
+        env_multithreaded.reset(tensordict=td_reset)
+
+        td = env_multithreaded.rollout(policy=None, max_steps=T)
+        assert (
+            td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
+        ), f"{td.shape}, {td.get('done').sum(1)}"
+        env_multithreaded.close()
         # env_serial.close()  # never opened
         env0.close()
 
