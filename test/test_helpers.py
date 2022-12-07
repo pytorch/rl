@@ -970,7 +970,7 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
     stats = {"loc": None, "scale": None}
     if initialized:
         stats = {"loc": 0.0, "scale": 1.0}
-    t_env.append_transform(ObservationNorm(standard_normal=True, **stats))
+    t_env.transform = ObservationNorm(standard_normal=True, **stats)
     if composed:
         t_env.append_transform(ObservationNorm(standard_normal=True, **stats))
     pre_init_state_dict = t_env.transform.state_dict()
@@ -990,11 +990,21 @@ def test_initialize_stats_from_non_obs_transform(device):
     env.set_seed(1)
 
     t_env = TransformedEnv(env)
-    t_env.append_transform(FlattenObservation(first_dim=0))
+    t_env.transform = FlattenObservation(first_dim=0)
     pre_init_state_dict = t_env.transform.state_dict()
     initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
     post_init_state_dict = t_env.transform.state_dict()
     assert len(post_init_state_dict) == len(pre_init_state_dict)
+
+
+def test_initialize_obs_transform_stats_raise_exception():
+    env = ContinuousActionVecMockEnv()
+    t_env = TransformedEnv(env)
+    t_env.transform = ObservationNorm()
+    with pytest.raises(
+        RuntimeError, match="More than one key exists in the observation_specs"
+    ):
+        initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -1004,7 +1014,7 @@ def test_retrieve_observation_norms_state_dict(device, composed):
     env.set_seed(1)
 
     t_env = TransformedEnv(env)
-    t_env.append_transform(ObservationNorm(standard_normal=True))
+    t_env.transform = ObservationNorm(standard_normal=True)
     if composed:
         t_env.append_transform(ObservationNorm(standard_normal=True))
     initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
