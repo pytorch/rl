@@ -1322,20 +1322,15 @@ class MultiThreadedEnv(EnvBase):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        print(f"entered _reset: tensordict={tensordict}")
         reset_workers = self._parse_reset_workers(tensordict)
-        print(f"finished _reset workeres: {reset_workers}")
 
         reset_data = self._env.reset(reset_workers)
-        print("---------- ", self._device)
         # if not isinstance(reset_data, tuple):
         #     reset_data = (reset_data,)
         tensordict_out = self._output_transform_reset(reset_data, reset_workers)
         return tensordict_out
 
     def _output_transform_reset(self, envpool_output, reset_workers):
-        print("---- envpool_output -----")
-        print(envpool_output)
         if self.env_type == "gym":
             obs = envpool_output
         else:

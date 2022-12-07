@@ -633,7 +633,7 @@ class TestParallel:
     def test_parallel_env_seed(
         self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
-        env_parallel, env_serial, env_multithread, _ = _make_envs(
+        env_parallel, env_serial, _, _ = _make_envs(
             env_name, frame_skip, transformed_in, transformed_out, 5
         )
         out_seed_serial = env_serial.set_seed(0, static_seed=static_seed)
@@ -687,17 +687,23 @@ class TestParallel:
     def test_multithreaded_env_seed(
         self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
-        _, env_serial, env_multithread, _ = _make_envs(
+        _, env_serial, env_multithread, env0 = _make_envs(
             env_name, frame_skip, transformed_in, transformed_out, 1
         )
+        env0.set_seed(0, static_seed=static_seed)
+        print("env0 reset=", env0.reset()["observation"])
+
+
         out_seed_serial = env_serial.set_seed(0, static_seed=static_seed)
         if static_seed:
             assert out_seed_serial == 0
         td0_serial = env_serial.reset()
         torch.manual_seed(0)
 
+        max_steps = 2
+
         td_serial = env_serial.rollout(
-            max_steps=10, auto_reset=False, tensordict=td0_serial
+            max_steps=max_steps, auto_reset=False, tensordict=td0_serial
         ).contiguous()
         key = "pixels" if "pixels" in td_serial.keys() else "observation"
         torch.testing.assert_close(
@@ -712,12 +718,12 @@ class TestParallel:
         torch.manual_seed(0)
         assert out_seed_multithread == out_seed_serial
         td_multithread = env_multithread.rollout(
-            max_steps=10, auto_reset=False, tensordict=td0_multithread
+            max_steps=max_steps, auto_reset=False, tensordict=td0_multithread
         ).contiguous()
         torch.testing.assert_close(
             td_multithread[:, :-1].get(("next", key)), td_multithread[:, 1:].get(key)
         )
-
+        print(td0_serial["observation"], td0_multithread["observation"])
         assert_allclose_td(td0_serial, td0_multithread)
         assert_allclose_td(td_serial[:, 0], td_multithread[:, 0])  # first step
         assert_allclose_td(td_serial[:, 1], td_multithread[:, 1])  # second step
@@ -734,6 +740,25 @@ class TestParallel:
     def test_parallel_env_shutdown(self):
         env_make = EnvCreator(lambda: GymEnv(PENDULUM_VERSIONED))
         env = ParallelEnv(4, env_make)
+        env.reset()
+        assert not env.is_closed
+        env.rand_step()
+        assert not env.is_closed
+        env.close()
+        assert env.is_closed
+        env.reset()
+        assert not env.is_closed
+        env.close()
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    def test_multithread_env_shutdown(self):
+        _, _, env, _ = _make_envs(
+            PENDULUM_VERSIONED,
+            1,
+            transformed_in=True,
+            transformed_out=False,
+            N=3,
+        )
         env.reset()
         assert not env.is_closed
         env.rand_step()
@@ -780,7 +805,7 @@ class TestParallel:
         N=3,
     ):
         # tests casting to device
-        env_parallel, env_serial, env0 = _make_envs(
+        env_parallel, env_serial, env_multithread, env0 = _make_envs(
             env_name,
             frame_skip,
             transformed_in=transformed_in,
@@ -817,21 +842,23 @@ class TestParallel:
         td_device = env_serial.rollout(max_steps=10)
         assert td_device.device == torch.device(device), env_serial
 
-        if open_before:
-            td_cpu = env_parallel.rollout(max_steps=10)
-            assert td_cpu.device == torch.device("cpu")
-        env_parallel = env_parallel.to(device)
-        assert env_parallel.observation_spec.device == torch.device(device)
-        assert env_parallel.action_spec.device == torch.device(device)
-        assert env_parallel.reward_spec.device == torch.device(device)
-        assert env_parallel.device == torch.device(device)
-        td_device = env_parallel.reset()
-        assert td_device.device == torch.device(device), env_parallel
-        td_device = env_parallel.rand_step()
-        assert td_device.device == torch.device(device), env_parallel
-        td_device = env_parallel.rollout(max_steps=10)
-        assert td_device.device == torch.device(device), env_parallel
+        for env_test in [env_parallel, env_multithread]:
+            if open_before:
+                td_cpu = env_test.rollout(max_steps=10)
+                assert td_cpu.device == torch.device("cpu")
+            env_test = env_test.to(device)
+            assert env_test.observation_spec.device == torch.device(device)
+            assert env_test.action_spec.device == torch.device(device)
+            assert env_test.reward_spec.device == torch.device(device)
+            assert env_test.device == torch.device(device)
+            td_device = env_test.reset()
+            assert td_device.device == torch.device(device), env_test
+            td_device = env_test.rand_step()
+            assert td_device.device == torch.device(device), env_test
+            td_device = env_test.rollout(max_steps=10)
+            assert td_device.device == torch.device(device), env_test
 
+        env_multithread.close()
         env_parallel.close()
         env_serial.close()
         env0.close()
@@ -880,7 +907,7 @@ class TestParallel:
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_parallel_env_transform_consistency(self, env_name, frame_skip, device):
-        env_parallel_in, env_serial_in, env0_in = _make_envs(
+        env_parallel_in, env_serial_in, env_multithread_in, env0_in = _make_envs(
             env_name,
             frame_skip,
             transformed_in=True,
@@ -888,7 +915,7 @@ class TestParallel:
             device=device,
             N=3,
         )
-        env_parallel_out, env_serial_out, env0_out = _make_envs(
+        env_parallel_out, env_serial_out, env_multithread_out, env0_out = _make_envs(
             env_name,
             frame_skip,
             transformed_in=False,
@@ -915,6 +942,17 @@ class TestParallel:
         assert_allclose_td(r_in, r_out)
         env_serial_in.close()
         env_serial_out.close()
+
+        torch.manual_seed(0)
+        env_multithread_in.set_seed(0)
+        r_in = env_multithread_in.rollout(max_steps=5)
+        torch.manual_seed(0)
+        env_multithread_out.set_seed(0)
+        r_out = env_multithread_out.rollout(max_steps=5)
+        print(r_in["observation"], r_out["observation"])
+        assert_allclose_td(r_in, r_out)
+        env_multithread_in.close()
+        env_multithread_out.close()
 
         torch.manual_seed(0)
         env0_in.set_seed(0)
