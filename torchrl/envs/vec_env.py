@@ -1179,7 +1179,6 @@ class MultiThreadedEnv(EnvBase):
 
     @property
     def device(self) -> torch.device:
-        print(f"accessed property!!! self._device={self._device}")
         if self._device is None:
             self._set_properties()
         return self._device
@@ -1190,15 +1189,12 @@ class MultiThreadedEnv(EnvBase):
 
     @property
     def action_spec(self) -> TensorSpec:
-        print(f"inside action_spec")
-        print(f"self.input_spec={self.input_spec}")
         return self.input_spec["action"]
 
 
     @property
     def input_spec(self) -> TensorSpec:
 
-        print("inside input_spec")
         if self._input_spec is None:
             action_spec = self._env.spec.action_spec()
             if action_spec.shape == ():
@@ -1208,8 +1204,6 @@ class MultiThreadedEnv(EnvBase):
                                                         minimum=action_spec.minimum,
                                                         maximum=action_spec.maximum)
             if self.env_type == "dm":
-                    print(f"_input_spec is None")
-                    print(f"action_spec = {action_spec}")
                     transformed_spec = _dmcontrol_to_torchrl_spec_transform(
                             action_spec, device=self.device,
                         )
@@ -1224,7 +1218,6 @@ class MultiThreadedEnv(EnvBase):
             )
                 )
 
-        print(f"returning self._input_spec={self._input_spec}")
         return self._input_spec
 
     @input_spec.setter
@@ -1235,12 +1228,10 @@ class MultiThreadedEnv(EnvBase):
     def observation_spec(self) -> TensorSpec:
         if self._observation_spec is None:
             obs_spec = self._env.spec.observation_spec().obs
-            print(f"obs_spec={obs_spec}")
             self._observation_spec = _dmcontrol_to_torchrl_spec_transform(
                 obs_spec, device=self.device
             )
             self._observation_spec = CompositeSpec(observation=self._observation_spec)
-        print(f"returning self._observation_spec={self._observation_spec}")
         return self._observation_spec
 
     @observation_spec.setter
@@ -1311,13 +1302,9 @@ class MultiThreadedEnv(EnvBase):
         #     action = action.flatten()
         if self.flatten:
             action = action.flatten()
-        print(f"sending action {action}")
-        step_output = self._env.step(action.numpy())
-        print(f"got step output {step_output}")
-
+        step_output = self._env.step(action.detach().numpy())
 
         tensordict_out = self._output_transform_step(step_output)
-        print(f"got _output_transform_output {tensordict_out}")
 
         return tensordict_out
 
@@ -1390,7 +1377,10 @@ class MultiThreadedEnv(EnvBase):
         return tensordict_out
 
 
-
+    @_check_start
+    def _set_seed(self, seed: Optional[int]):
+        if seed is not None:
+            self._env = envpool.make(task_id=self.task_id, env_type=self.env_type, num_envs=self.num_workers, **self.create_env_kwargs, seed=seed)
 
     def _create_td(self):
         pass
