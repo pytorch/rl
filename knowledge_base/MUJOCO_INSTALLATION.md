@@ -137,10 +137,18 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
                ^~~~~~~~~
     ```
     _Solution_: This should disappear once `mesalib` is installed: `conda install -y -c conda-forge mesalib`
-3. `FileNotFoundError: [Errno 2] No such file or directory: 'patchelf'
-    _Solution_: `pip install patchelf`
-4. `ImportError: /usr/lib/x86_64-linux-gnu/libOpenGL.so.0: undefined symbol: _glapi_tls_Current`
-   _Solution_: Link conda to the right `libOpenGL.so` file (replace `/path/to/conda` and `mujoco_env` with the proper paths and names):
+3. 
+   ```
+   FileNotFoundError: [Errno 2] No such file or directory: 'patchelf'
+   ```
+
+   _Solution_: `pip install patchelf`
+4. 
+    ```
+    ImportError: /usr/lib/x86_64-linux-gnu/libOpenGL.so.0: undefined symbol: _glapi_tls_Current
+    ```
+
+    _Solution_: Link conda to the right `libOpenGL.so` file (replace `/path/to/conda` and `mujoco_env` with the proper paths and names):
     ```shelf
    conda install -y -c conda-forge libglvnd-glx-cos7-x86_64 --force-reinstall
    conda install -y -c conda-forge xvfbwrapper --force-reinstall

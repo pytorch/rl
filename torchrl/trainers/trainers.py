@@ -138,7 +138,7 @@ class Trainer:
         total_frames: int,
         frame_skip: int,
         loss_module: Union[LossModule, Callable[[TensorDictBase], TensorDictBase]],
-        optimizer: optim.Optimizer,
+        optimizer: Optional[optim.Optimizer] = None,
         logger: Optional[Logger] = None,
         optim_steps_per_batch: int = 500,
         clip_grad_norm: bool = True,

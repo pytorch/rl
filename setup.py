@@ -226,7 +226,7 @@ def _main(argv):
                 "hydra-submitit-launcher",
             ],
             "checkpointing": [
-                "torchinductor",
+                "torchsnapshot",
             ],
         },
         zip_safe=False,
