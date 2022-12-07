@@ -451,18 +451,18 @@ def initialize_observation_norm_transforms(
     num_iter: int = 1000,
     key: Union[str, Tuple[str, ...]] = None,
 ):
-    """Calling init_stats on all uninitialised ObservationNorms transform of a TransformedEnv.
+    """Calling :obj:`ObservationNorm.init_stats` on all uninitialised :obj:`ObservationNorms` transform of a :obj:`TransformedEnv`.
 
-    If an ObservationNorm already has non-null loc or stats, it will be skipped.
-    If the transform of the environment does not contain any ObservationNorm, nothing will happen.
-    If no key is provided but the observations of the Environment contains more than one key, an exception will
+    If an :obj:`ObservationNorm` already has non-null :obj:`loc` or :obj:`scale`, it will be skipped.
+    If the transform of the environment does not contain any :obj:`ObservationNorm`, nothing will happen.
+    If no key is provided but the observations of the :obj:`EnvBase` contains more than one key, an exception will
     be raised.
 
     Args:
         proof_environment (EnvBase instance, optional): if provided, this env will
             be used ot execute the rollouts. If not, it will be created using
             the cfg object.
-        num_iter (int): Number of iterations used for initializing the ObservationNorms
+        num_iter (int): Number of iterations used for initializing the :obj:`ObservationNorms`
         key (str, optional): if provided, the stats of this key will be gathered.
             If not, it is expected that only one key exists in `env.observation_spec`.
 
@@ -473,12 +473,12 @@ def initialize_observation_norm_transforms(
         return
 
     if key is None:
-        keys = list(proof_environment.observation_spec.keys())
+        keys = list(proof_environment.base_env.observation_spec.keys())
         key = keys.pop()
         if len(keys):
             raise RuntimeError(
                 f"More than one key exists in the observation_specs: {[key] + keys} were found, "
-                "thus generate_stats_from_observation_norm cannot infer which to compute the stats of."
+                "thus initialize_observation_norm_transforms cannot infer which to compute the stats of."
             )
 
     if isinstance(proof_environment.transform, Compose):
@@ -497,13 +497,14 @@ def initialize_observation_norm_transforms(
 
 
 def retrieve_observation_norms_state_dict(proof_environment: TransformedEnv):
-    """Traverse the transforms of the environment and retrieve the ObservationNorm state dicts.
+    """Traverses the transforms of the environment and retrieves the :obj:`ObservationNorm` state dicts.
 
-    Returns a list of tuple (idx, state_dict) for each ObservationNorm transform in proof_environment
-    If the environment transform does not contain any ObservationNorm, returns an empty list
+    Returns a list of tuple (idx, state_dict) for each :obj:`ObservationNorm` transform in proof_environment
+    If the environment transform does not contain any :obj:`ObservationNorm`, returns an empty list
 
     Args:
-        proof_environment (EnvBase instance, optional): the TransformedEnv to retrieve the ObservationNorm state dict from
+        proof_environment (EnvBase instance, optional): the :obj:``TransformedEnv` to retrieve the :obj:`ObservationNorm`
+            state dict from
     """
     obs_norm_state_dicts = []
 

@@ -24,17 +24,24 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
+    MockSerialEnv,
 )
 from packaging import version
+from torchrl.data import CompositeSpec, NdBoundedTensorSpec
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import ObservationNorm
-from torchrl.envs.transforms.transforms import _has_tv
+from torchrl.envs.transforms.transforms import (
+    _has_tv,
+    FlattenObservation,
+    TransformedEnv,
+)
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules.tensordict_module.common import _has_functorch
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import (
     EnvConfig,
     initialize_observation_norm_transforms,
+    retrieve_observation_norms_state_dict,
 )
 from torchrl.trainers.helpers.losses import A2CLossConfig, make_a2c_loss
 from torchrl.trainers.helpers.models import (
@@ -933,46 +940,82 @@ def test_timeit():
     assert val2[2] == n2
 
 
-@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
-@pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
-def test_stats_from_observation_norm(from_pixels):
-    flags = list(from_pixels)
-    config_fields = [
-        (config_field.name, config_field.type, config_field)
-        for config_cls in (
-            EnvConfig,
-            REDQModelConfig,
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("keys", [None, ["observation", "observation_orig"]])
+@pytest.mark.parametrize("composed", [True, False])
+@pytest.mark.parametrize("initialized", [True, False])
+def test_initialize_stats_from_observation_norms(device, keys, composed, initialized):
+    obs_spec, stat_key = None, None
+    if keys:
+        obs_spec = CompositeSpec(
+            **{
+                key: NdBoundedTensorSpec(maximum=1, minimum=1, shape=torch.Size([1]))
+                for key in keys
+            }
         )
-        for config_field in dataclasses.fields(config_cls)
-    ]
-
-    Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-    cs = ConfigStore.instance()
-    cs.store(name="config", node=Config)
-    with initialize(version_base=None, config_path=None):
-        key = "pixels" if from_pixels else "observation_vector"
-        cfg = compose(config_name="config", overrides=flags)
-        env_maker = (
-            ContinuousActionConvMockEnvNumpy
-            if from_pixels
-            else ContinuousActionVecMockEnv
+        stat_key = keys[0]
+        env = ContinuousActionVecMockEnv(
+            device=device,
+            observation_spec=obs_spec,
+            action_spec=NdBoundedTensorSpec(
+                minimum=1, maximum=2, shape=torch.Size((1,))
+            ),
         )
-        env = transformed_env_constructor(
-            cfg,
-            use_env_creator=False,
-            custom_env_maker=env_maker,
-            stats={"loc": None, "scale": None},
-        )()
-        env.append_transform(ObservationNorm(in_keys=[key]))
+        env.out_key = "observation"
+    else:
+        env = MockSerialEnv(device=device)
+        env.set_seed(1)
 
-        pre_init_state_dict = env.transform.state_dict()
-        initialize_observation_norm_transforms(
-            proof_environment=env, num_iter=cfg.init_env_steps, key=key
-        )
-        post_init_state_dict = env.transform.state_dict()
+    t_env = TransformedEnv(env)
+    stats = {"loc": None, "scale": None}
+    if initialized:
+        stats = {"loc": 0.0, "scale": 1.0}
+    t_env.append_transform(ObservationNorm(standard_normal=True, **stats))
+    if composed:
+        t_env.append_transform(ObservationNorm(standard_normal=True, **stats))
+    pre_init_state_dict = t_env.transform.state_dict()
+    initialize_observation_norm_transforms(
+        proof_environment=t_env, num_iter=100, key=stat_key
+    )
+    post_init_state_dict = t_env.transform.state_dict()
+    expected_dict_size = 4 if composed else 2
+    expected_dict_size = expected_dict_size if not initialized else 0
 
-        # assert that we have at least initialized the ObservationNorm appended in the test
-        assert len(pre_init_state_dict) < len(post_init_state_dict)
+    assert len(post_init_state_dict) == len(pre_init_state_dict) + expected_dict_size
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_initialize_stats_from_non_obs_transform(device):
+    env = MockSerialEnv(device=device)
+    env.set_seed(1)
+
+    t_env = TransformedEnv(env)
+    t_env.append_transform(FlattenObservation(first_dim=0))
+    pre_init_state_dict = t_env.transform.state_dict()
+    initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
+    post_init_state_dict = t_env.transform.state_dict()
+    assert len(post_init_state_dict) == len(pre_init_state_dict)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("composed", [True, False])
+def test_retrieve_observation_norms_state_dict(device, composed):
+    env = MockSerialEnv(device=device)
+    env.set_seed(1)
+
+    t_env = TransformedEnv(env)
+    t_env.append_transform(ObservationNorm(standard_normal=True))
+    if composed:
+        t_env.append_transform(ObservationNorm(standard_normal=True))
+    initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
+    state_dicts = retrieve_observation_norms_state_dict(t_env)
+    expected_state_count = 2 if composed else 1
+    expected_idx = [0, 1] if composed else [0]
+
+    assert len(state_dicts) == expected_state_count
+    for idx, state_dict in enumerate(state_dicts):
+        assert len(state_dict[1]) == 2
+        assert state_dict[0] == expected_idx[idx]
 
 
 if __name__ == "__main__":
