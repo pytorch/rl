@@ -940,6 +940,45 @@ def test_timeit():
     assert val2[2] == n2
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
+def test_transformed_env_constructor_with_state_dict(from_pixels):
+    config_fields = [
+        (config_field.name, config_field.type, config_field)
+        for config_cls in (
+            EnvConfig,
+            DreamerConfig,
+        )
+        for config_field in dataclasses.fields(config_cls)
+    ]
+    flags = list(from_pixels)
+
+    Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+    cs = ConfigStore.instance()
+    cs.store(name="config", node=Config)
+    with initialize(version_base=None, config_path=None):
+        cfg = compose(config_name="config", overrides=flags)
+        env_maker = (
+            ContinuousActionConvMockEnvNumpy
+            if from_pixels
+            else ContinuousActionVecMockEnv
+        )
+        t_env = transformed_env_constructor(
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+        )()
+        idx, state_dict = retrieve_observation_norms_state_dict(t_env)[0]
+
+        obs_transform = transformed_env_constructor(
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            obs_norm_state_dict=state_dict,
+        )().transform[idx]
+        torch.testing.assert_close(obs_transform.state_dict(), state_dict)
+
+
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("keys", [None, ["observation", "observation_orig"]])
 @pytest.mark.parametrize("composed", [True, False])
