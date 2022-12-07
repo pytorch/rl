@@ -451,10 +451,10 @@ def initialize_observation_norm_transforms(
     num_iter: int = 1000,
     key: Union[str, Tuple[str, ...]] = None,
 ):
-    """Calling :obj:`ObservationNorm.init_stats` on all uninitialised :obj:`ObservationNorms` transform of a :obj:`TransformedEnv`.
+    """Calls :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
 
-    If an :obj:`ObservationNorm` already has non-null :obj:`loc` or :obj:`scale`, it will be skipped.
-    If the transform of the environment does not contain any :obj:`ObservationNorm`, nothing will happen.
+    If an :obj:`ObservationNorm` already has non-null :obj:`loc` or :obj:`scale`, a call to :obj:`initialize_observation_norm_transforms` will be a no-op.
+    Similarly, if the transformed environment does not contain any :obj:`ObservationNorm`, a call to this function will have no effect.
     If no key is provided but the observations of the :obj:`EnvBase` contains more than one key, an exception will
     be raised.
 
@@ -500,7 +500,7 @@ def retrieve_observation_norms_state_dict(proof_environment: TransformedEnv):
     """Traverses the transforms of the environment and retrieves the :obj:`ObservationNorm` state dicts.
 
     Returns a list of tuple (idx, state_dict) for each :obj:`ObservationNorm` transform in proof_environment
-    If the environment transform does not contain any :obj:`ObservationNorm`, returns an empty list
+    If the environment transforms do not contain any :obj:`ObservationNorm`, returns an empty list
 
     Args:
         proof_environment (EnvBase instance, optional): the :obj:``TransformedEnv` to retrieve the :obj:`ObservationNorm`
