@@ -1815,7 +1815,8 @@ class CatTensors(Transform):
         )
         if self.del_keys:
             for key in self.in_keys:
-                del observation_spec[key]
+                if key != self.out_keys[0]:
+                    del observation_spec[key]
         return observation_spec
 
     def __repr__(self) -> str:
