@@ -7,10 +7,13 @@ from torchrl.data import (
     NdUnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
-from torchrl.envs.libs.jumanji import (
-    _object_to_tensordict,
-    _tensordict_to_object,
-    _torchrl_data_to_spec_transform,
+from torchrl.envs.libs.jumanji import _torchrl_data_to_spec_transform
+from torchrl.envs.libs.jax_utils import (
+    tree_flatten,
+    tree_reshape,
+    tensor_to_ndarray,
+    object_to_tensordict,
+    tensordict_to_object,
 )
 
 try:
@@ -78,7 +81,7 @@ class BraxWrapper(_EnvWrapper):
     def _make_state_spec(self, env: "brax.envs.env.Env"):
         key = jax.random.PRNGKey(0)
         state = env.reset(key)
-        state_dict = _object_to_tensordict(state, self.device, batch_size=())
+        state_dict = object_to_tensordict(state, self.device, batch_size=())
         state_spec = _torchrl_data_to_spec_transform(state_dict)
         return state_spec
 
@@ -104,7 +107,7 @@ class BraxWrapper(_EnvWrapper):
         key = jax.random.PRNGKey(0)
         keys = jax.random.split(key, self.batch_size.numel())
         state = self._vmap_jit_env_reset(jax.numpy.stack(keys))
-        state = self._reshape(state)
+        state = tree_reshape(state, self.batch_size)
         return state
 
     def _init_env(self) -> Optional[int]:
@@ -122,8 +125,8 @@ class BraxWrapper(_EnvWrapper):
 
         self._key, *keys = jax.random.split(self._key, 1 + self.numel())
         state = self._vmap_jit_env_reset(jax.numpy.stack(keys))
-        state = self._reshape(state)
-        state = _object_to_tensordict(state, self.device, self.batch_size)
+        state = tree_reshape(state, self.batch_size)
+        state = object_to_tensordict(state, self.device, self.batch_size)
 
         tensordict_out = TensorDict(
             source={
@@ -142,14 +145,14 @@ class BraxWrapper(_EnvWrapper):
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
 
-        state = _tensordict_to_object(tensordict.get("state"), self._state_example)
-        action = tensordict.get("action").numpy()
+        state = tensordict_to_object(tensordict.get("state"), self._state_example)
+        action = tensor_to_ndarray(tensordict.get("action"))
 
-        state = self._flatten(state)
-        action = self._flatten(action)
+        state = tree_flatten(state, self.batch_size)
+        action = tree_flatten(action, self.batch_size)
         state = self._vmap_jit_env_step(state, action)
-        state = self._reshape(state)
-        state = _object_to_tensordict(state, self.device, self.batch_size)
+        state = tree_reshape(state, self.batch_size)
+        state = object_to_tensordict(state, self.device, self.batch_size)
 
         tensordict_out = TensorDict(
             source={
@@ -162,14 +165,6 @@ class BraxWrapper(_EnvWrapper):
             device=self.device,
         )
         return tensordict_out
-
-    def _reshape(self, x):
-        shape, n = self.batch_size, 1
-        return jax.tree_util.tree_map(lambda x: x.reshape(shape + x.shape[n:]), x)
-
-    def _flatten(self, x):
-        shape, n = (self.batch_size.numel(),), len(self.batch_size)
-        return jax.tree_util.tree_map(lambda x: x.reshape(shape + x.shape[n:]), x)
 
 
 class BraxEnv(BraxWrapper):

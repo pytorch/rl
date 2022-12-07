@@ -26,6 +26,7 @@ from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrappe
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
+from torchrl.envs.libs.jax_utils import tree_flatten
 
 if _has_gym:
     import gym
@@ -399,7 +400,7 @@ class TestJumanji:
         for i in range(rollout.shape[-1]):
             action = rollout[..., i]["action"]
             # state = env._flatten(state)
-            action = env._flatten(env.read_action(action))
+            action = tree_flatten(env.read_action(action), env.batch_size)
             state, timestep = jax.vmap(base_env.step)(state, action)
             # state = env._reshape(state)
             # timesteps.append(timestep)
