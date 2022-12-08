@@ -351,4 +351,4 @@ class _BraxEnvStep(torch.autograd.Function):
         )
         grad_action = _ndarray_to_tensor(grad_action)
 
-        return None, None, grad_action, *grad_state_qp.values()
+        return (None, None, grad_action, *grad_state_qp.values())
