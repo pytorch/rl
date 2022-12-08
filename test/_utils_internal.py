@@ -12,7 +12,6 @@ from functools import wraps
 import pytest
 import torch.cuda
 from torchrl._utils import implement_for, seed_generator
-from torchrl.envs import EnvBase
 from torchrl.envs.libs.gym import _has_gym
 
 # Specified for test_utils.py
@@ -68,45 +67,6 @@ def generate_seeds(seed, repeat):
         seed = seed_generator(seed)
         seeds.append(seed)
     return seeds
-
-
-def _test_fake_tensordict(env: EnvBase):
-    fake_tensordict = env.fake_tensordict().flatten_keys(".")
-    real_tensordict = env.rollout(3).flatten_keys(".")
-
-    keys1 = set(fake_tensordict.keys())
-    keys2 = set(real_tensordict.keys())
-    assert keys1 == keys2
-    fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
-    fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
-    fake_tensordict = fake_tensordict.to_tensordict()
-    assert (
-        fake_tensordict.apply(lambda x: torch.zeros_like(x))
-        == real_tensordict.apply(lambda x: torch.zeros_like(x))
-    ).all()
-    for key in keys2:
-        assert fake_tensordict[key].shape == real_tensordict[key].shape
-
-    # test dtypes
-    for key, value in real_tensordict.unflatten_keys(".").items():
-        _check_dtype(key, value, env.observation_spec, env.input_spec)
-
-
-def _check_dtype(key, value, obs_spec, input_spec):
-    if key in {"reward", "done"}:
-        return
-    elif key == "next":
-        for _key, _value in value.items():
-            _check_dtype(_key, _value, obs_spec, input_spec)
-        return
-    elif key in input_spec.keys(yield_nesting_keys=True):
-        assert input_spec[key].is_in(value), (input_spec[key], value)
-        return
-    elif key in obs_spec.keys(yield_nesting_keys=True):
-        assert obs_spec[key].is_in(value), (input_spec[key], value)
-        return
-    else:
-        raise KeyError(key)
 
 
 # Decorator to retry upon certain Exceptions.
