@@ -45,14 +45,8 @@ from torchrl.envs.transforms import (
     TransformedEnv,
 )
 from torchrl.envs.utils import step_mdp
-from torchrl.envs.vec_env import ParallelEnv, SerialEnv, MultiThreadedEnv, _has_envpool
-from torchrl.modules import (
-    Actor,
-    ActorCriticOperator,
-    MLP,
-    SafeModule,
-    ValueOperator,
-)
+from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnv, ParallelEnv, SerialEnv
+from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
 gym_version = None
