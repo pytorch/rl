@@ -473,7 +473,6 @@ class TestBrax:
             _ndarray_to_tensor,
             _tensor_to_ndarray,
             _tree_flatten,
-            _tree_reshape,
         )
 
         env = BraxEnv(envname, batch_size=batch_size, requires_grad=requires_grad)
