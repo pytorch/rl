@@ -1390,7 +1390,7 @@ class ObservationNorm(ObservationTransform):
                 raise ValueError(
                     "cat_dim must be specified if reduce_dim is not an integer."
                 )
-        if (isinstance(reduce_dim, tuple) and cat_dim in reduce_dim) or (
+        if (isinstance(reduce_dim, tuple) and cat_dim not in reduce_dim) or (
             isinstance(reduce_dim, int) and cat_dim != reduce_dim
         ):
             raise ValueError("cat_dim must be part of or equal to reduce_dim.")
