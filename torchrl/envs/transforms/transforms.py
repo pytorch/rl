@@ -7,23 +7,23 @@ from __future__ import annotations
 
 import collections
 import multiprocessing as mp
-from copy import deepcopy, copy
+from copy import copy, deepcopy
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 
 from torchrl.data.tensor_specs import (
+    BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
     ContinuousBox,
+    DEVICE_TYPING,
     NdUnboundedContinuousTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
-    BinaryDiscreteTensorSpec,
-    DEVICE_TYPING,
 )
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
@@ -1391,7 +1391,21 @@ class ObservationNorm(ObservationTransform):
             )
         key = self.in_keys[0] if key is None else key
 
+        def raise_initialization_exception(module):
+            if (
+                isinstance(module, ObservationNorm)
+                and module.scale is None
+                and module.loc is None
+            ):
+                raise RuntimeError(
+                    "ObservationNorms need to be initialized in the right order."
+                    "Trying to initialize an ObservationNorm "
+                    "while a parent ObservationNorm transform is still uninitialized"
+                )
+
         parent = self.parent
+        parent.apply(raise_initialization_exception)
+
         collected_frames = 0
         data = []
         while collected_frames < num_iter:
@@ -1406,6 +1420,11 @@ class ObservationNorm(ObservationTransform):
         if not self.standard_normal:
             loc = loc / scale
             scale = 1 / scale
+
+        if not torch.isfinite(loc).all():
+            raise RuntimeError("Non-finite values found in loc")
+        if not torch.isfinite(scale).all():
+            raise RuntimeError("Non-finite values found in scale")
 
         self.register_buffer("loc", loc)
         self.register_buffer("scale", scale.clamp_min(self.eps))
@@ -1723,14 +1742,23 @@ class CatTensors(Transform):
                     "Lazy call to CatTensors is only supported when `dim=-1`."
                 )
         else:
-            in_keys = sorted(list(in_keys))
+            in_keys = sorted(in_keys)
         if type(out_key) != str:
             raise Exception("CatTensors requires out_key to be of type string")
         # super().__init__(in_keys=in_keys)
         super(CatTensors, self).__init__(in_keys=in_keys, out_keys=[out_key])
         self.dim = dim
-        self.del_keys = del_keys
+        self._del_keys = del_keys
+        self._keys_to_exclude = None
         self.unsqueeze_if_oor = unsqueeze_if_oor
+
+    @property
+    def keys_to_exclude(self):
+        if self._keys_to_exclude is None:
+            self._keys_to_exclude = [
+                key for key in self.in_keys if key != self.out_keys[0]
+            ]
+        return self._keys_to_exclude
 
     def _find_in_keys(self):
         parent = self.parent
@@ -1762,13 +1790,13 @@ class CatTensors(Transform):
 
             out_tensor = torch.cat(values, dim=self.dim)
             tensordict.set(self.out_keys[0], out_tensor)
-            if self.del_keys:
-                tensordict.exclude(*self.in_keys, inplace=True)
+            if self._del_keys:
+                tensordict.exclude(*self.keys_to_exclude, inplace=True)
         else:
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
-                f" {sorted(list(self.in_keys))} but got a TensorDict with keys"
-                f" {sorted(list(tensordict.keys(include_nested=True)))}"
+                f" {sorted(self.in_keys)} but got a TensorDict with keys"
+                f" {sorted(tensordict.keys(include_nested=True))}"
             )
         return tensordict
 
@@ -1813,8 +1841,8 @@ class CatTensors(Transform):
             dtype=spec0.dtype,
             device=device,
         )
-        if self.del_keys:
-            for key in self.in_keys:
+        if self._del_keys:
+            for key in self.keys_to_exclude:
                 del observation_spec[key]
         return observation_spec
 
@@ -2340,7 +2368,7 @@ class VecNorm(Transform):
         if keys is None:
             keys = ["next", "reward"]
         td = make_tensordict(env)
-        keys = set(key for key in td.keys() if key in keys)
+        keys = {key for key in td.keys() if key in keys}
         td_select = td.select(*keys)
         td_select = td_select.flatten_keys(sep)
         if td.batch_dims:

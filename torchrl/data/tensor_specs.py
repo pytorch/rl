@@ -12,19 +12,19 @@ from textwrap import indent
 from typing import (
     Any,
     Dict,
+    ItemsView,
+    KeysView,
     List,
     Optional,
     Sequence,
     Tuple,
     Union,
-    ItemsView,
-    KeysView,
     ValuesView,
 )
 
 import numpy as np
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import get_binary_env_var
 
@@ -60,7 +60,7 @@ class invertible_dict(dict):
 
     def __init__(self, *args, inv_dict=None, **kwargs):
         if inv_dict is None:
-            inv_dict = dict()
+            inv_dict = {}
         super().__init__(*args, **kwargs)
         self.inv_dict = inv_dict
 
@@ -1403,4 +1403,7 @@ class _CompositeSpecKeysView:
                 yield key
 
     def __len__(self):
-        return len([k for k in self])
+        i = 0
+        for _ in self:
+            i += 1
+        return i

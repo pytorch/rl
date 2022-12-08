@@ -12,12 +12,8 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from tensordict.tensordict import assert_allclose_td, TensorDictBase, TensorDict
-from torchrl.data import (
-    PrioritizedReplayBuffer,
-    ReplayBuffer,
-    TensorDictReplayBuffer,
-)
+from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
+from torchrl.data import PrioritizedReplayBuffer, ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import (
     rb_prototype,
     samplers,
@@ -32,25 +28,25 @@ from torchrl.data.replay_buffers.storages import (
 )
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
 from torchrl.envs.transforms.transforms import (
+    BinarizeReward,
+    CatFrames,
     CatTensors,
+    CenterCrop,
+    DiscreteActionProjection,
+    DoubleToFloat,
+    FiniteTensorDictCheck,
     FlattenObservation,
+    GrayScale,
+    gSDENoise,
+    ObservationNorm,
+    PinMemoryTransform,
+    Resize,
+    RewardClipping,
+    RewardScaling,
     SqueezeTransform,
     ToTensorImage,
-    RewardClipping,
-    BinarizeReward,
-    Resize,
-    CenterCrop,
     UnsqueezeTransform,
-    GrayScale,
-    ObservationNorm,
-    CatFrames,
-    RewardScaling,
-    DoubleToFloat,
     VecNorm,
-    DiscreteActionProjection,
-    FiniteTensorDictCheck,
-    gSDENoise,
-    PinMemoryTransform,
 )
 
 _has_tv = importlib.util.find_spec("torchvision") is not None
@@ -69,7 +65,7 @@ _has_tv = importlib.util.find_spec("torchvision") is not None
 )
 @pytest.mark.parametrize("writer", [writers.RoundRobinWriter])
 @pytest.mark.parametrize("storage", [ListStorage, LazyTensorStorage, LazyMemmapStorage])
-@pytest.mark.parametrize("size", [3, 100])
+@pytest.mark.parametrize("size", [3, 5, 100])
 class TestPrototypeBuffers:
     def _get_rb(self, rb_type, size, sampler, writer, storage):
 
@@ -127,6 +123,26 @@ class TestPrototypeBuffers:
             assert (s == data.select(*s.keys())).all()
         else:
             assert (s == data).all()
+
+    def test_cursor_position(self, rb_type, sampler, writer, storage, size):
+        storage = storage(size)
+        writer = writer()
+        writer.register_storage(storage)
+        batch1 = self._get_data(rb_type, size=5)
+        writer.extend(batch1)
+
+        # Added less data than storage max size
+        if size > 5:
+            assert writer._cursor == 5
+        # Added more data than storage max size
+        elif size < 5:
+            assert writer._cursor == 5 - size
+        # Added as data as storage max size
+        else:
+            assert writer._cursor == 0
+            batch2 = self._get_data(rb_type, size=size - 1)
+            writer.extend(batch2)
+            assert writer._cursor == size - 1
 
     def test_extend(self, rb_type, sampler, writer, storage, size):
         torch.manual_seed(0)
@@ -196,6 +212,34 @@ class TestPrototypeBuffers:
         if not isinstance(b, bool):
             b = b.all()
         assert b
+
+
+@pytest.mark.parametrize("max_size", [1000])
+@pytest.mark.parametrize("shape", [[3, 4]])
+@pytest.mark.parametrize("storage", [LazyTensorStorage, LazyMemmapStorage])
+class TestStorages:
+    def _get_nested_td(self, shape):
+        nested_td = TensorDict(
+            {
+                "key1": torch.ones(*shape),
+                "key2": torch.ones(*shape),
+                "next": TensorDict(
+                    {
+                        "key1": torch.ones(*shape),
+                        "key2": torch.ones(*shape),
+                    },
+                    shape,
+                ),
+            },
+            shape,
+        )
+        return nested_td
+
+    def test_init(self, max_size, shape, storage):
+        td = self._get_nested_td(shape)
+        mystorage = storage(max_size=max_size)
+        mystorage._init(td)
+        assert mystorage._storage.shape == (max_size, *shape)
 
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
@@ -318,7 +362,7 @@ def test_rb_prototype_trajectories(stack):
         (TensorDictPrioritizedReplayBuffer, LazyMemmapStorage),
     ],
 )
-@pytest.mark.parametrize("size", [3, 100])
+@pytest.mark.parametrize("size", [3, 5, 100])
 @pytest.mark.parametrize("prefetch", [0])
 class TestBuffers:
     _default_params_rb = {}
@@ -379,6 +423,25 @@ class TestBuffers:
         else:
             raise NotImplementedError(rbtype)
         return data
+
+    def test_cursor_position2(self, rbtype, storage, size, prefetch):
+        torch.manual_seed(0)
+        rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
+        batch1 = self._get_data(rbtype, size=5)
+        rb.extend(batch1)
+
+        # Added less data than storage max size
+        if size > 5:
+            assert rb._cursor == 5
+        # Added more data than storage max size
+        elif size < 5:
+            assert rb._cursor == 5 - size
+        # Added as data as storage max size
+        else:
+            assert rb._cursor == 0
+            batch2 = self._get_data(rbtype, size=size - 1)
+            rb.extend(batch2)
+            assert rb._cursor == size - 1
 
     def test_add(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)

@@ -4,16 +4,15 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
-from collections import OrderedDict
 from typing import Iterable, Optional, Union
 
 import torch
-from tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import TensorDictModule
+from torchrl.modules import SafeModule
 
 
 class _context_manager:
@@ -97,7 +96,7 @@ class TargetNetUpdater:
         # for properties
         for name in loss_module.__class__.__dict__:
             if (
-                name.startswith("_target_")
+                name.startswith("target_")
                 and (name.endswith("params") or name.endswith("buffers"))
                 and (getattr(loss_module, name) is not None)
             ):
@@ -106,12 +105,12 @@ class TargetNetUpdater:
         # for regular lists: raise an exception
         for name in loss_module.__dict__:
             if (
-                name.startswith("_target_")
+                name.startswith("target_")
                 and (name.endswith("params") or name.endswith("buffers"))
                 and (getattr(loss_module, name) is not None)
             ):
                 raise RuntimeError(
-                    "Your module seems to have a _target tensor list contained "
+                    "Your module seems to have a target tensor list contained "
                     "in a non-dynamic structure (such as a list). If the "
                     "module is cast onto a device, the reference to these "
                     "tensors will be lost."
@@ -119,10 +118,10 @@ class TargetNetUpdater:
 
         if len(_target_names) == 0:
             raise RuntimeError(
-                "Did not found any target parameters or buffers in the loss module."
+                "Did not find any target parameters or buffers in the loss module."
             )
 
-        _source_names = ["".join(name.split("_target_")) for name in _target_names]
+        _source_names = ["".join(name.split("target_")) for name in _target_names]
 
         for _source in _source_names:
             try:
@@ -140,28 +139,28 @@ class TargetNetUpdater:
 
     @property
     def _targets(self):
-        return OrderedDict(
-            {name: getattr(self.loss_module, name) for name in self._target_names}
+        return TensorDict(
+            {name: getattr(self.loss_module, name) for name in self._target_names},
+            [],
         )
 
     @property
     def _sources(self):
-        return OrderedDict(
-            {name: getattr(self.loss_module, name) for name in self._source_names}
+        return TensorDict(
+            {name: getattr(self.loss_module, name) for name in self._source_names},
+            [],
         )
 
     def init_(self) -> None:
-        for source, target in zip(self._sources.values(), self._targets.values()):
-            if isinstance(source, TensorDictBase) and not source.is_empty():
-                # native functional modules
-                source = list(zip(*sorted(list(source.items()))))[1]
-                target = list(zip(*sorted(list(target.items()))))[1]
-            elif isinstance(source, TensorDictBase) and source.is_empty():
-                continue
-            for p_source, p_target in zip(source, target):
-                if p_target.requires_grad:
-                    raise RuntimeError("the target parameter is part of a graph.")
-                p_target.data.copy_(p_source.data)
+        for key, source in self._sources.items(True, True):
+            if not isinstance(key, tuple):
+                key = (key,)
+            key = ("target_" + key[0], *key[1:])
+            target = self._targets[key]
+            # for p_source, p_target in zip(source, target):
+            if target.requires_grad:
+                raise RuntimeError("the target parameter is part of a graph.")
+            target.data.copy_(source.data)
         self.initialized = True
 
     def step(self) -> None:
@@ -170,29 +169,25 @@ class TargetNetUpdater:
                 f"{self.__class__.__name__} must be "
                 f"initialized (`{self.__class__.__name__}.init_()`) before calling step()"
             )
-
-        for source, target in zip(self._sources.values(), self._targets.values()):
-            if isinstance(source, TensorDictBase) and not source.is_empty():
-                # native functional modules
-                source = list(zip(*sorted(list(source.items()))))[1]
-                target = list(zip(*sorted(list(target.items()))))[1]
-            elif isinstance(source, TensorDictBase) and source.is_empty():
-                continue
-            for p_source, p_target in zip(source, target):
-                if p_target.requires_grad:
-                    raise RuntimeError("the target parameter is part of a graph.")
-                if p_source.is_leaf:
-                    self._step(p_source, p_target)
-                else:
-                    p_target.copy_(p_source)
+        for key, source in self._sources.items(True, True):
+            if not isinstance(key, tuple):
+                key = (key,)
+            key = ("target_" + key[0], *key[1:])
+            target = self._targets[key]
+            if target.requires_grad:
+                raise RuntimeError("the target parameter is part of a graph.")
+            if target.is_leaf:
+                self._step(source, target)
+            else:
+                target.copy_(source)
 
     def _step(self, p_source: Tensor, p_target: Tensor) -> None:
         raise NotImplementedError
 
     def __repr__(self) -> str:
         string = (
-            f"{self.__class__.__name__}(sources={[name for name in self._sources]}, targets="
-            f"{[name for name in self._targets]})"
+            f"{self.__class__.__name__}(sources={self._sources}, targets="
+            f"{self._targets})"
         )
         return string
 
@@ -281,7 +276,10 @@ class hold_out_params(_context_manager):
     """Context manager to hold a list of parameters out of a computational graph."""
 
     def __init__(self, params: Iterable[Tensor]) -> None:
-        self.params = tuple(p.detach() for p in params)
+        if isinstance(params, TensorDictBase):
+            self.params = params.detach()
+        else:
+            self.params = tuple(p.detach() for p in params)
 
     def __enter__(self) -> None:
         return self.params
@@ -293,7 +291,7 @@ class hold_out_params(_context_manager):
 @torch.no_grad()
 def next_state_value(
     tensordict: TensorDictBase,
-    operator: Optional[TensorDictModule] = None,
+    operator: Optional[SafeModule] = None,
     next_val_key: str = "state_action_value",
     gamma: float = 0.99,
     pred_next_val: Optional[Tensor] = None,
@@ -341,5 +339,5 @@ def next_state_value(
     done = done.to(torch.float)
     target_value = (1 - done) * pred_next_val_detach
     rewards = rewards.to(torch.float)
-    target_value = rewards + (gamma ** steps_to_next_obs) * target_value
+    target_value = rewards + (gamma**steps_to_next_obs) * target_value
     return target_value

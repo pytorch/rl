@@ -4,16 +4,19 @@
 # LICENSE file in the root directory of this source tree.
 
 from .trainers import (
-    Trainer,
     BatchSubSampler,
+    ClearCudaCache,
     CountFramesLog,
     LogReward,
+    mask_batch,
+    OptimizerHook,
     Recorder,
     ReplayBuffer,
+    ReplayBufferTrainer,
     RewardNormalizer,
     SelectKeys,
+    Trainer,
     UpdateWeights,
-    ClearCudaCache,
 )
 
 # from .loggers import *

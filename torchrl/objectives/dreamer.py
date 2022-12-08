@@ -8,11 +8,10 @@ import torch
 from tensordict import TensorDict
 
 from torchrl.envs.model_based.dreamer import DreamerEnv
-from torchrl.envs.utils import set_exploration_mode
-from torchrl.envs.utils import step_mdp
-from torchrl.modules import TensorDictModule
+from torchrl.envs.utils import set_exploration_mode, step_mdp
+from torchrl.modules import SafeModule
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import hold_out_net, distance_loss
+from torchrl.objectives.utils import distance_loss, hold_out_net
 from torchrl.objectives.value.functional import vec_td_lambda_return_estimate
 
 
@@ -25,7 +24,7 @@ class DreamerModelLoss(LossModule):
     Reference: https://arxiv.org/abs/1912.01603.
 
     Args:
-        world_model (TensorDictModule): the world model.
+        world_model (SafeModule): the world model.
         lambda_kl (float, optional): the weight of the kl divergence loss. Default: 1.0.
         lambda_reco (float, optional): the weight of the reconstruction loss. Default: 1.0.
         lambda_reward (float, optional): the weight of the reward loss. Default: 1.0.
@@ -43,7 +42,7 @@ class DreamerModelLoss(LossModule):
 
     def __init__(
         self,
-        world_model: TensorDictModule,
+        world_model: SafeModule,
         lambda_kl: float = 1.0,
         lambda_reco: float = 1.0,
         lambda_reward: float = 1.0,
@@ -113,8 +112,8 @@ class DreamerModelLoss(LossModule):
     ) -> torch.Tensor:
         kl = (
             torch.log(prior_std / posterior_std)
-            + (posterior_std ** 2 + (prior_mean - posterior_mean) ** 2)
-            / (2 * prior_std ** 2)
+            + (posterior_std**2 + (prior_mean - posterior_mean) ** 2)
+            / (2 * prior_std**2)
             - 0.5
         )
         if not self.global_average:
@@ -134,8 +133,8 @@ class DreamerActorLoss(LossModule):
     Reference: https://arxiv.org/abs/1912.01603.
 
     Args:
-        actor_model (TensorDictModule): the actor model.
-        value_model (TensorDictModule): the value model.
+        actor_model (SafeModule): the actor model.
+        value_model (SafeModule): the value model.
         model_based_env (DreamerEnv): the model based environment.
         imagination_horizon (int, optional): The number of steps to unroll the
             model. Default: 15.
@@ -148,8 +147,8 @@ class DreamerActorLoss(LossModule):
 
     def __init__(
         self,
-        actor_model: TensorDictModule,
-        value_model: TensorDictModule,
+        actor_model: SafeModule,
+        value_model: SafeModule,
         model_based_env: DreamerEnv,
         imagination_horizon: int = 15,
         gamma: int = 0.99,
@@ -218,7 +217,7 @@ class DreamerValueLoss(LossModule):
     Reference: https://arxiv.org/abs/1912.01603.
 
     Args:
-        value_model (TensorDictModule): the value model.
+        value_model (SafeModule): the value model.
         value_loss (str, optional): the loss to use for the value loss. Default: "l2".
         gamma (float, optional): the gamma discount factor. Default: 0.99.
         discount_loss (bool, optional): if True, the loss is discounted with a
@@ -228,7 +227,7 @@ class DreamerValueLoss(LossModule):
 
     def __init__(
         self,
-        value_model: TensorDictModule,
+        value_model: SafeModule,
         value_loss: Optional[str] = None,
         gamma: int = 0.99,
         discount_loss: bool = False,  # for consistency with paper

@@ -9,11 +9,10 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import (
-    _test_fake_tensordict,
     get_available_devices,
     HALFCHEETAH_VERSIONED,
-    PONG_VERSIONED,
     PENDULUM_VERSIONED,
+    PONG_VERSIONED,
 )
 from packaging import version
 from tensordict.tensordict import assert_allclose_td
@@ -21,12 +20,11 @@ from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
-from torchrl.envs.libs.dm_control import _has_dmc
-from torchrl.envs.libs.gym import GymEnv, GymWrapper
-from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
-from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
-from torchrl.envs.libs.jumanji import JumanjiEnv, _has_jumanji
+from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
+from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
+from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
+from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
+from torchrl.envs.utils import check_env_specs
 
 if _has_gym:
     import gym
@@ -138,7 +136,7 @@ class TestGym:
             from_pixels=from_pixels,
             pixels_only=pixels_only,
         )
-        _test_fake_tensordict(env)
+        check_env_specs(env)
 
 
 @implement_for("gym", None, "0.26")
@@ -245,7 +243,7 @@ class TestDMControl:
             from_pixels=from_pixels,
             pixels_only=pixels_only,
         )
-        _test_fake_tensordict(env)
+        check_env_specs(env)
 
 
 @pytest.mark.skipif(
@@ -274,15 +272,15 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
         )
     env = env_lib(*env_args, **env_kwargs)
     td = env.rollout(max_steps=5)
-    td0 = td[0].flatten_keys(".")
+    td0 = td[0]
     fake_td = env.fake_tensordict()
 
-    fake_td = fake_td.flatten_keys(".")
-    td = td.flatten_keys(".")
-    assert set(fake_td.keys()) == set(td.keys())
-    for key in fake_td.keys():
+    assert set(fake_td.keys(include_nested=True, leaves_only=True)) == set(
+        td.keys(include_nested=True, leaves_only=True)
+    )
+    for key in fake_td.keys(include_nested=True, leaves_only=True):
         assert fake_td.get(key).shape == td.get(key)[0].shape
-    for key in fake_td.keys():
+    for key in fake_td.keys(include_nested=True, leaves_only=True):
         assert fake_td.get(key).shape == td0.get(key).shape
         assert fake_td.get(key).dtype == td0.get(key).dtype
         assert fake_td.get(key).device == td0.get(key).device
@@ -339,7 +337,7 @@ class TestHabitat:
     def test_habitat(self, envname):
         env = HabitatEnv(envname)
         rollout = env.rollout(3)
-        _test_fake_tensordict(env)
+        check_env_specs(env)
 
 
 @pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
@@ -377,7 +375,7 @@ class TestJumanji:
     def test_jumanji_spec_rollout(self, envname, batch_size):
         env = JumanjiEnv(envname, batch_size=batch_size)
         env.set_seed(0)
-        _test_fake_tensordict(env)
+        check_env_specs(env)
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
     def test_jumanji_consistency(self, envname, batch_size):
