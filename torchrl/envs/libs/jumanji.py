@@ -16,18 +16,18 @@ from torchrl.data import (
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs import GymLikeEnv
-from torchrl.envs.libs.jax_utils import (
-    _ndarray_to_tensor,
-    _object_to_tensordict,
-    _tensordict_to_object,
-    _tree_flatten,
-    _tree_reshape,
-)
 
 try:
     import jax
     import jumanji
     from jax import numpy as jnp
+    from torchrl.envs.libs.jax_utils import (
+        _ndarray_to_tensor,
+        _object_to_tensordict,
+        _tensordict_to_object,
+        _tree_flatten,
+        _tree_reshape,
+    )
 
     _has_jumanji = True
 except ImportError as err:
