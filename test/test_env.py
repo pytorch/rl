@@ -45,7 +45,7 @@ from torchrl.envs.transforms import (
     TransformedEnv,
 )
 from torchrl.envs.utils import step_mdp
-from torchrl.envs.vec_env import ParallelEnv, SerialEnv, MultiThreadedEnv
+from torchrl.envs.vec_env import ParallelEnv, SerialEnv, MultiThreadedEnv, _has_envpool
 from torchrl.modules import (
     Actor,
     ActorCriticOperator,
@@ -247,11 +247,14 @@ def _make_envs(
     env_serial = SerialEnv(
         N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
     )
-    env_multithread = MultiThreadedEnv(
-        N,
-        env_name,
-        env_type="gym",
-    )
+    if _has_envpool:
+        env_multithread = MultiThreadedEnv(
+            N,
+            env_name,
+            env_type="gym",
+        )
+    else:
+        env_multithread = None
 
     if transformed_out:
         if env_name == "ALE/Pong-v5":
@@ -275,10 +278,11 @@ def _make_envs(
                 env_serial,
                 t_out(),
             )
-            env_multithread = TransformedEnv(
-                env_multithread,
-                t_out(),
-            )
+            if _has_envpool:
+                env_multithread = TransformedEnv(
+                    env_multithread,
+                    t_out(),
+                )
         else:
 
             def t_out():
@@ -305,10 +309,11 @@ def _make_envs(
                 env_serial,
                 t_out(),
             )
-            env_multithread = TransformedEnv(
-                env_multithread,
-                t_out(),
-            )
+            if _has_envpool:
+                env_multithread = TransformedEnv(
+                    env_multithread,
+                    t_out(),
+                )
 
     return env_parallel, env_serial, env_multithread, env0
 
@@ -495,8 +500,10 @@ class TestParallel:
             transformed_out=transformed_out,
             N=N,
         )
-
-        for env_test in [env_parallel, env_multithreaded]:
+        envs_to_test = [env_parallel]
+        if _has_envpool:
+            envs_to_test.append(env_multithreaded)
+        for env_test in envs_to_test:
             td = TensorDict(
                 source={"action": env0.action_spec.rand((N,))},
                 batch_size=[
@@ -531,8 +538,8 @@ class TestParallel:
                 td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
             ), f"{td.shape}, {td.get('done').sum(1)}"
 
-        env_multithreaded.close()
-        env_parallel.close()
+            env_test.close()
+
         # env_serial.close()  # never opened
         env0.close()
 
@@ -586,7 +593,10 @@ class TestParallel:
             ),
         )
 
-        for env_test in [env_parallel, env_multithreaded]:
+        envs_to_test = [env_parallel]
+        if _has_envpool:
+            envs_to_test.append(env_multithreaded)
+        for env_test in envs_to_test:
             td = TensorDict(
                 source={"action": env0.action_spec.rand((N,))},
                 batch_size=[
@@ -620,9 +630,8 @@ class TestParallel:
             assert (
                 td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
             ), f"{td.shape}, {td.get('done').sum(1)}"
+            env_test.close()
 
-        env_multithreaded.close()
-        env_parallel.close()
         # env_serial.close()
         env0.close()
 
@@ -679,6 +688,7 @@ class TestParallel:
         env_parallel.close()
         env_serial.close()
 
+    @pytest.mark.skipif(not _has_envpool, reason="no envpool")
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize(
         "env_name",
@@ -752,6 +762,7 @@ class TestParallel:
         assert not env.is_closed
         env.close()
 
+    @pytest.mark.skipif(not _has_envpool, reason="no envpool")
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     def test_multithread_env_shutdown(self):
         _, _, env, _ = _make_envs(
@@ -844,7 +855,11 @@ class TestParallel:
         td_device = env_serial.rollout(max_steps=10)
         assert td_device.device == torch.device(device), env_serial
 
-        for env_test in [env_parallel, env_multithread]:
+        envs_to_test = [env_parallel]
+        if _has_envpool:
+            envs_to_test.append(env_multithread)
+
+        for env_test in envs_to_test:
             if open_before:
                 td_cpu = env_test.rollout(max_steps=10)
                 assert td_cpu.device == torch.device("cpu")
@@ -859,9 +874,8 @@ class TestParallel:
             assert td_device.device == torch.device(device), env_test
             td_device = env_test.rollout(max_steps=10)
             assert td_device.device == torch.device(device), env_test
+            env_test.close()
 
-        env_multithread.close()
-        env_parallel.close()
         env_serial.close()
         env0.close()
 

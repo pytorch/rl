@@ -60,3 +60,7 @@ conda env update --file "${this_dir}/environment.yml" --prune
 #yum -y install glfw-devel
 #yum -y install libGLEW
 #yum -y install gcc-c++
+
+if [[ $os == 'Linux' ]]; then
+  pip install envpool
+fi

@@ -56,3 +56,7 @@ conda run python -m pip install "gym[atari,accept-rom-license]" pygame
 
 # smoke test
 python -c "import habitat;import habitat.utils.gym_definitions"
+
+if [[ $os == 'Linux' ]]; then
+  pip install envpool
+fi
