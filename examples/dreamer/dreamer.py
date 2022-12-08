@@ -120,7 +120,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
-    key, init_env_steps = None, None
+    key, init_env_steps, stats = None, None, None
     if not cfg.vecnorm and cfg.norm_stats:
         if not hasattr(cfg, "init_env_steps"):
             raise AttributeError("init_env_steps missing from arguments.")
@@ -129,12 +129,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         stats = {"loc": None, "scale": None}
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
-    else:
-        stats = {"loc": 0.0, "scale": 1.0}
     proof_env = transformed_env_constructor(
-        cfg=cfg,
-        use_env_creator=False,
-        stats=stats,
+        cfg=cfg, use_env_creator=False, stats=stats
     )()
     initialize_observation_norm_transforms(
         proof_environment=proof_env, num_iter=init_env_steps, key=key

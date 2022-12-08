@@ -978,6 +978,33 @@ class TestTransforms:
         with pytest.raises(RuntimeError, match=err_msg):
             transform._apply_transform(torch.Tensor([1]))
 
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_observationnorm_infinite_stats_error(self, device):
+        base_env = ContinuousActionVecMockEnv(
+            observation_spec=CompositeSpec(
+                observation=NdBoundedTensorSpec(
+                    minimum=1, maximum=1, shape=torch.Size([1])
+                ),
+                observation_orig=NdBoundedTensorSpec(
+                    minimum=1, maximum=1, shape=torch.Size([1])
+                ),
+            ),
+            action_spec=NdBoundedTensorSpec(
+                minimum=1, maximum=1, shape=torch.Size((1,))
+            ),
+            seed=0,
+        )
+        base_env.out_key = "observation"
+        t_env = TransformedEnv(
+            base_env,
+            transform=ObservationNorm(in_keys="observation"),
+        )
+        t_env.append_transform(ObservationNorm(in_keys="observation"))
+        err_msg = "Non-finite values found in"
+        with pytest.raises(RuntimeError, match=err_msg):
+            for transform in t_env.transform:
+                transform.init_stats(num_iter=100)
+
     def test_catframes_transform_observation_spec(self):
         N = 4
         key1 = "first key"
