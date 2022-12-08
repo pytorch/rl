@@ -1361,6 +1361,7 @@ class ObservationNorm(ObservationTransform):
         self,
         num_iter: int,
         reduce_dim: Union[int, Tuple[int]] = 0,
+        cat_dim: Optional[int] = None,
         key: Optional[str] = None,
     ) -> None:
         """Initializes the loc and scale stats of the parent environment.
@@ -1373,13 +1374,26 @@ class ObservationNorm(ObservationTransform):
 
         Args:
             num_iter (int): number of random iterations to run in the environment.
-            reduce_dim (int, optional): dimension to compute the mean and std over.
+            reduce_dim (int or tuple of int, optional): dimension to compute the mean and std over.
                 Defaults to 0.
+            cat_dim (int, optional): dimension along which the batches collected will be concatenated.
+                It must be part equal to reduce_dim (if integer) or part of the reduce_dim tuple.
+                Defaults to the same value as reduce_dim.
             key (str, optional): if provided, the summary statistics will be
                 retrieved from that key in the resulting tensordicts.
                 Otherwise, the first key in :obj:`ObservationNorm.in_keys` will be used.
 
         """
+        if cat_dim is None:
+            cat_dim = reduce_dim
+            if not isinstance(cat_dim, int):
+                raise ValueError(
+                    "cat_dim must be specified if reduce_dim is not an integer."
+                )
+        if (isinstance(reduce_dim, tuple) and cat_dim not in reduce_dim) or (
+            isinstance(reduce_dim, int) and cat_dim != reduce_dim
+        ):
+            raise ValueError("cat_dim must be part of or equal to reduce_dim.")
         if self.loc is not None or self.scale is not None:
             raise RuntimeError(
                 f"Loc/Scale are already initialized: ({self.loc}, {self.scale})"
@@ -1413,7 +1427,7 @@ class ObservationNorm(ObservationTransform):
             collected_frames += tensordict.numel()
             data.append(tensordict.get(key))
 
-        data = torch.cat(data, reduce_dim)
+        data = torch.cat(data, cat_dim)
         loc = data.mean(reduce_dim)
         scale = data.std(reduce_dim)
 

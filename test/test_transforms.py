@@ -905,30 +905,49 @@ class TestTransforms:
     @pytest.mark.parametrize("size", [1, 3])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("standard_normal", [True, False])
-    def test_observationnorm_init_stats(self, keys, size, device, standard_normal):
-        base_env = ContinuousActionVecMockEnv(
-            observation_spec=CompositeSpec(
-                observation=NdBoundedTensorSpec(
-                    minimum=1, maximum=1, shape=torch.Size([size])
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_observationnorm_init_stats(
+        self, keys, size, device, standard_normal, parallel
+    ):
+        def make_env():
+            base_env = ContinuousActionVecMockEnv(
+                observation_spec=CompositeSpec(
+                    observation=NdBoundedTensorSpec(
+                        minimum=1, maximum=1, shape=torch.Size([size])
+                    ),
+                    observation_orig=NdBoundedTensorSpec(
+                        minimum=1, maximum=1, shape=torch.Size([size])
+                    ),
                 ),
-                observation_orig=NdBoundedTensorSpec(
-                    minimum=1, maximum=1, shape=torch.Size([size])
+                action_spec=NdBoundedTensorSpec(
+                    minimum=1, maximum=1, shape=torch.Size((size,))
                 ),
-            ),
-            action_spec=NdBoundedTensorSpec(
-                minimum=1, maximum=1, shape=torch.Size((size,))
-            ),
-            seed=0,
-        )
-        base_env.out_key = "observation"
+                seed=0,
+            )
+            base_env.out_key = "observation"
+            return base_env
+
+        if parallel:
+            base_env = SerialEnv(3, make_env)
+            reduce_dim = (0, 1)
+            cat_dim = 1
+        else:
+            base_env = make_env()
+            reduce_dim = 0
+            cat_dim = 0
+
         t_env = TransformedEnv(
             base_env,
             transform=ObservationNorm(in_keys=keys, standard_normal=standard_normal),
         )
         if len(keys) > 1:
-            t_env.transform.init_stats(num_iter=11, key="observation")
+            t_env.transform.init_stats(
+                num_iter=11, key="observation", cat_dim=cat_dim, reduce_dim=reduce_dim
+            )
         else:
-            t_env.transform.init_stats(num_iter=11)
+            t_env.transform.init_stats(
+                num_iter=11, reduce_dim=reduce_dim, cat_dim=cat_dim
+            )
 
         assert t_env.transform.loc.shape == t_env.observation_spec["observation"].shape
         assert (
@@ -944,6 +963,25 @@ class TestTransforms:
 
         with pytest.raises(RuntimeError, match="Loc/Scale are already initialized"):
             transform.init_stats(num_iter=11)
+
+    def test_observationnorm_wrong_catdim(self):
+        transform = ObservationNorm(in_keys="next_observation", loc=0, scale=1)
+
+        with pytest.raises(
+            ValueError, match="cat_dim must be part of or equal to reduce_dim"
+        ):
+            transform.init_stats(num_iter=11, cat_dim=1)
+
+        with pytest.raises(
+            ValueError, match="cat_dim must be part of or equal to reduce_dim"
+        ):
+            transform.init_stats(num_iter=11, cat_dim=2, reduce_dim=(0, 1))
+
+        with pytest.raises(
+            ValueError,
+            match="cat_dim must be specified if reduce_dim is not an integer",
+        ):
+            transform.init_stats(num_iter=11, reduce_dim=(0, 1))
 
     def test_observationnorm_init_stats_multiple_keys_error(self):
         transform = ObservationNorm(in_keys=["next_observation", "next_pixels"])
