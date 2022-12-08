@@ -4,11 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import pkg_resources
+import torch
 from tensordict.nn.probabilistic import (  # noqa
     interaction_mode as exploration_mode,
     set_interaction_mode as set_exploration_mode,
 )
 from tensordict.tensordict import TensorDictBase
+from torchrl.envs import EnvBase
 
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
@@ -151,3 +153,52 @@ SUPPORTED_LIBRARIES = {
     # "screeps": None,  # https://github.com/screeps/screeps
     # "ml-agents": None,
 }
+
+
+def test_fake_tensordict(env: EnvBase):
+    """Tests an environment specs against the results of short rollout.
+
+    This test function should be used as a sanity check for an env wrapped with
+    torchrl's EnvBase subclasses: any discrepency between the expected data and
+    the data collected should raise an assertion error.
+
+    A broken environment spec will likely make it impossible to use parallel
+    environments.
+
+    """
+    fake_tensordict = env.fake_tensordict().flatten_keys(".")
+    real_tensordict = env.rollout(3).flatten_keys(".")
+
+    keys1 = set(fake_tensordict.keys())
+    keys2 = set(real_tensordict.keys())
+    assert keys1 == keys2
+    fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
+    fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
+    fake_tensordict = fake_tensordict.to_tensordict()
+    assert (
+        fake_tensordict.apply(lambda x: torch.zeros_like(x))
+        == real_tensordict.apply(lambda x: torch.zeros_like(x))
+    ).all()
+    for key in keys2:
+        assert fake_tensordict[key].shape == real_tensordict[key].shape
+
+    # test dtypes
+    for key, value in real_tensordict.unflatten_keys(".").items():
+        _check_dtype(key, value, env.observation_spec, env.input_spec)
+
+
+def _check_dtype(key, value, obs_spec, input_spec):
+    if key in {"reward", "done"}:
+        return
+    elif key == "next":
+        for _key, _value in value.items():
+            _check_dtype(_key, _value, obs_spec, input_spec)
+        return
+    elif key in input_spec.keys(yield_nesting_keys=True):
+        assert input_spec[key].is_in(value), (input_spec[key], value)
+        return
+    elif key in obs_spec.keys(yield_nesting_keys=True):
+        assert obs_spec[key].is_in(value), (input_spec[key], value)
+        return
+    else:
+        raise KeyError(key)

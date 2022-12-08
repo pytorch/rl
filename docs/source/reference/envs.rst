@@ -210,6 +210,7 @@ in the environment. The keys to be included in this inverse transform are passed
     TensorDictPrimer
     R3MTransform
     VIPTransform
+    VIPRewardTransform
 
 Helpers
 -------
@@ -223,6 +224,7 @@ Helpers
     get_available_libraries
     set_exploration_mode
     exploration_mode
+    test_fake_tensordict
 
 Domain-specific
 ---------------
