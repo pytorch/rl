@@ -692,9 +692,6 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td)
-
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
@@ -856,9 +853,6 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td, params=params)
-
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
@@ -1011,9 +1005,6 @@ class TestTDSequence:
 
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
         tdmodule(td, params=params)
-
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td, params=params)
 
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 7])

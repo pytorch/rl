@@ -189,7 +189,7 @@ result_td = functorch.vmap(model, (None, 0))(tensordict, params)
 print("the output tensordict shape is: ", result_td.shape)
 
 
-from tensordict.nn.prototype import (
+from tensordict.nn import (
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
 )
