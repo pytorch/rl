@@ -46,13 +46,7 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.utils import step_mdp
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
-from torchrl.modules import (
-    Actor,
-    ActorCriticOperator,
-    MLP,
-    TensorDictModule,
-    ValueOperator,
-)
+from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
 gym_version = None
@@ -305,12 +299,12 @@ class TestModelBasedEnvBase:
         torch.manual_seed(seed)
         np.random.seed(seed)
         world_model = WorldModelWrapper(
-            TensorDictModule(
+            SafeModule(
                 ActionObsMergeLinear(5, 4),
                 in_keys=["hidden_observation", "action"],
                 out_keys=["hidden_observation"],
             ),
-            TensorDictModule(
+            SafeModule(
                 nn.Linear(4, 1),
                 in_keys=["hidden_observation"],
                 out_keys=["reward"],
@@ -331,12 +325,12 @@ class TestModelBasedEnvBase:
         torch.manual_seed(seed)
         np.random.seed(seed)
         world_model = WorldModelWrapper(
-            TensorDictModule(
+            SafeModule(
                 ActionObsMergeLinear(5, 4),
                 in_keys=["hidden_observation", "action"],
                 out_keys=["hidden_observation"],
             ),
-            TensorDictModule(
+            SafeModule(
                 nn.Linear(4, 1),
                 in_keys=["hidden_observation"],
                 out_keys=["reward"],
@@ -551,13 +545,13 @@ class TestParallel:
         )
 
         policy = ActorCriticOperator(
-            TensorDictModule(
+            SafeModule(
                 spec=None,
                 module=nn.LazyLinear(12),
                 in_keys=["observation"],
                 out_keys=["hidden"],
             ),
-            TensorDictModule(
+            SafeModule(
                 spec=None,
                 module=nn.LazyLinear(env0.action_spec.shape[-1]),
                 in_keys=["hidden"],

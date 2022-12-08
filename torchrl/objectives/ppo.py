@@ -10,10 +10,10 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
 
-from torchrl.modules import TensorDictModule
+from torchrl.modules import SafeModule
 from torchrl.objectives.utils import distance_loss
 
-from ..modules.tensordict_module import ProbabilisticTensorDictModule
+from ..modules.tensordict_module import SafeProbabilisticModule
 from .common import LossModule
 
 
@@ -32,7 +32,7 @@ class PPOLoss(LossModule):
     https://arxiv.org/abs/1707.06347
 
     Args:
-        actor (ProbabilisticTensorDictModule): policy operator.
+        actor (SafeProbabilisticModule): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
@@ -52,8 +52,8 @@ class PPOLoss(LossModule):
 
     def __init__(
         self,
-        actor: ProbabilisticTensorDictModule,
-        critic: TensorDictModule,
+        actor: SafeProbabilisticModule,
+        critic: SafeModule,
         advantage_key: str = "advantage",
         advantage_diff_key: str = "value_error",
         entropy_bonus: bool = True,
@@ -65,7 +65,9 @@ class PPOLoss(LossModule):
         advantage_module: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
     ):
         super().__init__()
-        self.convert_to_functional(actor, "actor")
+        self.convert_to_functional(
+            actor, "actor", funs_to_decorate=["forward", "get_dist"]
+        )
         # we want to make sure there are no duplicates in the params: the
         # params of critic must be refs to actor if they're shared
         self.convert_to_functional(critic, "critic", compare_against=self.actor_params)
@@ -106,7 +108,8 @@ class PPOLoss(LossModule):
         tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
 
         dist, *_ = self.actor.get_dist(
-            tensordict_clone, params=self.actor_params, buffers=self.actor_buffers
+            tensordict_clone,
+            params=self.actor_params,
         )
         log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
@@ -136,7 +139,6 @@ class PPOLoss(LossModule):
             value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
-                buffers=self.critic_buffers,
             ).get("state_value")
             value_target = advantage + value.detach()
             loss_value = distance_loss(
@@ -171,7 +173,7 @@ class ClipPPOLoss(PPOLoss):
         loss = -min( weight * advantage, min(max(weight, 1-eps), 1+eps) * advantage)
 
     Args:
-        actor (ProbabilisticTensorDictModule): policy operator.
+        actor (SafeProbabilisticModule): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
@@ -193,8 +195,8 @@ class ClipPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: ProbabilisticTensorDictModule,
-        critic: TensorDictModule,
+        actor: SafeProbabilisticModule,
+        critic: SafeModule,
         advantage_key: str = "advantage",
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
@@ -277,7 +279,7 @@ class KLPENPPOLoss(PPOLoss):
     favouring a certain level of distancing between the two while still preventing them to be too much apart.
 
     Args:
-        actor (ProbabilisticTensorDictModule): policy operator.
+        actor (SafeProbabilisticModule): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
@@ -304,8 +306,8 @@ class KLPENPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: ProbabilisticTensorDictModule,
-        critic: TensorDictModule,
+        actor: SafeProbabilisticModule,
+        critic: SafeModule,
         advantage_key="advantage",
         dtarg: float = 0.01,
         beta: float = 1.0,
@@ -363,7 +365,8 @@ class KLPENPPOLoss(PPOLoss):
 
         previous_dist = self.actor.build_dist_from_params(tensordict_clone)
         current_dist, *_ = self.actor.get_dist(
-            tensordict_clone, params=self.actor_params, buffers=self.actor_buffers
+            tensordict_clone,
+            params=self.actor_params,
         )
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)

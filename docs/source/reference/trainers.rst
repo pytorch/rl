@@ -29,9 +29,9 @@ The :obj:`trainer.train()` method can be sketched as follows:
         ...     self._post_steps_hook()  # "post_steps"
         ...     self._post_steps_log_hook(batch)  #  "post_steps_log"
 
-There are 9 hooks that can be used in a trainer loop: :obj:`"batch_process"`, :obj:`"pre_optim_steps"`,
+There are 10 hooks that can be used in a trainer loop: :obj:`"batch_process"`, :obj:`"pre_optim_steps"`,
 :obj:`"process_optim_batch"`, :obj:`"post_loss"`, :obj:`"post_steps"`, :obj:`"post_optim"`, :obj:`"pre_steps_log"`,
-:obj:`"post_steps_log"` and :obj:`"post_optim_log"`. They are indicated in the comments where they are applied.
+:obj:`"post_steps_log"`, :obj:`"post_optim_log"` and :obj:`"optimizer"`. They are indicated in the comments where they are applied.
 Hooks can be split into 3 categories: **data processing** (:obj:`"batch_process"` and :obj:`"process_optim_batch"`),
 **logging** (:obj:`"pre_steps_log"`, :obj:`"post_optim_log"` and :obj:`"post_steps_log"`) and **operations** hook
 (:obj:`"pre_optim_steps"`, :obj:`"post_loss"`, :obj:`"post_optim"` and :obj:`"post_steps"`).
@@ -139,6 +139,7 @@ Trainer and hooks
     BatchSubSampler
     CountFramesLog
     LogReward
+    OptimizerHook
     Recorder
     ReplayBuffer
     RewardNormalizer

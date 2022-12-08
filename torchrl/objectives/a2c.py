@@ -9,8 +9,8 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
 
-from torchrl.modules import TensorDictModule
-from torchrl.modules.tensordict_module import ProbabilisticTensorDictModule
+from torchrl.modules import SafeModule
+from torchrl.modules.tensordict_module import SafeProbabilisticModule
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import distance_loss
 
@@ -26,7 +26,7 @@ class A2CLoss(LossModule):
     https://arxiv.org/abs/1602.01783v2
 
     Args:
-        actor (ProbabilisticTensorDictModule): policy operator.
+        actor (SafeProbabilisticModule): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
@@ -36,13 +36,13 @@ class A2CLoss(LossModule):
         critic_coef (float): the weight of the critic loss.
         gamma (scalar): a discount factor for return computation.
         loss_function_type (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
-        advantage_module (nn.Module): TensorDictModule used to compute tha advantage function.
+        advantage_module (nn.Module): SafeModule used to compute tha advantage function.
     """
 
     def __init__(
         self,
-        actor: ProbabilisticTensorDictModule,
-        critic: TensorDictModule,
+        actor: SafeProbabilisticModule,
+        critic: SafeModule,
         advantage_key: str = "advantage",
         advantage_diff_key: str = "value_error",
         entropy_bonus: bool = True,
@@ -54,7 +54,9 @@ class A2CLoss(LossModule):
         advantage_module: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
     ):
         super().__init__()
-        self.convert_to_functional(actor, "actor")
+        self.convert_to_functional(
+            actor, "actor", funs_to_decorate=["forward", "get_dist"]
+        )
         self.convert_to_functional(critic, "critic", compare_against=self.actor_params)
         self.advantage_key = advantage_key
         self.advantage_diff_key = advantage_diff_key
@@ -93,7 +95,8 @@ class A2CLoss(LossModule):
         tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
 
         dist, *_ = self.actor.get_dist(
-            tensordict_clone, params=self.actor_params, buffers=self.actor_buffers
+            tensordict_clone,
+            params=self.actor_params,
         )
         log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
@@ -117,7 +120,6 @@ class A2CLoss(LossModule):
             value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
-                buffers=self.critic_buffers,
             ).get("state_value")
             value_target = advantage + value.detach()
             loss_value = distance_loss(

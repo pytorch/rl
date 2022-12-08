@@ -13,12 +13,6 @@ from .distributions import (
     TanhNormal,
     TruncatedNormal,
 )
-from .functional_modules import (
-    extract_buffers,
-    extract_weights,
-    FunctionalModule,
-    FunctionalModuleWithBuffers,
-)
 from .models import (
     ConvNet,
     DdpgCnnActor,
@@ -50,11 +44,10 @@ from .tensordict_module import (
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
-    ProbabilisticTensorDictModule,
     QValueActor,
-    TensorDictModule,
-    TensorDictModuleWrapper,
-    TensorDictSequential,
+    SafeModule,
+    SafeProbabilisticModule,
+    SafeSequential,
     ValueOperator,
     WorldModelWrapper,
 )

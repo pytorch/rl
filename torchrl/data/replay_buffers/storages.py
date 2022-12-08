@@ -370,26 +370,12 @@ class LazyMemmapStorage(LazyTensorStorage):
                 .memmap_(prefix=self.scratch_dir)
                 .to(self.device)
             )
-            for key, tensor in sorted(out.flatten_keys(".").items()):
-                # if isinstance(tensor, TensorDictBase):
-                #     out[key] = (
-                #         tensor.expand(self.max_size, *tensor.shape)
-                #         .clone()
-                #         .zero_()
-                #         .memmap_(prefix=self.scratch_dir)
-                #         .to(self.device)
-                #     )
-                # else:
-                #     out[key] = _value = MemmapTensor(
-                #         self.max_size,
-                #         *tensor.shape,
-                #         device=self.device,
-                #         dtype=tensor.dtype,
-                #         prefix=self.scratch_dir,
-                #     )
+            for key, tensor in sorted(
+                out.items(include_nested=True, leaves_only=True), key=str
+            ):
                 filesize = os.path.getsize(tensor.filename) / 1024 / 1024
                 print(
-                    f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {[self.max_size, *tensor.shape]})."
+                    f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                 )
         self._storage = out
         self.initialized = True

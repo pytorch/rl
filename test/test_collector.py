@@ -17,6 +17,7 @@ from mocking_classes import (
     DiscreteActionVecPolicy,
     MockSerialEnv,
 )
+from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import seed_generator
@@ -35,12 +36,7 @@ from torchrl.data import (
 from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.modules import (
-    Actor,
-    LSTMNet,
-    OrnsteinUhlenbeckProcessWrapper,
-    TensorDictModule,
-)
+from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
 
@@ -754,7 +750,7 @@ def test_update_weights(use_async):
         return ContinuousActionVecMockEnv()
 
     n_actions = ContinuousActionVecMockEnv().action_spec.shape[-1]
-    policy = TensorDictModule(
+    policy = SafeModule(
         torch.nn.LazyLinear(n_actions), in_keys=["observation"], out_keys=["action"]
     )
     policy(create_env().reset())
@@ -898,7 +894,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
             next=CompositeSpec(hidden1=hidden_spec, hidden2=hidden_spec),
         )
 
-    policy = TensorDictModule(**policy_kwargs)
+    policy = SafeModule(**policy_kwargs)
 
     env_maker = lambda: GymEnv(PENDULUM_VERSIONED)
 

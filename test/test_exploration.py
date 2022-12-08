@@ -14,7 +14,7 @@ from torch import nn
 from torchrl.data import CompositeSpec, NdBoundedTensorSpec
 from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import TensorDictModule, TensorDictSequential
+from torchrl.modules import SafeModule, SafeSequential
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import (
     IndependentNormal,
@@ -60,7 +60,7 @@ def test_ou(device, seed=0):
 def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     torch.manual_seed(seed)
     net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
-    module = TensorDictModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+    module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
     action_spec = NdBoundedTensorSpec(-torch.ones(d_act), torch.ones(d_act), (d_act,))
     policy = ProbabilisticActor(
         spec=action_spec,
@@ -112,7 +112,7 @@ class TestAdditiveGaussian:
             (d_act,),
             device=device,
         )
-        module = TensorDictModule(
+        module = SafeModule(
             net,
             in_keys=["observation"],
             out_keys=["loc", "scale"],
@@ -172,9 +172,7 @@ class TestAdditiveGaussian:
     ):
         torch.manual_seed(seed)
         net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
-        module = TensorDictModule(
-            net, in_keys=["observation"], out_keys=["loc", "scale"]
-        )
+        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         action_spec = NdBoundedTensorSpec(
             -torch.ones(d_act, device=device),
             torch.ones(d_act, device=device),
@@ -229,9 +227,9 @@ def test_gsde(
     if gSDE:
         model = torch.nn.LazyLinear(action_dim, device=device)
         in_keys = ["observation"]
-        module = TensorDictSequential(
-            TensorDictModule(model, in_keys=in_keys, out_keys=["action"]),
-            TensorDictModule(
+        module = SafeSequential(
+            SafeModule(model, in_keys=in_keys, out_keys=["action"]),
+            SafeModule(
                 LazygSDEModule(device=device),
                 in_keys=["action", "observation", "_eps_gSDE"],
                 out_keys=["loc", "scale", "action", "_eps_gSDE"],
@@ -243,7 +241,7 @@ def test_gsde(
         in_keys = ["observation"]
         model = torch.nn.LazyLinear(action_dim * 2, device=device)
         wrapper = NormalParamWrapper(model)
-        module = TensorDictModule(wrapper, in_keys=in_keys, out_keys=["loc", "scale"])
+        module = SafeModule(wrapper, in_keys=in_keys, out_keys=["loc", "scale"])
         distribution_class = TanhNormal
         distribution_kwargs = {"min": -bound, "max": bound}
     spec = NdBoundedTensorSpec(

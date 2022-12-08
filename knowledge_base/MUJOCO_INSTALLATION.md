@@ -137,15 +137,33 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
                ^~~~~~~~~
     ```
     _Solution_: This should disappear once `mesalib` is installed: `conda install -y -c conda-forge mesalib`
-3. `FileNotFoundError: [Errno 2] No such file or directory: 'patchelf'
-    _Solution_: `pip install patchelf`
-4. `ImportError: /usr/lib/x86_64-linux-gnu/libOpenGL.so.0: undefined symbol: _glapi_tls_Current`
-   _Solution_: Link conda to the right `libOpenGL.so` file (replace `/path/to/conda` and `mujoco_env` with the proper paths and names):
-    ```shelf
-   conda install -y -c conda-forge libglvnd-glx-cos7-x86_64 --force-reinstall
-   conda install -y -c conda-forge xvfbwrapper --force-reinstall
-   conda env config vars set LD_PRELOAD=/path/to/conda/envs/mujoco_env/x86_64-conda-linux-gnu/sysroot/usr/lib64/libGLdispatch.so.0
+3. 
+   ```
+   FileNotFoundError: [Errno 2] No such file or directory: 'patchelf'
+   ```
+
+   _Solution_: `pip install patchelf`
+4. 
     ```
+    ImportError: /usr/lib/x86_64-linux-gnu/libOpenGL.so.0: undefined symbol: _glapi_tls_Current
+    ```
+
+    _Solution_: Link conda to the right `libOpenGL.so` file (replace `/path/to/conda` and `mujoco_env` with the proper paths and names):
+    ```shelf
+    conda install -y -c conda-forge libglvnd-glx-cos7-x86_64 --force-reinstall
+    conda install -y -c conda-forge xvfbwrapper --force-reinstall
+    conda env config vars set LD_PRELOAD=/path/to/conda/envs/mujoco_env/x86_64-conda-linux-gnu/sysroot/usr/lib64/libGLdispatch.so.0
+    ```
+
+5.
+    ```
+    mujoco.FatalError: gladLoadGL error
+    
+    /path/to/conda/envs/mj_envs/lib/python3.8/site-packages/glfw/__init__.py:912: GLFWError: (65537) b'The GLFW library is not initialized'
+    ```
+
+    _Solution_: This can usually be sovled by setting EGL as your mujoco_gl backend: `MUJOCO_GL=egl python myscript.py`
+
 
 **Sanity check**
 To check that your mujoco-py has been built against the GPU, run
