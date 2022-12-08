@@ -1259,6 +1259,7 @@ class MultiThreadedEnv(EnvBase):
             task_id=self.task_id,
             env_type=self.env_type,
             num_envs=self.num_workers,
+            gym_reset_return_info=False,
             **self.create_env_kwargs,
         )
         self.is_closed = False
@@ -1349,6 +1350,7 @@ class MultiThreadedEnv(EnvBase):
                 task_id=self.task_id,
                 env_type=self.env_type,
                 num_envs=self.num_workers,
+                gym_reset_return_info=False,
                 **self.create_env_kwargs,
                 seed=seed,
             )
