@@ -606,13 +606,13 @@ class SerialEnv(_BatchedEnv):
             reset_workers = tensordict.get("reset_workers")
         else:
             reset_workers = torch.ones(self.num_workers, 1, dtype=torch.bool)
-            tensordict = TensorDict({}, self.batch_size, _run_checks=False)
 
         keys = set()
         for i, _env in enumerate(self._envs):
             if not reset_workers[i]:
                 continue
-            _td = _env.reset(tensordict[i], **kwargs)
+            _tensordict = tensordict[i] if tensordict is not None else None
+            _td = _env._reset(tensordict=_tensordict, **kwargs)
             keys = keys.union(_td.keys())
             self.shared_tensordicts[i].update_(_td)
 
