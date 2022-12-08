@@ -9,20 +9,20 @@ from torchrl.data import (
     NdUnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
-from torchrl.envs.libs.jax_utils import (
-    _ndarray_to_tensor,
-    _object_to_tensordict,
-    _tensor_to_ndarray,
-    _tensordict_to_object,
-    _tree_flatten,
-    _tree_reshape,
-)
 from torchrl.envs.libs.jumanji import _torchrl_data_to_spec_transform
 
 try:
     import brax
     import brax.envs
     import jax
+    from torchrl.envs.libs.jax_utils import (
+        _ndarray_to_tensor,
+        _object_to_tensordict,
+        _tensor_to_ndarray,
+        _tensordict_to_object,
+        _tree_flatten,
+        _tree_reshape,
+    )
 
     _has_brax = True
 except ImportError as err:
