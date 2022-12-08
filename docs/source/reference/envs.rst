@@ -121,7 +121,7 @@ Another thing to take in consideration is that :obj:`ParallelEnv`s (as well as d
 will create data buffers based on the environment specs to pass data from one process
 to another. This means that a misspecified spec (input, observation or reward) will
 cause a breakage at runtime as the data can't be written on the preallocated buffer.
-In general, an environment should be tested using the :obj:`test_fake_tensordict`
+In general, an environment should be tested using the :obj:`check_env_specs`
 test function before being used in a :obj:`ParallelEnv`. This function will raise
 an assertion error whenever the preallocated buffer and the collected data mismatch.
 
@@ -232,7 +232,7 @@ Helpers
     get_available_libraries
     set_exploration_mode
     exploration_mode
-    test_fake_tensordict
+    check_env_specs
 
 Domain-specific
 ---------------

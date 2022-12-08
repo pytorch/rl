@@ -154,7 +154,7 @@ SUPPORTED_LIBRARIES = {
 }
 
 
-def test_fake_tensordict(env):
+def check_env_specs(env):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with

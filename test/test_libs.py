@@ -24,7 +24,7 @@ from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrappe
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
-from torchrl.envs.utils import test_fake_tensordict
+from torchrl.envs.utils import check_env_specs
 
 if _has_gym:
     import gym
@@ -136,7 +136,7 @@ class TestGym:
             from_pixels=from_pixels,
             pixels_only=pixels_only,
         )
-        test_fake_tensordict(env)
+        check_env_specs(env)
 
 
 @implement_for("gym", None, "0.26")
@@ -243,7 +243,7 @@ class TestDMControl:
             from_pixels=from_pixels,
             pixels_only=pixels_only,
         )
-        test_fake_tensordict(env)
+        check_env_specs(env)
 
 
 @pytest.mark.skipif(
@@ -337,7 +337,7 @@ class TestHabitat:
     def test_habitat(self, envname):
         env = HabitatEnv(envname)
         rollout = env.rollout(3)
-        test_fake_tensordict(env)
+        check_env_specs(env)
 
 
 @pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
@@ -375,7 +375,7 @@ class TestJumanji:
     def test_jumanji_spec_rollout(self, envname, batch_size):
         env = JumanjiEnv(envname, batch_size=batch_size)
         env.set_seed(0)
-        test_fake_tensordict(env)
+        check_env_specs(env)
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
     def test_jumanji_consistency(self, envname, batch_size):
