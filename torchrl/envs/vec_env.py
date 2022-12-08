@@ -16,7 +16,7 @@ from warnings import warn
 
 import numpy as np
 import torch
-from dm_env.specs import BoundedArray
+
 from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
@@ -26,7 +26,10 @@ from torchrl.data import CompositeSpec, TensorSpec, UnboundedContinuousTensorSpe
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
-from torchrl.envs.libs.dm_control import _dmcontrol_to_torchrl_spec_transform
+from torchrl.envs.libs.dm_control import _dmcontrol_to_torchrl_spec_transform, _has_dmc
+
+if _has_dmc:
+    from dm_env.specs import BoundedArray
 
 try:
     import envpool
@@ -1259,7 +1262,7 @@ class MultiThreadedEnv(EnvBase):
             task_id=self.task_id,
             env_type=self.env_type,
             num_envs=self.num_workers,
-            gym_reset_return_info=False,
+            gym_reset_return_info=True,
             **self.create_env_kwargs,
         )
         self.is_closed = False
@@ -1307,7 +1310,7 @@ class MultiThreadedEnv(EnvBase):
 
     def _output_transform_reset(self, envpool_output, reset_workers):
         if self.env_type == "gym":
-            obs = envpool_output
+            obs, _ = envpool_output
         else:
             obs = envpool_output.observation.obs
         if reset_workers is not None:
@@ -1330,7 +1333,7 @@ class MultiThreadedEnv(EnvBase):
 
     def _output_transform_step(self, envpool_output):
         if self.env_type == "gym":
-            obs, reward, done, info = envpool_output
+            obs, reward, *_ = envpool_output
         else:
             obs = envpool_output.observation.obs
             reward = envpool_output.reward
@@ -1350,7 +1353,7 @@ class MultiThreadedEnv(EnvBase):
                 task_id=self.task_id,
                 env_type=self.env_type,
                 num_envs=self.num_workers,
-                gym_reset_return_info=False,
+                gym_reset_return_info=True,
                 **self.create_env_kwargs,
                 seed=seed,
             )
