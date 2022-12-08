@@ -26,7 +26,6 @@ from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrappe
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
-from torchrl.envs.libs.jax_utils import tree_flatten
 
 if _has_gym:
     import gym
@@ -384,6 +383,7 @@ class TestJumanji:
         import jax
         import jax.numpy as jnp
         import numpy as onp
+        from torchrl.envs.libs.jax_utils import _tree_flatten
 
         env = JumanjiEnv(envname, batch_size=batch_size)
         obs_keys = list(env.observation_spec.keys(True))
@@ -400,7 +400,7 @@ class TestJumanji:
         for i in range(rollout.shape[-1]):
             action = rollout[..., i]["action"]
             # state = env._flatten(state)
-            action = tree_flatten(env.read_action(action), env.batch_size)
+            action = _tree_flatten(env.read_action(action), env.batch_size)
             state, timestep = jax.vmap(base_env.step)(state, action)
             # state = env._reshape(state)
             # timesteps.append(timestep)
@@ -428,7 +428,7 @@ class TestJumanji:
 
 
 @pytest.mark.skipif(not _has_brax, reason="brax not installed")
-@pytest.mark.parametrize("envname", ["ant"])
+@pytest.mark.parametrize("envname", ["fast"])
 class TestBrax:
     def test_brax_seeding(self, envname):
         final_seed = []
@@ -463,6 +463,45 @@ class TestBrax:
         env = BraxEnv(envname, batch_size=batch_size)
         env.set_seed(0)
         _test_fake_tensordict(env)
+    
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    @pytest.mark.parametrize("requires_grad", [False, True])
+    def test_brax_grad(self, envname, batch_size, requires_grad):
+        import jax
+        import jax.numpy as jnp
+        from torchrl.envs.libs.jax_utils import _tree_flatten, _tensor_to_ndarray, _ndarray_to_tensor
+
+        env = BraxEnv(envname, batch_size=batch_size, requires_grad=requires_grad)
+        env.set_seed(1)
+        rollout = env.rollout(10)
+
+        env.set_seed(1)
+        key = env._key
+        base_env = env._env
+        key, *keys = jax.random.split(key, np.prod(batch_size) + 1)
+        state = jax.vmap(base_env.reset)(jnp.stack(keys))
+        for i in range(rollout.shape[-1]):
+            action = rollout[..., i]["action"]
+            action = _tensor_to_ndarray(action.clone())
+            action = _tree_flatten(action, env.batch_size)
+            state = jax.vmap(base_env.step)(state, action)
+            t1 = rollout[..., i][("next", "observation")]
+            t2 = _ndarray_to_tensor(state.obs)
+            torch.testing.assert_close(t1, t2)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_brax_grad(self, envname, batch_size):
+        batch_size = (1,)
+        env = BraxEnv(envname, batch_size=batch_size, requires_grad=True)
+        env.set_seed(0)
+        td1 = env.reset()
+        action = torch.randn(batch_size + env.action_spec.shape)
+        action.requires_grad_(True)
+        td1["action"] = action
+        td2 = env.step(td1)
+        td2["reward"].mean().backward()
+        env.close()
+        del env
 
 
 if __name__ == "__main__":

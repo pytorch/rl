@@ -17,11 +17,11 @@ from torchrl.data import (
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs import GymLikeEnv
 from torchrl.envs.libs.jax_utils import (
-    tree_reshape,
-    tree_flatten,
-    ndarray_to_tensor,
-    object_to_tensordict,
-    tensordict_to_object,
+    _ndarray_to_tensor,
+    _object_to_tensordict,
+    _tensordict_to_object,
+    _tree_flatten,
+    _tree_reshape,
 )
 
 try:
@@ -153,13 +153,13 @@ class JumanjiWrapper(GymLikeEnv):
         key = jax.random.PRNGKey(0)
         keys = jax.random.split(key, self.batch_size.numel())
         state, _ = jax.vmap(env.reset)(jnp.stack(keys))
-        state = tree_reshape(state, self.batch_size)
+        state = _tree_reshape(state, self.batch_size)
         return state
 
     def _make_state_spec(self, env) -> TensorSpec:
         key = jax.random.PRNGKey(0)
         state, _ = env.reset(key)
-        state_dict = object_to_tensordict(state, self.device, batch_size=())
+        state_dict = _object_to_tensordict(state, self.device, batch_size=())
         state_spec = _torchrl_data_to_spec_transform(state_dict)
         return state_spec
 
@@ -213,40 +213,40 @@ class JumanjiWrapper(GymLikeEnv):
         self.key = jax.random.PRNGKey(seed)
 
     def read_state(self, state):
-        state_dict = object_to_tensordict(state, self.device, self.batch_size)
+        state_dict = _object_to_tensordict(state, self.device, self.batch_size)
         return self._state_spec.encode(state_dict)
 
     def read_obs(self, obs):
         if isinstance(obs, (list, jnp.ndarray, np.ndarray)):
-            obs_dict = ndarray_to_tensor(obs).to(self.device)
+            obs_dict = _ndarray_to_tensor(obs).to(self.device)
         else:
-            obs_dict = object_to_tensordict(obs, self.device, self.batch_size)
+            obs_dict = _object_to_tensordict(obs, self.device, self.batch_size)
         return super().read_obs(obs_dict)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
 
         # prepare inputs
-        state = tensordict_to_object(tensordict.get("state"), self._state_example)
+        state = _tensordict_to_object(tensordict.get("state"), self._state_example)
         action = self.read_action(tensordict.get("action"))
         reward = self.reward_spec.zero(self.batch_size)
 
         # flatten batch size into vector
-        state = tree_flatten(state, self.batch_size)
-        action = tree_flatten(action, self.batch_size)
+        state = _tree_flatten(state, self.batch_size)
+        action = _tree_flatten(action, self.batch_size)
 
         # jax vectorizing map on env.step
         state, timestep = jax.vmap(self._env.step)(state, action)
 
         # reshape batch size from vector
-        state = tree_reshape(state, self.batch_size)
-        timestep = tree_reshape(timestep, self.batch_size)
+        state = _tree_reshape(state, self.batch_size)
+        timestep = _tree_reshape(timestep, self.batch_size)
 
         # collect outputs
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
         reward = self.read_reward(reward, np.asarray(timestep.reward))
         done = timestep.step_type == self.lib.types.StepType.LAST
-        done = ndarray_to_tensor(done).view(torch.bool).to(self.device)
+        done = _ndarray_to_tensor(done).view(torch.bool).to(self.device)
 
         self._is_done = done
 
@@ -273,8 +273,8 @@ class JumanjiWrapper(GymLikeEnv):
         state, timestep = jax.vmap(self._env.reset)(jnp.stack(keys))
 
         # reshape batch size from vector
-        state = tree_reshape(state, self.batch_size)
-        timestep = tree_reshape(timestep, self.batch_size)
+        state = _tree_reshape(state, self.batch_size)
+        timestep = _tree_reshape(timestep, self.batch_size)
 
         # collect outputs
         state_dict = self.read_state(state)
