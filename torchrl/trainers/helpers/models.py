@@ -1465,7 +1465,7 @@ def make_dreamer(
     action_key: str = "action",
     value_key: str = "state_value",
     use_decoder_in_env: bool = False,
-    stats: Optional[dict] = None,
+    obs_norm_state_dict=None,
 ) -> nn.ModuleList:
     """Create Dreamer components.
 
@@ -1480,8 +1480,8 @@ def make_dreamer(
             Defaults to "state_value".
         use_decoder_in_env (bool, optional): Whether to use the decoder in the model based dreamer env.
             Defaults to False.
-        stats (Optional[dict], optional): Stats to use for normalization.
-            Defaults to None.
+        obs_norm_state_dict (dict, optional): the state_dict of the ObservationNorm transform used
+            when proof_environment is missing. Defaults to None.
 
     Returns:
         nn.TensorDictModel: Dreamer World model.
@@ -1494,7 +1494,7 @@ def make_dreamer(
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
         proof_environment = transformed_env_constructor(
-            cfg=cfg, use_env_creator=False, stats=stats
+            cfg=cfg, use_env_creator=False, obs_norm_state_dict=obs_norm_state_dict
         )()
 
     # Modules
