@@ -463,13 +463,17 @@ class TestBrax:
         env = BraxEnv(envname, batch_size=batch_size)
         env.set_seed(0)
         _test_fake_tensordict(env)
-    
+
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
     @pytest.mark.parametrize("requires_grad", [False, True])
-    def test_brax_grad(self, envname, batch_size, requires_grad):
+    def test_brax_consistency(self, envname, batch_size, requires_grad):
         import jax
         import jax.numpy as jnp
-        from torchrl.envs.libs.jax_utils import _tree_flatten, _tensor_to_ndarray, _ndarray_to_tensor
+        from torchrl.envs.libs.jax_utils import (
+            _ndarray_to_tensor,
+            _tensor_to_ndarray,
+            _tree_flatten,
+        )
 
         env = BraxEnv(envname, batch_size=batch_size, requires_grad=requires_grad)
         env.set_seed(1)
