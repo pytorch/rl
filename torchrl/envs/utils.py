@@ -10,7 +10,6 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
 )
 from tensordict.tensordict import TensorDictBase
-from torchrl.envs import EnvBase
 
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
@@ -155,7 +154,7 @@ SUPPORTED_LIBRARIES = {
 }
 
 
-def test_fake_tensordict(env: EnvBase):
+def test_fake_tensordict(env):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
