@@ -505,27 +505,27 @@ actor = Actor(base_module, in_keys=["obs"])
 tensordict = TensorDict({"obs": torch.randn(5)}, batch_size=[])
 actor(tensordict)  # action is the default value
 
-from tensordict.nn import ProbabilisticTensorDictModule
+from tensordict.nn.prototype import (
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+)
 
 ###############################################################################
 
 # Probabilistic modules
 from torchrl.modules import NormalParamWrapper, TanhNormal
 
-td = TensorDict(
-    {"input": torch.randn(3, 5)},
-    [
-        3,
-    ],
-)
+td = TensorDict({"input": torch.randn(3, 5)}, [3])
 net = NormalParamWrapper(nn.Linear(5, 4))  # splits the output in loc and scale
 module = TensorDictModule(net, in_keys=["input"], out_keys=["loc", "scale"])
-td_module = ProbabilisticTensorDictModule(
-    module=module,
-    dist_in_keys=["loc", "scale"],
-    sample_out_key=["action"],
-    distribution_class=TanhNormal,
-    return_log_prob=False,
+td_module = ProbabilisticTensorDictSequential(
+    module,
+    ProbabilisticTensorDictModule(
+        in_keys=["loc", "scale"],
+        out_keys=["action"],
+        distribution_class=TanhNormal,
+        return_log_prob=False,
+    ),
 )
 td_module(td)
 print(td)
@@ -533,18 +533,15 @@ print(td)
 ###############################################################################
 
 # returning the log-probability
-td = TensorDict(
-    {"input": torch.randn(3, 5)},
-    [
-        3,
-    ],
-)
-td_module = ProbabilisticTensorDictModule(
-    module=module,
-    dist_in_keys=["loc", "scale"],
-    sample_out_key=["action"],
-    distribution_class=TanhNormal,
-    return_log_prob=True,
+td = TensorDict({"input": torch.randn(3, 5)}, [3])
+td_module = ProbabilisticTensorDictSequential(
+    module,
+    ProbabilisticTensorDictModule(
+        in_keys=["loc", "scale"],
+        out_keys=["action"],
+        distribution_class=TanhNormal,
+        return_log_prob=True,
+    ),
 )
 td_module(td)
 print(td)
@@ -554,12 +551,7 @@ print(td)
 # Sampling vs mode / mean
 from torchrl.envs.utils import set_exploration_mode
 
-td = TensorDict(
-    {"input": torch.randn(3, 5)},
-    [
-        3,
-    ],
-)
+td = TensorDict({"input": torch.randn(3, 5)}, [3])
 
 torch.manual_seed(0)
 with set_exploration_mode("random"):
