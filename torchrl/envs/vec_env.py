@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import numpy as np
 import os
 from collections import OrderedDict
 from copy import deepcopy
@@ -15,7 +14,9 @@ from time import sleep
 from typing import Callable, Optional, Sequence, Union, Any, List, Dict
 from warnings import warn
 
+import numpy as np
 import torch
+from dm_env.specs import BoundedArray
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from torch import multiprocessing as mp
@@ -26,9 +27,15 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 from torchrl.envs.libs.dm_control import _dmcontrol_to_torchrl_spec_transform
-from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
-import envpool
-from dm_env.specs import BoundedArray
+
+try:
+    import envpool
+
+    _has_envpool = True
+except ImportError as err:
+    _has_envpool = False
+    IMPORT_ERR_ENVPOOL = str(err)
+
 
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):
@@ -1074,18 +1081,14 @@ def _run_worker_pipe_shared_mem(
                 child_pipe.send(("_".join([cmd, "done"]), None))
 
 
-
 class MultiThreadedEnv(EnvBase):
-    """Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
+    """Multithreaded execution of environments.
 
-    Those queries will return a list of length equal to the number of workers containing the
-    values resulting from those queries.
-        >>> env = ParallelEnv(3, my_env_fun)
-        >>> custom_attribute_list = env.custom_attribute
-        >>> custom_method_list = env.custom_method(*args)
-
-    Args:
-
+    >>> env = MultiThreadedEnv(num_workers=3, task_id="Pendulum-v1", env_type="gym")
+    >>> env.reset()
+    >>> env.rand_step()
+    >>> env.rollout(5)
+    >>> env.close()
     """
 
     _verbose: bool = False
@@ -1114,12 +1117,12 @@ class MultiThreadedEnv(EnvBase):
         device: Optional[DEVICE_TYPING] = "cpu",
         allow_step_when_done: bool = False,
     ):
-        # if device is not None:
-        #     raise ValueError(
-        #         "Device setting for batched environment can't be done at initialization. "
-        #         "The device will be inferred from the constructed environment. "
-        #         "It can be set through the `to(device)` method."
-        #     )
+        if not _has_envpool:
+            raise ImportError(
+                f"""envpool python package was not found. Please install this dependency.
+(Got the error message: {IMPORT_ERR_ENVPOOL}).
+"""
+            )
         self._device = device
         self.is_closed = False
         self.task_id = task_id.replace("ALE/", "")
@@ -1128,9 +1131,7 @@ class MultiThreadedEnv(EnvBase):
         self.create_env_kwargs = create_env_kwargs or {}
         super().__init__(device=device)
 
-
         self.policy_proof = policy_proof
-
 
         self.env_input_keys = env_input_keys
         self.pin_memory = pin_memory
@@ -1147,7 +1148,9 @@ class MultiThreadedEnv(EnvBase):
         self._dummy_env_str = None
         self._seeds = None
         self.flatten = False
-        self.obs = torch.empty(self.num_workers, *self.observation_spec["observation"].shape)
+        self.obs = torch.empty(
+            self.num_workers, *self.observation_spec["observation"].shape
+        )
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
@@ -1191,7 +1194,6 @@ class MultiThreadedEnv(EnvBase):
     def action_spec(self) -> TensorSpec:
         return self.input_spec["action"]
 
-
     @property
     def input_spec(self) -> TensorSpec:
 
@@ -1199,23 +1201,25 @@ class MultiThreadedEnv(EnvBase):
             action_spec = self._env.spec.action_spec()
             if action_spec.shape == ():
                 self.flatten = True
-                action_spec = BoundedArray(shape=(1,), dtype=action_spec.dtype,
-                                                        name=action_spec.name,
-                                                        minimum=action_spec.minimum,
-                                                        maximum=action_spec.maximum)
+                action_spec = BoundedArray(
+                    shape=(1,),
+                    dtype=action_spec.dtype,
+                    name=action_spec.name,
+                    minimum=action_spec.minimum,
+                    maximum=action_spec.maximum,
+                )
             if self.env_type == "dm":
-                    transformed_spec = _dmcontrol_to_torchrl_spec_transform(
-                            action_spec, device=self.device,
-                        )
-                    self._input_spec = CompositeSpec(
-                        action=transformed_spec
-                    )
+                transformed_spec = _dmcontrol_to_torchrl_spec_transform(
+                    action_spec,
+                    device=self.device,
+                )
+                self._input_spec = CompositeSpec(action=transformed_spec)
             else:
                 self._input_spec = CompositeSpec(
-                        action=_dmcontrol_to_torchrl_spec_transform( #_gym_to_torchrl_spec_transform(
-                action_spec,
-                device=self.device,
-            )
+                    action=_dmcontrol_to_torchrl_spec_transform(
+                        action_spec,
+                        device=self.device,
+                    )
                 )
 
         return self._input_spec
@@ -1241,24 +1245,22 @@ class MultiThreadedEnv(EnvBase):
     @property
     def reward_spec(self) -> TensorSpec:
         if self._reward_spec is None:
-            # self._reward_spec = _dmcontrol_to_torchrl_spec_transform(
-            #     self._env.spec.reward_spec(), device=self.device
-            # )
             self._reward_spec = UnboundedContinuousTensorSpec(
                 device=self.device,
             )
-
         return self._reward_spec
-
-
-
 
     def is_done_set_fn(self, value: bool) -> None:
         self._is_done = value.all()
 
     def _start_workers(self) -> None:
         """Starts the various envs."""
-        self._env = envpool.make(task_id=self.task_id, env_type=self.env_type, num_envs=self.num_workers, **self.create_env_kwargs)
+        self._env = envpool.make(
+            task_id=self.task_id,
+            env_type=self.env_type,
+            num_envs=self.num_workers,
+            **self.create_env_kwargs,
+        )
         self.is_closed = False
 
     def __repr__(self) -> str:
@@ -1270,36 +1272,13 @@ class MultiThreadedEnv(EnvBase):
             f"\n\tbatch_size={self.batch_size})"
         )
 
-    # def close(self) -> None:
-    #     print(f"self.is_closed = {self.is_closed}")
-    #     if self.is_closed:
-    #         raise RuntimeError("trying to close a closed environment")
-    #     if self._verbose:
-    #         print(f"closing {self.__class__.__name__}")
-
-    #     # self.observation_spec = None
-    #     # self.reward_spec = None
-
-    #     #self._shutdown_workers()
-    #     print("attempting to set is_closed = True")
-    #     self.is_closed = True
-    #     print("finished setting is_closed = True")
-
     def close(self) -> None:
         self.is_closed = True
-
-    def __del__(self):
-        pass
-
 
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
 
         action = tensordict.get("action")
-        #action_np = self.read_action(action)
-
-        # if action.shape[1] == 1:
-        #     action = action.flatten()
         if self.flatten:
             action = action.flatten()
         step_output = self._env.step(action.detach().numpy())
@@ -1317,16 +1296,11 @@ class MultiThreadedEnv(EnvBase):
             return None
         return np.where(reset_workers)[0]
 
-
-
-
     @_check_start
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         reset_workers = self._parse_reset_workers(tensordict)
 
         reset_data = self._env.reset(reset_workers)
-        # if not isinstance(reset_data, tuple):
-        #     reset_data = (reset_data,)
         tensordict_out = self._output_transform_reset(reset_data, reset_workers)
         return tensordict_out
 
@@ -1337,22 +1311,21 @@ class MultiThreadedEnv(EnvBase):
             obs = envpool_output.observation.obs
         if reset_workers is not None:
             for i, worker in enumerate(reset_workers):
-                print(f"setting worker {worker}: obs={obs}, i={i}, {self.obs}=self.obs, worker={worker}")
+                print(
+                    f"setting worker {worker}: obs={obs}, i={i}, {self.obs}=self.obs, worker={worker}"
+                )
                 self.obs[worker] = torch.tensor(obs[i])
         else:
             self.obs = torch.tensor(obs)
 
         tensordict_out = TensorDict(
-            {"observation": self.obs,
-             #"reward": torch.tensor(reward)
-             },
+            {"observation": self.obs},
             batch_size=self.batch_size,
             device=self.device,
         )
         self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
         tensordict_out.set("done", self._is_done)
         return tensordict_out
-
 
     def _output_transform_step(self, envpool_output):
         if self.env_type == "gym":
@@ -1361,9 +1334,7 @@ class MultiThreadedEnv(EnvBase):
             obs = envpool_output.observation.obs
             reward = envpool_output.reward
         tensordict_out = TensorDict(
-            {"observation": torch.tensor(obs),
-             "reward": torch.tensor(reward)
-             },
+            {"observation": torch.tensor(obs), "reward": torch.tensor(reward)},
             batch_size=self.batch_size,
             device=self.device,
         )
@@ -1371,18 +1342,16 @@ class MultiThreadedEnv(EnvBase):
         tensordict_out.set("done", self._is_done)
         return tensordict_out
 
-
     @_check_start
     def _set_seed(self, seed: Optional[int]):
         if seed is not None:
-            self._env = envpool.make(task_id=self.task_id, env_type=self.env_type, num_envs=self.num_workers, **self.create_env_kwargs, seed=seed)
-
-    def _create_td(self):
-        pass
-
-
-    def _shutdown_workers(self) -> None:
-        raise NotImplementedError
+            self._env = envpool.make(
+                task_id=self.task_id,
+                env_type=self.env_type,
+                num_envs=self.num_workers,
+                **self.create_env_kwargs,
+                seed=seed,
+            )
 
     def start(self) -> None:
         if not self.is_closed:

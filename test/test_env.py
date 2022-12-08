@@ -248,7 +248,9 @@ def _make_envs(
         N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
     )
     env_multithread = MultiThreadedEnv(
-        N, env_name, env_type="gym",
+        N,
+        env_name,
+        env_type="gym",
     )
 
     if transformed_out:
@@ -509,12 +511,15 @@ class TestParallel:
             with pytest.raises(RuntimeError):
                 # number of actions does not match number of workers
                 td = TensorDict(
-                    source={"action": env0.action_spec.rand((N - 1,))}, batch_size=[N - 1]
+                    source={"action": env0.action_spec.rand((N - 1,))},
+                    batch_size=[N - 1],
                 )
                 td1 = env_test.step(td)
 
             td_reset = TensorDict(
-                source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
+                source={
+                    "reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()
+                },
                 batch_size=[
                     N,
                 ],
@@ -596,12 +601,15 @@ class TestParallel:
             with pytest.raises(RuntimeError):
                 # number of actions does not match number of workers
                 td = TensorDict(
-                    source={"action": env0.action_spec.rand((N - 1,))}, batch_size=[N - 1]
+                    source={"action": env0.action_spec.rand((N - 1,))},
+                    batch_size=[N - 1],
                 )
                 td1 = env_test.step(td)
 
             td_reset = TensorDict(
-                source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
+                source={
+                    "reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()
+                },
                 batch_size=[
                     N,
                 ],
@@ -671,7 +679,6 @@ class TestParallel:
         env_parallel.close()
         env_serial.close()
 
-
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize(
         "env_name",
@@ -692,7 +699,6 @@ class TestParallel:
         )
         env0.set_seed(0, static_seed=static_seed)
         print("env0 reset=", env0.reset()["observation"])
-
 
         out_seed_serial = env_serial.set_seed(0, static_seed=static_seed)
         if static_seed:
@@ -731,10 +737,6 @@ class TestParallel:
 
         env_multithread.close()
         env_serial.close()
-
-
-
-
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     def test_parallel_env_shutdown(self):
@@ -907,7 +909,7 @@ class TestParallel:
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_parallel_env_transform_consistency(self, env_name, frame_skip, device):
-        env_parallel_in, env_serial_in, env_multithread_in, env0_in = _make_envs(
+        env_parallel_in, env_serial_in, _, env0_in = _make_envs(
             env_name,
             frame_skip,
             transformed_in=True,
@@ -915,7 +917,7 @@ class TestParallel:
             device=device,
             N=3,
         )
-        env_parallel_out, env_serial_out, env_multithread_out, env0_out = _make_envs(
+        env_parallel_out, env_serial_out, _, env0_out = _make_envs(
             env_name,
             frame_skip,
             transformed_in=False,
@@ -942,17 +944,6 @@ class TestParallel:
         assert_allclose_td(r_in, r_out)
         env_serial_in.close()
         env_serial_out.close()
-
-        torch.manual_seed(0)
-        env_multithread_in.set_seed(0)
-        r_in = env_multithread_in.rollout(max_steps=5)
-        torch.manual_seed(0)
-        env_multithread_out.set_seed(0)
-        r_out = env_multithread_out.rollout(max_steps=5)
-        print(r_in["observation"], r_out["observation"])
-        assert_allclose_td(r_in, r_out)
-        env_multithread_in.close()
-        env_multithread_out.close()
 
         torch.manual_seed(0)
         env0_in.set_seed(0)
