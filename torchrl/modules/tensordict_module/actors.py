@@ -88,7 +88,6 @@ class ProbabilisticActor(SafeProbabilisticSequential):
         >>> action_spec = NdBoundedTensorSpec(shape=torch.Size([4]),
         ...    minimum=-1, maximum=1)
         >>> module = NormalParamWrapper(torch.nn.Linear(4, 8))
-        >>> params = make_functional(module)
         >>> tensordict_module = SafeModule(module, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> td_module = ProbabilisticActor(
         ...    module=tensordict_module,
@@ -96,6 +95,7 @@ class ProbabilisticActor(SafeProbabilisticSequential):
         ...    dist_in_keys=["loc", "scale"],
         ...    distribution_class=TanhNormal,
         ...    )
+        >>> params = make_functional(td_module)
         >>> td = td_module(td, params=params)
         >>> td
         TensorDict(

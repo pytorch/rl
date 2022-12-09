@@ -905,30 +905,49 @@ class TestTransforms:
     @pytest.mark.parametrize("size", [1, 3])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("standard_normal", [True, False])
-    def test_observationnorm_init_stats(self, keys, size, device, standard_normal):
-        base_env = ContinuousActionVecMockEnv(
-            observation_spec=CompositeSpec(
-                observation=NdBoundedTensorSpec(
-                    minimum=1, maximum=1, shape=torch.Size([size])
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_observationnorm_init_stats(
+        self, keys, size, device, standard_normal, parallel
+    ):
+        def make_env():
+            base_env = ContinuousActionVecMockEnv(
+                observation_spec=CompositeSpec(
+                    observation=NdBoundedTensorSpec(
+                        minimum=1, maximum=1, shape=torch.Size([size])
+                    ),
+                    observation_orig=NdBoundedTensorSpec(
+                        minimum=1, maximum=1, shape=torch.Size([size])
+                    ),
                 ),
-                observation_orig=NdBoundedTensorSpec(
-                    minimum=1, maximum=1, shape=torch.Size([size])
+                action_spec=NdBoundedTensorSpec(
+                    minimum=1, maximum=1, shape=torch.Size((size,))
                 ),
-            ),
-            action_spec=NdBoundedTensorSpec(
-                minimum=1, maximum=1, shape=torch.Size((size,))
-            ),
-            seed=0,
-        )
-        base_env.out_key = "observation"
+                seed=0,
+            )
+            base_env.out_key = "observation"
+            return base_env
+
+        if parallel:
+            base_env = SerialEnv(3, make_env)
+            reduce_dim = (0, 1)
+            cat_dim = 1
+        else:
+            base_env = make_env()
+            reduce_dim = 0
+            cat_dim = 0
+
         t_env = TransformedEnv(
             base_env,
             transform=ObservationNorm(in_keys=keys, standard_normal=standard_normal),
         )
         if len(keys) > 1:
-            t_env.transform.init_stats(num_iter=11, key="observation")
+            t_env.transform.init_stats(
+                num_iter=11, key="observation", cat_dim=cat_dim, reduce_dim=reduce_dim
+            )
         else:
-            t_env.transform.init_stats(num_iter=11)
+            t_env.transform.init_stats(
+                num_iter=11, reduce_dim=reduce_dim, cat_dim=cat_dim
+            )
 
         assert t_env.transform.loc.shape == t_env.observation_spec["observation"].shape
         assert (
@@ -945,12 +964,47 @@ class TestTransforms:
         with pytest.raises(RuntimeError, match="Loc/Scale are already initialized"):
             transform.init_stats(num_iter=11)
 
+    def test_observationnorm_wrong_catdim(self):
+        transform = ObservationNorm(in_keys="next_observation", loc=0, scale=1)
+
+        with pytest.raises(
+            ValueError, match="cat_dim must be part of or equal to reduce_dim"
+        ):
+            transform.init_stats(num_iter=11, cat_dim=1)
+
+        with pytest.raises(
+            ValueError, match="cat_dim must be part of or equal to reduce_dim"
+        ):
+            transform.init_stats(num_iter=11, cat_dim=2, reduce_dim=(0, 1))
+
+        with pytest.raises(
+            ValueError,
+            match="cat_dim must be specified if reduce_dim is not an integer",
+        ):
+            transform.init_stats(num_iter=11, reduce_dim=(0, 1))
+
     def test_observationnorm_init_stats_multiple_keys_error(self):
         transform = ObservationNorm(in_keys=["next_observation", "next_pixels"])
 
         err_msg = "Transform has multiple in_keys but no specific key was passed as an argument"
         with pytest.raises(RuntimeError, match=err_msg):
             transform.init_stats(num_iter=11)
+
+    def test_observationnorm_initialization_order_error(self):
+        base_env = ContinuousActionVecMockEnv()
+        t_env = TransformedEnv(base_env)
+
+        transform1 = ObservationNorm(in_keys=["next_observation"])
+        transform2 = ObservationNorm(in_keys=["next_observation"])
+        t_env.append_transform(transform1)
+        t_env.append_transform(transform2)
+
+        err_msg = (
+            "ObservationNorms need to be initialized in the right order."
+            "Trying to initialize an ObservationNorm while a parent ObservationNorm transform is still uninitialized"
+        )
+        with pytest.raises(RuntimeError, match=err_msg):
+            transform2.init_stats(num_iter=10, key="observation")
 
     def test_observationnorm_uninitialized_stats_error(self):
         transform = ObservationNorm(in_keys=["next_observation", "next_pixels"])
@@ -961,6 +1015,33 @@ class TestTransforms:
         )
         with pytest.raises(RuntimeError, match=err_msg):
             transform._apply_transform(torch.Tensor([1]))
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_observationnorm_infinite_stats_error(self, device):
+        base_env = ContinuousActionVecMockEnv(
+            observation_spec=CompositeSpec(
+                observation=NdBoundedTensorSpec(
+                    minimum=1, maximum=1, shape=torch.Size([1])
+                ),
+                observation_orig=NdBoundedTensorSpec(
+                    minimum=1, maximum=1, shape=torch.Size([1])
+                ),
+            ),
+            action_spec=NdBoundedTensorSpec(
+                minimum=1, maximum=1, shape=torch.Size((1,))
+            ),
+            seed=0,
+        )
+        base_env.out_key = "observation"
+        t_env = TransformedEnv(
+            base_env,
+            transform=ObservationNorm(in_keys="observation"),
+        )
+        t_env.append_transform(ObservationNorm(in_keys="observation"))
+        err_msg = "Non-finite values found in"
+        with pytest.raises(RuntimeError, match=err_msg):
+            for transform in t_env.transform:
+                transform.init_stats(num_iter=100)
 
     def test_catframes_transform_observation_spec(self):
         N = 4

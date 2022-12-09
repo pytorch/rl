@@ -4,10 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import dataclasses
-import os
-import pathlib
-import uuid
-from datetime import datetime
 
 import hydra
 import torch.cuda
@@ -22,14 +18,16 @@ from torchrl.trainers.helpers.collectors import (
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     EnvConfig,
-    get_stats_random_rollout,
+    initialize_observation_norm_transforms,
     parallel_env_constructor,
+    retrieve_observation_norms_state_dict,
     transformed_env_constructor,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.losses import A2CLossConfig, make_a2c_loss
 from torchrl.trainers.helpers.models import A2CModelConfig, make_a2c_model
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
+from torchrl.trainers.loggers.utils import generate_exp_name, get_logger
 
 config_fields = [
     (config_field.name, config_field.type, config_field)
@@ -63,50 +61,30 @@ def main(cfg: "DictConfig"):  # noqa: F821
         else torch.device("cuda:0")
     )
 
-    exp_name = "_".join(
-        [
-            "A2C",
-            cfg.exp_name,
-            str(uuid.uuid4())[:8],
-            datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
-        ]
+    exp_name = generate_exp_name("A2C", cfg.exp_name)
+    logger = get_logger(
+        logger_type=cfg.logger, logger_name="a2c_logging", experiment_name=exp_name
     )
-    if cfg.logger == "tensorboard":
-        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
-
-        logger = TensorboardLogger(log_dir="a2c_logging", exp_name=exp_name)
-    elif cfg.logger == "csv":
-        from torchrl.trainers.loggers.csv import CSVLogger
-
-        logger = CSVLogger(log_dir="a2c_logging", exp_name=exp_name)
-    elif cfg.logger == "wandb":
-        from torchrl.trainers.loggers.wandb import WandbLogger
-
-        logger = WandbLogger(log_dir="a2c_logging", exp_name=exp_name)
-    elif cfg.logger == "mlflow":
-        from torchrl.trainers.loggers.mlflow import MLFlowLogger
-
-        logger = MLFlowLogger(
-            tracking_uri=pathlib.Path(os.path.abspath("a2c_logging")).as_uri(),
-            exp_name=exp_name,
-        )
     video_tag = exp_name if cfg.record_video else ""
 
-    stats = None
+    key, init_env_steps, stats = None, None, None
     if not cfg.vecnorm and cfg.norm_stats:
-        proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
-        stats = get_stats_random_rollout(
-            cfg,
-            proof_env,
-            key="pixels" if cfg.from_pixels else "observation_vector",
-        )
-        # make sure proof_env is closed
-        proof_env.close()
+        if not hasattr(cfg, "init_env_steps"):
+            raise AttributeError("init_env_steps missing from arguments.")
+        key = "pixels" if cfg.from_pixels else "observation_vector"
+        init_env_steps = cfg.init_env_steps
+        stats = {"loc": None, "scale": None}
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
     proof_env = transformed_env_constructor(
-        cfg=cfg, use_env_creator=False, stats=stats
+        cfg=cfg,
+        use_env_creator=False,
+        stats=stats,
     )()
+    initialize_observation_norm_transforms(
+        proof_environment=proof_env, num_iter=init_env_steps, key=key
+    )
+    _, obs_norm_state_dict = retrieve_observation_norms_state_dict(proof_env)[0]
 
     model = make_a2c_model(
         proof_env,
@@ -128,7 +106,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     proof_env.close()
     create_env_fn = parallel_env_constructor(
         cfg=cfg,
-        stats=stats,
+        obs_norm_state_dict=obs_norm_state_dict,
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
@@ -143,7 +121,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg,
         video_tag=video_tag,
         norm_obs_only=True,
-        stats=stats,
+        obs_norm_state_dict=obs_norm_state_dict,
         logger=logger,
         use_env_creator=False,
     )()

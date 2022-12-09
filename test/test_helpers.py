@@ -24,14 +24,25 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
+    MockSerialEnv,
 )
 from packaging import version
+from torchrl.data import CompositeSpec, NdBoundedTensorSpec
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.envs.transforms.transforms import _has_tv
+from torchrl.envs.transforms import ObservationNorm
+from torchrl.envs.transforms.transforms import (
+    _has_tv,
+    FlattenObservation,
+    TransformedEnv,
+)
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules.tensordict_module.common import _has_functorch
 from torchrl.trainers.helpers import transformed_env_constructor
-from torchrl.trainers.helpers.envs import EnvConfig
+from torchrl.trainers.helpers.envs import (
+    EnvConfig,
+    initialize_observation_norm_transforms,
+    retrieve_observation_norms_state_dict,
+)
 from torchrl.trainers.helpers.losses import A2CLossConfig, make_a2c_loss
 from torchrl.trainers.helpers.models import (
     A2CModelConfig,
@@ -55,6 +66,7 @@ if TORCH_VERSION < version.parse("1.12.0"):
     UNSQUEEZE_SINGLETON = True
 else:
     UNSQUEEZE_SINGLETON = False
+
 
 ## these tests aren't truly unitary but setting up a fake env for the
 # purpose of building a model with args is a lot of unstable scaffoldings
@@ -121,10 +133,13 @@ def test_dqn_maker(
             DiscreteActionConvMockEnvNumpy if from_pixels else DiscreteActionVecMockEnv
         )
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker(
-            categorical_action_encoding=cfg.categorical_action_encoding
+            categorical_action_encoding=cfg.categorical_action_encoding,
         )
 
         actor = make_dqn_actor(proof_environment, cfg, device)
@@ -184,7 +199,10 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
             else ContinuousActionVecMockEnv
         )
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker()
         actor, value = make_ddpg_actor(proof_environment, device=device, cfg=cfg)
@@ -277,7 +295,10 @@ def test_ppo_maker(
                 env_maker = DiscreteActionVecMockEnv
 
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker()
 
@@ -429,7 +450,10 @@ def test_a2c_maker(
                 env_maker = DiscreteActionVecMockEnv
 
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker()
 
@@ -578,7 +602,10 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             else ContinuousActionVecMockEnv
         )
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker()
 
@@ -705,7 +732,10 @@ def test_redq_make(device, from_pixels, gsde, exploration):
             else ContinuousActionVecMockEnv
         )
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker()
 
@@ -782,7 +812,6 @@ to see torch < 1.11 supported for dreamer, please submit an issue.""",
 @pytest.mark.parametrize("tanh_loc", [(), ("tanh_loc=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture):
-
     transformed_env_constructor = dreamer_constructor_fixture
     flags = ["from_pixels=True", "catframes=1"]
 
@@ -802,7 +831,10 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
         cfg = compose(config_name="config", overrides=flags)
         env_maker = ContinuousActionConvMockEnvNumpy
         env_maker = transformed_env_constructor(
-            cfg, use_env_creator=False, custom_env_maker=env_maker
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            stats={"loc": 0.0, "scale": 1.0},
         )
         proof_environment = env_maker().to(device)
         model = make_dreamer(
@@ -910,6 +942,133 @@ def test_timeit():
     assert abs(val2[0] - w2) < 1e-2
     assert abs(val2[1] - n2 * w2) < 1
     assert val2[2] == n2
+
+
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
+def test_transformed_env_constructor_with_state_dict(from_pixels):
+    config_fields = [
+        (config_field.name, config_field.type, config_field)
+        for config_cls in (
+            EnvConfig,
+            DreamerConfig,
+        )
+        for config_field in dataclasses.fields(config_cls)
+    ]
+    flags = list(from_pixels)
+
+    Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+    cs = ConfigStore.instance()
+    cs.store(name="config", node=Config)
+    with initialize(version_base=None, config_path=None):
+        cfg = compose(config_name="config", overrides=flags)
+        env_maker = (
+            ContinuousActionConvMockEnvNumpy
+            if from_pixels
+            else ContinuousActionVecMockEnv
+        )
+        t_env = transformed_env_constructor(
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+        )()
+        idx, state_dict = retrieve_observation_norms_state_dict(t_env)[0]
+
+        obs_transform = transformed_env_constructor(
+            cfg,
+            use_env_creator=False,
+            custom_env_maker=env_maker,
+            obs_norm_state_dict=state_dict,
+        )().transform[idx]
+        torch.testing.assert_close(obs_transform.state_dict(), state_dict)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("keys", [None, ["observation", "observation_orig"]])
+@pytest.mark.parametrize("composed", [True, False])
+@pytest.mark.parametrize("initialized", [True, False])
+def test_initialize_stats_from_observation_norms(device, keys, composed, initialized):
+    obs_spec, stat_key = None, None
+    if keys:
+        obs_spec = CompositeSpec(
+            **{
+                key: NdBoundedTensorSpec(maximum=1, minimum=1, shape=torch.Size([1]))
+                for key in keys
+            }
+        )
+        stat_key = keys[0]
+        env = ContinuousActionVecMockEnv(
+            device=device,
+            observation_spec=obs_spec,
+            action_spec=NdBoundedTensorSpec(
+                minimum=1, maximum=2, shape=torch.Size((1,))
+            ),
+        )
+        env.out_key = "observation"
+    else:
+        env = MockSerialEnv(device=device)
+        env.set_seed(1)
+
+    t_env = TransformedEnv(env)
+    stats = {"loc": None, "scale": None}
+    if initialized:
+        stats = {"loc": 0.0, "scale": 1.0}
+    t_env.transform = ObservationNorm(standard_normal=True, **stats)
+    if composed:
+        t_env.append_transform(ObservationNorm(standard_normal=True, **stats))
+    pre_init_state_dict = t_env.transform.state_dict()
+    initialize_observation_norm_transforms(
+        proof_environment=t_env, num_iter=100, key=stat_key
+    )
+    post_init_state_dict = t_env.transform.state_dict()
+    expected_dict_size = 4 if composed else 2
+    expected_dict_size = expected_dict_size if not initialized else 0
+
+    assert len(post_init_state_dict) == len(pre_init_state_dict) + expected_dict_size
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_initialize_stats_from_non_obs_transform(device):
+    env = MockSerialEnv(device=device)
+    env.set_seed(1)
+
+    t_env = TransformedEnv(env)
+    t_env.transform = FlattenObservation(first_dim=0)
+    pre_init_state_dict = t_env.transform.state_dict()
+    initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
+    post_init_state_dict = t_env.transform.state_dict()
+    assert len(post_init_state_dict) == len(pre_init_state_dict)
+
+
+def test_initialize_obs_transform_stats_raise_exception():
+    env = ContinuousActionVecMockEnv()
+    t_env = TransformedEnv(env)
+    t_env.transform = ObservationNorm()
+    with pytest.raises(
+        RuntimeError, match="More than one key exists in the observation_specs"
+    ):
+        initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("composed", [True, False])
+def test_retrieve_observation_norms_state_dict(device, composed):
+    env = MockSerialEnv(device=device)
+    env.set_seed(1)
+
+    t_env = TransformedEnv(env)
+    t_env.transform = ObservationNorm(standard_normal=True)
+    if composed:
+        t_env.append_transform(ObservationNorm(standard_normal=True))
+    initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
+    state_dicts = retrieve_observation_norms_state_dict(t_env)
+    expected_state_count = 2 if composed else 1
+    expected_idx = [0, 1] if composed else [0]
+
+    assert len(state_dicts) == expected_state_count
+    for idx, state_dict in enumerate(state_dicts):
+        assert len(state_dict[1]) == 2
+        assert state_dict[0] == expected_idx[idx]
 
 
 if __name__ == "__main__":
