@@ -22,6 +22,7 @@ try:
     import jumanji
     from jax import numpy as jnp
     from torchrl.envs.libs.jax_utils import (
+        _extract_spec,
         _ndarray_to_tensor,
         _object_to_tensordict,
         _tensordict_to_object,
@@ -30,9 +31,16 @@ try:
     )
 
     _has_jumanji = True
+    IMPORT_ERR = ""
 except ImportError as err:
     _has_jumanji = False
     IMPORT_ERR = str(err)
+
+
+def _get_envs():
+    if not _has_jumanji:
+        return []
+    return jumanji.registered_environments()
 
 
 def _jumanji_to_torchrl_spec_transform(
@@ -87,41 +95,40 @@ def _jumanji_to_torchrl_spec_transform(
         raise TypeError(f"Unsupported spec type {type(spec)}")
 
 
-def _torchrl_data_to_spec_transform(data) -> TensorSpec:
-    if isinstance(data, torch.Tensor):
-        if data.dtype in (torch.float, torch.double, torch.half):
-            return NdUnboundedContinuousTensorSpec(
-                shape=data.shape, dtype=data.dtype, device=data.device
-            )
-        else:
-            return NdUnboundedDiscreteTensorSpec(
-                shape=data.shape, dtype=data.dtype, device=data.device
-            )
-    elif isinstance(data, TensorDict):
-        return CompositeSpec(
-            **{
-                key: _torchrl_data_to_spec_transform(value)
-                for key, value in data.items()
-            }
-        )
-    else:
-        raise TypeError(f"Unsupported data type {type(data)}")
-
-
 class JumanjiWrapper(GymLikeEnv):
     """Jumanji environment wrapper.
 
     Examples:
-        >>> env = jumanju.make("Snake-6x6-v0")
+        >>> env = jumanji.make("Snake-6x6-v0")
         >>> env = JumanjiWrapper(env)
-        >>> td0 = env.reset()
-        >>> print(td0)
-        >>> td1 = env.rand_step(td0)
+        >>> env.set_seed(0)
+        >>> td = env.reset()
+        >>> td["action"] = env.action_spec.rand()
+        >>> td = env.step(td)
         >>> print(td1)
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([1]), dtype=torch.int32),
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([6, 6, 5]), dtype=torch.float32)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([6, 6, 5]), dtype=torch.float32),
+                reward: Tensor(torch.Size([1]), dtype=torch.float32),
+                state: TensorDict(...)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
         >>> print(env.available_envs)
+        ['Snake-6x6-v0', 'Snake-12x12-v0', 'TSP50-v0', 'TSP100-v0', ...]
     """
 
     git_url = "https://github.com/instadeepai/jumanji"
+    available_envs = _get_envs()
+    libname = "jumanji"
 
     @property
     def lib(self):
@@ -160,7 +167,7 @@ class JumanjiWrapper(GymLikeEnv):
         key = jax.random.PRNGKey(0)
         state, _ = env.reset(key)
         state_dict = _object_to_tensordict(state, self.device, batch_size=())
-        state_spec = _torchrl_data_to_spec_transform(state_dict)
+        state_spec = _extract_spec(state_dict)
         return state_spec
 
     def _make_input_spec(self, env) -> TensorSpec:

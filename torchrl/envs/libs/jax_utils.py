@@ -7,6 +7,12 @@ import torch
 from jax import dlpack as jax_dlpack, numpy as jnp
 from tensordict.tensordict import make_tensordict, TensorDictBase
 from torch.utils import dlpack as torch_dlpack
+from torchrl.data import (
+    CompositeSpec,
+    NdUnboundedContinuousTensorSpec,
+    NdUnboundedDiscreteTensorSpec,
+    TensorSpec,
+)
 
 
 def _tree_reshape(x, batch_size: torch.Size):
@@ -83,3 +89,21 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
             value = jax_dlpack.from_dlpack(torch_dlpack.to_dlpack(value))
             t[name] = value.reshape(example.shape).view(example.dtype)
     return type(object_example)(**t)
+
+
+def _extract_spec(data: Union[torch.Tensor, TensorDictBase]) -> TensorSpec:
+    if isinstance(data, torch.Tensor):
+        if data.dtype in (torch.float, torch.double, torch.half):
+            return NdUnboundedContinuousTensorSpec(
+                shape=data.shape, dtype=data.dtype, device=data.device
+            )
+        else:
+            return NdUnboundedDiscreteTensorSpec(
+                shape=data.shape, dtype=data.dtype, device=data.device
+            )
+    elif isinstance(data, TensorDictBase):
+        return CompositeSpec(
+            **{key: _extract_spec(value) for key, value in data.items()}
+        )
+    else:
+        raise TypeError(f"Unsupported data type {type(data)}")

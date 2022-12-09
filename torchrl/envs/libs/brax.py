@@ -9,13 +9,13 @@ from torchrl.data import (
     NdUnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
-from torchrl.envs.libs.jumanji import _torchrl_data_to_spec_transform
 
 try:
     import brax
     import brax.envs
     import jax
     from torchrl.envs.libs.jax_utils import (
+        _extract_spec,
         _ndarray_to_tensor,
         _object_to_tensordict,
         _tensor_to_ndarray,
@@ -25,9 +25,16 @@ try:
     )
 
     _has_brax = True
+    IMPORT_ERR = ""
 except ImportError as err:
     _has_brax = False
     IMPORT_ERR = str(err)
+
+
+def _get_envs():
+    if not _has_brax:
+        return []
+    return list(brax.envs._envs.keys())
 
 
 class BraxWrapper(_EnvWrapper):
@@ -36,13 +43,34 @@ class BraxWrapper(_EnvWrapper):
     Examples:
         >>> env = brax.envs.get_environment("ant")
         >>> env = BraxWrapper(env)
-        >>> td = env.rand_step()
+        >>> env.set_seed(0)
+        >>> td = env.reset()
+        >>> td["action"] = env.action_spec.rand()
+        >>> td = env.step(td)
         >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([8]), dtype=torch.float32),
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([87]), dtype=torch.float32)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([87]), dtype=torch.float32),
+                reward: Tensor(torch.Size([1]), dtype=torch.float32),
+                state: TensorDict(...)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
         >>> print(env.available_envs)
-
+        ['acrobot', 'ant', 'fast', 'fetch', ...]
     """
 
     git_url = "https://github.com/google/brax"
+    available_envs = _get_envs()
+    libname = "brax"
 
     @property
     def lib(self):
@@ -85,7 +113,7 @@ class BraxWrapper(_EnvWrapper):
         key = jax.random.PRNGKey(0)
         state = env.reset(key)
         state_dict = _object_to_tensordict(state, self.device, batch_size=())
-        state_spec = _torchrl_data_to_spec_transform(state_dict)
+        state_spec = _extract_spec(state_dict)
         return state_spec
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
@@ -146,6 +174,7 @@ class BraxWrapper(_EnvWrapper):
             },
             batch_size=self.batch_size,
             device=self.device,
+            _run_checks=False,
         )
         return tensordict_out
 
@@ -176,6 +205,7 @@ class BraxWrapper(_EnvWrapper):
             },
             batch_size=self.batch_size,
             device=self.device,
+            _run_checks=False,
         )
         return tensordict_out
 
@@ -212,6 +242,7 @@ class BraxWrapper(_EnvWrapper):
             },
             batch_size=self.batch_size,
             device=self.device,
+            _run_checks=False,
         )
         return tensordict_out
 
@@ -314,6 +345,7 @@ class _BraxEnvStep(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, _, grad_next_obs, grad_next_reward, *grad_next_qp_values):
+
         # build gradient tensordict with zeros in fields with no grad
         grad_next_state = TensorDict(
             source={
@@ -330,6 +362,7 @@ class _BraxEnvStep(torch.autograd.Function):
             },
             device=ctx.env.device,
             batch_size=ctx.env.batch_size,
+            _run_checks=False,
         )
 
         # convert tensors to ndarrays
