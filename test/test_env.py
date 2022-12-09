@@ -604,7 +604,7 @@ class TestParallel:
         N=3,
     ):
         # tests casting to device
-        env_parallel, env_serial, env_multithread, env0 = _make_envs(
+        env_parallel, env_serial, _, env0 = _make_envs(
             env_name,
             frame_skip,
             transformed_in=transformed_in,
@@ -642,21 +642,21 @@ class TestParallel:
         assert td_device.device == torch.device(device), env_serial
 
         if open_before:
-            td_cpu = env_multithread.rollout(max_steps=10)
+            td_cpu = env_parallel.rollout(max_steps=10)
             assert td_cpu.device == torch.device("cpu")
-        env_test = env_multithread.to(device)
-        assert env_test.observation_spec.device == torch.device(device)
-        assert env_test.action_spec.device == torch.device(device)
-        assert env_test.reward_spec.device == torch.device(device)
-        assert env_test.device == torch.device(device)
-        td_device = env_test.reset()
-        assert td_device.device == torch.device(device), env_test
-        td_device = env_test.rand_step()
-        assert td_device.device == torch.device(device), env_test
-        td_device = env_test.rollout(max_steps=10)
-        assert td_device.device == torch.device(device), env_test
+        env_parallel = env_parallel.to(device)
+        assert env_parallel.observation_spec.device == torch.device(device)
+        assert env_parallel.action_spec.device == torch.device(device)
+        assert env_parallel.reward_spec.device == torch.device(device)
+        assert env_parallel.device == torch.device(device)
+        td_device = env_parallel.reset()
+        assert td_device.device == torch.device(device), env_parallel
+        td_device = env_parallel.rand_step()
+        assert td_device.device == torch.device(device), env_parallel
+        td_device = env_parallel.rollout(max_steps=10)
+        assert td_device.device == torch.device(device), env_parallel
 
-        env_test.close()
+        env_parallel.close()
         env_serial.close()
         env0.close()
 
