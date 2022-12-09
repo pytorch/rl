@@ -182,7 +182,8 @@ def check_env_specs(env):
         assert fake_tensordict[key].shape == real_tensordict[key].shape
 
     # test dtypes
-    for key, value in real_tensordict.unflatten_keys(".").items():
+    real_tensordict = env.rollout(3)  # keep empty structures, for example dict()
+    for key, value in real_tensordict.items():
         _check_dtype(key, value, env.observation_spec, env.input_spec)
 
 
