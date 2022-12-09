@@ -4,15 +4,28 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+
+import os.path
 import time
 from functools import wraps
 
 # Get relative file path
 # this returns relative path from current file.
+
 import pytest
+import torch
 import torch.cuda
 from torchrl._utils import implement_for, seed_generator
-from torchrl.envs.libs.gym import _has_gym
+
+from torchrl.envs import ObservationNorm
+from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs.transforms import (
+    Compose,
+    RewardClipping,
+    ToTensorImage,
+    TransformedEnv,
+)
+from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnv, ParallelEnv, SerialEnv
 
 # Specified for test_utils.py
 __version__ = "0.3"
@@ -104,3 +117,121 @@ def dtype_fixture():
     torch.set_default_dtype(torch.double)
     yield dtype
     torch.set_default_dtype(dtype)
+
+
+def _make_envs(
+    env_name,
+    frame_skip,
+    transformed_in,
+    transformed_out,
+    N,
+    selected_keys=None,
+    device="cpu",
+    kwargs=None,
+):
+    torch.manual_seed(0)
+    if not transformed_in:
+
+        def create_env_fn():
+            return GymEnv(env_name, frame_skip=frame_skip, device=device)
+
+    else:
+        if env_name == "ALE/Pong-v5":
+
+            def create_env_fn():
+                return TransformedEnv(
+                    GymEnv(env_name, frame_skip=frame_skip, device=device),
+                    Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
+                )
+
+        else:
+
+            def create_env_fn():
+                return TransformedEnv(
+                    GymEnv(env_name, frame_skip=frame_skip, device=device),
+                    Compose(
+                        ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
+                        RewardClipping(0, 0.1),
+                    ),
+                )
+
+    env0 = create_env_fn()
+    env_parallel = ParallelEnv(
+        N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
+    )
+    env_serial = SerialEnv(
+        N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
+    )
+    if _has_envpool:
+        multithreaded_kwargs = (
+            {"frame_skip": frame_skip} if env_name == "ALE/Pong-v5" else {}
+        )
+        env_multithread = MultiThreadedEnv(
+            N,
+            env_name,
+            env_type="gym",
+            create_env_kwargs=multithreaded_kwargs,
+        )
+    else:
+        env_multithread = None
+
+    if transformed_out:
+        if env_name == "ALE/Pong-v5":
+
+            def t_out():
+                return (
+                    Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
+                    if not transformed_in
+                    else Compose(*[ObservationNorm(in_keys=["pixels"], loc=0, scale=1)])
+                )
+
+            env0 = TransformedEnv(
+                env0,
+                t_out(),
+            )
+            env_parallel = TransformedEnv(
+                env_parallel,
+                t_out(),
+            )
+            env_serial = TransformedEnv(
+                env_serial,
+                t_out(),
+            )
+            if _has_envpool:
+                env_multithread = TransformedEnv(
+                    env_multithread,
+                    t_out(),
+                )
+        else:
+
+            def t_out():
+                return (
+                    Compose(
+                        ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
+                        RewardClipping(0, 0.1),
+                    )
+                    if not transformed_in
+                    else Compose(
+                        ObservationNorm(in_keys=["observation"], loc=1.0, scale=1.0)
+                    )
+                )
+
+            env0 = TransformedEnv(
+                env0,
+                t_out(),
+            )
+            env_parallel = TransformedEnv(
+                env_parallel,
+                t_out(),
+            )
+            env_serial = TransformedEnv(
+                env_serial,
+                t_out(),
+            )
+            if _has_envpool:
+                env_multithread = TransformedEnv(
+                    env_multithread,
+                    t_out(),
+                )
+
+    return env_parallel, env_serial, env_multithread, env0

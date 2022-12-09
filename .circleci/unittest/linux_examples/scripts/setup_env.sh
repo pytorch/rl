@@ -86,7 +86,3 @@ fi
 pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
-
-if [[ $os == 'Linux' ]]; then
-  pip install envpool
-fi

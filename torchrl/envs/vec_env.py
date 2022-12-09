@@ -1155,6 +1155,9 @@ class MultiThreadedEnv(EnvBase):
             self.num_workers, *self.observation_spec["observation"].shape
         )
 
+    def _create_td(self) -> None:
+        pass
+
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
 
@@ -1199,7 +1202,6 @@ class MultiThreadedEnv(EnvBase):
 
     @property
     def input_spec(self) -> TensorSpec:
-
         if self._input_spec is None:
             action_spec = self._env.spec.action_spec()
             if action_spec.shape == ():
@@ -1315,9 +1317,6 @@ class MultiThreadedEnv(EnvBase):
             obs = envpool_output.observation.obs
         if reset_workers is not None:
             for i, worker in enumerate(reset_workers):
-                print(
-                    f"setting worker {worker}: obs={obs}, i={i}, {self.obs}=self.obs, worker={worker}"
-                )
                 self.obs[worker] = torch.tensor(obs[i])
         else:
             self.obs = torch.tensor(obs)

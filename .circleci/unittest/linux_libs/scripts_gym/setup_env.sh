@@ -101,7 +101,3 @@ cd ${root_dir}/.mujoco/mujoco-py
 git checkout aws_fix
 pip install -e .
 cd $this_dir
-
-if [[ $os == 'Linux' ]]; then
-  pip install envpool
-fi
