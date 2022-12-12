@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import itertools
-from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import torch
@@ -16,71 +15,31 @@ from torchrl.data import (
     NdUnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs import TensorDictPrimer, TransformedEnv
 from torchrl.envs.common import EnvBase
-from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     ActorValueOperator,
-    NoisyLinear,
     NormalParamWrapper,
     SafeModule,
-    SafeProbabilisticModule,
     SafeSequential,
 )
 from torchrl.modules.distributions import (
-    Delta,
     OneHotCategorical,
-    TanhDelta,
     TanhNormal,
     TruncatedNormal,
 )
 from torchrl.modules.distributions.continuous import SafeTanhTransform
 from torchrl.modules.models.exploration import LazygSDEModule
-from torchrl.modules.models.model_based import (
-    DreamerActor,
-    ObsDecoder,
-    ObsEncoder,
-    RSSMPosterior,
-    RSSMPrior,
-    RSSMRollout,
-)
 from torchrl.modules.models.models import (
     ConvNet,
-    DdpgCnnActor,
-    DdpgCnnQNet,
-    DdpgMlpActor,
-    DdpgMlpQNet,
-    DuelingCnnDQNet,
-    DuelingMlpDQNet,
     LSTMNet,
     MLP,
-)
-from torchrl.modules.tensordict_module import (
-    Actor,
-    DistributionalQValueActor,
-    QValueActor,
 )
 from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
     ProbabilisticActor,
     ValueOperator,
 )
-from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
-from torchrl.trainers.helpers import transformed_env_constructor
-
-DISTRIBUTIONS = {
-    "delta": Delta,
-    "tanh-normal": TanhNormal,
-    "categorical": OneHotCategorical,
-    "tanh-delta": TanhDelta,
-}
-
-ACTIVATIONS = {
-    "elu": nn.ELU,
-    "tanh": nn.Tanh,
-    "relu": nn.ReLU,
-}
 
 
 def make_ppo_model(

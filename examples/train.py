@@ -1,9 +1,7 @@
 import torch
 import hydra
-from omegaconf import dictconfig
 from hydra.utils import instantiate
-from torchrl.envs import TransformedEnv, ParallelEnv, Compose
-from torchrl.trainers.trainers import Recorder
+from torchrl.envs import TransformedEnv, Compose
 from torchrl.modules.tensordict_module.actors import ActorValueOperator
 
 
@@ -16,7 +14,7 @@ def my_app(cfg):
         else torch.device("cuda:0")
     )
 
-    ### 1. Define environment
+    # 1. Define environment --------------------------------------------------------------------------------------------
 
     instantiate_cfg = instantiate(cfg)
 
@@ -29,7 +27,7 @@ def my_app(cfg):
     # Apply transformations to vec env
     transformed_vec_env = TransformedEnv(vec_env, Compose(*instantiate_cfg.env.transforms))
 
-    ### 2. Define model
+    # 2. Define model --------------------------------------------------------------------------------------------------
 
     instantiate_cfg = instantiate(cfg)
 
@@ -45,19 +43,19 @@ def my_app(cfg):
     # Close Transformed Env
     transformed_env.close()
 
-    ### 3. Ddefine Collector
+    # 3. Ddefine Collector ---------------------------------------------------------------------------------------------
 
     # Define collector
     collector = instantiate_cfg.collector(create_env_fn=transformed_vec_env, policy=model["policy"])
 
-    ### 4. Define Replay Buffer (if required)
+    # 4. Define Replay Buffer (if required) ----------------------------------------------------------------------------
 
     if "replay_buffer" in instantiate_cfg.keys():
         replay_buffer = instantiate_cfg.replay_buffer()
     else:
         replay_buffer = None
 
-    ### 5. Define Objective
+    # 5. Define Objective ----------------------------------------------------------------------------------------------
 
     if "advantage" in instantiate_cfg.objective.keys():
         advantage_module = instantiate_cfg.objective.advantage(
@@ -75,7 +73,7 @@ def my_app(cfg):
 
     objective = instantiate_cfg.objective.loss(**loss_kwargs)
 
-    ### 6. Define target network updater (if required)
+    # 6. Define target network updater (if required) -------------------------------------------------------------------
 
     if "target_net_updater" in instantiate_cfg.objective.keys():
         target_net_updater = nstantiate_cfg.objective.target_net_updater(
@@ -83,11 +81,11 @@ def my_app(cfg):
     else:
         target_net_updater = None
 
-    ### 7. Define Logger
+    # 7. Define Logger -------------------------------------------------------------------------------------------------
 
     logger = instantiate_cfg.logger()
 
-    ### 8. Define Recorder
+    # 8. Define Recorder -----------------------------------------------------------------------------------------------
 
     if "recorder" in instantiate_cfg.keys():
         transformed_env.append_transform(
@@ -101,7 +99,8 @@ def my_app(cfg):
     else:
         recorder_obj = None
 
-    ### 9. Define Trainer
+    # 9. Define Trainer ------------------------------------------------------------------------------------------------
+
     trainer = instantiate_cfg.trainer(
         collector=collector,
         loss_module=objective,
@@ -114,7 +113,8 @@ def my_app(cfg):
     )
 
     ### 10. Train
-    trainer.train()
+
+    # trainer.train()
 
 
 if __name__ == "__main__":
