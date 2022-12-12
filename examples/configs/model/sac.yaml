@@ -1,4 +1,4 @@
-_target_: torchrl.trainers.helpers.hierarchical_trainers.make_sac_model.make_sac_model
+_target_: torchrl.trainers.helpers.hierarchical_helpers.make_sac_model.make_sac_model
 _partial_: True
 
 # Parameters

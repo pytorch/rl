@@ -1,4 +1,4 @@
-_target_: torchrl.trainers.helpers.hierarchical_trainers.make_ppo_model.make_ppo_model
+_target_: torchrl.trainers.helpers.hierarchical_helpers.make_ppo_model.make_ppo_model
 _partial_: True
 
 # Parameters

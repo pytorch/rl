@@ -1,4 +1,4 @@
-_target_: torchrl.trainers.helpers.hierarchical.make_trainer.make_trainer
+_target_: torchrl.trainers.helpers.hierarchical_helpers.make_trainer.make_trainer
 _partial_: True
 
 # Parameters
