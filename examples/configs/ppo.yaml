@@ -1,0 +1,10 @@
+defaults:
+  - env/base_env: atari
+  - env/vec_env:  parallel
+  - env/transforms: pixels
+  - collector: sync_single
+  - model: ppo
+  - objective: ppo
+  - recorder: video_recorder
+  - logger: csv
+  - trainer: trainer

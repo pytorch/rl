@@ -1,0 +1,13 @@
+_target_: torchrl.trainers.helpers.hierarchical_trainers.make_ppo_model.make_ppo_model
+_partial_: True
+
+# Parameters
+gSDE: False
+tanh_loc: False
+default_policy_scale: 1.0
+distribution: tanh_normal
+lstm: False
+shared_mapping: True
+
+# Partial parameters
+proof_environment: MISSING

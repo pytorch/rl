@@ -1,0 +1,11 @@
+_target_: torchrl.objectives.value.GAE
+_partial_: True
+
+# Parameters
+lmbda: 0.95
+average_rewards: False
+gradient_mode: False
+
+# Partial parameters
+gamma: MISSING
+value_network: MISSING

@@ -1,0 +1,24 @@
+_target_: torchrl.trainers.helpers.hierarchical_trainers.make_sac_model.make_sac_model
+_partial_: True
+
+# Parameters
+annealing_frames: 1000000
+noisy: False
+ou_exploration: False
+ou_sigma: 0.2
+ou_theta: 0.15
+distributional: False
+atoms: 51
+gSDE: False
+tanh_loc: False
+default_policy_scale: 1.0
+distribution: tanh_normal
+actor_cells: 256
+qvalue_cells: 256
+scale_lb: 0.1
+value_cells: 256
+activation: tanh
+model_device: ""
+
+# Partial parameters
+proof_environment: MISSING

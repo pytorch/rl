@@ -1,0 +1,11 @@
+defaults:
+  - env/base_env: halfcheetah
+  - env/vec_env:  parallel
+  - env/transforms: state
+  - collector: sync_single
+  - model: sac
+  - objective: sac
+  - replay_buffer: circular
+  - recorder: video_recorder
+  - logger: csv
+  - trainer: trainer

@@ -1,0 +1,26 @@
+recorder:
+  _target_: torchrl.record.recorder.VideoRecorder
+  _partial_: True
+
+  # Parameters
+  tag: testing
+  keys_in: null
+  skip: 2
+  center_crop: null
+  make_grid: True
+
+  # Partial parameters
+  logger: MISSING
+
+recorder_hook:
+  _target_: torchrl.trainers.trainers.Recorder
+  _partial_: True
+
+  log_keys: null
+  record_frames: 10000
+  record_interval: 10
+
+  # Partial parameters
+  frame_skip: MISSING
+  policy_exploration: MISSING
+  recorder: MISSING

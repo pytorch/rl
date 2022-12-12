@@ -1,0 +1,15 @@
+_target_: torchrl.data.replay_buffers.replay_buffers.TensorDictReplayBuffer
+_partial_: True
+
+# Parameters
+collate_fn: null
+pin_memory: False
+prefetch: null
+size: {$storage.size}
+
+# Partial parameters
+storage: MISSING
+
+defaults:
+  - _self_
+  - storage: lazy_memmap

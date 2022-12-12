@@ -1,0 +1,13 @@
+- _target_: torchrl.envs.transforms.RewardScaling
+  loc: 0.0
+  scale: 1.0
+- _target_: torchrl.envs.transforms.CatTensors
+  in_keys: ["observation"]
+  out_key: "observation_vector"
+  del_keys: True
+- _target_: torchrl.envs.transforms.ObservationNorm
+  in_keys: ["observation_vector"]
+  loc: 0.0
+  scale: 1.0
+- _target_: torchrl.envs.transforms.DoubleToFloat
+  in_keys: ["observation_vector"]

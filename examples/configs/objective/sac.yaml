@@ -1,0 +1,30 @@
+name: SAC
+
+loss:
+  _target_: torchrl.objectives.SACLoss
+  _partial_: True
+
+  # Parameters
+  num_qvalue_nets: 2
+  gamma: 0.99
+  priotity_key: td_error
+  loss_function: smooth_l1
+  alpha_init: 1.0
+  min_alpha: 0.1
+  max_alpha: 10.0
+  fixed_alpha: False
+  target_entropy: auto
+  delay_actor: False
+  delay_qvalue: False
+  delay_value: False
+
+  # Partial parameters
+  actor_network: MISSING
+  qvalue_network: MISSING
+  value_network: MISSING
+
+# default config
+defaults:
+  - _self_
+  - target_update: hard_update
+

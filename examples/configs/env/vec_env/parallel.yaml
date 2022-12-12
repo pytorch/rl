@@ -1,0 +1,19 @@
+_target_: torchrl.envs.vec_env.SerialEnv
+_partial_: True
+
+# Parameters
+num_workers: 4
+create_env_kwargs: null
+env_input_keys: null
+pin_memory: False
+selected_keys: null
+excluded_keys: null
+share_individual_td: null
+shared_memory: True
+memmap: False
+policy_proof: null
+device: null
+allow_step_when_done: False
+
+# Partial parameters
+create_env_fn: MISSING

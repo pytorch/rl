@@ -1,0 +1,6 @@
+_target_: torchrl.trainers.loggers.csv.CSVLogger
+_partial_: True
+
+# Parameters
+exp_name: example_exp
+log_dir: null

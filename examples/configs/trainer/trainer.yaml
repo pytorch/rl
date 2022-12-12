@@ -1,0 +1,32 @@
+_target_: torchrl.trainers.helpers.hierarchical.make_trainer.make_trainer
+_partial_: True
+
+# Parameters
+optim_steps_per_batch: 500
+optimizer: adam
+lr_scheduler: cosine
+selected_keys: null
+batch_size: 256
+log_interval: 10000
+lr: 3e-4
+weight_decay: 0.0
+clip_norm: 1000.0
+clip_grad_norm: False
+normalize_rewards_online: False
+normalize_rewards_online_scale: 1.0
+normalize_rewards_online_decay: 0.9999
+sub_traj_len: -1
+total_frames: 1000
+record_frames: 10
+record_interval: 10
+frames_per_batch: 1000
+
+# Partial Parameters
+collector: MISSING
+loss_module: MISSING
+recorder: MISSING
+target_net_updater: MISSING
+policy_exploration: MISSING
+replay_buffer: MISSING
+logger: MISSING
+frame_skip: MISSING

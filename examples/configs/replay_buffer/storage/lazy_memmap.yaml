@@ -1,0 +1,4 @@
+_target_: torchrl.data.LazyMemmapStorage
+
+# Parameters
+max_size: 1_000_000

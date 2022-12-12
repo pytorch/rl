@@ -1,0 +1,26 @@
+name: PPO
+
+loss:
+  _target_: torchrl.objectives.PPOLoss
+  _partial_: True
+
+  # Parameters
+  advantage_key: "advantage"
+  advantage_diff_key: "value_error"
+  entropy_bonus: True
+  samples_mc_entropy: 1
+  entropy_coef: 0.01
+  critic_coef: 1.0
+  gamma: 0.99
+  loss_critic_type: "smooth_l1"
+
+  # Partial parameters
+  actor: MISSING
+  critic: MISSING
+  advantage_module: MISSING
+
+# default config
+defaults:
+  - _self_
+  - advantage: gae
+
