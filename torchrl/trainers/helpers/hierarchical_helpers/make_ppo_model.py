@@ -45,8 +45,9 @@ def make_ppo_model(
     lstm=False,
     default_policy_scale=1.0,
 ) -> ActorValueOperator:
-    """Modified version of helper/models/make_ppo_model for hierarchical_config"""
-
+    """
+    Modified version of helper/models/make_ppo_model for hierarchical_config.
+    """
     specs = proof_environment.specs
     action_spec = specs["action_spec"]
 

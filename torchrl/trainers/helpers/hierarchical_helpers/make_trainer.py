@@ -64,8 +64,9 @@ def make_trainer(
     frame_skip: int = 0,
     frames_per_batch: int = 1000,
 ) -> Trainer:
-    """Modified version of helper/trainers/make_trainer for hierarchical_config"""
-
+    """
+    Modified version of helper/trainers/make_trainer for hierarchical_config.
+    """
     device = next(loss_module.parameters()).device
 
     # Define optimizier

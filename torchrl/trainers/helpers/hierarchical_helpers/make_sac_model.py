@@ -61,8 +61,9 @@ def make_sac_model(
     activation: str = "tanh",
     model_device: str = "",
 ) -> nn.ModuleList:
-    """Modified version of helper/models/make_sac_model for hierarchical_config"""
-
+    """
+    Modified version of helper/models/make_sac_model for hierarchical_config.
+    """
     tanh_loc = tanh_loc
     default_policy_scale = default_policy_scale
     gSDE = gSDE
