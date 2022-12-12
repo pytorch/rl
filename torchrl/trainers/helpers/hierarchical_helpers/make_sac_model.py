@@ -7,26 +7,22 @@ from typing import Optional, Sequence
 
 import torch
 from torch import distributions as d, nn
-from torchrl.modules.distributions import TanhNormal
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
-    ValueOperator,
     NormalParamWrapper,
     SafeModule,
     SafeSequential,
+    ValueOperator,
 )
+from torchrl.modules.distributions import TanhNormal
 
 from torchrl.modules.distributions.continuous import SafeTanhTransform
 from torchrl.modules.models.exploration import LazygSDEModule
-from torchrl.modules.models.models import (
-    MLP,
-)
+from torchrl.modules.models.models import MLP
 
-from torchrl.modules.tensordict_module.actors import (
-    ProbabilisticActor,
-)
+from torchrl.modules.tensordict_module.actors import ProbabilisticActor
 
 ACTIVATIONS = {
     "elu": nn.ELU,
@@ -61,9 +57,7 @@ def make_sac_model(
     activation: str = "tanh",
     model_device: str = "",
 ) -> nn.ModuleList:
-    """
-    Modified version of helper/models/make_sac_model for hierarchical_config.
-    """
+    """Modified version of helper/models/make_sac_model for hierarchical_config."""
     tanh_loc = tanh_loc
     default_policy_scale = default_policy_scale
     gSDE = gSDE
@@ -179,12 +173,14 @@ def make_sac_model(
         in_keys=in_keys,
         module=value_net,
     )
-    model = nn.ModuleDict({
-        "policy": actor, # For the collector
-        "actor_network": actor,
-        "qvalue_network": qvalue,
-        "value_network": value,
-    }).to(device)
+    model = nn.ModuleDict(
+        {
+            "policy": actor,  # For the collector
+            "actor_network": actor,
+            "qvalue_network": qvalue,
+            "value_network": value,
+        }
+    ).to(device)
 
     # init nets
     with torch.no_grad(), set_exploration_mode("random"):

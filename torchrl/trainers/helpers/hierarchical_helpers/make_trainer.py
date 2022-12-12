@@ -64,9 +64,7 @@ def make_trainer(
     frame_skip: int = 0,
     frames_per_batch: int = 1000,
 ) -> Trainer:
-    """
-    Modified version of helper/trainers/make_trainer for hierarchical_config.
-    """
+    """Modified version of helper/trainers/make_trainer for hierarchical_config."""
     device = next(loss_module.parameters()).device
 
     # Define optimizier
@@ -82,9 +80,7 @@ def make_trainer(
     if lr_scheduler == "cosine":
         optim_scheduler = CosineAnnealingLR(
             optimizer,
-            T_max=int(
-                total_frames / frames_per_batch * optim_steps_per_batch
-            ),
+            T_max=int(total_frames / frames_per_batch * optim_steps_per_batch),
         )
     elif lr_scheduler == "":
         optim_scheduler = None
@@ -114,7 +110,8 @@ def make_trainer(
 
     if replay_buffer is not None:
         rb_trainer = ReplayBufferTrainer(
-            replay_buffer, batch_size, memmap=False, device=device)
+            replay_buffer, batch_size, memmap=False, device=device
+        )
 
         # Add data to replay buffer
         trainer.register_op("batch_process", rb_trainer.extend)
@@ -124,7 +121,7 @@ def make_trainer(
         # Clear cuda memory
         trainer.register_op("pre_optim_steps", ClearCudaCache(1))
 
-    if False: # TODO: fix - if noise
+    if False:  # TODO: fix - if noise
         # Reset noise
         trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
 
@@ -135,7 +132,8 @@ def make_trainer(
         # Generate mini-batches
         trainer.register_op(
             "process_optim_batch",
-            BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len))
+            BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len),
+        )
         # Move mini-batches to device
         trainer.register_op("process_optim_batch", lambda batch: batch.to(device))
 
@@ -165,9 +163,7 @@ def make_trainer(
             "post_steps", policy_exploration.step, frames=frames_per_batch
         )
 
-    trainer.register_op(
-        "post_steps_log", lambda lr: optimizer.param_groups[0]["lr"]
-    )
+    trainer.register_op("post_steps_log", lambda lr: optimizer.param_groups[0]["lr"])
 
     if recorder is not None:
         trainer.register_op(

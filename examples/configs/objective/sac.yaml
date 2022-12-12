@@ -27,4 +27,3 @@ loss:
 defaults:
   - _self_
   - target_update: hard_update
-

@@ -1,0 +1,2 @@
+- _target_: torchrl.envs.transforms.DoubleToFloat
+  in_keys: ["bservation_vector"]

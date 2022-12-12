@@ -5,9 +5,7 @@
 
 import torch
 from torch import distributions as d, nn
-from torchrl.data import (
-    CompositeSpec,
-)
+from torchrl.data import CompositeSpec
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
@@ -16,18 +14,10 @@ from torchrl.modules import (
     SafeModule,
     SafeSequential,
 )
-from torchrl.modules.distributions import (
-    OneHotCategorical,
-    TanhNormal,
-    TruncatedNormal,
-)
+from torchrl.modules.distributions import OneHotCategorical, TanhNormal, TruncatedNormal
 from torchrl.modules.distributions.continuous import SafeTanhTransform
 from torchrl.modules.models.exploration import LazygSDEModule
-from torchrl.modules.models.models import (
-    ConvNet,
-    LSTMNet,
-    MLP,
-)
+from torchrl.modules.models.models import ConvNet, LSTMNet, MLP
 from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
     ProbabilisticActor,
@@ -45,9 +35,7 @@ def make_ppo_model(
     lstm=False,
     default_policy_scale=1.0,
 ) -> ActorValueOperator:
-    """
-    Modified version of helper/models/make_ppo_model for hierarchical_config.
-    """
+    """Modified version of helper/models/make_ppo_model for hierarchical_config."""
     specs = proof_environment.specs
     action_spec = specs["action_spec"]
 
@@ -263,10 +251,12 @@ def make_ppo_model(
         td_device = td.to(device)
         td_device = actor_value(td_device)  # for init
 
-    model = nn.ModuleDict({
-        "policy": actor_value.get_policy_operator(), # For the collector
-        "actor": actor_value.get_policy_operator(),
-        "critic": actor_value.get_value_operator(),
-    })
+    model = nn.ModuleDict(
+        {
+            "policy": actor_value.get_policy_operator(),  # For the collector
+            "actor": actor_value.get_policy_operator(),
+            "critic": actor_value.get_value_operator(),
+        }
+    )
 
     return model

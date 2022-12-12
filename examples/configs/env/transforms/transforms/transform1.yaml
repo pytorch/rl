@@ -1,0 +1,3 @@
+- _target_: torchrl.envs.transforms.RewardScaling
+  loc: 0.0
+  scale: 1.0

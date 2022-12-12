@@ -1,8 +1,7 @@
-import torch
 import hydra
+import torch
 from hydra.utils import instantiate
-from torchrl.envs import TransformedEnv, Compose
-from torchrl.modules.tensordict_module.actors import ActorValueOperator
+from torchrl.envs import Compose, TransformedEnv
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="ppo.yaml")
@@ -25,7 +24,9 @@ def my_app(cfg):
     vec_env = instantiate_cfg.env.vec_env(create_env_fn=base_env)
 
     # Apply transformations to vec env
-    transformed_vec_env = TransformedEnv(vec_env, Compose(*instantiate_cfg.env.transforms))
+    transformed_vec_env = TransformedEnv(
+        vec_env, Compose(*instantiate_cfg.env.transforms)
+    )
 
     # 2. Define model --------------------------------------------------------------------------------------------------
 
@@ -35,7 +36,9 @@ def my_app(cfg):
     base_env = instantiate_cfg.env.base_env
 
     # Apply transformations - this env can be reused later as a recorder
-    transformed_env = TransformedEnv(base_env(), Compose(*instantiate_cfg.env.transforms))
+    transformed_env = TransformedEnv(
+        base_env(), Compose(*instantiate_cfg.env.transforms)
+    )
 
     # Define Model
     model = instantiate_cfg.model(proof_environment=transformed_env, device=device)
@@ -46,7 +49,9 @@ def my_app(cfg):
     # 3. Ddefine Collector ---------------------------------------------------------------------------------------------
 
     # Define collector
-    collector = instantiate_cfg.collector(create_env_fn=transformed_vec_env, policy=model["policy"])
+    collector = instantiate_cfg.collector(
+        create_env_fn=transformed_vec_env, policy=model["policy"]
+    )
 
     # 4. Define Replay Buffer (if required) ----------------------------------------------------------------------------
 
@@ -60,7 +65,8 @@ def my_app(cfg):
     if "advantage" in instantiate_cfg.objective.keys():
         advantage_module = instantiate_cfg.objective.advantage(
             gamma=instantiate_cfg.objective.loss.keywords["gamma"],
-            value_network=model["critic"])
+            value_network=model["critic"],
+        )
         model["advantage_module"] = advantage_module
     else:
         advantage_module = None
@@ -76,8 +82,9 @@ def my_app(cfg):
     # 6. Define target network updater (if required) -------------------------------------------------------------------
 
     if "target_net_updater" in instantiate_cfg.objective.keys():
-        target_net_updater = nstantiate_cfg.objective.target_net_updater(
-            loss_module=objective)
+        target_net_updater = instantiate_cfg.objective.target_net_updater(
+            loss_module=objective
+        )
     else:
         target_net_updater = None
 
@@ -89,7 +96,8 @@ def my_app(cfg):
 
     if "recorder" in instantiate_cfg.keys():
         transformed_env.append_transform(
-            instantiate_cfg.recorder.recorder(logger=logger))
+            instantiate_cfg.recorder.recorder(logger=logger)
+        )
         recorder_obj = instantiate_cfg.recorder.recorder_hook(
             recorder=transformed_env,
             policy_exploration=model["policy"],
@@ -112,7 +120,7 @@ def my_app(cfg):
         frame_skip=instantiate_cfg.env.base_env.keywords["frame_skip"] or 0,
     )
 
-    ### 10. Train
+    # 10. Train -------------------------------------------------------------------------------------------------------
 
     # trainer.train()
 
