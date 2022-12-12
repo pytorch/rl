@@ -3,35 +3,24 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import itertools
 from typing import Optional, Sequence
 
 import torch
 from torch import distributions as d, nn
-
+from torchrl.modules.distributions import TanhNormal
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
-    ActorValueOperator,
-    NoisyLinear,
+    ValueOperator,
     NormalParamWrapper,
     SafeModule,
-    SafeProbabilisticModule,
     SafeSequential,
 )
 
 from torchrl.modules.distributions.continuous import SafeTanhTransform
 from torchrl.modules.models.exploration import LazygSDEModule
 from torchrl.modules.models.models import (
-    ConvNet,
-    DdpgCnnActor,
-    DdpgCnnQNet,
-    DdpgMlpActor,
-    DdpgMlpQNet,
-    DuelingCnnDQNet,
-    DuelingMlpDQNet,
-    LSTMNet,
     MLP,
 )
 
@@ -72,6 +61,7 @@ def make_sac_model(
     activation: str = "tanh",
     model_device: str = "",
 ) -> nn.ModuleList:
+    """Modified version of helper/models/make_sac_model for hierarchical_config"""
 
     tanh_loc = tanh_loc
     default_policy_scale = default_policy_scale

@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from typing import List, Optional, Union
-from warnings import warn
 
 import torch
 from tensordict.nn import TensorDictModuleWrapper
@@ -23,7 +22,6 @@ from torchrl.trainers.trainers import (
     ClearCudaCache,
     CountFramesLog,
     LogReward,
-    Recorder,
     ReplayBufferTrainer,
     RewardNormalizer,
     SelectKeys,
@@ -66,6 +64,7 @@ def make_trainer(
     frame_skip: int = 0,
     frames_per_batch: int = 1000,
 ) -> Trainer:
+    """Modified version of helper/trainers/make_trainer for hierarchical_config"""
 
     device = next(loss_module.parameters()).device
 
@@ -124,9 +123,9 @@ def make_trainer(
         # Clear cuda memory
         trainer.register_op("pre_optim_steps", ClearCudaCache(1))
 
-    # if noisy:
-    #     # Reset noise
-    #     trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
+    if False: # TODO: fix - if noise
+        # Reset noise
+        trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
 
     # Define hooks applied to sub-batches before optimization
     if replay_buffer is not None:

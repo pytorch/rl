@@ -3,18 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import itertools
-from typing import Optional, Sequence
-
 import torch
 from torch import distributions as d, nn
-
 from torchrl.data import (
     CompositeSpec,
-    DiscreteTensorSpec,
-    NdUnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
@@ -52,6 +45,7 @@ def make_ppo_model(
     lstm=False,
     default_policy_scale=1.0,
 ) -> ActorValueOperator:
+    """Modified version of helper/models/make_ppo_model for hierarchical_config"""
 
     specs = proof_environment.specs
     action_spec = specs["action_spec"]
