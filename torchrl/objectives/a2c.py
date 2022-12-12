@@ -10,7 +10,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
 
 from torchrl.modules import SafeModule
-from torchrl.modules.tensordict_module import SafeProbabilisticModule
+from torchrl.modules.tensordict_module import SafeProbabilisticSequential
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import distance_loss
 
@@ -26,7 +26,7 @@ class A2CLoss(LossModule):
     https://arxiv.org/abs/1602.01783v2
 
     Args:
-        actor (SafeProbabilisticModule): policy operator.
+        actor (SafeProbabilisticSequential): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
@@ -41,7 +41,7 @@ class A2CLoss(LossModule):
 
     def __init__(
         self,
-        actor: SafeProbabilisticModule,
+        actor: SafeProbabilisticSequential,
         critic: SafeModule,
         advantage_key: str = "advantage",
         advantage_diff_key: str = "value_error",
@@ -94,10 +94,7 @@ class A2CLoss(LossModule):
             raise RuntimeError("tensordict stored action require grad.")
         tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
 
-        dist, *_ = self.actor.get_dist(
-            tensordict_clone,
-            params=self.actor_params,
-        )
+        dist = self.actor.get_dist(tensordict_clone, params=self.actor_params)
         log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
         return log_prob, dist

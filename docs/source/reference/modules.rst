@@ -14,6 +14,7 @@ TensorDict modules
     SafeModule
     SafeProbabilisticModule
     SafeSequential
+    SafeProbabilisticSequential
     Actor
     ProbabilisticActor
     ValueOperator

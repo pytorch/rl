@@ -26,6 +26,7 @@ from torchrl.modules import (
     NormalParamWrapper,
     SafeModule,
     SafeProbabilisticModule,
+    SafeProbabilisticSequential,
     SafeSequential,
 )
 from torchrl.modules.distributions import (
@@ -338,7 +339,7 @@ def make_ddpg_actor(
     # distribution.
     actor = ProbabilisticActor(
         module=actor_module,
-        dist_in_keys=["param"],
+        in_keys=["param"],
         spec=CompositeSpec(action=env_specs["action_spec"]),
         safe=True,
         distribution_class=TanhDelta,
@@ -605,7 +606,7 @@ def make_a2c_model(
         policy_operator = ProbabilisticActor(
             spec=CompositeSpec(action=action_spec),
             module=actor_module,
-            dist_in_keys=dist_in_keys,
+            in_keys=dist_in_keys,
             default_interaction_mode="random",
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
@@ -682,7 +683,7 @@ def make_a2c_model(
         policy_po = ProbabilisticActor(
             actor_module,
             spec=action_spec,
-            dist_in_keys=dist_in_keys,
+            in_keys=dist_in_keys,
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
@@ -900,7 +901,7 @@ def make_ppo_model(
         policy_operator = ProbabilisticActor(
             spec=CompositeSpec(action=action_spec),
             module=actor_module,
-            dist_in_keys=dist_in_keys,
+            in_keys=dist_in_keys,
             default_interaction_mode="random",
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
@@ -977,7 +978,7 @@ def make_ppo_model(
         policy_po = ProbabilisticActor(
             actor_module,
             spec=action_spec,
-            dist_in_keys=dist_in_keys,
+            in_keys=dist_in_keys,
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
@@ -1192,7 +1193,7 @@ def make_sac_model(
 
     actor = ProbabilisticActor(
         spec=action_spec,
-        dist_in_keys=["loc", "scale"],
+        in_keys=["loc", "scale"],
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
@@ -1435,7 +1436,7 @@ def make_redq_model(
 
     actor = ProbabilisticActor(
         spec=action_spec,
-        dist_in_keys=["loc", "scale"],
+        in_keys=["loc", "scale"],
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
@@ -1642,28 +1643,30 @@ def _dreamer_make_actors(
 
 
 def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
-    actor_simulator = SafeProbabilisticModule(
+    actor_simulator = SafeProbabilisticSequential(
         SafeModule(
             actor_module,
             in_keys=["state", "belief"],
             out_keys=["loc", "scale"],
+            spec=CompositeSpec(
+                **{
+                    "loc": NdUnboundedContinuousTensorSpec(
+                        proof_environment.action_spec.shape,
+                        device=proof_environment.action_spec.device,
+                    ),
+                    "scale": NdUnboundedContinuousTensorSpec(
+                        proof_environment.action_spec.shape,
+                        device=proof_environment.action_spec.device,
+                    ),
+                }
+            ),
         ),
-        dist_in_keys=["loc", "scale"],
-        sample_out_key=[action_key],
-        default_interaction_mode="random",
-        distribution_class=TanhNormal,
-        spec=CompositeSpec(
-            **{
-                action_key: proof_environment.action_spec,
-                "loc": NdUnboundedContinuousTensorSpec(
-                    proof_environment.action_spec.shape,
-                    device=proof_environment.action_spec.device,
-                ),
-                "scale": NdUnboundedContinuousTensorSpec(
-                    proof_environment.action_spec.shape,
-                    device=proof_environment.action_spec.device,
-                ),
-            }
+        SafeProbabilisticModule(
+            in_keys=["loc", "scale"],
+            out_keys=[action_key],
+            default_interaction_mode="random",
+            distribution_class=TanhNormal,
+            spec=CompositeSpec(**{action_key: proof_environment.action_spec}),
         ),
     )
     return actor_simulator
@@ -1690,26 +1693,30 @@ def _dreamer_make_actor_real(
                 "state",
             ],
         ),
-        SafeProbabilisticModule(
+        SafeProbabilisticSequential(
             SafeModule(
                 actor_module,
                 in_keys=["state", "belief"],
                 out_keys=["loc", "scale"],
+                spec=CompositeSpec(
+                    **{
+                        "loc": NdUnboundedContinuousTensorSpec(
+                            proof_environment.action_spec.shape,
+                        ),
+                        "scale": NdUnboundedContinuousTensorSpec(
+                            proof_environment.action_spec.shape,
+                        ),
+                    }
+                ),
             ),
-            dist_in_keys=["loc", "scale"],
-            sample_out_key=[action_key],
-            default_interaction_mode="random",
-            distribution_class=TanhNormal,
-            spec=CompositeSpec(
-                **{
-                    action_key: proof_environment.action_spec.to("cpu"),
-                    "loc": NdUnboundedContinuousTensorSpec(
-                        proof_environment.action_spec.shape,
-                    ),
-                    "scale": NdUnboundedContinuousTensorSpec(
-                        proof_environment.action_spec.shape,
-                    ),
-                }
+            SafeProbabilisticModule(
+                in_keys=["loc", "scale"],
+                out_keys=[action_key],
+                default_interaction_mode="random",
+                distribution_class=TanhNormal,
+                spec=CompositeSpec(
+                    **{action_key: proof_environment.action_spec.to("cpu")}
+                ),
             ),
         ),
         SafeModule(

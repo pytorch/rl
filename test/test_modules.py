@@ -256,11 +256,11 @@ def test_value_based_policy_categorical(device):
 @pytest.mark.parametrize("device", get_available_devices())
 def test_actorcritic(device):
     common_module = SafeModule(
-        spec=None, module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
+        module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"], spec=None
     ).to(device)
     module = SafeModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
     policy_operator = ProbabilisticActor(
-        spec=None, module=module, dist_in_keys=["param"], return_log_prob=True
+        module=module, in_keys=["param"], spec=None, return_log_prob=True
     ).to(device)
     value_operator = ValueOperator(nn.Linear(4, 1), in_keys=["hidden"]).to(device)
     op = ActorValueOperator(

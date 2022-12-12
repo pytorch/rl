@@ -4,7 +4,7 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import SafeModule, SafeProbabilisticModule
+from torchrl.modules import SafeModule, SafeProbabilisticSequential
 from torchrl.objectives import distance_loss
 from torchrl.objectives.common import LossModule
 
@@ -19,7 +19,7 @@ class ReinforceLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: SafeProbabilisticModule,
+        actor_network: SafeProbabilisticSequential,
         advantage_module: Callable[[TensorDictBase], TensorDictBase],
         critic: Optional[SafeModule] = None,
         delay_value: bool = False,

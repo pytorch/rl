@@ -105,10 +105,7 @@ class SACLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
-            funs_to_decorate=[
-                "forward",
-                "get_dist",
-            ],
+            funs_to_decorate=["forward", "get_dist"],
         )
 
         # Value
@@ -215,7 +212,7 @@ class SACLoss(LossModule):
             dist = self.actor_network.get_dist(
                 tensordict,
                 params=self.actor_network_params,
-            )[0]
+            )
             a_reparm = dist.rsample()
         # if not self.actor_network.spec.is_in(a_reparm):
         #     a_reparm.data.copy_(self.actor_network.spec.project(a_reparm.data))
@@ -295,7 +292,7 @@ class SACLoss(LossModule):
         )
         pred_val = td_copy.get("state_value").squeeze(-1)
 
-        action_dist, *_ = self.actor_network.get_dist(
+        action_dist = self.actor_network.get_dist(
             td_copy,
             params=self.target_actor_network_params,
         )  # resample an action

@@ -13,7 +13,7 @@ from torch import distributions as d
 from torchrl.modules import SafeModule
 from torchrl.objectives.utils import distance_loss
 
-from ..modules.tensordict_module import SafeProbabilisticModule
+from ..modules.tensordict_module import SafeProbabilisticSequential
 from .common import LossModule
 
 
@@ -32,7 +32,7 @@ class PPOLoss(LossModule):
     https://arxiv.org/abs/1707.06347
 
     Args:
-        actor (SafeProbabilisticModule): policy operator.
+        actor (SafeProbabilisticSequential): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
@@ -52,7 +52,7 @@ class PPOLoss(LossModule):
 
     def __init__(
         self,
-        actor: SafeProbabilisticModule,
+        actor: SafeProbabilisticSequential,
         critic: SafeModule,
         advantage_key: str = "advantage",
         advantage_diff_key: str = "value_error",
@@ -107,10 +107,7 @@ class PPOLoss(LossModule):
             raise RuntimeError("tensordict stored action requires grad.")
         tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
 
-        dist, *_ = self.actor.get_dist(
-            tensordict_clone,
-            params=self.actor_params,
-        )
+        dist = self.actor.get_dist(tensordict_clone, params=self.actor_params)
         log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
 
@@ -173,7 +170,7 @@ class ClipPPOLoss(PPOLoss):
         loss = -min( weight * advantage, min(max(weight, 1-eps), 1+eps) * advantage)
 
     Args:
-        actor (SafeProbabilisticModule): policy operator.
+        actor (SafeProbabilisticSequential): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
@@ -195,7 +192,7 @@ class ClipPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: SafeProbabilisticModule,
+        actor: SafeProbabilisticSequential,
         critic: SafeModule,
         advantage_key: str = "advantage",
         clip_epsilon: float = 0.2,
@@ -279,7 +276,7 @@ class KLPENPPOLoss(PPOLoss):
     favouring a certain level of distancing between the two while still preventing them to be too much apart.
 
     Args:
-        actor (SafeProbabilisticModule): policy operator.
+        actor (SafeProbabilisticSequential): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
@@ -306,7 +303,7 @@ class KLPENPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: SafeProbabilisticModule,
+        actor: SafeProbabilisticSequential,
         critic: SafeModule,
         advantage_key="advantage",
         dtarg: float = 0.01,
@@ -364,10 +361,7 @@ class KLPENPPOLoss(PPOLoss):
         ).clone()
 
         previous_dist = self.actor.build_dist_from_params(tensordict_clone)
-        current_dist, *_ = self.actor.get_dist(
-            tensordict_clone,
-            params=self.actor_params,
-        )
+        current_dist = self.actor.get_dist(tensordict_clone, params=self.actor_params)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:

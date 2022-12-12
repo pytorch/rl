@@ -310,7 +310,7 @@ def make_ddpg_actor(
     # to the right space using a TanhDelta distribution.
     actor = ProbabilisticActor(
         module=actor_module,
-        dist_in_keys=["param"],
+        in_keys=["param"],
         spec=CompositeSpec(action=env_specs["action_spec"]),
         safe=True,
         distribution_class=TanhDelta,
