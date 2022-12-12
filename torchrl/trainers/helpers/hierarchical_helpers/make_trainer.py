@@ -113,7 +113,7 @@ def make_trainer(
     # Move data to cpu
     trainer.register_op("batch_process", lambda batch: batch.cpu())
 
-    if replay_buffer:
+    if replay_buffer is not None:
         rb_trainer = ReplayBufferTrainer(
             replay_buffer, batch_size, memmap=False, device=device)
 
@@ -130,7 +130,7 @@ def make_trainer(
     #     trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
 
     # Define hooks applied to sub-batches before optimization
-    if replay_buffer:
+    if replay_buffer is not None:
         trainer.register_op("process_optim_batch", rb_trainer.sample)
     else:
         # Generate mini-batches
