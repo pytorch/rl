@@ -252,6 +252,13 @@ class GAE(nn.Module):
         gradient_mode (bool): if True, gradients are propagated throught the computation of the value function.
             Default is `False`.
 
+    GAE will return an :obj:`"advantage"` entry containing the advange value. It will also
+    return a :obj:`"value_target"` entry with the return value that is to be used
+    to train the value network. Finally, if :obj:`gradient_mode` is :obj:`True`,
+    an additional and differentiable :obj:`"value_error"` entry will be returned,
+    which simple represents the difference between the return and the value network
+    output (i.e. an additional distance loss should be applied to that signed value).
+
     """
 
     def __init__(
