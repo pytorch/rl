@@ -449,6 +449,11 @@ class BoundedTensorSpec(TensorSpec):
             maximum = maximum.expand_as(val)
             val[val < minimum] = minimum[val < minimum]
             val[val > maximum] = maximum[val > maximum]
+        except RuntimeError:
+            minimum = minimum.expand_as(val)
+            maximum = maximum.expand_as(val)
+            val[val < minimum] = minimum[val < minimum]
+            val[val > maximum] = maximum[val > maximum]
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
