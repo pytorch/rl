@@ -336,6 +336,7 @@ class GAE(nn.Module):
             )
 
         tensordict.set("advantage", adv.detach())
+        tensordict.set("value_target", value_target)
         if self.gradient_mode:
             tensordict.set("value_error", value_target - value)
 
