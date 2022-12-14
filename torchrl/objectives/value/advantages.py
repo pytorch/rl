@@ -54,7 +54,11 @@ class TDEstimate(nn.Module):
         value_key: str = "state_value",
     ):
         super().__init__()
-        self.register_buffer("gamma", torch.tensor(gamma))
+        try:
+            device = next(value_network.parameters()).device
+        except StopIteration:
+            device = torch.device("cpu")
+        self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.value_network = value_network
 
         self.average_rewards = average_rewards
@@ -159,8 +163,12 @@ class TDLambdaEstimate(nn.Module):
         vectorized: bool = True,
     ):
         super().__init__()
-        self.register_buffer("gamma", torch.tensor(gamma))
-        self.register_buffer("lmbda", torch.tensor(lmbda))
+        try:
+            device = next(value_network.parameters()).device
+        except StopIteration:
+            device = torch.device("cpu")
+        self.register_buffer("gamma", torch.tensor(gamma, device=device))
+        self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
         self.value_network = value_network
         self.vectorized = vectorized
 
@@ -282,8 +290,12 @@ class GAE(nn.Module):
         differentiable: bool = False,
     ):
         super().__init__()
-        self.register_buffer("gamma", torch.tensor(gamma))
-        self.register_buffer("lmbda", torch.tensor(lmbda))
+        try:
+            device = next(value_network.parameters()).device
+        except StopIteration:
+            device = torch.device("cpu")
+        self.register_buffer("gamma", torch.tensor(gamma, device=device))
+        self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
         self.value_network = value_network
 
         self.average_gae = average_gae

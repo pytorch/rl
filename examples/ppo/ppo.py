@@ -178,7 +178,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     trainer.register_op(
         "process_optim_batch",
-        advantage,
+        lambda tensordict: advantage(tensordict.to(device)),
     )
     trainer._process_optim_batch_ops = [
         trainer._process_optim_batch_ops[-1],
