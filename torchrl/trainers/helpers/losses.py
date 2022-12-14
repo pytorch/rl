@@ -25,7 +25,6 @@ from torchrl.objectives.deprecated import REDQLoss_deprecated
 # from torchrl.objectives.redq import REDQLoss
 
 from torchrl.objectives.utils import TargetNetUpdater
-from torchrl.objectives.value.advantages import GAE, TDEstimate
 
 
 def make_target_updater(

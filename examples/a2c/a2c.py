@@ -148,7 +148,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg.gamma,
         value_network=critic_model,
         average_rewards=True,
-        gradient_mode=False,
     )
     trainer.register_op(
         "process_optim_batch",
