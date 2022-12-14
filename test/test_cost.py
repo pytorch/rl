@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import re
 from copy import deepcopy
 
 _has_functorch = True
@@ -21,7 +22,7 @@ import pytest
 import torch
 from _utils_internal import dtype_fixture, get_available_devices  # noqa
 from mocking_classes import ContinuousActionConvMockEnv
-from tensordict.nn import get_functional
+from tensordict.nn import get_functional, TensorDictModule
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from tensordict.tensordict import assert_allclose_td, TensorDict
@@ -1597,23 +1598,25 @@ class TestPPO:
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td":
             advantage = TDEstimate(
-                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(
-            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
-        )
-
+        loss_fn = loss_class(actor, value, gamma=0.9, loss_critic_type="l2")
+        with pytest.raises(
+            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
+        ):
+            _ = loss_fn(td)
+        advantage(td)
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -1659,20 +1662,17 @@ class TestPPO:
                 gamma=0.9,
                 lmbda=0.9,
                 value_network=value,
-                gradient_mode=False,
             )
         elif advantage == "td":
             advantage = TDEstimate(
                 gamma=0.9,
                 value_network=value,
-                gradient_mode=False,
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
                 gamma=0.9,
                 lmbda=0.9,
                 value_network=value,
-                gradient_mode=False,
             )
         else:
             raise NotImplementedError
@@ -1681,9 +1681,13 @@ class TestPPO:
             value,
             gamma=0.9,
             loss_critic_type="l2",
-            advantage_module=advantage,
         )
 
+        with pytest.raises(
+            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
+        ):
+            _ = loss_fn(td)
+        advantage(td)
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -1731,29 +1735,33 @@ class TestPPO:
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td":
             advantage = TDEstimate(
-                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(
-            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
-        )
+        loss_fn = loss_class(actor, value, gamma=0.9, loss_critic_type="l2")
 
         floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
         # fill params with zero
         for p in params:
             p.data.zero_()
         # assert len(list(floss_fn.parameters())) == 0
+        with pytest.raises(
+            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
+        ):
+            _ = floss_fn(params, buffers, td)
+        advantage(td)
         loss = floss_fn(params, buffers, td)
+
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
@@ -1860,22 +1868,20 @@ class TestA2C:
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td":
             advantage = TDEstimate(
-                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         else:
             raise NotImplementedError
 
-        loss_fn = A2CLoss(
-            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
-        )
+        loss_fn = A2CLoss(actor, value, gamma=0.9, loss_critic_type="l2")
 
         # Check error is raised when actions require grads
         td["action"].requires_grad = True
@@ -1886,16 +1892,13 @@ class TestA2C:
             _ = loss_fn._log_probs(td)
         td["action"].requires_grad = False
 
-        # Check error is raised when advantage_diff_key present and does not required grad
-        td[loss_fn.advantage_diff_key] = torch.randn_like(td["reward"])
-        with pytest.raises(
-            RuntimeError,
-            match="value_target retrieved from tensordict does not require grad.",
-        ):
-            loss = loss_fn.loss_critic(td)
-        td = td.exclude(loss_fn.advantage_diff_key)
-        assert loss_fn.advantage_diff_key not in td.keys()
+        td = td.exclude(loss_fn.value_target_key)
 
+        with pytest.raises(
+            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
+        ):
+            _ = loss_fn(td)
+        advantage(td)
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -1939,25 +1942,28 @@ class TestA2C:
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td":
             advantage = TDEstimate(
-                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         else:
             raise NotImplementedError
 
-        loss_fn = A2CLoss(
-            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
-        )
+        loss_fn = A2CLoss(actor, value, gamma=0.9, loss_critic_type="l2")
 
         floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
 
+        with pytest.raises(
+            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
+        ):
+            _ = floss_fn(params, buffers, td)
+        advantage(td)
         loss = floss_fn(params, buffers, td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -2007,24 +2013,24 @@ class TestReinforce:
             spec=NdUnboundedContinuousTensorSpec(n_act),
         )
         if advantage == "gae":
-            advantage_module = GAE(
+            advantage = GAE(
                 gamma=gamma,
                 lmbda=0.9,
                 value_network=get_functional(value_net),
-                gradient_mode=gradient_mode,
+                differentiable=gradient_mode,
             )
         elif advantage == "td":
-            advantage_module = TDEstimate(
+            advantage = TDEstimate(
                 gamma=gamma,
                 value_network=get_functional(value_net),
-                gradient_mode=gradient_mode,
+                differentiable=gradient_mode,
             )
         elif advantage == "td_lambda":
-            advantage_module = TDLambdaEstimate(
+            advantage = TDLambdaEstimate(
                 gamma=0.9,
                 lmbda=0.9,
                 value_network=get_functional(value_net),
-                gradient_mode=gradient_mode,
+                differentiable=gradient_mode,
             )
         else:
             raise NotImplementedError
@@ -2033,7 +2039,6 @@ class TestReinforce:
             actor_net,
             critic=value_net,
             gamma=gamma,
-            advantage_module=advantage_module,
             delay_value=delay_value,
         )
 
@@ -2048,6 +2053,12 @@ class TestReinforce:
             [batch],
         )
 
+        with pytest.raises(
+            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
+        ):
+            _ = loss_fn(td)
+        params = TensorDict(value_net.state_dict(), []).unflatten_keys(".")
+        advantage(td, params=params)
         loss_td = loss_fn(td)
         autograd.grad(
             loss_td.get("loss_actor"),
@@ -2946,6 +2957,69 @@ def test_shared_params(dest, expected_dtype, expected_device):
         assert (qvalparam == loss.actor_network_params[key]).all(), key
         if i == 1:
             break
+
+
+class TestAdv:
+    @pytest.mark.parametrize(
+        "adv,kwargs",
+        [[GAE, {"lmbda": 0.95}], [TDEstimate, {}], [TDLambdaEstimate, {"lmbda": 0.95}]],
+    )
+    def test_diff_reward(
+        self,
+        adv,
+        kwargs,
+    ):
+        value_net = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+        )
+        module = adv(
+            gamma=0.98,
+            value_network=value_net,
+            differentiable=True,
+            **kwargs,
+        )
+        td = TensorDict(
+            {
+                "obs": torch.randn(1, 10, 3),
+                "reward": torch.randn(1, 10, 1, requires_grad=True),
+                "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                "next": {"obs": torch.randn(1, 10, 3)},
+            },
+            [1, 10],
+        )
+        td = module(td.clone(False))
+        # check that the advantage can't backprop to the value params
+        td["advantage"].sum().backward()
+        for p in value_net.parameters():
+            assert p.grad is None or (p.grad == 0).all()
+        # check that rewards have a grad
+        assert td["reward"].grad.norm() > 0
+
+    @pytest.mark.parametrize(
+        "adv,kwargs",
+        [[GAE, {"lmbda": 0.95}], [TDEstimate, {}], [TDLambdaEstimate, {"lmbda": 0.95}]],
+    )
+    def test_non_differentiable(self, adv, kwargs):
+        value_net = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+        )
+        module = adv(
+            gamma=0.98,
+            value_network=value_net,
+            differentiable=False,
+            **kwargs,
+        )
+        td = TensorDict(
+            {
+                "obs": torch.randn(1, 10, 3),
+                "reward": torch.randn(1, 10, 1, requires_grad=True),
+                "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                "next": {"obs": torch.randn(1, 10, 3)},
+            },
+            [1, 10],
+        )
+        td = module(td.clone(False))
+        assert td["advantage"].is_leaf
 
 
 if __name__ == "__main__":
