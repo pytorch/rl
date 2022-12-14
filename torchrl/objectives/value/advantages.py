@@ -79,8 +79,9 @@ class TDEstimate(nn.Module):
         """Computes the GAE given the data in tensordict.
 
         Args:
-            tensordict (TensorDictBase): A TensorDict containing the data (observation, action, reward, done state)
-                necessary to compute the value estimates and the GAE.
+            tensordict (TensorDictBase): A TensorDict containing the data
+                (an observation key, "action", "reward", "done" and "next" tensordict state
+                as returned by the environment) necessary to compute the value estimates and the TDEstimate.
 
         Returns:
             An updated TensorDict with an "advantage" and a "value_error" keys
@@ -118,7 +119,7 @@ class TDEstimate(nn.Module):
             # we assume that target parameters are not differentiable
             kwargs["params"] = target_params
         elif "params" in kwargs:
-            kwargs["params"] = [param.detach() for param in kwargs["params"]]
+            kwargs["params"] = kwargs["params"].detach()
         with hold_out_net(self.value_network):
             self.value_network(step_td, **kwargs)
             next_value = step_td.get(self.value_key)
@@ -185,8 +186,10 @@ class TDLambdaEstimate(nn.Module):
         """Computes the GAE given the data in tensordict.
 
         Args:
-            tensordict (TensorDictBase): A TensorDict containing the data (observation, action, reward, done state)
-                necessary to compute the value estimates and the GAE.
+            tensordict (TensorDictBase): A TensorDict containing the data
+                (an observation key, "action", "reward", "done" and "next" tensordict state
+                as returned by the environment) necessary to compute the value
+                estimates and the TDLambdaEstimate.
 
         Returns:
             An updated TensorDict with an "advantage" and a "value_error" keys
@@ -224,7 +227,7 @@ class TDLambdaEstimate(nn.Module):
             # we assume that target parameters are not differentiable
             kwargs["params"] = target_params
         elif "params" in kwargs:
-            kwargs["params"] = [param.detach() for param in kwargs["params"]]
+            kwargs["params"] = kwargs["params"].detach()
         with hold_out_net(self.value_network):
             # we may still need to pass gradient, but we don't want to assign grads to
             # value net params
@@ -304,8 +307,9 @@ class GAE(nn.Module):
         """Computes the GAE given the data in tensordict.
 
         Args:
-            tensordict (TensorDictBase): A TensorDict containing the data (observation, action, reward, done state)
-                necessary to compute the value estimates and the GAE.
+            tensordict (TensorDictBase): A TensorDict containing the data
+                (an observation key, "action", "reward", "done" and "next" tensordict state
+                as returned by the environment) necessary to compute the value estimates and the GAE.
 
         Returns:
             An updated TensorDict with an "advantage" and a "value_error" keys
@@ -337,7 +341,7 @@ class GAE(nn.Module):
             # we assume that target parameters are not differentiable
             kwargs["params"] = target_params
         elif "params" in kwargs:
-            kwargs["params"] = [param.detach() for param in kwargs["params"]]
+            kwargs["params"] = kwargs["params"].detach()
         with hold_out_net(self.value_network):
             # we may still need to pass gradient, but we don't want to assign grads to
             # value net params
