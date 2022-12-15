@@ -2964,6 +2964,34 @@ class TestAdv:
         "adv,kwargs",
         [[GAE, {"lmbda": 0.95}], [TDEstimate, {}], [TDLambdaEstimate, {"lmbda": 0.95}]],
     )
+    def test_dispatch(
+        self,
+        adv,
+        kwargs,
+    ):
+        value_net = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+        )
+        module = adv(
+            gamma=0.98,
+            value_network=value_net,
+            differentiable=False,
+            **kwargs,
+        )
+        kwargs = {
+            "obs": torch.randn(1, 10, 3),
+            "reward": torch.randn(1, 10, 1, requires_grad=True),
+            "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+            "next_obs": torch.randn(1, 10, 3),
+        }
+        advantage, value_target = module(**kwargs)
+        assert advantage.shape == torch.Size([1, 10, 1])
+        assert value_target.shape == torch.Size([1, 10, 1])
+
+    @pytest.mark.parametrize(
+        "adv,kwargs",
+        [[GAE, {"lmbda": 0.95}], [TDEstimate, {}], [TDLambdaEstimate, {"lmbda": 0.95}]],
+    )
     def test_diff_reward(
         self,
         adv,
