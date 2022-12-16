@@ -23,6 +23,11 @@ On the low-level end, torchrl comes with a set of highly re-usable functionals f
 
 TorchRL aims at (1) a high modularity and (2) good runtime performance.
 
+## Documentation
+
+The TorchRL documentation can be found [here](https://pytorch.org/rl).
+It contains tutorials and the API reference.
+
 ## TensorDict as a common data carrier for RL
 
 TorchRL relies on [`TensorDict`](https://github.com/pytorch-labs/tensordict/),

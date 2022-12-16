@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
-from typing import Callable, Optional, Tuple
+from typing import Tuple
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
@@ -55,14 +55,13 @@ class PPOLoss(LossModule):
         actor: SafeProbabilisticSequential,
         critic: SafeModule,
         advantage_key: str = "advantage",
-        advantage_diff_key: str = "value_error",
+        value_target_key: str = "value_target",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
         critic_coef: float = 1.0,
         gamma: float = 0.99,
         loss_critic_type: str = "smooth_l1",
-        advantage_module: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -72,7 +71,7 @@ class PPOLoss(LossModule):
         # params of critic must be refs to actor if they're shared
         self.convert_to_functional(critic, "critic", compare_against=self.actor_params)
         self.advantage_key = advantage_key
-        self.advantage_diff_key = advantage_diff_key
+        self.value_target_key = value_target_key
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef
         self.register_buffer(
@@ -83,9 +82,6 @@ class PPOLoss(LossModule):
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self.device))
         self.loss_critic_type = loss_critic_type
-        self.advantage_module = advantage_module
-        if self.advantage_module is not None:
-            self.advantage_module = advantage_module.to(self.device)
 
     def reset(self) -> None:
         pass
@@ -119,35 +115,29 @@ class PPOLoss(LossModule):
         return log_weight, dist
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
-        if self.advantage_diff_key in tensordict.keys():
-            advantage_diff = tensordict.get(self.advantage_diff_key)
-            if not advantage_diff.requires_grad:
-                raise RuntimeError(
-                    "value_target retrieved from tensordict does not requires grad."
-                )
-            loss_value = distance_loss(
-                advantage_diff,
-                torch.zeros_like(advantage_diff),
-                loss_function=self.loss_critic_type,
-            )
-        else:
-            advantage = tensordict.get(self.advantage_key)
+        try:
+            target_return = tensordict.get(self.value_target_key)
             tensordict_select = tensordict.select(*self.critic.in_keys)
-            value = self.critic(
+            state_value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
             ).get("state_value")
-            value_target = advantage + value.detach()
             loss_value = distance_loss(
-                value, value_target, loss_function=self.loss_critic_type
+                target_return,
+                state_value,
+                loss_function=self.loss_critic_type,
+            )
+        except KeyError:
+            raise KeyError(
+                f"the key {self.value_target_key} was not found in the input tensordict. "
+                f"Make sure you provided the right key and the value_target (i.e. the target "
+                f"return) has been retrieved accordingly. Advantage classes such as GAE, "
+                f"TDLambdaEstimate and TDEstimate all return a 'value_target' entry that "
+                f"can be used for the value loss."
             )
         return self.critic_coef * loss_value
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self.advantage_module is not None:
-            tensordict = self.advantage_module(
-                tensordict,
-            )
         tensordict = tensordict.clone()
         advantage = tensordict.get(self.advantage_key)
         log_weight, dist = self._log_weight(tensordict)
@@ -226,8 +216,6 @@ class ClipPPOLoss(PPOLoss):
         )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self.advantage_module is not None:
-            tensordict = self.advantage_module(tensordict)
         tensordict = tensordict.clone()
         advantage = tensordict.get(self.advantage_key)
         log_weight, dist = self._log_weight(tensordict)
@@ -349,8 +337,6 @@ class KLPENPPOLoss(PPOLoss):
         self.samples_mc_kl = samples_mc_kl
 
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
-        if self.advantage_module is not None:
-            tensordict = self.advantage_module(tensordict)
         tensordict = tensordict.clone()
         advantage = tensordict.get(self.advantage_key)
         log_weight, dist = self._log_weight(tensordict)

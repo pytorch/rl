@@ -415,7 +415,6 @@ def test_ppo_maker(
 def test_a2c_maker(
     device, from_pixels, shared_mapping, gsde, exploration, action_space
 ):
-    A2CModelConfig.advantage_in_loss = False
     if not gsde and exploration != "random":
         pytest.skip("no need to test this setting")
     flags = list(from_pixels + shared_mapping + gsde)
@@ -558,9 +557,6 @@ def test_a2c_maker(
         proof_environment.close()
         del proof_environment
 
-        cfg.advantage_in_loss = False
-        loss_fn = make_a2c_loss(actor_value, cfg)
-        cfg.advantage_in_loss = True
         loss_fn = make_a2c_loss(actor_value, cfg)
 
 

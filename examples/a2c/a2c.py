@@ -143,19 +143,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg=cfg,
     )
 
-    if not cfg.advantage_in_loss:
-        critic_model = model.get_value_operator()
-        advantage = TDEstimate(
-            cfg.gamma,
-            value_network=critic_model,
-            average_rewards=True,
-            gradient_mode=False,
-        )
-        advantage = advantage.to(device)
-        trainer.register_op(
-            "process_optim_batch",
-            advantage,
-        )
+    critic_model = model.get_value_operator()
+    advantage = TDEstimate(
+        cfg.gamma,
+        value_network=critic_model,
+        average_rewards=True,
+    )
+    trainer.register_op(
+        "process_optim_batch",
+        advantage,
+    )
 
     final_seed = collector.set_seed(cfg.seed)
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")

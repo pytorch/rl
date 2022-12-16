@@ -25,7 +25,6 @@ from torchrl.objectives.deprecated import REDQLoss_deprecated
 # from torchrl.objectives.redq import REDQLoss
 
 from torchrl.objectives.utils import TargetNetUpdater
-from torchrl.objectives.value.advantages import GAE, TDEstimate
 
 
 def make_target_updater(
@@ -178,22 +177,11 @@ def make_a2c_loss(model, cfg) -> A2CLoss:
     actor_model = model.get_policy_operator()
     critic_model = model.get_value_operator()
 
-    if cfg.advantage_in_loss:
-        advantage = TDEstimate(
-            gamma=cfg.gamma,
-            value_network=critic_model,
-            average_rewards=True,
-            gradient_mode=False,
-        )
-    else:
-        advantage = None
-
     kwargs = {
         "actor": actor_model,
         "critic": critic_model,
         "loss_critic_type": cfg.critic_loss_function,
         "entropy_coef": cfg.entropy_coef,
-        "advantage_module": advantage,
     }
 
     loss_module = A2CLoss(**kwargs)
@@ -212,21 +200,9 @@ def make_ppo_loss(model, cfg) -> PPOLoss:
     actor_model = model.get_policy_operator()
     critic_model = model.get_value_operator()
 
-    if cfg.advantage_in_loss:
-        advantage = GAE(
-            cfg.gamma,
-            cfg.lmbda,
-            value_network=critic_model,
-            average_rewards=True,
-            gradient_mode=False,
-        )
-    else:
-        advantage = None
-
     kwargs = {
         "actor": actor_model,
         "critic": critic_model,
-        "advantage_module": advantage,
         "loss_critic_type": cfg.loss_function,
         "entropy_coef": cfg.entropy_coef,
     }
@@ -289,8 +265,6 @@ class A2CLossConfig:
     # Critic factor for the A2C loss
     critic_loss_function: str = "smooth_l1"
     # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
-    advantage_in_loss: bool = False
-    # if True, the advantage is computed on the sub-batch.
 
 
 @dataclass
@@ -313,8 +287,6 @@ class PPOLossConfig:
     # Number of samples to use for a Monte-Carlo estimate if the policy distribution has not closed formula.
     loss_function: str = "smooth_l1"
     # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
-    advantage_in_loss: bool = False
-    # if True, the advantage is computed on the sub-batch.,
     critic_coef: float = 1.0
     # Critic loss multiplier when computing the total loss.
 

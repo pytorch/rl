@@ -1008,7 +1008,7 @@ class BatchSubSampler(TrainerHookBase):
                 * batch.shape[1]
             )
         len_mask = traj_len >= sub_traj_len
-        valid_trajectories = torch.arange(batch.shape[0])[len_mask]
+        valid_trajectories = torch.arange(batch.shape[0], device=batch.device)[len_mask]
 
         batch_size = self.batch_size // sub_traj_len
         if batch_size == 0:
