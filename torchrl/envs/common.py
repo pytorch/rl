@@ -401,7 +401,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         self.is_done = tensordict_reset.set_default(
             "done",
-            torch.zeros(self.batch_size, dtype=torch.bool, device=self.device),
+            torch.zeros(
+                *tensordict_reset.batch_size, 1, dtype=torch.bool, device=self.device
+            ),
         )
         if self.is_done:
             raise RuntimeError(
