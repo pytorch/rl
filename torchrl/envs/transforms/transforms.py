@@ -1985,7 +1985,7 @@ class NoopResetEnv(Transform):
                 i += 1
                 tensordict = parent.rand_step(tensordict)
                 tensordict = step_mdp(tensordict, exclude_done=False)
-                if tensordict.get("is_done"):
+                if tensordict.get("done"):
                     tensordict = parent.reset(td_reset.clone(False))
                     break
             else:
@@ -1994,13 +1994,13 @@ class NoopResetEnv(Transform):
             trial += 1
             if trial > _MAX_NOOPS_TRIALS:
                 tensordict = parent.rand_step(tensordict)
-                if tensordict.get("is_done"):
+                if tensordict.get("done"):
                     raise RuntimeError(
                         f"parent is still done after a single random step (i={i})."
                     )
                 break
 
-        if tensordict.get("is_done"):
+        if tensordict.get("done"):
             raise RuntimeError("NoopResetEnv concluded with done environment")
         return tensordict
 
