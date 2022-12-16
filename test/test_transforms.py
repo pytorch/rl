@@ -48,10 +48,10 @@ from torchrl.envs import (
     Resize,
     RewardClipping,
     RewardScaling,
+    RewardSum,
     SerialEnv,
     ToTensorImage,
     VIPTransform,
-    RewardSum,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm

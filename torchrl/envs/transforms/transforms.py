@@ -2460,7 +2460,7 @@ class RewardSum(Transform):
         self._check_inplace()
 
         for in_key in self.in_keys:
-            if not in_key in tensordict.keys():
+            if in_key not in tensordict.keys():
                 return tensordict
 
         # Get input keys
@@ -2473,10 +2473,12 @@ class RewardSum(Transform):
             self.is_new_episode = torch.zeros_like(done)
 
         for out_key in self.out_keys:
-            if not out_key in tensordict.keys():
-                tensordict.set(out_key, torch.zeros(*tensordict.shape, 1, dtype=reward.dtype))
+            if out_key not in tensordict.keys():
+                tensordict.set(
+                    out_key, torch.zeros(*tensordict.shape, 1, dtype=reward.dtype)
+                )
             updated_value = tensordict.get(out_key) * self.is_new_episode + reward
-            tensordict.set(out_key,  updated_value)
+            tensordict.set(out_key, updated_value)
 
         # Restart sum immediately after end-of-episode detected
         self.is_new_episode = 1 - done
