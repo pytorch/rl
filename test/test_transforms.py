@@ -1275,6 +1275,22 @@ class TestTransforms:
         else:
             assert transformed_env.step_count == 30
 
+    @pytest.mark.parametrize("random", [True, False])
+    @pytest.mark.parametrize("compose", [True, False])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_noop_reset_env_error(self, random, device, compose):
+        torch.manual_seed(0)
+        env = SerialEnv(3, lambda: ContinuousActionVecMockEnv())
+        env.set_seed(100)
+        noop_reset_env = NoopResetEnv(random=random)
+        transformed_env = TransformedEnv(env)
+        transformed_env.append_transform(noop_reset_env)
+        with pytest.raises(
+            ValueError,
+            match="there is more than one done state in the parent environment",
+        ):
+            transformed_env.reset()
+
     @pytest.mark.parametrize(
         "default_keys", [["action"], ["action", "monkeys jumping on the bed"]]
     )
