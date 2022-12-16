@@ -222,9 +222,21 @@ class TensorSpec:
             ):
                 val = val.copy()
             val = torch.tensor(val, dtype=self.dtype, device=self.device)
+            if val.shape[-len(self.shape):] != self.shape:
+                # option 1: add a singleton dim at the end
+                if self.shape == torch.Size([1]):
+                    val = val.unsqueeze(-1)
+                else:
+                    raise RuntimeError(f"Shape mismatch: the value has shape {val.shape} which "
+                                       f"is incompatible with the spec shape {self.shape}.")
         if not _NO_CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val
+
+    def __setattr__(self, key, value):
+        if key == "shape":
+            value = torch.Size(value)
+        super().__setattr__(key, value)
 
     def to_numpy(self, val: torch.Tensor, safe: bool = True) -> np.ndarray:
         """Returns the np.ndarray correspondent of an input tensor.

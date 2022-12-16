@@ -422,6 +422,9 @@ class TestParallel:
         env2 = DMControlEnv("humanoid", "walk")
         env2_obs_keys = list(env2.observation_spec.keys())
 
+        assert len(env1_obs_keys)
+        assert len(env2_obs_keys)
+
         def env1_maker():
             return TransformedEnv(
                 DMControlEnv("humanoid", "stand"),
@@ -449,6 +452,7 @@ class TestParallel:
             )
 
         env = ParallelEnv(2, [env1_maker, env2_maker])
+        # env = SerialEnv(2, [env1_maker, env2_maker])
         assert not env._single_task
 
         td = env.rollout(10, return_contiguous=False)

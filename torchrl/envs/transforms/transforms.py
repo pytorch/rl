@@ -333,8 +333,9 @@ class TransformedEnv(EnvBase):
 
         self._last_obs = None
         self.cache_specs = cache_specs
-        self._reward_spec = None
-        self._observation_spec = None
+        self.__dict__["_reward_spec"] = None
+        self.__dict__["_input_spec"] = None
+        self.__dict__["_observation_spec"] = None
         self.batch_size = self.base_env.batch_size
 
     def _set_env(self, env: EnvBase, device) -> None:
@@ -395,7 +396,7 @@ but got an object of type {type(transform)}."""
                 deepcopy(self.base_env.observation_spec)
             )
             if self.cache_specs:
-                self._observation_spec = observation_spec
+                self.__dict__["_observation_spec"] = observation_spec
         else:
             observation_spec = self._observation_spec
         return observation_spec
@@ -413,7 +414,7 @@ but got an object of type {type(transform)}."""
                 deepcopy(self.base_env.input_spec)
             )
             if self.cache_specs:
-                self._input_spec = input_spec
+                self.__dict__["_input_spec"] = input_spec
         else:
             input_spec = self._input_spec
         return input_spec
@@ -426,7 +427,7 @@ but got an object of type {type(transform)}."""
                 deepcopy(self.base_env.reward_spec)
             )
             if self.cache_specs:
-                self._reward_spec = reward_spec
+                self.__dict__["_reward_spec"] = reward_spec
         else:
             reward_spec = self._reward_spec
         return reward_spec
@@ -500,9 +501,9 @@ but got an object of type {type(transform)}."""
         self.is_closed = True
 
     def empty_cache(self):
-        self._observation_spec = None
-        self._input_spec = None
-        self._reward_spec = None
+        self.__dict__["_observation_spec"] = None
+        self.__dict__["_input_spec"] = None
+        self.__dict__["_reward_spec"] = None
 
     def append_transform(self, transform: Transform) -> None:
         self._erase_metadata()
@@ -571,9 +572,9 @@ but got an object of type {type(transform)}."""
         self.is_done = self.is_done.to(device)
 
         if self.cache_specs:
-            self._input_spec = None
-            self._observation_spec = None
-            self._reward_spec = None
+            self.__dict__["_input_spec"] = None
+            self.__dict__["_observation_spec"] = None
+            self.__dict__["_reward_spec"] = None
         return self
 
     def __setattr__(self, key, value):
