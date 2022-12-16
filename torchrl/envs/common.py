@@ -399,9 +399,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
 
-        self.is_done = tensordict_reset.get(
+        self.is_done = tensordict_reset.set_default(
             "done",
-            torch.zeros(self.batch_size, dtype=torch.bool, device=self.device),
+            torch.zeros(
+                *tensordict_reset.batch_size, 1, dtype=torch.bool, device=self.device
+            ),
         )
         if self.is_done:
             raise RuntimeError(
