@@ -91,7 +91,6 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         - input_spec (CompositeSpec): sampling spec of the inputs;
         - batch_size (torch.Size): batch_size to be used by the env. If not set, the env accept tensordicts of all batch sizes.
         - device (torch.device): device where the env input and output are expected to live
-        - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the last reset
 
     Args:
         world_model (nn.Module): model that generates world states and its corresponding rewards;

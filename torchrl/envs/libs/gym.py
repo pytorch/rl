@@ -272,7 +272,7 @@ class GymWrapper(GymLikeEnv):
         )
 
     def _init_env(self):
-        self.reset()  # make sure that _is_done is populated
+        self.reset()
 
     def __repr__(self) -> str:
         return (
