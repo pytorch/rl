@@ -356,9 +356,6 @@ class _BatchedEnv(EnvBase):
     def reward_spec(self, value: TensorSpec) -> None:
         self._reward_spec = value
 
-    def is_done_set_fn(self, value: bool) -> None:
-        self._is_done = value.all()
-
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
         if self._single_task:
@@ -988,11 +985,8 @@ def _run_worker_pipe_shared_mem(
                 _td.pin_memory()
             tensordict.update_(_td)
             child_pipe.send(("reset_obs", reset_keys))
-            just_reset = True
-            if env.is_done:
-                raise RuntimeError(
-                    f"{env.__class__.__name__}.is_done is {env.is_done} after reset"
-                )
+            if _td.get("done").any():
+                raise RuntimeError(f"{env.__class__.__name__} is done after reset")
 
         elif cmd == "step":
             if not initialized:
@@ -1002,10 +996,6 @@ def _run_worker_pipe_shared_mem(
                 *env_input_keys,
                 strict=False,
             )
-            if env.is_done and not allow_step_when_done:
-                raise RuntimeError(
-                    f"calling step when env is done, just reset = {just_reset}"
-                )
             _td = env._step(_td)
             if step_keys is None:
                 step_keys = set(env.observation_spec.keys()).union(
@@ -1020,7 +1010,6 @@ def _run_worker_pipe_shared_mem(
                 msg = "step_result"
             data = (msg, step_keys)
             child_pipe.send(data)
-            just_reset = False
 
         elif cmd == "close":
             del tensordict, _td, data

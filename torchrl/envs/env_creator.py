@@ -49,7 +49,7 @@ class EnvCreator:
         ...     tensordict = env.reset()
         ...     for _ in range(10):
         ...         env.rand_step(tensordict)
-        ...         if env.is_done:
+        ...         if tensordict.get("done"):
         ...             tensordict = env.reset(tensordict)
         ...     print("env 1: ", env.transform._td.get(("next", "observation_count")))
         >>>

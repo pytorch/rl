@@ -255,8 +255,6 @@ class JumanjiWrapper(GymLikeEnv):
         done = timestep.step_type == self.lib.types.StepType.LAST
         done = _ndarray_to_tensor(done).view(torch.bool).to(self.device)
 
-        self._is_done = done
-
         # build results
         tensordict_out = TensorDict(
             source=obs_dict,
@@ -287,8 +285,6 @@ class JumanjiWrapper(GymLikeEnv):
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
         done = torch.zeros(self.batch_size, dtype=torch.bool)
-
-        self._is_done = done
 
         # build results
         tensordict_out = TensorDict(

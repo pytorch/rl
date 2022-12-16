@@ -485,16 +485,6 @@ but got an object of type {type(transform)}."""
     def is_closed(self, value: bool):
         self.base_env.is_closed = value
 
-    @property
-    def is_done(self) -> bool:
-        if self._is_done is None:
-            return self.base_env.is_done
-        return self._is_done.all()
-
-    @is_done.setter
-    def is_done(self, val: torch.Tensor) -> None:
-        self._is_done = val
-
     def close(self):
         self.base_env.close()
         self.is_closed = True
@@ -567,8 +557,6 @@ but got an object of type {type(transform)}."""
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.base_env.to(device)
         self.transform.to(device)
-
-        self.is_done = self.is_done.to(device)
 
         if self.cache_specs:
             self._input_spec = None
