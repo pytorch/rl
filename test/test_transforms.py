@@ -59,6 +59,7 @@ from torchrl.envs.transforms.transforms import (
     _has_tv,
     CenterCrop,
     DiscreteActionProjection,
+    FrameSkipTransform,
     gSDENoise,
     NoopResetEnv,
     PinMemoryTransform,
@@ -375,17 +376,48 @@ def test_transform_parent():
     t3 = RewardClipping(0.1, 0.5)
     env.append_transform(t3)
 
-    t1_parent_gt = t1._parent
-    t2_parent_gt = t2._parent
-    t3_parent_gt = t3._parent
+    t1_parent_gt = t1._container
+    t2_parent_gt = t2._container
+    t3_parent_gt = t3._container
 
     _ = t1.parent
     _ = t2.parent
     _ = t3.parent
 
-    assert t1_parent_gt == t1._parent
-    assert t2_parent_gt == t2._parent
-    assert t3_parent_gt == t3._parent
+    assert t1_parent_gt == t1._container
+    assert t2_parent_gt == t2._container
+    assert t3_parent_gt == t3._container
+
+
+def test_transform_parent_cache():
+    """Tests the caching and uncaching of the transformed envs."""
+    env = TransformedEnv(
+        ContinuousActionVecMockEnv(),
+        FrameSkipTransform(3),
+    )
+
+    # print the parent
+    assert (
+        type(env.transform.parent.transform) is Compose
+        and len(env.transform.parent.transform) == 0
+    )
+    parent1 = env.transform.parent
+    parent2 = env.transform.parent
+    assert parent1 is parent2
+
+    # change the env, re-print the parent
+    env.insert_transform(0, NoopResetEnv(3))
+    parent3 = env.transform[-1].parent
+    assert parent1 is not parent3
+    assert type(parent3.transform[0]) is NoopResetEnv
+
+    # change the env, re-print the parent
+    env.insert_transform(0, CatTensors(["observation"]))
+    parent4 = env.transform[-1].parent
+    assert parent1 is not parent4
+    assert parent3 is not parent4
+    assert type(parent4.transform[0]) is CatTensors
+    assert type(parent4.transform[1]) is NoopResetEnv
 
 
 class TestTransforms:
