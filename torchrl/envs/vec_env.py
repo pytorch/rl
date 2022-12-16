@@ -985,7 +985,6 @@ def _run_worker_pipe_shared_mem(
                 _td.pin_memory()
             tensordict.update_(_td)
             child_pipe.send(("reset_obs", reset_keys))
-            just_reset = True
             if _td.get("done").any():
                 raise RuntimeError(f"{env.__class__.__name__} is done after reset")
 
