@@ -29,5 +29,6 @@ from .transforms import (
     TransformedEnv,
     UnsqueezeTransform,
     VecNorm,
+    RewardSum,
 )
 from .vip import VIPRewardTransform, VIPTransform
