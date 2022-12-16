@@ -399,7 +399,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             "done",
             torch.zeros(self.batch_size, dtype=torch.bool, device=self.device),
         )
-        if tensordict.get("done").any():
+        if tensordict_reset.get("done").any():
             raise RuntimeError(
                 f"Env {self} was done after reset. This is (currently) not allowed."
             )
