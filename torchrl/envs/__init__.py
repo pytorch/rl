@@ -33,5 +33,6 @@ from .transforms import (
     UnsqueezeTransform,
     VecNorm,
     VIPTransform,
+    RewardSum,
 )
 from .vec_env import ParallelEnv, SerialEnv
