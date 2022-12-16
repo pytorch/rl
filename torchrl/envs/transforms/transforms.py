@@ -356,6 +356,10 @@ class TransformedEnv(EnvBase):
                 f"""Expected a transform of type torchrl.envs.transforms.Transform,
 but got an object of type {type(transform)}."""
             )
+        prev_transform = self.transform
+        if prev_transform is not None:
+            prev_transform.empty_cache()
+            prev_transform.__dict__["_container"] = None
         transform.set_container(self)
         transform.eval()
         self._transform = transform

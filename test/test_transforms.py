@@ -401,6 +401,7 @@ def test_transform_parent_cache():
         type(env.transform.parent.transform) is Compose
         and len(env.transform.parent.transform) == 0
     )
+    transform = env.transform
     parent1 = env.transform.parent
     parent2 = env.transform.parent
     assert parent1 is parent2
@@ -418,6 +419,10 @@ def test_transform_parent_cache():
     assert parent3 is not parent4
     assert type(parent4.transform[0]) is CatTensors
     assert type(parent4.transform[1]) is NoopResetEnv
+
+    # check that we don't keep track of the wrong parent
+    env.transform = NoopResetEnv(3)
+    assert transform.parent is None
 
 
 class TestTransforms:
