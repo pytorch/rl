@@ -22,6 +22,7 @@ from .transforms import (
     Resize,
     RewardClipping,
     RewardScaling,
+    RewardSum,
     SqueezeTransform,
     TensorDictPrimer,
     ToTensorImage,
@@ -29,6 +30,5 @@ from .transforms import (
     TransformedEnv,
     UnsqueezeTransform,
     VecNorm,
-    RewardSum,
 )
 from .vip import VIPRewardTransform, VIPTransform
