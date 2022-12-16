@@ -716,13 +716,15 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_sum_reward(self, keys, device):
         torch.manual_seed(0)
+        batch = 4
         rs = RewardSum()
         td = TensorDict(
             {
-                "done": torch.zeros((*batch, 1), dtype=torch.bool, device=device),
-                "reward": torch.rand((*batch, 1), dtype=torch.bool, device=device),
+                "done": torch.zeros((batch, 1), dtype=torch.bool),
+                "reward": torch.rand((batch, 1)),
             },
             device=device,
+            batch_size=[batch],
         )
 
         # apply one time, episode_reward should be equal to reward again
@@ -731,7 +733,7 @@ class TestTransforms:
         assert (td.get("episode_reward") == td.get("reward")).all()
 
         # apply a second time, episode_reward should twice the rewar
-        td.set("done", torch.ones((*batch, 1), dtype=torch.bool, device=device))
+        td.set("done", torch.ones((batch, 1), dtype=torch.bool, device=device))
         td = rs(td)
         assert (td.get("episode_reward") == 2 * td.get("reward")).all()
 
