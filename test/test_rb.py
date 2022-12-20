@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
+from tensordict.prototype import is_tensorclass, tensorclass
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torchrl.data import PrioritizedReplayBuffer, ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import (
@@ -222,6 +223,27 @@ class TestPrototypeBuffers:
 @pytest.mark.parametrize("shape", [[3, 4]])
 @pytest.mark.parametrize("storage", [LazyTensorStorage, LazyMemmapStorage])
 class TestStorages:
+    def _get_nested_tensorclass(self, shape):
+        @tensorclass
+        class NestedTensorClass:
+            key1: torch.Tensor
+            key2: torch.Tensor
+
+        @tensorclass
+        class TensorClass:
+            key1: torch.Tensor
+            key2: torch.Tensor
+            next: NestedTensorClass
+
+        return TensorClass(
+            key1=torch.ones(*shape),
+            key2=torch.ones(*shape),
+            next=NestedTensorClass(
+                key1=torch.ones(*shape), key2=torch.ones(*shape), batch_size=shape
+            ),
+            batch_size=shape,
+        )
+
     def _get_nested_td(self, shape):
         nested_td = TensorDict(
             {
@@ -243,6 +265,13 @@ class TestStorages:
         td = self._get_nested_td(shape)
         mystorage = storage(max_size=max_size)
         mystorage._init(td)
+        assert mystorage._storage.shape == (max_size, *shape)
+
+    def test_init_tensorclass(self, max_size, shape, storage):
+        tc = self._get_nested_tensorclass(shape)
+        mystorage = storage(max_size=max_size)
+        mystorage._init(tc)
+        assert is_tensorclass(mystorage._storage)
         assert mystorage._storage.shape == (max_size, *shape)
 
 
