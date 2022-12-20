@@ -2456,7 +2456,6 @@ class RewardSum(Transform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets episode rewards."""
-
         if "reset_workers" in tensordict.keys():
             for out_key in self.out_keys:
                 tensordict[out_key][tensordict["reset_workers"]] = 0.0
@@ -2465,7 +2464,6 @@ class RewardSum(Transform):
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Updates the episode rewards with the step rewards."""
-
         # Sanity checks
         self._check_inplace()
         for in_key in self.in_keys:
@@ -2476,7 +2474,9 @@ class RewardSum(Transform):
         reward = tensordict.get("reward")
         for out_key in self.out_keys:
             if out_key not in tensordict.keys():
-                tensordict.set(out_key, torch.zeros(*tensordict.shape, 1, dtype=reward.dtype))
+                tensordict.set(
+                    out_key, torch.zeros(*tensordict.shape, 1, dtype=reward.dtype)
+                )
             tensordict[out_key] += reward
 
         return tensordict
