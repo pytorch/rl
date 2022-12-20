@@ -48,5 +48,13 @@ fi
 
 source "$this_dir/set_cuda_envs.sh"
 
+
+
+# install tensordict
+pip install git+https://github.com/pytorch-labs/tensordict
+
+# smoke test
+python -c "import torch;import functorch"
+
 printf "* Installing torchrl\n"
 "$this_dir/vc_env_helper.bat" python setup.py develop
