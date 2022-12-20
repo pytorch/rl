@@ -73,7 +73,9 @@ class TDEstimate(nn.Module):
         self.differentiable = differentiable
         self.value_key = value_key
         if value_key not in value_network.out_keys:
-            raise KeyError(f"value key '{value_key}' not found in value network out_keys.")
+            raise KeyError(
+                f"value key '{value_key}' not found in value network out_keys."
+            )
 
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
@@ -245,7 +247,9 @@ class TDLambdaEstimate(nn.Module):
         self.differentiable = differentiable
         self.value_key = value_key
         if value_key not in value_network.out_keys:
-            raise KeyError(f"value key '{value_key}' not found in value network out_keys.")
+            raise KeyError(
+                f"value key '{value_key}' not found in value network out_keys."
+            )
 
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
@@ -432,7 +436,9 @@ class GAE(nn.Module):
         self.value_network = value_network
         self.value_key = value_key
         if value_key not in value_network.out_keys:
-            raise KeyError(f"value key '{value_key}' not found in value network out_keys.")
+            raise KeyError(
+                f"value key '{value_key}' not found in value network out_keys."
+            )
 
         self.average_gae = average_gae
         self.differentiable = differentiable
