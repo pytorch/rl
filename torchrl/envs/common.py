@@ -143,7 +143,7 @@ class Specs:
 
         """
         # build a tensordict from specs
-        td = TensorDict({}, batch_size=torch.Size([]))
+        td = TensorDict({}, batch_size=torch.Size([]), _run_checks=False)
         action_placeholder = torch.zeros(
             self["action_spec"].shape, dtype=self["action_spec"].dtype
         )
@@ -462,7 +462,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         """
         if tensordict is None:
-            tensordict = TensorDict({}, device=self.device, batch_size=self.batch_size)
+            tensordict = TensorDict({}, device=self.device, batch_size=self.batch_size, _run_checks=False)
         action = self.action_spec.rand(self.batch_size)
         tensordict.set("action", action)
         return self.step(tensordict)
@@ -646,6 +646,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             },
             batch_size=self.batch_size,
             device=self.device,
+            _run_checks=False,
         )
         return fake_td
 

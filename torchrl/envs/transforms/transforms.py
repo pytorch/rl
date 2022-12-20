@@ -439,7 +439,7 @@ but got an object of type {type(transform)}."""
         return reward_spec
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = tensordict.clone()
+        tensordict = tensordict.clone(False)
         tensordict_in = self.transform.inv(tensordict)
         tensordict_out = self.base_env._step(tensordict_in)
         tensordict_out = tensordict_out.update(
@@ -1937,10 +1937,10 @@ class FrameSkipTransform(Transform):
         parent = self.parent
         reward = tensordict.get("reward")
         for _ in range(self.frame_skip - 1):
-            parent.step(tensordict)
+            parent._step(tensordict)
             reward = reward + tensordict.get("reward")
         tensordict.set("reward", reward)
-        return super()._step(tensordict)
+        return tensordict
 
 
 class NoopResetEnv(Transform):
