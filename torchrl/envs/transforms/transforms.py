@@ -2476,18 +2476,7 @@ class RewardSum(Transform):
         reward = tensordict.get("reward")
         for out_key in self.out_keys:
             if out_key not in tensordict.keys():
-<<<<<<< HEAD
-                tensordict.set(
-                    out_key, torch.zeros(*tensordict.shape, 1, dtype=reward.dtype)
-                )
-            updated_value = tensordict.get(out_key) * self.is_new_episode + reward
-            tensordict.set(out_key, updated_value)
-
-        # Restart sum immediately after end-of-episode detected
-        self.is_new_episode = 1 - done
-=======
                 tensordict.set(out_key, torch.zeros(*tensordict.shape, 1, dtype=reward.dtype))
             tensordict[out_key] += reward
->>>>>>> 53e49e0f3ae657bda22eb302e60de3032b6c40a4
 
         return tensordict
