@@ -2438,7 +2438,7 @@ class VecNorm(Transform):
 class RewardSum(Transform):
     """Tracks the accumulated reward of each episode.
 
-    This transform requires ´reward´ to be an input key. If that is not the case,
+    This transform requires ´reward´ to be input key. If that is not the case,
     the transform has no effect.
     """
 
@@ -2455,15 +2455,18 @@ class RewardSum(Transform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Resets the specified episode rewards."""
-        if all(key in tensordict.keys() for key in("reset_workers", "episode_reward")):
-            tensordict["episode_reward"][tensordict["reset_workers"]] += 0.0
+        """Resets episode rewards."""
+
+        if "reset_workers" in tensordict.keys():
+            for out_key in self.out_keys:
+                tensordict[out_key][tensordict["reset_workers"]] = 0.0
+
         return tensordict
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Reads the input tensordict, and for the selected keys, applies the transform."""
+        """Updates the episode rewards with the step rewards."""
 
-        # Sanity check
+        # Sanity checks
         self._check_inplace()
         for in_key in self.in_keys:
             if in_key not in tensordict.keys():
@@ -2474,7 +2477,6 @@ class RewardSum(Transform):
         for out_key in self.out_keys:
             if out_key not in tensordict.keys():
                 tensordict.set(out_key, torch.zeros(*tensordict.shape, 1, dtype=reward.dtype))
-            updated_value = tensordict.get(out_key) + reward
-            tensordict.set(out_key,  updated_value)
+            tensordict[out_key] += reward
 
         return tensordict
