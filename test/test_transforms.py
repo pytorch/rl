@@ -732,10 +732,13 @@ class TestTransforms:
         assert "episode_reward" in td.keys()
         assert (td.get("episode_reward") == td.get("reward")).all()
 
-        # apply a second time, episode_reward should twice the rewar
-        td.set("done", torch.ones((batch, 1), dtype=torch.bool, device=device))
+        # apply a second time, episode_reward should twice the reward
         td = rs(td)
         assert (td.get("episode_reward") == 2 * td.get("reward")).all()
+
+        # reset environments
+        td.set("reset_workers", torch.ones((batch, 1), dtype=torch.bool, device=device))
+        rs.reset(td)
 
         # apply a third time, episode_reward should be equal to reward again
         td = rs(td)
