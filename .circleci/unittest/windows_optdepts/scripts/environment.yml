@@ -3,7 +3,6 @@ channels:
   - defaults
 dependencies:
   - pip
-  - setuptools
   - pip:
     - hypothesis
     - future

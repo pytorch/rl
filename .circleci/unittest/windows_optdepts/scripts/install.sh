@@ -60,6 +60,6 @@ pip install git+https://github.com/pytorch-labs/tensordict
 python -c "import torch;import functorch"
 
 printf "* Installing torchrl\n"
-"$this_dir/vc_env_helper.bat" python setup.py develop
+"$this_dir/vc_env_helper.bat" pip3 install -e .
 # smoke test
 python -c "import torchrl"
