@@ -36,6 +36,10 @@ conda activate "${env_dir}"
 
 # 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
+echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
+cat "${this_dir}/environment.yml"
+
+pip install pip --upgrade
 conda env update --file "${this_dir}/environment.yml" --prune
 
 # 4. Downgrade setuptools on Python 3.7.
