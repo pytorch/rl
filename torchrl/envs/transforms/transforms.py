@@ -2476,3 +2476,50 @@ class VecNorm(Transform):
             f"{self.__class__.__name__}(decay={self.decay:4.4f},"
             f"eps={self.eps:4.4f}, keys={self.in_keys})"
         )
+
+
+class StepCounter(Transform):
+    """Counts the steps from a reset and sets the done state to True after a certain number of steps.
+
+    Args:
+        max_steps (:obj:`int`, optional): the maximum number of steps to take before setting the done state to True.
+    """
+
+    invertible = False
+    inplace = True
+
+    def __init__(self, max_steps: Optional[int]):
+        self.max_steps = max_steps
+        super().__init__([])
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        tensordict.set(
+            "step_count", torch.zeros(*tensordict.batch_size, 1, dtype=torch.int64)
+        )
+        if self.max_steps is not None and self.max_steps <= 0:
+            tensordict.fill_("done", True)
+        return tensordict
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        next_step_count = tensordict.get("step_count") + 1
+        tensordict.set("step_count", next_step_count)
+        if self.max_steps is not None:
+            tensordict.set(
+                "done",
+                torch.where(
+                    next_step_count < self.max_steps, tensordict.get("done"), True
+                ),
+            )
+        return tensordict
+
+    def _transform_spec(self, spec: TensorSpec) -> None:
+        if isinstance(spec, CompositeSpec):
+            for key in spec:
+                self._transform_spec(spec[key])
+        else:
+            spec.dtype = torch.int64
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        self._transform_spec(observation_spec)
+        return observation_spec
