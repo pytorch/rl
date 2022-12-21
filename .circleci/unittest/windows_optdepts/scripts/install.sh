@@ -41,6 +41,7 @@ UPLOAD_CHANNEL='stable'
 
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
+    pip uninstall -y torch
     pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/stable/cpu
 else
 conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
