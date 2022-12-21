@@ -72,7 +72,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     td = TensorDict(
         source=out_dict,
         device=rollout_tensordict.device,
-        batch_size=out_dict["mask"].shape[:-1],
+        batch_size=out_dict["mask"].shape,
     )
     td = td.unflatten_keys(sep)
     if (out_dict["done"].sum(1) > 1).any():
