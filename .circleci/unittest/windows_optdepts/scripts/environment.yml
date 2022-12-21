@@ -2,17 +2,18 @@ channels:
   - pytorch
   - defaults
 dependencies:
+  - pytest
+  - pytest-cov
+  - pytest-mock
   - pip
+  - libpng
+  - jpeg
+  - ca-certificates
+  - hdf5
+  - setuptools
   - pip:
-    - hypothesis
     - future
-    - cloudpickle
-    - pytest
-    - pytest-cov
-    - pytest-mock
-    - pytest-instafail
-    - expecttest
-    - pyyaml
     - scipy
-    - coverage
-    - mkl
+    - av !=9.1.1, <10
+    - dataclasses
+    - h5py
