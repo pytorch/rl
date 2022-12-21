@@ -257,8 +257,6 @@ jobs:
           root: dist
           paths:
             - "*"
-      - store_test_results:
-          path: build_results/
 
   unittest_linux_cpu:
     <<: *binary_common
@@ -1070,7 +1068,7 @@ workflows:
           cu_version: cpu
           name: binary_win_wheel_py3.10_cpu
           python_version: '3.10'
-          
+
       - binary_win_wheel:
           cu_version: cu117
           name: binary_win_wheel_py3.10_cu117
