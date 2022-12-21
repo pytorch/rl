@@ -33,6 +33,9 @@ else
     cudatoolkit="${cuda_toolkit_pckg}=${version}"
 fi
 
+# submodules
+git submodule sync && git submodule update --init --recursive
+
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
 
