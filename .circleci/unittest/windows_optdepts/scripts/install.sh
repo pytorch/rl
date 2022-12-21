@@ -33,19 +33,8 @@ else
     cudatoolkit="${cuda_toolkit_pckg}=${version}"
 fi
 
-# submodules
-git submodule sync && git submodule update --init --recursive
-
-# override UPLOAD_CHANNEL with 'stable' because it breaks with 2.0.0 (nightly) AttributeError: module 'torch._C' has no attribute '_distributed_rpc'. Did you mean: '_distributed_c10d'? in CPU env (at least)
-UPLOAD_CHANNEL='stable'
-
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
-if [ "${CU_VERSION:-}" == cpu ] ; then
-    conda install pytorch torchvision torchaudio cpuonly -c pytorch
-    # conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
-else
-    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
-fi
+conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
 
 torch_cuda=$(python -c "import torch; print(torch.cuda.is_available())")
 echo torch.cuda.is_available is $torch_cuda
@@ -59,15 +48,5 @@ fi
 
 source "$this_dir/set_cuda_envs.sh"
 
-
-
-# install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict
-
-# smoke test
-python -c "import torch;import functorch"
-
-printf "* Installing torchrl\n"
-"$this_dir/vc_env_helper.bat" pip3 install -e .
-# smoke test
-python -c "import torchrl"
+printf "* Installing torchvision\n"
+"$this_dir/vc_env_helper.bat" python setup.py develop
