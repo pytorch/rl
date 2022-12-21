@@ -190,7 +190,7 @@ def relocate_elf_library(patchelf, output_dir, output_library, binary):
         binary_queue += [(n, library) for n in library_info["needed"]]
 
     print("Copying dependencies to wheel directory")
-    new_libraries_path = osp.join(output_dir, "torchvision.libs")
+    new_libraries_path = osp.join(output_dir, "torchrl.libs")
     os.makedirs(new_libraries_path)
 
     new_names = {binary: binary_path}
@@ -231,7 +231,7 @@ def relocate_elf_library(patchelf, output_dir, output_library, binary):
 
     print("Update library rpath")
     subprocess.check_output(
-        [patchelf, "--set-rpath", "$ORIGIN:$ORIGIN/../torchvision.libs", binary_path], cwd=output_library
+        [patchelf, "--set-rpath", "$ORIGIN:$ORIGIN/../torchrl.libs", binary_path], cwd=output_library
     )
 
 
@@ -277,7 +277,7 @@ def relocate_dll_library(dumpbin, output_dir, output_library, binary):
         binary_queue += [(n, library) for n in downstream_dlls]
 
     print("Copying dependencies to wheel directory")
-    package_dir = osp.join(output_dir, "torchvision")
+    package_dir = osp.join(output_dir, "torchrl")
     for library in binary_paths:
         if library != binary:
             library_path = binary_paths[library]
@@ -324,7 +324,7 @@ def patch_linux():
 
     image_binary = "image.so"
     video_binary = "video_reader.so"
-    torchvision_binaries = [image_binary, video_binary]
+    torchrl_binaries = [image_binary, video_binary]
     for wheel in wheels:
         if osp.exists(output_dir):
             shutil.rmtree(output_dir)
@@ -339,8 +339,8 @@ def patch_linux():
         unzip_file(wheel, output_dir)
 
         print("Finding ELF dependencies...")
-        output_library = osp.join(output_dir, "torchvision")
-        for binary in torchvision_binaries:
+        output_library = osp.join(output_dir, "torchrl")
+        for binary in torchrl_binaries:
             if osp.exists(osp.join(output_library, binary)):
                 relocate_elf_library(patchelf, output_dir, output_library, binary)
 
@@ -360,7 +360,7 @@ def patch_win():
 
     image_binary = "image.pyd"
     video_binary = "video_reader.pyd"
-    torchvision_binaries = [image_binary, video_binary]
+    torchrl_binaries = [image_binary, video_binary]
     for wheel in wheels:
         if osp.exists(output_dir):
             shutil.rmtree(output_dir)
@@ -375,8 +375,8 @@ def patch_win():
         unzip_file(wheel, output_dir)
 
         print("Finding DLL/PE dependencies...")
-        output_library = osp.join(output_dir, "torchvision")
-        for binary in torchvision_binaries:
+        output_library = osp.join(output_dir, "torchrl")
+        for binary in torchrl_binaries:
             if osp.exists(osp.join(output_library, binary)):
                 relocate_dll_library(dumpbin, output_dir, output_library, binary)
 
