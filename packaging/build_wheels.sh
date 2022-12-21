@@ -32,7 +32,8 @@ else
 fi
 
 if [[ "$OSTYPE" == "msys" ]]; then
-  echo "ERROR: Windows installation is not supported yet." && exit 100
+    IS_WHEEL=1 "$script_dir/windows/internal/vc_env_helper.bat" python setup.py bdist_wheel
+    "$script_dir/windows/internal/vc_env_helper.bat" python $script_dir/wheel/relocate.py
 else
     python setup.py bdist_wheel
     if [[ "$(uname)" != Darwin ]]; then

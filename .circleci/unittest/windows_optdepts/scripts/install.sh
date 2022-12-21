@@ -36,19 +36,8 @@ fi
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-# printf "Installing PyTorch with %s\n" "${cudatoolkit}"
-# conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
-printf "Installing PyTorch with %s\n" "${CU_VERSION}"
-if [ "${CU_VERSION:-}" == cpu ] ; then
-    # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
-    # use pip to install pytorch as conda can frequently pick older release
-#    conda install -y pytorch cpuonly -c pytorch-nightly
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-else
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
-fi
-
-
+printf "Installing PyTorch with %s\n" "${cudatoolkit}"
+conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
 
 torch_cuda=$(python -c "import torch; print(torch.cuda.is_available())")
 echo torch.cuda.is_available is $torch_cuda
