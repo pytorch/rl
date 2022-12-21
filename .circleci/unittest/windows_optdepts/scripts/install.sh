@@ -37,7 +37,7 @@ fi
 git submodule sync && git submodule update --init --recursive
 
 # override UPLOAD_CHANNEL with 'stable' because it breaks with 2.0.0 (nightly) AttributeError: module 'torch._C' has no attribute '_distributed_rpc'. Did you mean: '_distributed_c10d'? in CPU env (at least)
-$UPLOAD_CHANNEL='stable'
+UPLOAD_CHANNEL='stable'
 
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
