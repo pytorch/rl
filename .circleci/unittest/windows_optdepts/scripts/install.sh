@@ -41,7 +41,8 @@ UPLOAD_CHANNEL='stable'
 
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
+    conda install pytorch torchvision torchaudio cpuonly -c pytorch
+    # conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
 else
     conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
 fi
