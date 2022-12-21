@@ -839,13 +839,13 @@ jobs:
       - run:
           name: Setup
           command: .circleci/unittest/windows_optdepts/scripts/setup_env.sh
-      - save_cache:
+      # - save_cache:
 
-          key: env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+      #     key: env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
-          paths:
-            - conda
-            - env
+      #     paths:
+      #       - conda
+      #       - env
       - run:
           name: Install torchrl
           command: .circleci/unittest/windows_optdepts/scripts/install.sh
@@ -864,7 +864,8 @@ jobs:
       name: windows-gpu
     environment:
       CUDA_VERSION: "11.6"
-      PYTHON_VERSION: << parameters.python_version >>
+      CU_VERSION: << parameters.cu_version >> # see https://github.com/pytorch/vision/issues/4443
+      PYTHON_VERSION: << parameters.python_version >> 
     steps:
       - checkout
       - designate_upload_channel
@@ -1223,33 +1224,18 @@ workflows:
           python_version: '3.10'
 
       - unittest_windows_gpu:
-          cu_version: cu116
-          filters:
-            branches:
-              only:
-              - main
-              - nightly
+          cu_version: cu113
           name: unittest_windows_gpu_py3.7
           python_version: '3.7'
       - unittest_windows_gpu:
-          cu_version: cu116
+          cu_version: cu113
           name: unittest_windows_gpu_py3.8
           python_version: '3.8'
       - unittest_windows_gpu:
-          cu_version: cu116
-          filters:
-            branches:
-              only:
-              - main
-              - nightly
+          cu_version: cu113
           name: unittest_windows_gpu_py3.9
           python_version: '3.9'
       - unittest_windows_gpu:
-          cu_version: cu116
-          filters:
-            branches:
-              only:
-              - main
-              - nightly
+          cu_version: cu113
           name: unittest_windows_gpu_py3.10
           python_version: '3.10'
