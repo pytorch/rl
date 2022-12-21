@@ -2458,7 +2458,8 @@ class RewardSum(Transform):
         """Resets episode rewards."""
         if "reset_workers" in tensordict.keys():
             for out_key in self.out_keys:
-                tensordict[out_key][tensordict["reset_workers"]] = 0.0
+                if out_key in tensordict.keys():
+                    tensordict[out_key][tensordict["reset_workers"]] = 0.0
 
         return tensordict
 
