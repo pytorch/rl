@@ -69,10 +69,11 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
         key: torch.nn.utils.rnn.pad_sequence(_o, batch_first=True)
         for key, _o in out_splits.items()
     }
+    out_dict["mask"] = out_dict["mask"].squeeze(-1)
     td = TensorDict(
         source=out_dict,
         device=rollout_tensordict.device,
-        batch_size=out_dict["mask"].shape,
+        batch_size=out_dict["mask"].squeeze(-1).shape,
     )
     td = td.unflatten_keys(sep)
     if (out_dict["done"].sum(1) > 1).any():
