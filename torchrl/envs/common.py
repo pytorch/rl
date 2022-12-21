@@ -351,14 +351,22 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         reward = tensordict_out.get("reward")
         # unsqueeze rewards if needed
         expected_reward_shape = torch.Size([*tensordict_out.batch_size, *self.reward_spec.shape])
-        if reward.shape != expected_reward_shape:
+        n = len(expected_reward_shape)
+        if len(reward.shape) >= n and reward.shape[-n:] != expected_reward_shape:
+            reward = reward.view(*reward.shape[:n], *expected_reward_shape)
+            tensordict_out.set("reward", reward)
+        elif len(reward.shape) < n:
             reward = reward.view(expected_reward_shape)
             tensordict_out.set("reward", reward)
 
         done = tensordict_out.get("done")
         # unsqueeze done if needed
         expected_done_shape = torch.Size([*tensordict_out.batch_size, 1])
-        if done.shape != expected_done_shape:
+        n = len(expected_done_shape)
+        if len(done.shape) >= n and done.shape[-n:] != expected_done_shape:
+            done = done.view(*done.shape[:n], *expected_done_shape)
+            tensordict_out.set("done", done)
+        elif len(done.shape) < n:
             done = done.view(expected_done_shape)
             tensordict_out.set("done", done)
 

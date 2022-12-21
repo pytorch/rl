@@ -561,9 +561,9 @@ but got an object of type {type(transform)}."""
 
     def _erase_metadata(self):
         if self.cache_specs:
-            self._input_spec = None
-            self._observation_spec = None
-            self._reward_spec = None
+            self.__dict__["_input_spec"] = None
+            self.__dict__["_observation_spec"] = None
+            self.__dict__["_reward_spec"] = None
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.base_env.to(device)
