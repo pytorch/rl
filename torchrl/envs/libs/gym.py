@@ -15,9 +15,9 @@ from torchrl.data import (
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
-    UnboundedContinuousTensorSpec, NdUnboundedContinuousTensorSpec,
 )
 
 from ..._utils import implement_for

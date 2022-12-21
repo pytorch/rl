@@ -219,7 +219,10 @@ class REDQLoss_deprecated(LossModule):
                 selected_q_params,
             )
             state_action_value = next_td.get("state_action_value")
-            if state_action_value.shape[-len(sample_log_prob.shape):] != sample_log_prob.shape:
+            if (
+                state_action_value.shape[-len(sample_log_prob.shape) :]
+                != sample_log_prob.shape
+            ):
                 sample_log_prob = sample_log_prob.unsqueeze(-1)
             state_value = (
                 next_td.get("state_action_value") - self.alpha * sample_log_prob

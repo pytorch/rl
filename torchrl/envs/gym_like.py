@@ -204,7 +204,9 @@ class GymLikeEnv(_EnvWrapper):
 
             reward = self.read_reward(reward, _reward)
 
-            if isinstance(done, bool) or (isinstance(done, np.ndarray) and not len(done)):
+            if isinstance(done, bool) or (
+                isinstance(done, np.ndarray) and not len(done)
+            ):
                 done = torch.tensor([done], device=self.device)
 
             done, do_break = self.read_done(done)
