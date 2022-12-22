@@ -36,7 +36,7 @@ else
 fi
 
 # install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict@speed
+pip install git+https://github.com/pytorch-labs/tensordict
 
 # smoke test
 python -c "import functorch;import tensordict"
