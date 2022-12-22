@@ -224,7 +224,6 @@ class BraxWrapper(_EnvWrapper):
 
         # extract done values
         next_done = next_state_nograd["done"].bool()
-        self._is_done = next_done
 
         # merge with tensors with grad function
         next_state = next_state_nograd

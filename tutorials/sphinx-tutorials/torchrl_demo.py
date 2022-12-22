@@ -505,7 +505,7 @@ actor = Actor(base_module, in_keys=["obs"])
 tensordict = TensorDict({"obs": torch.randn(5)}, batch_size=[])
 actor(tensordict)  # action is the default value
 
-from tensordict.nn.prototype import (
+from tensordict.nn import (
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
 )

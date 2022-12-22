@@ -186,8 +186,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         - reward_spec (TensorSpec): sampling spec of the rewards;
         - batch_size (torch.Size): number of environments contained in the instance;
         - device (torch.device): device where the env input and output are expected to live
-        - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the
-            last reset
         - run_type_checks (bool): if True, the observation and reward dtypes
             will be compared against their respective spec and an exception
             will be raised if they don't match.
@@ -212,7 +210,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         super().__init__()
         if device is not None:
             self.device = torch.device(device)
-        self._is_done = None
         self.dtype = dtype_map.get(dtype, dtype)
         if "is_closed" not in self.__dir__():
             self.is_closed = True
@@ -378,7 +375,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
-        self.is_done = tensordict_out.get("done")
         if self.run_type_checks:
             for key in self._select_observation_keys(tensordict_out):
                 obs = tensordict_out.get(key)
@@ -455,11 +451,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
 
-        self.is_done = tensordict_reset.get(
+        tensordict_reset.set_default(
             "done",
-            torch.zeros(*self.batch_size, 1, dtype=torch.bool, device=self.device),
+            torch.zeros(
+                *tensordict_reset.batch_size, 1, dtype=torch.bool, device=self.device
+            ),
         )
-        if self.is_done:
+        if tensordict_reset.get("done").any():
             raise RuntimeError(
                 f"Env {self} was done after reset. This is (currently) not allowed."
             )
@@ -507,16 +505,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"Expected a tensordict with shape==env.shape, "
                 f"got {tensordict.batch_size} and {self.batch_size}"
             )
-
-    def is_done_get_fn(self) -> bool:
-        if self._is_done is None:
-            self._is_done = torch.zeros(self.batch_size, device=self.device)
-        return self._is_done.all()
-
-    def is_done_set_fn(self, val: torch.Tensor) -> None:
-        self._is_done = val
-
-    is_done = property(is_done_get_fn, is_done_set_fn)
 
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
         """Performs a random step in the environment given the action_spec attribute.
@@ -604,30 +592,27 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 return td.set("action", self.action_spec.rand(self.batch_size))
 
         tensordicts = []
-        if not self.is_done:
-            for i in range(max_steps):
-                if auto_cast_to_device:
-                    tensordict = tensordict.to(policy_device)
-                tensordict = policy(tensordict)
-                if auto_cast_to_device:
-                    tensordict = tensordict.to(env_device)
-                tensordict = self.step(tensordict)
-                tensordicts.append(tensordict.clone())
-                if (
-                    break_when_any_done and tensordict.get("done").any()
-                ) or i == max_steps - 1:
-                    break
-                tensordict = step_mdp(
-                    tensordict,
-                    keep_other=True,
-                    exclude_reward=False,
-                    exclude_action=False,
-                )
+        for i in range(max_steps):
+            if auto_cast_to_device:
+                tensordict = tensordict.to(policy_device)
+            tensordict = policy(tensordict)
+            if auto_cast_to_device:
+                tensordict = tensordict.to(env_device)
+            tensordict = self.step(tensordict)
+            tensordicts.append(tensordict.clone())
+            if (
+                break_when_any_done and tensordict.get("done").any()
+            ) or i == max_steps - 1:
+                break
+            tensordict = step_mdp(
+                tensordict,
+                keep_other=True,
+                exclude_reward=False,
+                exclude_action=False,
+            )
 
-                if callback is not None:
-                    callback(self, tensordict)
-        else:
-            raise Exception("reset env before calling rollout!")
+            if callback is not None:
+                callback(self, tensordict)
 
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
 
@@ -696,7 +681,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.reward_spec = self.reward_spec.to(device)
         self.observation_spec = self.observation_spec.to(device)
         self.input_spec = self.input_spec.to(device)
-        self.is_done = self.is_done.to(device)
         self.device = device
         return super().to(device)
 
