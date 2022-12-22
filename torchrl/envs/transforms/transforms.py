@@ -2501,7 +2501,6 @@ class RewardSum(Transform):
 
     def transform_rward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         """Transforms the reward spec such that the resulting spec matches transform mapping."""
-
         # # Define episode_reward spec
         # if isinstance(reward_spec, NdUnboundedContinuousTensorSpec):
         #     episode_reward_spec = NdUnboundedContinuousTensorSpec(
@@ -2520,5 +2519,4 @@ class RewardSum(Transform):
         #     reward=reward_spec,
         #     episode_reward=episode_reward_spec
         # )
-
         return reward_spec
