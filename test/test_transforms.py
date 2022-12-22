@@ -1656,23 +1656,37 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
     @pytest.mark.parametrize("max_steps", [None, 0, 5])
-    def test_step_counter(self, max_steps, device, batch):
+    @pytest.mark.parametrize("reset_workers", [True, False])
+    def test_step_counter(self, max_steps, device, batch, reset_workers):
         torch.manual_seed(0)
         step_counter = StepCounter(max_steps)
         td = TensorDict(
             {"done": torch.zeros(*batch, 1, dtype=torch.bool)}, batch, device=device
         )
+        if reset_workers:
+            td.set("reset_workers", torch.randn(*batch, 1) < 0)
         step_counter.reset(td)
         assert not torch.all(td.get("step_count"))
         i = 0
-        while not td.get("done").all():
+        while max_steps is None or i < max_steps:
             step_counter._step(td)
             i += 1
             assert torch.all(td.get("step_count") == i)
-            if max_steps is None or i == max_steps:
+            if max_steps is None:
                 break
         if max_steps is not None:
             assert torch.all(td.get("step_count") == max_steps)
+            assert torch.all(td.get("done"))
+        step_counter.reset(td)
+        if reset_workers:
+            assert torch.all(
+                torch.masked_select(td.get("step_count"), td.get("reset_workers")) == 0
+            )
+            assert torch.all(
+                torch.masked_select(td.get("step_count"), ~td.get("reset_workers")) == i
+            )
+        else:
+            assert torch.all(td.get("step_count") == 0)
 
 
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
