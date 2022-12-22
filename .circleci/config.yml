@@ -858,21 +858,21 @@ jobs:
           name: Generate cache key
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
-      - restore_cache:
+      # - restore_cache:
 
-          keys:
-            - env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+      #     keys:
+      #       - env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
       - run:
           name: Setup
-          command: .circleci/unittest/windows/scripts/setup_env.sh
-      - save_cache:
+          command: .circleci/unittest/windows_optdepts/scripts/setup_env.sh
+      # - save_cache:
 
-          key: env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+      #     key: env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
-          paths:
-            - conda
-            - env
+          # paths:
+          #   - conda
+          #   - env
       - run:
           name: Install torchvision
           command: .circleci/unittest/windows_optdepts/scripts/install.sh
@@ -893,206 +893,206 @@ workflows:
       - lint_c
 #      - type_check_python
 
-  build:
-    jobs:
-      - binary_linux_wheel:
-          conda_docker_image: pytorch/conda-builder:cpu
-          cu_version: cpu
-          name: binary_linux_wheel_py3.7_cpu
-          python_version: '3.7'
-          wheel_docker_image: pytorch/manylinux-cuda102
+  # build:
+  #   jobs:
+  #     - binary_linux_wheel:
+  #         conda_docker_image: pytorch/conda-builder:cpu
+  #         cu_version: cpu
+  #         name: binary_linux_wheel_py3.7_cpu
+  #         python_version: '3.7'
+  #         wheel_docker_image: pytorch/manylinux-cuda102
 
-      - binary_linux_wheel:
-          conda_docker_image: pytorch/conda-builder:cpu
-          cu_version: cpu
-          name: binary_linux_wheel_py3.8_cpu
-          python_version: '3.8'
-          wheel_docker_image: pytorch/manylinux-cuda102
+  #     - binary_linux_wheel:
+  #         conda_docker_image: pytorch/conda-builder:cpu
+  #         cu_version: cpu
+  #         name: binary_linux_wheel_py3.8_cpu
+  #         python_version: '3.8'
+  #         wheel_docker_image: pytorch/manylinux-cuda102
 
-      - binary_linux_wheel:
-          conda_docker_image: pytorch/conda-builder:cpu
-          cu_version: cpu
-          name: binary_linux_wheel_py3.9_cpu
-          python_version: '3.9'
-          wheel_docker_image: pytorch/manylinux-cuda102
+  #     - binary_linux_wheel:
+  #         conda_docker_image: pytorch/conda-builder:cpu
+  #         cu_version: cpu
+  #         name: binary_linux_wheel_py3.9_cpu
+  #         python_version: '3.9'
+  #         wheel_docker_image: pytorch/manylinux-cuda102
 
-      - binary_linux_wheel:
-          conda_docker_image: pytorch/conda-builder:cpu
-          cu_version: cpu
-          name: binary_linux_wheel_py3.10_cpu
-          python_version: '3.10'
-          wheel_docker_image: pytorch/manylinux-cuda102
+  #     - binary_linux_wheel:
+  #         conda_docker_image: pytorch/conda-builder:cpu
+  #         cu_version: cpu
+  #         name: binary_linux_wheel_py3.10_cpu
+  #         python_version: '3.10'
+  #         wheel_docker_image: pytorch/manylinux-cuda102
 
-      - binary_macos_wheel:
-          conda_docker_image: pytorch/conda-builder:cpu
-          cu_version: cpu
-          name: binary_macos_wheel_py3.7_cpu
-          python_version: '3.7'
-          wheel_docker_image: pytorch/manylinux-cuda102
+  #     - binary_macos_wheel:
+  #         conda_docker_image: pytorch/conda-builder:cpu
+  #         cu_version: cpu
+  #         name: binary_macos_wheel_py3.7_cpu
+  #         python_version: '3.7'
+  #         wheel_docker_image: pytorch/manylinux-cuda102
 
-      - binary_macos_wheel:
-          conda_docker_image: pytorch/conda-builder:cpu
-          cu_version: cpu
-          name: binary_macos_wheel_py3.8_cpu
-          python_version: '3.8'
-          wheel_docker_image: pytorch/manylinux-cuda102
+  #     - binary_macos_wheel:
+  #         conda_docker_image: pytorch/conda-builder:cpu
+  #         cu_version: cpu
+  #         name: binary_macos_wheel_py3.8_cpu
+  #         python_version: '3.8'
+  #         wheel_docker_image: pytorch/manylinux-cuda102
 
-      - binary_macos_wheel:
-          conda_docker_image: pytorch/conda-builder:cpu
-          cu_version: cpu
-          name: binary_macos_wheel_py3.9_cpu
-          python_version: '3.9'
-          wheel_docker_image: pytorch/manylinux-cuda102
+  #     - binary_macos_wheel:
+  #         conda_docker_image: pytorch/conda-builder:cpu
+  #         cu_version: cpu
+  #         name: binary_macos_wheel_py3.9_cpu
+  #         python_version: '3.9'
+  #         wheel_docker_image: pytorch/manylinux-cuda102
 
-      - binary_macos_wheel:
-          conda_docker_image: pytorch/conda-builder:cpu
-          cu_version: cpu
-          name: binary_macos_wheel_py3.10_cpu
-          python_version: '3.10'
-          wheel_docker_image: pytorch/manylinux-cuda102
+  #     - binary_macos_wheel:
+  #         conda_docker_image: pytorch/conda-builder:cpu
+  #         cu_version: cpu
+  #         name: binary_macos_wheel_py3.10_cpu
+  #         python_version: '3.10'
+  #         wheel_docker_image: pytorch/manylinux-cuda102
 
   unittest:
     jobs:
-      - unittest_macos_cpu:
-          cu_version: cpu
-          name: unittest_macos_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_gpu:
-          cu_version: cu113
-          name: unittest_linux_gpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_optdeps_gpu:
-          cu_version: cu113
-          name: unittest_linux_optdeps_gpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_stable_gpu:
-          cu_version: cu113
-          name: unittest_linux_stable_gpu_py3.7
-          python_version: '3.7'
+      # - unittest_macos_cpu:
+      #     cu_version: cpu
+      #     name: unittest_macos_cpu_py3.7
+      #     python_version: '3.7'
+      # - unittest_linux_cpu:
+      #     cu_version: cpu
+      #     name: unittest_linux_cpu_py3.7
+      #     python_version: '3.7'
+      # - unittest_linux_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_gpu_py3.7
+      #     python_version: '3.7'
+      # - unittest_linux_optdeps_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_optdeps_gpu_py3.7
+      #     python_version: '3.7'
+      # - unittest_linux_stable_cpu:
+      #     cu_version: cpu
+      #     name: unittest_linux_stable_cpu_py3.7
+      #     python_version: '3.7'
+      # - unittest_linux_stable_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_stable_gpu_py3.7
+      #     python_version: '3.7'
 
-      - unittest_macos_cpu:
-          cu_version: cpu
-          name: unittest_macos_cpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_gpu:
-          cu_version: cu113
-          name: unittest_linux_gpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_optdeps_gpu:
-          cu_version: cu113
-          name: unittest_linux_optdeps_gpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_stable_gpu:
-          cu_version: cu113
-          name: unittest_linux_stable_gpu_py3.8
-          python_version: '3.8'
-      # we test supported libs for 3.8 only
-      - unittest_linux_habitat_gpu:
-          cu_version: cu113
-          name: unittest_linux_habitat_gpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_jumanji_gpu:
-          cu_version: cu113
-          name: unittest_linux_jumanji_gpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_brax_gpu:
-          cu_version: cu113
-          name: unittest_linux_brax_gpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_gym_gpu:
-          cu_version: cu113
-          name: unittest_linux_gym_gpu_py3.8
-          python_version: '3.8'
+      # - unittest_macos_cpu:
+      #     cu_version: cpu
+      #     name: unittest_macos_cpu_py3.8
+      #     python_version: '3.8'
+      # - unittest_linux_cpu:
+      #     cu_version: cpu
+      #     name: unittest_linux_cpu_py3.8
+      #     python_version: '3.8'
+      # - unittest_linux_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_gpu_py3.8
+      #     python_version: '3.8'
+      # - unittest_linux_optdeps_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_optdeps_gpu_py3.8
+      #     python_version: '3.8'
+      # - unittest_linux_stable_cpu:
+      #     cu_version: cpu
+      #     name: unittest_linux_stable_cpu_py3.8
+      #     python_version: '3.8'
+      # - unittest_linux_stable_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_stable_gpu_py3.8
+      #     python_version: '3.8'
+      # # we test supported libs for 3.8 only
+      # - unittest_linux_habitat_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_habitat_gpu_py3.8
+      #     python_version: '3.8'
+      # - unittest_linux_jumanji_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_jumanji_gpu_py3.8
+      #     python_version: '3.8'
+      # - unittest_linux_brax_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_brax_gpu_py3.8
+      #     python_version: '3.8'
+      # - unittest_linux_gym_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_gym_gpu_py3.8
+      #     python_version: '3.8'
 
 
-      - unittest_macos_cpu:
-          cu_version: cpu
-          name: unittest_macos_cpu_py3.9
-          python_version: '3.9'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.9
-          python_version: '3.9'
-      - unittest_linux_gpu:
-          cu_version: cu113
-          name: unittest_linux_gpu_py3.9
-          python_version: '3.9'
-      - unittest_linux_optdeps_gpu:
-          cu_version: cu113
-          name: unittest_linux_optdeps_gpu_py3.9
-          python_version: '3.9'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.9
-          python_version: '3.9'
-      - unittest_linux_stable_gpu:
-          cu_version: cu113
-          name: unittest_linux_stable_gpu_py3.9
-          python_version: '3.9'
+      # - unittest_macos_cpu:
+      #     cu_version: cpu
+      #     name: unittest_macos_cpu_py3.9
+      #     python_version: '3.9'
+      # - unittest_linux_cpu:
+      #     cu_version: cpu
+      #     name: unittest_linux_cpu_py3.9
+      #     python_version: '3.9'
+      # - unittest_linux_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_gpu_py3.9
+      #     python_version: '3.9'
+      # - unittest_linux_optdeps_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_optdeps_gpu_py3.9
+      #     python_version: '3.9'
+      # - unittest_linux_stable_cpu:
+      #     cu_version: cpu
+      #     name: unittest_linux_stable_cpu_py3.9
+      #     python_version: '3.9'
+      # - unittest_linux_stable_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_stable_gpu_py3.9
+      #     python_version: '3.9'
 
-      - unittest_macos_cpu:
-          cu_version: cpu
-          name: unittest_macos_cpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_gpu:
-          cu_version: cu113
-          name: unittest_linux_gpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_optdeps_gpu:
-          cu_version: cu113
-          name: unittest_linux_optdeps_gpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_stable_gpu:
-          cu_version: cu113
-          name: unittest_linux_stable_gpu_py3.10
-          python_version: '3.10'
+      # - unittest_macos_cpu:
+      #     cu_version: cpu
+      #     name: unittest_macos_cpu_py3.10
+      #     python_version: '3.10'
+      # - unittest_linux_cpu:
+      #     cu_version: cpu
+      #     name: unittest_linux_cpu_py3.10
+      #     python_version: '3.10'
+      # - unittest_linux_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_gpu_py3.10
+      #     python_version: '3.10'
+      # - unittest_linux_optdeps_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_optdeps_gpu_py3.10
+      #     python_version: '3.10'
+      # - unittest_linux_stable_cpu:
+      #     cu_version: cpu
+      #     name: unittest_linux_stable_cpu_py3.10
+      #     python_version: '3.10'
+      # - unittest_linux_stable_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_stable_gpu_py3.10
+      #     python_version: '3.10'
 
-      - unittest_linux_olddeps_gpu:
-          cu_version: cu113
-          name: unittest_linux_olddeps_gpu_py3.9
-          python_version: '3.9'
+      # - unittest_linux_olddeps_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_olddeps_gpu_py3.9
+      #     python_version: '3.9'
 
-      - unittest_linux_examples_gpu:
-          cu_version: cu113
-          name: unittest_linux_examples_gpu_py3.9
-          python_version: '3.9'
+      # - unittest_linux_examples_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_examples_gpu_py3.9
+      #     python_version: '3.9'
 
-      - unittest_windows_cpu:
-          cu_version: cpu
-          name: unittest_windows_cpu_py3.7
-          python_version: '3.7'
-      - unittest_windows_cpu:
-          cu_version: cpu
-          name: unittest_windows_cpu_py3.8
-          python_version: '3.8'
-      - unittest_windows_cpu:
-          cu_version: cpu
-          name: unittest_windows_cpu_py3.9
-          python_version: '3.9'
+      # - unittest_windows_cpu:
+      #     cu_version: cpu
+      #     name: unittest_windows_cpu_py3.7
+      #     python_version: '3.7'
+      # - unittest_windows_cpu:
+      #     cu_version: cpu
+      #     name: unittest_windows_cpu_py3.8
+      #     python_version: '3.8'
+      # - unittest_windows_cpu:
+      #     cu_version: cpu
+      #     name: unittest_windows_cpu_py3.9
+      #     python_version: '3.9'
       - unittest_windows_cpu:
           cu_version: cpu
           name: unittest_windows_cpu_py3.10
