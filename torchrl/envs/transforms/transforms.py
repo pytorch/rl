@@ -2499,7 +2499,7 @@ class RewardSum(Transform):
 
         return tensordict
 
-    def transform_rward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         """Transforms the reward spec such that the resulting spec matches transform mapping."""
         # # Define episode_reward spec
         # if isinstance(reward_spec, NdUnboundedContinuousTensorSpec):
