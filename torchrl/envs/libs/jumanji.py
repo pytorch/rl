@@ -59,25 +59,31 @@ def _jumanji_to_torchrl_spec_transform(
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return action_space_cls(spec.num_values, dtype=dtype, device=device)
     elif isinstance(spec, jumanji.specs.BoundedArray):
+        shape = spec.shape
+        if not len(shape):
+            shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return NdBoundedTensorSpec(
-            shape=spec.shape,
+            shape=shape,
             minimum=np.asarray(spec.minimum),
             maximum=np.asarray(spec.maximum),
             dtype=dtype,
             device=device,
         )
     elif isinstance(spec, jumanji.specs.Array):
+        shape = spec.shape
+        if not len(shape):
+            shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         if dtype in (torch.float, torch.double, torch.half):
             return NdUnboundedContinuousTensorSpec(
-                shape=spec.shape, dtype=dtype, device=device
+                shape=shape, dtype=dtype, device=device
             )
         else:
             return NdUnboundedDiscreteTensorSpec(
-                shape=spec.shape, dtype=dtype, device=device
+                shape=shape, dtype=dtype, device=device
             )
     elif isinstance(spec, jumanji.specs.Spec) and hasattr(spec, "__dict__"):
         new_spec = {}
