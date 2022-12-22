@@ -810,9 +810,7 @@ class LogReward(TrainerHookBase):
     def __call__(self, batch: TensorDictBase) -> Dict:
         if "mask" in batch.keys():
             return {
-                self.logname: batch.get("reward")[batch.get("mask")]
-                .mean()
-                .item(),
+                self.logname: batch.get("reward")[batch.get("mask")].mean().item(),
                 "log_pbar": self.log_pbar,
             }
         return {
