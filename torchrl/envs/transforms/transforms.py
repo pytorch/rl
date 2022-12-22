@@ -2436,10 +2436,15 @@ class VecNorm(Transform):
 
 
 class RewardSum(Transform):
-    """Tracks the accumulated reward of each episode.
+    """Tracks the accumulated rewards of each episode.
 
-    This transform requires ´reward´ to be input key. If that is not the case,
-    the transform has no effect.
+    This transform accepts a list of tensordict keys ´in_keys´, and tracks their cumulative value along each
+    episode. The transform creates a new tensordict key for each input_key called ´episode_{input_key}´ where
+    the cumulative values are written.
+
+    If no in_keys are specified, this transform assumes ´reward´ to be the input key. However, multiple rewards
+    (e.g. reward1 and reward2) can also be specified in the. If ´in_keys´ are not present in the provided
+    tensordict, this transform hos no effect.
     """
 
     inplace = True
@@ -2449,14 +2454,26 @@ class RewardSum(Transform):
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
     ):
-        in_keys = ["reward"]
-        if out_keys is None:
-            out_keys = ["episode_reward"]
+        """Initialises the transform. Filters out non-reward input keys and defines output keys."""
+        if in_keys is None:
+            in_keys = ["reward"]
+        else:
+            in_keys = [in_key for in_key in in_keys if in_key.startswith("reward")]
+
+        out_keys = [f"episode_{in_key}" for in_key in in_keys]
+
         super().__init__(in_keys=in_keys, out_keys=out_keys)
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets episode rewards."""
-        if "reset_workers" in tensordict.keys():
+        # Non-batched environments
+        if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
+            for out_key in self.out_keys:
+                if out_key in tensordict.keys():
+                    tensordict[out_key] = 0.0
+
+        # Batched environments
+        elif "reset_workers" in tensordict.keys():
             for out_key in self.out_keys:
                 if out_key in tensordict.keys():
                     tensordict[out_key][tensordict["reset_workers"]] = 0.0
@@ -2481,3 +2498,27 @@ class RewardSum(Transform):
             tensordict[out_key] += reward
 
         return tensordict
+
+    def transform_rward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        """Transforms the reward spec such that the resulting spec matches transform mapping."""
+
+        # # Define episode_reward spec
+        # if isinstance(reward_spec, NdUnboundedContinuousTensorSpec):
+        #     episode_reward_spec = NdUnboundedContinuousTensorSpec(
+        #         shape=reward_spec.shape,
+        #         device=reward_spec.device,
+        #         dtype=reward_spec.dtype
+        #     )
+        # else:
+        #     episode_reward_spec = UnboundedContinuousTensorSpec(
+        #         device=reward_spec.device,
+        #         dtype=reward_spec.dtype
+        #     )
+        #
+        # # Add episode_reward spec to observation spec
+        # reward_spec = CompositeSpec(
+        #     reward=reward_spec,
+        #     episode_reward=episode_reward_spec
+        # )
+
+        return reward_spec
