@@ -193,13 +193,13 @@ class JumanjiWrapper(GymLikeEnv):
     def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
 
         # extract spec from jumanji definition
-        self._input_spec = self._make_input_spec(env)
-        self._observation_spec = self._make_observation_spec(env)
-        self._reward_spec = self._make_reward_spec(env)
+        self.input_spec = self._make_input_spec(env)
+        self.observation_spec = self._make_observation_spec(env)
+        self.reward_spec = self._make_reward_spec(env)
 
         # extract state spec from instance
-        self._state_spec = self._make_state_spec(env)
-        self._input_spec["state"] = self._state_spec
+        self.state_spec = self._make_state_spec(env)
+        self.input_spec["state"] = self.state_spec
 
         # build state example for data conversion
         self._state_example = self._make_state_example(env)
