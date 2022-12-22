@@ -2495,7 +2495,7 @@ class RewardSum(Transform):
                 tensordict.set(
                     out_key, torch.zeros(*tensordict.shape, 1, dtype=reward.dtype)
                 )
-            tensordict[out_key] += tensordict.get(reward)
+            tensordict[out_key] += reward
 
         return tensordict
 
