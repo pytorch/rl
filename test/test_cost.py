@@ -266,7 +266,7 @@ class TestDQN:
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
                 "action_value": action_value
-                * expand_as_right(mask.to(obs.dtype).squeeze(-1), action_value),
+                * expand_as_right(mask.to(obs.dtype), action_value),
             },
         )
         return td

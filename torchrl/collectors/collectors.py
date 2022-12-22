@@ -681,7 +681,6 @@ class SyncDataCollector(_DataCollector):
                 raise RuntimeError("resetting unique env with index is not permitted.")
             reset_workers = torch.zeros(
                 *self.env.batch_size,
-                1,
                 dtype=torch.bool,
                 device=self.env.device,
             )

@@ -99,7 +99,7 @@ def _select_and_repeat(
     )
     tensor_cat = torch.cat([tensor, tensor_repeat], 1) + post_terminal_tensor
     tensor_cat = tensor_cat[:, -T:]
-    mask = expand_as_right(mask.squeeze(-1), tensor_cat)
+    mask = expand_as_right(mask, tensor_cat)
     return tensor_cat.masked_fill(~mask, 0.0)
 
 

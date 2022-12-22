@@ -618,7 +618,7 @@ class SerialEnv(_BatchedEnv):
             self._assert_tensordict_shape(tensordict)
             reset_workers = tensordict.get("reset_workers")
         else:
-            reset_workers = torch.ones(self.num_workers, 1, dtype=torch.bool)
+            reset_workers = torch.ones(self.num_workers, dtype=torch.bool)
 
         keys = set()
         for i, _env in enumerate(self._envs):
@@ -834,7 +834,7 @@ class ParallelEnv(_BatchedEnv):
             self._assert_tensordict_shape(tensordict)
             reset_workers = tensordict.get("reset_workers")
         else:
-            reset_workers = torch.ones(self.num_workers, 1, dtype=torch.bool)
+            reset_workers = torch.ones(self.num_workers, dtype=torch.bool)
 
         for i, channel in enumerate(self.parent_channels):
             if not reset_workers[i]:
