@@ -190,7 +190,9 @@ class JumanjiWrapper(GymLikeEnv):
             raise TypeError(f"Unsupported spec type {type(spec)}")
 
     def _make_reward_spec(self, env) -> TensorSpec:
-        reward_spec = _jumanji_to_torchrl_spec_transform(env.reward_spec(), device=self.device)
+        reward_spec = _jumanji_to_torchrl_spec_transform(
+            env.reward_spec(), device=self.device
+        )
         if not len(reward_spec.shape):
             reward_spec.shape = torch.Size([1])
         return reward_spec

@@ -447,7 +447,9 @@ class BoundedTensorSpec(TensorSpec):
             return out
         else:
             interval = self.space.maximum - self.space.minimum
-            r = torch.rand(torch.Size([*shape, *interval.shape]), device=interval.device)
+            r = torch.rand(
+                torch.Size([*shape, *interval.shape]), device=interval.device
+            )
             r = interval * r
             r = self.space.minimum + r
             r = r.to(self.dtype).to(self.device)
@@ -1035,7 +1037,7 @@ class DiscreteTensorSpec(TensorSpec):
         dtype: Optional[Union[str, torch.dtype]] = torch.long,
     ):
         if shape is None:
-            shape = torch.Size((1,))
+            shape = torch.Size([])
         dtype, device = _default_dtype_and_device(dtype, device)
         space = DiscreteBox(n)
         super().__init__(shape, space, device, dtype, domain="discrete")
@@ -1070,7 +1072,7 @@ class DiscreteTensorSpec(TensorSpec):
         )
 
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
-        return super().to_numpy(val, safe).squeeze(-1)
+        return super().to_numpy(val, safe)
 
 
 class CompositeSpec(TensorSpec):
