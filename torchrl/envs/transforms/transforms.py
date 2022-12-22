@@ -236,20 +236,22 @@ class Transform(nn.Module):
         if self.__dict__.get("_parent", None) is None:
             if "_container" not in self.__dict__:
                 raise AttributeError("transform parent uninitialized")
-            parent = self.__dict__["_container"]
-            if parent is None:
-                return parent
+            container = self.__dict__["_container"]
+            if container is None:
+                return container
             out = None
-            if not isinstance(parent, EnvBase):
+            if not isinstance(container, EnvBase):
                 # if it's not an env, it should be a Compose transform
-                if not isinstance(parent, Compose):
+                if not isinstance(container, Compose):
                     raise ValueError(
                         "A transform parent must be either another Compose transform or an environment object."
                     )
-                compose = parent
-                if compose.parent:
+                compose = container
+                if compose.__dict__["_container"]:
                     # the parent of the compose must be a TransformedEnv
-                    compose_parent = compose.parent
+                    compose_parent = TransformedEnv(
+                        compose.__dict__["_container"].base_env
+                    )
                     if compose_parent.transform is not compose:
                         comp_parent_trans = compose_parent.transform.clone()
                     else:
@@ -261,13 +263,13 @@ class Transform(nn.Module):
                     for orig_trans in compose.transforms:
                         if orig_trans is self:
                             break
-                        transform = copy(orig_trans)
+                        transform = orig_trans.clone()
                         transform.reset_parent()
                         out.append_transform(transform)
-            elif isinstance(parent, TransformedEnv):
-                out = TransformedEnv(parent.base_env)
+            elif isinstance(container, TransformedEnv):
+                out = TransformedEnv(container.base_env)
             else:
-                raise ValueError(f"parent is of type {type(parent)}")
+                raise ValueError(f"container is of type {type(container)}")
             self.__dict__["_parent"] = out
         return self.__dict__["_parent"]
 
