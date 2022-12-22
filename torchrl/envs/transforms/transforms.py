@@ -2490,11 +2490,12 @@ class RewardSum(Transform):
 
         # Update episode rewards
         for in_key, out_key in zip(self.in_keys, self.out_keys):
+            reward = tensordict.get(in_key)
             if out_key not in tensordict.keys():
                 tensordict.set(
                     out_key, torch.zeros(*tensordict.shape, 1, dtype=reward.dtype)
                 )
-            tensordict[out_key] += tensordict.get(in_key)
+            tensordict[out_key] += tensordict.get(reward)
 
         return tensordict
 
