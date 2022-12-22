@@ -108,10 +108,10 @@ class TestSplits:
             td = TensorDict(
                 source={
                     "traj_ids": traj_ids,
-                    "a": traj_ids.clone(),
+                    "a": traj_ids.clone().unsqueeze(-1),
                     "steps_count": steps_count,
                     "workers": workers,
-                    "done": done,
+                    "done": done.unsqueeze(-1),
                 },
                 batch_size=[num_workers],
             )
