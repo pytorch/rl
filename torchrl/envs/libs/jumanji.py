@@ -60,8 +60,6 @@ def _jumanji_to_torchrl_spec_transform(
         return action_space_cls(spec.num_values, dtype=dtype, device=device)
     elif isinstance(spec, jumanji.specs.BoundedArray):
         shape = spec.shape
-        if not len(shape):
-            shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return NdBoundedTensorSpec(
@@ -73,8 +71,6 @@ def _jumanji_to_torchrl_spec_transform(
         )
     elif isinstance(spec, jumanji.specs.Array):
         shape = spec.shape
-        if not len(shape):
-            shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         if dtype in (torch.float, torch.double, torch.half):
@@ -194,7 +190,10 @@ class JumanjiWrapper(GymLikeEnv):
             raise TypeError(f"Unsupported spec type {type(spec)}")
 
     def _make_reward_spec(self, env) -> TensorSpec:
-        return _jumanji_to_torchrl_spec_transform(env.reward_spec(), device=self.device)
+        reward_spec = _jumanji_to_torchrl_spec_transform(env.reward_spec(), device=self.device)
+        if not len(reward_spec.shape):
+            reward_spec.shape = torch.Size([1])
+        return reward_spec
 
     def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
 

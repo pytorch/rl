@@ -447,7 +447,7 @@ class BoundedTensorSpec(TensorSpec):
             return out
         else:
             interval = self.space.maximum - self.space.minimum
-            r = torch.rand(*shape, *interval.shape, device=interval.device)
+            r = torch.rand(torch.Size([*shape, *interval.shape]), device=interval.device)
             r = interval * r
             r = self.space.minimum + r
             r = r.to(self.dtype).to(self.device)
@@ -533,7 +533,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         return torch.nn.functional.gumbel_softmax(
-            torch.rand(*shape, self.space.n, device=self.device),
+            torch.rand(torch.Size([*shape, self.space.n]), device=self.device),
             hard=True,
             dim=-1,
         ).to(torch.long)
@@ -666,7 +666,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         interval = self.space.maximum - self.space.minimum
-        r = torch.rand(*shape, *interval.shape, device=interval.device)
+        r = torch.rand(torch.Size([*shape, *interval.shape]), device=interval.device)
         r = r * interval
         r = self.space.minimum + r
         r = r.to(self.dtype)
