@@ -1925,6 +1925,17 @@ class DiscreteActionProjection(Transform):
 
 
 class FrameSkipTransform(Transform):
+    """A frame-skip transform.
+
+    This transform applies the same action repeatedly in the parent environment,
+    which improves stability on certain training algorithms.
+
+    Args:
+        frame_skip (int, optional): a positive integer representing the number
+            of frames during which the same action must be applied.
+
+    """
+
     inplace = False
 
     def __init__(self, frame_skip: int = 1):
