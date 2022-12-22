@@ -239,9 +239,12 @@ class DMControlWrapper(GymLikeEnv):
     @property
     def reward_spec(self) -> TensorSpec:
         if self._reward_spec is None:
-            self._reward_spec = _dmcontrol_to_torchrl_spec_transform(
+            _reward_spec = _dmcontrol_to_torchrl_spec_transform(
                 self._env.reward_spec(), device=self.device
             )
+            if _reward_spec.shape == torch.Size([]):
+                _reward_spec.shape = torch.Size([1])
+            self._reward_spec = _reward_spec
         return self._reward_spec
 
     @reward_spec.setter

@@ -462,7 +462,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         """
         if tensordict is None:
-            tensordict = TensorDict({}, device=self.device, batch_size=self.batch_size, _run_checks=False)
+            tensordict = TensorDict(
+                {}, device=self.device, batch_size=self.batch_size, _run_checks=False
+            )
         action = self.action_spec.rand(self.batch_size)
         tensordict.set("action", action)
         return self.step(tensordict)
