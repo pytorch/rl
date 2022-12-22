@@ -99,7 +99,7 @@ def _select_and_repeat(
     )
     tensor_cat = torch.cat([tensor, tensor_repeat], 1) + post_terminal_tensor
     tensor_cat = tensor_cat[:, -T:]
-    mask = expand_as_right(mask, tensor_cat)
+    mask = mask.expand_as(tensor_cat)
     return tensor_cat.masked_fill(~mask, 0.0)
 
 
@@ -170,7 +170,7 @@ class MultiStep(nn.Module):
 
         done = tensordict.get("done")
         if "mask" in tensordict.keys():
-            mask = tensordict.get("mask")
+            mask = tensordict.get("mask").view_as(done)
         else:
             mask = done.clone().flip(1).cumsum(1).flip(1).to(torch.bool)
         reward = tensordict.get("reward")
