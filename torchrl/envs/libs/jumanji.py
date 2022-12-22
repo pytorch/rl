@@ -227,7 +227,7 @@ class JumanjiWrapper(GymLikeEnv):
 
     def read_state(self, state):
         state_dict = _object_to_tensordict(state, self.device, self.batch_size)
-        return self._state_spec.encode(state_dict)
+        return self.state_spec.encode(state_dict)
 
     def read_obs(self, obs):
         if isinstance(obs, (list, jnp.ndarray, np.ndarray)):
