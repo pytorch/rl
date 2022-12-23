@@ -598,7 +598,6 @@ class SyncDataCollector(_DataCollector):
             done = torch.zeros_like(done)
         steps = self._tensordict.get("step_count")
         done_or_terminated = done.squeeze(-1) | (steps == self.max_frames_per_traj)
-        assert len(done_or_terminated.shape) == 1, (steps.shape, done_or_terminated.shape)
         if self._has_been_done is None:
             self._has_been_done = done_or_terminated
         else:
@@ -664,10 +663,12 @@ class SyncDataCollector(_DataCollector):
 
                 self._reset_if_necessary()
                 self._tensordict.update(step_mdp(self._tensordict), inplace=True)
+
             if self.return_in_place and len(self._tensordict_out.keys()) > 0:
                 tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))
-                tensordict_out = tensordict_out.select(*self._tensordict_out.keys())
-                return self._tensordict_out.update_(tensordict_out)
+                for key in self._tensordict_out.keys():
+                    self._tensordict_out.set_(key, tensordict_out.get(key))
+                return self._tensordict_out
         return torch.stack(
             tensordict_out,
             len(self.env.batch_size),
