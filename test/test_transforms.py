@@ -59,6 +59,7 @@ from torchrl.envs.transforms.transforms import (
     _has_tv,
     CenterCrop,
     DiscreteActionProjection,
+    FrameSkipTransform,
     gSDENoise,
     NoopResetEnv,
     PinMemoryTransform,
@@ -375,17 +376,53 @@ def test_transform_parent():
     t3 = RewardClipping(0.1, 0.5)
     env.append_transform(t3)
 
-    t1_parent_gt = t1._parent
-    t2_parent_gt = t2._parent
-    t3_parent_gt = t3._parent
+    t1_parent_gt = t1._container
+    t2_parent_gt = t2._container
+    t3_parent_gt = t3._container
 
     _ = t1.parent
     _ = t2.parent
     _ = t3.parent
 
-    assert t1_parent_gt == t1._parent
-    assert t2_parent_gt == t2._parent
-    assert t3_parent_gt == t3._parent
+    assert t1_parent_gt == t1._container
+    assert t2_parent_gt == t2._container
+    assert t3_parent_gt == t3._container
+
+
+def test_transform_parent_cache():
+    """Tests the caching and uncaching of the transformed envs."""
+    env = TransformedEnv(
+        ContinuousActionVecMockEnv(),
+        FrameSkipTransform(3),
+    )
+
+    # print the parent
+    assert (
+        type(env.transform.parent.transform) is Compose
+        and len(env.transform.parent.transform) == 0
+    )
+    transform = env.transform
+    parent1 = env.transform.parent
+    parent2 = env.transform.parent
+    assert parent1 is parent2
+
+    # change the env, re-print the parent
+    env.insert_transform(0, NoopResetEnv(3))
+    parent3 = env.transform[-1].parent
+    assert parent1 is not parent3
+    assert type(parent3.transform[0]) is NoopResetEnv
+
+    # change the env, re-print the parent
+    env.insert_transform(0, CatTensors(["observation"]))
+    parent4 = env.transform[-1].parent
+    assert parent1 is not parent4
+    assert parent3 is not parent4
+    assert type(parent4.transform[0]) is CatTensors
+    assert type(parent4.transform[1]) is NoopResetEnv
+
+    # check that we don't keep track of the wrong parent
+    env.transform = NoopResetEnv(3)
+    assert transform.parent is None
 
 
 class TestTransforms:
@@ -509,6 +546,66 @@ class TestTransforms:
             observation_spec = flatten.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].shape[-3] == expected_size
+
+    @pytest.mark.skipif(not _has_gym, reason="gym not installed")
+    @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
+    def test_frame_skip_transform_builtin(self, skip):
+        torch.manual_seed(0)
+        if skip < 0:
+            with pytest.raises(
+                ValueError,
+                match="frame_skip should have a value greater or equal to one",
+            ):
+                FrameSkipTransform(skip)
+            return
+        else:
+            fs = FrameSkipTransform(skip)
+        base_env = GymEnv(PENDULUM_VERSIONED, frame_skip=skip)
+        tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), fs)
+        base_env.set_seed(0)
+        env.base_env.set_seed(0)
+        td1 = base_env.reset()
+        td2 = env.reset()
+        for key in td1.keys():
+            torch.testing.assert_close(td1[key], td2[key])
+        for i in range(10):
+            td1 = base_env.step(tensordicts[i].clone()).flatten_keys()
+            td2 = env.step(tensordicts[i].clone()).flatten_keys()
+            for key in td1.keys():
+                torch.testing.assert_close(td1[key], td2[key])
+
+    @pytest.mark.skipif(not _has_gym, reason="gym not installed")
+    @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
+    def test_frame_skip_transform_unroll(self, skip):
+        torch.manual_seed(0)
+        if skip < 0:
+            with pytest.raises(
+                ValueError,
+                match="frame_skip should have a value greater or equal to one",
+            ):
+                FrameSkipTransform(skip)
+            return
+        else:
+            fs = FrameSkipTransform(skip)
+        base_env = GymEnv(PENDULUM_VERSIONED)
+        tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), fs)
+        base_env.set_seed(0)
+        env.base_env.set_seed(0)
+        td1 = base_env.reset()
+        td2 = env.reset()
+        for key in td1.keys():
+            torch.testing.assert_close(td1[key], td2[key])
+        for i in range(10):
+            r = 0.0
+            for _ in range(skip):
+                td1 = base_env.step(tensordicts[i].clone()).flatten_keys()
+                r = td1.get("reward") + r
+            td1.set("reward", r)
+            td2 = env.step(tensordicts[i].clone()).flatten_keys()
+            for key in td1.keys():
+                torch.testing.assert_close(td1[key], td2[key])
 
     @pytest.mark.parametrize("unsqueeze_dim", [1, -2])
     @pytest.mark.parametrize("nchannels", [1, 3])

@@ -13,6 +13,7 @@ from .transforms import (
     DoubleToFloat,
     FiniteTensorDictCheck,
     FlattenObservation,
+    FrameSkipTransform,
     GrayScale,
     gSDENoise,
     NoopResetEnv,

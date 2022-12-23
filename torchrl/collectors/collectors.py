@@ -432,7 +432,8 @@ class SyncDataCollector(_DataCollector):
 
         self._tensordict = env.reset()
         self._tensordict.set(
-            "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
+            "step_count",
+            torch.zeros(self.env.batch_size, dtype=torch.int, device=env.device),
         )
 
         if (
@@ -468,14 +469,21 @@ class SyncDataCollector(_DataCollector):
             )
         # in addition to outputs of the policy, we add traj_ids and step_count to
         # _tensordict_out which will be collected during rollout
-        if len(self.env.batch_size):
-            traj_ids = torch.zeros(*self._tensordict_out.batch_size, 1)
-        else:
-            traj_ids = torch.zeros(*self._tensordict_out.batch_size, 1, 1)
-
-        self._tensordict_out.set("traj_ids", traj_ids)
         self._tensordict_out.set(
-            "step_count", torch.zeros(*self._tensordict_out.batch_size, 1)
+            "traj_ids",
+            torch.zeros(
+                *self._tensordict_out.batch_size,
+                dtype=torch.int64,
+                device=self.env_device,
+            ),
+        )
+        self._tensordict_out.set(
+            "step_count",
+            torch.zeros(
+                *self._tensordict_out.batch_size,
+                dtype=torch.int64,
+                device=self.env_device,
+            ),
         )
 
         self.return_in_place = return_in_place
@@ -589,7 +597,7 @@ class SyncDataCollector(_DataCollector):
         if not self.reset_when_done:
             done = torch.zeros_like(done)
         steps = self._tensordict.get("step_count")
-        done_or_terminated = done | (steps == self.max_frames_per_traj)
+        done_or_terminated = done.squeeze(-1) | (steps == self.max_frames_per_traj)
         if self._has_been_done is None:
             self._has_been_done = done_or_terminated
         else:
@@ -604,7 +612,7 @@ class SyncDataCollector(_DataCollector):
             traj_ids = self._tensordict.get("traj_ids").clone()
             steps = steps.clone()
             if len(self.env.batch_size):
-                self._tensordict.masked_fill_(done_or_terminated.squeeze(-1), 0)
+                self._tensordict.masked_fill_(done_or_terminated, 0)
                 self._tensordict.set("reset_workers", done_or_terminated)
             else:
                 self._tensordict.zero_()
@@ -620,8 +628,8 @@ class SyncDataCollector(_DataCollector):
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
             steps[done_or_terminated] = 0
-            self._tensordict.set("traj_ids", traj_ids)  # no ops if they already match
-            self._tensordict.set("step_count", steps)
+            self._tensordict.set_("traj_ids", traj_ids)  # no ops if they already match
+            self._tensordict.set_("step_count", steps)
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
@@ -636,7 +644,7 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.fill_("step_count", 0)
 
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
-        self._tensordict.set("traj_ids", torch.arange(n).unsqueeze(-1))
+        self._tensordict.set("traj_ids", torch.arange(n).view(self.env.batch_size[:1]))
 
         tensordict_out = []
         with set_exploration_mode(self.exploration_mode):
@@ -673,7 +681,6 @@ class SyncDataCollector(_DataCollector):
                 raise RuntimeError("resetting unique env with index is not permitted.")
             reset_workers = torch.zeros(
                 *self.env.batch_size,
-                1,
                 dtype=torch.bool,
                 device=self.env.device,
             )

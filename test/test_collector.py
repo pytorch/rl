@@ -306,8 +306,8 @@ def test_collector_env_reset():
     )
     for _data in collector:
         continue
-    steps = _data["step_count"][..., 1:, :]
-    done = _data["done"][..., :-1, :]
+    steps = _data["step_count"][..., 1:]
+    done = _data["done"][..., :-1, :].squeeze(-1)
     # we don't want just one done
     assert done.sum() > 3
     # check that after a done, the next step count is always 1
@@ -366,6 +366,62 @@ def test_collector_done_persist(num_env, env_name, seed=5):
 
     assert (d["done"].sum(-2) >= 1).all()
     assert torch.unique(d["traj_ids"], dim=-1).shape[-1] == 1
+
+    del collector
+
+
+@pytest.mark.parametrize("frames_per_batch", [200, 10])
+@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("env_name", ["vec"])
+def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
+    if num_env == 1:
+
+        def env_fn(seed):
+            env = MockSerialEnv(device="cpu")
+            env.set_seed(seed)
+            return env
+
+    else:
+
+        def env_fn(seed):
+            def make_env(seed):
+                env = MockSerialEnv(device="cpu")
+                env.set_seed(seed)
+                return env
+
+            env = SerialEnv(
+                num_workers=num_env,
+                create_env_fn=make_env,
+                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+                allow_step_when_done=True,
+            )
+            env.set_seed(seed)
+            return env
+
+    policy = make_policy(env_name)
+
+    collector = SyncDataCollector(
+        create_env_fn=env_fn,
+        create_env_kwargs={"seed": seed},
+        policy=policy,
+        frames_per_batch=frames_per_batch * num_env,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        device="cpu",
+        pin_memory=False,
+        reset_when_done=True,
+        split_trajs=True,
+    )
+    for _, d in enumerate(collector):  # noqa
+        break
+
+    assert d.ndimension() == 2
+    assert d["mask"].shape == d.shape
+    assert d["step_count"].shape == d.shape
+    assert d["traj_ids"].shape == d.shape
+    for traj in d.unbind(0):
+        assert traj["traj_ids"].unique().numel() == 1
+        assert (traj["step_count"][1:] - traj["step_count"][:-1] == 1).all()
 
     del collector
 

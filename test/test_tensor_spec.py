@@ -53,7 +53,7 @@ def test_discrete(cls):
         r = ts.rand()
         ts.to_numpy(r)
         ts.encode(torch.tensor([5]))
-        ts.encode(torch.tensor([5]).numpy())
+        ts.encode(torch.tensor(5).numpy())
         ts.encode(9)
         with pytest.raises(AssertionError):
             ts.encode(torch.tensor([11]))  # out of bounds
@@ -887,9 +887,8 @@ class TestSpec:
 
         sample = action_spec.rand((10000,))
 
-        sample_list = sample[:, 0]
+        sample_list = sample
         sample_list = [sum(sample_list == i).item() for i in range(10)]
-        print(sample_list)
         assert chisquare(sample_list).pvalue > 0.1
 
         sample = action_spec.to_numpy(sample)
