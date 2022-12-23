@@ -2444,8 +2444,8 @@ class RewardSum(Transform):
     env reward_spec.
 
     If no in_keys are specified, this transform assumes ´reward´ to be the input key. However, multiple rewards
-    (e.g. reward1 and reward2) can also be specified in the. If ´in_keys´ are not present in the provided
-    tensordict, this transform hos no effect.
+    (e.g. reward1 and reward2) can also be specified. If ´in_keys´ are not present in the provided tensordict,
+    this transform hos no effect.
     """
 
     inplace = True
