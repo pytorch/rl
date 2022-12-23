@@ -486,16 +486,6 @@ but got an object of type {type(transform)}."""
     def is_closed(self, value: bool):
         self.base_env.is_closed = value
 
-    @property
-    def is_done(self) -> bool:
-        if self._is_done is None:
-            return self.base_env.is_done
-        return self._is_done.all()
-
-    @is_done.setter
-    def is_done(self, val: torch.Tensor) -> None:
-        self._is_done = val
-
     def close(self):
         self.base_env.close()
         self.is_closed = True
@@ -561,15 +551,13 @@ but got an object of type {type(transform)}."""
 
     def _erase_metadata(self):
         if self.cache_specs:
-            self._input_spec = None
-            self._observation_spec = None
-            self._reward_spec = None
+            self.__dict__["_input_spec"] = None
+            self.__dict__["_observation_spec"] = None
+            self.__dict__["_reward_spec"] = None
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.base_env.to(device)
         self.transform.to(device)
-
-        self.is_done = self.is_done.to(device)
 
         if self.cache_specs:
             self.__dict__["_input_spec"] = None
@@ -1961,40 +1949,48 @@ class NoopResetEnv(Transform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Do no-op action for a number of steps in [1, noop_max]."""
+        td_reset = tensordict.clone(False)
+        tensordict = tensordict.clone(False)
+        # check that there is a single done state -- behaviour is undefined for multiple dones
         parent = self.parent
-        # keys = tensordict.keys()
+        if tensordict.get("done").numel() > 1:
+            raise ValueError(
+                "there is more than one done state in the parent environment. "
+                "NoopResetEnv is designed to work on single env instances, as partial reset "
+                "is currently not supported. If you feel like this is a missing feature, submit "
+                "an issue on TorchRL github repo. "
+                "In case you are trying to use NoopResetEnv over a batch of environments, know "
+                "that you can have a transformed batch of transformed envs, such as: "
+                "`TransformedEnv(ParallelEnv(3, lambda: TransformedEnv(MyEnv(), NoopResetEnv(3))), OtherTransform())`."
+            )
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
-        i = 0
         trial = 0
 
-        while i < noops:
-            i += 1
-            tensordict = parent.rand_step(tensordict)
-            tensordict = step_mdp(tensordict)
-            if parent.is_done:
-                parent.reset()
-                i = 0
-                trial += 1
-                if trial > _MAX_NOOPS_TRIALS:
-                    tensordict = parent.reset(tensordict)
-                    tensordict = parent.rand_step(tensordict)
+        while True:
+            i = 0
+            while i < noops:
+                i += 1
+                tensordict = parent.rand_step(tensordict)
+                tensordict = step_mdp(tensordict, exclude_done=False)
+                if tensordict.get("done"):
+                    tensordict = parent.reset(td_reset.clone(False))
                     break
-        if parent.is_done:
+            else:
+                break
+
+            trial += 1
+            if trial > _MAX_NOOPS_TRIALS:
+                tensordict = parent.rand_step(tensordict)
+                if tensordict.get("done"):
+                    raise RuntimeError(
+                        f"parent is still done after a single random step (i={i})."
+                    )
+                break
+
+        if tensordict.get("done"):
             raise RuntimeError("NoopResetEnv concluded with done environment")
-        # td = step_mdp(
-        #     tensordict, exclude_done=False, exclude_reward=True, exclude_action=True
-        # )
-
-        # for k in keys:
-        #     if k not in td.keys():
-        #         td.set(k, tensordict.get(k))
-
-        # # replace the next_ prefix
-        # for out_key in parent.observation_spec:
-        #     td.rename_key(out_key[5:], out_key)
-
         return tensordict
 
     def __repr__(self) -> str:

@@ -105,13 +105,12 @@ class PPOLoss(LossModule):
 
         dist = self.actor.get_dist(tensordict_clone, params=self.actor_params)
         log_prob = dist.log_prob(action)
-        log_prob = log_prob.unsqueeze(-1)
 
         prev_log_prob = tensordict.get("sample_log_prob")
         if prev_log_prob.requires_grad:
             raise RuntimeError("tensordict prev_log_prob requires grad.")
 
-        log_weight = log_prob - prev_log_prob
+        log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         return log_weight, dist
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:

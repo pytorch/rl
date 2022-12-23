@@ -15,9 +15,9 @@ from torchrl.data import (
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
-    UnboundedContinuousTensorSpec, NdUnboundedContinuousTensorSpec,
 )
 
 from ..._utils import implement_for
@@ -277,7 +277,7 @@ class GymWrapper(GymLikeEnv):
         )
 
     def _init_env(self):
-        self.reset()  # make sure that _is_done is populated
+        self.reset()
 
     def __repr__(self) -> str:
         return (
