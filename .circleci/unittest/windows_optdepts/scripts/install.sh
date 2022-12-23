@@ -40,8 +40,7 @@ git submodule sync && git submodule update --init --recursive
 "$this_dir/vc_env_helper.bat" pip3 install pip --upgrade
 
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
-# conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
-conda install -y -c "pytorch" -c nvidia "pytorch"::pytorch[build="*${version}*"] "${cudatoolkit}"
+conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
 
 torch_cuda=$(python -c "import torch; print(torch.cuda.is_available())")
 echo torch.cuda.is_available is $torch_cuda
@@ -62,7 +61,3 @@ source "$this_dir/set_cuda_envs.sh"
 
 printf "* Installing torchrl\n"
 pip3 install -e .
-
-
-echo "DEBUGGING"
-python -c "from torch.distributed.rpc import TensorPipeRpcBackendOptions"
