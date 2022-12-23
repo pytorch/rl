@@ -560,7 +560,7 @@ class SyncDataCollector(_DataCollector):
             if self.return_same_td:
                 yield tensordict_out
             else:
-                yield tensordict_out.clone()
+                yield tensordict_out.clone(False)
 
             del tensordict_out
             if self._frames >= self.total_frames:
@@ -659,7 +659,7 @@ class SyncDataCollector(_DataCollector):
 
                 step_count = self._tensordict.get("step_count")
                 step_count += 1
-                tensordict_out.append(self._tensordict.clone())
+                tensordict_out.append(self._tensordict.clone(False))
 
                 self._reset_if_necessary()
                 self._tensordict.update(step_mdp(self._tensordict), inplace=True)
