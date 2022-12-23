@@ -2457,9 +2457,6 @@ class RewardSum(Transform):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
         if in_keys is None:
             in_keys = ["reward"]
-        else:
-            in_keys = [in_key for in_key in in_keys if in_key.startswith("reward")]
-
         out_keys = [f"episode_{in_key}" for in_key in in_keys]
 
         super().__init__(in_keys=in_keys, out_keys=out_keys)
