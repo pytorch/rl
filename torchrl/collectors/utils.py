@@ -6,8 +6,7 @@
 from typing import Callable
 
 import torch
-from tensordict import TensorDict
-from tensordict.tensordict import TensorDictBase, pad
+from tensordict.tensordict import pad, TensorDictBase
 
 
 def _stack_output(fun) -> Callable:
@@ -55,8 +54,17 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     out_splits = rollout_tensordict.view(-1).split(splits, 0)
 
     for out_split in out_splits:
-        out_split.set("mask", torch.ones(out_split.shape, dtype=torch.bool, device=out_split._get_meta("done").device))
+        out_split.set(
+            "mask",
+            torch.ones(
+                out_split.shape,
+                dtype=torch.bool,
+                device=out_split._get_meta("done").device,
+            ),
+        )
     MAX = max(*[out_split.shape[0] for out_split in out_splits])
-    td = torch.stack([pad(out_split, [0, MAX - out_split.shape[0]]) for out_split in out_splits], 0).contiguous()
+    td = torch.stack(
+        [pad(out_split, [0, MAX - out_split.shape[0]]) for out_split in out_splits], 0
+    ).contiguous()
     td = td.unflatten_keys(sep)
     return td

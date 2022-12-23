@@ -645,7 +645,6 @@ class SyncDataCollector(_DataCollector):
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
         self._tensordict.set("traj_ids", torch.arange(n).view(self.env.batch_size[:1]))
 
-        tensordict_out = []
         with set_exploration_mode(self.exploration_mode):
             for j in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
@@ -659,8 +658,16 @@ class SyncDataCollector(_DataCollector):
                 step_count = self._tensordict.get("step_count")
                 step_count += 1
                 # we must clone all the values, since the step / traj_id updates are done in-place
-                # tensordict_out.append(self._tensordict.clone(True))
-                self._tensordict_out[..., j] = self._tensordict
+                try:
+                    self._tensordict_out[..., j] = self._tensordict
+                except RuntimeError:
+                    # unlock the output tensordict to allow for new keys to be written
+                    # these will be missed during the sync but at least we won't get an error during the update
+                    is_shared = self._tensordict_out.is_shared()
+                    self._tensordict_out.unlock()
+                    self._tensordict_out[..., j] = self._tensordict
+                    if is_shared:
+                        self._tensordict_out.share_memory_()
 
                 self._reset_if_necessary()
                 self._tensordict.update(step_mdp(self._tensordict), inplace=True)
@@ -1246,10 +1253,14 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     else:
                         same_device = same_device and (item.device == prev_device)
             if same_device:
-                out_buffer = torch.cat(list(out_tensordicts_shared.values()), 0, out=out_buffer)
+                out_buffer = torch.cat(
+                    list(out_tensordicts_shared.values()), 0, out=out_buffer
+                )
             else:
                 out_buffer = torch.cat(
-                    [item.cpu() for item in out_tensordicts_shared.values()], 0, out=out_buffer
+                    [item.cpu() for item in out_tensordicts_shared.values()],
+                    0,
+                    out=out_buffer,
                 )
 
             if self.split_trajs:
