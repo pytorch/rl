@@ -1206,6 +1206,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
+        out_buffer = None
         while not all(dones) and frames < self.total_frames:
             _check_for_faulty_process(self.procs)
             if self.update_at_each_batch:
@@ -1251,24 +1252,27 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     else:
                         same_device = same_device and (item.device == prev_device)
             if same_device:
-                out = torch.cat(list(out_tensordicts_shared.values()), 0)
+                out_buffer = torch.cat(list(out_tensordicts_shared.values()), 0, out_buffer=out_buffer)
             else:
-                out = torch.cat(
-                    [item.cpu() for item in out_tensordicts_shared.values()], 0
+                out_buffer = torch.cat(
+                    [item.cpu() for item in out_tensordicts_shared.values()], 0, out_buffer=out_buffer
                 )
 
             if self.split_trajs:
-                out = split_trajectories(out)
-                frames += out.get("mask").sum()
+                out = split_trajectories(out_buffer)
+                frames += out.get("mask").sum().item()
             else:
+                out = out_buffer
                 frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
-                out = out.exclude(*excluded_keys)
+                if excluded_keys:
+                    out = out.exclude(*excluded_keys)
             yield out
+            del out
 
         del out_tensordicts_shared
         # We shall not call shutdown just yet as user may want to retrieve state_dict
