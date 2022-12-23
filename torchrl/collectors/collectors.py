@@ -1252,10 +1252,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     else:
                         same_device = same_device and (item.device == prev_device)
             if same_device:
-                out_buffer = torch.cat(list(out_tensordicts_shared.values()), 0, out_buffer=out_buffer)
+                out_buffer = torch.cat(list(out_tensordicts_shared.values()), 0, out=out_buffer)
             else:
                 out_buffer = torch.cat(
-                    [item.cpu() for item in out_tensordicts_shared.values()], 0, out_buffer=out_buffer
+                    [item.cpu() for item in out_tensordicts_shared.values()], 0, out=out_buffer
                 )
 
             if self.split_trajs:
