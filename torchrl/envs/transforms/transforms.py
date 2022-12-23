@@ -2436,11 +2436,12 @@ class VecNorm(Transform):
 
 
 class RewardSum(Transform):
-    """Tracks the accumulated rewards of each episode.
+    """Tracks episode cumulative rewards.
 
-    This transform accepts a list of tensordict keys ´in_keys´, and tracks their cumulative value along each
-    episode. The transform creates a new tensordict key for each input_key called ´episode_{input_key}´ where
-    the cumulative values are written.
+    This transform accepts a list of tensordict reward keys (i.e. ´in_keys´) and tracks their cumulative
+    value along each episode. The transform creates a new tensordict key for each in_key named ´episode_{in_key}´
+    where  the cumulative values are written. All ´in_keys´ should be part of the env reward and be present in the
+    env reward_spec.
 
     If no in_keys are specified, this transform assumes ´reward´ to be the input key. However, multiple rewards
     (e.g. reward1 and reward2) can also be specified in the. If ´in_keys´ are not present in the provided
