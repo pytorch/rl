@@ -598,6 +598,7 @@ class SyncDataCollector(_DataCollector):
             done = torch.zeros_like(done)
         steps = self._tensordict.get("step_count")
         done_or_terminated = done.squeeze(-1) | (steps == self.max_frames_per_traj)
+        assert len(done_or_terminated.shape) == 1, (steps.shape, done_or_terminated.shape)
         if self._has_been_done is None:
             self._has_been_done = done_or_terminated
         else:
