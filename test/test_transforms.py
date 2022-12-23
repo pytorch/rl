@@ -744,6 +744,29 @@ class TestTransforms:
         td = rs(td)
         assert (td.get("episode_reward") == td.get("reward")).all()
 
+        # test transform_observation_spec
+        base_env = ContinuousActionVecMockEnv(
+            reward_spec=NdUnboundedContinuousTensorSpec(shape=(3, 16, 16)),
+        )
+        transfomed_env = TransformedEnv(base_env, RewardSum())
+        transformed_observation_spec1 = transfomed_env.specs["observation_spec"]
+        assert isinstance(transformed_observation_spec1, CompositeSpec)
+        assert "episode_reward" in transformed_observation_spec1.keys()
+        assert "observation" in transformed_observation_spec1.keys()
+
+        base_env = ContinuousActionVecMockEnv(
+            reward_spec=UnboundedContinuousTensorSpec(),
+            observation_spec=CompositeSpec(
+                observation=UnboundedContinuousTensorSpec(),
+                some_extra_observation=UnboundedContinuousTensorSpec(),
+            ),
+        )
+        transfomed_env = TransformedEnv(base_env, RewardSum())
+        transformed_observation_spec2 = transfomed_env.specs["observation_spec"]
+        assert isinstance(transformed_observation_spec2, CompositeSpec)
+        assert "some_extra_observation" in transformed_observation_spec2.keys()
+        assert "episode_reward" in transformed_observation_spec2.keys()
+
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
         "keys",
