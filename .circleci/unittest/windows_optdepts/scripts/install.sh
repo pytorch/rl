@@ -35,12 +35,21 @@ fi
 
 
 # submodules
+printf "Installing PyTorch with %s\n" "${cudatoolkit} from source"
+export USE_CUDA=0
+conda install astunparse numpy ninja pyyaml setuptools cmake cffi typing_extensions future six requests dataclasses
+conda install mkl mkl-include
+# Add these packages if torch.distributed is needed.
+# Distributed package support on Windows is a prototype feature and is subject to changes.
+conda install -c conda-forge libuv=1.39
+git clone --recursive https://github.com/pytorch/pytorch
+cd pytorch
+# if you are updating an existing checkout
 git submodule sync && git submodule update --init --recursive
 
-"$this_dir/vc_env_helper.bat" pip3 install pip --upgrade
+source "$this_dir/set_cuda_envs.sh"
+"$this_dir/vc_env_helper.bat" python setup.py develop
 
-printf "Installing PyTorch with %s\n" "${cudatoolkit}"
-conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
 
 torch_cuda=$(python -c "import torch; print(torch.cuda.is_available())")
 echo torch.cuda.is_available is $torch_cuda
@@ -57,7 +66,7 @@ pip install pip --upgrade
 # install tensordict
 pip3 install git+https://github.com/pytorch-labs/tensordict
 
-source "$this_dir/set_cuda_envs.sh"
 
+cd ..
 printf "* Installing torchrl\n"
 pip3 install -e .
