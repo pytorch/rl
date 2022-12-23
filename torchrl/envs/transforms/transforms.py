@@ -2510,7 +2510,7 @@ class RewardSum(Transform):
             # If reward_spec is a CompositeSpec, all in_keys should be keys of reward_spec
             assert all(
                 [k in reward_spec.keys() for k in self.in_keys]
-            ), "Not all in_keys are present in the ´reward_spec´"
+            ), "Not all in_keys are present in ´reward_spec´"
 
             # Define episode specs for all out_keys
             for in_key, out_key in zip(self.in_keys, self.out_keys):
@@ -2532,7 +2532,7 @@ class RewardSum(Transform):
             # If reward_spec is not a CompositeSpec, the only in_key should be ´reward´
             assert set(self.in_keys) == {
                 "reward"
-            }, "reward_spec is not a CompositeSpec class, in_keys should be ´reward´"
+            }, "reward_spec is not a CompositeSpec class, in_keys should only include ´reward´"
 
             # Define episode spec
             if isinstance(reward_spec, NdUnboundedContinuousTensorSpec):
