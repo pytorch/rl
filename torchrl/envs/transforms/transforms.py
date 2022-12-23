@@ -2439,9 +2439,9 @@ class RewardSum(Transform):
     """Tracks episode cumulative rewards.
 
     This transform accepts a list of tensordict reward keys (i.e. ´in_keys´) and tracks their cumulative
-    value along each episode. The transform creates a new tensordict key for each in_key named ´episode_{in_key}´
-    where  the cumulative values are written. All ´in_keys´ should be part of the env reward and be present in the
-    env reward_spec.
+    value along each episode. When called, the transform creates a new tensordict key for each in_key named
+    ´episode_{in_key}´ where  the cumulative values are written. All ´in_keys´ should be part of the env
+    reward and be present in the env reward_spec.
 
     If no in_keys are specified, this transform assumes ´reward´ to be the input key. However, multiple rewards
     (e.g. reward1 and reward2) can also be specified. If ´in_keys´ are not present in the provided tensordict,
@@ -2471,10 +2471,14 @@ class RewardSum(Transform):
                     tensordict[out_key] = 0.0
 
         # Batched environments
-        elif "reset_workers" in tensordict.keys():
+        else:
+            reset_workers = tensordict.get(
+                "reset_workers",
+                torch.ones(*tensordict.batch_size, 1, dtype=torch.bool, device=tensordict.device),
+            )
             for out_key in self.out_keys:
                 if out_key in tensordict.keys():
-                    tensordict[out_key][tensordict["reset_workers"]] = 0.0
+                    tensordict[out_key][reset_workers] = 0.0
 
         return tensordict
 
@@ -2491,7 +2495,8 @@ class RewardSum(Transform):
             reward = tensordict.get(in_key)
             if out_key not in tensordict.keys():
                 tensordict.set(
-                    out_key, torch.zeros(*tensordict.shape, 1, dtype=reward.dtype)
+                    out_key,
+                    torch.zeros(*tensordict.shape, 1, dtype=reward.dtype, device=reward.device)
                 )
             tensordict[out_key] += reward
 
@@ -2506,9 +2511,8 @@ class RewardSum(Transform):
         if isinstance(reward_spec, CompositeSpec):
 
             # If reward_spec is a CompositeSpec, all in_keys should be keys of reward_spec
-            assert all(
-                [k in reward_spec.keys() for k in self.in_keys]
-            ), "Not all in_keys are present in ´reward_spec´"
+            if not all([k in reward_spec.keys() for k in self.in_keys]):
+                raise KeyError("Not all in_keys are present in ´reward_spec´")
 
             # Define episode specs for all out_keys
             for in_key, out_key in zip(self.in_keys, self.out_keys):
@@ -2528,9 +2532,8 @@ class RewardSum(Transform):
         else:
 
             # If reward_spec is not a CompositeSpec, the only in_key should be ´reward´
-            assert set(self.in_keys) == {
-                "reward"
-            }, "reward_spec is not a CompositeSpec class, in_keys should only include ´reward´"
+            if not set(self.in_keys) == {"reward"}:
+                raise KeyError("reward_spec is not a CompositeSpec class, in_keys should only include ´reward´")
 
             # Define episode spec
             if isinstance(reward_spec, NdUnboundedContinuousTensorSpec):
