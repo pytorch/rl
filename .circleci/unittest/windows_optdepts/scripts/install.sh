@@ -53,14 +53,16 @@ if [ ! -z "${CUDA_VERSION:-}" ] ; then
     fi
 fi
 
+pip install pip --upgrade
+
 # install tensordict
-"$this_dir/vc_env_helper.bat" pip3 install git+https://github.com/pytorch-labs/tensordict
+pip3 install git+https://github.com/pytorch-labs/tensordict
 
 source "$this_dir/set_cuda_envs.sh"
 
 printf "* Installing torchrl\n"
-"$this_dir/vc_env_helper.bat" pip3 install -e .
+pip3 install -e .
 
 
 echo "DEBUGGING"
-"$this_dir/vc_env_helper.bat" python -c "from torch.distributed.rpc import TensorPipeRpcBackendOptions"
+python -c "from torch.distributed.rpc import TensorPipeRpcBackendOptions"
