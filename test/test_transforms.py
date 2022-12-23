@@ -63,6 +63,7 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
 )
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
+from torchrl.envs.utils import check_env_specs
 
 TIMEOUT = 10.0
 
@@ -1687,6 +1688,11 @@ class TestTransforms:
             )
         else:
             assert torch.all(td.get("step_count") == 0)
+
+    def test_step_counter_observation_spec(self):
+        env = TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(50))
+        check_env_specs(GymEnv("Pendulum-v1"))
+        check_env_specs(env)
 
 
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")

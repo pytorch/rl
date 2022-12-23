@@ -2499,13 +2499,21 @@ class StepCounter(Transform):
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         workers = tensordict.get(
             "reset_workers",
-            default=torch.ones(*tensordict.batch_size, 1, dtype=torch.bool),
+            default=torch.ones(
+                *tensordict.batch_size, 1, dtype=torch.bool, device=tensordict.device
+            ),
         )
         tensordict.set(
             "step_count",
             (~workers)
             * tensordict.get(
-                "step_count", torch.zeros(*tensordict.batch_size, 1, dtype=torch.int64)
+                "step_count",
+                torch.zeros(
+                    *tensordict.batch_size,
+                    1,
+                    dtype=torch.int64,
+                    device=tensordict.device,
+                ),
             ),
         )
         if self.max_steps is not None and self.max_steps <= 0:
@@ -2515,7 +2523,13 @@ class StepCounter(Transform):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         next_step_count = (
             tensordict.get(
-                "step_count", torch.zeros(*tensordict.batch_size, 1, dtype=torch.int64)
+                "step_count",
+                torch.zeros(
+                    *tensordict.batch_size,
+                    1,
+                    dtype=torch.int64,
+                    device=tensordict.device,
+                ),
             )
             + 1
         )
@@ -2527,7 +2541,15 @@ class StepCounter(Transform):
             )
         return tensordict
 
-    @_apply_to_composite
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec["step_count"] = UnboundedDiscreteTensorSpec(dtype=torch.int64)
+    def transform_observation_spec(
+        self, observation_spec: CompositeSpec
+    ) -> CompositeSpec:
+        if not isinstance(observation_spec, CompositeSpec):
+            raise ValueError(
+                f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
+            )
+        observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
+            dtype=torch.int64, device=observation_spec.device
+        )
+        observation_spec["step_count"].space.minimum = 0
         return observation_spec
