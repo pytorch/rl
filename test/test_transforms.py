@@ -560,7 +560,7 @@ class TestTransforms:
             return
         else:
             fs = FrameSkipTransform(skip)
-        base_env = GymEnv("Pendulum-v1", frame_skip=skip)
+        base_env = GymEnv(PENDULUM_VERSIONED, frame_skip=skip)
         tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
         env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), fs)
         base_env.set_seed(0)
@@ -588,9 +588,9 @@ class TestTransforms:
             return
         else:
             fs = FrameSkipTransform(skip)
-        base_env = GymEnv("Pendulum-v1")
+        base_env = GymEnv(PENDULUM_VERSIONED)
         tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
-        env = TransformedEnv(GymEnv("Pendulum-v1"), fs)
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), fs)
         base_env.set_seed(0)
         env.base_env.set_seed(0)
         td1 = base_env.reset()
