@@ -1256,7 +1256,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 out = split_trajectories(out_buffer)
                 frames += out.get("mask").sum().item()
             else:
-                out = out_buffer
+                out = out_buffer.clone()
                 frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
