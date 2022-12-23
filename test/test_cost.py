@@ -1550,7 +1550,7 @@ class TestPPO:
                 "done": done,
                 "reward": reward,
                 "action": action,
-                "sample_log_prob": torch.randn_like(action[..., :1]) / 10,
+                "sample_log_prob": torch.randn_like(action[..., 1]) / 10,
             },
             device=device,
         )
@@ -1585,9 +1585,9 @@ class TestPPO:
                 "mask": mask,
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                "sample_log_prob": (
-                    torch.randn_like(action[..., :1]) / 10
-                ).masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "sample_log_prob": (torch.randn_like(action[..., 1]) / 10).masked_fill_(
+                    ~mask, 0.0
+                ),
                 "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -1858,8 +1858,8 @@ class TestA2C:
                 "mask": mask,
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                "sample_log_prob": torch.randn_like(action[..., :1]).masked_fill_(
-                    ~mask.unsqueeze(-1), 0.0
+                "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
+                    ~mask, 0.0
                 )
                 / 10,
                 "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
