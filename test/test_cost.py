@@ -26,7 +26,6 @@ from tensordict.nn import get_functional, TensorDictModule
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from tensordict.tensordict import assert_allclose_td, TensorDict
-from tensordict.utils import expand_as_right
 from torch import autograd, nn
 from torchrl.data import (
     CompositeSpec,
@@ -253,20 +252,22 @@ class TestDQN:
         if action_spec_type == "categorical":
             action_value = torch.max(action_value, -1, keepdim=True)[0]
             action = torch.argmax(action, -1, keepdim=True)
+        # action_value = action_value.unsqueeze(-1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
-                "action_value": action_value
-                * expand_as_right(mask.to(obs.dtype).squeeze(-1), action_value),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
         )
         return td
@@ -488,16 +489,18 @@ class TestDDPG:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -726,16 +729,18 @@ class TestSAC:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = torch.ones(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -1129,16 +1134,18 @@ class TestREDQ:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -1543,7 +1550,7 @@ class TestPPO:
                 "done": done,
                 "reward": reward,
                 "action": action,
-                "sample_log_prob": torch.randn_like(action[..., :1]) / 10,
+                "sample_log_prob": torch.randn_like(action[..., 1]) / 10,
             },
             device=device,
         )
@@ -1564,23 +1571,25 @@ class TestPPO:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = torch.ones(batch, T, dtype=torch.bool, device=device)
         params_mean = torch.randn_like(action) / 10
         params_scale = torch.rand_like(action) / 10
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
-                "sample_log_prob": torch.randn_like(action[..., :1])
-                / 10
-                * mask.to(obs.dtype),
-                "loc": params_mean * mask.to(obs.dtype),
-                "scale": params_scale * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "sample_log_prob": (torch.randn_like(action[..., 1]) / 10).masked_fill_(
+                    ~mask, 0.0
+                ),
+                "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -1835,23 +1844,26 @@ class TestA2C:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         params_mean = torch.randn_like(action) / 10
         params_scale = torch.rand_like(action) / 10
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
-                "sample_log_prob": torch.randn_like(action[..., :1])
-                / 10
-                * mask.to(obs.dtype),
-                "loc": params_mean * mask.to(obs.dtype),
-                "scale": params_scale * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
+                    ~mask, 0.0
+                )
+                / 10,
+                "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )

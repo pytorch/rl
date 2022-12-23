@@ -643,7 +643,7 @@ for i, tensordict in enumerate(collector):
     if "mask" in tensordict.keys():
         # if multi-step, a mask is present to help filter padded values
         current_frames = tensordict["mask"].sum()
-        tensordict = tensordict[tensordict.get("mask").squeeze(-1)]
+        tensordict = tensordict[tensordict.get("mask")]
     else:
         tensordict = tensordict.view(-1)
         current_frames = tensordict.numel()

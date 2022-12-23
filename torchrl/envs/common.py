@@ -214,11 +214,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if "is_closed" not in self.__dir__():
             self.is_closed = True
         if "_input_spec" not in self.__dir__():
-            self._input_spec = None
+            self.__dict__["_input_spec"] = None
         if "_reward_spec" not in self.__dir__():
-            self._reward_spec = None
+            self.__dict__["_reward_spec"] = None
         if "_observation_spec" not in self.__dir__():
-            self._observation_spec = None
+            self.__dict__["_observation_spec"] = None
         if batch_size is not None:
             # we want an error to be raised if we pass batch_size but
             # it's already been set
@@ -239,6 +239,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         cls._batch_locked = _batch_locked
         cls._device = None
         return super().__new__(cls)
+
+    def __setattr__(self, key, value):
+        if key in ("_input_spec", "_observation_spec", "_action_spec", "_reward_spec"):
+            raise AttributeError(
+                "To set an environment spec, please use `env.observation_spec = obs_spec` (without the leading"
+                " underscore)."
+            )
+        return super().__setattr__(key, value)
 
     @property
     def batch_locked(self) -> bool:
@@ -268,9 +276,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
         if self._input_spec is None:
-            self._input_spec = CompositeSpec(action=value)
+            self.input_spec = CompositeSpec(action=value)
         else:
-            self._input_spec["action"] = value
+            self.input_spec["action"] = value
 
     @property
     def input_spec(self) -> TensorSpec:
@@ -278,7 +286,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @input_spec.setter
     def input_spec(self, value: TensorSpec) -> None:
-        self._input_spec = value
+        if not isinstance(value, CompositeSpec):
+            raise TypeError("The type of an input_spec must be Composite.")
+        self.__dict__["_input_spec"] = value
 
     @property
     def reward_spec(self) -> TensorSpec:
@@ -286,7 +296,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @reward_spec.setter
     def reward_spec(self, value: TensorSpec) -> None:
-        self._reward_spec = value
+        if not hasattr(value, "shape"):
+            raise TypeError(
+                f"reward_spec of type {type(value)} do not have a shape " f"attribute."
+            )
+        if len(value.shape) == 0:
+            raise RuntimeError(
+                "the reward_spec shape cannot be empty (this error"
+                " usually comes from trying to set a reward_spec"
+                " with a null number of dimensions. Try using a multidimensional"
+                " spec instead, for instance with a singleton dimension at the tail)."
+            )
+        self.__dict__["_reward_spec"] = value
 
     @property
     def observation_spec(self) -> TensorSpec:
@@ -294,7 +315,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @observation_spec.setter
     def observation_spec(self, value: TensorSpec) -> None:
-        self._observation_spec = value
+        if not isinstance(value, CompositeSpec):
+            raise TypeError("The type of an observation_spec must be Composite.")
+        self.__dict__["_observation_spec"] = value
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
@@ -320,7 +343,31 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         obs_keys = set(self.observation_spec.keys())
         tensordict_out_select = tensordict_out.select(*obs_keys)
         tensordict_out = tensordict_out.exclude(*obs_keys)
-        tensordict_out["next"] = tensordict_out_select
+        tensordict_out.set("next", tensordict_out_select)
+
+        reward = tensordict_out.get("reward")
+        # unsqueeze rewards if needed
+        expected_reward_shape = torch.Size(
+            [*tensordict_out.batch_size, *self.reward_spec.shape]
+        )
+        n = len(expected_reward_shape)
+        if len(reward.shape) >= n and reward.shape[-n:] != expected_reward_shape:
+            reward = reward.view(*reward.shape[:n], *expected_reward_shape)
+            tensordict_out.set("reward", reward)
+        elif len(reward.shape) < n:
+            reward = reward.view(expected_reward_shape)
+            tensordict_out.set("reward", reward)
+
+        done = tensordict_out.get("done")
+        # unsqueeze done if needed
+        expected_done_shape = torch.Size([*tensordict_out.batch_size, 1])
+        n = len(expected_done_shape)
+        if len(done.shape) >= n and done.shape[-n:] != expected_done_shape:
+            done = done.view(*done.shape[:n], *expected_done_shape)
+            tensordict_out.set("done", done)
+        elif len(done.shape) < n:
+            done = done.view(expected_done_shape)
+            tensordict_out.set("done", done)
 
         if tensordict_out is tensordict:
             raise RuntimeError(
@@ -382,6 +429,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         """
         tensordict_reset = self._reset(tensordict, **kwargs)
+
+        done = tensordict_reset.get("done", None)
+        if done is not None:
+            # unsqueeze done if needed
+            expected_done_shape = torch.Size([*tensordict_reset.batch_size, 1])
+            if done.shape != expected_done_shape:
+                done = done.view(expected_done_shape)
+                tensordict_reset.set("done", done)
+
         if tensordict_reset.device != self.device:
             tensordict_reset = tensordict_reset.to(self.device)
         if tensordict_reset is tensordict:
