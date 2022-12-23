@@ -56,15 +56,16 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     out_splits = {
         key: _d.contiguous().view(-1, *_d.shape[ndim:]).split(splits, 0)
         for key, _d in rollout_tensordict.items()
-        # if key not in ("step_count", "traj_ids")
+    #    if key not in ("step_count", "traj_ids")
     }
+    # out_splits = rollout_tensordict.view(-1).split(splits, 0)
 
     # select complete rollouts
     dones = out_splits.get("done")
     valid_ids = list(range(len(dones)))
     out_splits = {key: [_out[i] for i in valid_ids] for key, _out in out_splits.items()}
     mask = [
-        torch.ones_like(_out[..., 0], dtype=torch.bool, device=dones.device) for _out in out_splits["done"]
+        torch.ones_like(_out[..., 0], dtype=torch.bool, device=_out.device) for _out in out_splits["done"]
     ]
     out_splits["mask"] = mask
     out_dict = {
