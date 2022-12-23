@@ -2474,7 +2474,12 @@ class RewardSum(Transform):
         else:
             reset_workers = tensordict.get(
                 "reset_workers",
-                torch.ones(*tensordict.batch_size, 1, dtype=torch.bool, device=tensordict.device),
+                torch.ones(
+                    *tensordict.batch_size,
+                    1,
+                    dtype=torch.bool,
+                    device=tensordict.device,
+                ),
             )
             for out_key in self.out_keys:
                 if out_key in tensordict.keys():
@@ -2496,7 +2501,9 @@ class RewardSum(Transform):
             if out_key not in tensordict.keys():
                 tensordict.set(
                     out_key,
-                    torch.zeros(*tensordict.shape, 1, dtype=reward.dtype, device=reward.device)
+                    torch.zeros(
+                        *tensordict.shape, 1, dtype=reward.dtype, device=reward.device
+                    ),
                 )
             tensordict[out_key] += reward
 
@@ -2533,7 +2540,9 @@ class RewardSum(Transform):
 
             # If reward_spec is not a CompositeSpec, the only in_key should be ´reward´
             if not set(self.in_keys) == {"reward"}:
-                raise KeyError("reward_spec is not a CompositeSpec class, in_keys should only include ´reward´")
+                raise KeyError(
+                    "reward_spec is not a CompositeSpec class, in_keys should only include ´reward´"
+                )
 
             # Define episode spec
             if isinstance(reward_spec, NdUnboundedContinuousTensorSpec):
