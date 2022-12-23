@@ -44,7 +44,7 @@ printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 conda install -y -c "pytorch" -c nvidia "pytorch"::pytorch[build="*${version}*"] "${cudatoolkit}"
 
 echo "DEBUGGING"
-"$this_dir/vc_env_helper.bat" python -c "from torch.distributed.rpc import TensorPipeRpcBackendOptions"
+python -c "from torch.distributed.rpc import TensorPipeRpcBackendOptions"
 
 torch_cuda=$(python -c "import torch; print(torch.cuda.is_available())")
 echo torch.cuda.is_available is $torch_cuda
