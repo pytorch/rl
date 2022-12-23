@@ -169,7 +169,6 @@ def make_dqn_actor(
         # automatically infer in key
         (in_key,) = itertools.islice(env_specs["observation_spec"], 1)
 
-    out_features = action_spec.shape[0]
     actor_class = QValueActor
     actor_kwargs = {}
 
@@ -178,6 +177,8 @@ def make_dqn_actor(
         # to the number of possible choices and also set categorical behavioural for actors.
         actor_kwargs.update({"action_space": "categorical"})
         out_features = env_specs["action_spec"].space.n
+    else:
+        out_features = action_spec.shape[0]
 
     if cfg.distributional:
         if not atoms:

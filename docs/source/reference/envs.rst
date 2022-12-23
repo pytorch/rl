@@ -105,7 +105,7 @@ It is also possible to reset some but not all of the environments:
             fields={
                 done: Tensor(torch.Size([4, 1]), dtype=torch.bool),
                 pixels: Tensor(torch.Size([4, 500, 500, 3]), dtype=torch.uint8),
-                reset_workers: Tensor(torch.Size([4, 1]), dtype=torch.bool)},
+                reset_workers: Tensor(torch.Size([4]), dtype=torch.bool)},
             batch_size=torch.Size([4]),
             device=None,
             is_shared=True)

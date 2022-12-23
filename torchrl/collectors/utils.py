@@ -41,7 +41,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     splits = traj_ids.view(-1)
     splits = [(splits == i).sum().item() for i in splits.unique_consecutive()]
     # if all splits are identical then we can skip this function
-    if len(set(splits)) == 1 and splits[0] == traj_ids.shape[1]:
+    if len(set(splits)) == 1 and splits[0] == traj_ids.shape[-1]:
         rollout_tensordict.set(
             "mask",
             torch.ones(
@@ -63,16 +63,19 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     dones = out_splits["done"]
     valid_ids = list(range(len(dones)))
     out_splits = {key: [_out[i] for i in valid_ids] for key, _out in out_splits.items()}
-    mask = [torch.ones_like(_out, dtype=torch.bool) for _out in out_splits["done"]]
+    mask = [
+        torch.ones_like(_out[..., 0], dtype=torch.bool) for _out in out_splits["done"]
+    ]
     out_splits["mask"] = mask
     out_dict = {
         key: torch.nn.utils.rnn.pad_sequence(_o, batch_first=True)
         for key, _o in out_splits.items()
     }
+    out_dict["mask"] = out_dict["mask"]
     td = TensorDict(
         source=out_dict,
         device=rollout_tensordict.device,
-        batch_size=out_dict["mask"].shape[:-1],
+        batch_size=out_dict["mask"].shape,
     )
     td = td.unflatten_keys(sep)
     if (out_dict["done"].sum(1) > 1).any():

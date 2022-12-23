@@ -73,7 +73,7 @@ class DreamerModelLoss(LossModule):
             tensordict.get(("next", "prior_std")),
             tensordict.get(("next", "posterior_mean")),
             tensordict.get(("next", "posterior_std")),
-        )
+        ).unsqueeze(-1)
         reco_loss = distance_loss(
             tensordict.get(("next", "pixels")),
             tensordict.get(("next", "reco_pixels")),
@@ -81,7 +81,7 @@ class DreamerModelLoss(LossModule):
         )
         if not self.global_average:
             reco_loss = reco_loss.sum((-3, -2, -1))
-        reco_loss = reco_loss.mean()
+        reco_loss = reco_loss.mean().unsqueeze(-1)
 
         reward_loss = distance_loss(
             tensordict.get("true_reward"),
@@ -90,7 +90,8 @@ class DreamerModelLoss(LossModule):
         )
         if not self.global_average:
             reward_loss = reward_loss.squeeze(-1)
-        reward_loss = reward_loss.mean()
+        reward_loss = reward_loss.mean().unsqueeze(-1)
+        # import ipdb; ipdb.set_trace()
         return (
             TensorDict(
                 {

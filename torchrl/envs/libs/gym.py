@@ -15,9 +15,9 @@ from torchrl.data import (
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
-    UnboundedContinuousTensorSpec,
 )
 
 from ..._utils import implement_for
@@ -70,12 +70,15 @@ def _gym_to_torchrl_spec_transform(
     elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
         return MultOneHotDiscreteTensorSpec(spec.nvec, device=device)
     elif isinstance(spec, gym.spaces.Box):
+        shape = spec.shape
+        if not len(shape):
+            shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return NdBoundedTensorSpec(
             torch.tensor(spec.low, device=device, dtype=dtype),
             torch.tensor(spec.high, device=device, dtype=dtype),
-            torch.Size(spec.shape),
+            shape,
             dtype=dtype,
             device=device,
         )
@@ -257,17 +260,19 @@ class GymWrapper(GymLikeEnv):
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
-        self.observation_spec = _gym_to_torchrl_spec_transform(
+        observation_spec = _gym_to_torchrl_spec_transform(
             env.observation_space,
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
-        if not isinstance(self.observation_spec, CompositeSpec):
+        if not isinstance(observation_spec, CompositeSpec):
             if self.from_pixels:
-                self.observation_spec = CompositeSpec(pixels=self.observation_spec)
+                observation_spec = CompositeSpec(pixels=observation_spec)
             else:
-                self.observation_spec = CompositeSpec(observation=self.observation_spec)
-        self.reward_spec = UnboundedContinuousTensorSpec(
+                observation_spec = CompositeSpec(observation=observation_spec)
+        self.observation_spec = observation_spec
+        self.reward_spec = NdUnboundedContinuousTensorSpec(
+            shape=[1],
             device=self.device,
         )
 
