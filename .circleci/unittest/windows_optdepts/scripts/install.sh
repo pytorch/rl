@@ -37,8 +37,9 @@ printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 # conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
 "$this_dir/vc_env_helper.bat" pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 echo 'DEBUGGING AFTER TORCH INSTALL'
-python -c "import torch;print(torch.__version__)"
-python -c "from torch.distributed.rpc import TensorPipeRpcBackendOptions"
+"$this_dir/vc_env_helper.bat" python -c 'import torch; print(hasattr(torch._C, "_rpc_init"));print(torch._C._rpc_init());'
+# python -c "import torch;print(torch.__version__)"
+# python -c "from torch.distributed.rpc import TensorPipeRpcBackendOptions"
 
 
 torch_cuda=$(python -c "import torch; print(torch.cuda.is_available())")
@@ -57,7 +58,7 @@ fi
 # smoke test
 echo 'DEBUGGING AFTER TENSORDICT INSTALL'
 # "$this_dir/vc_env_helper.bat" python -c "import torch;print(torch.__version__)"
-"$this_dir/vc_env_helper.bat" python -c 'import torch; print(hasattr(torch._C, "_rpc_init"));print(torch._C._rpc_init());'
+
 # "$this_dir/vc_env_helper.bat"  python -c "from torch.distributed.rpc import TensorPipeRpcBackendOptions"
 
 
