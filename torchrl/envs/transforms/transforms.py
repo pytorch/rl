@@ -1950,7 +1950,7 @@ class FrameSkipTransform(Transform):
         parent = self.parent
         reward = tensordict.get("reward")
         for _ in range(self.frame_skip - 1):
-            parent._step(tensordict)
+            tensordict = parent._step(tensordict)
             reward = reward + tensordict.get("reward")
         tensordict.set("reward", reward)
         return tensordict

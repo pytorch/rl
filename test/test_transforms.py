@@ -547,6 +547,66 @@ class TestTransforms:
             for key in keys:
                 assert observation_spec[key].shape[-3] == expected_size
 
+    @pytest.mark.skipif(not _has_gym, reason="gym not installed")
+    @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
+    def test_frame_skip_transform_builtin(self, skip):
+        torch.manual_seed(0)
+        if skip < 0:
+            with pytest.raises(
+                ValueError,
+                match="frame_skip should have a value greater or equal to one",
+            ):
+                FrameSkipTransform(skip)
+            return
+        else:
+            fs = FrameSkipTransform(skip)
+        base_env = GymEnv("Pendulum-v1", frame_skip=skip)
+        tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
+        env = TransformedEnv(GymEnv("Pendulum-v1"), fs)
+        base_env.set_seed(0)
+        env.base_env.set_seed(0)
+        td1 = base_env.reset()
+        td2 = env.reset()
+        for key in td1.keys():
+            torch.testing.assert_close(td1[key], td2[key])
+        for i in range(10):
+            td1 = base_env.step(tensordicts[i].clone()).flatten_keys()
+            td2 = env.step(tensordicts[i].clone()).flatten_keys()
+            for key in td1.keys():
+                torch.testing.assert_close(td1[key], td2[key])
+
+    @pytest.mark.skipif(not _has_gym, reason="gym not installed")
+    @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
+    def test_frame_skip_transform_unroll(self, skip):
+        torch.manual_seed(0)
+        if skip < 0:
+            with pytest.raises(
+                ValueError,
+                match="frame_skip should have a value greater or equal to one",
+            ):
+                FrameSkipTransform(skip)
+            return
+        else:
+            fs = FrameSkipTransform(skip)
+        base_env = GymEnv("Pendulum-v1")
+        tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
+        env = TransformedEnv(GymEnv("Pendulum-v1"), fs)
+        base_env.set_seed(0)
+        env.base_env.set_seed(0)
+        td1 = base_env.reset()
+        td2 = env.reset()
+        for key in td1.keys():
+            torch.testing.assert_close(td1[key], td2[key])
+        for i in range(10):
+            r = 0.0
+            for _ in range(skip):
+                td1 = base_env.step(tensordicts[i].clone()).flatten_keys()
+                r = td1.get("reward") + r
+            td1.set("reward", r)
+            td2 = env.step(tensordicts[i].clone()).flatten_keys()
+            for key in td1.keys():
+                torch.testing.assert_close(td1[key], td2[key])
+
     @pytest.mark.parametrize("unsqueeze_dim", [1, -2])
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
