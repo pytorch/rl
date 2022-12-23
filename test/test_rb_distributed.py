@@ -82,7 +82,7 @@ def init_rpc(rank, name, world_size):
     rpc.init_rpc(
         name,
         rank=rank,
-        backend=rpc.BackendType.,
+        backend=rpc.BackendType.TENSORPIPE,
         rpc_backend_options=options,
         world_size=world_size,
     )
