@@ -1656,7 +1656,7 @@ class TestTransforms:
 
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
-    @pytest.mark.parametrize("max_steps", [None, 0, 5])
+    @pytest.mark.parametrize("max_steps", [None, 1, 5, 50])
     @pytest.mark.parametrize("reset_workers", [True, False])
     def test_step_counter(self, max_steps, device, batch, reset_workers):
         torch.manual_seed(0)

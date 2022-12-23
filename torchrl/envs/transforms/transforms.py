@@ -2483,16 +2483,18 @@ class StepCounter(Transform):
     """Counts the steps from a reset and sets the done state to True after a certain number of steps.
 
     Args:
-        max_steps (:obj:`int`, optional): the maximum number of steps to take before setting the done state to
-        True. If set to None (the default value), the environment will run indefinitely until the done state is manually
-        set by the user or by the environment itself. However, the step count will still be incremented on each call to
-        step().
+        max_steps (:obj:`int`, optional): a positive integer that indicates the maximum number of steps to take before
+        setting the done state to True. If set to None (the default value), the environment will run indefinitely until
+        the done state is manually set by the user or by the environment itself. However, the step count will still be
+        incremented on each call to step().
     """
 
     invertible = False
     inplace = True
 
     def __init__(self, max_steps: Optional[int] = None):
+        if max_steps is not None and max_steps < 1:
+            raise ValueError("max_steps should have a value greater or equal to one.")
         self.max_steps = max_steps
         super().__init__([])
 
@@ -2516,8 +2518,6 @@ class StepCounter(Transform):
                 ),
             ),
         )
-        if self.max_steps is not None and self.max_steps <= 0:
-            tensordict.fill_("done", True)
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
