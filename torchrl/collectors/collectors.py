@@ -648,7 +648,7 @@ class SyncDataCollector(_DataCollector):
 
         tensordict_out = []
         with set_exploration_mode(self.exploration_mode):
-            for _ in range(self.frames_per_batch):
+            for j in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
@@ -659,21 +659,24 @@ class SyncDataCollector(_DataCollector):
 
                 step_count = self._tensordict.get("step_count")
                 step_count += 1
-                tensordict_out.append(self._tensordict.clone(False))
+                # we must clone all the values, since the step / traj_id updates are done in-place
+                # tensordict_out.append(self._tensordict.clone(True))
+                self._tensordict_out[..., j] = self._tensordict
 
                 self._reset_if_necessary()
                 self._tensordict.update(step_mdp(self._tensordict), inplace=True)
 
             if self.return_in_place and len(self._tensordict_out.keys()) > 0:
-                tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))
-                for key in self._tensordict_out.keys():
-                    self._tensordict_out.set_(key, tensordict_out.get(key))
+                # tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))
+                # for key in self._tensordict_out.keys():
+                #     self._tensordict_out.set_(key, tensordict_out.get(key))
                 return self._tensordict_out
-        return torch.stack(
-            tensordict_out,
-            len(self.env.batch_size),
-            out=self._tensordict_out,
-        )  # dim 0 for single env, dim 1 for batch
+        return self._tensordict_out
+        # return torch.stack(
+        #     tensordict_out,
+        #     len(self.env.batch_size),
+        #     out=self._tensordict_out,
+        # )  # dim 0 for single env, dim 1 for batch
 
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
