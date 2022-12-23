@@ -283,9 +283,6 @@ class SyncDataCollector(_DataCollector):
             For long trajectories, it may be necessary to store the data on a different device than the one where
             the policy is stored.
             default = None
-        return_in_place (bool): if True, the collector will yield the same tensordict container with updated values
-            at each iteration.
-            default = False
         exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
             "mode" or "mean".
             default = "random"
@@ -363,7 +360,6 @@ class SyncDataCollector(_DataCollector):
         passing_device: DEVICE_TYPING = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
-        return_in_place: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         init_with_lag: bool = False,
         return_same_td: bool = False,
@@ -486,7 +482,6 @@ class SyncDataCollector(_DataCollector):
             ),
         )
 
-        self.return_in_place = return_in_place
         if split_trajs is None:
             if not self.reset_when_done:
                 split_trajs = False
@@ -497,12 +492,6 @@ class SyncDataCollector(_DataCollector):
                 "Cannot split trajectories when reset_when_done is False."
             )
         self.split_trajs = split_trajs
-        if self.return_in_place and self.split_trajs:
-            raise RuntimeError(
-                "the 'return_in_place' and 'split_trajs' argument are incompatible, but found to be both "
-                "True. split_trajs=True will cause the output tensordict to have an unpredictable output "
-                "shape, which prevents caching and overwriting the tensors."
-            )
         self._td_env = None
         self._td_policy = None
         self._has_been_done = None
@@ -560,7 +549,17 @@ class SyncDataCollector(_DataCollector):
             if self.return_same_td:
                 yield tensordict_out
             else:
-                yield tensordict_out.clone(False)
+                # we must clone the values, as the tensordict is updated in-place.
+                # otherwise the following code may break:
+                # >>> for i, data in enumerate(collector):
+                # >>>      if i == 0:
+                # >>>          data0 = data
+                # >>>      elif i == 1:
+                # >>>          data1 = data
+                # >>>      else:
+                # >>>          break
+                # >>> assert data0["done"] is not data1["done"]
+                yield tensordict_out.clone()
 
             del tensordict_out
             if self._frames >= self.total_frames:
@@ -666,17 +665,7 @@ class SyncDataCollector(_DataCollector):
                 self._reset_if_necessary()
                 self._tensordict.update(step_mdp(self._tensordict), inplace=True)
 
-            if self.return_in_place and len(self._tensordict_out.keys()) > 0:
-                # tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))
-                # for key in self._tensordict_out.keys():
-                #     self._tensordict_out.set_(key, tensordict_out.get(key))
-                return self._tensordict_out
         return self._tensordict_out
-        # return torch.stack(
-        #     tensordict_out,
-        #     len(self.env.batch_size),
-        #     out=self._tensordict_out,
-        # )  # dim 0 for single env, dim 1 for batch
 
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
@@ -1578,7 +1567,6 @@ def _main_async_collector(
         seed=seed,
         pin_memory=pin_memory,
         passing_device=passing_device,
-        return_in_place=True,
         init_with_lag=init_with_lag,
         exploration_mode=exploration_mode,
         reset_when_done=reset_when_done,
