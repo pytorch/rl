@@ -283,9 +283,6 @@ class SyncDataCollector(_DataCollector):
             For long trajectories, it may be necessary to store the data on a different device than the one where
             the policy is stored.
             default = None
-        return_in_place (bool): if True, the collector will yield the same tensordict container with updated values
-            at each iteration.
-            default = False
         exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
             "mode" or "mean".
             default = "random"
@@ -363,7 +360,6 @@ class SyncDataCollector(_DataCollector):
         passing_device: DEVICE_TYPING = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
-        return_in_place: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         init_with_lag: bool = False,
         return_same_td: bool = False,
@@ -486,7 +482,6 @@ class SyncDataCollector(_DataCollector):
             ),
         )
 
-        self.return_in_place = return_in_place
         if split_trajs is None:
             if not self.reset_when_done:
                 split_trajs = False
@@ -497,12 +492,6 @@ class SyncDataCollector(_DataCollector):
                 "Cannot split trajectories when reset_when_done is False."
             )
         self.split_trajs = split_trajs
-        if self.return_in_place and self.split_trajs:
-            raise RuntimeError(
-                "the 'return_in_place' and 'split_trajs' argument are incompatible, but found to be both "
-                "True. split_trajs=True will cause the output tensordict to have an unpredictable output "
-                "shape, which prevents caching and overwriting the tensors."
-            )
         self._td_env = None
         self._td_policy = None
         self._has_been_done = None
@@ -560,6 +549,16 @@ class SyncDataCollector(_DataCollector):
             if self.return_same_td:
                 yield tensordict_out
             else:
+                # we must clone the values, as the tensordict is updated in-place.
+                # otherwise the following code may break:
+                # >>> for i, data in enumerate(collector):
+                # >>>      if i == 0:
+                # >>>          data0 = data
+                # >>>      elif i == 1:
+                # >>>          data1 = data
+                # >>>      else:
+                # >>>          break
+                # >>> assert data0["done"] is not data1["done"]
                 yield tensordict_out.clone()
 
             del tensordict_out
@@ -646,9 +645,8 @@ class SyncDataCollector(_DataCollector):
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
         self._tensordict.set("traj_ids", torch.arange(n).view(self.env.batch_size[:1]))
 
-        tensordict_out = []
         with set_exploration_mode(self.exploration_mode):
-            for _ in range(self.frames_per_batch):
+            for j in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
@@ -659,19 +657,22 @@ class SyncDataCollector(_DataCollector):
 
                 step_count = self._tensordict.get("step_count")
                 step_count += 1
-                tensordict_out.append(self._tensordict.clone())
+                # we must clone all the values, since the step / traj_id updates are done in-place
+                try:
+                    self._tensordict_out[..., j] = self._tensordict
+                except RuntimeError:
+                    # unlock the output tensordict to allow for new keys to be written
+                    # these will be missed during the sync but at least we won't get an error during the update
+                    is_shared = self._tensordict_out.is_shared()
+                    self._tensordict_out.unlock()
+                    self._tensordict_out[..., j] = self._tensordict
+                    if is_shared:
+                        self._tensordict_out.share_memory_()
 
                 self._reset_if_necessary()
                 self._tensordict.update(step_mdp(self._tensordict), inplace=True)
-            if self.return_in_place and len(self._tensordict_out.keys()) > 0:
-                tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))
-                tensordict_out = tensordict_out.select(*self._tensordict_out.keys())
-                return self._tensordict_out.update_(tensordict_out)
-        return torch.stack(
-            tensordict_out,
-            len(self.env.batch_size),
-            out=self._tensordict_out,
-        )  # dim 0 for single env, dim 1 for batch
+
+        return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
@@ -1206,6 +1207,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
+        out_buffer = None
         while not all(dones) and frames < self.total_frames:
             _check_for_faulty_process(self.procs)
             if self.update_at_each_batch:
@@ -1251,24 +1253,31 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     else:
                         same_device = same_device and (item.device == prev_device)
             if same_device:
-                out = torch.cat(list(out_tensordicts_shared.values()), 0)
+                out_buffer = torch.cat(
+                    list(out_tensordicts_shared.values()), 0, out=out_buffer
+                )
             else:
-                out = torch.cat(
-                    [item.cpu() for item in out_tensordicts_shared.values()], 0
+                out_buffer = torch.cat(
+                    [item.cpu() for item in out_tensordicts_shared.values()],
+                    0,
+                    out=out_buffer,
                 )
 
             if self.split_trajs:
-                out = split_trajectories(out)
-                frames += out.get("mask").sum()
+                out = split_trajectories(out_buffer)
+                frames += out.get("mask").sum().item()
             else:
+                out = out_buffer.clone()
                 frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
-                out = out.exclude(*excluded_keys)
+                if excluded_keys:
+                    out = out.exclude(*excluded_keys)
             yield out
+            del out
 
         del out_tensordicts_shared
         # We shall not call shutdown just yet as user may want to retrieve state_dict
@@ -1569,7 +1578,6 @@ def _main_async_collector(
         seed=seed,
         pin_memory=pin_memory,
         passing_device=passing_device,
-        return_in_place=True,
         init_with_lag=init_with_lag,
         exploration_mode=exploration_mode,
         reset_when_done=reset_when_done,
