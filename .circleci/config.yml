@@ -906,7 +906,7 @@ jobs:
 
       - run:
           name: Setup
-          command: .circleci/unittest/windows/scripts/setup_env.sh
+          command: .circleci/unittest/windows_optdepts/scripts/setup_env.sh
       - save_cache:
 
           key: env-v1-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
