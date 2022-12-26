@@ -916,10 +916,10 @@ jobs:
             - env
       - run:
           name: Install CUDA
-          command: packaging/windows_optdepts/internal/cuda_install.bat
+          command: packaging/windows/internal/cuda_install.bat
       - run:
           name: Update CUDA driver
-          command: packaging/windows_optdepts/internal/driver_update.bat
+          command: packaging/windows/internal/driver_update.bat
       - run:
           name: Install torchrl
           command: .circleci/unittest/windows_optdepts/scripts/install.sh
