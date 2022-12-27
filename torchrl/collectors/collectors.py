@@ -1258,12 +1258,14 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 out_buffer = torch.cat(
                     list(out_tensordicts_shared.values()), 0, out=out_buffer
                 )
+                out_buffer = out_buffer.to(prev_device)
             else:
                 out_buffer = torch.cat(
                     [item.cpu() for item in out_tensordicts_shared.values()],
                     0,
                     out=out_buffer,
                 )
+                out_buffer = out_buffer.to(torch.device("cpu"))
 
             if self.split_trajs:
                 out = split_trajectories(out_buffer)

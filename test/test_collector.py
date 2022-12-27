@@ -1015,7 +1015,7 @@ def test_collector_device_combinations(device, passing_device):
         pin_memory=False,
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(passing_device) or batch["done"].device
+    assert batch.device == torch.device(passing_device)
     collector.shutdown()
 
     collector = MultiSyncDataCollector(
@@ -1038,7 +1038,7 @@ def test_collector_device_combinations(device, passing_device):
         pin_memory=False,
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(passing_device) or batch["done"].device
+    assert batch.device == torch.device(passing_device)
     collector.shutdown()
 
     collector = MultiaSyncDataCollector(
@@ -1061,7 +1061,7 @@ def test_collector_device_combinations(device, passing_device):
         pin_memory=False,
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(passing_device) or batch["done"].device
+    assert batch.device == torch.device(passing_device)
     collector.shutdown()
 
 
