@@ -470,7 +470,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def numel(self) -> int:
         return prod(self.batch_size)
 
-   def set_seed(self, seed: Optional[int] = None, static_seed: bool = False) -> Optional[int]:
+    def set_seed(self, seed: Optional[int] = None, static_seed: bool = False) -> Optional[int]:
         """Sets the seed of the environment and returns the next seed to be used (which is the input seed if a single environment is present).
 
         Args:
