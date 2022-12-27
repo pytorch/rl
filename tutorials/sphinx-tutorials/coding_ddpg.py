@@ -310,7 +310,7 @@ def make_ddpg_actor(
     # to the right space using a TanhDelta distribution.
     actor = ProbabilisticActor(
         module=actor_module,
-        dist_in_keys=["param"],
+        in_keys=["param"],
         spec=CompositeSpec(action=env_specs["action_spec"]),
         safe=True,
         distribution_class=TanhDelta,
@@ -643,7 +643,7 @@ for i, tensordict in enumerate(collector):
     if "mask" in tensordict.keys():
         # if multi-step, a mask is present to help filter padded values
         current_frames = tensordict["mask"].sum()
-        tensordict = tensordict[tensordict.get("mask").squeeze(-1)]
+        tensordict = tensordict[tensordict.get("mask")]
     else:
         tensordict = tensordict.view(-1)
         current_frames = tensordict.numel()

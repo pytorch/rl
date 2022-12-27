@@ -28,4 +28,3 @@ loss_function: smooth_l1
 batch_transform: 1
 entropy_coef: 0.1
 default_policy_scale: 1.0
-advantage_in_loss: 1

@@ -105,10 +105,7 @@ class SACLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
-            funs_to_decorate=[
-                "forward",
-                "get_dist",
-            ],
+            funs_to_decorate=["forward", "get_dist"],
         )
 
         # Value
@@ -180,23 +177,29 @@ class SACLoss(LossModule):
         )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        shape = None
         if tensordict.ndimension() > 1:
-            tensordict = tensordict.view(-1)
+            shape = tensordict.shape
+            tensordict_reshape = tensordict.reshape(-1)
+        else:
+            tensordict_reshape = tensordict
 
         device = self.device
-        td_device = tensordict.to(device)
+        td_device = tensordict_reshape.to(device)
 
         loss_actor = self._loss_actor(td_device)
         loss_qvalue, priority = self._loss_qvalue(td_device)
         loss_value = self._loss_value(td_device)
         loss_alpha = self._loss_alpha(td_device)
-        tensordict.set(self.priority_key, priority)
+        tensordict_reshape.set(self.priority_key, priority)
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_actor.shape != loss_value.shape
         ):
             raise RuntimeError(
                 f"Losses shape mismatch: {loss_actor.shape}, {loss_qvalue.shape} and {loss_value.shape}"
             )
+        if shape:
+            tensordict.update(tensordict_reshape.view(shape))
         return TensorDict(
             {
                 "loss_actor": loss_actor.mean(),
@@ -215,7 +218,7 @@ class SACLoss(LossModule):
             dist = self.actor_network.get_dist(
                 tensordict,
                 params=self.actor_network_params,
-            )[0]
+            )
             a_reparm = dist.rsample()
         # if not self.actor_network.spec.is_in(a_reparm):
         #     a_reparm.data.copy_(self.actor_network.spec.project(a_reparm.data))
@@ -295,7 +298,7 @@ class SACLoss(LossModule):
         )
         pred_val = td_copy.get("state_value").squeeze(-1)
 
-        action_dist, *_ = self.actor_network.get_dist(
+        action_dist = self.actor_network.get_dist(
             td_copy,
             params=self.target_actor_network_params,
         )  # resample an action

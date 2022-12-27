@@ -340,7 +340,6 @@ class DiscreteActionVecMockEnv(_MockEnv):
 
         if not self.categorical_action_encoding:
             assert (a.sum(-1) == 1).all()
-        assert not self.is_done, "trying to execute step in done env"
 
         obs = self._get_in_obs(tensordict.get(self._out_key)) + a / self.maxstep
         tensordict = tensordict.select()  # empty tensordict
@@ -423,7 +422,6 @@ class ContinuousActionVecMockEnv(_MockEnv):
         self.step_count += 1
         tensordict = tensordict.to(self.device)
         a = tensordict.get("action")
-        assert not self.is_done, "trying to execute step in done env"
 
         obs = self._obs_step(self._get_in_obs(tensordict.get(self._out_key)), a)
         tensordict = tensordict.select()  # empty tensordict

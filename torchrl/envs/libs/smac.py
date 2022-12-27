@@ -1,19 +1,20 @@
+from typing import Dict, Optional
+
 import numpy as np
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from typing import Dict, Optional
 
 from torchrl.data import (
     CompositeSpec,
+    CustomNdOneHotDiscreteTensorSpec,
     DEVICE_TYPING,
     DiscreteTensorSpec,
     NdBoundedTensorSpec,
-    CustomNdOneHotDiscreteTensorSpec,
     NdUnboundedContinuousTensorSpec,
-    UnboundedContinuousTensorSpec,
     NdUnboundedDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import GymLikeEnv
 
@@ -29,8 +30,8 @@ except ImportError as err:
 
 # TODO: discuss with Vincent if separation to ..Wrapper and ..Env classes makes sense here.
 class SC2Wrapper(GymLikeEnv):
-    """TODO: comments
-    """
+    """TODO: comments"""
+
     git_url = "https://github.com/oxwhirl/smac"
 
     def __init__(self, map_name: str = None, **kwargs):
@@ -46,7 +47,9 @@ class SC2Wrapper(GymLikeEnv):
         # TODO: verify that isn't required.
         pass
 
-    def _build_env(self, env, seed: Optional[int] = None, **kwargs) -> "smac.env.StarCraft2Env":
+    def _build_env(
+        self, env, seed: Optional[int] = None, **kwargs
+    ) -> "smac.env.StarCraft2Env":
         # TODO: if required
         # self.from_pixels = from_pixels
         # self.pixels_only = pixels_only
@@ -75,8 +78,7 @@ class SC2Wrapper(GymLikeEnv):
 
     def _make_input_spec(self, env: StarCraft2Env) -> TensorSpec:
         action_spec = CustomNdOneHotDiscreteTensorSpec(
-            torch.tensor(env.get_avail_actions()),
-            device=self.device
+            torch.tensor(env.get_avail_actions()), device=self.device
         )
         return CompositeSpec(action=action_spec)
 
@@ -136,8 +138,7 @@ class SC2Wrapper(GymLikeEnv):
 
 
 class SC2Env(SC2Wrapper):
-    """TODO: comments
-    """
+    """TODO: comments"""
 
     def __init__(self, map_name: str, seed: Optional[int] = None, **kwargs):
         kwargs["map_name"] = map_name

@@ -222,9 +222,23 @@ class TensorSpec:
             ):
                 val = val.copy()
             val = torch.tensor(val, dtype=self.dtype, device=self.device)
+            if val.shape[-len(self.shape) :] != self.shape:
+                # option 1: add a singleton dim at the end
+                if self.shape == torch.Size([1]):
+                    val = val.unsqueeze(-1)
+                else:
+                    raise RuntimeError(
+                        f"Shape mismatch: the value has shape {val.shape} which "
+                        f"is incompatible with the spec shape {self.shape}."
+                    )
         if not _NO_CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val
+
+    def __setattr__(self, key, value):
+        if key == "shape":
+            value = torch.Size(value)
+        super().__setattr__(key, value)
 
     def to_numpy(self, val: torch.Tensor, safe: bool = True) -> np.ndarray:
         """Returns the np.ndarray correspondent of an input tensor.
@@ -433,7 +447,9 @@ class BoundedTensorSpec(TensorSpec):
             return out
         else:
             interval = self.space.maximum - self.space.minimum
-            r = torch.rand(*shape, *interval.shape, device=interval.device)
+            r = torch.rand(
+                torch.Size([*shape, *interval.shape]), device=interval.device
+            )
             r = interval * r
             r = self.space.minimum + r
             r = r.to(self.dtype).to(self.device)
@@ -445,6 +461,11 @@ class BoundedTensorSpec(TensorSpec):
         try:
             val = val.clamp_(minimum.item(), maximum.item())
         except ValueError:
+            minimum = minimum.expand_as(val)
+            maximum = maximum.expand_as(val)
+            val[val < minimum] = minimum[val < minimum]
+            val[val > maximum] = maximum[val > maximum]
+        except RuntimeError:
             minimum = minimum.expand_as(val)
             maximum = maximum.expand_as(val)
             val[val < minimum] = minimum[val < minimum]
@@ -514,7 +535,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         return torch.nn.functional.gumbel_softmax(
-            torch.rand(*shape, self.space.n, device=self.device),
+            torch.rand(torch.Size([*shape, self.space.n]), device=self.device),
             hard=True,
             dim=-1,
         ).to(torch.long)
@@ -738,7 +759,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         interval = self.space.maximum - self.space.minimum
-        r = torch.rand(*shape, *interval.shape, device=interval.device)
+        r = torch.rand(torch.Size([*shape, *interval.shape]), device=interval.device)
         r = r * interval
         r = self.space.minimum + r
         r = r.to(self.dtype)
@@ -1107,7 +1128,7 @@ class DiscreteTensorSpec(TensorSpec):
         dtype: Optional[Union[str, torch.dtype]] = torch.long,
     ):
         if shape is None:
-            shape = torch.Size((1,))
+            shape = torch.Size([])
         dtype, device = _default_dtype_and_device(dtype, device)
         space = DiscreteBox(n)
         super().__init__(shape, space, device, dtype, domain="discrete")
@@ -1142,7 +1163,7 @@ class DiscreteTensorSpec(TensorSpec):
         )
 
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
-        return super().to_numpy(val, safe).squeeze(-1)
+        return super().to_numpy(val, safe)
 
 
 class CompositeSpec(TensorSpec):

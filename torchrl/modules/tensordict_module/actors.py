@@ -12,7 +12,10 @@ from torch import nn
 from torchrl.data import CompositeSpec, TensorSpec, UnboundedContinuousTensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
-from torchrl.modules.tensordict_module.probabilistic import SafeProbabilisticModule
+from torchrl.modules.tensordict_module.probabilistic import (
+    SafeProbabilisticModule,
+    SafeProbabilisticSequential,
+)
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 
@@ -68,7 +71,7 @@ class Actor(SafeModule):
         )
 
 
-class ProbabilisticActor(SafeProbabilisticModule):
+class ProbabilisticActor(SafeProbabilisticSequential):
     """General class for probabilistic actors in RL.
 
     The Actor class comes with default values for the out_keys (["action"])
@@ -85,7 +88,6 @@ class ProbabilisticActor(SafeProbabilisticModule):
         >>> action_spec = NdBoundedTensorSpec(shape=torch.Size([4]),
         ...    minimum=-1, maximum=1)
         >>> module = NormalParamWrapper(torch.nn.Linear(4, 8))
-        >>> params = make_functional(module)
         >>> tensordict_module = SafeModule(module, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> td_module = ProbabilisticActor(
         ...    module=tensordict_module,
@@ -93,6 +95,7 @@ class ProbabilisticActor(SafeProbabilisticModule):
         ...    dist_in_keys=["loc", "scale"],
         ...    distribution_class=TanhNormal,
         ...    )
+        >>> params = make_functional(td_module)
         >>> td = td_module(td, params=params)
         >>> td
         TensorDict(
@@ -110,26 +113,25 @@ class ProbabilisticActor(SafeProbabilisticModule):
     def __init__(
         self,
         module: SafeModule,
-        dist_in_keys: Union[str, Sequence[str]],
-        sample_out_key: Optional[Sequence[str]] = None,
+        in_keys: Union[str, Sequence[str]],
+        out_keys: Optional[Sequence[str]] = None,
         spec: Optional[TensorSpec] = None,
         **kwargs,
     ):
-        if sample_out_key is None:
-            sample_out_key = ["action"]
+        if out_keys is None:
+            out_keys = ["action"]
         if (
-            "action" in sample_out_key
+            "action" in out_keys
             and spec is not None
             and not isinstance(spec, CompositeSpec)
         ):
             spec = CompositeSpec(action=spec)
 
         super().__init__(
-            module=module,
-            dist_in_keys=dist_in_keys,
-            sample_out_key=sample_out_key,
-            spec=spec,
-            **kwargs,
+            module,
+            SafeProbabilisticModule(
+                in_keys=in_keys, out_keys=out_keys, spec=spec, **kwargs
+            ),
         )
 
 
@@ -652,6 +654,8 @@ class ActorValueOperator(SafeSequential):
 
     def get_policy_operator(self) -> SafeSequential:
         """Returns a stand-alone policy operator that maps an observation to an action."""
+        if isinstance(self.module[1], SafeProbabilisticSequential):
+            return SafeProbabilisticSequential(self.module[0], *self.module[1].module)
         return SafeSequential(self.module[0], self.module[1])
 
     def get_value_operator(self) -> SafeSequential:

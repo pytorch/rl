@@ -20,7 +20,11 @@ from torchrl.data.replay_buffers import (
     TensorDictPrioritizedReplayBuffer,
     writers,
 )
-from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
+from torchrl.data.replay_buffers.samplers import (
+    PrioritizedSampler,
+    RandomSampler,
+    SamplerWithoutReplacement,
+)
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -794,6 +798,39 @@ def test_smoke_replay_buffer_transform_no_inkeys(transform):
     rb._transform = mock.MagicMock()
     rb.sample(1)
     assert rb._transform.called
+
+
+@pytest.mark.parametrize("size", [10, 15, 20])
+@pytest.mark.parametrize("samples", [5, 9, 11, 14, 16])
+@pytest.mark.parametrize("drop_last", [True, False])
+def test_samplerwithoutrep(size, samples, drop_last):
+    torch.manual_seed(0)
+    storage = ListStorage(size)
+    storage.set(range(size), range(size))
+    assert len(storage) == size
+    sampler = SamplerWithoutReplacement(drop_last=drop_last)
+    visited = False
+    for _ in range(10):
+        _n_left = (
+            sampler._sample_list.numel() if sampler._sample_list is not None else size
+        )
+        if samples > size and drop_last:
+            with pytest.raises(
+                ValueError,
+                match=r"The batch size .* is greater than the storage capacity",
+            ):
+                idx, _ = sampler.sample(storage, samples)
+            break
+        idx, _ = sampler.sample(storage, samples)
+        assert idx.numel() == samples
+        if drop_last or _n_left >= samples:
+            assert idx.unique().numel() == idx.numel()
+        else:
+            visited = True
+    if not drop_last and (size % samples > 0):
+        assert visited
+    else:
+        assert not visited
 
 
 if __name__ == "__main__":

@@ -189,7 +189,10 @@ result_td = functorch.vmap(model, (None, 0))(tensordict, params)
 print("the output tensordict shape is: ", result_td.shape)
 
 
-from tensordict.nn import ProbabilisticTensorDictModule
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+)
 
 ###############################################################################
 # Do's and don't with TensorDictModule
@@ -207,37 +210,40 @@ from tensordict.nn import ProbabilisticTensorDictModule
 #
 # ``ProbabilisticTensorDictModule``
 # ----------------------------------
-# ``ProbabilisticTensorDictModule`` is a special case of a ``TensorDictModule``
-# where the output is sampled given some rule, specified by the input
-# ``default_interaction_mode`` argument and the ``exploration_mode()``
-# global function. If they conflict, the context manager precedes.
+# ``ProbabilisticTensorDictModule`` is a non-parametric module representing a
+# probability distribution. Distribution parameters are read from tensordict
+# input, and the output is written to an output tensordict. The output is
+# sampled given some rule, specified by the input ``default_interaction_mode``
+# argument and the ``exploration_mode()`` global function. If they conflict,
+# the context manager precedes.
 #
-# It consists in a wrapper around another ``TensorDictModule`` that returns
-# a tensordict updated with the distribution parameters.
+# It can be wired together with a ``TensorDictModule`` that returns
+# a tensordict updated with the distribution parameters using
+# ``ProbabilisticTensorDictSequential``. This is a special case of
+# ``TensorDictSequential`` that terminates in a
+# ``ProbabilisticTensorDictModule``.
 #
 # ``ProbabilisticTensorDictModule`` is responsible for constructing the
 # distribution (through the ``get_dist()`` method) and/or sampling from this
-# distribution (through a regular ``__call__()`` to the module).
+# distribution (through a regular ``__call__()`` to the module). The same
+# ``get_dist()`` method is exposed on ``ProbabilisticTensorDictSequential.
 #
 # One can find the parameters in the output tensordict as well as the log
 # probability if needed.
 
 from torchrl.modules import NormalParamWrapper, TanhNormal
 
-td = TensorDict(
-    {"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)},
-    [
-        3,
-    ],
-)
+td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3])
 net = NormalParamWrapper(torch.nn.GRUCell(4, 8))
 module = TensorDictModule(net, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
-td_module = ProbabilisticTensorDictModule(
-    module=module,
-    dist_in_keys=["loc", "scale"],
-    sample_out_key=["action"],
-    distribution_class=TanhNormal,
-    return_log_prob=True,
+td_module = ProbabilisticTensorDictSequential(
+    module,
+    ProbabilisticTensorDictModule(
+        in_keys=["loc", "scale"],
+        out_keys=["action"],
+        distribution_class=TanhNormal,
+        return_log_prob=True,
+    ),
 )
 print(f"TensorDict before going through module: {td}")
 td_module(td)
@@ -284,8 +290,8 @@ module_action = TensorDictModule(
 )
 td_module_action = ProbabilisticActor(
     module=module_action,
-    dist_in_keys=["loc", "scale"],
-    sample_out_key=["action"],
+    in_keys=["loc", "scale"],
+    out_keys=["action"],
     distribution_class=TanhNormal,
     return_log_prob=True,
 )
@@ -296,12 +302,7 @@ td_module_value = ValueOperator(
     out_keys=["state_action_value"],
 )
 td_module = ActorCriticOperator(td_module_hidden, td_module_action, td_module_value)
-td = TensorDict(
-    {"observation": torch.randn(3, 4)},
-    [
-        3,
-    ],
-)
+td = TensorDict({"observation": torch.randn(3, 4)}, [3])
 print(td)
 td_clone = td_module(td.clone())
 print(td_clone)
