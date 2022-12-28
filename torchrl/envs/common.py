@@ -14,12 +14,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
-
 from torchrl.data import CompositeSpec, TensorSpec
 
+from .utils import get_available_libraries, step_mdp
 from .._utils import prod, seed_generator
 from ..data.utils import DEVICE_TYPING
-from .utils import get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
 
@@ -470,7 +469,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def numel(self) -> int:
         return prod(self.batch_size)
 
-    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+    def set_seed(
+        self, seed: Optional[int] = None, static_seed: bool = False
+    ) -> Optional[int]:
         """Sets the seed of the environment and returns the next seed to be used (which is the input seed if a single environment is present).
 
         Args:
@@ -820,21 +821,6 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
             self._env.close()
         except AttributeError:
             pass
-
-    def set_seed(
-        self, seed: Optional[int] = None, static_seed: bool = False
-    ) -> Optional[int]:
-        if seed is not None:
-            torch.manual_seed(seed)
-        self._set_seed(seed)
-        if seed is not None and not static_seed:
-            new_seed = seed_generator(seed)
-            seed = new_seed
-        return seed
-
-    @abc.abstractmethod
-    def _set_seed(self, seed: Optional[int]):
-        raise NotImplementedError
 
 
 def make_tensordict(
