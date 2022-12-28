@@ -7,7 +7,6 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
-from torchrl._utils import seed_generator
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -85,12 +84,9 @@ class _MockEnv(EnvBase):
     def maxstep(self):
         return 100
 
-    def set_seed(self, seed: int, static_seed=False) -> int:
+    def _set_seed(self, seed: Optional[int]):
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
-        if static_seed:
-            return seed
-        return seed_generator(seed)
 
     def custom_fun(self):
         return 0
@@ -136,14 +132,11 @@ class MockSerialEnv(EnvBase):
         super(MockSerialEnv, self).__init__(device=device)
         self.is_closed = False
 
-    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+    def _set_seed(self, seed: Optional[int]):
         assert seed >= 1
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
         self.max_val = max(self.counter + 100, self.counter * 2)
-        if static_seed:
-            return seed
-        return seed_generator(seed)
 
     def _step(self, tensordict):
         self.counter += 1
@@ -207,8 +200,13 @@ class MockBatchedLockedEnv(EnvBase):
         super(MockBatchedLockedEnv, self).__init__(device=device, batch_size=batch_size)
         self.counter = 0
 
-    set_seed = MockSerialEnv.set_seed
     rand_step = MockSerialEnv.rand_step
+
+    def _set_seed(self, seed: Optional[int]):
+        assert seed >= 1
+        self.seed = seed
+        self.counter = seed % 17  # make counter a small number
+        self.max_val = max(self.counter + 100, self.counter * 2)
 
     def _step(self, tensordict):
         self.counter += 1

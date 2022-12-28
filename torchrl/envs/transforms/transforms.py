@@ -453,9 +453,15 @@ but got an object of type {type(transform)}."""
 
         return tensordict_out
 
-    def set_seed(self, seed: int, static_seed: bool = False) -> int:
-        """Set the seeds of the environment."""
+    def set_seed(
+        self, seed: Optional[int] = None, static_seed: bool = False
+    ) -> Optional[int]:
+        # This method is not used in transformed environments
         return self.base_env.set_seed(seed, static_seed=static_seed)
+
+    def _set_seed(self, seed: Optional[int]):
+        # This method is not used in transformed envs
+        return
 
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         if tensordict is not None:
