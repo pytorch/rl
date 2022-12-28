@@ -46,19 +46,10 @@ class RoundRobinWriter(Writer):
         if cur_size + batch_size <= self._storage.max_size:
             index = np.arange(cur_size, cur_size + batch_size)
             self._cursor = (self._cursor + batch_size) % self._storage.max_size
-        elif cur_size < self._storage.max_size:
+        else:
             d = self._storage.max_size - cur_size
             index = np.empty(batch_size, dtype=np.int64)
             index[:d] = np.arange(cur_size, self._storage.max_size)
-            index[d:] = np.arange(batch_size - d)
-            self._cursor = batch_size - d
-        elif self._cursor + batch_size <= self._storage.max_size:
-            index = np.arange(self._cursor, self._cursor + batch_size)
-            self._cursor = (self._cursor + batch_size) % self._storage.max_size
-        else:
-            d = self._storage.max_size - self._cursor
-            index = np.empty(batch_size, dtype=np.int64)
-            index[:d] = np.arange(self._cursor, self._storage.max_size)
             index[d:] = np.arange(batch_size - d)
             self._cursor = batch_size - d
         # storage must convert the data to the appropriate format if needed

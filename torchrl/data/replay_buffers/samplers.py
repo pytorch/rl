@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Union, Tuple
+from typing import Any, Tuple, Union
 
 import numpy as np
 import torch
@@ -10,8 +10,9 @@ from torchrl._torchrl import (
     SumSegmentTreeFp32,
     SumSegmentTreeFp64,
 )
+
 from .storages import Storage
-from .utils import INT_CLASSES, _to_numpy
+from .utils import _to_numpy, INT_CLASSES
 
 
 class Sampler(ABC):
@@ -22,18 +23,18 @@ class Sampler(ABC):
         raise NotImplementedError
 
     def add(self, index: int) -> None:
-        pass
+        return
 
     def extend(self, index: torch.Tensor) -> None:
-        pass
+        return
 
     def update_priority(
         self, index: Union[int, torch.Tensor], priority: Union[float, torch.Tensor]
     ) -> dict:
-        pass
+        return
 
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
-        pass
+        return
 
     @property
     def default_priority(self) -> float:
@@ -43,8 +44,68 @@ class Sampler(ABC):
 class RandomSampler(Sampler):
     """A uniformly random sampler for composable replay buffers."""
 
-    def sample(self, storage: Storage, batch_size: int) -> Tuple[np.array, dict]:
-        index = np.random.randint(0, len(storage), size=batch_size)
+    def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
+        index = torch.randint(0, len(storage), (batch_size,))
+        return index, {}
+
+
+class SamplerWithoutReplacement(Sampler):
+    """A data-consuming sampler that ensures that the same sample is not present in consecutive batches.
+
+    Args:
+        drop_last (bool, optional): if True, the last incomplete sample (if any) will be dropped.
+            If False, this last sample will be kept and (unlike with torch dataloaders)
+            completed with other samples from a fresh indices permutation.
+
+    *Caution*: If the size of the storage changes in between two calls, the samples will be re-shuffled
+    (as we can't generally keep track of which samples have been sampled before and which haven't).
+
+    Similarly, it is expected that the storage content remains the same in between two calls,
+    but this is not enforced.
+
+    When the sampler reaches the end of the list of available indices, a new sample order
+    will be generated and the resulting indices will be completed with this new draw, which
+    can lead to duplicated indices, unless the :obj:`drop_last` argument is set to :obj:`True`.
+
+    """
+
+    def __init__(self, drop_last: bool = False):
+        self._sample_list = None
+        self.len_storage = 0
+        self.drop_last = drop_last
+
+    def _single_sample(self, len_storage, batch_size):
+        index = self._sample_list[:batch_size]
+        self._sample_list = self._sample_list[batch_size:]
+        if not self._sample_list.numel():
+            self._sample_list = torch.randperm(len_storage)
+        return index
+
+    def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
+        len_storage = len(storage)
+        if not len_storage:
+            raise RuntimeError("An empty storage was passed")
+        if self.len_storage != len_storage or self._sample_list is None:
+            self._sample_list = torch.randperm(len_storage)
+        if len_storage < batch_size and self.drop_last:
+            raise ValueError(
+                f"The batch size ({batch_size}) is greater than the storage capacity ({len_storage}). "
+                "This makes it impossible to return a sample without repeating indices. "
+                "Consider changing the sampler class or turn the 'drop_last' argument to False."
+            )
+        self.len_storage = len_storage
+        index = self._single_sample(len_storage, batch_size)
+        while index.numel() < batch_size:
+            if self.drop_last:
+                index = self._single_sample(len_storage, batch_size)
+            else:
+                index = torch.cat(
+                    [
+                        index,
+                        self._single_sample(len_storage, batch_size - index.numel()),
+                    ],
+                    0,
+                )
         return index, {}
 
 

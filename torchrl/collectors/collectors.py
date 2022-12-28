@@ -12,24 +12,25 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from textwrap import indent
-from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Dict
+from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.nn import TensorDictModule
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
+from torchrl._utils import _check_for_faulty_process, prod
+from torchrl.collectors.utils import split_trajectories
+from torchrl.data import TensorSpec
+from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
+from torchrl.envs.common import EnvBase
+
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
-from .._utils import _check_for_faulty_process, prod
-from ..data import TensorSpec
-from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
-from ..envs.common import EnvBase
-from ..envs.vec_env import _BatchedEnv
-from ..modules.tensordict_module import ProbabilisticTensorDictModule, TensorDictModule
-from .utils import split_trajectories
+from torchrl.envs.vec_env import _BatchedEnv
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
@@ -115,15 +116,13 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         self,
         policy: Optional[
             Union[
-                ProbabilisticTensorDictModule,
+                TensorDictModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
         ] = None,
         device: Optional[DEVICE_TYPING] = None,
         observation_spec: TensorSpec = None,
-    ) -> Tuple[
-        ProbabilisticTensorDictModule, torch.device, Union[None, Callable[[], dict]]
-    ]:
+    ) -> Tuple[TensorDictModule, torch.device, Union[None, Callable[[], dict]]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
 
         From a policy and a device, assigns the self.device attribute to
@@ -134,7 +133,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             create_env_fn (Callable or list of callables): an env creator
                 function (or a list of creators)
             create_env_kwargs (dictionary): kwargs for the env creator
-            policy (ProbabilisticTensorDictModule, optional): a policy to be used
+            policy (TensorDictModule, optional): a policy to be used
             device (int, str or torch.device, optional): device where to place
                 the policy
             observation_spec (TensorSpec, optional): spec of the observations
@@ -142,7 +141,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         # if create_env_fn is not None:
         #     if create_env_kwargs is None:
-        #         create_env_kwargs = dict()
+        #         create_env_kwargs = {}
         #     self.create_env_fn = create_env_fn
         #     if isinstance(create_env_fn, EnvBase):
         #         env = create_env_fn
@@ -284,9 +283,6 @@ class SyncDataCollector(_DataCollector):
             For long trajectories, it may be necessary to store the data on a different device than the one where
             the policy is stored.
             default = None
-        return_in_place (bool): if True, the collector will yield the same tensordict container with updated values
-            at each iteration.
-            default = False
         exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
             "mode" or "mean".
             default = "random"
@@ -297,6 +293,48 @@ class SyncDataCollector(_DataCollector):
             updated. This feature should be used cautiously: if the same tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
             Default is False.
+
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torch import nn
+        >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+        >>> collector = SyncDataCollector(
+        ...     create_env_fn=env_maker,
+        ...     policy=policy,
+        ...     total_frames=2000,
+        ...     max_frames_per_traj=50,
+        ...     frames_per_batch=200,
+        ...     init_random_frames=-1,
+        ...     reset_at_each_iter=False,
+        ...     device="cpu",
+        ...     passing_device="cpu",
+        ... )
+        >>> for i, data in enumerate(collector):
+        ...     if i == 2:
+        ...         print(data)
+        ...         break
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                done: Tensor(torch.Size([4, 50, 1]), dtype=torch.bool),
+                mask: Tensor(torch.Size([4, 50, 1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([4, 50, 3]), dtype=torch.float32)},
+                    batch_size=torch.Size([4, 50]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([4, 50, 3]), dtype=torch.float32),
+                reward: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                step_count: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                traj_ids: Tensor(torch.Size([4, 50, 1, 1]), dtype=torch.float32)},
+            batch_size=torch.Size([4, 50]),
+            device=cpu,
+            is_shared=False)
+        >>> del collector
+
     """
 
     def __init__(
@@ -306,7 +344,7 @@ class SyncDataCollector(_DataCollector):
         ],  # noqa: F821
         policy: Optional[
             Union[
-                ProbabilisticTensorDictModule,
+                TensorDictModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
         ] = None,
@@ -322,7 +360,6 @@ class SyncDataCollector(_DataCollector):
         passing_device: DEVICE_TYPING = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
-        return_in_place: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         init_with_lag: bool = False,
         return_same_td: bool = False,
@@ -391,7 +428,8 @@ class SyncDataCollector(_DataCollector):
 
         self._tensordict = env.reset()
         self._tensordict.set(
-            "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
+            "step_count",
+            torch.zeros(self.env.batch_size, dtype=torch.int, device=env.device),
         )
 
         if (
@@ -425,20 +463,25 @@ class SyncDataCollector(_DataCollector):
                 .to_tensordict()
                 .zero_()
             )
-
         # in addition to outputs of the policy, we add traj_ids and step_count to
         # _tensordict_out which will be collected during rollout
-        if len(self.env.batch_size):
-            traj_ids = torch.zeros(*self._tensordict_out.batch_size, 1)
-        else:
-            traj_ids = torch.zeros(*self._tensordict_out.batch_size, 1, 1)
-
-        self._tensordict_out.set("traj_ids", traj_ids)
         self._tensordict_out.set(
-            "step_count", torch.zeros(*self._tensordict_out.batch_size, 1)
+            "traj_ids",
+            torch.zeros(
+                *self._tensordict_out.batch_size,
+                dtype=torch.int64,
+                device=self.env_device,
+            ),
+        )
+        self._tensordict_out.set(
+            "step_count",
+            torch.zeros(
+                *self._tensordict_out.batch_size,
+                dtype=torch.int64,
+                device=self.env_device,
+            ),
         )
 
-        self.return_in_place = return_in_place
         if split_trajs is None:
             if not self.reset_when_done:
                 split_trajs = False
@@ -449,12 +492,6 @@ class SyncDataCollector(_DataCollector):
                 "Cannot split trajectories when reset_when_done is False."
             )
         self.split_trajs = split_trajs
-        if self.return_in_place and self.split_trajs:
-            raise RuntimeError(
-                "the 'return_in_place' and 'split_trajs' argument are incompatible, but found to be both "
-                "True. split_trajs=True will cause the output tensordict to have an unpredictable output "
-                "shape, which prevents caching and overwriting the tensors."
-            )
         self._td_env = None
         self._td_policy = None
         self._has_been_done = None
@@ -473,8 +510,10 @@ class SyncDataCollector(_DataCollector):
             seed will be incremented for each of these. The resulting seed is the seed of the last environment.
 
         Examples:
+            >>> from torchrl.envs import ParallelEnv
+            >>> from torchrl.envs.libs.gym import GymEnv
             >>> env_fn = lambda: GymEnv("Pendulum-v1")
-            >>> env_fn_parallel = lambda: ParallelEnv(6, env_fn)
+            >>> env_fn_parallel = ParallelEnv(6, env_fn)
             >>> collector = SyncDataCollector(env_fn_parallel)
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
@@ -510,6 +549,16 @@ class SyncDataCollector(_DataCollector):
             if self.return_same_td:
                 yield tensordict_out
             else:
+                # we must clone the values, as the tensordict is updated in-place.
+                # otherwise the following code may break:
+                # >>> for i, data in enumerate(collector):
+                # >>>      if i == 0:
+                # >>>          data0 = data
+                # >>>      elif i == 1:
+                # >>>          data1 = data
+                # >>>      else:
+                # >>>          break
+                # >>> assert data0["done"] is not data1["done"]
                 yield tensordict_out.clone()
 
             del tensordict_out
@@ -547,7 +596,7 @@ class SyncDataCollector(_DataCollector):
         if not self.reset_when_done:
             done = torch.zeros_like(done)
         steps = self._tensordict.get("step_count")
-        done_or_terminated = done | (steps == self.max_frames_per_traj)
+        done_or_terminated = done.squeeze(-1) | (steps == self.max_frames_per_traj)
         if self._has_been_done is None:
             self._has_been_done = done_or_terminated
         else:
@@ -562,7 +611,7 @@ class SyncDataCollector(_DataCollector):
             traj_ids = self._tensordict.get("traj_ids").clone()
             steps = steps.clone()
             if len(self.env.batch_size):
-                self._tensordict.masked_fill_(done_or_terminated.squeeze(-1), 0)
+                self._tensordict.masked_fill_(done_or_terminated, 0)
                 self._tensordict.set("reset_workers", done_or_terminated)
             else:
                 self._tensordict.zero_()
@@ -578,8 +627,8 @@ class SyncDataCollector(_DataCollector):
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
             steps[done_or_terminated] = 0
-            self._tensordict.set("traj_ids", traj_ids)  # no ops if they already match
-            self._tensordict.set("step_count", steps)
+            self._tensordict.set_("traj_ids", traj_ids)  # no ops if they already match
+            self._tensordict.set_("step_count", steps)
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
@@ -594,11 +643,10 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.fill_("step_count", 0)
 
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
-        self._tensordict.set("traj_ids", torch.arange(n).unsqueeze(-1))
+        self._tensordict.set("traj_ids", torch.arange(n).view(self.env.batch_size[:1]))
 
-        tensordict_out = []
         with set_exploration_mode(self.exploration_mode):
-            for _ in range(self.frames_per_batch):
+            for j in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
@@ -609,19 +657,22 @@ class SyncDataCollector(_DataCollector):
 
                 step_count = self._tensordict.get("step_count")
                 step_count += 1
-                tensordict_out.append(self._tensordict.clone())
+                # we must clone all the values, since the step / traj_id updates are done in-place
+                try:
+                    self._tensordict_out[..., j] = self._tensordict
+                except RuntimeError:
+                    # unlock the output tensordict to allow for new keys to be written
+                    # these will be missed during the sync but at least we won't get an error during the update
+                    is_shared = self._tensordict_out.is_shared()
+                    self._tensordict_out.unlock()
+                    self._tensordict_out[..., j] = self._tensordict
+                    if is_shared:
+                        self._tensordict_out.share_memory_()
 
                 self._reset_if_necessary()
                 self._tensordict.update(step_mdp(self._tensordict), inplace=True)
-            if self.return_in_place and len(self._tensordict_out.keys()) > 0:
-                tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))
-                tensordict_out = tensordict_out.select(*self._tensordict_out.keys())
-                return self._tensordict_out.update_(tensordict_out)
-        return torch.stack(
-            tensordict_out,
-            len(self.env.batch_size),
-            out=self._tensordict_out,
-        )  # dim 0 for single env, dim 1 for batch
+
+        return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
@@ -631,7 +682,6 @@ class SyncDataCollector(_DataCollector):
                 raise RuntimeError("resetting unique env with index is not permitted.")
             reset_workers = torch.zeros(
                 *self.env.batch_size,
-                1,
                 dtype=torch.bool,
                 device=self.env.device,
             )
@@ -719,14 +769,14 @@ class _MultiDataCollector(_DataCollector):
 
     Args:
         create_env_fn (list of Callabled): list of Callables, each returning an instance of EnvBase
-        policy (Callable, optional): Instance of ProbabilisticTensorDictModule class.
+        policy (Callable, optional): Instance of TensorDictModule class.
             Must accept TensorDictBase object as input.
         total_frames (int): lower bound of the total number of frames returned by the collector. In parallel settings,
             the actual number of frames may well be greater than this as the closing signals are sent to the
             workers only once the total number of frames has been collected on the server.
         create_env_kwargs (dict, optional): A (list of) dictionaries with the arguments used to create an environment
         max_frames_per_traj: Maximum steps per trajectory. Note that a trajectory can span over multiple batches
-            (unless reset_at_each_iter is set to True, see below). Once a trajectory reaches n_steps_max,
+            (unless reset_at_each_iter is set to True, see below). Once a traje tory reaches n_steps_max,
             the environment is reset. If the environment wraps multiple environments together, the number of steps
             is tracked for each environment independently. Negative values are allowed, in which case this argument
             is ignored.
@@ -778,7 +828,7 @@ class _MultiDataCollector(_DataCollector):
         create_env_fn: Sequence[Callable[[], EnvBase]],
         policy: Optional[
             Union[
-                ProbabilisticTensorDictModule,
+                TensorDictModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
         ] = None,
@@ -1096,6 +1146,48 @@ class MultiSyncDataCollector(_MultiDataCollector):
     trajectory and the start of the next collection.
     This class can be safely used with online RL algorithms.
 
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torch import nn
+        >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+        >>> collector = MultiSyncDataCollector(
+        ...     create_env_fn=[env_maker, env_maker],
+        ...     policy=policy,
+        ...     total_frames=2000,
+        ...     max_frames_per_traj=50,
+        ...     frames_per_batch=200,
+        ...     init_random_frames=-1,
+        ...     reset_at_each_iter=False,
+        ...     devices="cpu",
+        ...     passing_devices="cpu",
+        ... )
+        >>> for i, data in enumerate(collector):
+        ...     if i == 2:
+        ...         print(data)
+        ...         break
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                done: Tensor(torch.Size([4, 50, 1]), dtype=torch.bool),
+                mask: Tensor(torch.Size([4, 50, 1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([4, 50, 3]), dtype=torch.float32)},
+                    batch_size=torch.Size([4, 50]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([4, 50, 3]), dtype=torch.float32),
+                reward: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                step_count: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                traj_ids: Tensor(torch.Size([4, 50, 1, 1]), dtype=torch.float32)},
+            batch_size=torch.Size([4, 50]),
+            device=cpu,
+            is_shared=False)
+        >>> collector.shutdown()
+        >>> del collector
+
     """
 
     __doc__ += _MultiDataCollector.__doc__
@@ -1115,6 +1207,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
+        out_buffer = None
         while not all(dones) and frames < self.total_frames:
             _check_for_faulty_process(self.procs)
             if self.update_at_each_batch:
@@ -1160,24 +1253,31 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     else:
                         same_device = same_device and (item.device == prev_device)
             if same_device:
-                out = torch.cat(list(out_tensordicts_shared.values()), 0)
+                out_buffer = torch.cat(
+                    list(out_tensordicts_shared.values()), 0, out=out_buffer
+                )
             else:
-                out = torch.cat(
-                    [item.cpu() for item in out_tensordicts_shared.values()], 0
+                out_buffer = torch.cat(
+                    [item.cpu() for item in out_tensordicts_shared.values()],
+                    0,
+                    out=out_buffer,
                 )
 
             if self.split_trajs:
-                out = split_trajectories(out)
-                frames += out.get("mask").sum()
+                out = split_trajectories(out_buffer)
+                frames += out.get("mask").sum().item()
             else:
+                out = out_buffer.clone()
                 frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
-                out = out.exclude(*excluded_keys)
+                if excluded_keys:
+                    out = out.exclude(*excluded_keys)
             yield out
+            del out
 
         del out_tensordicts_shared
         # We shall not call shutdown just yet as user may want to retrieve state_dict
@@ -1190,6 +1290,48 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     The collection keeps on occuring on all processes even between the time
     the batch of rollouts is collected and the next call to the iterator.
     This class can be safely used with offline RL algorithms.
+
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torch import nn
+        >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+        >>> collector = MultiaSyncDataCollector(
+        ...     create_env_fn=[env_maker, env_maker],
+        ...     policy=policy,
+        ...     total_frames=2000,
+        ...     max_frames_per_traj=50,
+        ...     frames_per_batch=200,
+        ...     init_random_frames=-1,
+        ...     reset_at_each_iter=False,
+        ...     devices="cpu",
+        ...     passing_devices="cpu",
+        ... )
+        >>> for i, data in enumerate(collector):
+        ...     if i == 2:
+        ...         print(data)
+        ...         break
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                done: Tensor(torch.Size([4, 50, 1]), dtype=torch.bool),
+                mask: Tensor(torch.Size([4, 50, 1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([4, 50, 3]), dtype=torch.float32)},
+                    batch_size=torch.Size([4, 50]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([4, 50, 3]), dtype=torch.float32),
+                reward: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                step_count: Tensor(torch.Size([4, 50, 1]), dtype=torch.float32),
+                traj_ids: Tensor(torch.Size([4, 50, 1, 1]), dtype=torch.float32)},
+            batch_size=torch.Size([4, 50]),
+            device=cpu,
+            is_shared=False)
+        >>> collector.shutdown()
+        >>> del collector
 
     """
 
@@ -1305,7 +1447,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
 
     Args:
         create_env_fn (Callabled): Callable returning an instance of EnvBase
-        policy (Callable, optional): Instance of ProbabilisticTensorDictModule class.
+        policy (Callable, optional): Instance of TensorDictModule class.
             Must accept TensorDictBase object as input.
         total_frames (int): lower bound of the total number of frames returned
             by the collector. In parallel settings, the actual number of
@@ -1360,7 +1502,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         create_env_fn: Callable[[], EnvBase],
         policy: Optional[
             Union[
-                ProbabilisticTensorDictModule,
+                TensorDictModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
         ] = None,
@@ -1436,7 +1578,6 @@ def _main_async_collector(
         seed=seed,
         pin_memory=pin_memory,
         passing_device=passing_device,
-        return_in_place=True,
         init_with_lag=init_with_lag,
         exploration_mode=exploration_mode,
         reset_when_done=reset_when_done,

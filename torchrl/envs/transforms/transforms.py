@@ -7,23 +7,23 @@ from __future__ import annotations
 
 import collections
 import multiprocessing as mp
-from copy import deepcopy, copy
+from copy import copy, deepcopy
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 
 from torchrl.data.tensor_specs import (
+    BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
     ContinuousBox,
+    DEVICE_TYPING,
     NdUnboundedContinuousTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
-    BinaryDiscreteTensorSpec,
-    DEVICE_TYPING,
 )
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
@@ -107,6 +107,7 @@ class Transform(nn.Module):
         if out_keys_inv is None:
             out_keys_inv = copy(self.in_keys_inv)
         self.out_keys_inv = out_keys_inv
+        self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -213,58 +214,67 @@ class Transform(nn.Module):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(keys={self.in_keys})"
 
-    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
-        if self.__dict__["_parent"] is not None:
-            raise AttributeError("parent of transform already set")
-        self.__dict__["_parent"] = parent
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        if self.__dict__["_container"] is not None:
+            raise AttributeError(
+                f"parent of transform {type(self)} already set. "
+                "Call `transform.clone()` to get a similar transform with no parent set."
+            )
+        self.__dict__["_container"] = container
 
     def reset_parent(self) -> None:
+        self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
 
+    def clone(self):
+        self_copy = copy(self)
+        self_copy.reset_parent()
+        return self_copy
+
     @property
-    def parent(self) -> EnvBase:
-        if not hasattr(self, "_parent"):
-            raise AttributeError("transform parent uninitialized")
-        parent = self._parent
-        if parent is None:
-            return parent
-        if not isinstance(parent, EnvBase):
-            # if it's not an env, it should be a Compose transform
-            if not isinstance(parent, Compose):
-                raise ValueError(
-                    "A transform parent must be either another Compose transform or an environment object."
-                )
-            compose = parent
-            # the parent of the compose must be a TransformedEnv
-            compose_parent = compose.parent
-            if not isinstance(compose_parent, TransformedEnv):
-                raise ValueError(
-                    f"Compose parent was of type {type(compose_parent)} but expected TransformedEnv."
-                )
-            if compose_parent.transform is not compose:
-                comp_parent_trans = copy(compose_parent.transform)
-                comp_parent_trans.reset_parent()
+    def parent(self) -> Optional[EnvBase]:
+        if self.__dict__.get("_parent", None) is None:
+            if "_container" not in self.__dict__:
+                raise AttributeError("transform parent uninitialized")
+            container = self.__dict__["_container"]
+            if container is None:
+                return container
+            out = None
+            if not isinstance(container, EnvBase):
+                # if it's not an env, it should be a Compose transform
+                if not isinstance(container, Compose):
+                    raise ValueError(
+                        "A transform parent must be either another Compose transform or an environment object."
+                    )
+                compose = container
+                if compose.__dict__["_container"]:
+                    # the parent of the compose must be a TransformedEnv
+                    compose_parent = TransformedEnv(
+                        compose.__dict__["_container"].base_env
+                    )
+                    if compose_parent.transform is not compose:
+                        comp_parent_trans = compose_parent.transform.clone()
+                    else:
+                        comp_parent_trans = None
+                    out = TransformedEnv(
+                        compose_parent.base_env,
+                        transform=comp_parent_trans,
+                    )
+                    for orig_trans in compose.transforms:
+                        if orig_trans is self:
+                            break
+                        transform = orig_trans.clone()
+                        transform.reset_parent()
+                        out.append_transform(transform)
+            elif isinstance(container, TransformedEnv):
+                out = TransformedEnv(container.base_env)
             else:
-                comp_parent_trans = None
-            out = TransformedEnv(
-                compose_parent.base_env,
-                transform=comp_parent_trans,
-            )
-            for orig_trans in compose.transforms:
-                if orig_trans is self:
-                    break
-                transform = copy(orig_trans)
-                transform.reset_parent()
-                out.append_transform(transform)
-        elif isinstance(parent, TransformedEnv):
-            out = TransformedEnv(parent.base_env)
-        else:
-            raise ValueError(f"parent is of type {type(parent)}")
-        return out
+                raise ValueError(f"container is of type {type(container)}")
+            self.__dict__["_parent"] = out
+        return self.__dict__["_parent"]
 
     def empty_cache(self):
-        if self.parent is not None:
-            self.parent.empty_cache()
+        self.__dict__["_parent"] = None
 
 
 class TransformedEnv(EnvBase):
@@ -328,8 +338,9 @@ class TransformedEnv(EnvBase):
 
         self._last_obs = None
         self.cache_specs = cache_specs
-        self._reward_spec = None
-        self._observation_spec = None
+        self.__dict__["_reward_spec"] = None
+        self.__dict__["_input_spec"] = None
+        self.__dict__["_observation_spec"] = None
         self.batch_size = self.base_env.batch_size
 
     def _set_env(self, env: EnvBase, device) -> None:
@@ -348,7 +359,11 @@ class TransformedEnv(EnvBase):
                 f"""Expected a transform of type torchrl.envs.transforms.Transform,
 but got an object of type {type(transform)}."""
             )
-        transform.set_parent(self)
+        prev_transform = self.transform
+        if prev_transform is not None:
+            prev_transform.empty_cache()
+            prev_transform.__dict__["_container"] = None
+        transform.set_container(self)
         transform.eval()
         self._transform = transform
 
@@ -390,7 +405,7 @@ but got an object of type {type(transform)}."""
                 deepcopy(self.base_env.observation_spec)
             )
             if self.cache_specs:
-                self._observation_spec = observation_spec
+                self.__dict__["_observation_spec"] = observation_spec
         else:
             observation_spec = self._observation_spec
         return observation_spec
@@ -408,7 +423,7 @@ but got an object of type {type(transform)}."""
                 deepcopy(self.base_env.input_spec)
             )
             if self.cache_specs:
-                self._input_spec = input_spec
+                self.__dict__["_input_spec"] = input_spec
         else:
             input_spec = self._input_spec
         return input_spec
@@ -421,19 +436,15 @@ but got an object of type {type(transform)}."""
                 deepcopy(self.base_env.reward_spec)
             )
             if self.cache_specs:
-                self._reward_spec = reward_spec
+                self.__dict__["_reward_spec"] = reward_spec
         else:
             reward_spec = self._reward_spec
         return reward_spec
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # selected_keys = [key for key in tensordict.keys() if "action" in key]
-        # tensordict_in = tensordict.select(*selected_keys).clone()
-        tensordict = tensordict.clone()
+        tensordict = tensordict.clone(False)
         tensordict_in = self.transform.inv(tensordict)
         tensordict_out = self.base_env._step(tensordict_in)
-        # tensordict should already have been processed by the transforms
-        # for logging purposes
         tensordict_out = tensordict_out.update(
             tensordict.exclude(*tensordict_out.keys())
         )
@@ -480,24 +491,14 @@ but got an object of type {type(transform)}."""
     def is_closed(self, value: bool):
         self.base_env.is_closed = value
 
-    @property
-    def is_done(self) -> bool:
-        if self._is_done is None:
-            return self.base_env.is_done
-        return self._is_done.all()
-
-    @is_done.setter
-    def is_done(self, val: torch.Tensor) -> None:
-        self._is_done = val
-
     def close(self):
         self.base_env.close()
         self.is_closed = True
 
     def empty_cache(self):
-        self._observation_spec = None
-        self._input_spec = None
-        self._reward_spec = None
+        self.__dict__["_observation_spec"] = None
+        self.__dict__["_input_spec"] = None
+        self.__dict__["_reward_spec"] = None
 
     def append_transform(self, transform: Transform) -> None:
         self._erase_metadata()
@@ -523,8 +524,8 @@ but got an object of type {type(transform)}."""
             )
         transform = transform.to(self.device)
         if not isinstance(self.transform, Compose):
-            self.transform = Compose(self.transform)
-            self.transform.set_parent(self)
+            compose = Compose(self.transform.clone())
+            self.transform = compose  # parent set automatically
 
         self.transform.insert(index, transform)
         self._erase_metadata()
@@ -555,20 +556,18 @@ but got an object of type {type(transform)}."""
 
     def _erase_metadata(self):
         if self.cache_specs:
-            self._input_spec = None
-            self._observation_spec = None
-            self._reward_spec = None
+            self.__dict__["_input_spec"] = None
+            self.__dict__["_observation_spec"] = None
+            self.__dict__["_reward_spec"] = None
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.base_env.to(device)
         self.transform.to(device)
 
-        self.is_done = self.is_done.to(device)
-
         if self.cache_specs:
-            self._input_spec = None
-            self._observation_spec = None
-            self._reward_spec = None
+            self.__dict__["_input_spec"] = None
+            self.__dict__["_observation_spec"] = None
+            self.__dict__["_reward_spec"] = None
         return self
 
     def __setattr__(self, key, value):
@@ -627,7 +626,7 @@ class Compose(Transform):
         super().__init__(in_keys=[])
         self.transforms = nn.ModuleList(transforms)
         for t in self.transforms:
-            t.set_parent(self)
+            t.set_container(self)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
@@ -664,7 +663,7 @@ class Compose(Transform):
         transform = transform[item]
         if not isinstance(transform, Transform):
             out = Compose(*self.transforms[item])
-            out.set_parent(self.parent)
+            out.set_container(self.parent)
             return out
         return transform
 
@@ -690,7 +689,7 @@ class Compose(Transform):
             )
         transform.eval()
         self.transforms.append(transform)
-        transform.set_parent(self)
+        transform.set_container(self)
 
     def insert(self, index: int, transform: Transform) -> None:
         if not isinstance(transform, Transform):
@@ -704,12 +703,13 @@ class Compose(Transform):
                 f"Index expected to be between [-{len(self.transforms)}, {len(self.transforms)}] got index={index}"
             )
 
+        # empty cache of all transforms to reset parents and specs
         self.empty_cache()
         if index < 0:
             index = index + len(self.transforms)
         transform.eval()
         self.transforms.insert(index, transform)
-        transform.set_parent(self)
+        transform.set_container(self)
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Compose:
         for t in self.transforms:
@@ -727,6 +727,11 @@ class Compose(Transform):
             [indent(str(trsf), 4 * " ") for trsf in self.transforms]
         )
         return f"{self.__class__.__name__}(\n{indent(layers_str, 4 * ' ')})"
+
+    def empty_cache(self):
+        for t in self.transforms:
+            t.empty_cache()
+        super().empty_cache()
 
 
 class ToTensorImage(ObservationTransform):
@@ -1026,13 +1031,14 @@ class FlattenObservation(ObservationTransform):
 
     def __init__(
         self,
-        first_dim: int = 0,
+        first_dim: int,
         last_dim: int = -3,
         in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
-        super().__init__(in_keys=in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.first_dim = first_dim
         self.last_dim = last_dim
 
@@ -1040,17 +1046,28 @@ class FlattenObservation(ObservationTransform):
         observation = torch.flatten(observation, self.first_dim, self.last_dim)
         return observation
 
-    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
-        out = super().set_parent(parent)
-        observation_spec = self.parent.observation_spec
-        for key in self.in_keys:
-            if key in observation_spec:
-                observation_spec = observation_spec[key]
-                if self.first_dim >= 0:
-                    self.first_dim = self.first_dim - len(observation_spec.shape)
-                if self.last_dim >= 0:
-                    self.last_dim = self.last_dim - len(observation_spec.shape)
-                break
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        out = super().set_container(container)
+        try:
+            observation_spec = self.parent.observation_spec
+            for key in self.in_keys:
+                if key in observation_spec:
+                    observation_spec = observation_spec[key]
+                    if self.first_dim >= 0:
+                        self.first_dim = self.first_dim - len(observation_spec.shape)
+                    if self.last_dim >= 0:
+                        self.last_dim = self.last_dim - len(observation_spec.shape)
+                    break
+        except AttributeError:
+            if self.first_dim >= 0 or self.last_dim >= 0:
+                raise ValueError(
+                    f"FlattenObservation got first and last dim {self.first_dim} amd {self.last_dim}. "
+                    f"Those values assume that the observation spec is known, which requires the "
+                    f"parent environment to be set. "
+                    f"Consider setting the parent environment beforehand (ie passing the transform "
+                    f"to `TransformedEnv.append_transform()`) or setting strictly negative "
+                    f"flatten dimensions to the transform."
+                )
         return out
 
     @_apply_to_composite
@@ -1107,14 +1124,22 @@ class UnsqueezeTransform(Transform):
         )
         self._unsqueeze_dim_orig = unsqueeze_dim
 
-    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
         if self._unsqueeze_dim_orig < 0:
             self._unsqueeze_dim = self._unsqueeze_dim_orig
         else:
-            parent = self.parent
-            batch_size = parent.batch_size
+            container = self.parent
+            try:
+                batch_size = container.batch_size
+            except AttributeError:
+                raise ValueError(
+                    f"Got the unsqueeze dimension {self._unsqueeze_dim_orig} which is greater or equal to zero. "
+                    f"However this requires to know what the parent environment is, but it has not been provided. "
+                    f"Consider providing a negative dimension or setting the transform using the "
+                    f"`TransformedEnv.append_transform()` method."
+                )
             self._unsqueeze_dim = self._unsqueeze_dim_orig + len(batch_size)
-        return super().set_parent(parent)
+        return super().set_container(container)
 
     @property
     def unsqueeze_dim(self):
@@ -1336,6 +1361,7 @@ class ObservationNorm(ObservationTransform):
         self,
         num_iter: int,
         reduce_dim: Union[int, Tuple[int]] = 0,
+        cat_dim: Optional[int] = None,
         key: Optional[str] = None,
     ) -> None:
         """Initializes the loc and scale stats of the parent environment.
@@ -1348,13 +1374,26 @@ class ObservationNorm(ObservationTransform):
 
         Args:
             num_iter (int): number of random iterations to run in the environment.
-            reduce_dim (int, optional): dimension to compute the mean and std over.
+            reduce_dim (int or tuple of int, optional): dimension to compute the mean and std over.
                 Defaults to 0.
+            cat_dim (int, optional): dimension along which the batches collected will be concatenated.
+                It must be part equal to reduce_dim (if integer) or part of the reduce_dim tuple.
+                Defaults to the same value as reduce_dim.
             key (str, optional): if provided, the summary statistics will be
                 retrieved from that key in the resulting tensordicts.
                 Otherwise, the first key in :obj:`ObservationNorm.in_keys` will be used.
 
         """
+        if cat_dim is None:
+            cat_dim = reduce_dim
+            if not isinstance(cat_dim, int):
+                raise ValueError(
+                    "cat_dim must be specified if reduce_dim is not an integer."
+                )
+        if (isinstance(reduce_dim, tuple) and cat_dim not in reduce_dim) or (
+            isinstance(reduce_dim, int) and cat_dim != reduce_dim
+        ):
+            raise ValueError("cat_dim must be part of or equal to reduce_dim.")
         if self.loc is not None or self.scale is not None:
             raise RuntimeError(
                 f"Loc/Scale are already initialized: ({self.loc}, {self.scale})"
@@ -1366,7 +1405,21 @@ class ObservationNorm(ObservationTransform):
             )
         key = self.in_keys[0] if key is None else key
 
+        def raise_initialization_exception(module):
+            if (
+                isinstance(module, ObservationNorm)
+                and module.scale is None
+                and module.loc is None
+            ):
+                raise RuntimeError(
+                    "ObservationNorms need to be initialized in the right order."
+                    "Trying to initialize an ObservationNorm "
+                    "while a parent ObservationNorm transform is still uninitialized"
+                )
+
         parent = self.parent
+        parent.apply(raise_initialization_exception)
+
         collected_frames = 0
         data = []
         while collected_frames < num_iter:
@@ -1374,13 +1427,18 @@ class ObservationNorm(ObservationTransform):
             collected_frames += tensordict.numel()
             data.append(tensordict.get(key))
 
-        data = torch.cat(data, reduce_dim)
+        data = torch.cat(data, cat_dim)
         loc = data.mean(reduce_dim)
         scale = data.std(reduce_dim)
 
         if not self.standard_normal:
             loc = loc / scale
             scale = 1 / scale
+
+        if not torch.isfinite(loc).all():
+            raise RuntimeError("Non-finite values found in loc")
+        if not torch.isfinite(scale).all():
+            raise RuntimeError("Non-finite values found in scale")
 
         self.register_buffer("loc", loc)
         self.register_buffer("scale", scale.clamp_min(self.eps))
@@ -1500,6 +1558,12 @@ class RewardScaling(Transform):
     Args:
         loc (number or torch.Tensor): location of the affine transform
         scale (number or torch.Tensor): scale of the affine transform
+        standard_normal (bool, optional): if True, the transform will be
+
+            .. math::
+                reward = (reward-loc)/scale
+
+            as it is done for standardization. Default is `False`.
     """
 
     inplace = True
@@ -1509,10 +1573,13 @@ class RewardScaling(Transform):
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
         in_keys: Optional[Sequence[str]] = None,
+        standard_normal: bool = False,
     ):
         if in_keys is None:
             in_keys = ["reward"]
         super().__init__(in_keys=in_keys)
+        self.standard_normal = standard_normal
+
         if not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc)
         if not isinstance(scale, torch.Tensor):
@@ -1522,8 +1589,16 @@ class RewardScaling(Transform):
         self.register_buffer("scale", scale.clamp_min(1e-6))
 
     def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
-        reward.mul_(self.scale).add_(self.loc)
-        return reward
+        if self.standard_normal:
+            loc = self.loc
+            scale = self.scale
+            reward = (reward - loc) / scale
+            return reward
+        else:
+            scale = self.scale
+            loc = self.loc
+            reward = reward * scale + loc
+            return reward
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if isinstance(reward_spec, UnboundedContinuousTensorSpec):
@@ -1681,14 +1756,23 @@ class CatTensors(Transform):
                     "Lazy call to CatTensors is only supported when `dim=-1`."
                 )
         else:
-            in_keys = sorted(list(in_keys))
+            in_keys = sorted(in_keys)
         if type(out_key) != str:
             raise Exception("CatTensors requires out_key to be of type string")
         # super().__init__(in_keys=in_keys)
         super(CatTensors, self).__init__(in_keys=in_keys, out_keys=[out_key])
         self.dim = dim
-        self.del_keys = del_keys
+        self._del_keys = del_keys
+        self._keys_to_exclude = None
         self.unsqueeze_if_oor = unsqueeze_if_oor
+
+    @property
+    def keys_to_exclude(self):
+        if self._keys_to_exclude is None:
+            self._keys_to_exclude = [
+                key for key in self.in_keys if key != self.out_keys[0]
+            ]
+        return self._keys_to_exclude
 
     def _find_in_keys(self):
         parent = self.parent
@@ -1720,13 +1804,13 @@ class CatTensors(Transform):
 
             out_tensor = torch.cat(values, dim=self.dim)
             tensordict.set(self.out_keys[0], out_tensor)
-            if self.del_keys:
-                tensordict.exclude(*self.in_keys, inplace=True)
+            if self._del_keys:
+                tensordict.exclude(*self.keys_to_exclude, inplace=True)
         else:
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
-                f" {sorted(list(self.in_keys))} but got a TensorDict with keys"
-                f" {sorted(list(tensordict.keys(include_nested=True)))}"
+                f" {sorted(self.in_keys)} but got a TensorDict with keys"
+                f" {sorted(tensordict.keys(include_nested=True))}"
             )
         return tensordict
 
@@ -1771,8 +1855,8 @@ class CatTensors(Transform):
             dtype=spec0.dtype,
             device=device,
         )
-        if self.del_keys:
-            for key in self.in_keys:
+        if self._del_keys:
+            for key in self.keys_to_exclude:
                 del observation_spec[key]
         return observation_spec
 
@@ -1843,6 +1927,36 @@ class DiscreteActionProjection(Transform):
         )
 
 
+class FrameSkipTransform(Transform):
+    """A frame-skip transform.
+
+    This transform applies the same action repeatedly in the parent environment,
+    which improves stability on certain training algorithms.
+
+    Args:
+        frame_skip (int, optional): a positive integer representing the number
+            of frames during which the same action must be applied.
+
+    """
+
+    inplace = False
+
+    def __init__(self, frame_skip: int = 1):
+        super().__init__([])
+        if frame_skip < 1:
+            raise ValueError("frame_skip should have a value greater or equal to one.")
+        self.frame_skip = frame_skip
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        parent = self.parent
+        reward = tensordict.get("reward")
+        for _ in range(self.frame_skip - 1):
+            tensordict = parent._step(tensordict)
+            reward = reward + tensordict.get("reward")
+        tensordict.set("reward", reward)
+        return tensordict
+
+
 class NoopResetEnv(Transform):
     """Runs a series of random actions when an environment is reset.
 
@@ -1876,40 +1990,48 @@ class NoopResetEnv(Transform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Do no-op action for a number of steps in [1, noop_max]."""
+        td_reset = tensordict.clone(False)
+        tensordict = tensordict.clone(False)
+        # check that there is a single done state -- behaviour is undefined for multiple dones
         parent = self.parent
-        # keys = tensordict.keys()
+        if tensordict.get("done").numel() > 1:
+            raise ValueError(
+                "there is more than one done state in the parent environment. "
+                "NoopResetEnv is designed to work on single env instances, as partial reset "
+                "is currently not supported. If you feel like this is a missing feature, submit "
+                "an issue on TorchRL github repo. "
+                "In case you are trying to use NoopResetEnv over a batch of environments, know "
+                "that you can have a transformed batch of transformed envs, such as: "
+                "`TransformedEnv(ParallelEnv(3, lambda: TransformedEnv(MyEnv(), NoopResetEnv(3))), OtherTransform())`."
+            )
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
-        i = 0
         trial = 0
 
-        while i < noops:
-            i += 1
-            tensordict = parent.rand_step(tensordict)
-            tensordict = step_mdp(tensordict)
-            if parent.is_done:
-                parent.reset()
-                i = 0
-                trial += 1
-                if trial > _MAX_NOOPS_TRIALS:
-                    tensordict = parent.reset(tensordict)
-                    tensordict = parent.rand_step(tensordict)
+        while True:
+            i = 0
+            while i < noops:
+                i += 1
+                tensordict = parent.rand_step(tensordict)
+                tensordict = step_mdp(tensordict, exclude_done=False)
+                if tensordict.get("done"):
+                    tensordict = parent.reset(td_reset.clone(False))
                     break
-        if parent.is_done:
+            else:
+                break
+
+            trial += 1
+            if trial > _MAX_NOOPS_TRIALS:
+                tensordict = parent.rand_step(tensordict)
+                if tensordict.get("done"):
+                    raise RuntimeError(
+                        f"parent is still done after a single random step (i={i})."
+                    )
+                break
+
+        if tensordict.get("done"):
             raise RuntimeError("NoopResetEnv concluded with done environment")
-        # td = step_mdp(
-        #     tensordict, exclude_done=False, exclude_reward=True, exclude_action=True
-        # )
-
-        # for k in keys:
-        #     if k not in td.keys():
-        #         td.set(k, tensordict.get(k))
-
-        # # replace the next_ prefix
-        # for out_key in parent.observation_spec:
-        #     td.rename_key(out_key[5:], out_key)
-
         return tensordict
 
     def __repr__(self) -> str:
@@ -1999,8 +2121,8 @@ class TensorDictPrimer(Transform):
             observation_spec[key] = spec.to(self.device)
         return observation_spec
 
-    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
-        super().set_parent(parent)
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        super().set_container(container)
 
     @property
     def _batch_size(self):
@@ -2298,7 +2420,7 @@ class VecNorm(Transform):
         if keys is None:
             keys = ["next", "reward"]
         td = make_tensordict(env)
-        keys = set(key for key in td.keys() if key in keys)
+        keys = {key for key in td.keys() if key in keys}
         td_select = td.select(*keys)
         td_select = td_select.flatten_keys(sep)
         if td.batch_dims:

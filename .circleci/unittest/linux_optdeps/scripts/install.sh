@@ -36,13 +36,13 @@ else
 fi
 
 # install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict
+pip install git+https://github.com/pytorch-labs/tensordict.git
 
 # smoke test
 python -c "import functorch"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+pip3 install -e .
 
 # smoke test
 python -c "import torchrl"

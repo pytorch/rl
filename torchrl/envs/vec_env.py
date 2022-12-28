@@ -11,16 +11,16 @@ from copy import deepcopy
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
 from time import sleep
-from typing import Callable, Optional, Sequence, Union, Any, List, Dict
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 from warnings import warn
 
 import torch
 from tensordict import TensorDict
-from tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
+from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 
 from torchrl._utils import _check_for_faulty_process
-from torchrl.data import TensorSpec, CompositeSpec
+from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
@@ -172,7 +172,7 @@ class _BatchedEnv(EnvBase):
                     "share_individual_td must be set to None or True when using multi-task batched environments"
                 )
             share_individual_td = True
-        create_env_kwargs = dict() if create_env_kwargs is None else create_env_kwargs
+        create_env_kwargs = {} if create_env_kwargs is None else create_env_kwargs
         if isinstance(create_env_kwargs, dict):
             create_env_kwargs = [
                 deepcopy(create_env_kwargs) for _ in range(num_workers)
@@ -195,8 +195,9 @@ class _BatchedEnv(EnvBase):
                 "memmap and shared memory are mutually exclusive features."
             )
         self._batch_size = None
-        self._observation_spec = None
-        self._reward_spec = None
+        self.__dict__["_observation_spec"] = None
+        self.__dict__["_input_spec"] = None
+        self.__dict__["_reward_spec"] = None
         self._device = None
         self._dummy_env_str = None
         self._seeds = None
@@ -276,9 +277,9 @@ class _BatchedEnv(EnvBase):
         meta_data = deepcopy(self.meta_data)
         if self._single_task:
             self._batch_size = meta_data.batch_size
-            self._observation_spec = meta_data.specs["observation_spec"]
-            self._reward_spec = meta_data.specs["reward_spec"]
-            self._input_spec = meta_data.specs["input_spec"]
+            self.observation_spec = meta_data.specs["observation_spec"]
+            self.reward_spec = meta_data.specs["reward_spec"]
+            self.input_spec = meta_data.specs["input_spec"]
             self._dummy_env_str = meta_data.env_str
             self._device = meta_data.device
             self._env_tensordict = meta_data.tensordict
@@ -287,15 +288,15 @@ class _BatchedEnv(EnvBase):
             self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
             self._device = meta_data[0].device
             # TODO: check that all action_spec and reward spec match (issue #351)
-            self._reward_spec = meta_data[0].specs["reward_spec"]
+            self.reward_spec = meta_data[0].specs["reward_spec"]
             _observation_spec = {}
             for md in meta_data:
                 _observation_spec.update(dict(**md.specs["observation_spec"]))
-            self._observation_spec = CompositeSpec(**_observation_spec)
+            self.observation_spec = CompositeSpec(**_observation_spec)
             _input_spec = {}
             for md in meta_data:
                 _input_spec.update(dict(**md.specs["input_spec"]))
-            self._input_spec = CompositeSpec(**_input_spec)
+            self.input_spec = CompositeSpec(**_input_spec)
             self._dummy_env_str = str(meta_data[0])
             self._env_tensordict = torch.stack(
                 [meta_data.tensordict for meta_data in meta_data], 0
@@ -334,7 +335,9 @@ class _BatchedEnv(EnvBase):
 
     @observation_spec.setter
     def observation_spec(self, value: TensorSpec) -> None:
-        self._observation_spec = value
+        if not isinstance(value, CompositeSpec) and value is not None:
+            raise TypeError("The type of an observation_spec must be Composite.")
+        self.__dict__["_observation_spec"] = value
 
     @property
     def input_spec(self) -> TensorSpec:
@@ -344,7 +347,9 @@ class _BatchedEnv(EnvBase):
 
     @input_spec.setter
     def input_spec(self, value: TensorSpec) -> None:
-        self._input_spec = value
+        if not isinstance(value, CompositeSpec) and value is not None:
+            raise TypeError("The type of an input_spec must be Composite.")
+        self.__dict__["_input_spec"] = value
 
     @property
     def reward_spec(self) -> TensorSpec:
@@ -354,10 +359,18 @@ class _BatchedEnv(EnvBase):
 
     @reward_spec.setter
     def reward_spec(self, value: TensorSpec) -> None:
-        self._reward_spec = value
-
-    def is_done_set_fn(self, value: bool) -> None:
-        self._is_done = value.all()
+        if not hasattr(value, "shape") and value is not None:
+            raise TypeError(
+                f"reward_spec of type {type(value)} do not have a shape " f"attribute."
+            )
+        if value is not None and len(value.shape) == 0:
+            raise RuntimeError(
+                "the reward_spec shape cannot be empty (this error"
+                " usually comes from trying to set a reward_spec"
+                " with a null number of dimensions. Try using a multidimensional"
+                " spec instead, for instance with a singleton dimension at the tail)."
+            )
+        self.__dict__["_reward_spec"] = value
 
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
@@ -407,17 +420,17 @@ class _BatchedEnv(EnvBase):
                 )
         else:
             if self._single_task:
-                self.env_input_keys = sorted(list(self.input_spec.keys()))
+                self.env_input_keys = sorted(self.input_spec.keys())
             else:
                 env_input_keys = set()
                 for meta_data in self.meta_data:
                     env_input_keys = env_input_keys.union(
                         meta_data.specs["input_spec"].keys()
                     )
-                self.env_input_keys = sorted(list(env_input_keys))
+                self.env_input_keys = sorted(env_input_keys)
             if not len(self.env_input_keys):
                 raise RuntimeError(
-                    f"found 0 action keys in {sorted(list(self.selected_keys))}"
+                    f"found 0 action keys in {sorted(self.selected_keys)}"
                 )
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
@@ -605,13 +618,14 @@ class SerialEnv(_BatchedEnv):
             self._assert_tensordict_shape(tensordict)
             reset_workers = tensordict.get("reset_workers")
         else:
-            reset_workers = torch.ones(self.num_workers, 1, dtype=torch.bool)
+            reset_workers = torch.ones(self.num_workers, dtype=torch.bool)
 
         keys = set()
         for i, _env in enumerate(self._envs):
             if not reset_workers[i]:
                 continue
-            _td = _env._reset(**kwargs)
+            _tensordict = tensordict[i] if tensordict is not None else None
+            _td = _env._reset(tensordict=_tensordict, **kwargs)
             keys = keys.union(_td.keys())
             self.shared_tensordicts[i].update_(_td)
 
@@ -820,7 +834,7 @@ class ParallelEnv(_BatchedEnv):
             self._assert_tensordict_shape(tensordict)
             reset_workers = tensordict.get("reset_workers")
         else:
-            reset_workers = torch.ones(self.num_workers, 1, dtype=torch.bool)
+            reset_workers = torch.ones(self.num_workers, dtype=torch.bool)
 
         for i, channel in enumerate(self.parent_channels):
             if not reset_workers[i]:
@@ -987,11 +1001,8 @@ def _run_worker_pipe_shared_mem(
                 _td.pin_memory()
             tensordict.update_(_td)
             child_pipe.send(("reset_obs", reset_keys))
-            just_reset = True
-            if env.is_done:
-                raise RuntimeError(
-                    f"{env.__class__.__name__}.is_done is {env.is_done} after reset"
-                )
+            if _td.get("done").any():
+                raise RuntimeError(f"{env.__class__.__name__} is done after reset")
 
         elif cmd == "step":
             if not initialized:
@@ -1001,10 +1012,6 @@ def _run_worker_pipe_shared_mem(
                 *env_input_keys,
                 strict=False,
             )
-            if env.is_done and not allow_step_when_done:
-                raise RuntimeError(
-                    f"calling step when env is done, just reset = {just_reset}"
-                )
             _td = env._step(_td)
             if step_keys is None:
                 step_keys = set(env.observation_spec.keys()).union(
@@ -1019,7 +1026,6 @@ def _run_worker_pipe_shared_mem(
                 msg = "step_result"
             data = (msg, step_keys)
             child_pipe.send(data)
-            just_reset = False
 
         elif cmd == "close":
             del tensordict, _td, data

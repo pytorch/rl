@@ -9,17 +9,27 @@ from typing import Union
 
 import numpy as np
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+
+from tensordict.nn import TensorDictSequential
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
 from torchrl.envs.utils import set_exploration_mode, step_mdp
-from torchrl.modules import TensorDictModule
-from torchrl.objectives.common import LossModule, _has_functorch
+from torchrl.modules import SafeModule
+from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     distance_loss,
-    hold_out_params,
     next_state_value as get_next_state_value,
 )
+
+try:
+    from functorch import vmap
+
+    FUNCTORCH_ERR = ""
+    _has_functorch = True
+except ImportError as err:
+    FUNCTORCH_ERR = str(err)
+    _has_functorch = False
 
 
 class REDQLoss(LossModule):
@@ -30,8 +40,8 @@ class REDQLoss(LossModule):
     train a SAC-like algorithm.
 
     Args:
-        actor_network (TensorDictModule): the actor to be trained
-        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
+        actor_network (SafeModule): the actor to be trained
+        qvalue_network (SafeModule): a single Q-value network that will be multiplicated as many times as needed.
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
         sub_sample_len (int, optional): number of Q-value networks to be subsampled to evaluate the next state value
             Default is 2.
@@ -59,8 +69,8 @@ class REDQLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: TensorDictModule,
-        qvalue_network: TensorDictModule,
+        actor_network: SafeModule,
+        qvalue_network: SafeModule,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
         gamma: Number = 0.99,
@@ -75,13 +85,16 @@ class REDQLoss(LossModule):
         gSDE: bool = False,
     ):
         if not _has_functorch:
-            raise ImportError("REDQ requires functorch to be installed.")
+            raise ImportError(
+                f"Failed to import functorch with error message:\n{FUNCTORCH_ERR}"
+            )
 
         super().__init__()
         self.convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
+            funs_to_decorate=["forward", "get_dist_params"],
         )
 
         # let's make sure that actor_network has `return_log_prob` set to True
@@ -152,25 +165,11 @@ class REDQLoss(LossModule):
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
         ].sort()[0]
-        selected_q_params = [
-            p[selected_models_idx] for p in self.target_qvalue_network_params
-        ]
-        selected_q_buffers = [
-            b[selected_models_idx] for b in self.target_qvalue_network_buffers
-        ]
+        selected_q_params = self.target_qvalue_network_params[selected_models_idx]
 
-        actor_params = [
-            torch.stack([p1, p2], 0)
-            for p1, p2 in zip(
-                self.actor_network_params, self.target_actor_network_params
-            )
-        ]
-        actor_buffers = [
-            torch.stack([p1, p2], 0)
-            for p1, p2 in zip(
-                self.actor_network_buffers, self.target_actor_network_buffers
-            )
-        ]
+        actor_params = torch.stack(
+            [self.actor_network_params, self.target_actor_network_params], 0
+        )
 
         tensordict_actor_grad = tensordict_select.select(
             *obs_keys
@@ -187,60 +186,58 @@ class REDQLoss(LossModule):
                     "_eps_gSDE",
                     torch.zeros(tensordict_actor.shape, device=tensordict_actor.device),
                 )
-            tensordict_actor = self.actor_network(
+            # vmap doesn't support sampling, so we take it out from the vmap
+            td_params = vmap(self.actor_network.get_dist_params)(
                 tensordict_actor,
-                params=actor_params,
-                buffers=actor_buffers,
-                vmap=(0, 0, 0),
+                actor_params,
+            )
+            if isinstance(self.actor_network, TensorDictSequential):
+                sample_key = self.actor_network[-1].out_keys[0]
+                tensordict_actor_dist = self.actor_network.build_dist_from_params(
+                    td_params
+                )
+            else:
+                sample_key = self.actor_network.out_keys[0]
+                tensordict_actor_dist = self.actor_network.build_dist_from_params(
+                    td_params
+                )
+            tensordict_actor[sample_key] = tensordict_actor_dist.rsample()
+            tensordict_actor["sample_log_prob"] = tensordict_actor_dist.log_prob(
+                tensordict_actor[sample_key]
             )
 
         # repeat tensordict_actor to match the qvalue size
+        _actor_loss_td = (
+            tensordict_actor[0]
+            .select(*self.qvalue_network.in_keys)
+            .expand(self.num_qvalue_nets, *tensordict_actor[0].batch_size)
+        )  # for actor loss
+        _qval_td = tensordict_select.select(*self.qvalue_network.in_keys).expand(
+            self.num_qvalue_nets,
+            *tensordict_select.select(*self.qvalue_network.in_keys).batch_size,
+        )  # for qvalue loss
+        _next_val_td = (
+            tensordict_actor[1]
+            .select(*self.qvalue_network.in_keys)
+            .expand(self.sub_sample_len, *tensordict_actor[1].batch_size)
+        )  # for next value estimation
         tensordict_qval = torch.cat(
             [
-                tensordict_actor[0]
-                .select(*self.qvalue_network.in_keys)
-                .expand(
-                    self.num_qvalue_nets, *tensordict_actor[0].batch_size
-                ),  # for actor loss
-                tensordict_actor[1]
-                .select(*self.qvalue_network.in_keys)
-                .expand(
-                    self.sub_sample_len, *tensordict_actor[1].batch_size
-                ),  # for next value estimation
-                tensordict_select.select(*self.qvalue_network.in_keys).expand(
-                    self.num_qvalue_nets,
-                    *tensordict_select.select(*self.qvalue_network.in_keys).batch_size,
-                ),  # for qvalue loss
+                _actor_loss_td,
+                _next_val_td,
+                _qval_td,
             ],
             0,
         )
 
         # cat params
-        q_params_detach = hold_out_params(self.qvalue_network_params).params
-        qvalue_params = [
-            torch.cat([p1, p2, p3], 0)
-            for p1, p2, p3 in zip(
-                q_params_detach, selected_q_params, self.qvalue_network_params
-            )
-        ]
-        qvalue_buffers = [
-            torch.cat([p1, p2, p3], 0)
-            for p1, p2, p3 in zip(
-                self.qvalue_network_buffers,
-                selected_q_buffers,
-                self.qvalue_network_buffers,
-            )
-        ]
-        tensordict_qval = self.qvalue_network(
+        q_params_detach = self.qvalue_network_params.detach()
+        qvalue_params = torch.cat(
+            [q_params_detach, selected_q_params, self.qvalue_network_params], 0
+        )
+        tensordict_qval = vmap(self.qvalue_network)(
             tensordict_qval,
-            tensordict_out=TensorDict({}, tensordict_qval.shape),
-            params=qvalue_params,
-            buffers=qvalue_buffers,
-            vmap=(
-                0,
-                0,
-                0,
-            ),  # TensorDict vmap will take care of expanding the tuple as needed
+            qvalue_params,
         )
 
         state_action_value = tensordict_qval.get("state_action_value").squeeze(-1)

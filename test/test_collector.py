@@ -8,7 +8,7 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from _utils_internal import generate_seeds
+from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnv,
@@ -17,7 +17,8 @@ from mocking_classes import (
     DiscreteActionVecPolicy,
     MockSerialEnv,
 )
-from tensordict.tensordict import TensorDict, assert_allclose_td
+from tensordict.nn import TensorDictModule
+from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
@@ -35,28 +36,7 @@ from torchrl.data import (
 from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.modules import (
-    Actor,
-    LSTMNet,
-    OrnsteinUhlenbeckProcessWrapper,
-    TensorDictModule,
-)
-
-if _has_gym:
-    import gym
-    from packaging import version
-
-    gym_version = version.parse(gym.__version__)
-    PENDULUM_VERSIONED = (
-        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
-    )
-    PONG_VERSIONED = (
-        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
-    )
-else:
-    # placeholders
-    PENDULUM_VERSIONED = "Pendulum-v1"
-    PONG_VERSIONED = "ALE/Pong-v5"
+from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
 
@@ -314,16 +294,20 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
 @pytest.mark.skipif(not _has_gym, reason="gym library is not installed")
 def test_collector_env_reset():
     torch.manual_seed(0)
-    env = SerialEnv(2, lambda: GymEnv(PONG_VERSIONED, frame_skip=4))
+
+    def make_env():
+        return GymEnv(PONG_VERSIONED, frame_skip=4)
+
+    env = SerialEnv(2, make_env)
     # env = SerialEnv(3, lambda: GymEnv("CartPole-v1", frame_skip=4))
     env.set_seed(0)
     collector = SyncDataCollector(
         env, total_frames=10000, frames_per_batch=10000, split_trajs=False
     )
-    for data in collector:
+    for _data in collector:
         continue
-    steps = data["step_count"][..., 1:, :]
-    done = data["done"][..., :-1, :]
+    steps = _data["step_count"][..., 1:]
+    done = _data["done"][..., :-1, :].squeeze(-1)
     # we don't want just one done
     assert done.sum() > 3
     # check that after a done, the next step count is always 1
@@ -333,8 +317,8 @@ def test_collector_env_reset():
     # check that if step is 1, then the env was done before
     assert (steps == 1)[done].all()
     # check that split traj has a minimum total reward of -21 (for pong only)
-    data = split_trajectories(data)
-    assert data["reward"].sum(-2).min() == -21
+    _data = split_trajectories(_data)
+    assert _data["reward"].sum(-2).min() == -21
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
@@ -382,6 +366,62 @@ def test_collector_done_persist(num_env, env_name, seed=5):
 
     assert (d["done"].sum(-2) >= 1).all()
     assert torch.unique(d["traj_ids"], dim=-1).shape[-1] == 1
+
+    del collector
+
+
+@pytest.mark.parametrize("frames_per_batch", [200, 10])
+@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("env_name", ["vec"])
+def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
+    if num_env == 1:
+
+        def env_fn(seed):
+            env = MockSerialEnv(device="cpu")
+            env.set_seed(seed)
+            return env
+
+    else:
+
+        def env_fn(seed):
+            def make_env(seed):
+                env = MockSerialEnv(device="cpu")
+                env.set_seed(seed)
+                return env
+
+            env = SerialEnv(
+                num_workers=num_env,
+                create_env_fn=make_env,
+                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+                allow_step_when_done=True,
+            )
+            env.set_seed(seed)
+            return env
+
+    policy = make_policy(env_name)
+
+    collector = SyncDataCollector(
+        create_env_fn=env_fn,
+        create_env_kwargs={"seed": seed},
+        policy=policy,
+        frames_per_batch=frames_per_batch * num_env,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        device="cpu",
+        pin_memory=False,
+        reset_when_done=True,
+        split_trajs=True,
+    )
+    for _, d in enumerate(collector):  # noqa
+        break
+
+    assert d.ndimension() == 2
+    assert d["mask"].shape == d.shape
+    assert d["step_count"].shape == d.shape
+    assert d["traj_ids"].shape == d.shape
+    for traj in d.unbind(0):
+        assert traj["traj_ids"].unique().numel() == 1
+        assert (traj["step_count"][1:] - traj["step_count"][:-1] == 1).all()
 
     del collector
 
@@ -766,7 +806,7 @@ def test_update_weights(use_async):
         return ContinuousActionVecMockEnv()
 
     n_actions = ContinuousActionVecMockEnv().action_spec.shape[-1]
-    policy = TensorDictModule(
+    policy = SafeModule(
         torch.nn.LazyLinear(n_actions), in_keys=["observation"], out_keys=["action"]
     )
     policy(create_env().reset())
@@ -910,7 +950,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
             next=CompositeSpec(hidden1=hidden_spec, hidden2=hidden_spec),
         )
 
-    policy = TensorDictModule(**policy_kwargs)
+    policy = SafeModule(**policy_kwargs)
 
     env_maker = lambda: GymEnv(PENDULUM_VERSIONED)
 

@@ -11,8 +11,8 @@ from torch import nn
 from torchrl.envs.utils import step_mdp
 from torchrl.modules.distributions import NormalParamWrapper
 from torchrl.modules.models.models import MLP
-from torchrl.modules.tensordict_module.common import TensorDictModule
-from torchrl.modules.tensordict_module.sequence import TensorDictSequential
+from torchrl.modules.tensordict_module.common import SafeModule
+from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 
 class DreamerActor(nn.Module):
@@ -151,15 +151,15 @@ class RSSMRollout(nn.Module):
     Reference: https://arxiv.org/abs/1811.04551
 
     Args:
-        rssm_prior (TensorDictModule): Prior network.
-        rssm_posterior (TensorDictModule): Posterior network.
+        rssm_prior (SafeModule): Prior network.
+        rssm_posterior (SafeModule): Posterior network.
 
 
     """
 
-    def __init__(self, rssm_prior: TensorDictModule, rssm_posterior: TensorDictModule):
+    def __init__(self, rssm_prior: SafeModule, rssm_posterior: SafeModule):
         super().__init__()
-        _module = TensorDictSequential(rssm_prior, rssm_posterior)
+        _module = SafeSequential(rssm_prior, rssm_posterior)
         self.in_keys = _module.in_keys
         self.out_keys = _module.out_keys
         self.rssm_prior = rssm_prior

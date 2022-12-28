@@ -11,7 +11,13 @@ import numpy as np
 import pytest
 import torch
 import yaml
-from _utils_internal import get_available_devices
+from _utils_internal import (
+    CARTPOLE_VERSIONED,
+    get_available_devices,
+    HALFCHEETAH_VERSIONED,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+)
 from mocking_classes import (
     ActionObsMergeLinear,
     DiscreteActionConvMockEnv,
@@ -40,39 +46,14 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.utils import step_mdp
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
-from torchrl.modules import (
-    Actor,
-    ActorCriticOperator,
-    MLP,
-    TensorDictModule,
-    ValueOperator,
-)
+from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
+gym_version = None
 if _has_gym:
     import gym
 
     gym_version = version.parse(gym.__version__)
-    PENDULUM_VERSIONED = (
-        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
-    )
-    CARTPOLE_VERSIONED = (
-        "CartPole-v1" if gym_version > version.parse("0.20.0") else "CartPole-v0"
-    )
-    PONG_VERSIONED = (
-        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
-    )
-    HALFCHEETAH_VERSIONED = (
-        "HalfCheetah-v4" if gym_version > version.parse("0.20.0") else "HalfCheetah-v2"
-    )
-else:
-    # placeholder
-    gym_version = version.parse("0.0.1")
-
-    # placeholders
-    PENDULUM_VERSIONED = "Pendulum-v1"
-    CARTPOLE_VERSIONED = "CartPole-v1"
-    PONG_VERSIONED = "ALE/Pong-v5"
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -318,12 +299,12 @@ class TestModelBasedEnvBase:
         torch.manual_seed(seed)
         np.random.seed(seed)
         world_model = WorldModelWrapper(
-            TensorDictModule(
+            SafeModule(
                 ActionObsMergeLinear(5, 4),
                 in_keys=["hidden_observation", "action"],
                 out_keys=["hidden_observation"],
             ),
-            TensorDictModule(
+            SafeModule(
                 nn.Linear(4, 1),
                 in_keys=["hidden_observation"],
                 out_keys=["reward"],
@@ -344,12 +325,12 @@ class TestModelBasedEnvBase:
         torch.manual_seed(seed)
         np.random.seed(seed)
         world_model = WorldModelWrapper(
-            TensorDictModule(
+            SafeModule(
                 ActionObsMergeLinear(5, 4),
                 in_keys=["hidden_observation", "action"],
                 out_keys=["hidden_observation"],
             ),
-            TensorDictModule(
+            SafeModule(
                 nn.Linear(4, 1),
                 in_keys=["hidden_observation"],
                 out_keys=["reward"],
@@ -402,7 +383,9 @@ class TestParallel:
             env_make = [lambda: DMControlEnv("humanoid", tasks[0])] * 3
         else:
             single_task = False
-            env_make = [lambda: DMControlEnv("humanoid", task) for task in tasks]
+            env_make = [
+                lambda task=task: DMControlEnv("humanoid", task) for task in tasks
+            ]
 
         if not share_individual_td and not single_task:
             with pytest.raises(
@@ -439,6 +422,9 @@ class TestParallel:
         env2 = DMControlEnv("humanoid", "walk")
         env2_obs_keys = list(env2.observation_spec.keys())
 
+        assert len(env1_obs_keys)
+        assert len(env2_obs_keys)
+
         def env1_maker():
             return TransformedEnv(
                 DMControlEnv("humanoid", "stand"),
@@ -466,6 +452,7 @@ class TestParallel:
             )
 
         env = ParallelEnv(2, [env1_maker, env2_maker])
+        # env = SerialEnv(2, [env1_maker, env2_maker])
         assert not env._single_task
 
         td = env.rollout(10, return_contiguous=False)
@@ -514,7 +501,7 @@ class TestParallel:
             td1 = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
+            source={"reset_workers": torch.zeros(N, dtype=torch.bool).bernoulli_()},
             batch_size=[
                 N,
             ],
@@ -562,13 +549,13 @@ class TestParallel:
         )
 
         policy = ActorCriticOperator(
-            TensorDictModule(
+            SafeModule(
                 spec=None,
                 module=nn.LazyLinear(12),
                 in_keys=["observation"],
                 out_keys=["hidden"],
             ),
-            TensorDictModule(
+            SafeModule(
                 spec=None,
                 module=nn.LazyLinear(env0.action_spec.shape[-1]),
                 in_keys=["hidden"],
@@ -598,7 +585,7 @@ class TestParallel:
             td1 = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
+            source={"reset_workers": torch.zeros(N, dtype=torch.bool).bernoulli_()},
             batch_size=[
                 N,
             ],
@@ -1048,7 +1035,7 @@ def test_batch_unlocked_with_batch_size(device):
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.skipif(
-    gym_version < version.parse("0.20.0"),
+    gym_version is None or gym_version < version.parse("0.20.0"),
     reason="older versions of half-cheetah do not have 'x_position' info key.",
 )
 def test_info_dict_reader(seed=0):

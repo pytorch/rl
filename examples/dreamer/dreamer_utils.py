@@ -2,9 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from dataclasses import dataclass
-from dataclasses import field as dataclass_field
-from typing import Callable, Optional, Union, Any, Sequence
+from dataclasses import dataclass, field as dataclass_field
+from typing import Any, Callable, Optional, Sequence, Union
 
 from torchrl.data import NdUnboundedContinuousTensorSpec
 from torchrl.envs import ParallelEnv
@@ -14,6 +13,7 @@ from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     CatFrames,
+    CenterCrop,
     DoubleToFloat,
     GrayScale,
     NoopResetEnv,
@@ -22,12 +22,8 @@ from torchrl.envs.transforms import (
     RewardScaling,
     ToTensorImage,
     TransformedEnv,
-    CenterCrop,
 )
-from torchrl.envs.transforms.transforms import (
-    FlattenObservation,
-    TensorDictPrimer,
-)
+from torchrl.envs.transforms.transforms import FlattenObservation, TensorDictPrimer
 from torchrl.record.recorder import VideoRecorder
 from torchrl.trainers.loggers import Logger
 
@@ -56,6 +52,7 @@ def make_env_transforms(
     action_dim_gsde,
     state_dim_gsde,
     batch_dims=0,
+    obs_norm_state_dict=None,
 ):
     env = TransformedEnv(env)
 
@@ -92,14 +89,20 @@ def make_env_transforms(
         env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
-        env.append_transform(FlattenObservation())
+        env.append_transform(FlattenObservation(0))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
         if stats is None:
-            obs_stats = {"loc": 0.0, "scale": 1.0}
+            obs_stats = {
+                "loc": torch.zeros(env.observation_spec["pixels"].shape),
+                "scale": torch.ones(env.observation_spec["pixels"].shape),
+            }
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
-        env.append_transform(ObservationNorm(**obs_stats, in_keys=["pixels"]))
+        obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
+        if obs_norm_state_dict:
+            obs_norm.load_state_dict(obs_norm_state_dict)
+        env.append_transform(obs_norm)
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -145,6 +148,7 @@ def transformed_env_constructor(
     action_dim_gsde: Optional[int] = None,
     state_dim_gsde: Optional[int] = None,
     batch_dims: Optional[int] = 0,
+    obs_norm_state_dict: Optional[dict] = None,
 ) -> Union[Callable, EnvCreator]:
     """
     Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
@@ -175,6 +179,8 @@ def transformed_env_constructor(
         batch_dims (int, optional): number of dimensions of a batch of data. If a single env is
             used, it should be 0 (default). If multiple envs are being transformed in parallel,
             it should be set to 1 (or the number of dims of the batch).
+        obs_norm_state_dict (dict, optional): the state_dict of the ObservationNorm transform to be loaded
+            into the environment
     """
 
     def make_transformed_env(**kwargs) -> TransformedEnv:
@@ -230,6 +236,7 @@ def transformed_env_constructor(
             action_dim_gsde,
             state_dim_gsde,
             batch_dims=batch_dims,
+            obs_norm_state_dict=obs_norm_state_dict,
         )
 
     if use_env_creator:
@@ -307,7 +314,7 @@ def call_record(
     if cfg.record_video and record._count % cfg.record_interval == 0:
         world_model_td = sampled_tensordict
 
-        true_pixels = recover_pixels(world_model_td["next_pixels"], stats)
+        true_pixels = recover_pixels(world_model_td[("next", "pixels")], stats)
 
         reco_pixels = recover_pixels(world_model_td["next", "reco_pixels"], stats)
         with autocast(dtype=torch.float16):
@@ -339,12 +346,12 @@ def grad_norm(optimizer: torch.optim.Optimizer):
     return sum_of_sq.sqrt().detach().item()
 
 
-def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
+def make_recorder_env(cfg, video_tag, obs_norm_state_dict, logger, create_env_fn):
     recorder = transformed_env_constructor(
         cfg,
         video_tag=video_tag,
         norm_obs_only=True,
-        stats=stats,
+        obs_norm_state_dict=obs_norm_state_dict,
         logger=logger,
         use_env_creator=False,
     )()
@@ -354,7 +361,7 @@ def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
         recorder_rm = TransformedEnv(recorder.base_env)
         for transform in recorder.transform:
             if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform)
+                recorder_rm.append_transform(transform.clone())
     else:
         recorder_rm = recorder
 

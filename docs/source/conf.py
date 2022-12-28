@@ -23,9 +23,14 @@
 # -- Project information -----------------------------------------------------
 import os.path
 import sys
+import warnings
 
 import pytorch_sphinx_theme
 import torchrl
+
+# Suppress warnings - TODO
+# suppress_warnings = [ 'misc.highlighting_failure' ]
+warnings.filterwarnings("ignore", category=UserWarning)
 
 project = "torchrl"
 copyright = "2022, Meta"
@@ -46,7 +51,7 @@ release = "main"
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = "en"
 
 # -- General configuration ---------------------------------------------------
 
@@ -56,6 +61,7 @@ language = None
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
+    "sphinx.ext.viewcode",
     "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
@@ -66,10 +72,13 @@ extensions = [
 ]
 
 sphinx_gallery_conf = {
-    "examples_dirs": "../../gallery/",  # path to your example scripts
-    "gallery_dirs": "auto_examples",  # path to where to save gallery generated output
+    "examples_dirs": "reference/generated/tutorials/",  # path to your example scripts
+    "gallery_dirs": "tutorials",  # path to where to save gallery generated output
     "backreferences_dir": "gen_modules/backreferences",
     "doc_module": ("torchrl",),
+    "filename_pattern": "reference/generated/tutorials/",  # files to parse
+    "notebook_images": "reference/generated/tutorials/media/",  # images to parse
+    "download_all_examples": True,
 }
 
 napoleon_use_ivar = True
@@ -102,9 +111,20 @@ exclude_patterns = []
 #
 html_theme = "pytorch_sphinx_theme"
 html_theme_path = [pytorch_sphinx_theme.get_html_theme_path()]
+html_theme_options = {
+    "pytorch_project": "torchrl",
+    "collapse_navigation": False,
+    "display_version": True,
+    "logo_only": False,
+    "analytics_id": "UA-117752657-2",
+}
+html_css_files = [
+    "https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css",
+    "css/custom.css",
+]
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = "PyTorchdoc"
+htmlhelp_basename = "PyTorchRLdoc"
 
 autosummary_generate = True
 
@@ -150,11 +170,17 @@ intersphinx_mapping = {
 }
 
 
-aafig_default_options = dict(scale=1.5, aspect=1.0, proportional=True)
+aafig_default_options = {"scale": 1.5, "aspect": 1.0, "proportional": True}
 
 # -- Generate knowledge base references -----------------------------------
 current_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(current_path)
-from knowledge_base import generate_knowledge_base_references
+from content_generation import (
+    generate_knowledge_base_references,
+    generate_tutorial_references,
+)
 
 generate_knowledge_base_references("../../knowledge_base")
+generate_tutorial_references("../../tutorials/sphinx-tutorials/", "tutorial")
+generate_tutorial_references("../../tutorials/src/", "src")
+generate_tutorial_references("../../tutorials/media/", "media")

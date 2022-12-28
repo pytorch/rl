@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from numbers import Number
-from typing import Dict, Sequence, Union, Optional, Tuple
+from typing import Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -95,7 +95,7 @@ class SafeTanhTransform(D.TanhTransform):
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
         eps = torch.finfo(y.dtype).eps
-        y.data.clamp_(-1 + eps, 1 - eps)
+        y = y.clamp(-1 + eps, 1 - eps)
         x = super()._inverse(y)
         return x
 
@@ -144,7 +144,7 @@ class NormalParamWrapper(nn.Module):
 
     def forward(self, *tensors: torch.Tensor) -> Tuple[torch.Tensor]:
         net_output = self.operator(*tensors)
-        others = tuple()
+        others = ()
         if not isinstance(net_output, torch.Tensor):
             net_output, *others = net_output
         loc, scale = net_output.chunk(2, -1)

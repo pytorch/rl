@@ -4,81 +4,99 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - "*"
   workflow_dispatch:
 jobs:
   build_docs_job:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         include:
-         - os: linux.2xlarge
+         - os: linux.4xlarge.nvidia.gpu
            python-version: 3.8
+    defaults:
+      run:
+        shell: bash -l {0}
+    container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu18.04
     steps:
+    - name: Install deps
+      run: |
+        apt-get update -y
+        apt-get install software-properties-common -y
+        add-apt-repository ppa:git-core/candidate -y
+        apt-get update -y
+        apt-get upgrade -y
+        apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git
+    - name: Install rsync 📚
+      run: |
+        apt-get update && apt-get install -y rsync
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     # Update references
     - name: Update pip
       run: |
-        sudo yum update -y
-        sudo yum -y install git python3-pip
-        sudo pip3 install --upgrade pip
+        apt-get install python3.8 python3-pip -y
+        pip3 install --upgrade pip
     - name: Setup conda
       run: |
         rm -rf $HOME/miniconda
         wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
         bash ~/miniconda.sh -b -p $HOME/miniconda
-    - name: Install gcc
-      shell: bash
-      run: |
-        sudo yum group install -y "Development Tools"
     - name: setup Path
       run: |
-        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
-        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
-    - name: create conda env
+        echo "$HOME/miniconda/bin" >> $GITHUB_PATH
+        echo "CONDA=$HOME/miniconda" >> $GITHUB_PATH
+    - name: create and activate conda env
       run: |
-        conda create --name build_binary python=${{ matrix.python-version }}
-        conda info
-    - name: check python version no Conda
-      run: |
-        python --version
+        $HOME/miniconda/bin/conda create --name build_binary python=${{ matrix.python-version }}
+        $HOME/miniconda/bin/conda info
+        $HOME/miniconda/bin/activate build_binary
     - name: check python version
       run: |
-        conda run -n build_binary python --version
+        python --version
+    - name: Check git version
+      run: git version
     - name: setup Path
       run: |
         echo /usr/local/bin >> $GITHUB_PATH
     - name: Install PyTorch
       shell: bash
       run: |
-        conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
+        python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
     - name: Install tensordict
       run: |
-        python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
+        python3 -m pip install git+https://github.com/pytorch-labs/tensordict.git
     - name: Install TorchRL
       run: |
-        conda run -n build_binary python -m pip install -e .
+        python -m pip install -e .
     - name: Test torchrl installation
       shell: bash
       run: |
         mkdir _tmp
         cd _tmp
-        conda run -n build_binary \
-          python -c "import torchrl"
+        python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv"
         cd ..
     - name: Build the docset
+      id: build_doc
       run: |
-        conda run -n build_binary python -m pip install -r docs/requirements.txt
+        python -m pip install -r docs/requirements.txt
         cd ./docs
-        conda run -n build_binary make html
+        timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         cd ..
+    - name: Pull TensorDict docs
+      run: |
+        git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/_local_build/tensordict
+        rm -rf docs/_local_build/tensordict/.git
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
-      uses: JamesIves/github-pages-deploy-action@releases/v3
+      if: ${{ github.ref == 'refs/heads/main' }}
+      uses: JamesIves/github-pages-deploy-action@releases/v4
       with:
-          ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: gh-pages # The branch the action should deploy to.
-          FOLDER: docs/build/html # The folder the action should deploy.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages # The branch the action should deploy to.
+          folder: docs/_local_build/ # The folder the action should deploy.

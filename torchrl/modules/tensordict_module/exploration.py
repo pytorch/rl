@@ -7,6 +7,7 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+from tensordict.nn import TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import expand_as_right
 
@@ -14,8 +15,7 @@ from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.tensordict_module.common import (
     _forward_hook_safe_action,
-    TensorDictModule,
-    TensorDictModuleWrapper,
+    SafeModule,
 )
 
 
@@ -30,7 +30,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
     """Epsilon-Greedy PO wrapper.
 
     Args:
-        policy (TensorDictModule): a deterministic policy.
+        policy (SafeModule): a deterministic policy.
         eps_init (scalar, optional): initial epsilon value.
             default: 1.0
         eps_end (scalar, optional): final epsilon value.
@@ -65,13 +65,13 @@ class EGreedyWrapper(TensorDictModuleWrapper):
                 [ 0.0000,  0.0000,  0.0000,  0.0000],
                 [ 0.0000,  0.0000,  0.0000,  0.0000],
                 [ 0.0000,  0.0000,  0.0000,  0.0000],
-                [ 0.0000,  0.0000,  0.0000,  0.0000]], grad_fn=<CopyBackwards>)
+                [ 0.0000,  0.0000,  0.0000,  0.0000]], grad_fn=<AddBackward0>)
 
     """
 
     def __init__(
         self,
-        policy: TensorDictModule,
+        policy: SafeModule,
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
@@ -139,7 +139,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
     """Additive Gaussian PO wrapper.
 
     Args:
-        policy (TensorDictModule): a policy.
+        policy (SafeModule): a policy.
         sigma_init (scalar, optional): initial epsilon value.
             default: 1.0
         sigma_end (scalar, optional): final epsilon value.
@@ -164,7 +164,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
     def __init__(
         self,
-        policy: TensorDictModule,
+        policy: SafeModule,
         sigma_init: float = 1.0,
         sigma_end: float = 0.1,
         annealing_num_steps: int = 1000,
@@ -259,7 +259,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     zeroing the tensordict at reset time.
 
     Args:
-        policy (TensorDictModule): a policy
+        policy (SafeModule): a policy
         eps_init (scalar): initial epsilon value, determining the amount of noise to be added.
             default: 1.0
         eps_end (scalar): final epsilon value, determining the amount of noise to be added.
@@ -294,15 +294,24 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         >>> torch.manual_seed(0)
         >>> spec = NdBoundedTensorSpec(-1, 1, torch.Size([4]))
         >>> module = torch.nn.Linear(4, 4, bias=False)
-        >>> policy = Actor(spec, module=module)
+        >>> policy = Actor(module=module, spec=spec)
         >>> explorative_policy = OrnsteinUhlenbeckProcessWrapper(policy)
         >>> td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
         >>> print(explorative_policy(td))
+        TensorDict(
+            fields={
+                _ou_prev_noise: Tensor(torch.Size([10, 4]), dtype=torch.float32),
+                _ou_steps: Tensor(torch.Size([10, 1]), dtype=torch.int64),
+                action: Tensor(torch.Size([10, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([10, 4]), dtype=torch.float32)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False)
     """
 
     def __init__(
         self,
-        policy: TensorDictModule,
+        policy: SafeModule,
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,

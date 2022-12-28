@@ -5,7 +5,7 @@
 
 import abc
 from copy import deepcopy
-from typing import Optional, Union, List
+from typing import List, Optional, Union
 
 import numpy as np
 import torch
@@ -13,7 +13,7 @@ from tensordict import TensorDict
 
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-from torchrl.modules.tensordict_module import TensorDictModule
+from torchrl.modules.tensordict_module import SafeModule
 
 
 class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
@@ -53,12 +53,12 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         >>> import torch.nn as nn
         >>> from torchrl.modules import MLP, WorldModelWrapper
         >>> world_model = WorldModelWrapper(
-        ...     TensorDictModule(
+        ...     SafeModule(
         ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
         ...         in_keys=["hidden_observation", "action"],
         ...         out_keys=["hidden_observation"],
         ...     ),
-        ...     TensorDictModule(
+        ...     SafeModule(
         ...         nn.Linear(4, 1),
         ...         in_keys=["hidden_observation"],
         ...         out_keys=["reward"],
@@ -91,7 +91,6 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         - input_spec (CompositeSpec): sampling spec of the inputs;
         - batch_size (torch.Size): batch_size to be used by the env. If not set, the env accept tensordicts of all batch sizes.
         - device (torch.device): device where the env input and output are expected to live
-        - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the last reset
 
     Args:
         world_model (nn.Module): model that generates world states and its corresponding rewards;
@@ -114,7 +113,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
 
     def __init__(
         self,
-        world_model: TensorDictModule,
+        world_model: SafeModule,
         params: Optional[List[torch.Tensor]] = None,
         buffers: Optional[List[torch.Tensor]] = None,
         device: DEVICE_TYPING = "cpu",

@@ -4,20 +4,21 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Type, Union, Dict, Any
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
+from tensordict.nn import TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
 
 from torchrl.collectors.collectors import (
     _DataCollector,
-    SyncDataCollector,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
+    SyncDataCollector,
 )
 from torchrl.data import MultiStep
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
-from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
+from torchrl.modules import SafeProbabilisticSequential
 
 
 def sync_async_collector(
@@ -176,7 +177,7 @@ def _make_collector(
     **kwargs,
 ) -> _DataCollector:
     if env_kwargs is None:
-        env_kwargs = dict()
+        env_kwargs = {}
     if isinstance(env_fns, list):
         num_env = len(env_fns)
         if num_env_per_collector is None:
@@ -219,7 +220,7 @@ def _make_collector(
         env_kwargs = [_env_kwargs[0] for _env_kwargs in env_kwargs_split]
     else:
         env_fns = [
-            lambda: ParallelEnv(
+            lambda _env_fn=_env_fn, _env_kwargs=_env_kwargs: ParallelEnv(
                 num_workers=len(_env_fn),
                 create_env_fn=_env_fn,
                 create_env_kwargs=_env_kwargs,
@@ -248,7 +249,7 @@ def _make_collector(
 
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
+    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticSequential],
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
@@ -256,7 +257,7 @@ def make_collector_offpolicy(
 
     Args:
         make_env (Callable): environment creator
-        actor_model_explore (TensorDictModule): Model instance used for evaluation and exploration update
+        actor_model_explore (SafeModule): Model instance used for evaluation and exploration update
         cfg (DictConfig): config for creating collector object
         make_env_kwargs (dict): kwargs for the env creator
 
@@ -312,7 +313,7 @@ def make_collector_offpolicy(
 
 def make_collector_onpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
+    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticSequential],
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
@@ -320,7 +321,7 @@ def make_collector_onpolicy(
 
     Args:
         make_env (Callable): environment creator
-        actor_model_explore (TensorDictModule): Model instance used for evaluation and exploration update
+        actor_model_explore (SafeModule): Model instance used for evaluation and exploration update
         cfg (DictConfig): config for creating collector object
         make_env_kwargs (dict): kwargs for the env creator
 

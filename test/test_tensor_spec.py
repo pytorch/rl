@@ -11,6 +11,7 @@ from _utils_internal import get_available_devices
 from scipy.stats import chisquare
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import (
+    _keys_to_empty_composite_spec,
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
@@ -20,7 +21,6 @@ from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
-    _keys_to_empty_composite_spec,
 )
 
 
@@ -53,7 +53,7 @@ def test_discrete(cls):
         r = ts.rand()
         ts.to_numpy(r)
         ts.encode(torch.tensor([5]))
-        ts.encode(torch.tensor([5]).numpy())
+        ts.encode(torch.tensor(5).numpy())
         ts.encode(9)
         with pytest.raises(AssertionError):
             ts.encode(torch.tensor([11]))  # out of bounds
@@ -874,7 +874,7 @@ class TestSpec:
         sample = torch.stack([action_spec.rand() for _ in range(10000)], 0)
 
         sample_list = sample.argmax(-1)
-        sample_list = list([sum(sample_list == i).item() for i in range(10)])
+        sample_list = [sum(sample_list == i).item() for i in range(10)]
         assert chisquare(sample_list).pvalue > 0.1
 
         sample = action_spec.to_numpy(sample)
@@ -887,9 +887,8 @@ class TestSpec:
 
         sample = action_spec.rand((10000,))
 
-        sample_list = sample[:, 0]
-        sample_list = list([sum(sample_list == i).item() for i in range(10)])
-        print(sample_list)
+        sample_list = sample
+        sample_list = [sum(sample_list == i).item() for i in range(10)]
         assert chisquare(sample_list).pvalue > 0.1
 
         sample = action_spec.to_numpy(sample)
@@ -917,11 +916,11 @@ class TestSpec:
         assert sample.ndim == 2, f"found shape: {sample.shape}"
 
         sample0 = sample[:, 0]
-        sample_list = list([sum(sample0 == i) for i in range(ns[0])])
+        sample_list = [sum(sample0 == i) for i in range(ns[0])]
         assert chisquare(sample_list).pvalue > 0.1
 
         sample1 = sample[:, 1]
-        sample_list = list([sum(sample1 == i) for i in range(ns[1])])
+        sample_list = [sum(sample1 == i) for i in range(ns[1])]
         assert chisquare(sample_list).pvalue > 0.1
 
     def test_categorical_action_spec_encode(self):

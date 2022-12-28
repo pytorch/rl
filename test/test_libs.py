@@ -3,18 +3,29 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+from sys import platform
 
 import numpy as np
 import pytest
 import torch
-from _utils_internal import _test_fake_tensordict
-from _utils_internal import get_available_devices
+from _utils_internal import (
+    get_available_devices,
+    HALFCHEETAH_VERSIONED,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+)
 from packaging import version
+from tensordict.tensordict import assert_allclose_td
+from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
-from torchrl.envs.libs.dm_control import _has_dmc
-from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
-from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
+from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs.libs.brax import _has_brax, BraxEnv
+from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
+from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
+from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
+from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
+from torchrl.envs.utils import check_env_specs
 
 if _has_gym:
     import gym
@@ -31,38 +42,7 @@ if _has_dmc:
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
 
-from sys import platform
-
-from tensordict.tensordict import assert_allclose_td
-from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
-from torchrl.envs.libs.gym import GymEnv, GymWrapper
-
 IS_OSX = platform == "darwin"
-
-if _has_gym:
-    from packaging import version
-
-    gym_version = version.parse(gym.__version__)
-    PENDULUM_VERSIONED = (
-        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
-    )
-    HC_VERSIONED = (
-        "HalfCheetah-v4" if gym_version > version.parse("0.20.0") else "HalfCheetah-v2"
-    )
-    PONG_VERSIONED = (
-        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
-    )
-
-    # if gym_version < version.parse("0.24.0") and torch.cuda.device_count() > 0:
-    #     from opengl_rendering import create_opengl_context
-    #
-    #     create_opengl_context()
-else:
-    # placeholders
-    PENDULUM_VERSIONED = "Pendulum-v1"
-    HC_VERSIONED = "HalfCheetah-v4"
-    PONG_VERSIONED = "ALE/Pong-v5"
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
@@ -122,10 +102,7 @@ class TestGym:
             base_env = gym.make(env_name, frameskip=frame_skip)
             frame_skip = 1
         else:
-            if gym_version < version.parse("0.26.0"):
-                base_env = gym.make(env_name)
-            else:
-                base_env = gym.make(env_name, render_mode="rgb_array")
+            base_env = _make_gym_environment(env_name)
 
         if from_pixels and not _is_from_pixels(base_env):
             base_env = PixelObservationWrapper(base_env, pixels_only=pixels_only)
@@ -160,7 +137,17 @@ class TestGym:
             from_pixels=from_pixels,
             pixels_only=pixels_only,
         )
-        _test_fake_tensordict(env)
+        check_env_specs(env)
+
+
+@implement_for("gym", None, "0.26")
+def _make_gym_environment(env_name):  # noqa: F811
+    return gym.make(env_name)
+
+
+@implement_for("gym", "0.26", None)
+def _make_gym_environment(env_name):  # noqa: F811
+    return gym.make(env_name, render_mode="rgb_array")
 
 
 @pytest.mark.skipif(not _has_dmc, reason="no dm_control library found")
@@ -257,7 +244,7 @@ class TestDMControl:
             from_pixels=from_pixels,
             pixels_only=pixels_only,
         )
-        _test_fake_tensordict(env)
+        check_env_specs(env)
 
 
 @pytest.mark.skipif(
@@ -269,9 +256,9 @@ class TestDMControl:
     "env_lib,env_args,env_kwargs",
     [
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
-        [GymEnv, (HC_VERSIONED,), {"from_pixels": True}],
+        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
-        [GymEnv, (HC_VERSIONED,), {"from_pixels": False}],
+        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
         [GymEnv, (PONG_VERSIONED,), {}],
     ],
 )
@@ -286,29 +273,29 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
         )
     env = env_lib(*env_args, **env_kwargs)
     td = env.rollout(max_steps=5)
-    td0 = td[0].flatten_keys(".")
+    td0 = td[0]
     fake_td = env.fake_tensordict()
 
-    fake_td = fake_td.flatten_keys(".")
-    td = td.flatten_keys(".")
-    assert set(fake_td.keys()) == set(td.keys())
-    for key in fake_td.keys():
+    assert set(fake_td.keys(include_nested=True, leaves_only=True)) == set(
+        td.keys(include_nested=True, leaves_only=True)
+    )
+    for key in fake_td.keys(include_nested=True, leaves_only=True):
         assert fake_td.get(key).shape == td.get(key)[0].shape
-    for key in fake_td.keys():
+    for key in fake_td.keys(include_nested=True, leaves_only=True):
         assert fake_td.get(key).shape == td0.get(key).shape
         assert fake_td.get(key).dtype == td0.get(key).dtype
         assert fake_td.get(key).device == td0.get(key).device
 
 
-@pytest.mark.skipif(IS_OSX, reason="rendeing unstable on osx, skipping")
+@pytest.mark.skipif(IS_OSX, reason="rendering unstable on osx, skipping")
 @pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
 @pytest.mark.parametrize(
     "env_lib,env_args,env_kwargs",
     [
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
-        [GymEnv, (HC_VERSIONED,), {"from_pixels": True}],
+        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
-        [GymEnv, (HC_VERSIONED,), {"from_pixels": False}],
+        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
         [GymEnv, (PONG_VERSIONED,), {}],
     ],
 )
@@ -351,7 +338,180 @@ class TestHabitat:
     def test_habitat(self, envname):
         env = HabitatEnv(envname)
         rollout = env.rollout(3)
-        _test_fake_tensordict(env)
+        check_env_specs(env)
+
+
+@pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
+@pytest.mark.parametrize(
+    "envname",
+    [
+        "TSP50-v0",
+        "Snake-6x6-v0",
+    ],
+)
+class TestJumanji:
+    def test_jumanji_seeding(self, envname):
+        final_seed = []
+        tdreset = []
+        tdrollout = []
+        for _ in range(2):
+            env = JumanjiEnv(envname)
+            torch.manual_seed(0)
+            np.random.seed(0)
+            final_seed.append(env.set_seed(0))
+            tdreset.append(env.reset())
+            tdrollout.append(env.rollout(max_steps=50))
+            env.close()
+            del env
+        assert final_seed[0] == final_seed[1]
+        assert_allclose_td(*tdreset)
+        assert_allclose_td(*tdrollout)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_jumanji_batch_size(self, envname, batch_size):
+        env = JumanjiEnv(envname, batch_size=batch_size)
+        env.set_seed(0)
+        tdreset = env.reset()
+        tdrollout = env.rollout(max_steps=50)
+        env.close()
+        del env
+        assert tdreset.batch_size == batch_size
+        assert tdrollout.batch_size[:-1] == batch_size
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_jumanji_spec_rollout(self, envname, batch_size):
+        env = JumanjiEnv(envname, batch_size=batch_size)
+        env.set_seed(0)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_jumanji_consistency(self, envname, batch_size):
+        import jax
+        import jax.numpy as jnp
+        import numpy as onp
+        from torchrl.envs.libs.jax_utils import _tree_flatten
+
+        env = JumanjiEnv(envname, batch_size=batch_size)
+        obs_keys = list(env.observation_spec.keys(True))
+        env.set_seed(1)
+        rollout = env.rollout(10)
+
+        env.set_seed(1)
+        key = env.key
+        base_env = env._env
+        key, *keys = jax.random.split(key, np.prod(batch_size) + 1)
+        state, timestep = jax.vmap(base_env.reset)(jnp.stack(keys))
+        # state = env._reshape(state)
+        # timesteps.append(timestep)
+        for i in range(rollout.shape[-1]):
+            action = rollout[..., i]["action"]
+            # state = env._flatten(state)
+            action = _tree_flatten(env.read_action(action), env.batch_size)
+            state, timestep = jax.vmap(base_env.step)(state, action)
+            # state = env._reshape(state)
+            # timesteps.append(timestep)
+            checked = False
+            for _key in obs_keys:
+                if isinstance(_key, str):
+                    _key = (_key,)
+                try:
+                    t2 = getattr(timestep, _key[0])
+                except AttributeError:
+                    try:
+                        t2 = getattr(timestep.observation, _key[0])
+                    except AttributeError:
+                        continue
+                t1 = rollout[..., i][("next", *_key)]
+                for __key in _key[1:]:
+                    t2 = getattr(t2, _key)
+                t2 = torch.tensor(onp.asarray(t2)).view_as(t1)
+                torch.testing.assert_close(t1, t2)
+                checked = True
+            if not checked:
+                raise AttributeError(
+                    f"None of the keys matched: {rollout}, {list(timestep.__dict__.keys())}"
+                )
+
+
+@pytest.mark.skipif(not _has_brax, reason="brax not installed")
+@pytest.mark.parametrize("envname", ["fast"])
+class TestBrax:
+    def test_brax_seeding(self, envname):
+        final_seed = []
+        tdreset = []
+        tdrollout = []
+        for _ in range(2):
+            env = BraxEnv(envname)
+            torch.manual_seed(0)
+            np.random.seed(0)
+            final_seed.append(env.set_seed(0))
+            tdreset.append(env.reset())
+            tdrollout.append(env.rollout(max_steps=50))
+            env.close()
+            del env
+        assert final_seed[0] == final_seed[1]
+        assert_allclose_td(*tdreset)
+        assert_allclose_td(*tdrollout)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_brax_batch_size(self, envname, batch_size):
+        env = BraxEnv(envname, batch_size=batch_size)
+        env.set_seed(0)
+        tdreset = env.reset()
+        tdrollout = env.rollout(max_steps=50)
+        env.close()
+        del env
+        assert tdreset.batch_size == batch_size
+        assert tdrollout.batch_size[:-1] == batch_size
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_brax_spec_rollout(self, envname, batch_size):
+        env = BraxEnv(envname, batch_size=batch_size)
+        env.set_seed(0)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    @pytest.mark.parametrize("requires_grad", [False, True])
+    def test_brax_consistency(self, envname, batch_size, requires_grad):
+        import jax
+        import jax.numpy as jnp
+        from torchrl.envs.libs.jax_utils import (
+            _ndarray_to_tensor,
+            _tensor_to_ndarray,
+            _tree_flatten,
+        )
+
+        env = BraxEnv(envname, batch_size=batch_size, requires_grad=requires_grad)
+        env.set_seed(1)
+        rollout = env.rollout(10)
+
+        env.set_seed(1)
+        key = env._key
+        base_env = env._env
+        key, *keys = jax.random.split(key, np.prod(batch_size) + 1)
+        state = jax.vmap(base_env.reset)(jnp.stack(keys))
+        for i in range(rollout.shape[-1]):
+            action = rollout[..., i]["action"]
+            action = _tensor_to_ndarray(action.clone())
+            action = _tree_flatten(action, env.batch_size)
+            state = jax.vmap(base_env.step)(state, action)
+            t1 = rollout[..., i][("next", "observation")]
+            t2 = _ndarray_to_tensor(state.obs).view_as(t1)
+            torch.testing.assert_close(t1, t2)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_brax_grad(self, envname, batch_size):
+        batch_size = (1,)
+        env = BraxEnv(envname, batch_size=batch_size, requires_grad=True)
+        env.set_seed(0)
+        td1 = env.reset()
+        action = torch.randn(batch_size + env.action_spec.shape)
+        action.requires_grad_(True)
+        td1["action"] = action
+        td2 = env.step(td1)
+        td2["reward"].mean().backward()
+        env.close()
+        del env
 
 
 if __name__ == "__main__":

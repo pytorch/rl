@@ -24,26 +24,27 @@ except ImportError:
 
 from tensordict import TensorDict
 from torchrl.data import (
-    TensorDictPrioritizedReplayBuffer,
-    TensorDictReplayBuffer,
-    ListStorage,
     LazyMemmapStorage,
     LazyTensorStorage,
+    ListStorage,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.trainers import Recorder, Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
+    _has_ts,
     BatchSubSampler,
     CountFramesLog,
     LogReward,
     mask_batch,
+    OptimizerHook,
     ReplayBufferTrainer,
     RewardNormalizer,
     SelectKeys,
     UpdateWeights,
-    _has_ts,
 )
 
 
@@ -72,7 +73,7 @@ class MockingCollector:
         pass
 
     def state_dict(self):
-        return dict()
+        return {}
 
     def load_state_dict(self, state_dict):
         pass
@@ -82,7 +83,10 @@ class MockingLossModule(nn.Module):
     pass
 
 
-def mocking_trainer(file=None) -> Trainer:
+_mocking_optim = MockingOptim()
+
+
+def mocking_trainer(file=None, optimizer=_mocking_optim) -> Trainer:
     trainer = Trainer(
         MockingCollector(),
         *[
@@ -90,7 +94,7 @@ def mocking_trainer(file=None) -> Trainer:
         ]
         * 2,
         loss_module=MockingLossModule(),
-        optimizer=MockingOptim(),
+        optimizer=optimizer,
         save_trainer_file=file,
     )
     trainer._pbar_str = OrderedDict()
@@ -249,20 +253,22 @@ class TestRB:
         S = 100
         if storage_type == "list":
             storage = ListStorage(S)
-            collate_fn = lambda x: torch.stack(x, 0)
         elif storage_type == "memmap":
             storage = LazyMemmapStorage(S)
-            collate_fn = lambda x: x
         else:
             raise NotImplementedError
 
         if prioritized:
             replay_buffer = TensorDictPrioritizedReplayBuffer(
-                S, 1.1, 0.9, storage=storage, collate_fn=collate_fn
+                S,
+                1.1,
+                0.9,
+                storage=storage,
             )
         else:
             replay_buffer = TensorDictReplayBuffer(
-                S, storage=storage, collate_fn=collate_fn
+                S,
+                storage=storage,
             )
 
         N = 9
@@ -371,16 +377,13 @@ class TestRB:
         def make_storage():
             if storage_type == "list":
                 storage = ListStorage(S)
-                collate_fn = lambda x: torch.stack(x, 0)
             elif storage_type == "tensor":
                 storage = LazyTensorStorage(S)
-                collate_fn = lambda x: x
             elif storage_type == "memmap":
                 storage = LazyMemmapStorage(S)
-                collate_fn = lambda x: x
             else:
                 raise NotImplementedError
-            return storage, collate_fn
+            return storage
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             if backend == "torch":
@@ -391,14 +394,18 @@ class TestRB:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
 
-            storage, collate_fn = make_storage()
+            storage = make_storage()
             if prioritized:
                 replay_buffer = TensorDictPrioritizedReplayBuffer(
-                    S, 1.1, 0.9, storage=storage, collate_fn=collate_fn
+                    S,
+                    1.1,
+                    0.9,
+                    storage=storage,
                 )
             else:
                 replay_buffer = TensorDictReplayBuffer(
-                    S, storage=storage, collate_fn=collate_fn
+                    S,
+                    storage=storage,
                 )
 
             rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
@@ -413,6 +420,7 @@ class TestRB:
                 [batch],
             )
             trainer._process_batch_hook(td)
+            # sample from rb
             td_out = trainer._process_optim_batch_hook(td)
             if prioritized:
                 td_out.set(replay_buffer.priority_key, torch.rand(N))
@@ -420,14 +428,18 @@ class TestRB:
             trainer.save_trainer(True)
 
             trainer2 = mocking_trainer()
-            storage2, _ = make_storage()
+            storage2 = make_storage()
             if prioritized:
                 replay_buffer2 = TensorDictPrioritizedReplayBuffer(
-                    S, 1.1, 0.9, storage=storage2, collate_fn=collate_fn
+                    S,
+                    1.1,
+                    0.9,
+                    storage=storage2,
                 )
             else:
                 replay_buffer2 = TensorDictReplayBuffer(
-                    S, storage=storage2, collate_fn=collate_fn
+                    S,
+                    storage=storage2,
                 )
             N = 9
             rb_trainer2 = ReplayBufferTrainer(
@@ -462,6 +474,159 @@ class TestRB:
         ReplayBufferTrainer.load_state_dict = ReplayBufferTrainer_load_state_dict
         TensorDict.state_dict = TensorDict_state_dict
         TensorDict.load_state_dict = TensorDict_load_state_dict
+
+
+class TestOptimizer:
+    @staticmethod
+    def _setup():
+        torch.manual_seed(0)
+        x = torch.randn(5, 10)
+        model1 = nn.Linear(10, 20)
+        model2 = nn.Linear(10, 20)
+        td = TensorDict(
+            {
+                "loss_1": model1(x).sum(),
+                "loss_2": model2(x).sum(),
+            },
+            batch_size=[],
+        )
+        model1_params = list(model1.parameters())
+        model2_params = list(model2.parameters())
+        all_params = model1_params + model2_params
+        return model1_params, model2_params, all_params, td
+
+    def test_optimizer_set_as_argument(self):
+        _, _, all_params, td = self._setup()
+
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+        trainer = mocking_trainer(optimizer=optimizer)
+
+        params_before = [torch.clone(p) for p in all_params]
+        td_out = trainer._optimizer_hook(td)
+        params_after = all_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(params_before, params_after)
+        )
+
+    def test_optimizer_set_as_hook(self):
+        _, _, all_params, td = self._setup()
+
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+        trainer = mocking_trainer(optimizer=None)
+        hook = OptimizerHook(optimizer)
+        hook.register(trainer)
+
+        params_before = [torch.clone(p) for p in all_params]
+        td_out = trainer._optimizer_hook(td)
+        params_after = all_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(params_before, params_after)
+        )
+
+    def test_optimizer_no_optimizer(self):
+        _, _, all_params, td = self._setup()
+
+        trainer = mocking_trainer(optimizer=None)
+
+        params_before = [torch.clone(p) for p in all_params]
+        td_out = trainer._optimizer_hook(td)
+        params_after = all_params
+
+        assert not [key for key in td_out.keys() if key.startswith("grad_norm_")]
+        assert all(
+            torch.equal(p_before, p_after)
+            for p_before, p_after in zip(params_before, params_after)
+        )
+
+    def test_optimizer_hook_loss_components_empty(self):
+        model = nn.Linear(10, 20)
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+        with pytest.raises(ValueError, match="loss_components list cannot be empty"):
+            OptimizerHook(optimizer, loss_components=[])
+
+    def test_optimizer_hook_loss_components_partial(self):
+        model1_params, model2_params, all_params, td = self._setup()
+
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+        trainer = mocking_trainer(optimizer=None)
+        hook = OptimizerHook(optimizer, loss_components=["loss_1"])
+        hook.register(trainer)
+
+        model1_params_before = [torch.clone(p) for p in model1_params]
+        model2_params_before = [torch.clone(p) for p in model2_params]
+        td_out = trainer._optimizer_hook(td)
+        model1_params_after = model1_params
+        model2_params_after = model2_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model1_params_before, model1_params_after)
+        )
+        assert all(
+            torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model2_params_before, model2_params_after)
+        )
+
+    def test_optimizer_hook_loss_components_none(self):
+        model1_params, model2_params, all_params, td = self._setup()
+
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+        trainer = mocking_trainer(optimizer=None)
+        hook = OptimizerHook(optimizer, loss_components=None)
+        hook.register(trainer)
+
+        model1_params_before = [torch.clone(p) for p in model1_params]
+        model2_params_before = [torch.clone(p) for p in model2_params]
+        td_out = trainer._optimizer_hook(td)
+        model1_params_after = model1_params
+        model2_params_after = model2_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model1_params_before, model1_params_after)
+        )
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model2_params_before, model2_params_after)
+        )
+
+    def test_optimizer_multiple_hooks(self):
+        model1_params, model2_params, _, td = self._setup()
+
+        trainer = mocking_trainer(optimizer=None)
+
+        optimizer1 = torch.optim.SGD(model1_params, lr=1e-3)
+        hook1 = OptimizerHook(optimizer1, loss_components=["loss_1"])
+        hook1.register(trainer, name="optimizer1")
+
+        optimizer2 = torch.optim.Adam(model2_params, lr=1e-4)
+        hook2 = OptimizerHook(optimizer2, loss_components=["loss_2"])
+        hook2.register(trainer, name="optimizer2")
+
+        model1_params_before = [torch.clone(p) for p in model1_params]
+        model2_params_before = [torch.clone(p) for p in model2_params]
+        td_out = trainer._optimizer_hook(td)
+        model1_params_after = model1_params
+        model2_params_after = model2_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert "grad_norm_1" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model1_params_before, model1_params_after)
+        )
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model2_params_before, model2_params_after)
+        )
 
 
 class TestLogReward:
@@ -608,7 +773,7 @@ def test_masking():
     )
     td_out = trainer._process_batch_hook(td)
     assert td_out.shape[0] == td.get("mask").sum()
-    assert (td["tensor"][td["mask"].squeeze(-1)] == td_out["tensor"]).all()
+    assert (td["tensor"][td["mask"]] == td_out["tensor"]).all()
 
 
 class TestSubSampler:

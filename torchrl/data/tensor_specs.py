@@ -12,19 +12,19 @@ from textwrap import indent
 from typing import (
     Any,
     Dict,
+    ItemsView,
+    KeysView,
     List,
     Optional,
     Sequence,
     Tuple,
     Union,
-    ItemsView,
-    KeysView,
     ValuesView,
 )
 
 import numpy as np
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import get_binary_env_var
 
@@ -60,7 +60,7 @@ class invertible_dict(dict):
 
     def __init__(self, *args, inv_dict=None, **kwargs):
         if inv_dict is None:
-            inv_dict = dict()
+            inv_dict = {}
         super().__init__(*args, **kwargs)
         self.inv_dict = inv_dict
 
@@ -222,9 +222,23 @@ class TensorSpec:
             ):
                 val = val.copy()
             val = torch.tensor(val, dtype=self.dtype, device=self.device)
+            if val.shape[-len(self.shape) :] != self.shape:
+                # option 1: add a singleton dim at the end
+                if self.shape == torch.Size([1]):
+                    val = val.unsqueeze(-1)
+                else:
+                    raise RuntimeError(
+                        f"Shape mismatch: the value has shape {val.shape} which "
+                        f"is incompatible with the spec shape {self.shape}."
+                    )
         if not _NO_CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val
+
+    def __setattr__(self, key, value):
+        if key == "shape":
+            value = torch.Size(value)
+        super().__setattr__(key, value)
 
     def to_numpy(self, val: torch.Tensor, safe: bool = True) -> np.ndarray:
         """Returns the np.ndarray correspondent of an input tensor.
@@ -419,8 +433,8 @@ class BoundedTensorSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         a, b = self.space
-        shape = [*shape, *self.shape]
         if self.dtype in (torch.float, torch.double, torch.half):
+            shape = [*shape, *self.shape]
             out = (
                 torch.zeros(shape, dtype=self.dtype, device=self.device).uniform_()
                 * (b - a)
@@ -433,7 +447,9 @@ class BoundedTensorSpec(TensorSpec):
             return out
         else:
             interval = self.space.maximum - self.space.minimum
-            r = torch.rand(*interval.shape, device=interval.device)
+            r = torch.rand(
+                torch.Size([*shape, *interval.shape]), device=interval.device
+            )
             r = interval * r
             r = self.space.minimum + r
             r = r.to(self.dtype).to(self.device)
@@ -445,6 +461,11 @@ class BoundedTensorSpec(TensorSpec):
         try:
             val = val.clamp_(minimum.item(), maximum.item())
         except ValueError:
+            minimum = minimum.expand_as(val)
+            maximum = maximum.expand_as(val)
+            val[val < minimum] = minimum[val < minimum]
+            val[val > maximum] = maximum[val > maximum]
+        except RuntimeError:
             minimum = minimum.expand_as(val)
             maximum = maximum.expand_as(val)
             val[val < minimum] = minimum[val < minimum]
@@ -514,7 +535,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         return torch.nn.functional.gumbel_softmax(
-            torch.rand(*shape, self.space.n, device=self.device),
+            torch.rand(torch.Size([*shape, self.space.n]), device=self.device),
             hard=True,
             dim=-1,
         ).to(torch.long)
@@ -647,7 +668,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         interval = self.space.maximum - self.space.minimum
-        r = torch.rand(interval.shape, device=interval.device)
+        r = torch.rand(torch.Size([*shape, *interval.shape]), device=interval.device)
         r = r * interval
         r = self.space.minimum + r
         r = r.to(self.dtype)
@@ -798,9 +819,15 @@ class NdUnboundedDiscreteTensorSpec(UnboundedDiscreteTensorSpec):
             shape = torch.Size([shape])
 
         dtype, device = _default_dtype_and_device(dtype, device)
+        if dtype == torch.bool:
+            min_value = False
+            max_value = True
+        else:
+            min_value = torch.iinfo(dtype).min
+            max_value = torch.iinfo(dtype).max
         space = ContinuousBox(
-            torch.full(shape, torch.iinfo(dtype).min, device=device),
-            torch.full(shape, torch.iinfo(dtype).max, device=device),
+            torch.full(shape, min_value, device=device),
+            torch.full(shape, max_value, device=device),
         )
 
         super(UnboundedDiscreteTensorSpec, self).__init__(
@@ -1010,7 +1037,7 @@ class DiscreteTensorSpec(TensorSpec):
         dtype: Optional[Union[str, torch.dtype]] = torch.long,
     ):
         if shape is None:
-            shape = torch.Size((1,))
+            shape = torch.Size([])
         dtype, device = _default_dtype_and_device(dtype, device)
         space = DiscreteBox(n)
         super().__init__(shape, space, device, dtype, domain="discrete")
@@ -1045,7 +1072,7 @@ class DiscreteTensorSpec(TensorSpec):
         )
 
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
-        return super().to_numpy(val, safe).squeeze(-1)
+        return super().to_numpy(val, safe)
 
 
 class CompositeSpec(TensorSpec):
@@ -1100,6 +1127,15 @@ class CompositeSpec(TensorSpec):
             a: CompositeSpec(
                 b: None,
                 c: None))
+
+    CompositeSpec supports nested indexing:
+        >>> spec = CompositeSpec(obs=None)
+        >>> spec["nested", "x"] = None
+        >>> print(spec)
+        CompositeSpec(
+            nested: CompositeSpec(
+                x: None),
+            x: None)
 
     """
 
@@ -1212,7 +1248,12 @@ class CompositeSpec(TensorSpec):
                 raise RuntimeError(
                     "CompositeSpec.encode cannot be used with missing values."
                 )
-            out[key] = self[key].encode(item)
+            try:
+                out[key] = self[key].encode(item)
+            except KeyError:
+                raise KeyError(
+                    f"The CompositeSpec instance with keys {self.keys()} does not have a '{key}' key."
+                )
         return out
 
     def __repr__(self) -> str:
@@ -1258,12 +1299,13 @@ class CompositeSpec(TensorSpec):
     def rand(self, shape=None) -> TensorDictBase:
         if shape is None:
             shape = torch.Size([])
+        _dict = {
+            key: self[key].rand(shape)
+            for key in self.keys(True)
+            if isinstance(key, str) and self[key] is not None
+        }
         return TensorDict(
-            {
-                key: self[key].rand(shape)
-                for key in self.keys(True)
-                if isinstance(key, str) and self[key] is not None
-            },
+            _dict,
             batch_size=shape,
         )
 
@@ -1382,4 +1424,7 @@ class _CompositeSpecKeysView:
                 yield key
 
     def __len__(self):
-        return len([k for k in self])
+        i = 0
+        for _ in self:
+            i += 1
+        return i

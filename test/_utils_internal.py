@@ -11,13 +11,41 @@ from functools import wraps
 # this returns relative path from current file.
 import pytest
 import torch.cuda
-from tensordict.tensordict import TensorDictBase
-from torchrl._utils import seed_generator
-from torchrl.envs import EnvBase
-
+from torchrl._utils import implement_for, seed_generator
+from torchrl.envs.libs.gym import _has_gym
 
 # Specified for test_utils.py
 __version__ = "0.3"
+
+# Default versions of the environments.
+CARTPOLE_VERSIONED = "CartPole-v1"
+HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
+PENDULUM_VERSIONED = "Pendulum-v1"
+PONG_VERSIONED = "ALE/Pong-v5"
+
+
+@implement_for("gym", None, "0.21.0")
+def _set_gym_environments():  # noqa: F811
+    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
+
+    CARTPOLE_VERSIONED = "CartPole-v0"
+    HALFCHEETAH_VERSIONED = "HalfCheetah-v2"
+    PENDULUM_VERSIONED = "Pendulum-v0"
+    PONG_VERSIONED = "Pong-v4"
+
+
+@implement_for("gym", "0.21.0", None)
+def _set_gym_environments():  # noqa: F811
+    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
+
+    CARTPOLE_VERSIONED = "CartPole-v1"
+    HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
+    PENDULUM_VERSIONED = "Pendulum-v1"
+    PONG_VERSIONED = "ALE/Pong-v5"
+
+
+if _has_gym:
+    _set_gym_environments()
 
 
 def get_relative_path(curr_file, *path_components):
@@ -39,48 +67,6 @@ def generate_seeds(seed, repeat):
         seed = seed_generator(seed)
         seeds.append(seed)
     return seeds
-
-
-def _test_fake_tensordict(env: EnvBase):
-    fake_tensordict = env.fake_tensordict().flatten_keys(".")
-    real_tensordict = env.rollout(3).flatten_keys(".")
-
-    keys1 = set(fake_tensordict.keys())
-    keys2 = set(real_tensordict.keys())
-    assert keys1 == keys2
-    fake_tensordict = fake_tensordict.expand(3).to_tensordict()
-    fake_tensordict.zero_()
-    real_tensordict.zero_()
-    assert (fake_tensordict == real_tensordict).all()
-    for key in keys2:
-        assert fake_tensordict[key].shape == real_tensordict[key].shape
-
-    # test dtypes
-    for key, value in real_tensordict.unflatten_keys(".").items():
-        _check_dtype(key, value, env.observation_spec, env.input_spec)
-
-
-def _check_dtype(key, value, obs_spec, input_spec):
-    if isinstance(value, TensorDictBase) and key == "next":
-        for _key, _value in value.items():
-            _check_dtype(_key, _value, obs_spec, input_spec=None)
-    elif isinstance(value, TensorDictBase) and key in obs_spec.keys():
-        for _key, _value in value.items():
-            _check_dtype(_key, _value, obs_spec=obs_spec[key], input_spec=None)
-    elif isinstance(value, TensorDictBase) and key in input_spec.keys():
-        for _key, _value in value.items():
-            _check_dtype(_key, _value, obs_spec=None, input_spec=input_spec[key])
-    else:
-        if obs_spec is not None and key in obs_spec.keys():
-            assert (
-                obs_spec[key].dtype is value.dtype
-            ), f"{obs_spec[key].dtype} vs {value.dtype} for {key}"
-        elif input_spec is not None and key in input_spec.keys():
-            assert (
-                input_spec[key].dtype is value.dtype
-            ), f"{input_spec[key].dtype} vs {value.dtype} for {key}"
-        else:
-            assert key in {"done", "reward"}, (key, obs_spec, input_spec)
 
 
 # Decorator to retry upon certain Exceptions.
