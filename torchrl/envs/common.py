@@ -824,6 +824,10 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         except AttributeError:
             pass
 
+    @abc.abstractmethod
+    def _set_seed(self, seed: Optional[int]):
+        raise NotImplementedError
+
 
 def make_tensordict(
     env: _EnvWrapper,
