@@ -515,8 +515,8 @@ class _BatchedEnv(EnvBase):
         raise NotImplementedError
 
     def _set_seed(self, seed: Optional[int]):
-        # This method is not used in batched envs
-        return
+        """ This method is not used in batched envs """
+        pass
 
     def start(self) -> None:
         if not self.is_closed:
