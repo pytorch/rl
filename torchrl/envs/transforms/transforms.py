@@ -459,7 +459,7 @@ but got an object of type {type(transform)}."""
         return self.base_env.set_seed(seed, static_seed=static_seed)
 
     def _set_seed(self, seed: Optional[int]):
-        """This method is not used in transformed envs"""
+        """This method is not used in transformed envs."""
         pass
 
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
