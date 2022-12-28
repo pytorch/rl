@@ -14,8 +14,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
-from torchrl.data import CompositeSpec, TensorSpec
 
+from torchrl.data import CompositeSpec, TensorSpec
 from .utils import get_available_libraries, step_mdp
 from .._utils import prod, seed_generator
 from ..data.utils import DEVICE_TYPING
@@ -788,6 +788,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
             f"env not set in {self.__class__.__name__}, cannot access {attr}"
         )
 
+    @abc.abstractmethod
     def _init_env(self) -> Optional[int]:
         """Runs all the necessary steps such that the environment is ready to use.
 
