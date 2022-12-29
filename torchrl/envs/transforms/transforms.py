@@ -2486,7 +2486,7 @@ class StepCounter(Transform):
         max_steps (:obj:`int`, optional): a positive integer that indicates the maximum number of steps to take before
         setting the done state to True. If set to None (the default value), the environment will run indefinitely until
         the done state is manually set by the user or by the environment itself. However, the step count will still be
-        incremented on each call to step().
+        incremented on each call to step() into the `step_count` attribute.
     """
 
     invertible = False
@@ -2549,7 +2549,7 @@ class StepCounter(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            dtype=torch.int64, device=observation_spec.device
+            shape=torch.Size([1]), dtype=torch.int64, device=observation_spec.device
         )
         observation_spec["step_count"].space.minimum = 0
         return observation_spec

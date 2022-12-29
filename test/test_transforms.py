@@ -1690,9 +1690,9 @@ class TestTransforms:
             assert torch.all(td.get("step_count") == 0)
 
     def test_step_counter_observation_spec(self):
-        env = TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(50))
-        check_env_specs(GymEnv("Pendulum-v1"))
-        check_env_specs(env)
+        transformed_env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(50))
+        check_env_specs(transformed_env)
+        transformed_env.close()
 
 
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
