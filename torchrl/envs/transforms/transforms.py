@@ -30,7 +30,6 @@ from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
 from torchrl.envs.utils import step_mdp
 
-
 try:
     from torchvision.transforms.functional import center_crop
     from torchvision.transforms.functional_tensor import (
@@ -453,9 +452,15 @@ but got an object of type {type(transform)}."""
 
         return tensordict_out
 
-    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+    def set_seed(
+        self, seed: Optional[int] = None, static_seed: bool = False
+    ) -> Optional[int]:
         """Set the seeds of the environment."""
         return self.base_env.set_seed(seed, static_seed=static_seed)
+
+    def _set_seed(self, seed: Optional[int]):
+        """This method is not used in transformed envs."""
+        pass
 
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         if tensordict is not None:

@@ -493,6 +493,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             seed = new_seed
         return seed
 
+    @abc.abstractmethod
     def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError
 
@@ -823,10 +824,6 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
             self._env.close()
         except AttributeError:
             pass
-
-    @abc.abstractmethod
-    def _set_seed(self, seed: Optional[int]):
-        raise NotImplementedError
 
 
 def make_tensordict(
