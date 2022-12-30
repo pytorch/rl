@@ -114,7 +114,7 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = BoundedTensorSpec(-0.1, 0.1, torch.Size((1,)), 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = UnboundedContinuousTensorSpec(4)
 

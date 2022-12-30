@@ -14,9 +14,9 @@ import torch
 from torchrl.data import (
     BoundedTensorSpec,
     CompositeSpec,
-    NdUnboundedDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
 )
 
 from ...data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
@@ -78,9 +78,7 @@ def _dmcontrol_to_torchrl_spec_transform(
                 shape=shape, dtype=dtype, device=device
             )
         else:
-            return NdUnboundedDiscreteTensorSpec(
-                shape=shape, dtype=dtype, device=device
-            )
+            return UnboundedDiscreteTensorSpec(shape=shape, dtype=dtype, device=device)
 
     else:
         raise NotImplementedError(type(spec))
