@@ -36,7 +36,7 @@ INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
 _NO_CHECK_SPEC_ENCODE = get_binary_env_var("NO_CHECK_SPEC_ENCODE")
 
-_DEFAULT_SHAPE = torch.Size([1])
+_DEFAULT_SHAPE = torch.Size((1,))
 
 
 def _default_dtype_and_device(
@@ -511,38 +511,6 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
 
 @dataclass(repr=False)
-class UnboundedContinuousTensorSpec(TensorSpec):
-    """An unbounded, unidimensional, continuous tensor spec.
-
-    Args:
-        device (str, int or torch.device, optional): device of the tensors.
-        dtype (str or torch.dtype, optional): dtype of the tensors.
-            (should be an floating point dtype such as float, double etc.)
-
-    """
-
-    shape: torch.Size
-    space: ContinuousBox
-    device: torch.device = torch.device("cpu")
-    dtype: torch.dtype = torch.float
-    domain: str = ""
-
-    def __init__(self, device=None, dtype=None):
-        dtype, device = _default_dtype_and_device(dtype, device)
-        box = ContinuousBox(torch.tensor(-np.inf), torch.tensor(np.inf))
-        super().__init__(torch.Size((1,)), box, device, dtype, "composite")
-
-    def rand(self, shape=None) -> torch.Tensor:
-        if shape is None:
-            shape = torch.Size([])
-        shape = [*shape, *self.shape]
-        return torch.randn(shape, device=self.device, dtype=self.dtype)
-
-    def is_in(self, val: torch.Tensor) -> bool:
-        return True
-
-
-@dataclass(repr=False)
 class UnboundedDiscreteTensorSpec(TensorSpec):
     """An unbounded, unidimensional, discrete tensor spec.
 
@@ -722,8 +690,8 @@ class BoundedTensorSpec(TensorSpec):
 
 
 @dataclass(repr=False)
-class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
-    """An unbounded, multi-dimensional, continuous tensor spec.
+class UnboundedContinuousTensorSpec(TensorSpec):
+    """An unbounded continuous tensor spec.
 
     Args:
         device (str, int or torch.device, optional): device of the tensors.
@@ -733,7 +701,7 @@ class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
 
     def __init__(
         self,
-        shape: Union[torch.Size, int],
+        shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = None,
     ):
@@ -741,13 +709,27 @@ class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
             shape = torch.Size([shape])
 
         dtype, device = _default_dtype_and_device(dtype, device)
-        super(UnboundedContinuousTensorSpec, self).__init__(
+        box = (
+            ContinuousBox(torch.tensor(-np.inf), torch.tensor(np.inf))
+            if shape == _DEFAULT_SHAPE
+            else None
+        )
+        super().__init__(
             shape=shape,
-            space=None,
+            space=box,
             device=device,
             dtype=dtype,
             domain="continuous",
         )
+
+    def rand(self, shape=None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
+        shape = [*shape, *self.shape]
+        return torch.randn(shape, device=self.device, dtype=self.dtype)
+
+    def is_in(self, val: torch.Tensor) -> bool:
+        return True
 
 
 @dataclass(repr=False)

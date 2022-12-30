@@ -21,7 +21,6 @@ from .tensor_specs import (
     DEVICE_TYPING,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     NdUnboundedDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,

@@ -9,10 +9,10 @@ from torchrl.data import (
     CompositeSpec,
     DEVICE_TYPING,
     DiscreteTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     NdUnboundedDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs import GymLikeEnv
@@ -74,7 +74,7 @@ def _jumanji_to_torchrl_spec_transform(
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         if dtype in (torch.float, torch.double, torch.half):
-            return NdUnboundedContinuousTensorSpec(
+            return UnboundedContinuousTensorSpec(
                 shape=shape, dtype=dtype, device=device
             )
         else:

@@ -17,7 +17,6 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
@@ -134,7 +133,7 @@ def test_ndunbounded(dtype, n, shape):
     torch.manual_seed(0)
     np.random.seed(0)
 
-    ts = NdUnboundedContinuousTensorSpec(
+    ts = UnboundedContinuousTensorSpec(
         shape=[
             n,
         ],
@@ -248,7 +247,7 @@ class TestComposite:
                 dtype=dtype,
                 device=device,
             ),
-            act=NdUnboundedContinuousTensorSpec((7,), dtype=dtype, device=device)
+            act=UnboundedContinuousTensorSpec((7,), dtype=dtype, device=device)
             if is_complete
             else None,
         )
@@ -257,7 +256,7 @@ class TestComposite:
         ts = self._composite_spec(is_complete, device, dtype)
         assert isinstance(ts["obs"], BoundedTensorSpec)
         if is_complete:
-            assert isinstance(ts["act"], NdUnboundedContinuousTensorSpec)
+            assert isinstance(ts["act"], UnboundedContinuousTensorSpec)
         else:
             assert ts["act"] is None
         with pytest.raises(KeyError):
@@ -660,25 +659,23 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        ts = NdUnboundedContinuousTensorSpec(shape=shape, device=device, dtype=dtype)
+        ts = UnboundedContinuousTensorSpec(shape=shape, device=device, dtype=dtype)
 
-        ts_same = NdUnboundedContinuousTensorSpec(
-            shape=shape, device=device, dtype=dtype
-        )
+        ts_same = UnboundedContinuousTensorSpec(shape=shape, device=device, dtype=dtype)
         assert ts == ts_same
 
         other_shape = 13 if type(shape) == int else torch.Size(np.array(shape) + 10)
-        ts_other = NdUnboundedContinuousTensorSpec(
+        ts_other = UnboundedContinuousTensorSpec(
             shape=other_shape, device=device, dtype=dtype
         )
         assert ts != ts_other
 
-        ts_other = NdUnboundedContinuousTensorSpec(
+        ts_other = UnboundedContinuousTensorSpec(
             shape=shape, device="cpu:0", dtype=dtype
         )
         assert ts != ts_other
 
-        ts_other = NdUnboundedContinuousTensorSpec(
+        ts_other = UnboundedContinuousTensorSpec(
             shape=shape, device=device, dtype=torch.float64
         )
         assert ts != ts_other

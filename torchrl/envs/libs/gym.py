@@ -15,9 +15,9 @@ from torchrl.data import (
     CompositeSpec,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 
 from ..._utils import implement_for
@@ -271,7 +271,7 @@ class GymWrapper(GymLikeEnv):
             else:
                 observation_spec = CompositeSpec(observation=observation_spec)
         self.observation_spec = observation_spec
-        self.reward_spec = NdUnboundedContinuousTensorSpec(
+        self.reward_spec = UnboundedContinuousTensorSpec(
             shape=[1],
             device=self.device,
         )

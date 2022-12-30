@@ -32,8 +32,8 @@ from torchrl.data import (
     CompositeSpec,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.envs.model_based.dreamer import DreamerEnv
@@ -2022,7 +2022,7 @@ class TestReinforce:
             distribution_class=TanhNormal,
             return_log_prob=True,
             in_keys=["loc", "scale"],
-            spec=NdUnboundedContinuousTensorSpec(n_act),
+            spec=UnboundedContinuousTensorSpec(n_act),
         )
         if advantage == "gae":
             advantage = GAE(
@@ -2146,8 +2146,8 @@ class TestDreamer:
     def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "state": NdUnboundedContinuousTensorSpec(state_dim),
-            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2221,8 +2221,8 @@ class TestDreamer:
     def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "state": NdUnboundedContinuousTensorSpec(state_dim),
-            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2270,8 +2270,8 @@ class TestDreamer:
     def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "state": NdUnboundedContinuousTensorSpec(state_dim),
-            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)

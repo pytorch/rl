@@ -25,12 +25,7 @@ from mocking_classes import (
 from tensordict import TensorDict
 from torch import multiprocessing as mp, Tensor
 from torchrl._utils import prod
-from torchrl.data import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    NdUnboundedContinuousTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs import (
     BinarizeReward,
     CatFrames,
@@ -1795,7 +1790,7 @@ class TestR3M:
         if del_keys:
             exp_ts = CompositeSpec(
                 {
-                    key: NdUnboundedContinuousTensorSpec(r3m_net.outdim, device)
+                    key: UnboundedContinuousTensorSpec(r3m_net.outdim, device)
                     for key in out_keys
                 }
             )
@@ -1813,7 +1808,7 @@ class TestR3M:
             for key in in_keys:
                 ts_dict[key] = observation_spec[key]
             for key in out_keys:
-                ts_dict[key] = NdUnboundedContinuousTensorSpec(r3m_net.outdim, device)
+                ts_dict[key] = UnboundedContinuousTensorSpec(r3m_net.outdim, device)
             exp_ts = CompositeSpec(ts_dict)
 
             observation_spec_out = r3m_net.transform_observation_spec(observation_spec)
@@ -2052,7 +2047,7 @@ class TestVIP:
         if del_keys:
             exp_ts = CompositeSpec(
                 {
-                    key: NdUnboundedContinuousTensorSpec(vip_net.outdim, device)
+                    key: UnboundedContinuousTensorSpec(vip_net.outdim, device)
                     for key in out_keys
                 }
             )
@@ -2070,7 +2065,7 @@ class TestVIP:
             for key in in_keys:
                 ts_dict[key] = observation_spec[key]
             for key in out_keys:
-                ts_dict[key] = NdUnboundedContinuousTensorSpec(vip_net.outdim, device)
+                ts_dict[key] = UnboundedContinuousTensorSpec(vip_net.outdim, device)
             exp_ts = CompositeSpec(ts_dict)
 
             observation_spec_out = vip_net.transform_observation_spec(observation_spec)

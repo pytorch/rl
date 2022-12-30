@@ -29,10 +29,10 @@ class Actor(SafeModule):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data import UnboundedContinuousTensorSpec
         >>> from torchrl.modules import Actor
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
-        >>> action_spec = NdUnboundedContinuousTensorSpec(4)
+        >>> action_spec = UnboundedContinuousTensorSpec(4)
         >>> module = torch.nn.Linear(4, 4)
         >>> td_module = Actor(
         ...    module=module,
@@ -148,7 +148,7 @@ class ValueOperator(SafeModule):
         >>> from tensordict import TensorDict
         >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch import nn
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data import UnboundedContinuousTensorSpec
         >>> from torchrl.modules import ValueOperator
         >>> td = TensorDict({"observation": torch.randn(3, 4), "action": torch.randn(3, 2)}, [3,])
         >>> class CustomModule(nn.Module):
@@ -569,9 +569,9 @@ class ActorValueOperator(SafeSequential):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.modules import ProbabilisticActor, SafeModule
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec, BoundedTensorSpec
+        >>> from torchrl.data import UnboundedContinuousTensorSpec, BoundedTensorSpec
         >>> from torchrl.modules import ValueOperator, TanhNormal, ActorValueOperator, NormalParamWrapper
-        >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
+        >>> spec_hidden = UnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
         >>> td_module_hidden = SafeModule(
         ...    module=module_hidden,
@@ -703,9 +703,9 @@ class ActorCriticOperator(ActorValueOperator):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.modules import ProbabilisticActor, SafeModule
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec, BoundedTensorSpec
+        >>> from torchrl.data import UnboundedContinuousTensorSpec, BoundedTensorSpec
         >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper, MLP
-        >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
+        >>> spec_hidden = UnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
         >>> td_module_hidden = SafeModule(
         ...    module=module_hidden,
@@ -832,7 +832,7 @@ class ActorCriticWrapper(SafeSequential):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec, BoundedTensorSpec
+        >>> from torchrl.data import UnboundedContinuousTensorSpec, BoundedTensorSpec
         >>> from torchrl.modules import (
                 ActorCriticWrapper,
                 ProbabilisticActor,

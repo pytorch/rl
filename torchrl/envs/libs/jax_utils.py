@@ -9,9 +9,9 @@ from tensordict.tensordict import make_tensordict, TensorDictBase
 from torch.utils import dlpack as torch_dlpack
 from torchrl.data import (
     CompositeSpec,
-    NdUnboundedContinuousTensorSpec,
     NdUnboundedDiscreteTensorSpec,
     TensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 
 
@@ -94,7 +94,7 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
 def _extract_spec(data: Union[torch.Tensor, TensorDictBase]) -> TensorSpec:
     if isinstance(data, torch.Tensor):
         if data.dtype in (torch.float, torch.double, torch.half):
-            return NdUnboundedContinuousTensorSpec(
+            return UnboundedContinuousTensorSpec(
                 shape=data.shape, dtype=data.dtype, device=data.device
             )
         else:
