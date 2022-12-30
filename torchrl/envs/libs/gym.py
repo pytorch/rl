@@ -11,10 +11,10 @@ import torch
 
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
+    BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
@@ -75,7 +75,7 @@ def _gym_to_torchrl_spec_transform(
             shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdBoundedTensorSpec(
+        return BoundedTensorSpec(
             torch.tensor(spec.low, device=device, dtype=dtype),
             torch.tensor(spec.high, device=device, dtype=dtype),
             shape,

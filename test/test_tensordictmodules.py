@@ -11,8 +11,8 @@ from tensordict import TensorDict
 from tensordict.nn.functional_modules import make_functional
 from torch import nn
 from torchrl.data.tensor_specs import (
+    BoundedTensorSpec,
     CompositeSpec,
-    NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
 )
 from torchrl.envs.utils import set_exploration_mode
@@ -114,7 +114,7 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
 
@@ -176,7 +176,7 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
         else:
@@ -239,7 +239,7 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
 
@@ -293,7 +293,7 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
         else:
@@ -350,7 +350,7 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 32)
+            spec = BoundedTensorSpec(-0.1, 0.1, 32)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(32)
 
@@ -404,7 +404,7 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 32)
+            spec = BoundedTensorSpec(-0.1, 0.1, 32)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(32)
         else:
@@ -464,7 +464,7 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
 
@@ -543,7 +543,7 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
         else:
@@ -640,7 +640,7 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
 
@@ -717,7 +717,7 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
         else:
@@ -804,7 +804,7 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
 
@@ -873,7 +873,7 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
         else:
@@ -959,7 +959,7 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 7)
+            spec = BoundedTensorSpec(-0.1, 0.1, 7)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(7)
 
@@ -1031,7 +1031,7 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 7)
+            spec = BoundedTensorSpec(-0.1, 0.1, 7)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(7)
         else:
@@ -1123,7 +1123,7 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
 
@@ -1222,7 +1222,7 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
         else:
@@ -1340,7 +1340,7 @@ class TestTDSequence:
         net3 = NormalParamWrapper(net3)
         net3 = SafeModule(net3, in_keys=["c"], out_keys=["loc", "scale"])
 
-        spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+        spec = BoundedTensorSpec(-0.1, 0.1, 4)
 
         kwargs = {"distribution_class": TanhNormal}
 

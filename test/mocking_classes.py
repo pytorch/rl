@@ -13,7 +13,6 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
@@ -26,7 +25,6 @@ spec_dict = {
     "one_hot": OneHotDiscreteTensorSpec,
     "categorical": DiscreteTensorSpec,
     "unbounded": UnboundedContinuousTensorSpec,
-    "ndbounded": NdBoundedTensorSpec,
     "ndunbounded": NdUnboundedContinuousTensorSpec,
     "binary": BinaryDiscreteTensorSpec,
     "mult_one_hot": MultOneHotDiscreteTensorSpec,
@@ -34,11 +32,10 @@ spec_dict = {
 }
 
 default_spec_kwargs = {
-    BoundedTensorSpec: {"minimum": -1.0, "maximum": 1.0},
     OneHotDiscreteTensorSpec: {"n": 7},
     DiscreteTensorSpec: {"n": 7},
     UnboundedContinuousTensorSpec: {},
-    NdBoundedTensorSpec: {"minimum": -torch.ones(4), "maxmimum": torch.ones(4)},
+    BoundedTensorSpec: {"minimum": -torch.ones(4), "maximum": torch.ones(4)},
     NdUnboundedContinuousTensorSpec: {
         "shape": [
             7,
@@ -376,7 +373,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
                 ),
             )
         if action_spec is None:
-            action_spec = NdBoundedTensorSpec(-1, 1, (7,))
+            action_spec = BoundedTensorSpec(-1, 1, (7,))
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec()
 
@@ -592,7 +589,7 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
             )
 
         if action_spec is None:
-            action_spec = NdBoundedTensorSpec(-1, 1, pixel_shape[-1])
+            action_spec = BoundedTensorSpec(-1, 1, pixel_shape[-1])
 
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec()

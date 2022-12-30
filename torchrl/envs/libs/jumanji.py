@@ -5,10 +5,10 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
     DEVICE_TYPING,
     DiscreteTensorSpec,
-    NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
     NdUnboundedDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
@@ -62,7 +62,7 @@ def _jumanji_to_torchrl_spec_transform(
         shape = spec.shape
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdBoundedTensorSpec(
+        return BoundedTensorSpec(
             shape=shape,
             minimum=np.asarray(spec.minimum),
             maximum=np.asarray(spec.maximum),

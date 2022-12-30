@@ -55,8 +55,8 @@ class RandomPolicy:
 
         Examples:
             >>> from tensordict import TensorDict
-            >>> from torchrl.data.tensor_specs import NdBoundedTensorSpec
-            >>> action_spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
+            >>> from torchrl.data.tensor_specs import BoundedTensorSpec
+            >>> action_spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
             >>> actor = RandomPolicy(spec=action_spec)
             >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
 

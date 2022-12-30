@@ -27,7 +27,7 @@ from mocking_classes import (
     MockSerialEnv,
 )
 from packaging import version
-from torchrl.data import CompositeSpec, NdBoundedTensorSpec
+from torchrl.data import BoundedTensorSpec, CompositeSpec
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import ObservationNorm
 from torchrl.envs.transforms.transforms import (
@@ -988,7 +988,7 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
     if keys:
         obs_spec = CompositeSpec(
             **{
-                key: NdBoundedTensorSpec(maximum=1, minimum=1, shape=torch.Size([1]))
+                key: BoundedTensorSpec(maximum=1, minimum=1, shape=torch.Size([1]))
                 for key in keys
             }
         )
@@ -996,9 +996,7 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
         env = ContinuousActionVecMockEnv(
             device=device,
             observation_spec=obs_spec,
-            action_spec=NdBoundedTensorSpec(
-                minimum=1, maximum=2, shape=torch.Size((1,))
-            ),
+            action_spec=BoundedTensorSpec(minimum=1, maximum=2, shape=torch.Size((1,))),
         )
         env.out_key = "observation"
     else:

@@ -12,8 +12,8 @@ import numpy as np
 import torch
 
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
-    NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
     NdUnboundedDiscreteTensorSpec,
     TensorSpec,
@@ -60,7 +60,7 @@ def _dmcontrol_to_torchrl_spec_transform(
         shape = spec.shape
         if not len(shape):
             shape = torch.Size([1])
-        return NdBoundedTensorSpec(
+        return BoundedTensorSpec(
             shape=shape,
             minimum=spec.minimum,
             maximum=spec.maximum,
