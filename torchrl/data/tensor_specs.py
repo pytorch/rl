@@ -565,7 +565,7 @@ class BoundedTensorSpec(TensorSpec):
         self,
         minimum: Union[float, torch.Tensor, np.ndarray],
         maximum: Union[float, torch.Tensor, np.ndarray],
-        shape: Optional[torch.Size] = _DEFAULT_SHAPE,
+        shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[torch.dtype, str]] = None,
     ):

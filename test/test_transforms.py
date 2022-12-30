@@ -308,7 +308,9 @@ def test_added_transforms_are_in_eval_mode():
 
 class TestTransformedEnv:
     def test_independent_obs_specs_from_shared_env(self):
-        obs_spec = CompositeSpec(observation=BoundedTensorSpec(minimum=0, maximum=10))
+        obs_spec = CompositeSpec(
+            observation=BoundedTensorSpec(minimum=0, maximum=10, shape=torch.Size((1,)))
+        )
         base_env = ContinuousActionVecMockEnv(observation_spec=obs_spec)
         t1 = TransformedEnv(base_env, transform=ObservationNorm(loc=3, scale=2))
         t2 = TransformedEnv(base_env, transform=ObservationNorm(loc=1, scale=6))

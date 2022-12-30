@@ -28,7 +28,9 @@ def test_bounded(dtype):
     np.random.seed(0)
     for _ in range(100):
         bounds = torch.randn(2).sort()[0]
-        ts = BoundedTensorSpec(bounds[0].item(), bounds[1].item(), dtype=dtype)
+        ts = BoundedTensorSpec(
+            bounds[0].item(), bounds[1].item(), torch.Size((1,)), dtype=dtype
+        )
         _dtype = dtype
         if dtype is None:
             _dtype = torch.get_default_dtype()
@@ -473,7 +475,7 @@ class TestComposite:
         td2 = CompositeSpec(nested_cp=CompositeSpec(act=None).to(device))
         ts.update(td2)
         td2 = CompositeSpec(
-            nested_cp=CompositeSpec(act=UnboundedContinuousTensorSpec(device))
+            nested_cp=CompositeSpec(act=UnboundedContinuousTensorSpec(device=device))
         )
         ts.update(td2)
         assert set(ts.keys()) == {
@@ -509,25 +511,31 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        ts = BoundedTensorSpec(minimum, maximum, device, dtype)
+        ts = BoundedTensorSpec(minimum, maximum, torch.Size((1,)), device, dtype)
 
-        ts_same = BoundedTensorSpec(minimum, maximum, device, dtype)
+        ts_same = BoundedTensorSpec(minimum, maximum, torch.Size((1,)), device, dtype)
         assert ts == ts_same
 
-        ts_other = BoundedTensorSpec(minimum + 1, maximum, device, dtype)
+        ts_other = BoundedTensorSpec(
+            minimum + 1, maximum, torch.Size((1,)), device, dtype
+        )
         assert ts != ts_other
 
-        ts_other = BoundedTensorSpec(minimum, maximum + 1, device, dtype)
+        ts_other = BoundedTensorSpec(
+            minimum, maximum + 1, torch.Size((1,)), device, dtype
+        )
         assert ts != ts_other
 
-        ts_other = BoundedTensorSpec(minimum, maximum, "cpu:0", dtype)
+        ts_other = BoundedTensorSpec(minimum, maximum, torch.Size((1,)), "cpu:0", dtype)
         assert ts != ts_other
 
-        ts_other = BoundedTensorSpec(minimum, maximum, device, torch.float64)
+        ts_other = BoundedTensorSpec(
+            minimum, maximum, torch.Size((1,)), device, torch.float64
+        )
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            UnboundedContinuousTensorSpec(device, dtype), ts
+            UnboundedContinuousTensorSpec(device=device, dtype=dtype), ts
         )
         assert ts != ts_other
 
@@ -555,7 +563,7 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            UnboundedContinuousTensorSpec(device, dtype), ts
+            UnboundedContinuousTensorSpec(device=device, dtype=dtype), ts
         )
         assert ts != ts_other
 
@@ -563,19 +571,19 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        ts = UnboundedContinuousTensorSpec(device, dtype)
+        ts = UnboundedContinuousTensorSpec(device=device, dtype=dtype)
 
-        ts_same = UnboundedContinuousTensorSpec(device, dtype)
+        ts_same = UnboundedContinuousTensorSpec(device=device, dtype=dtype)
         assert ts == ts_same
 
-        ts_other = UnboundedContinuousTensorSpec("cpu:0", dtype)
+        ts_other = UnboundedContinuousTensorSpec(device="cpu:0", dtype=dtype)
         assert ts != ts_other
 
-        ts_other = UnboundedContinuousTensorSpec(device, torch.float64)
+        ts_other = UnboundedContinuousTensorSpec(device=device, dtype=torch.float64)
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, device, dtype), ts
+            BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype), ts
         )
         assert ts != ts_other
 
@@ -615,7 +623,7 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, device, dtype), ts
+            UnboundedContinuousTensorSpec(device=device, dtype=dtype), ts
         )
         assert ts != ts_other
 
@@ -643,7 +651,7 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            UnboundedContinuousTensorSpec(device, dtype), ts
+            UnboundedContinuousTensorSpec(device=device, dtype=dtype), ts
         )
         assert ts != ts_other
 
@@ -681,7 +689,7 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, device, dtype), ts
+            BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype), ts
         )
         assert ts != ts_other
 
@@ -705,7 +713,7 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, device, dtype), ts
+            BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype), ts
         )
         assert ts != ts_other
 
@@ -746,7 +754,7 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, device, dtype), ts
+            BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype), ts
         )
         assert ts != ts_other
 
@@ -756,9 +764,9 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        bounded = BoundedTensorSpec(0, 1, device, dtype)
-        bounded_same = BoundedTensorSpec(0, 1, device, dtype)
-        bounded_other = BoundedTensorSpec(0, 2, device, dtype)
+        bounded = BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype)
+        bounded_same = BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype)
+        bounded_other = BoundedTensorSpec(0, 2, torch.Size((1,)), device, dtype)
 
         nd = BoundedTensorSpec(
             minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
@@ -937,7 +945,7 @@ class TestSpec:
         ).all()
 
     def test_bounded_rand(self):
-        spec = BoundedTensorSpec(-3, 3)
+        spec = BoundedTensorSpec(-3, 3, torch.Size((1,)))
         sample = torch.stack([spec.rand() for _ in range(100)])
         assert (-3 <= sample).all() and (3 >= sample).all()
 

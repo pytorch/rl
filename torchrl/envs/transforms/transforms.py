@@ -852,6 +852,7 @@ class RewardClipping(Transform):
             return BoundedTensorSpec(
                 self.clamp_min,
                 self.clamp_max,
+                torch.Size((1,)),
                 device=reward_spec.device,
                 dtype=reward_spec.dtype,
             )
