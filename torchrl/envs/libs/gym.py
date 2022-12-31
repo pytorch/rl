@@ -8,7 +8,6 @@ from typing import Dict, List
 from warnings import warn
 
 import torch
-
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -20,10 +19,10 @@ from torchrl.data import (
     UnboundedContinuousTensorSpec,
 )
 
-from ..._utils import implement_for
-from ...data.utils import numpy_to_torch_dtype_dict
 from ..gym_like import default_info_dict_reader, GymLikeEnv
 from ..utils import _classproperty
+from ..._utils import implement_for
+from ...data.utils import numpy_to_torch_dtype_dict
 
 try:
     import gym
@@ -75,12 +74,19 @@ def _gym_to_torchrl_spec_transform(
             shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return BoundedTensorSpec(
-            torch.tensor(spec.low, device=device, dtype=dtype),
-            torch.tensor(spec.high, device=device, dtype=dtype),
-            shape,
-            dtype=dtype,
-            device=device,
+        low = torch.tensor(spec.low, device=device, dtype=dtype)
+        high = torch.tensor(spec.high, device=device, dtype=dtype)
+        is_unbounded = low.isinf().all() and high.isinf().all()
+        return (
+            UnboundedContinuousTensorSpec(shape, device=device, dtype=dtype)
+            if is_unbounded
+            else BoundedTensorSpec(
+                low,
+                high,
+                shape,
+                dtype=dtype,
+                device=device,
+            )
         )
     elif isinstance(spec, (Dict,)):
         spec_out = {}
