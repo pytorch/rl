@@ -209,9 +209,10 @@ class _BatchedEnv(EnvBase):
     ):
         if self._single_task:
             # if EnvCreator, the metadata are already there
-            self.meta_data = get_env_metadata(
-                create_env_fn[0], create_env_kwargs[0]
-            ).expand(self.num_workers)
+            meta_data = get_env_metadata(create_env_fn[0], create_env_kwargs[0])
+            self.meta_data = meta_data.expand(
+                *(self.num_workers, *meta_data.batch_size)
+            )
         else:
             n_tasks = len(create_env_fn)
             self.meta_data = []

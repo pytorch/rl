@@ -7,6 +7,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
+
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -206,13 +207,16 @@ class MockBatchedLockedEnv(EnvBase):
         self.counter += 1
         # We use tensordict.batch_size instead of self.batch_size since this method will also be used by MockBatchedUnLockedEnv
         n = (
-            torch.full(tensordict.batch_size, self.counter)
+            torch.full(
+                (*tensordict.batch_size, *self.observation_spec["observation"].shape),
+                self.counter,
+            )
             .to(self.device)
             .to(torch.get_default_dtype())
         )
         done = self.counter >= self.max_val
         done = torch.full(
-            tensordict.batch_size, done, dtype=torch.bool, device=self.device
+            (*tensordict.batch_size, 1), done, dtype=torch.bool, device=self.device
         )
 
         return TensorDict(
@@ -229,12 +233,14 @@ class MockBatchedLockedEnv(EnvBase):
             batch_size = tensordict.batch_size
 
         n = (
-            torch.full(batch_size, self.counter)
+            torch.full(
+                (*batch_size, *self.observation_spec["observation"].shape), self.counter
+            )
             .to(self.device)
             .to(torch.get_default_dtype())
         )
         done = self.counter >= self.max_val
-        done = torch.full(batch_size, done, dtype=torch.bool, device=self.device)
+        done = torch.full((*batch_size, 1), done, dtype=torch.bool, device=self.device)
 
         return TensorDict(
             {"reward": n, "done": done, "observation": n},
