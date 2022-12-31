@@ -376,6 +376,7 @@ class TestParallel:
         parallel_env = ParallelEnv(num_parallel_env, lambda: env)
         parallel_env.start()
         assert parallel_env.batch_size == (num_parallel_env, *env_batch_size)
+        parallel_env.close()
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
