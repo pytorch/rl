@@ -19,10 +19,11 @@ from torchrl.data import (
     UnboundedContinuousTensorSpec,
 )
 
-from ..gym_like import default_info_dict_reader, GymLikeEnv
-from ..utils import _classproperty
 from ..._utils import implement_for
 from ...data.utils import numpy_to_torch_dtype_dict
+
+from ..gym_like import default_info_dict_reader, GymLikeEnv
+from ..utils import _classproperty
 
 try:
     import gym
