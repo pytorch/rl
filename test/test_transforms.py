@@ -43,6 +43,7 @@ from torchrl.envs import (
     RewardClipping,
     RewardScaling,
     SerialEnv,
+    StepCounter,
     ToTensorImage,
     VIPTransform,
 )
@@ -62,6 +63,7 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
 )
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
+from torchrl.envs.utils import check_env_specs
 
 TIMEOUT = 10.0
 
@@ -1651,6 +1653,46 @@ class TestTransforms:
             assert env._input_spec["action"] is not None
             assert env._observation_spec is not None
             assert env._reward_spec is not None
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
+    @pytest.mark.parametrize("max_steps", [None, 1, 5, 50])
+    @pytest.mark.parametrize("reset_workers", [True, False])
+    def test_step_counter(self, max_steps, device, batch, reset_workers):
+        torch.manual_seed(0)
+        step_counter = StepCounter(max_steps)
+        td = TensorDict(
+            {"done": torch.zeros(*batch, 1, dtype=torch.bool)}, batch, device=device
+        )
+        if reset_workers:
+            td.set("reset_workers", torch.randn(*batch, 1) < 0)
+        step_counter.reset(td)
+        assert not torch.all(td.get("step_count"))
+        i = 0
+        while max_steps is None or i < max_steps:
+            step_counter._step(td)
+            i += 1
+            assert torch.all(td.get("step_count") == i)
+            if max_steps is None:
+                break
+        if max_steps is not None:
+            assert torch.all(td.get("step_count") == max_steps)
+            assert torch.all(td.get("done"))
+        step_counter.reset(td)
+        if reset_workers:
+            assert torch.all(
+                torch.masked_select(td.get("step_count"), td.get("reset_workers")) == 0
+            )
+            assert torch.all(
+                torch.masked_select(td.get("step_count"), ~td.get("reset_workers")) == i
+            )
+        else:
+            assert torch.all(td.get("step_count") == 0)
+
+    def test_step_counter_observation_spec(self):
+        transformed_env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(50))
+        check_env_specs(transformed_env)
+        transformed_env.close()
 
 
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
