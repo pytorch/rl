@@ -11,6 +11,10 @@ import numpy as np
 import pytest
 import torch
 import yaml
+from packaging import version
+from tensordict.tensordict import assert_allclose_td, TensorDict
+from torch import nn
+
 from _utils_internal import (
     CARTPOLE_VERSIONED,
     get_available_devices,
@@ -27,9 +31,6 @@ from mocking_classes import (
     MockBatchedUnLockedEnv,
     MockSerialEnv,
 )
-from packaging import version
-from tensordict.tensordict import assert_allclose_td, TensorDict
-from torch import nn
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
@@ -367,6 +368,15 @@ class TestModelBasedEnvBase:
 
 
 class TestParallel:
+    @pytest.mark.parametrize("num_parallel_env", [1, 10])
+    @pytest.mark.parametrize("env_batch_size", [[], (32,), (32, 1), (32, 0)])
+    def test_env_with_batch_size(self, num_parallel_env, env_batch_size):
+        env = MockBatchedLockedEnv(device="cpu", batch_size=torch.Size(env_batch_size))
+        env.set_seed(1)
+        parallel_env = ParallelEnv(num_parallel_env, lambda: env)
+        parallel_env.start()
+        assert parallel_env.batch_size == (num_parallel_env, *env_batch_size)
+
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
     @pytest.mark.parametrize("share_individual_td", [True, False])
