@@ -11,10 +11,6 @@ import numpy as np
 import pytest
 import torch
 import yaml
-from packaging import version
-from tensordict.tensordict import assert_allclose_td, TensorDict
-from torch import nn
-
 from _utils_internal import (
     CARTPOLE_VERSIONED,
     get_available_devices,
@@ -31,6 +27,9 @@ from mocking_classes import (
     MockBatchedUnLockedEnv,
     MockSerialEnv,
 )
+from packaging import version
+from tensordict.tensordict import assert_allclose_td, TensorDict
+from torch import nn
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
