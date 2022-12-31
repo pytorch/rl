@@ -28,12 +28,12 @@ from tensordict.nn import get_functional, TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import autograd, nn
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.envs.model_based.dreamer import DreamerEnv
@@ -130,7 +130,7 @@ class TestDQN:
         elif action_spec_type == "categorical":
             action_spec = DiscreteTensorSpec(action_dim)
         elif action_spec_type == "nd_bounded":
-            action_spec = NdBoundedTensorSpec(
+            action_spec = BoundedTensorSpec(
                 -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
             )
         else:
@@ -417,7 +417,7 @@ class TestDDPG:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Linear(obs_dim, action_dim)
@@ -647,7 +647,7 @@ class TestSAC:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
@@ -1026,7 +1026,7 @@ class TestREDQ:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
@@ -1481,7 +1481,7 @@ class TestPPO:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
@@ -1504,7 +1504,7 @@ class TestPPO:
 
     def _create_mock_actor_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         base_layer = nn.Linear(obs_dim, 5)
@@ -1808,7 +1808,7 @@ class TestA2C:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
@@ -2022,7 +2022,7 @@ class TestReinforce:
             distribution_class=TanhNormal,
             return_log_prob=True,
             in_keys=["loc", "scale"],
-            spec=NdUnboundedContinuousTensorSpec(n_act),
+            spec=UnboundedContinuousTensorSpec(n_act),
         )
         if advantage == "gae":
             advantage = GAE(
@@ -2146,8 +2146,8 @@ class TestDreamer:
     def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "state": NdUnboundedContinuousTensorSpec(state_dim),
-            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2221,8 +2221,8 @@ class TestDreamer:
     def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "state": NdUnboundedContinuousTensorSpec(state_dim),
-            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2270,8 +2270,8 @@ class TestDreamer:
     def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "state": NdUnboundedContinuousTensorSpec(state_dim),
-            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)

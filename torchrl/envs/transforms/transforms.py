@@ -21,7 +21,6 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     ContinuousBox,
     DEVICE_TYPING,
-    NdUnboundedContinuousTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
@@ -853,6 +852,7 @@ class RewardClipping(Transform):
             return BoundedTensorSpec(
                 self.clamp_min,
                 self.clamp_max,
+                torch.Size((1,)),
                 device=reward_spec.device,
                 dtype=reward_spec.dtype,
             )
@@ -1855,7 +1855,7 @@ class CatTensors(Transform):
         device = spec0.device
         shape[self.dim] = sum_shape
         shape = torch.Size(shape)
-        observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
+        observation_spec[out_key] = UnboundedContinuousTensorSpec(
             shape=shape,
             dtype=spec0.dtype,
             device=device,
@@ -2066,7 +2066,7 @@ class TensorDictPrimer(Transform):
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> base_env = GymEnv("Pendulum-v1")
         >>> env = TransformedEnv(base_env)
-        >>> env.append_transform(TensorDictPrimer(mykey=NdUnboundedContinuousTensorSpec([3])))
+        >>> env.append_transform(TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([3])))
         >>> print(env.reset())
         TensorDict(
             fields={

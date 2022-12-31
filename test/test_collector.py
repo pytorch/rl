@@ -28,11 +28,7 @@ from torchrl.collectors.collectors import (
     RandomPolicy,
 )
 from torchrl.collectors.utils import split_trajectories
-from torchrl.data import (
-    CompositeSpec,
-    NdUnboundedContinuousTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
@@ -942,7 +938,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         ],
     }
     if explicit_spec:
-        hidden_spec = NdUnboundedContinuousTensorSpec((1, hidden_size))
+        hidden_spec = UnboundedContinuousTensorSpec((1, hidden_size))
         policy_kwargs["spec"] = CompositeSpec(
             action=UnboundedContinuousTensorSpec(),
             hidden1=hidden_spec,

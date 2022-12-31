@@ -11,13 +11,13 @@ import torch
 
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
+    BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 
 from ..._utils import implement_for
@@ -75,7 +75,7 @@ def _gym_to_torchrl_spec_transform(
             shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdBoundedTensorSpec(
+        return BoundedTensorSpec(
             torch.tensor(spec.low, device=device, dtype=dtype),
             torch.tensor(spec.high, device=device, dtype=dtype),
             shape,
@@ -271,7 +271,7 @@ class GymWrapper(GymLikeEnv):
             else:
                 observation_spec = CompositeSpec(observation=observation_spec)
         self.observation_spec = observation_spec
-        self.reward_spec = NdUnboundedContinuousTensorSpec(
+        self.reward_spec = UnboundedContinuousTensorSpec(
             shape=[1],
             device=self.device,
         )
