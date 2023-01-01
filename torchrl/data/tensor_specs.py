@@ -982,6 +982,85 @@ class DiscreteTensorSpec(TensorSpec):
         return super().to_numpy(val, safe)
 
 
+@dataclass(repr=False)
+class MultDiscreteTensorSpec(DiscreteTensorSpec):
+    """A concatenation of discrete tensor spec.
+
+    Args:
+        nvec (iterable of integers): cardinality of each of the elements of
+            the tensor.
+        shape: (torch.Size, optional): shape of the variables, default is "(1,)".
+        device (str, int or torch.device, optional): device of
+            the tensors.
+        dtype (str or torch.dtype, optional): dtype of the tensors.
+
+    Examples:
+        >>> ts = MultDiscreteTensorSpec((3,2,3))
+        >>> ts.is_in(torch.tensor([2, 0, 1]))
+        True
+        >>> ts.is_in(torch.tensor([2, 2, 1]))
+        False
+    """
+
+    def __init__(
+        self,
+        nvec: Sequence[int],
+        shape: Optional[torch.Size] = None,
+        device: Optional[DEVICE_TYPING] = None,
+        dtype: Optional[Union[str, torch.dtype]] = torch.long,
+    ):
+        if shape is None:
+            shape = torch.Size([])
+        dtype, device = _default_dtype_and_device(dtype, device)
+        self._size = len(nvec)
+        self._individual_shape = shape
+        self._first_dim_size = shape[0] if len(shape) != 0 else 1
+        shape = torch.Size([self._first_dim_size * self._size, *shape[1:]])
+        space = BoxList([DiscreteBox(n) for n in nvec])
+        super(DiscreteTensorSpec, self).__init__(
+            shape, space, device, dtype, domain="discrete"
+        )
+
+    def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
+        return torch.cat(
+            [
+                torch.randint(
+                    0,
+                    space.n,
+                    torch.Size([*shape, *self._individual_shape]),
+                    device=self.device,
+                    dtype=self.dtype,
+                )
+                for space in self.space
+            ]
+        )
+
+    def _split(self, val: torch.Tensor):
+        return val.split(self._first_dim_size)
+
+    def _project(self, val: torch.Tensor) -> torch.Tensor:
+        if val.dtype not in (torch.int, torch.long):
+            val = torch.round(val)
+        vals = self._split(val)
+        return torch.cat(
+            [
+                _val.clamp_(min=0, max=space.n - 1)
+                for _val, space in zip(vals, self.space)
+            ]
+        )
+
+    def is_in(self, val: torch.Tensor) -> bool:
+        vals = self._split(val)
+        return self._size == len(vals) and all(
+            [
+                (0 <= _val).all() and (_val < space.n).all()
+                for _val, space in zip(vals, self.space)
+            ]
+        )
+
+
 class CompositeSpec(TensorSpec):
     """A composition of TensorSpecs.
 
