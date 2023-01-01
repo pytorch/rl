@@ -195,27 +195,30 @@ in the environment. The keys to be included in this inverse transform are passed
 
     Transform
     TransformedEnv
-    RewardClipping
-    Resize
-    CenterCrop
-    GrayScale
-    Compose
-    ToTensorImage
-    ObservationNorm
-    FlattenObservation
-    UnsqueezeTransform
-    RewardScaling
-    ObservationTransform
-    CatFrames
-    FiniteTensorDictCheck
-    DoubleToFloat
-    CatTensors
-    NoopResetEnv
     BinarizeReward
-    PinMemoryTransform
-    VecNorm
+    CatFrames
+    CatTensors
+    CenterCrop
+    Compose
+    DoubleToFloat
+    FiniteTensorDictCheck
+    FlattenObservation
+    FrameSkipTransform
+    GrayScale
     gSDENoise
+    NoopResetEnv
+    ObservationNorm
+    ObservationTransform
+    PinMemoryTransform
+    Resize
+    RewardClipping
+    RewardScaling
+    SqueezeTransform
+    StepCounter
     TensorDictPrimer
+    ToTensorImage
+    UnsqueezeTransform
+    VecNorm
     R3MTransform
     VIPTransform
     VIPRewardTransform
