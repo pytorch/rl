@@ -16,7 +16,7 @@ from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
-    MultDiscreteTensorSpec,
+    MultiDiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
@@ -253,10 +253,10 @@ def test_mult_onehot(shape, ns):
         torch.Size([4, 5]),
     ],
 )
-def test_mult_discrete(shape, ns):
+def test_multi_discrete(shape, ns):
     torch.manual_seed(0)
     np.random.seed(0)
-    ts = MultDiscreteTensorSpec(ns)
+    ts = MultiDiscreteTensorSpec(ns)
     _real_shape = shape if shape is not None else []
     _len_ns = [len(ns)] if len(ns) > 1 else []
     for _ in range(100):
@@ -312,8 +312,8 @@ def test_discrete_conversion(n, device):
     ],
 )
 @pytest.mark.parametrize("device", get_available_devices())
-def test_mult_discrete_conversion(ns, device):
-    categorical = MultDiscreteTensorSpec(ns, device=device)
+def test_multi_discrete_conversion(ns, device):
+    categorical = MultiDiscreteTensorSpec(ns, device=device)
     one_hot = MultOneHotDiscreteTensorSpec(ns, device=device)
 
     assert categorical != one_hot
@@ -851,27 +851,29 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        ts = MultDiscreteTensorSpec(nvec=nvec, device=device, dtype=dtype)
+        ts = MultiDiscreteTensorSpec(nvec=nvec, device=device, dtype=dtype)
 
-        ts_same = MultDiscreteTensorSpec(nvec=nvec, device=device, dtype=dtype)
+        ts_same = MultiDiscreteTensorSpec(nvec=nvec, device=device, dtype=dtype)
         assert ts == ts_same
 
         other_nvec = np.array(nvec) + 3
-        ts_other = MultDiscreteTensorSpec(nvec=other_nvec, device=device, dtype=dtype)
+        ts_other = MultiDiscreteTensorSpec(nvec=other_nvec, device=device, dtype=dtype)
         assert ts != ts_other
 
         other_nvec = [12]
-        ts_other = MultDiscreteTensorSpec(nvec=other_nvec, device=device, dtype=dtype)
+        ts_other = MultiDiscreteTensorSpec(nvec=other_nvec, device=device, dtype=dtype)
         assert ts != ts_other
 
         other_nvec = [12, 13]
-        ts_other = MultDiscreteTensorSpec(nvec=other_nvec, device=device, dtype=dtype)
+        ts_other = MultiDiscreteTensorSpec(nvec=other_nvec, device=device, dtype=dtype)
         assert ts != ts_other
 
-        ts_other = MultDiscreteTensorSpec(nvec=nvec, device="cpu:0", dtype=dtype)
+        ts_other = MultiDiscreteTensorSpec(nvec=nvec, device="cpu:0", dtype=dtype)
         assert ts != ts_other
 
-        ts_other = MultDiscreteTensorSpec(nvec=nvec, device=device, dtype=torch.float64)
+        ts_other = MultiDiscreteTensorSpec(
+            nvec=nvec, device=device, dtype=torch.float64
+        )
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(

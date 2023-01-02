@@ -908,8 +908,8 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         vals = self._split(val)
         return torch.cat([super()._project(_val) for _val in vals], -1)
 
-    def to_categorical(self) -> MultDiscreteTensorSpec:
-        return MultDiscreteTensorSpec(
+    def to_categorical(self) -> MultiDiscreteTensorSpec:
+        return MultiDiscreteTensorSpec(
             [_space.n for _space in self.space], self.device, self.dtype
         )
 
@@ -994,7 +994,7 @@ class DiscreteTensorSpec(TensorSpec):
 
 
 @dataclass(repr=False)
-class MultDiscreteTensorSpec(DiscreteTensorSpec):
+class MultiDiscreteTensorSpec(DiscreteTensorSpec):
     """A concatenation of discrete tensor spec.
 
     Args:
@@ -1005,7 +1005,7 @@ class MultDiscreteTensorSpec(DiscreteTensorSpec):
         dtype (str or torch.dtype, optional): dtype of the tensors.
 
     Examples:
-        >>> ts = MultDiscreteTensorSpec((3,2,3))
+        >>> ts = MultiDiscreteTensorSpec((3,2,3))
         >>> ts.is_in(torch.tensor([2, 0, 1]))
         True
         >>> ts.is_in(torch.tensor([2, 2, 1]))

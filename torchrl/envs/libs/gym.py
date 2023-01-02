@@ -13,7 +13,7 @@ from torchrl.data import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
-    MultDiscreteTensorSpec,
+    MultiDiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
@@ -70,7 +70,7 @@ def _gym_to_torchrl_spec_transform(
         return BinaryDiscreteTensorSpec(spec.n, device=device)
     elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
         return (
-            MultDiscreteTensorSpec(spec.nvec, device=device)
+            MultiDiscreteTensorSpec(spec.nvec, device=device)
             if categorical_action_encoding
             else MultOneHotDiscreteTensorSpec(spec.nvec, device=device)
         )
