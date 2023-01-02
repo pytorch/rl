@@ -126,6 +126,8 @@ class PPOLoss(LossModule):
                 state_value,
                 loss_function=self.loss_critic_type,
             )
+        #            loss_value = (state_value - target_return).pow(2)
+
         except KeyError:
             raise KeyError(
                 f"the key {self.value_target_key} was not found in the input tensordict. "
