@@ -796,7 +796,7 @@ def test_collector_vecnorm_envcreator(static_seed):
 
 
 @pytest.mark.parametrize("use_async", [False, True])
-@pytest.mark.skipif(not torch.cuda.is_availabltorch.cuda.is_availablee(), reason="no cuda device found")
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
 def test_update_weights(use_async):
     def create_env():
         return ContinuousActionVecMockEnv()
@@ -993,8 +993,9 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
 @pytest.mark.parametrize("passing_device", ["cuda", "cpu"])
 def test_collector_device_combinations(device, passing_device):
 
-    if (device == "cuda" or "passing_device" == "cuda") and \
-            not torch.cuda.is_availabltorch.cuda.is_availablee():
+    if (
+        device == "cuda" or "passing_device" == "cuda"
+    ) and not torch.cuda.is_available():
         pytest.skip("no cuda device found")
 
     def env_fn(seed):
