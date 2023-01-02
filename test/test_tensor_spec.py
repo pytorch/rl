@@ -17,8 +17,6 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
@@ -30,7 +28,9 @@ def test_bounded(dtype):
     np.random.seed(0)
     for _ in range(100):
         bounds = torch.randn(2).sort()[0]
-        ts = BoundedTensorSpec(bounds[0].item(), bounds[1].item(), dtype=dtype)
+        ts = BoundedTensorSpec(
+            bounds[0].item(), bounds[1].item(), torch.Size((1,)), dtype=dtype
+        )
         _dtype = dtype
         if dtype is None:
             _dtype = torch.get_default_dtype()
@@ -96,7 +96,7 @@ def test_ndbounded(dtype, shape):
     for _ in range(100):
         lb = torch.rand(10) - 1
         ub = torch.rand(10) + 1
-        ts = NdBoundedTensorSpec(lb, ub, dtype=dtype)
+        ts = BoundedTensorSpec(lb, ub, dtype=dtype)
         _dtype = dtype
         if dtype is None:
             _dtype = torch.get_default_dtype()
@@ -135,7 +135,7 @@ def test_ndunbounded(dtype, n, shape):
     torch.manual_seed(0)
     np.random.seed(0)
 
-    ts = NdUnboundedContinuousTensorSpec(
+    ts = UnboundedContinuousTensorSpec(
         shape=[
             n,
         ],
@@ -243,22 +243,22 @@ class TestComposite:
         np.random.seed(0)
 
         return CompositeSpec(
-            obs=NdBoundedTensorSpec(
+            obs=BoundedTensorSpec(
                 torch.zeros(3, 32, 32),
                 torch.ones(3, 32, 32),
                 dtype=dtype,
                 device=device,
             ),
-            act=NdUnboundedContinuousTensorSpec((7,), dtype=dtype, device=device)
+            act=UnboundedContinuousTensorSpec((7,), dtype=dtype, device=device)
             if is_complete
             else None,
         )
 
     def test_getitem(self, is_complete, device, dtype):
         ts = self._composite_spec(is_complete, device, dtype)
-        assert isinstance(ts["obs"], NdBoundedTensorSpec)
+        assert isinstance(ts["obs"], BoundedTensorSpec)
         if is_complete:
-            assert isinstance(ts["act"], NdUnboundedContinuousTensorSpec)
+            assert isinstance(ts["act"], UnboundedContinuousTensorSpec)
         else:
             assert ts["act"] is None
         with pytest.raises(KeyError):
@@ -475,7 +475,7 @@ class TestComposite:
         td2 = CompositeSpec(nested_cp=CompositeSpec(act=None).to(device))
         ts.update(td2)
         td2 = CompositeSpec(
-            nested_cp=CompositeSpec(act=UnboundedContinuousTensorSpec(device))
+            nested_cp=CompositeSpec(act=UnboundedContinuousTensorSpec(device=device))
         )
         ts.update(td2)
         assert set(ts.keys()) == {
@@ -511,25 +511,31 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        ts = BoundedTensorSpec(minimum, maximum, device, dtype)
+        ts = BoundedTensorSpec(minimum, maximum, torch.Size((1,)), device, dtype)
 
-        ts_same = BoundedTensorSpec(minimum, maximum, device, dtype)
+        ts_same = BoundedTensorSpec(minimum, maximum, torch.Size((1,)), device, dtype)
         assert ts == ts_same
 
-        ts_other = BoundedTensorSpec(minimum + 1, maximum, device, dtype)
+        ts_other = BoundedTensorSpec(
+            minimum + 1, maximum, torch.Size((1,)), device, dtype
+        )
         assert ts != ts_other
 
-        ts_other = BoundedTensorSpec(minimum, maximum + 1, device, dtype)
+        ts_other = BoundedTensorSpec(
+            minimum, maximum + 1, torch.Size((1,)), device, dtype
+        )
         assert ts != ts_other
 
-        ts_other = BoundedTensorSpec(minimum, maximum, "cpu:0", dtype)
+        ts_other = BoundedTensorSpec(minimum, maximum, torch.Size((1,)), "cpu:0", dtype)
         assert ts != ts_other
 
-        ts_other = BoundedTensorSpec(minimum, maximum, device, torch.float64)
+        ts_other = BoundedTensorSpec(
+            minimum, maximum, torch.Size((1,)), device, torch.float64
+        )
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            UnboundedContinuousTensorSpec(device, dtype), ts
+            UnboundedContinuousTensorSpec(device=device, dtype=dtype), ts
         )
         assert ts != ts_other
 
@@ -557,7 +563,7 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            UnboundedContinuousTensorSpec(device, dtype), ts
+            UnboundedContinuousTensorSpec(device=device, dtype=dtype), ts
         )
         assert ts != ts_other
 
@@ -565,19 +571,19 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        ts = UnboundedContinuousTensorSpec(device, dtype)
+        ts = UnboundedContinuousTensorSpec(device=device, dtype=dtype)
 
-        ts_same = UnboundedContinuousTensorSpec(device, dtype)
+        ts_same = UnboundedContinuousTensorSpec(device=device, dtype=dtype)
         assert ts == ts_same
 
-        ts_other = UnboundedContinuousTensorSpec("cpu:0", dtype)
+        ts_other = UnboundedContinuousTensorSpec(device="cpu:0", dtype=dtype)
         assert ts != ts_other
 
-        ts_other = UnboundedContinuousTensorSpec(device, torch.float64)
+        ts_other = UnboundedContinuousTensorSpec(device=device, dtype=torch.float64)
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, device, dtype), ts
+            BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype), ts
         )
         assert ts != ts_other
 
@@ -587,37 +593,37 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        ts = NdBoundedTensorSpec(
+        ts = BoundedTensorSpec(
             minimum=minimum, maximum=maximum, device=device, dtype=dtype
         )
 
-        ts_same = NdBoundedTensorSpec(
+        ts_same = BoundedTensorSpec(
             minimum=minimum, maximum=maximum, device=device, dtype=dtype
         )
         assert ts == ts_same
 
-        ts_other = NdBoundedTensorSpec(
+        ts_other = BoundedTensorSpec(
             minimum=minimum + 1, maximum=maximum, device=device, dtype=dtype
         )
         assert ts != ts_other
 
-        ts_other = NdBoundedTensorSpec(
+        ts_other = BoundedTensorSpec(
             minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
         )
         assert ts != ts_other
 
-        ts_other = NdBoundedTensorSpec(
+        ts_other = BoundedTensorSpec(
             minimum=minimum, maximum=maximum, device="cpu:0", dtype=dtype
         )
         assert ts != ts_other
 
-        ts_other = NdBoundedTensorSpec(
+        ts_other = BoundedTensorSpec(
             minimum=minimum, maximum=maximum, device=device, dtype=torch.float64
         )
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, device, dtype), ts
+            UnboundedContinuousTensorSpec(device=device, dtype=dtype), ts
         )
         assert ts != ts_other
 
@@ -645,7 +651,7 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            UnboundedContinuousTensorSpec(device, dtype), ts
+            UnboundedContinuousTensorSpec(device=device, dtype=dtype), ts
         )
         assert ts != ts_other
 
@@ -661,31 +667,29 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        ts = NdUnboundedContinuousTensorSpec(shape=shape, device=device, dtype=dtype)
+        ts = UnboundedContinuousTensorSpec(shape=shape, device=device, dtype=dtype)
 
-        ts_same = NdUnboundedContinuousTensorSpec(
-            shape=shape, device=device, dtype=dtype
-        )
+        ts_same = UnboundedContinuousTensorSpec(shape=shape, device=device, dtype=dtype)
         assert ts == ts_same
 
         other_shape = 13 if type(shape) == int else torch.Size(np.array(shape) + 10)
-        ts_other = NdUnboundedContinuousTensorSpec(
+        ts_other = UnboundedContinuousTensorSpec(
             shape=other_shape, device=device, dtype=dtype
         )
         assert ts != ts_other
 
-        ts_other = NdUnboundedContinuousTensorSpec(
+        ts_other = UnboundedContinuousTensorSpec(
             shape=shape, device="cpu:0", dtype=dtype
         )
         assert ts != ts_other
 
-        ts_other = NdUnboundedContinuousTensorSpec(
+        ts_other = UnboundedContinuousTensorSpec(
             shape=shape, device=device, dtype=torch.float64
         )
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, device, dtype), ts
+            BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype), ts
         )
         assert ts != ts_other
 
@@ -709,7 +713,7 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, device, dtype), ts
+            BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype), ts
         )
         assert ts != ts_other
 
@@ -750,7 +754,7 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, device, dtype), ts
+            BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype), ts
         )
         assert ts != ts_other
 
@@ -760,17 +764,17 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        bounded = BoundedTensorSpec(0, 1, device, dtype)
-        bounded_same = BoundedTensorSpec(0, 1, device, dtype)
-        bounded_other = BoundedTensorSpec(0, 2, device, dtype)
+        bounded = BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype)
+        bounded_same = BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype)
+        bounded_other = BoundedTensorSpec(0, 2, torch.Size((1,)), device, dtype)
 
-        nd = NdBoundedTensorSpec(
+        nd = BoundedTensorSpec(
             minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
         )
-        nd_same = NdBoundedTensorSpec(
+        nd_same = BoundedTensorSpec(
             minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
         )
-        _ = NdBoundedTensorSpec(
+        _ = BoundedTensorSpec(
             minimum=minimum, maximum=maximum + 3, device=device, dtype=dtype
         )
 
@@ -941,12 +945,12 @@ class TestSpec:
         ).all()
 
     def test_bounded_rand(self):
-        spec = BoundedTensorSpec(-3, 3)
+        spec = BoundedTensorSpec(-3, 3, torch.Size((1,)))
         sample = torch.stack([spec.rand() for _ in range(100)])
         assert (-3 <= sample).all() and (3 >= sample).all()
 
     def test_ndbounded_shape(self):
-        spec = NdBoundedTensorSpec(-3, 3 * torch.ones(10, 5), shape=[10, 5])
+        spec = BoundedTensorSpec(-3, 3 * torch.ones(10, 5), shape=[10, 5])
         sample = torch.stack([spec.rand() for _ in range(100)], 0)
         assert (-3 <= sample).all() and (3 >= sample).all()
         assert sample.shape == torch.Size([100, 10, 5])

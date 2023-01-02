@@ -34,11 +34,11 @@ class SafeSequential(TensorDictSequential, SafeModule):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn.functional_modules import make_functional
-        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
         >>> from torchrl.modules import TanhNormal, SafeSequential, SafeModule, NormalParamWrapper
         >>> from torchrl.modules.tensordict_module import SafeProbabilisticModule
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
-        >>> spec1 = CompositeSpec(hidden=NdUnboundedContinuousTensorSpec(4), loc=None, scale=None)
+        >>> spec1 = CompositeSpec(hidden=UnboundedContinuousTensorSpec(4), loc=None, scale=None)
         >>> net1 = NormalParamWrapper(torch.nn.Linear(4, 8))
         >>> module1 = SafeModule(net1, in_keys=["input"], out_keys=["loc", "scale"])
         >>> td_module1 = SafeProbabilisticModule(
@@ -49,7 +49,7 @@ class SafeSequential(TensorDictSequential, SafeModule):
         ...     distribution_class=TanhNormal,
         ...     return_log_prob=True,
         ... )
-        >>> spec2 = NdUnboundedContinuousTensorSpec(8)
+        >>> spec2 = UnboundedContinuousTensorSpec(8)
         >>> module2 = torch.nn.Linear(4, 8)
         >>> td_module2 = SafeModule(
         ...    module=module2,

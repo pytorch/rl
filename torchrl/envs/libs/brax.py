@@ -3,11 +3,7 @@ from typing import Dict, Optional, Union
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.data import (
-    CompositeSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
-)
+from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvWrapper
 
 try:
@@ -118,18 +114,18 @@ class BraxWrapper(_EnvWrapper):
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
         self.input_spec = CompositeSpec(
-            action=NdBoundedTensorSpec(
+            action=BoundedTensorSpec(
                 minimum=-1, maximum=1, shape=(env.action_size,), device=self.device
             )
         )
-        self.reward_spec = NdUnboundedContinuousTensorSpec(
+        self.reward_spec = UnboundedContinuousTensorSpec(
             shape=[
                 1,
             ],
             device=self.device,
         )
         self.observation_spec = CompositeSpec(
-            observation=NdUnboundedContinuousTensorSpec(
+            observation=UnboundedContinuousTensorSpec(
                 shape=(env.observation_size,), device=self.device
             )
         )

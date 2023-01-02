@@ -8,20 +8,20 @@ from typing import Dict, List
 from warnings import warn
 
 import torch
-
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
+    BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 
 from ..._utils import implement_for
 from ...data.utils import numpy_to_torch_dtype_dict
+
 from ..gym_like import default_info_dict_reader, GymLikeEnv
 from ..utils import _classproperty
 
@@ -75,12 +75,19 @@ def _gym_to_torchrl_spec_transform(
             shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdBoundedTensorSpec(
-            torch.tensor(spec.low, device=device, dtype=dtype),
-            torch.tensor(spec.high, device=device, dtype=dtype),
-            shape,
-            dtype=dtype,
-            device=device,
+        low = torch.tensor(spec.low, device=device, dtype=dtype)
+        high = torch.tensor(spec.high, device=device, dtype=dtype)
+        is_unbounded = low.isinf().all() and high.isinf().all()
+        return (
+            UnboundedContinuousTensorSpec(shape, device=device, dtype=dtype)
+            if is_unbounded
+            else BoundedTensorSpec(
+                low,
+                high,
+                shape,
+                dtype=dtype,
+                device=device,
+            )
         )
     elif isinstance(spec, (Dict,)):
         spec_out = {}
@@ -271,7 +278,7 @@ class GymWrapper(GymLikeEnv):
             else:
                 observation_spec = CompositeSpec(observation=observation_spec)
         self.observation_spec = observation_spec
-        self.reward_spec = NdUnboundedContinuousTensorSpec(
+        self.reward_spec = UnboundedContinuousTensorSpec(
             shape=[1],
             device=self.device,
         )

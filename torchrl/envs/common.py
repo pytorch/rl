@@ -493,6 +493,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             seed = new_seed
         return seed
 
+    @abc.abstractmethod
     def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError
 
@@ -676,7 +677,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # if del occurs before env has been set up, we don't want a recursion
         # error
         if "is_closed" in self.__dict__ and not self.is_closed:
-            self.close()
+            try:
+                self.close()
+            except Exception:
+                # a TypeError will typically be raised if the env is deleted when the program ends.
+                # In the future, insignificant changes to the close method may change the error type.
+                # We excplicitely assume that any error raised during closure in
+                # __del__ will not affect the program.
+                pass
 
     def to(self, device: DEVICE_TYPING) -> EnvBase:
         device = torch.device(device)
@@ -823,10 +831,6 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
             self._env.close()
         except AttributeError:
             pass
-
-    @abc.abstractmethod
-    def _set_seed(self, seed: Optional[int]):
-        raise NotImplementedError
 
 
 def make_tensordict(
