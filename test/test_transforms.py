@@ -841,7 +841,7 @@ class TestTransforms:
 
         # test transform_observation_spec
         base_env = ContinuousActionVecMockEnv(
-            reward_spec=NdUnboundedContinuousTensorSpec(shape=(3, 16, 16)),
+            reward_spec=UnboundedContinuousTensorSpec(shape=(3, 16, 16)),
         )
         transfomed_env = TransformedEnv(base_env, RewardSum())
         transformed_observation_spec1 = transfomed_env.specs["observation_spec"]

@@ -2567,17 +2567,11 @@ class RewardSum(Transform):
 
             # Define episode specs for all out_keys
             for in_key, out_key in zip(self.in_keys, self.out_keys):
-                if isinstance(reward_spec[in_key], NdUnboundedContinuousTensorSpec):
-                    episode_spec = NdUnboundedContinuousTensorSpec(
-                        shape=reward_spec.shape,
-                        device=reward_spec.device,
-                        dtype=reward_spec.dtype,
-                    )
-                else:
-                    episode_spec = UnboundedContinuousTensorSpec(
-                        device=reward_spec.device,
-                        dtype=reward_spec.dtype,
-                    )
+                episode_spec = UnboundedContinuousTensorSpec(
+                    shape=reward_spec.shape,
+                    device=reward_spec.device,
+                    dtype=reward_spec.dtype,
+                )
                 episode_specs.update({out_key: episode_spec})
 
         else:
