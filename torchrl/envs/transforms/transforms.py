@@ -2589,17 +2589,11 @@ class RewardSum(Transform):
                 )
 
             # Define episode spec
-            if isinstance(reward_spec, NdUnboundedContinuousTensorSpec):
-                episode_spec = NdUnboundedContinuousTensorSpec(
-                    shape=reward_spec.shape,
-                    device=reward_spec.device,
-                    dtype=reward_spec.dtype,
-                )
-            else:
-                episode_spec = UnboundedContinuousTensorSpec(
-                    device=reward_spec.device,
-                    dtype=reward_spec.dtype,
-                )
+            episode_spec = UnboundedContinuousTensorSpec(
+                device=reward_spec.device,
+                dtype=reward_spec.dtype,
+                shape=reward_spec.shape,
+            )
             episode_specs.update({"episode_reward": episode_spec})
 
         # Update observation_spec with episode_specs
