@@ -2594,6 +2594,7 @@ class RewardSum(Transform):
         if not isinstance(observation_spec, CompositeSpec):
             observation_spec = CompositeSpec(observation=observation_spec)
         observation_spec.update(episode_specs)
+        return observation_spec
 
 
 class StepCounter(Transform):
