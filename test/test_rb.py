@@ -186,7 +186,6 @@ class TestPrototypeBuffers:
             new_data = new_data[0]
 
         for d in new_data:
-            found_similar = False
             for b in data:
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())
@@ -267,12 +266,30 @@ class TestStorages:
         mystorage._init(td)
         assert mystorage._storage.shape == (max_size, *shape)
 
+    def test_set(self, max_size, shape, storage):
+        td = self._get_nested_td(shape)
+        mystorage = storage(max_size=max_size)
+        mystorage.set(list(range(td.shape[0])), td)
+        assert mystorage._storage.shape == (max_size, *shape[1:])
+        idx = list(range(1, td.shape[0] - 1))
+        tc_sample = mystorage.get(idx)
+        assert tc_sample.shape == torch.Size([td.shape[0] - 2, *td.shape[1:]])
+
     def test_init_tensorclass(self, max_size, shape, storage):
         tc = self._get_nested_tensorclass(shape)
         mystorage = storage(max_size=max_size)
         mystorage._init(tc)
         assert is_tensorclass(mystorage._storage)
         assert mystorage._storage.shape == (max_size, *shape)
+
+    def test_set_tensorclass(self, max_size, shape, storage):
+        tc = self._get_nested_tensorclass(shape)
+        mystorage = storage(max_size=max_size)
+        mystorage.set(list(range(tc.shape[0])), tc)
+        assert mystorage._storage.shape == (max_size, *shape[1:])
+        idx = list(range(1, tc.shape[0] - 1))
+        tc_sample = mystorage.get(idx)
+        assert tc_sample.shape == torch.Size([tc.shape[0] - 2, *tc.shape[1:]])
 
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
