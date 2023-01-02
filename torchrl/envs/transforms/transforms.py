@@ -2566,7 +2566,7 @@ class RewardSum(Transform):
                 raise KeyError("Not all in_keys are present in ´reward_spec´")
 
             # Define episode specs for all out_keys
-            for in_key, out_key in zip(self.in_keys, self.out_keys):
+            for out_key in self.out_keys:
                 episode_spec = UnboundedContinuousTensorSpec(
                     shape=reward_spec.shape,
                     device=reward_spec.device,
