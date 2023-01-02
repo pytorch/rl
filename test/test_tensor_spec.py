@@ -282,6 +282,45 @@ def test_mult_discrete(shape, ns):
     assert ts.is_in(projection)
 
 
+@pytest.mark.parametrize(
+    "n",
+    [
+        1,
+        4,
+        7,
+        99,
+    ],
+)
+@pytest.mark.parametrize("device", get_available_devices())
+def test_discrete_conversion(n, device):
+    categorical = DiscreteTensorSpec(n, device=device)
+    one_hot = OneHotDiscreteTensorSpec(n, device=device)
+
+    assert categorical != one_hot
+    assert categorical.to_onehot() == one_hot
+    assert one_hot.to_categorical() == categorical
+
+
+@pytest.mark.parametrize(
+    "ns",
+    [
+        [
+            5,
+        ],
+        [5, 2, 3],
+        [4, 5, 1, 3],
+    ],
+)
+@pytest.mark.parametrize("device", get_available_devices())
+def test_mult_discrete_conversion(ns, device):
+    categorical = MultDiscreteTensorSpec(ns, device=device)
+    one_hot = MultOneHotDiscreteTensorSpec(ns, device=device)
+
+    assert categorical != one_hot
+    assert categorical.to_onehot() == one_hot
+    assert one_hot.to_categorical() == categorical
+
+
 @pytest.mark.parametrize("is_complete", [True, False])
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])

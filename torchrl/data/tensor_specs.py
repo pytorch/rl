@@ -509,6 +509,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             and self.use_register == other.use_register
         )
 
+    def to_categorical(self) -> DiscreteTensorSpec:
+        return DiscreteTensorSpec(self.space.n, device=self.device, dtype=self.dtype)
+
 
 @dataclass(repr=False)
 class BoundedTensorSpec(TensorSpec):
@@ -905,6 +908,11 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         vals = self._split(val)
         return torch.cat([super()._project(_val) for _val in vals], -1)
 
+    def to_categorical(self) -> MultDiscreteTensorSpec:
+        return MultDiscreteTensorSpec(
+            [_space.n for _space in self.space], self.device, self.dtype
+        )
+
 
 class DiscreteTensorSpec(TensorSpec):
     """A discrete tensor spec.
@@ -981,6 +989,9 @@ class DiscreteTensorSpec(TensorSpec):
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
         return super().to_numpy(val, safe)
 
+    def to_onehot(self) -> OneHotDiscreteTensorSpec:
+        return OneHotDiscreteTensorSpec(self.space.n, self.device, self.dtype)
+
 
 @dataclass(repr=False)
 class MultDiscreteTensorSpec(DiscreteTensorSpec):
@@ -1055,6 +1066,11 @@ class MultDiscreteTensorSpec(DiscreteTensorSpec):
                 (0 <= _val).all() and (_val < space.n).all()
                 for _val, space in zip(vals, self.space)
             ]
+        )
+
+    def to_onehot(self) -> MultOneHotDiscreteTensorSpec:
+        return MultOneHotDiscreteTensorSpec(
+            [_space.n for _space in self.space], self.device, self.dtype
         )
 
 

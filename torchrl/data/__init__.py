@@ -20,6 +20,7 @@ from .tensor_specs import (
     CompositeSpec,
     DEVICE_TYPING,
     DiscreteTensorSpec,
+    MultDiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
