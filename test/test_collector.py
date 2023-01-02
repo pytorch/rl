@@ -989,15 +989,9 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     del collector
 
 
-@pytest.mark.parametrize("device", ["cuda", "cpu"])
-@pytest.mark.parametrize("passing_device", ["cuda", "cpu"])
+@pytest.mark.parametrize("device", ["cuda", "cpu"] if torch.cuda.is_available() else ["cpu"])
+@pytest.mark.parametrize("passing_device", ["cuda", "cpu"] if torch.cuda.is_available() else ["cpu"])
 def test_collector_device_combinations(device, passing_device):
-
-    if (
-        device == "cuda" or "passing_device" == "cuda"
-    ) and not torch.cuda.is_available():
-        pytest.skip("no cuda device found")
-
     def env_fn(seed):
         env = make_make_env("conv")()
         env.set_seed(seed)
