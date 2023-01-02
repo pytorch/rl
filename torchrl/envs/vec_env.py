@@ -209,9 +209,10 @@ class _BatchedEnv(EnvBase):
     ):
         if self._single_task:
             # if EnvCreator, the metadata are already there
-            self.meta_data = get_env_metadata(
-                create_env_fn[0], create_env_kwargs[0]
-            ).expand(self.num_workers)
+            meta_data = get_env_metadata(create_env_fn[0], create_env_kwargs[0])
+            self.meta_data = meta_data.expand(
+                *(self.num_workers, *meta_data.batch_size)
+            )
         else:
             n_tasks = len(create_env_fn)
             self.meta_data = []
@@ -514,6 +515,10 @@ class _BatchedEnv(EnvBase):
     def _shutdown_workers(self) -> None:
         raise NotImplementedError
 
+    def _set_seed(self, seed: Optional[int]):
+        """This method is not used in batched envs."""
+        pass
+
     def start(self) -> None:
         if not self.is_closed:
             raise RuntimeError("trying to start a environment that is not closed.")
@@ -606,7 +611,9 @@ class SerialEnv(_BatchedEnv):
             del self._envs
 
     @_check_start
-    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+    def set_seed(
+        self, seed: Optional[int] = None, static_seed: bool = False
+    ) -> Optional[int]:
         for env in self._envs:
             new_seed = env.set_seed(seed, static_seed=static_seed)
             seed = new_seed
@@ -816,7 +823,9 @@ class ParallelEnv(_BatchedEnv):
         del self.parent_channels
 
     @_check_start
-    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+    def set_seed(
+        self, seed: Optional[int] = None, static_seed: bool = False
+    ) -> Optional[int]:
         self._seeds = []
         for channel in self.parent_channels:
             channel.send(("seed", (seed, static_seed)))

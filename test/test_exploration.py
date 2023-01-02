@@ -11,7 +11,7 @@ from _utils_internal import get_available_devices
 from scipy.stats import ttest_1samp
 from tensordict.tensordict import TensorDict
 from torch import nn
-from torchrl.data import CompositeSpec, NdBoundedTensorSpec
+from torchrl.data import BoundedTensorSpec, CompositeSpec
 from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import SafeModule, SafeSequential
@@ -61,7 +61,7 @@ def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     torch.manual_seed(seed)
     net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
     module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
-    action_spec = NdBoundedTensorSpec(-torch.ones(d_act), torch.ones(d_act), (d_act,))
+    action_spec = BoundedTensorSpec(-torch.ones(d_act), torch.ones(d_act), (d_act,))
     policy = ProbabilisticActor(
         spec=action_spec,
         module=module,
@@ -106,7 +106,7 @@ class TestAdditiveGaussian:
     ):
         torch.manual_seed(seed)
         net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(d_act, device=device),
             torch.ones(d_act, device=device),
             (d_act,),
@@ -173,7 +173,7 @@ class TestAdditiveGaussian:
         torch.manual_seed(seed)
         net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(d_act, device=device),
             torch.ones(d_act, device=device),
             (d_act,),
@@ -244,7 +244,7 @@ def test_gsde(
         module = SafeModule(wrapper, in_keys=in_keys, out_keys=["loc", "scale"])
         distribution_class = TanhNormal
         distribution_kwargs = {"min": -bound, "max": bound}
-    spec = NdBoundedTensorSpec(
+    spec = BoundedTensorSpec(
         -torch.ones(action_dim) * bound, torch.ones(action_dim) * bound, (action_dim,)
     ).to(device)
 
