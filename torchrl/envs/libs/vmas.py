@@ -1,18 +1,17 @@
-from typing import Optional, Dict, List
+from typing import Dict, List, Optional
 
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.data import (
     CompositeSpec,
-    UnboundedContinuousTensorSpec,
     MultOneHotDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 
 try:
     import vmas
-    from vmas.simulator.environment.environment import Environment
 
     _has_vmas = True
 
@@ -23,10 +22,12 @@ except ImportError as err:
 
 __all__ = ["VmasWrapper", "VmasEnv"]
 
+
 def _get_envs() -> List:
     if not _has_vmas:
         return []
     return vmas.scenarios + vmas.mpe_scenarios + vmas.debug_scenarios
+
 
 def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int = -1):
     shape_len = len(tensor.shape)
@@ -45,28 +46,49 @@ class VmasWrapper(_EnvWrapper):
     libname = "vmas"
     available_envs = _get_envs()
 
-    def __init__(self, env: Environment = None, **kwargs):
+    def __init__(
+        self, env: "vmas.simulator.environment.environment.Environment"= None, **kwargs
+    ):
         if env is not None:
             kwargs["env"] = env
         super().__init__(**kwargs)
+
         assert self.device == self._env.device
         if len(self.batch_size) == 0:
             # Batch size not set
             self.batch_size = torch.Size((self.num_envs,))
         elif len(self.batch_size) == 1:
             # Batch size is set
-            assert self.batch_size[0] == self.num_envs
+            if not self.batch_size[0] == self.num_envs:
+                raise TypeError("Batch size used in constructor does not match vmas batch size.")
         else:
-            assert False
+            raise TypeError(
+                "Batch size used in constructor is not compatible with vmas."
+            )
         self.batch_size = torch.Size([*self.batch_size, self.n_agents])
+
+    @property
+    def lib(self):
+        return vmas
 
     def _build_env(
         self,
-        env,
+        env: "vmas.simulator.environment.environment.Environment",
+        from_pixels: bool = False,
+        pixels_only: bool = False,
     ):
+        self.from_pixels = from_pixels
+        self.pixels_only = pixels_only
+
+        # TODO rendering
+        if self.from_pixels:
+            raise NotImplementedError("vmas rendiering not yet implemented")
+
         return env
 
-    def _make_specs(self, env: Environment) -> None:
+    def _make_specs(
+        self, env: "vmas.simulator.environment.environment.Environment"
+    ) -> None:
         # For now the wrapper assumes all agent spaces to be homogenous, thus let's use agent0
         agent0 = self.agents[0]
         agent0_index = 0
@@ -122,15 +144,20 @@ class VmasWrapper(_EnvWrapper):
         self._env.seed(seed)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        obs = self._env.reset()
+        obs, info = self._env.reset(return_info=True)
 
         obs = self.read_obs(obs)
+        info = self.read_info(info)
 
         tensordict_out = TensorDict(
             source={"observation": obs},
             batch_size=self.batch_size,
             device=self.device,
         )
+
+        if info is not None:
+            tensordict_out.set("info", info)
+
         return tensordict_out
 
     def _step(
@@ -219,12 +246,13 @@ class VmasEnv(VmasWrapper):
         num_envs: int,
         continuous_actions: bool = True,
         max_steps: Optional[int] = None,
-        seed:Optional[int] = None
+        seed: Optional[int] = None,
         **kwargs,
     ):
         if not _has_vmas:
             raise ImportError(
-                f"vmas python package was not found. Please install this dependency. ImportError: {IMPORT_ERR}"
+                f"vmas python package was not found. Please install this dependency. "
+                f"More info: {self.git_url} (ImportError: {IMPORT_ERR})"
             )
         kwargs["scenario_name"] = scenario_name
         kwargs["num_envs"] = num_envs
@@ -247,18 +275,24 @@ class VmasEnv(VmasWrapper):
         max_steps: Optional[int],
         seed: Optional[int],
         **scenario_kwargs,
-    ) -> Environment:
+    ) -> "vmas.simulator.environment.environment.Environment":
         self.scenario_name = scenario_name
+        from_pixels = scenario_kwargs.pop("from_pixels", False)
+        pixels_only = scenario_kwargs.pop("pixels_only", False)
 
-        return vmas.make_env(
-            scenario_name=scenario_name,
-            num_envs=num_envs,
-            device=self.device,
-            continuous_actions=continuous_actions,
-            max_steps=max_steps,
-            seed=seed,
-            wrapper=None,
-            **scenario_kwargs,
+        return super()._build_env(
+            env=vmas.make_env(
+                scenario_name=scenario_name,
+                num_envs=num_envs,
+                device=self.device,
+                continuous_actions=continuous_actions,
+                max_steps=max_steps,
+                seed=seed,
+                wrapper=None,
+                **scenario_kwargs,
+            ),
+            pixels_only=pixels_only,
+            from_pixels=from_pixels,
         )
 
     def __repr__(self):

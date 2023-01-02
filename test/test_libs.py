@@ -25,6 +25,7 @@ from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrappe
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
+from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs
 
 if _has_gym:
@@ -41,6 +42,9 @@ if _has_gym:
 if _has_dmc:
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
+
+if _has_vmas:
+    import vmas
 
 IS_OSX = platform == "darwin"
 
@@ -513,6 +517,65 @@ class TestBrax:
         env.close()
         del env
 
+@pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
+@pytest.mark.parametrize("scenario_name", ["waterfall","flocking"])
+class TestVmas:
+    def test_vmas_seeding(self, scenario_name):
+        final_seed = []
+        tdreset = []
+        tdrollout = []
+        for _ in range(2):
+            env = VmasEnv(scenario_name=scenario_name, num_envs=4)
+            final_seed.append(env.set_seed(0))
+            tdreset.append(env.reset())
+            tdrollout.append(env.rollout(max_steps=10))
+            env.close()
+            del env
+        assert final_seed[0] == final_seed[1]
+        assert_allclose_td(*tdreset)
+        assert_allclose_td(*tdrollout)
+
+
+    @pytest.mark.parametrize("batch_size", [tuple(),(12,),(12,2),(12,3),(12,3,1),(12,3,4)])
+    def test_vmas_batch_size_error(self, scenario_name,batch_size):
+        num_envs = 12
+        n_agents = 2
+        if len(batch_size) > 1:
+            with pytest.raises(
+                    TypeError, match="Batch size used in constructor is not compatible with vmas."
+            ):
+                env = VmasEnv(scenario_name=scenario_name, num_envs=num_envs, n_agents=n_agents, batch_size=batch_size)
+        elif len(batch_size) == 1 and batch_size != (num_envs,):
+            with pytest.raises(
+                    TypeError, match="Batch size used in constructor does not match vmas batch size."
+            ):
+                env = VmasEnv(scenario_name=scenario_name, num_envs=num_envs, n_agents=n_agents, batch_size=batch_size)
+        else:
+            env = VmasEnv(scenario_name=scenario_name, num_envs=num_envs, n_agents=n_agents, batch_size=batch_size)
+
+
+    @pytest.mark.parametrize("num_envs", [1,20])
+    @pytest.mark.parametrize("n_agents", [1,5])
+    def test_vmas_batch_size(self,scenario_name, num_envs, n_agents):
+        n_rollout_samples = 10
+        env=VmasEnv(scenario_name=scenario_name,num_envs=num_envs,n_agents=n_agents)
+        env.set_seed(0)
+        tdreset = env.reset()
+        tdrollout = env.rollout(max_steps=n_rollout_samples)
+        env.close()
+        del env
+        assert tdreset.batch_size == (num_envs,n_agents)
+        assert tdrollout.batch_size == (num_envs,n_agents,n_rollout_samples)
+
+    @pytest.mark.parametrize("num_envs", [1, 20])
+    @pytest.mark.parametrize("n_agents", [1, 5])
+    def test_vmas_spec_rollout(self ,scenario_name, num_envs, n_agents):
+        env = VmasEnv(scenario_name=scenario_name, num_envs=num_envs, n_agents=n_agents)
+        wrapped = VmasWrapper(vmas.make_env(scenario_name=scenario_name, num_envs=num_envs, n_agents=n_agents))
+        for e in [env,wrapped]:
+            e.set_seed(0)
+            check_env_specs(e)
+            del e
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
