@@ -26,13 +26,30 @@ __all__ = ["VmasWrapper", "VmasEnv"]
 def _get_envs() -> List:
     if not _has_vmas:
         return []
-    return vmas.scenarios + vmas.mpe_scenarios + vmas.debug_scenarios
+    all_scenarios = vmas.scenarios + vmas.mpe_scenarios + vmas.debug_scenarios
+    # For now torchrl does not support heterogenous spaces (Tple(Box))
+    heterogenous_spaces_scenarios = [
+        "simple_adversary",
+        "simple_crypto",
+        "simple_push",
+        "simple_speaker_listener",
+        "simple_tag",
+        "simple_world_comm",
+    ]
+
+    return [
+        scenario
+        for scenario in all_scenarios
+        if scenario not in heterogenous_spaces_scenarios
+    ]
 
 
 def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int = -1):
     shape_len = len(tensor.shape)
 
-    assert shape_len >= len(batch_size)
+    assert shape_len >= len(
+        batch_size
+    ), f"shape: {tensor.shape}, batch_size: {batch_size}"
     assert tensor.shape[: len(batch_size)] == batch_size
 
     if shape_len == len(batch_size):
@@ -47,7 +64,7 @@ class VmasWrapper(_EnvWrapper):
     available_envs = _get_envs()
 
     def __init__(
-        self, env: "vmas.simulator.environment.environment.Environment"= None, **kwargs
+        self, env: "vmas.simulator.environment.environment.Environment" = None, **kwargs
     ):
         if env is not None:
             kwargs["env"] = env
@@ -60,7 +77,9 @@ class VmasWrapper(_EnvWrapper):
         elif len(self.batch_size) == 1:
             # Batch size is set
             if not self.batch_size[0] == self.num_envs:
-                raise TypeError("Batch size used in constructor does not match vmas batch size.")
+                raise TypeError(
+                    "Batch size used in constructor does not match vmas batch size."
+                )
         else:
             raise TypeError(
                 "Batch size used in constructor is not compatible with vmas."
