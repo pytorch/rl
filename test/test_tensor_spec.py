@@ -16,6 +16,7 @@ from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
+    MultDiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
@@ -231,6 +232,54 @@ def test_mult_onehot(shape, ns):
             assert _r.shape[-1] == _n
         np_r = ts.to_numpy(r)
         assert (ts.encode(np_r) == r).all()
+
+
+@pytest.mark.parametrize(
+    "ns",
+    [
+        [
+            5,
+        ],
+        [5, 2, 3],
+        [4, 5, 1, 3],
+    ],
+)
+@pytest.mark.parametrize(
+    "shape",
+    [
+        None,
+        [],
+        torch.Size([3]),
+        torch.Size([4, 5]),
+    ],
+)
+def test_mult_discrete(shape, ns):
+    torch.manual_seed(0)
+    np.random.seed(0)
+    ts = MultDiscreteTensorSpec(ns)
+    _real_shape = shape if shape is not None else []
+    _len_ns = [len(ns)] if len(ns) > 1 else []
+    for _ in range(100):
+        r = ts.rand(shape)
+
+        assert r.shape == torch.Size(
+            [
+                *_real_shape,
+                *_len_ns,
+            ]
+        )
+        assert ts.is_in(r)
+    rand = torch.rand(
+        torch.Size(
+            [
+                *_real_shape,
+                *_len_ns,
+            ]
+        )
+    )
+    projection = ts._project(rand)
+    assert rand.shape == projection.shape
+    assert ts.is_in(projection)
 
 
 @pytest.mark.parametrize("is_complete", [True, False])

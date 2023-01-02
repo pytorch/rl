@@ -989,7 +989,6 @@ class MultDiscreteTensorSpec(DiscreteTensorSpec):
     Args:
         nvec (iterable of integers): cardinality of each of the elements of
             the tensor.
-        shape: (torch.Size, optional): shape of the variables, default is "(1,)".
         device (str, int or torch.device, optional): device of
             the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
@@ -1005,17 +1004,12 @@ class MultDiscreteTensorSpec(DiscreteTensorSpec):
     def __init__(
         self,
         nvec: Sequence[int],
-        shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = torch.long,
     ):
-        if shape is None:
-            shape = torch.Size([])
         dtype, device = _default_dtype_and_device(dtype, device)
         self._size = len(nvec)
-        self._individual_shape = shape
-        self._first_dim_size = shape[0] if len(shape) != 0 else 1
-        shape = torch.Size([self._first_dim_size * self._size, *shape[1:]])
+        shape = torch.Size([self._size])
         space = BoxList([DiscreteBox(n) for n in nvec])
         super(DiscreteTensorSpec, self).__init__(
             shape, space, device, dtype, domain="discrete"
@@ -1024,21 +1018,23 @@ class MultDiscreteTensorSpec(DiscreteTensorSpec):
     def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
-        return torch.cat(
+        x = torch.cat(
             [
                 torch.randint(
                     0,
                     space.n,
-                    torch.Size([*shape, *self._individual_shape]),
+                    torch.Size([1, *shape]),
                     device=self.device,
                     dtype=self.dtype,
                 )
                 for space in self.space
             ]
-        )
+        ).squeeze()
+        _size = [self._size] if self._size > 1 else []
+        return x.T.reshape([*shape, *_size])
 
     def _split(self, val: torch.Tensor):
-        return val.split(self._first_dim_size)
+        return [val] if self._size < 2 else val.split(1, -1)
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         if val.dtype not in (torch.int, torch.long):
@@ -1046,10 +1042,11 @@ class MultDiscreteTensorSpec(DiscreteTensorSpec):
         vals = self._split(val)
         return torch.cat(
             [
-                _val.clamp_(min=0, max=space.n - 1)
+                _val.clamp_(min=0, max=space.n - 1).unsqueeze(0)
                 for _val, space in zip(vals, self.space)
-            ]
-        )
+            ],
+            dim=-1,
+        ).squeeze()
 
     def is_in(self, val: torch.Tensor) -> bool:
         vals = self._split(val)
