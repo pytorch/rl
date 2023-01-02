@@ -13,8 +13,8 @@ from packaging import version
 from tensordict import TensorDict
 from torch import nn
 from torchrl.data.tensor_specs import (
+    BoundedTensorSpec,
     DiscreteTensorSpec,
-    NdBoundedTensorSpec,
     OneHotDiscreteTensorSpec,
 )
 from torchrl.modules import (
@@ -511,7 +511,7 @@ class TestDreamerComponents:
     @pytest.mark.parametrize("deter_size", [20, 30])
     @pytest.mark.parametrize("action_size", [3, 6])
     def test_rssm_prior(self, device, batch_size, stoch_size, deter_size, action_size):
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             shape=(action_size,), dtype=torch.float32, minimum=-1, maximum=1
         )
         rssm_prior = RSSMPrior(
@@ -566,7 +566,7 @@ class TestDreamerComponents:
     def test_rssm_rollout(
         self, device, batch_size, temporal_size, stoch_size, deter_size, action_size
     ):
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             shape=(action_size,), dtype=torch.float32, minimum=-1, maximum=1
         )
         rssm_prior = RSSMPrior(

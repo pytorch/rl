@@ -121,10 +121,10 @@ class SafeModule(TensorDictModule):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn.functional_modules import make_functional
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data import UnboundedContinuousTensorSpec
         >>> from torchrl.modules import SafeModule
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
-        >>> spec = NdUnboundedContinuousTensorSpec(8)
+        >>> spec = UnboundedContinuousTensorSpec(8)
         >>> module = torch.nn.GRUCell(4, 8)
         >>> td_fmodule = SafeModule(
         ...    module=module,

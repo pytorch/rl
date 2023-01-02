@@ -45,20 +45,20 @@ class CEMPlanner(MPCPlannerBase):
 
     Examples:
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
         >>> from torchrl.envs.model_based import ModelBasedEnvBase
         >>> from torchrl.modules import SafeModule
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
         ...         self.observation_spec = CompositeSpec(
-        ...             next_hidden_observation=NdUnboundedContinuousTensorSpec((4,))
+        ...             next_hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
         ...         self.input_spec = CompositeSpec(
-        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
-        ...             action=NdUnboundedContinuousTensorSpec((1,)),
+        ...             hidden_observation=UnboundedContinuousTensorSpec((4,)),
+        ...             action=UnboundedContinuousTensorSpec((1,)),
         ...         )
-        ...         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+        ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
         ...         tensordict = TensorDict({},

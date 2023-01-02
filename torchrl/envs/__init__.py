@@ -27,6 +27,7 @@ from .transforms import (
     RewardClipping,
     RewardScaling,
     RewardSum,
+    StepCounter,
     TensorDictPrimer,
     ToTensorImage,
     Transform,

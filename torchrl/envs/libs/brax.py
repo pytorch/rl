@@ -3,11 +3,7 @@ from typing import Dict, Optional, Union
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.data import (
-    CompositeSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
-)
+from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvWrapper
 
 try:
@@ -117,22 +113,25 @@ class BraxWrapper(_EnvWrapper):
         return state_spec
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
-        self._input_spec = CompositeSpec(
-            action=NdBoundedTensorSpec(
+        self.input_spec = CompositeSpec(
+            action=BoundedTensorSpec(
                 minimum=-1, maximum=1, shape=(env.action_size,), device=self.device
             )
         )
-        self._reward_spec = NdUnboundedContinuousTensorSpec(
-            shape=(), device=self.device
+        self.reward_spec = UnboundedContinuousTensorSpec(
+            shape=[
+                1,
+            ],
+            device=self.device,
         )
-        self._observation_spec = CompositeSpec(
-            observation=NdUnboundedContinuousTensorSpec(
+        self.observation_spec = CompositeSpec(
+            observation=UnboundedContinuousTensorSpec(
                 shape=(env.observation_size,), device=self.device
             )
         )
         # extract state spec from instance
-        self._state_spec = self._make_state_spec(env)
-        self._input_spec["state"] = self._state_spec
+        self.state_spec = self._make_state_spec(env)
+        self.input_spec["state"] = self.state_spec
 
     def _make_state_example(self):
         key = jax.random.PRNGKey(0)
@@ -224,7 +223,6 @@ class BraxWrapper(_EnvWrapper):
 
         # extract done values
         next_done = next_state_nograd["done"].bool()
-        self._is_done = next_done
 
         # merge with tensors with grad function
         next_state = next_state_nograd

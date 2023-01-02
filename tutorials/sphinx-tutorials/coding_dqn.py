@@ -365,7 +365,7 @@ prev_traj_count = 0
 pbar = tqdm.tqdm(total=total_frames)
 for j, data in enumerate(data_collector):
     # trajectories are padded to be stored in the same tensordict: since we do not care about consecutive step, we'll just mask the tensordict and get the flattened representation instead.
-    mask = data["mask"].squeeze(-1)
+    mask = data["mask"]
     current_frames = mask.sum().cpu().item()
     pbar.update(current_frames)
 
@@ -602,7 +602,7 @@ prev_traj_count = 0
 
 pbar = tqdm.tqdm(total=total_frames)
 for j, data in enumerate(data_collector):
-    mask = data["mask"].squeeze(-1)
+    mask = data["mask"]
     data = pad(data, [0, 0, 0, max_size - data.shape[1]])
     current_frames = mask.sum().cpu().item()
     pbar.update(current_frames)

@@ -5,14 +5,14 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
     DEVICE_TYPING,
     DiscreteTensorSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
-    NdUnboundedDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
+    UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs import GymLikeEnv
@@ -59,26 +59,26 @@ def _jumanji_to_torchrl_spec_transform(
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return action_space_cls(spec.num_values, dtype=dtype, device=device)
     elif isinstance(spec, jumanji.specs.BoundedArray):
+        shape = spec.shape
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdBoundedTensorSpec(
-            shape=spec.shape,
+        return BoundedTensorSpec(
+            shape=shape,
             minimum=np.asarray(spec.minimum),
             maximum=np.asarray(spec.maximum),
             dtype=dtype,
             device=device,
         )
     elif isinstance(spec, jumanji.specs.Array):
+        shape = spec.shape
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         if dtype in (torch.float, torch.double, torch.half):
-            return NdUnboundedContinuousTensorSpec(
-                shape=spec.shape, dtype=dtype, device=device
+            return UnboundedContinuousTensorSpec(
+                shape=shape, dtype=dtype, device=device
             )
         else:
-            return NdUnboundedDiscreteTensorSpec(
-                shape=spec.shape, dtype=dtype, device=device
-            )
+            return UnboundedDiscreteTensorSpec(shape=shape, dtype=dtype, device=device)
     elif isinstance(spec, jumanji.specs.Spec) and hasattr(spec, "__dict__"):
         new_spec = {}
         for key, value in spec.__dict__.items():
@@ -188,18 +188,23 @@ class JumanjiWrapper(GymLikeEnv):
             raise TypeError(f"Unsupported spec type {type(spec)}")
 
     def _make_reward_spec(self, env) -> TensorSpec:
-        return _jumanji_to_torchrl_spec_transform(env.reward_spec(), device=self.device)
+        reward_spec = _jumanji_to_torchrl_spec_transform(
+            env.reward_spec(), device=self.device
+        )
+        if not len(reward_spec.shape):
+            reward_spec.shape = torch.Size([1])
+        return reward_spec
 
     def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
 
         # extract spec from jumanji definition
-        self._input_spec = self._make_input_spec(env)
-        self._observation_spec = self._make_observation_spec(env)
-        self._reward_spec = self._make_reward_spec(env)
+        self.input_spec = self._make_input_spec(env)
+        self.observation_spec = self._make_observation_spec(env)
+        self.reward_spec = self._make_reward_spec(env)
 
         # extract state spec from instance
-        self._state_spec = self._make_state_spec(env)
-        self._input_spec["state"] = self._state_spec
+        self.state_spec = self._make_state_spec(env)
+        self.input_spec["state"] = self.state_spec
 
         # build state example for data conversion
         self._state_example = self._make_state_example(env)
@@ -221,7 +226,7 @@ class JumanjiWrapper(GymLikeEnv):
 
     def read_state(self, state):
         state_dict = _object_to_tensordict(state, self.device, self.batch_size)
-        return self._state_spec.encode(state_dict)
+        return self.state_spec.encode(state_dict)
 
     def read_obs(self, obs):
         if isinstance(obs, (list, jnp.ndarray, np.ndarray)):
@@ -255,8 +260,6 @@ class JumanjiWrapper(GymLikeEnv):
         done = timestep.step_type == self.lib.types.StepType.LAST
         done = _ndarray_to_tensor(done).view(torch.bool).to(self.device)
 
-        self._is_done = done
-
         # build results
         tensordict_out = TensorDict(
             source=obs_dict,
@@ -287,8 +290,6 @@ class JumanjiWrapper(GymLikeEnv):
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
         done = torch.zeros(self.batch_size, dtype=torch.bool)
-
-        self._is_done = done
 
         # build results
         tensordict_out = TensorDict(

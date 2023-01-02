@@ -480,10 +480,10 @@ print(tensordict_exp)
 # ------------------------------
 
 torch.manual_seed(0)
-from torchrl.data import NdBoundedTensorSpec
+from torchrl.data import BoundedTensorSpec
 from torchrl.modules import SafeModule
 
-spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
+spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
 base_module = nn.Linear(5, 3)
 module = SafeModule(
     module=base_module, spec=spec, in_keys=["obs"], out_keys=["action"], safe=True
@@ -505,7 +505,7 @@ actor = Actor(base_module, in_keys=["obs"])
 tensordict = TensorDict({"obs": torch.randn(5)}, batch_size=[])
 actor(tensordict)  # action is the default value
 
-from tensordict.nn.prototype import (
+from tensordict.nn import (
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
 )

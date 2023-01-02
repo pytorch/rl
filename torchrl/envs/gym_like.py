@@ -204,7 +204,11 @@ class GymLikeEnv(_EnvWrapper):
 
             reward = self.read_reward(reward, _reward)
 
-            # TODO: check how to deal with np arrays
+            if isinstance(done, bool) or (
+                isinstance(done, np.ndarray) and not len(done)
+            ):
+                done = torch.tensor([done], device=self.device)
+
             done, do_break = self.read_done(done)
             if do_break:
                 break
@@ -215,7 +219,6 @@ class GymLikeEnv(_EnvWrapper):
             reward = np.nan
         reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
         done = self._to_tensor(done, dtype=torch.bool)
-        self.is_done = done
 
         tensordict_out = TensorDict(
             obs_dict, batch_size=tensordict.batch_size, device=self.device
@@ -240,8 +243,7 @@ class GymLikeEnv(_EnvWrapper):
             batch_size=self.batch_size,
             device=self.device,
         )
-        self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
-        tensordict_out.set("done", self._is_done)
+        tensordict_out.set("done", torch.zeros(*self.batch_size, 1, dtype=torch.bool))
         return tensordict_out
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:

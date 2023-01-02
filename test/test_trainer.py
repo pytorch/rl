@@ -773,7 +773,7 @@ def test_masking():
     )
     td_out = trainer._process_batch_hook(td)
     assert td_out.shape[0] == td.get("mask").sum()
-    assert (td["tensor"][td["mask"].squeeze(-1)] == td_out["tensor"]).all()
+    assert (td["tensor"][td["mask"]] == td_out["tensor"]).all()
 
 
 class TestSubSampler:

@@ -342,7 +342,13 @@ class TestHabitat:
 
 
 @pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
-@pytest.mark.parametrize("envname", ["Snake-6x6-v0", "TSP50-v0"])
+@pytest.mark.parametrize(
+    "envname",
+    [
+        "TSP50-v0",
+        "Snake-6x6-v0",
+    ],
+)
 class TestJumanji:
     def test_jumanji_seeding(self, envname):
         final_seed = []
