@@ -23,6 +23,7 @@ from .transforms import (
     Resize,
     RewardClipping,
     RewardScaling,
+    RewardSum,
     SqueezeTransform,
     StepCounter,
     TensorDictPrimer,
