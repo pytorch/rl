@@ -26,15 +26,14 @@ from tensordict.nn import get_functional, TensorDictModule
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from tensordict.tensordict import assert_allclose_td, TensorDict
-from tensordict.utils import expand_as_right
 from torch import autograd, nn
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.envs.model_based.dreamer import DreamerEnv
@@ -131,7 +130,7 @@ class TestDQN:
         elif action_spec_type == "categorical":
             action_spec = DiscreteTensorSpec(action_dim)
         elif action_spec_type == "nd_bounded":
-            action_spec = NdBoundedTensorSpec(
+            action_spec = BoundedTensorSpec(
                 -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
             )
         else:
@@ -253,20 +252,22 @@ class TestDQN:
         if action_spec_type == "categorical":
             action_value = torch.max(action_value, -1, keepdim=True)[0]
             action = torch.argmax(action, -1, keepdim=True)
+        # action_value = action_value.unsqueeze(-1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
-                "action_value": action_value
-                * expand_as_right(mask.to(obs.dtype).squeeze(-1), action_value),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
         )
         return td
@@ -416,7 +417,7 @@ class TestDDPG:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Linear(obs_dim, action_dim)
@@ -488,16 +489,18 @@ class TestDDPG:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -644,7 +647,7 @@ class TestSAC:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
@@ -726,16 +729,18 @@ class TestSAC:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = torch.ones(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -1021,7 +1026,7 @@ class TestREDQ:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
@@ -1129,16 +1134,18 @@ class TestREDQ:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -1474,7 +1481,7 @@ class TestPPO:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
@@ -1497,7 +1504,7 @@ class TestPPO:
 
     def _create_mock_actor_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         base_layer = nn.Linear(obs_dim, 5)
@@ -1543,7 +1550,7 @@ class TestPPO:
                 "done": done,
                 "reward": reward,
                 "action": action,
-                "sample_log_prob": torch.randn_like(action[..., :1]) / 10,
+                "sample_log_prob": torch.randn_like(action[..., 1]) / 10,
             },
             device=device,
         )
@@ -1564,23 +1571,25 @@ class TestPPO:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = torch.ones(batch, T, dtype=torch.bool, device=device)
         params_mean = torch.randn_like(action) / 10
         params_scale = torch.rand_like(action) / 10
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
-                "sample_log_prob": torch.randn_like(action[..., :1])
-                / 10
-                * mask.to(obs.dtype),
-                "loc": params_mean * mask.to(obs.dtype),
-                "scale": params_scale * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "sample_log_prob": (torch.randn_like(action[..., 1]) / 10).masked_fill_(
+                    ~mask, 0.0
+                ),
+                "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -1799,7 +1808,7 @@ class TestA2C:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
@@ -1835,23 +1844,26 @@ class TestA2C:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         params_mean = torch.randn_like(action) / 10
         params_scale = torch.rand_like(action) / 10
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
-                "sample_log_prob": torch.randn_like(action[..., :1])
-                / 10
-                * mask.to(obs.dtype),
-                "loc": params_mean * mask.to(obs.dtype),
-                "scale": params_scale * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
+                    ~mask, 0.0
+                )
+                / 10,
+                "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -2010,7 +2022,7 @@ class TestReinforce:
             distribution_class=TanhNormal,
             return_log_prob=True,
             in_keys=["loc", "scale"],
-            spec=NdUnboundedContinuousTensorSpec(n_act),
+            spec=UnboundedContinuousTensorSpec(n_act),
         )
         if advantage == "gae":
             advantage = GAE(
@@ -2134,8 +2146,8 @@ class TestDreamer:
     def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "state": NdUnboundedContinuousTensorSpec(state_dim),
-            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2209,8 +2221,8 @@ class TestDreamer:
     def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "state": NdUnboundedContinuousTensorSpec(state_dim),
-            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2258,8 +2270,8 @@ class TestDreamer:
     def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "state": NdUnboundedContinuousTensorSpec(state_dim),
-            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)

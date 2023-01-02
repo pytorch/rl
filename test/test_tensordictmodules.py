@@ -11,9 +11,9 @@ from tensordict import TensorDict
 from tensordict.nn.functional_modules import make_functional
 from torch import nn
 from torchrl.data.tensor_specs import (
+    BoundedTensorSpec,
     CompositeSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import NormalParamWrapper, SafeModule, TanhNormal
@@ -87,8 +87,8 @@ class TestTDModule:
                 return self.linear_1(x), self.linear_2(x)
 
         spec_dict = {
-            "_": NdUnboundedContinuousTensorSpec((4,)),
-            "out_2": NdUnboundedContinuousTensorSpec((3,)),
+            "_": UnboundedContinuousTensorSpec((4,)),
+            "out_2": UnboundedContinuousTensorSpec((3,)),
         }
 
         # warning due to "_" in spec keys
@@ -114,9 +114,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
 
         if safe and spec is None:
             with pytest.raises(
@@ -176,9 +176,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
         else:
             raise NotImplementedError
 
@@ -239,9 +239,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
 
         if safe and spec is None:
             with pytest.raises(
@@ -293,9 +293,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
         else:
             raise NotImplementedError
 
@@ -350,9 +350,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 32)
+            spec = BoundedTensorSpec(-0.1, 0.1, 32)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(32)
+            spec = UnboundedContinuousTensorSpec(32)
 
         if safe and spec is None:
             with pytest.raises(
@@ -404,9 +404,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 32)
+            spec = BoundedTensorSpec(-0.1, 0.1, 32)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(32)
+            spec = UnboundedContinuousTensorSpec(32)
         else:
             raise NotImplementedError
 
@@ -464,9 +464,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
 
         if safe and spec is None:
             with pytest.raises(
@@ -543,9 +543,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
         else:
             raise NotImplementedError
 
@@ -640,9 +640,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
 
         kwargs = {}
 
@@ -717,9 +717,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
         else:
             raise NotImplementedError
 
@@ -804,9 +804,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
 
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
@@ -873,9 +873,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
         else:
             raise NotImplementedError
 
@@ -959,9 +959,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 7)
+            spec = BoundedTensorSpec(-0.1, 0.1, 7)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(7)
+            spec = UnboundedContinuousTensorSpec(7)
 
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
@@ -1031,9 +1031,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 7)
+            spec = BoundedTensorSpec(-0.1, 0.1, 7)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(7)
+            spec = UnboundedContinuousTensorSpec(7)
         else:
             raise NotImplementedError
 
@@ -1123,9 +1123,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
 
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
@@ -1222,9 +1222,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
         else:
             raise NotImplementedError
 
@@ -1340,7 +1340,7 @@ class TestTDSequence:
         net3 = NormalParamWrapper(net3)
         net3 = SafeModule(net3, in_keys=["c"], out_keys=["loc", "scale"])
 
-        spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+        spec = BoundedTensorSpec(-0.1, 0.1, 4)
 
         kwargs = {"distribution_class": TanhNormal}
 

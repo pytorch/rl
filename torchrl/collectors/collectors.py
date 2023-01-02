@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import _pickle
 import abc
 import inspect
 import os
@@ -55,8 +56,8 @@ class RandomPolicy:
 
         Examples:
             >>> from tensordict import TensorDict
-            >>> from torchrl.data.tensor_specs import NdBoundedTensorSpec
-            >>> action_spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
+            >>> from torchrl.data.tensor_specs import BoundedTensorSpec
+            >>> action_spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
             >>> actor = RandomPolicy(spec=action_spec)
             >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
 
@@ -283,9 +284,6 @@ class SyncDataCollector(_DataCollector):
             For long trajectories, it may be necessary to store the data on a different device than the one where
             the policy is stored.
             default = None
-        return_in_place (bool): if True, the collector will yield the same tensordict container with updated values
-            at each iteration.
-            default = False
         exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
             "mode" or "mean".
             default = "random"
@@ -363,7 +361,6 @@ class SyncDataCollector(_DataCollector):
         passing_device: DEVICE_TYPING = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
-        return_in_place: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         init_with_lag: bool = False,
         return_same_td: bool = False,
@@ -432,7 +429,8 @@ class SyncDataCollector(_DataCollector):
 
         self._tensordict = env.reset()
         self._tensordict.set(
-            "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
+            "step_count",
+            torch.zeros(self.env.batch_size, dtype=torch.int, device=env.device),
         )
 
         if (
@@ -468,17 +466,23 @@ class SyncDataCollector(_DataCollector):
             )
         # in addition to outputs of the policy, we add traj_ids and step_count to
         # _tensordict_out which will be collected during rollout
-        if len(self.env.batch_size):
-            traj_ids = torch.zeros(*self._tensordict_out.batch_size, 1)
-        else:
-            traj_ids = torch.zeros(*self._tensordict_out.batch_size, 1, 1)
-
-        self._tensordict_out.set("traj_ids", traj_ids)
         self._tensordict_out.set(
-            "step_count", torch.zeros(*self._tensordict_out.batch_size, 1)
+            "traj_ids",
+            torch.zeros(
+                *self._tensordict_out.batch_size,
+                dtype=torch.int64,
+                device=self.env_device,
+            ),
+        )
+        self._tensordict_out.set(
+            "step_count",
+            torch.zeros(
+                *self._tensordict_out.batch_size,
+                dtype=torch.int64,
+                device=self.env_device,
+            ),
         )
 
-        self.return_in_place = return_in_place
         if split_trajs is None:
             if not self.reset_when_done:
                 split_trajs = False
@@ -489,12 +493,6 @@ class SyncDataCollector(_DataCollector):
                 "Cannot split trajectories when reset_when_done is False."
             )
         self.split_trajs = split_trajs
-        if self.return_in_place and self.split_trajs:
-            raise RuntimeError(
-                "the 'return_in_place' and 'split_trajs' argument are incompatible, but found to be both "
-                "True. split_trajs=True will cause the output tensordict to have an unpredictable output "
-                "shape, which prevents caching and overwriting the tensors."
-            )
         self._td_env = None
         self._td_policy = None
         self._has_been_done = None
@@ -552,6 +550,16 @@ class SyncDataCollector(_DataCollector):
             if self.return_same_td:
                 yield tensordict_out
             else:
+                # we must clone the values, as the tensordict is updated in-place.
+                # otherwise the following code may break:
+                # >>> for i, data in enumerate(collector):
+                # >>>      if i == 0:
+                # >>>          data0 = data
+                # >>>      elif i == 1:
+                # >>>          data1 = data
+                # >>>      else:
+                # >>>          break
+                # >>> assert data0["done"] is not data1["done"]
                 yield tensordict_out.clone()
 
             del tensordict_out
@@ -589,7 +597,7 @@ class SyncDataCollector(_DataCollector):
         if not self.reset_when_done:
             done = torch.zeros_like(done)
         steps = self._tensordict.get("step_count")
-        done_or_terminated = done | (steps == self.max_frames_per_traj)
+        done_or_terminated = done.squeeze(-1) | (steps == self.max_frames_per_traj)
         if self._has_been_done is None:
             self._has_been_done = done_or_terminated
         else:
@@ -604,7 +612,7 @@ class SyncDataCollector(_DataCollector):
             traj_ids = self._tensordict.get("traj_ids").clone()
             steps = steps.clone()
             if len(self.env.batch_size):
-                self._tensordict.masked_fill_(done_or_terminated.squeeze(-1), 0)
+                self._tensordict.masked_fill_(done_or_terminated, 0)
                 self._tensordict.set("reset_workers", done_or_terminated)
             else:
                 self._tensordict.zero_()
@@ -620,8 +628,8 @@ class SyncDataCollector(_DataCollector):
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
             steps[done_or_terminated] = 0
-            self._tensordict.set("traj_ids", traj_ids)  # no ops if they already match
-            self._tensordict.set("step_count", steps)
+            self._tensordict.set_("traj_ids", traj_ids)  # no ops if they already match
+            self._tensordict.set_("step_count", steps)
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
@@ -636,11 +644,10 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.fill_("step_count", 0)
 
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
-        self._tensordict.set("traj_ids", torch.arange(n).unsqueeze(-1))
+        self._tensordict.set("traj_ids", torch.arange(n).view(self.env.batch_size[:1]))
 
-        tensordict_out = []
         with set_exploration_mode(self.exploration_mode):
-            for _ in range(self.frames_per_batch):
+            for j in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
@@ -651,19 +658,22 @@ class SyncDataCollector(_DataCollector):
 
                 step_count = self._tensordict.get("step_count")
                 step_count += 1
-                tensordict_out.append(self._tensordict.clone())
+                # we must clone all the values, since the step / traj_id updates are done in-place
+                try:
+                    self._tensordict_out[..., j] = self._tensordict
+                except RuntimeError:
+                    # unlock the output tensordict to allow for new keys to be written
+                    # these will be missed during the sync but at least we won't get an error during the update
+                    is_shared = self._tensordict_out.is_shared()
+                    self._tensordict_out.unlock()
+                    self._tensordict_out[..., j] = self._tensordict
+                    if is_shared:
+                        self._tensordict_out.share_memory_()
 
                 self._reset_if_necessary()
                 self._tensordict.update(step_mdp(self._tensordict), inplace=True)
-            if self.return_in_place and len(self._tensordict_out.keys()) > 0:
-                tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))
-                tensordict_out = tensordict_out.select(*self._tensordict_out.keys())
-                return self._tensordict_out.update_(tensordict_out)
-        return torch.stack(
-            tensordict_out,
-            len(self.env.batch_size),
-            out=self._tensordict_out,
-        )  # dim 0 for single env, dim 1 for batch
+
+        return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
@@ -673,7 +683,6 @@ class SyncDataCollector(_DataCollector):
                 raise RuntimeError("resetting unique env with index is not permitted.")
             reset_workers = torch.zeros(
                 *self.env.batch_size,
-                1,
                 dtype=torch.bool,
                 device=self.env.device,
             )
@@ -700,7 +709,14 @@ class SyncDataCollector(_DataCollector):
             del self.env
 
     def __del__(self):
-        self.shutdown()  # make sure env is closed
+        try:
+            self.shutdown()
+        except Exception:
+            # an AttributeError will typically be raised if the collector is deleted when the program ends.
+            # In the future, insignificant changes to the close method may change the error type.
+            # We excplicitely assume that any error raised during closure in
+            # __del__ will not affect the program.
+            pass
 
     def state_dict(self) -> OrderedDict:
         """Returns the local state_dict of the data collector (environment and policy).
@@ -1008,7 +1024,19 @@ class _MultiDataCollector(_DataCollector):
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
-            proc.start()
+            try:
+                proc.start()
+            except _pickle.PicklingError as err:
+                if "<lambda>" in str(err):
+                    raise RuntimeError(
+                        """Can't open a process with doubly cloud-pickled lambda function.
+This error is likely due to an attempt to use a ParallelEnv in a
+multiprocessed data collector. To do this, consider wrapping your
+lambda function in an `torchrl.envs.EnvCreator` wrapper as follows:
+`env = ParallelEnv(N, EnvCreator(my_lambda_function))`.
+This will not only ensure that your lambda function is cloud-pickled once, but
+also that the state dict is synchronised across processes if needed."""
+                    )
             pipe_child.close()
             self.procs.append(proc)
             self.pipes.append(pipe_parent)
@@ -1019,7 +1047,14 @@ class _MultiDataCollector(_DataCollector):
         self.closed = False
 
     def __del__(self):
-        self.shutdown()
+        try:
+            self.shutdown()
+        except Exception:
+            # an AttributeError will typically be raised if the collector is deleted when the program ends.
+            # In the future, insignificant changes to the close method may change the error type.
+            # We excplicitely assume that any error raised during closure in
+            # __del__ will not affect the program.
+            pass
 
     def shutdown(self) -> None:
         """Shuts down all processes. This operation is irreversible."""
@@ -1199,6 +1234,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
+        out_buffer = None
         while not all(dones) and frames < self.total_frames:
             _check_for_faulty_process(self.procs)
             if self.update_at_each_batch:
@@ -1244,24 +1280,31 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     else:
                         same_device = same_device and (item.device == prev_device)
             if same_device:
-                out = torch.cat(list(out_tensordicts_shared.values()), 0)
+                out_buffer = torch.cat(
+                    list(out_tensordicts_shared.values()), 0, out=out_buffer
+                )
             else:
-                out = torch.cat(
-                    [item.cpu() for item in out_tensordicts_shared.values()], 0
+                out_buffer = torch.cat(
+                    [item.cpu() for item in out_tensordicts_shared.values()],
+                    0,
+                    out=out_buffer,
                 )
 
             if self.split_trajs:
-                out = split_trajectories(out)
-                frames += out.get("mask").sum()
+                out = split_trajectories(out_buffer)
+                frames += out.get("mask").sum().item()
             else:
+                out = out_buffer.clone()
                 frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
-                out = out.exclude(*excluded_keys)
+                if excluded_keys:
+                    out = out.exclude(*excluded_keys)
             yield out
+            del out
 
         del out_tensordicts_shared
         # We shall not call shutdown just yet as user may want to retrieve state_dict
@@ -1562,7 +1605,6 @@ def _main_async_collector(
         seed=seed,
         pin_memory=pin_memory,
         passing_device=passing_device,
-        return_in_place=True,
         init_with_lag=init_with_lag,
         exploration_mode=exploration_mode,
         reset_when_done=reset_when_done,
@@ -1609,8 +1651,8 @@ def _main_async_collector(
                         f"without receiving a command from main. Consider increasing the maximum idle count "
                         f"if this is expected via the environment variable MAX_IDLE_COUNT "
                         f"(current value is {_MAX_IDLE_COUNT})."
-                        f"\nIf this occurs at the end of a function, it means that your collector has not been "
-                        f"collected, consider calling `collector.shutdown()` or `del collector` at the end of the function."
+                        f"\nIf this occurs at the end of a function or program, it means that your collector has not been "
+                        f"collected, consider calling `collector.shutdown()` or `del collector` before ending the program."
                     )
                 continue
         if msg in ("continue", "continue_random"):

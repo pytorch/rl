@@ -97,8 +97,8 @@ class TestSplits:
         num_workers=32,
         traj_len=200,
     ):
-        traj_ids = torch.arange(num_workers).unsqueeze(-1)
-        steps_count = torch.zeros(num_workers).unsqueeze(-1)
+        traj_ids = torch.arange(num_workers)
+        steps_count = torch.zeros(num_workers)
         workers = torch.arange(num_workers)
 
         out = []
@@ -108,10 +108,10 @@ class TestSplits:
             td = TensorDict(
                 source={
                     "traj_ids": traj_ids,
-                    "a": traj_ids.clone(),
+                    "a": traj_ids.clone().unsqueeze(-1),
                     "steps_count": steps_count,
                     "workers": workers,
-                    "done": done,
+                    "done": done.unsqueeze(-1),
                 },
                 batch_size=[num_workers],
             )
@@ -125,15 +125,7 @@ class TestSplits:
         return out
 
     @pytest.mark.parametrize("num_workers", range(3, 34, 3))
-    @pytest.mark.parametrize(
-        "traj_len",
-        [
-            10,
-            17,
-            50,
-            97,
-        ],
-    )
+    @pytest.mark.parametrize("traj_len", [10, 17, 50, 97])
     def test_splits(self, num_workers, traj_len):
 
         trajs = TestSplits.create_fake_trajs(num_workers, traj_len)

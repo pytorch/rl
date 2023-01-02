@@ -8,13 +8,12 @@ from typing import Dict, List
 from warnings import warn
 
 import torch
-
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
+    BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
@@ -22,6 +21,7 @@ from torchrl.data import (
 
 from ..._utils import implement_for
 from ...data.utils import numpy_to_torch_dtype_dict
+
 from ..gym_like import default_info_dict_reader, GymLikeEnv
 from ..utils import _classproperty
 
@@ -70,14 +70,24 @@ def _gym_to_torchrl_spec_transform(
     elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
         return MultOneHotDiscreteTensorSpec(spec.nvec, device=device)
     elif isinstance(spec, gym.spaces.Box):
+        shape = spec.shape
+        if not len(shape):
+            shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdBoundedTensorSpec(
-            torch.tensor(spec.low, device=device, dtype=dtype),
-            torch.tensor(spec.high, device=device, dtype=dtype),
-            torch.Size(spec.shape),
-            dtype=dtype,
-            device=device,
+        low = torch.tensor(spec.low, device=device, dtype=dtype)
+        high = torch.tensor(spec.high, device=device, dtype=dtype)
+        is_unbounded = low.isinf().all() and high.isinf().all()
+        return (
+            UnboundedContinuousTensorSpec(shape, device=device, dtype=dtype)
+            if is_unbounded
+            else BoundedTensorSpec(
+                low,
+                high,
+                shape,
+                dtype=dtype,
+                device=device,
+            )
         )
     elif isinstance(spec, (Dict,)):
         spec_out = {}
@@ -257,17 +267,19 @@ class GymWrapper(GymLikeEnv):
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
-        self.observation_spec = _gym_to_torchrl_spec_transform(
+        observation_spec = _gym_to_torchrl_spec_transform(
             env.observation_space,
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
-        if not isinstance(self.observation_spec, CompositeSpec):
+        if not isinstance(observation_spec, CompositeSpec):
             if self.from_pixels:
-                self.observation_spec = CompositeSpec(pixels=self.observation_spec)
+                observation_spec = CompositeSpec(pixels=observation_spec)
             else:
-                self.observation_spec = CompositeSpec(observation=self.observation_spec)
+                observation_spec = CompositeSpec(observation=observation_spec)
+        self.observation_spec = observation_spec
         self.reward_spec = UnboundedContinuousTensorSpec(
+            shape=[1],
             device=self.device,
         )
 

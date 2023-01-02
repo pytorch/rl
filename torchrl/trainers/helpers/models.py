@@ -13,7 +13,7 @@ from torch import distributions as d, nn
 from torchrl.data import (
     CompositeSpec,
     DiscreteTensorSpec,
-    NdUnboundedContinuousTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import TensorDictPrimer, TransformedEnv
@@ -169,7 +169,6 @@ def make_dqn_actor(
         # automatically infer in key
         (in_key,) = itertools.islice(env_specs["observation_spec"], 1)
 
-    out_features = action_spec.shape[0]
     actor_class = QValueActor
     actor_kwargs = {}
 
@@ -178,6 +177,8 @@ def make_dqn_actor(
         # to the number of possible choices and also set categorical behavioural for actors.
         actor_kwargs.update({"action_space": "categorical"})
         out_features = env_specs["action_spec"].space.n
+    else:
+        out_features = action_spec.shape[0]
 
     if cfg.distributional:
         if not atoms:
@@ -1650,11 +1651,11 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             out_keys=["loc", "scale"],
             spec=CompositeSpec(
                 **{
-                    "loc": NdUnboundedContinuousTensorSpec(
+                    "loc": UnboundedContinuousTensorSpec(
                         proof_environment.action_spec.shape,
                         device=proof_environment.action_spec.device,
                     ),
-                    "scale": NdUnboundedContinuousTensorSpec(
+                    "scale": UnboundedContinuousTensorSpec(
                         proof_environment.action_spec.shape,
                         device=proof_environment.action_spec.device,
                     ),
@@ -1700,10 +1701,10 @@ def _dreamer_make_actor_real(
                 out_keys=["loc", "scale"],
                 spec=CompositeSpec(
                     **{
-                        "loc": NdUnboundedContinuousTensorSpec(
+                        "loc": UnboundedContinuousTensorSpec(
                             proof_environment.action_spec.shape,
                         ),
-                        "scale": NdUnboundedContinuousTensorSpec(
+                        "scale": UnboundedContinuousTensorSpec(
                             proof_environment.action_spec.shape,
                         ),
                     }
@@ -1797,8 +1798,8 @@ def _dreamer_make_mbenv(
     model_based_env.set_specs_from_env(proof_environment)
     model_based_env = TransformedEnv(model_based_env)
     default_dict = {
-        "state": NdUnboundedContinuousTensorSpec(state_dim),
-        "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+        "state": UnboundedContinuousTensorSpec(state_dim),
+        "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         # "action": proof_environment.action_spec,
     }
     model_based_env.append_transform(
