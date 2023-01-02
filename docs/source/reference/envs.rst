@@ -216,6 +216,7 @@ in the environment. The keys to be included in this inverse transform are passed
     VecNorm
     gSDENoise
     TensorDictPrimer
+    RewardSum
     R3MTransform
     VIPTransform
     VIPRewardTransform
