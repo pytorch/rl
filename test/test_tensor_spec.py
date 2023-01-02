@@ -807,6 +807,39 @@ class TestEquality:
         )
         assert ts != ts_other
 
+    @pytest.mark.parametrize("nvec", [[3], [3, 4], [3, 4, 5]])
+    def test_equality_multi_discrete(self, nvec):
+        device = "cpu"
+        dtype = torch.float16
+
+        ts = MultDiscreteTensorSpec(nvec=nvec, device=device, dtype=dtype)
+
+        ts_same = MultDiscreteTensorSpec(nvec=nvec, device=device, dtype=dtype)
+        assert ts == ts_same
+
+        other_nvec = np.array(nvec) + 3
+        ts_other = MultDiscreteTensorSpec(nvec=other_nvec, device=device, dtype=dtype)
+        assert ts != ts_other
+
+        other_nvec = [12]
+        ts_other = MultDiscreteTensorSpec(nvec=other_nvec, device=device, dtype=dtype)
+        assert ts != ts_other
+
+        other_nvec = [12, 13]
+        ts_other = MultDiscreteTensorSpec(nvec=other_nvec, device=device, dtype=dtype)
+        assert ts != ts_other
+
+        ts_other = MultDiscreteTensorSpec(nvec=nvec, device="cpu:0", dtype=dtype)
+        assert ts != ts_other
+
+        ts_other = MultDiscreteTensorSpec(nvec=nvec, device=device, dtype=torch.float64)
+        assert ts != ts_other
+
+        ts_other = TestEquality._ts_make_all_fields_equal(
+            BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype), ts
+        )
+        assert ts != ts_other
+
     def test_equality_composite(self):
         minimum = np.arange(12).reshape((3, 4))
         maximum = minimum + 100
