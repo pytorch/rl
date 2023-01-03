@@ -274,7 +274,7 @@ class VmasWrapper(_EnvWrapper):
                 agent_td.set("info", agent_info)
             agent_tds.append(agent_td)
 
-        tensordict_out = torch.stack(agent_tds, dim=0).to_tensordict()
+        tensordict_out = torch.stack(agent_tds, dim=0)
 
         return tensordict_out
 
