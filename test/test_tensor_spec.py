@@ -16,6 +16,7 @@ from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
+    MultiDiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
@@ -231,6 +232,93 @@ def test_mult_onehot(shape, ns):
             assert _r.shape[-1] == _n
         np_r = ts.to_numpy(r)
         assert (ts.encode(np_r) == r).all()
+
+
+@pytest.mark.parametrize(
+    "ns",
+    [
+        [
+            5,
+        ],
+        [5, 2, 3],
+        [4, 5, 1, 3],
+    ],
+)
+@pytest.mark.parametrize(
+    "shape",
+    [
+        None,
+        [],
+        torch.Size([3]),
+        torch.Size([4, 5]),
+    ],
+)
+def test_multi_discrete(shape, ns):
+    torch.manual_seed(0)
+    np.random.seed(0)
+    ts = MultiDiscreteTensorSpec(ns)
+    _real_shape = shape if shape is not None else []
+    _len_ns = [len(ns)] if len(ns) > 1 else []
+    for _ in range(100):
+        r = ts.rand(shape)
+
+        assert r.shape == torch.Size(
+            [
+                *_real_shape,
+                *_len_ns,
+            ]
+        )
+        assert ts.is_in(r)
+    rand = torch.rand(
+        torch.Size(
+            [
+                *_real_shape,
+                *_len_ns,
+            ]
+        )
+    )
+    projection = ts._project(rand)
+    assert rand.shape == projection.shape
+    assert ts.is_in(projection)
+
+
+@pytest.mark.parametrize(
+    "n",
+    [
+        1,
+        4,
+        7,
+        99,
+    ],
+)
+@pytest.mark.parametrize("device", get_available_devices())
+def test_discrete_conversion(n, device):
+    categorical = DiscreteTensorSpec(n, device=device)
+    one_hot = OneHotDiscreteTensorSpec(n, device=device)
+
+    assert categorical != one_hot
+    assert categorical.to_onehot() == one_hot
+    assert one_hot.to_categorical() == categorical
+
+
+@pytest.mark.parametrize(
+    "ns",
+    [
+        [
+            5,
+        ],
+        [5, 2, 3],
+        [4, 5, 1, 3],
+    ],
+)
+@pytest.mark.parametrize("device", get_available_devices())
+def test_multi_discrete_conversion(ns, device):
+    categorical = MultiDiscreteTensorSpec(ns, device=device)
+    one_hot = MultOneHotDiscreteTensorSpec(ns, device=device)
+
+    assert categorical != one_hot
+    assert categorical.to_onehot() == one_hot
+    assert one_hot.to_categorical() == categorical
 
 
 @pytest.mark.parametrize("is_complete", [True, False])
@@ -749,6 +837,41 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = MultOneHotDiscreteTensorSpec(
+            nvec=nvec, device=device, dtype=torch.float64
+        )
+        assert ts != ts_other
+
+        ts_other = TestEquality._ts_make_all_fields_equal(
+            BoundedTensorSpec(0, 1, torch.Size((1,)), device, dtype), ts
+        )
+        assert ts != ts_other
+
+    @pytest.mark.parametrize("nvec", [[3], [3, 4], [3, 4, 5]])
+    def test_equality_multi_discrete(self, nvec):
+        device = "cpu"
+        dtype = torch.float16
+
+        ts = MultiDiscreteTensorSpec(nvec=nvec, device=device, dtype=dtype)
+
+        ts_same = MultiDiscreteTensorSpec(nvec=nvec, device=device, dtype=dtype)
+        assert ts == ts_same
+
+        other_nvec = np.array(nvec) + 3
+        ts_other = MultiDiscreteTensorSpec(nvec=other_nvec, device=device, dtype=dtype)
+        assert ts != ts_other
+
+        other_nvec = [12]
+        ts_other = MultiDiscreteTensorSpec(nvec=other_nvec, device=device, dtype=dtype)
+        assert ts != ts_other
+
+        other_nvec = [12, 13]
+        ts_other = MultiDiscreteTensorSpec(nvec=other_nvec, device=device, dtype=dtype)
+        assert ts != ts_other
+
+        ts_other = MultiDiscreteTensorSpec(nvec=nvec, device="cpu:0", dtype=dtype)
+        assert ts != ts_other
+
+        ts_other = MultiDiscreteTensorSpec(
             nvec=nvec, device=device, dtype=torch.float64
         )
         assert ts != ts_other

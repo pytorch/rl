@@ -213,6 +213,7 @@ in the environment. The keys to be included in this inverse transform are passed
     Resize
     RewardClipping
     RewardScaling
+    RewardSum
     SqueezeTransform
     StepCounter
     TensorDictPrimer
