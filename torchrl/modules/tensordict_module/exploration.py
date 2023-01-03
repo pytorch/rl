@@ -48,9 +48,9 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.modules import EGreedyWrapper, Actor
-        >>> from torchrl.data import NdBoundedTensorSpec
+        >>> from torchrl.data import BoundedTensorSpec
         >>> torch.manual_seed(0)
-        >>> spec = NdBoundedTensorSpec(-1, 1, torch.Size([4]))
+        >>> spec = BoundedTensorSpec(-1, 1, torch.Size([4]))
         >>> module = torch.nn.Linear(4, 4, bias=False)
         >>> policy = Actor(spec=spec, module=module)
         >>> explorative_policy = EGreedyWrapper(policy, eps_init=0.2)
@@ -280,10 +280,10 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import NdBoundedTensorSpec
+        >>> from torchrl.data import BoundedTensorSpec
         >>> from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
         >>> torch.manual_seed(0)
-        >>> spec = NdBoundedTensorSpec(-1, 1, torch.Size([4]))
+        >>> spec = BoundedTensorSpec(-1, 1, torch.Size([4]))
         >>> module = torch.nn.Linear(4, 4, bias=False)
         >>> policy = Actor(module=module, spec=spec)
         >>> explorative_policy = OrnsteinUhlenbeckProcessWrapper(policy)

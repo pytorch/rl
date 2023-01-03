@@ -21,15 +21,14 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     ContinuousBox,
     DEVICE_TYPING,
-    NdUnboundedContinuousTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
 )
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
 from torchrl.envs.utils import step_mdp
-
 
 try:
     from torchvision.transforms.functional import center_crop
@@ -453,9 +452,15 @@ but got an object of type {type(transform)}."""
 
         return tensordict_out
 
-    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+    def set_seed(
+        self, seed: Optional[int] = None, static_seed: bool = False
+    ) -> Optional[int]:
         """Set the seeds of the environment."""
         return self.base_env.set_seed(seed, static_seed=static_seed)
+
+    def _set_seed(self, seed: Optional[int]):
+        """This method is not used in transformed envs."""
+        pass
 
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         if tensordict is not None:
@@ -848,6 +853,7 @@ class RewardClipping(Transform):
             return BoundedTensorSpec(
                 self.clamp_min,
                 self.clamp_max,
+                torch.Size((1,)),
                 device=reward_spec.device,
                 dtype=reward_spec.dtype,
             )
@@ -1850,7 +1856,7 @@ class CatTensors(Transform):
         device = spec0.device
         shape[self.dim] = sum_shape
         shape = torch.Size(shape)
-        observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
+        observation_spec[out_key] = UnboundedContinuousTensorSpec(
             shape=shape,
             dtype=spec0.dtype,
             device=device,
@@ -2061,7 +2067,7 @@ class TensorDictPrimer(Transform):
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> base_env = GymEnv("Pendulum-v1")
         >>> env = TransformedEnv(base_env)
-        >>> env.append_transform(TensorDictPrimer(mykey=NdUnboundedContinuousTensorSpec([3])))
+        >>> env.append_transform(TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([3])))
         >>> print(env.reset())
         TensorDict(
             fields={
@@ -2471,3 +2477,197 @@ class VecNorm(Transform):
             f"{self.__class__.__name__}(decay={self.decay:4.4f},"
             f"eps={self.eps:4.4f}, keys={self.in_keys})"
         )
+
+
+class RewardSum(Transform):
+    """Tracks episode cumulative rewards.
+
+    This transform accepts a list of tensordict reward keys (i.e. ´in_keys´) and tracks their cumulative
+    value along each episode. When called, the transform creates a new tensordict key for each in_key named
+    ´episode_{in_key}´ where  the cumulative values are written. All ´in_keys´ should be part of the env
+    reward and be present in the env reward_spec.
+
+    If no in_keys are specified, this transform assumes ´reward´ to be the input key. However, multiple rewards
+    (e.g. reward1 and reward2) can also be specified. If ´in_keys´ are not present in the provided tensordict,
+    this transform hos no effect.
+    """
+
+    inplace = True
+
+    def __init__(
+        self,
+        in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
+    ):
+        """Initialises the transform. Filters out non-reward input keys and defines output keys."""
+        if in_keys is None:
+            in_keys = ["reward"]
+        out_keys = [f"episode_{in_key}" for in_key in in_keys]
+
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Resets episode rewards."""
+        # Non-batched environments
+        if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
+            for out_key in self.out_keys:
+                if out_key in tensordict.keys():
+                    tensordict[out_key] = 0.0
+
+        # Batched environments
+        else:
+            reset_workers = tensordict.get(
+                "reset_workers",
+                torch.ones(
+                    *tensordict.batch_size,
+                    1,
+                    dtype=torch.bool,
+                    device=tensordict.device,
+                ),
+            )
+            for out_key in self.out_keys:
+                if out_key in tensordict.keys():
+                    tensordict[out_key][reset_workers] = 0.0
+
+        return tensordict
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Updates the episode rewards with the step rewards."""
+        # Sanity checks
+        self._check_inplace()
+        for in_key in self.in_keys:
+            if in_key not in tensordict.keys():
+                return tensordict
+
+        # Update episode rewards
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            reward = tensordict.get(in_key)
+            if out_key not in tensordict.keys():
+                tensordict.set(
+                    out_key,
+                    torch.zeros(
+                        *tensordict.shape, 1, dtype=reward.dtype, device=reward.device
+                    ),
+                )
+            tensordict[out_key] += reward
+
+        return tensordict
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        """Transforms the observation spec, adding the new keys generated by RewardSum."""
+        # Retrieve parent reward spec
+        reward_spec = self.parent.specs["reward_spec"]
+
+        episode_specs = {}
+        if isinstance(reward_spec, CompositeSpec):
+
+            # If reward_spec is a CompositeSpec, all in_keys should be keys of reward_spec
+            if not all([k in reward_spec.keys() for k in self.in_keys]):
+                raise KeyError("Not all in_keys are present in ´reward_spec´")
+
+            # Define episode specs for all out_keys
+            for out_key in self.out_keys:
+                episode_spec = UnboundedContinuousTensorSpec(
+                    shape=reward_spec.shape,
+                    device=reward_spec.device,
+                    dtype=reward_spec.dtype,
+                )
+                episode_specs.update({out_key: episode_spec})
+
+        else:
+
+            # If reward_spec is not a CompositeSpec, the only in_key should be ´reward´
+            if not set(self.in_keys) == {"reward"}:
+                raise KeyError(
+                    "reward_spec is not a CompositeSpec class, in_keys should only include ´reward´"
+                )
+
+            # Define episode spec
+            episode_spec = UnboundedContinuousTensorSpec(
+                device=reward_spec.device,
+                dtype=reward_spec.dtype,
+                shape=reward_spec.shape,
+            )
+            episode_specs.update({"episode_reward": episode_spec})
+
+        # Update observation_spec with episode_specs
+        if not isinstance(observation_spec, CompositeSpec):
+            observation_spec = CompositeSpec(observation=observation_spec)
+        observation_spec.update(episode_specs)
+        return observation_spec
+
+
+class StepCounter(Transform):
+    """Counts the steps from a reset and sets the done state to True after a certain number of steps.
+
+    Args:
+        max_steps (:obj:`int`, optional): a positive integer that indicates the maximum number of steps to take before
+        setting the done state to True. If set to None (the default value), the environment will run indefinitely until
+        the done state is manually set by the user or by the environment itself. However, the step count will still be
+        incremented on each call to step() into the `step_count` attribute.
+    """
+
+    invertible = False
+    inplace = True
+
+    def __init__(self, max_steps: Optional[int] = None):
+        if max_steps is not None and max_steps < 1:
+            raise ValueError("max_steps should have a value greater or equal to one.")
+        self.max_steps = max_steps
+        super().__init__([])
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        workers = tensordict.get(
+            "reset_workers",
+            default=torch.ones(
+                *tensordict.batch_size, 1, dtype=torch.bool, device=tensordict.device
+            ),
+        )
+        tensordict.set(
+            "step_count",
+            (~workers)
+            * tensordict.get(
+                "step_count",
+                torch.zeros(
+                    *tensordict.batch_size,
+                    1,
+                    dtype=torch.int64,
+                    device=tensordict.device,
+                ),
+            ),
+        )
+        return tensordict
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        next_step_count = (
+            tensordict.get(
+                "step_count",
+                torch.zeros(
+                    *tensordict.batch_size,
+                    1,
+                    dtype=torch.int64,
+                    device=tensordict.device,
+                ),
+            )
+            + 1
+        )
+        tensordict.set("step_count", next_step_count)
+        if self.max_steps is not None:
+            tensordict.set(
+                "done",
+                tensordict.get("done") | next_step_count >= self.max_steps,
+            )
+        return tensordict
+
+    def transform_observation_spec(
+        self, observation_spec: CompositeSpec
+    ) -> CompositeSpec:
+        if not isinstance(observation_spec, CompositeSpec):
+            raise ValueError(
+                f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
+            )
+        observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
+            shape=torch.Size([1]), dtype=torch.int64, device=observation_spec.device
+        )
+        observation_spec["step_count"].space.minimum = 0
+        return observation_spec

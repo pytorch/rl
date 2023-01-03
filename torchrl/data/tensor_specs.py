@@ -36,6 +36,8 @@ INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
 _NO_CHECK_SPEC_ENCODE = get_binary_env_var("NO_CHECK_SPEC_ENCODE")
 
+_DEFAULT_SHAPE = torch.Size((1,))
+
 
 def _default_dtype_and_device(
     dtype: Union[None, torch.dtype],
@@ -380,105 +382,6 @@ class TensorSpec:
 
 
 @dataclass(repr=False)
-class BoundedTensorSpec(TensorSpec):
-    """A bounded, unidimensional, continuous tensor spec.
-
-    Args:
-        minimum (np.ndarray, torch.Tensor or number): lower bound of the box.
-        maximum (np.ndarray, torch.Tensor or number): upper bound of the box.
-        device (str, int or torch.device, optional): device of the tensors.
-        dtype (str or torch.dtype, optional): dtype of the tensors.
-    """
-
-    shape: torch.Size
-    space: ContinuousBox
-    device: torch.device = torch.device("cpu")
-    dtype: torch.dtype = torch.float
-    domain: str = ""
-
-    def __init__(
-        self,
-        minimum: Union[np.ndarray, torch.Tensor, float],
-        maximum: Union[np.ndarray, torch.Tensor, float],
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[torch.dtype] = None,
-    ):
-        dtype, device = _default_dtype_and_device(dtype, device)
-        if not isinstance(minimum, torch.Tensor):
-            minimum = torch.tensor(minimum, dtype=dtype, device=device)
-        if minimum.dtype is not dtype:
-            minimum = minimum.to(dtype)
-        if minimum.device != device:
-            minimum = minimum.to(device)
-
-        if not isinstance(maximum, torch.Tensor):
-            maximum = torch.tensor(maximum, dtype=dtype, device=device)
-        if maximum.dtype is not dtype:
-            maximum = maximum.to(dtype)
-        if maximum.device != device:
-            maximum = maximum.to(device)
-        super().__init__(
-            torch.Size(
-                [
-                    1,
-                ]
-            ),
-            ContinuousBox(minimum, maximum),
-            device,
-            dtype,
-            "continuous",
-        )
-
-    def rand(self, shape=None) -> torch.Tensor:
-        if shape is None:
-            shape = torch.Size([])
-        a, b = self.space
-        if self.dtype in (torch.float, torch.double, torch.half):
-            shape = [*shape, *self.shape]
-            out = (
-                torch.zeros(shape, dtype=self.dtype, device=self.device).uniform_()
-                * (b - a)
-                + a
-            )
-            if (out > b).any():
-                out[out > b] = b.expand_as(out)[out > b]
-            if (out < a).any():
-                out[out < a] = a.expand_as(out)[out < a]
-            return out
-        else:
-            interval = self.space.maximum - self.space.minimum
-            r = torch.rand(
-                torch.Size([*shape, *interval.shape]), device=interval.device
-            )
-            r = interval * r
-            r = self.space.minimum + r
-            r = r.to(self.dtype).to(self.device)
-            return r
-
-    def _project(self, val: torch.Tensor) -> torch.Tensor:
-        minimum = self.space.minimum.to(val.device)
-        maximum = self.space.maximum.to(val.device)
-        try:
-            val = val.clamp_(minimum.item(), maximum.item())
-        except ValueError:
-            minimum = minimum.expand_as(val)
-            maximum = maximum.expand_as(val)
-            val[val < minimum] = minimum[val < minimum]
-            val[val > maximum] = maximum[val > maximum]
-        except RuntimeError:
-            minimum = minimum.expand_as(val)
-            maximum = maximum.expand_as(val)
-            val[val < minimum] = minimum[val < minimum]
-            val[val > maximum] = maximum[val > maximum]
-        return val
-
-    def is_in(self, val: torch.Tensor) -> bool:
-        return (val >= self.space.minimum.to(val.device)).all() and (
-            val <= self.space.maximum.to(val.device)
-        ).all()
-
-
-@dataclass(repr=False)
 class OneHotDiscreteTensorSpec(TensorSpec):
     """A unidimensional, one-hot discrete tensor spec.
 
@@ -608,79 +511,8 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
 
 @dataclass(repr=False)
-class UnboundedContinuousTensorSpec(TensorSpec):
-    """An unbounded, unidimensional, continuous tensor spec.
-
-    Args:
-        device (str, int or torch.device, optional): device of the tensors.
-        dtype (str or torch.dtype, optional): dtype of the tensors.
-            (should be an floating point dtype such as float, double etc.)
-
-    """
-
-    shape: torch.Size
-    space: ContinuousBox
-    device: torch.device = torch.device("cpu")
-    dtype: torch.dtype = torch.float
-    domain: str = ""
-
-    def __init__(self, device=None, dtype=None):
-        dtype, device = _default_dtype_and_device(dtype, device)
-        box = ContinuousBox(torch.tensor(-np.inf), torch.tensor(np.inf))
-        super().__init__(torch.Size((1,)), box, device, dtype, "composite")
-
-    def rand(self, shape=None) -> torch.Tensor:
-        if shape is None:
-            shape = torch.Size([])
-        shape = [*shape, *self.shape]
-        return torch.randn(shape, device=self.device, dtype=self.dtype)
-
-    def is_in(self, val: torch.Tensor) -> bool:
-        return True
-
-
-@dataclass(repr=False)
-class UnboundedDiscreteTensorSpec(TensorSpec):
-    """An unbounded, unidimensional, discrete tensor spec.
-
-    Args:
-        device (str, int or torch.device, optional): device of the tensors.
-        dtype (str or torch.dtype, optional): dtype of the tensors
-            (should be an integer dtype such as long, uint8 etc.)
-
-    """
-
-    shape: torch.Size
-    space: ContinuousBox
-    device: torch.device = torch.device("cpu")
-    dtype: torch.dtype = torch.uint8
-    domain: str = ""
-
-    def __init__(self, device=None, dtype=None):
-        dtype, device = _default_dtype_and_device(dtype, device)
-        box = ContinuousBox(
-            torch.tensor(torch.iinfo(dtype).min, device=device),
-            torch.tensor(torch.iinfo(dtype).max, device=device),
-        )
-        super().__init__(torch.Size((1,)), box, device, dtype, "composite")
-
-    def rand(self, shape=None) -> torch.Tensor:
-        if shape is None:
-            shape = torch.Size([])
-        interval = self.space.maximum - self.space.minimum
-        r = torch.rand(torch.Size([*shape, *interval.shape]), device=interval.device)
-        r = r * interval
-        r = self.space.minimum + r
-        r = r.to(self.dtype)
-        return r.to(self.device)
-
-    def is_in(self, val: torch.Tensor) -> bool:
-        return True
-
-
-@dataclass(repr=False)
-class NdBoundedTensorSpec(BoundedTensorSpec):
-    """A bounded, multi-dimensional, continuous tensor spec.
+class BoundedTensorSpec(TensorSpec):
+    """A bounded continuous tensor spec.
 
     Args:
         minimum (np.ndarray, torch.Tensor or number): lower bound of the box.
@@ -694,7 +526,7 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
         self,
         minimum: Union[float, torch.Tensor, np.ndarray],
         maximum: Union[float, torch.Tensor, np.ndarray],
-        shape: Optional[torch.Size] = None,
+        shape: Optional[Union[torch.Size, int]] = None,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[torch.dtype, str]] = None,
     ):
@@ -717,7 +549,7 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
         if dtype is not None and maximum.dtype is not dtype:
             maximum = maximum.to(dtype)
         err_msg = (
-            "NdBoundedTensorSpec requires the shape to be explicitely (via "
+            "BoundedTensorSpec requires the shape to be explicitely (via "
             "the shape argument) or implicitely defined (via either the "
             "minimum or the maximum or both). If the maximum and/or the "
             "minimum have a non-singleton shape, they must match the "
@@ -765,14 +597,62 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
                 raise RuntimeError(shape_err_msg)
         self.shape = shape
 
-        super(BoundedTensorSpec, self).__init__(
+        super().__init__(
             shape, ContinuousBox(minimum, maximum), device, dtype, "continuous"
         )
 
+    def rand(self, shape=None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
+        a, b = self.space
+        if self.dtype in (torch.float, torch.double, torch.half):
+            shape = [*shape, *self.shape]
+            out = (
+                torch.zeros(shape, dtype=self.dtype, device=self.device).uniform_()
+                * (b - a)
+                + a
+            )
+            if (out > b).any():
+                out[out > b] = b.expand_as(out)[out > b]
+            if (out < a).any():
+                out[out < a] = a.expand_as(out)[out < a]
+            return out
+        else:
+            interval = self.space.maximum - self.space.minimum
+            r = torch.rand(
+                torch.Size([*shape, *interval.shape]), device=interval.device
+            )
+            r = interval * r
+            r = self.space.minimum + r
+            r = r.to(self.dtype).to(self.device)
+            return r
+
+    def _project(self, val: torch.Tensor) -> torch.Tensor:
+        minimum = self.space.minimum.to(val.device)
+        maximum = self.space.maximum.to(val.device)
+        try:
+            val = val.clamp_(minimum.item(), maximum.item())
+        except ValueError:
+            minimum = minimum.expand_as(val)
+            maximum = maximum.expand_as(val)
+            val[val < minimum] = minimum[val < minimum]
+            val[val > maximum] = maximum[val > maximum]
+        except RuntimeError:
+            minimum = minimum.expand_as(val)
+            maximum = maximum.expand_as(val)
+            val[val < minimum] = minimum[val < minimum]
+            val[val > maximum] = maximum[val > maximum]
+        return val
+
+    def is_in(self, val: torch.Tensor) -> bool:
+        return (val >= self.space.minimum.to(val.device)).all() and (
+            val <= self.space.maximum.to(val.device)
+        ).all()
+
 
 @dataclass(repr=False)
-class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
-    """An unbounded, multi-dimensional, continuous tensor spec.
+class UnboundedContinuousTensorSpec(TensorSpec):
+    """An unbounded continuous tensor spec.
 
     Args:
         device (str, int or torch.device, optional): device of the tensors.
@@ -782,7 +662,7 @@ class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
 
     def __init__(
         self,
-        shape: Union[torch.Size, int],
+        shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = None,
     ):
@@ -790,18 +670,32 @@ class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
             shape = torch.Size([shape])
 
         dtype, device = _default_dtype_and_device(dtype, device)
-        super(UnboundedContinuousTensorSpec, self).__init__(
+        box = (
+            ContinuousBox(torch.tensor(-np.inf), torch.tensor(np.inf))
+            if shape == _DEFAULT_SHAPE
+            else None
+        )
+        super().__init__(
             shape=shape,
-            space=None,
+            space=box,
             device=device,
             dtype=dtype,
             domain="continuous",
         )
 
+    def rand(self, shape=None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
+        shape = [*shape, *self.shape]
+        return torch.randn(shape, device=self.device, dtype=self.dtype)
+
+    def is_in(self, val: torch.Tensor) -> bool:
+        return True
+
 
 @dataclass(repr=False)
-class NdUnboundedDiscreteTensorSpec(UnboundedDiscreteTensorSpec):
-    """An unbounded, multi-dimensional, discrete tensor spec.
+class UnboundedDiscreteTensorSpec(TensorSpec):
+    """An unbounded discrete tensor spec.
 
     Args:
         device (str, int or torch.device, optional): device of the tensors.
@@ -811,7 +705,7 @@ class NdUnboundedDiscreteTensorSpec(UnboundedDiscreteTensorSpec):
 
     def __init__(
         self,
-        shape: Union[torch.Size, int],
+        shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = None,
     ):
@@ -830,13 +724,26 @@ class NdUnboundedDiscreteTensorSpec(UnboundedDiscreteTensorSpec):
             torch.full(shape, max_value, device=device),
         )
 
-        super(UnboundedDiscreteTensorSpec, self).__init__(
+        super().__init__(
             shape=shape,
             space=space,
             device=device,
             dtype=dtype,
             domain="continuous",
         )
+
+    def rand(self, shape=None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
+        interval = self.space.maximum - self.space.minimum
+        r = torch.rand(torch.Size([*shape, *interval.shape]), device=interval.device)
+        r = r * interval
+        r = self.space.minimum + r
+        r = r.to(self.dtype)
+        return r.to(self.device)
+
+    def is_in(self, val: torch.Tensor) -> bool:
+        return True
 
 
 @dataclass(repr=False)
@@ -1088,10 +995,10 @@ class CompositeSpec(TensorSpec):
             effect. `spec.encode` cannot be used with missing values.
 
     Examples:
-        >>> pixels_spec = NdBoundedTensorSpec(
+        >>> pixels_spec = BoundedTensorSpec(
         ...    torch.zeros(3,32,32),
         ...    torch.ones(3, 32, 32))
-        >>> observation_vector_spec = NdBoundedTensorSpec(torch.zeros(33),
+        >>> observation_vector_spec = BoundedTensorSpec(torch.zeros(33),
         ...    torch.ones(33))
         >>> composite_spec = CompositeSpec(
         ...     pixels=pixels_spec,
