@@ -215,7 +215,9 @@ class VmasWrapper(_EnvWrapper):
     def _set_seed(self, seed: Optional[int]):
         self._env.seed(seed)
 
-    def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs) -> TensorDictBase:
+    def _reset(
+        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+    ) -> TensorDictBase:
         obs, infos = self._env.reset(return_info=True)
 
         agent_tds = []
