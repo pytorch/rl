@@ -4,7 +4,6 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.data import (
     CompositeSpec,
-    MultOneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
@@ -310,9 +309,6 @@ class VmasWrapper(_EnvWrapper):
         return rewards
 
     def read_action(self, action):
-        if isinstance(self.action_spec, MultOneHotDiscreteTensorSpec):
-            vals = action.split([space.n for space in self.action_spec.space], dim=-1)
-            action = torch.stack([val.argmax(-1) for val in vals], -1)
 
         agent_actions = []
         for i in range(self.n_agents):
