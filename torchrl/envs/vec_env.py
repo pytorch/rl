@@ -18,7 +18,6 @@ import torch
 from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
-
 from torchrl._utils import _check_for_faulty_process
 from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -781,10 +780,9 @@ class ParallelEnv(_BatchedEnv):
         for i in range(self.num_workers):
             msg, data = self.parent_channels[i].recv()
             if msg != "step_result":
-                if msg != "done":
-                    raise RuntimeError(
-                        f"Expected 'done' but received {msg} from worker {i}"
-                    )
+                raise RuntimeError(
+                    f"Expected 'step_result' but received {msg} from worker {i}"
+                )
             # data is the set of updated keys
             keys = keys.union(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
@@ -1003,7 +1001,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
-            _td = env._reset(**reset_kwargs)
+            _td = env.reset(**reset_kwargs)
             if reset_keys is None:
                 reset_keys = set(_td.keys())
             if pin_memory:
@@ -1029,10 +1027,7 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 _td.pin_memory()
             tensordict.update_(_td.select(*step_keys, strict=False))
-            if _td.get("done"):
-                msg = "done"
-            else:
-                msg = "step_result"
+            msg = "step_result"
             data = (msg, step_keys)
             child_pipe.send(data)
 
