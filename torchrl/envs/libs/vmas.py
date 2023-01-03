@@ -2,10 +2,7 @@ from typing import Dict, List, Optional
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from torchrl.data import (
-    CompositeSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 
