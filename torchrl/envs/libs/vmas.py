@@ -2,6 +2,7 @@ from typing import Dict, List, Optional
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+
 from torchrl.data import (
     CompositeSpec,
     MultOneHotDiscreteTensorSpec,
@@ -74,7 +75,7 @@ class VmasWrapper(_EnvWrapper):
         >>>          n_agents=5,
         >>>      )
         >>>  )
-        >>>  print(wrapped.rollout(10))
+        >>>  print(env.rollout(10))
         TensorDict(
              fields={
                  action: Tensor(torch.Size([5, 32, 10, 2]), dtype=torch.float64),
