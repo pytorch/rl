@@ -233,9 +233,10 @@ class ClipPPOLoss(PPOLoss):
                 f"and {log_weight.shape})"
             )
         gain1 = log_weight.exp() * advantage
-        log_weight_clip = log_weight.clamp(*self._clip_bounds)
 
+        log_weight_clip = log_weight.clamp(*self._clip_bounds)
         gain2 = log_weight_clip.exp() * advantage
+
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
         td_out = TensorDict({"loss_objective": -gain.mean()}, [])
 
