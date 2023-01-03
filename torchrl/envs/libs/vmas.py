@@ -2,7 +2,6 @@ from typing import Dict, List, Optional
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-
 from torchrl.data import (
     CompositeSpec,
     MultOneHotDiscreteTensorSpec,
@@ -216,7 +215,7 @@ class VmasWrapper(_EnvWrapper):
     def _set_seed(self, seed: Optional[int]):
         self._env.seed(seed)
 
-    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+    def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs) -> TensorDictBase:
         obs, infos = self._env.reset(return_info=True)
 
         agent_tds = []
