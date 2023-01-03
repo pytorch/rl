@@ -233,11 +233,7 @@ class ClipPPOLoss(PPOLoss):
                 f"and {log_weight.shape})"
             )
         gain1 = log_weight.exp() * advantage
-        # log_weight_clip = torch.empty_like(log_weight)
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
-        # idx_pos = advantage >= 0
-        # log_weight_clip[idx_pos] = log_weight[idx_pos].clamp_max(self._clip_bounds[1])
-        # log_weight_clip[~idx_pos] = log_weight[~idx_pos].clamp_min(self._clip_bounds[0])
 
         gain2 = log_weight_clip.exp() * advantage
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]

@@ -989,6 +989,79 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     del collector
 
 
+@pytest.mark.parametrize("device", ["cuda", "cpu"])
+@pytest.mark.parametrize("passing_device", ["cuda", "cpu"])
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
+def test_collector_device_combinations(device, passing_device):
+    def env_fn(seed):
+        env = make_make_env("conv")()
+        env.set_seed(seed)
+        return env
+
+    policy = dummypolicy_conv()
+
+    collector = SyncDataCollector(
+        create_env_fn=env_fn,
+        create_env_kwargs={"seed": 0},
+        policy=policy,
+        frames_per_batch=20,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        device=device,
+        passing_device=passing_device,
+        pin_memory=False,
+    )
+    batch = next(collector.iterator())
+    assert batch.device == torch.device(passing_device)
+    collector.shutdown()
+
+    collector = MultiSyncDataCollector(
+        create_env_fn=[
+            env_fn,
+        ],
+        create_env_kwargs=[
+            {"seed": 0},
+        ],
+        policy=policy,
+        frames_per_batch=20,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        devices=[
+            device,
+        ],
+        passing_devices=[
+            passing_device,
+        ],
+        pin_memory=False,
+    )
+    batch = next(collector.iterator())
+    assert batch.device == torch.device(passing_device)
+    collector.shutdown()
+
+    collector = MultiaSyncDataCollector(
+        create_env_fn=[
+            env_fn,
+        ],
+        create_env_kwargs=[
+            {"seed": 0},
+        ],
+        policy=policy,
+        frames_per_batch=20,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        devices=[
+            device,
+        ],
+        passing_devices=[
+            passing_device,
+        ],
+        pin_memory=False,
+    )
+    batch = next(collector.iterator())
+    assert batch.device == torch.device(passing_device)
+    collector.shutdown()
+
+
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
 @pytest.mark.parametrize(
     "collector_class",
