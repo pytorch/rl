@@ -27,7 +27,8 @@ def _get_envs() -> List:
     if not _has_vmas:
         return []
     all_scenarios = vmas.scenarios + vmas.mpe_scenarios + vmas.debug_scenarios
-    # For now torchrl does not support heterogenous spaces (Tple(Box))
+    # TODO heterogenous spaces
+    # For now torchrl does not support heterogenous spaces (Tple(Box)) so many OpenAI MPE scenarios do not work
     heterogenous_spaces_scenarios = [
         "simple_adversary",
         "simple_crypto",
@@ -58,6 +59,56 @@ def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int 
 
 
 class VmasWrapper(_EnvWrapper):
+    """Vmas environment wrapper.
+
+    Examples:
+        >>>  env = VmasWrapper(
+        >>>      vmas.make_env(
+        >>>          scenario_name="flocking",
+        >>>          num_envs=32,
+        >>>          continuous_actions=True,
+        >>>          max_steps=200,
+        >>>          device="cpu",
+        >>>          seed=None,
+        >>>          # Scenario kwargs
+        >>>          n_agents=5,
+        >>>      )
+        >>>  )
+        >>>  print(wrapped.rollout(10))
+        TensorDict(
+             fields={
+                 action: Tensor(torch.Size([5, 32, 10, 2]), dtype=torch.float64),
+                 done: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.bool),
+                 info: TensorDict(
+                     fields={
+                         cohesion_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
+                         collision_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
+                         separation_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
+                         velocity_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32)},
+                     batch_size=torch.Size([5, 32, 10]),
+                     device=cpu,
+                     is_shared=False),
+                 next: TensorDict(
+                     fields={
+                         info: TensorDict(
+                             fields={
+                                 cohesion_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
+                                 collision_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
+                                 separation_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
+                                 velocity_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32)},
+                             batch_size=torch.Size([5, 32, 10]),
+                             device=cpu,
+                             is_shared=False),
+                         observation: Tensor(torch.Size([5, 32, 10, 18]), dtype=torch.float32)},
+                     batch_size=torch.Size([5, 32, 10]),
+                     device=cpu,
+                     is_shared=False),
+                 observation: Tensor(torch.Size([5, 32, 10, 18]), dtype=torch.float32),
+                 reward: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32)},
+             batch_size=torch.Size([5, 32, 10]),
+             device=cpu,
+             is_shared=False)
+    """
 
     git_url = "https://github.com/proroklab/VectorizedMultiAgentSimulator"
     libname = "vmas"
@@ -68,9 +119,10 @@ class VmasWrapper(_EnvWrapper):
     ):
         if env is not None:
             kwargs["env"] = env
+            if "device" in kwargs.keys() and kwargs["device"] != str(env.device):
+                raise TypeError("Env device is different from vmas device")
+            kwargs["device"] = str(env.device)
         super().__init__(**kwargs)
-
-        assert self.device == self._env.device
         if len(self.batch_size) == 0:
             # Batch size not set
             self.batch_size = torch.Size((self.num_envs,))
@@ -84,7 +136,7 @@ class VmasWrapper(_EnvWrapper):
             raise TypeError(
                 "Batch size used in constructor is not compatible with vmas."
             )
-        self.batch_size = torch.Size([*self.batch_size, self.n_agents])
+        self.batch_size = torch.Size([self.n_agents, *self.batch_size])
 
     @property
     def lib(self):
@@ -99,7 +151,7 @@ class VmasWrapper(_EnvWrapper):
         self.from_pixels = from_pixels
         self.pixels_only = pixels_only
 
-        # TODO rendering
+        # TODO pixels
         if self.from_pixels:
             raise NotImplementedError("vmas rendiering not yet implemented")
 
@@ -108,6 +160,7 @@ class VmasWrapper(_EnvWrapper):
     def _make_specs(
         self, env: "vmas.simulator.environment.environment.Environment"
     ) -> None:
+        # TODO heterogenous spaces
         # For now the wrapper assumes all agent spaces to be homogenous, thus let's use agent0
         agent0 = self.agents[0]
         agent0_index = 0
@@ -163,19 +216,26 @@ class VmasWrapper(_EnvWrapper):
         self._env.seed(seed)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        obs, info = self._env.reset(return_info=True)
+        obs, infos = self._env.reset(return_info=True)
 
-        obs = self.read_obs(obs)
-        info = self.read_info(info)
+        agent_tds = []
+        for i in range(self.n_agents):
+            agent_obs = self.read_obs(obs[i])
+            agent_info = self.read_info(infos[i])
 
-        tensordict_out = TensorDict(
-            source={"observation": obs},
-            batch_size=self.batch_size,
-            device=self.device,
-        )
+            agent_td = TensorDict(
+                source={
+                    "observation": agent_obs,
+                },
+                batch_size=(self.num_envs,),
+                device=self.device,
+            )
 
-        if info is not None:
-            tensordict_out.set("info", info)
+            if infos is not None:
+                agent_td.set("info", agent_info)
+            agent_tds.append(agent_td)
+
+        tensordict_out = torch.stack(agent_tds, dim=0)
 
         return tensordict_out
 
@@ -183,62 +243,68 @@ class VmasWrapper(_EnvWrapper):
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
+
         action = tensordict.get("action")
         action = self.read_action(action)
 
         obs, rews, dones, infos = self._env.step(action)
 
-        obs = self.read_obs(obs)
-        rews = self.read_reward(rews)
         dones = self.read_done(dones)
-        infos = self.read_info(infos)
 
-        tensordict_out = TensorDict(
-            source={
-                "observation": obs,
-                "done": dones,
-                "reward": rews,
-            },
-            batch_size=self.batch_size,
-            device=self.device,
-        )
+        agent_tds = []
+        for i in range(self.n_agents):
+            agent_obs = self.read_obs(obs[i])
+            agent_rew = self.read_reward(rews[i])
+            agent_done = dones.clone()
+            agent_info = self.read_info(infos[i])
 
-        if infos is not None:
-            tensordict_out.set("info", infos)
+            agent_td = TensorDict(
+                source={
+                    "observation": agent_obs,
+                    "done": agent_done,
+                    "reward": agent_rew,
+                },
+                batch_size=(self.num_envs,),
+                device=self.device,
+            )
+
+            if infos is not None:
+                agent_td.set("info", agent_info)
+            agent_tds.append(agent_td)
+
+        tensordict_out = torch.stack(agent_tds, dim=0).to_tensordict()
 
         return tensordict_out
 
-    def read_obs(self, observations: List[torch.Tensor]) -> torch.Tensor:
-        observations = torch.stack(observations, dim=1)
-        observations = _selective_unsqueeze(observations, batch_size=self.batch_size)
+    def read_obs(self, observations: torch.Tensor) -> torch.Tensor:
+        observations = _selective_unsqueeze(
+            observations, batch_size=torch.Size((self.num_envs,))
+        )
         return observations
 
-    def read_info(self, infos: List[Dict[str, torch.Tensor]]) -> torch.Tensor:
-        infos = [
-            TensorDict(
-                source={
-                    key: _selective_unsqueeze(value, batch_size=self.batch_size[:1])
-                    for key, value in agent_info.items()
-                },
-                batch_size=torch.Size((self.num_envs,)),
-                device=self.device,
-            )
-            for agent_info in infos
-            if len(agent_info) > 0
-        ]
-        infos = torch.stack(infos, dim=1).to_tensordict() if len(infos) > 0 else None
+    def read_info(self, infos: Dict[str, torch.Tensor]) -> torch.Tensor:
+        if len(infos) == 0:
+            return None
+        infos = TensorDict(
+            source={
+                key: _selective_unsqueeze(
+                    value, batch_size=torch.Size((self.num_envs,))
+                )
+                for key, value in infos.items()
+            },
+            batch_size=torch.Size((self.num_envs,)),
+            device=self.device,
+        )
 
         return infos
 
     def read_done(self, done):
-        done = _selective_unsqueeze(done, batch_size=self.batch_size[:1])
-        done = done.repeat(1, self.n_agents)
-        done = _selective_unsqueeze(done, batch_size=self.batch_size)
+        done = _selective_unsqueeze(done, batch_size=torch.Size((self.num_envs,)))
+
         return done
 
     def read_reward(self, rewards):
-        rewards = torch.stack(rewards, dim=1)
-        rewards = _selective_unsqueeze(rewards, batch_size=self.batch_size)
+        rewards = _selective_unsqueeze(rewards, batch_size=torch.Size((self.num_envs,)))
         return rewards
 
     def read_action(self, action):
@@ -248,7 +314,7 @@ class VmasWrapper(_EnvWrapper):
 
         agent_actions = []
         for i in range(self.n_agents):
-            agent_actions.append(action[:, i, ...])
+            agent_actions.append(action[i, :, ...])
         return agent_actions
 
     def __repr__(self) -> str:
@@ -259,6 +325,55 @@ class VmasWrapper(_EnvWrapper):
 
 
 class VmasEnv(VmasWrapper):
+    """Vmas environment wrapper.
+
+    Examples:
+        >>>  env = VmasEnv(
+        >>>      scenario_name="flocking",
+        >>>      num_envs=32,
+        >>>      continuous_actions=True,
+        >>>      max_steps=200,
+        >>>      device="cpu",
+        >>>      seed=None,
+        >>>      # Scenario kwargs
+        >>>      n_agents=5,
+        >>>  )
+        >>>  print(env.rollout(10))
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([5, 32, 10, 2]), dtype=torch.float64),
+                done: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.bool),
+                info: TensorDict(
+                    fields={
+                        cohesion_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
+                        collision_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
+                        separation_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
+                        velocity_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32)},
+                    batch_size=torch.Size([5, 32, 10]),
+                    device=cpu,
+                    is_shared=False),
+                next: TensorDict(
+                    fields={
+                        info: TensorDict(
+                            fields={
+                                cohesion_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
+                                collision_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
+                                separation_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
+                                velocity_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32)},
+                            batch_size=torch.Size([5, 32, 10]),
+                            device=cpu,
+                            is_shared=False),
+                        observation: Tensor(torch.Size([5, 32, 10, 18]), dtype=torch.float32)},
+                    batch_size=torch.Size([5, 32, 10]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([5, 32, 10, 18]), dtype=torch.float32),
+                reward: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32)},
+            batch_size=torch.Size([5, 32, 10]),
+            device=cpu,
+            is_shared=False)
+    """
+
     def __init__(
         self,
         scenario_name: str,

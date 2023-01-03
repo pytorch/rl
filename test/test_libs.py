@@ -575,28 +575,24 @@ class TestVmas:
                 num_envs=num_envs,
                 n_agents=n_agents,
                 batch_size=batch_size,
-
             )
 
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
-    def test_vmas_batch_size(
-        self, scenario_name, num_envs, n_agents
-    ):
+    def test_vmas_batch_size(self, scenario_name, num_envs, n_agents):
         n_rollout_samples = 5
         env = VmasEnv(
             scenario_name=scenario_name,
             num_envs=num_envs,
             n_agents=n_agents,
-
         )
         env.set_seed(0)
         tdreset = env.reset()
         tdrollout = env.rollout(max_steps=n_rollout_samples)
         env.close()
         del env
-        assert tdreset.batch_size == (num_envs, n_agents)
-        assert tdrollout.batch_size == (num_envs, n_agents, n_rollout_samples)
+        assert tdreset.batch_size == (n_agents, num_envs)
+        assert tdrollout.batch_size == (n_agents, num_envs, n_rollout_samples)
 
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
