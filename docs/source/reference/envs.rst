@@ -261,4 +261,6 @@ Libraries
     dm_control.DMControlWrapper
     jumanji.JumanjiEnv
     jumanji.JumanjiWrapper
+    vmas.VmasEnv
+    vmas.VmasWrapper
     habitat.HabitatEnv
