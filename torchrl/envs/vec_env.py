@@ -18,7 +18,6 @@ import torch
 from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
-
 from torchrl._utils import _check_for_faulty_process
 from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -37,6 +36,12 @@ def _check_start(fun):
         return fun(self, *args, **kwargs)
 
     return decorated_fun
+
+
+def _sort_keys(element):
+    if isinstance(element, tuple):
+        return "".join(element)
+    return element
 
 
 class _dispatch_caller_parallel:
@@ -421,17 +426,17 @@ class _BatchedEnv(EnvBase):
                 )
         else:
             if self._single_task:
-                self.env_input_keys = sorted(self.input_spec.keys())
+                self.env_input_keys = sorted(self.input_spec.keys(), key=_sort_keys)
             else:
                 env_input_keys = set()
                 for meta_data in self.meta_data:
                     env_input_keys = env_input_keys.union(
                         meta_data.specs["input_spec"].keys()
                     )
-                self.env_input_keys = sorted(env_input_keys)
+                self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
             if not len(self.env_input_keys):
                 raise RuntimeError(
-                    f"found 0 action keys in {sorted(self.selected_keys)}"
+                    f"found 0 action keys in {sorted(self.selected_keys,key=_sort_keys)}"
                 )
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
