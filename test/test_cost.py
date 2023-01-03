@@ -69,7 +69,6 @@ from torchrl.objectives import (
     A2CLoss,
     ClipPPOLoss,
     DDPGLoss,
-    TD3Loss,
     DistributionalDQNLoss,
     DQNLoss,
     DreamerActorLoss,
@@ -78,6 +77,7 @@ from torchrl.objectives import (
     KLPENPPOLoss,
     PPOLoss,
     SACLoss,
+    TD3Loss,
 )
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.deprecated import DoubleREDQLoss_deprecated, REDQLoss_deprecated
@@ -648,7 +648,7 @@ class TestTD3:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Linear(obs_dim, action_dim)
@@ -738,10 +738,16 @@ class TestTD3:
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
-    @pytest.mark.parametrize("policy_update_delay", [1])
-    @pytest.mark.parametrize("policy_noise", [0.1, 1.])
-    @pytest.mark.parametrize("noise_clip", [0.1, 1.])
-    def test_td3(self, delay_actor, delay_value, device, policy_update_delay, policy_noise, noise_clip):
+    @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
+    @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
+    def test_td3(
+        self,
+        delay_actor,
+        delay_value,
+        device,
+        policy_noise,
+        noise_clip,
+    ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
@@ -751,7 +757,6 @@ class TestTD3:
             value,
             gamma=0.9,
             loss_function="l2",
-            policy_update_delay=policy_update_delay,
             policy_noise=policy_noise,
             noise_clip=noise_clip,
             delay_actor=delay_actor,
@@ -824,9 +829,18 @@ class TestTD3:
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
     @pytest.mark.parametrize("policy_update_delay", [1])
-    @pytest.mark.parametrize("policy_noise", [0.1, 1.])
-    @pytest.mark.parametrize("noise_clip", [0.1, 1.])
-    def test_td3_batcher(self, n, delay_actor, delay_value, device, policy_update_delay, policy_noise, noise_clip):
+    @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
+    @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
+    def test_td3_batcher(
+        self,
+        n,
+        delay_actor,
+        delay_value,
+        device,
+        policy_update_delay,
+        policy_noise,
+        noise_clip,
+    ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)

@@ -54,7 +54,6 @@ class TD3Loss(LossModule):
         qvalue_network: SafeModule,
         num_qvalue_nets: int = 2,
         gamma: Number = 0.99,
-        max_action: float = 1.0,
         policy_noise: float = 0.2,
         noise_clip: float = 0.5,
         priotity_key: str = "td_error",
@@ -87,7 +86,7 @@ class TD3Loss(LossModule):
         self.loss_function = loss_function
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
-        self.max_action = max_action
+        self.max_action = actor_network.spec["action"].space.maximum.max().item()
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
