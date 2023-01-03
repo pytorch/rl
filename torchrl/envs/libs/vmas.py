@@ -149,7 +149,7 @@ class VmasWrapper(_EnvWrapper):
 
         # TODO pixels
         if self.from_pixels:
-            raise NotImplementedError("vmas rendiering not yet implemented")
+            raise NotImplementedError("vmas rendering not yet implemented")
 
         return env
 
