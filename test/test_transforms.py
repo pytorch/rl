@@ -42,6 +42,7 @@ from torchrl.envs import (
     Resize,
     RewardClipping,
     RewardScaling,
+    RewardSum,
     SerialEnv,
     StepCounter,
     ToTensorImage,
@@ -802,6 +803,64 @@ class TestTransforms:
             observation_spec = gs.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([1, 16, 16])
+
+    @pytest.mark.parametrize(
+        "keys",
+        [["done", "reward"]],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_sum_reward(self, keys, device):
+        torch.manual_seed(0)
+        batch = 4
+        rs = RewardSum()
+        td = TensorDict(
+            {
+                "done": torch.zeros((batch, 1), dtype=torch.bool),
+                "reward": torch.rand((batch, 1)),
+            },
+            device=device,
+            batch_size=[batch],
+        )
+
+        # apply one time, episode_reward should be equal to reward again
+        td = rs(td)
+        assert "episode_reward" in td.keys()
+        assert (td.get("episode_reward") == td.get("reward")).all()
+
+        # apply a second time, episode_reward should twice the reward
+        td = rs(td)
+        assert (td.get("episode_reward") == 2 * td.get("reward")).all()
+
+        # reset environments
+        td.set("reset_workers", torch.ones((batch, 1), dtype=torch.bool, device=device))
+        rs.reset(td)
+
+        # apply a third time, episode_reward should be equal to reward again
+        td = rs(td)
+        assert (td.get("episode_reward") == td.get("reward")).all()
+
+        # test transform_observation_spec
+        base_env = ContinuousActionVecMockEnv(
+            reward_spec=UnboundedContinuousTensorSpec(shape=(3, 16, 16)),
+        )
+        transfomed_env = TransformedEnv(base_env, RewardSum())
+        transformed_observation_spec1 = transfomed_env.specs["observation_spec"]
+        assert isinstance(transformed_observation_spec1, CompositeSpec)
+        assert "episode_reward" in transformed_observation_spec1.keys()
+        assert "observation" in transformed_observation_spec1.keys()
+
+        base_env = ContinuousActionVecMockEnv(
+            reward_spec=UnboundedContinuousTensorSpec(),
+            observation_spec=CompositeSpec(
+                observation=UnboundedContinuousTensorSpec(),
+                some_extra_observation=UnboundedContinuousTensorSpec(),
+            ),
+        )
+        transfomed_env = TransformedEnv(base_env, RewardSum())
+        transformed_observation_spec2 = transfomed_env.specs["observation_spec"]
+        assert isinstance(transformed_observation_spec2, CompositeSpec)
+        assert "some_extra_observation" in transformed_observation_spec2.keys()
+        assert "episode_reward" in transformed_observation_spec2.keys()
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
