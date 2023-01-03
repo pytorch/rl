@@ -58,6 +58,7 @@ from torchrl.envs.transforms.transforms import (
 _has_tv = importlib.util.find_spec("torchvision") is not None
 _os_is_windows = sys.platform == "win32"
 
+
 @pytest.mark.parametrize(
     "rb_type",
     [
@@ -119,7 +120,9 @@ class TestPrototypeBuffers:
 
     def test_add(self, rb_type, sampler, writer, storage, size):
         if rb_type is rb_prototype.RemoteTensorDictReplayBuffer and _os_is_windows:
-            pytest.skip("Distributed package support on Windows is a prototype feature and is subject to changes.")
+            pytest.skip(
+                "Distributed package support on Windows is a prototype feature and is subject to changes."
+            )
         torch.manual_seed(0)
         rb = self._get_rb(
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
@@ -154,7 +157,9 @@ class TestPrototypeBuffers:
 
     def test_extend(self, rb_type, sampler, writer, storage, size):
         if rb_type is rb_prototype.RemoteTensorDictReplayBuffer and _os_is_windows:
-            pytest.skip("Distributed package support on Windows is a prototype feature and is subject to changes.")
+            pytest.skip(
+                "Distributed package support on Windows is a prototype feature and is subject to changes."
+            )
         torch.manual_seed(0)
         rb = self._get_rb(
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
@@ -181,7 +186,9 @@ class TestPrototypeBuffers:
 
     def test_sample(self, rb_type, sampler, writer, storage, size):
         if rb_type is rb_prototype.RemoteTensorDictReplayBuffer and _os_is_windows:
-            pytest.skip("Distributed package support on Windows is a prototype feature and is subject to changes.")
+            pytest.skip(
+                "Distributed package support on Windows is a prototype feature and is subject to changes."
+            )
         torch.manual_seed(0)
         rb = self._get_rb(
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
@@ -210,7 +217,9 @@ class TestPrototypeBuffers:
 
     def test_index(self, rb_type, sampler, writer, storage, size):
         if rb_type is rb_prototype.RemoteTensorDictReplayBuffer and _os_is_windows:
-            pytest.skip("Distributed package support on Windows is a prototype feature and is subject to changes.")
+            pytest.skip(
+                "Distributed package support on Windows is a prototype feature and is subject to changes."
+            )
         torch.manual_seed(0)
         rb = self._get_rb(
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size

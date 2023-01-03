@@ -1,6 +1,6 @@
 import os
-import time
 import sys
+import time
 
 import pytest
 import torch
@@ -14,7 +14,6 @@ from torchrl.data.replay_buffers.writers import RoundRobinWriter
 
 RETRY_COUNT = 3
 RETRY_BACKOFF = 3
-
 
 
 class ReplayBufferNode(RemoteTensorDictReplayBuffer):
@@ -51,7 +50,11 @@ def sample_from_buffer_remotely_returns_correct_tensordict_test(rank, name, worl
         assert type(sampled) is type(inserted) is TensorDict
         assert (sampled == inserted)["a"].item()
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Distributed package support on Windows is a prototype feature and is subject to changes.")
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Distributed package support on Windows is a prototype feature and is subject to changes.",
+)
 @pytest.mark.parametrize("names", [["BUFFER", "TRAINER"]])
 @pytest.mark.parametrize(
     "func",
