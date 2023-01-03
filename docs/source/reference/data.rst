@@ -35,7 +35,6 @@ We also provide a prototyped composable replay buffer.
     torchrl.data.replay_buffers.rb_prototype.RemoteTensorDictReplayBuffer
     torchrl.data.replay_buffers.samplers.Sampler
     torchrl.data.replay_buffers.samplers.RandomSampler
-    torchrl.data.replay_buffers.samplers.SamplerWithoutReplacement
     torchrl.data.replay_buffers.samplers.PrioritizedSampler
     torchrl.data.replay_buffers.storages.Storage
     torchrl.data.replay_buffers.storages.ListStorage
