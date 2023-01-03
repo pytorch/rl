@@ -40,7 +40,7 @@ def _check_start(fun):
 
 def _sort_keys(element):
     if isinstance(element, tuple):
-        return "".join(element)
+        return "_-|-_".join(element)
     return element
 
 
