@@ -4,8 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from typing import Optional
-
 import hydra
 
 import numpy as np
@@ -30,15 +28,13 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import RewardScaling
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
-    MLP,
-    OrnsteinUhlenbeckProcessWrapper,
     AdditiveGaussianWrapper,
+    MLP,
     ProbabilisticActor,
     SafeModule,
+    ValueOperator,
 )
 from torchrl.modules.distributions import TanhDelta
-
-from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
 
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.td3 import TD3Loss
@@ -207,7 +203,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     #     actor,
     #     annealing_num_steps=1_000_000,
     # ).to(device)
-    
+
     actor_model_explore = AdditiveGaussianWrapper(
         actor,
         sigma_init=1,
@@ -250,9 +246,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
     actor_params = list(loss_module.actor_network_params.flatten_keys().values())
 
-    optimizer_actor = optim.Adam(
-        actor_params, lr=cfg.lr, weight_decay=cfg.weight_decay
-    )
+    optimizer_actor = optim.Adam(actor_params, lr=cfg.lr, weight_decay=cfg.weight_decay)
     optimizer_critic = optim.Adam(
         critic_params, lr=cfg.lr, weight_decay=cfg.weight_decay
     )

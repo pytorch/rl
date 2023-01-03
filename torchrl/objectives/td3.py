@@ -29,6 +29,7 @@ except ImportError as err:
 
 class TD3Loss(LossModule):
     """TD3 Loss module.
+
     Args:
         actor_network (SafeModule): the actor to be trained
         qvalue_network (SafeModule): a single Q-value network that will be multiplicated as many times as needed.
