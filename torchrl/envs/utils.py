@@ -202,3 +202,20 @@ def _check_dtype(key, value, obs_spec, input_spec):
         return
     else:
         raise KeyError(key)
+
+
+def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int = -1):
+    shape_len = len(tensor.shape)
+
+    if shape_len < len(batch_size):
+        raise RuntimeError(
+            f"Tensor has less dims than batch_size. shape:{tensor.shape}, batch_size: {batch_size}"
+        )
+    if tensor.shape[: len(batch_size)] != batch_size:
+        raise RuntimeError(
+            f"Tensor does not have given batch_size. shape:{tensor.shape}, batch_size: {batch_size}"
+        )
+
+    if shape_len == len(batch_size):
+        return tensor.unsqueeze(dim=dim)
+    return tensor

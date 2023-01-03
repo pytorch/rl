@@ -2,9 +2,11 @@ from typing import Dict, List, Optional
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
+from torchrl.envs.utils import _selective_unsqueeze
 
 try:
     import vmas
@@ -39,23 +41,6 @@ def _get_envs() -> List:
         for scenario in all_scenarios
         if scenario not in heterogenous_spaces_scenarios
     ]
-
-
-def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int = -1):
-    shape_len = len(tensor.shape)
-
-    if shape_len < len(batch_size):
-        raise RuntimeError(
-            f"Tensor has less dims than batch_size. shape:{tensor.shape}, batch_size: {batch_size}"
-        )
-    if tensor.shape[: len(batch_size)] != batch_size:
-        raise RuntimeError(
-            f"Tensor does not have given batch_size. shape:{tensor.shape}, batch_size: {batch_size}"
-        )
-
-    if shape_len == len(batch_size):
-        return tensor.unsqueeze(dim=dim)
-    return tensor
 
 
 class VmasWrapper(_EnvWrapper):
