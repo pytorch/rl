@@ -509,6 +509,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             and self.use_register == other.use_register
         )
 
+    def to_categorical(self) -> DiscreteTensorSpec:
+        return DiscreteTensorSpec(self.space.n, device=self.device, dtype=self.dtype)
+
 
 @dataclass(repr=False)
 class BoundedTensorSpec(TensorSpec):
@@ -905,6 +908,11 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         vals = self._split(val)
         return torch.cat([super()._project(_val) for _val in vals], -1)
 
+    def to_categorical(self) -> MultiDiscreteTensorSpec:
+        return MultiDiscreteTensorSpec(
+            [_space.n for _space in self.space], self.device, self.dtype
+        )
+
 
 class DiscreteTensorSpec(TensorSpec):
     """A discrete tensor spec.
@@ -980,6 +988,90 @@ class DiscreteTensorSpec(TensorSpec):
 
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
         return super().to_numpy(val, safe)
+
+    def to_onehot(self) -> OneHotDiscreteTensorSpec:
+        return OneHotDiscreteTensorSpec(self.space.n, self.device, self.dtype)
+
+
+@dataclass(repr=False)
+class MultiDiscreteTensorSpec(DiscreteTensorSpec):
+    """A concatenation of discrete tensor spec.
+
+    Args:
+        nvec (iterable of integers): cardinality of each of the elements of
+            the tensor.
+        device (str, int or torch.device, optional): device of
+            the tensors.
+        dtype (str or torch.dtype, optional): dtype of the tensors.
+
+    Examples:
+        >>> ts = MultiDiscreteTensorSpec((3,2,3))
+        >>> ts.is_in(torch.tensor([2, 0, 1]))
+        True
+        >>> ts.is_in(torch.tensor([2, 2, 1]))
+        False
+    """
+
+    def __init__(
+        self,
+        nvec: Sequence[int],
+        device: Optional[DEVICE_TYPING] = None,
+        dtype: Optional[Union[str, torch.dtype]] = torch.long,
+    ):
+        dtype, device = _default_dtype_and_device(dtype, device)
+        self._size = len(nvec)
+        shape = torch.Size([self._size])
+        space = BoxList([DiscreteBox(n) for n in nvec])
+        super(DiscreteTensorSpec, self).__init__(
+            shape, space, device, dtype, domain="discrete"
+        )
+
+    def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
+        x = torch.cat(
+            [
+                torch.randint(
+                    0,
+                    space.n,
+                    torch.Size([1, *shape]),
+                    device=self.device,
+                    dtype=self.dtype,
+                )
+                for space in self.space
+            ]
+        ).squeeze()
+        _size = [self._size] if self._size > 1 else []
+        return x.T.reshape([*shape, *_size])
+
+    def _split(self, val: torch.Tensor):
+        return [val] if self._size < 2 else val.split(1, -1)
+
+    def _project(self, val: torch.Tensor) -> torch.Tensor:
+        if val.dtype not in (torch.int, torch.long):
+            val = torch.round(val)
+        vals = self._split(val)
+        return torch.cat(
+            [
+                _val.clamp_(min=0, max=space.n - 1).unsqueeze(0)
+                for _val, space in zip(vals, self.space)
+            ],
+            dim=-1,
+        ).squeeze()
+
+    def is_in(self, val: torch.Tensor) -> bool:
+        vals = self._split(val)
+        return self._size == len(vals) and all(
+            [
+                (0 <= _val).all() and (_val < space.n).all()
+                for _val, space in zip(vals, self.space)
+            ]
+        )
+
+    def to_onehot(self) -> MultOneHotDiscreteTensorSpec:
+        return MultOneHotDiscreteTensorSpec(
+            [_space.n for _space in self.space], self.device, self.dtype
+        )
 
 
 class CompositeSpec(TensorSpec):
