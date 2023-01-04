@@ -312,7 +312,6 @@ params_target_flat = params_target.flatten_keys(".")
 # shape. This storage will be instantiated later.
 
 replay_buffer = TensorDictReplayBuffer(
-    buffer_size,
     storage=LazyMemmapStorage(buffer_size),
     prefetch=n_optim,
 )
@@ -385,7 +384,7 @@ for j, data in enumerate(data_collector):
     if sum(frames) > init_random_frames:
         for _ in range(n_optim):
             # sample from the RB and send to device
-            sampled_data = replay_buffer.sample(batch_size)
+            sampled_data, _ = replay_buffer.sample(batch_size)
             sampled_data = sampled_data.to(device, non_blocking=True)
 
             # collect data from RB
@@ -556,8 +555,7 @@ params_target_flat = params_target.flatten_keys(".")
 max_size = frames_per_batch // n_workers
 
 replay_buffer = TensorDictReplayBuffer(
-    -(-buffer_size // max_size),
-    storage=LazyMemmapStorage(buffer_size),
+    storage=LazyMemmapStorage(-(-buffer_size // max_size)),
     prefetch=n_optim,
 )
 
@@ -618,7 +616,7 @@ for j, data in enumerate(data_collector):
 
     if sum(frames) > init_random_frames:
         for _ in range(n_optim):
-            sampled_data = replay_buffer.sample(batch_size // max_size)
+            sampled_data, _ = replay_buffer.sample(batch_size // max_size)
             sampled_data = sampled_data.clone().to(device, non_blocking=True)
 
             reward = sampled_data["reward"]

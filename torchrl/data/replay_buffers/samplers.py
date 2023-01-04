@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any, Tuple, Union
+from copy import deepcopy
+from typing import Any, Dict, Tuple, Union
 
 import numpy as np
 import torch
@@ -39,6 +40,12 @@ class Sampler(ABC):
     @property
     def default_priority(self) -> float:
         return 1.0
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        return
 
 
 class RandomSampler(Sampler):
@@ -152,7 +159,7 @@ class PrioritizedSampler(Sampler):
             self._min_tree = MinSegmentTreeFp64(self._max_capacity)
         else:
             raise NotImplementedError(
-                f"dtype {dtype} not supported by PrioritizedReplayBuffer"
+                f"dtype {dtype} not supported by PrioritizedSampler"
             )
         self._max_priority = 1.0
 
@@ -249,3 +256,21 @@ class PrioritizedSampler(Sampler):
 
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
         self.update_priority(index, self.default_priority)
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "_alpha": self._alpha,
+            "_beta": self._beta,
+            "_eps": self._eps,
+            "_max_priority": self._max_priority,
+            "_sum_tree": deepcopy(self._sum_tree),
+            "_min_tree": deepcopy(self._min_tree),
+        }
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        self._alpha = state_dict["_alpha"]
+        self._beta = state_dict["_beta"]
+        self._eps = state_dict["_eps"]
+        self._max_priority = state_dict["_max_priority"]
+        self._sum_tree = state_dict.pop("_sum_tree")
+        self._min_tree = state_dict.pop("_min_tree")

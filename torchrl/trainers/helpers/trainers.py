@@ -129,7 +129,7 @@ def make_trainer(
         >>> recorder = env_proof
         >>> target_net_updater = None
         >>> policy_exploration = EGreedyWrapper(policy)
-        >>> replay_buffer = TensorDictReplayBuffer(1000)
+        >>> replay_buffer = TensorDictReplayBuffer()
         >>> dir = tempfile.gettempdir()
         >>> logger = TensorboardLogger(exp_name=dir)
         >>> trainer = make_trainer(collector, loss_module, recorder, target_net_updater, policy_exploration,
