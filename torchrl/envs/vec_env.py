@@ -1004,7 +1004,7 @@ def _run_worker_pipe_shared_mem(
             _td = env._reset(**reset_kwargs)
             _td.set_default(
                 "done",
-                torch.zeros(*_td.batch_size, 1, dtype=torch.bool, device=_td.device),
+                torch.zeros(*_td.batch_size, 1, dtype=torch.bool, device=env.device),
             )
             if reset_keys is None:
                 reset_keys = set(_td.keys())
