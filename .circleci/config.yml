@@ -13,7 +13,6 @@ executors:
       image: windows-server-2019-nvidia:stable
       shell: bash.exe
 
-
 commands:
   checkout_merge:
     description: "checkout merge branch"
@@ -83,7 +82,6 @@ commands:
           args: --no-build-isolation <<# parameters.editable >> --editable <</ parameters.editable >> .
           descr: Install torchrl <<# parameters.editable >> in editable mode <</ parameters.editable >>
 
-
 binary_common: &binary_common
   parameters:
     # Edit these defaults to do a release
@@ -127,18 +125,18 @@ smoke_test_common: &smoke_test_common
     - image: torchrl/smoke_test:latest
 
 jobs:
-#  circleci_consistency:
-#    docker:
-#      - image: circleci/python:3.7
-#    steps:
-#      - checkout
-#      - pip_install:
-#          args: jinja2 pyyaml
-#      - run:
-#          name: Check CircleCI config consistency
-#          command: |
-#            python .circleci/regenerate.py
-#            git diff --exit-code || (echo ".circleci/config.yml not in sync with config.yml.in! Run .circleci/regenerate.py to update config"; exit 1)
+  #  circleci_consistency:
+  #    docker:
+  #      - image: circleci/python:3.7
+  #    steps:
+  #      - checkout
+  #      - pip_install:
+  #          args: jinja2 pyyaml
+  #      - run:
+  #          name: Check CircleCI config consistency
+  #          command: |
+  #            python .circleci/regenerate.py
+  #            git diff --exit-code || (echo ".circleci/config.yml not in sync with config.yml.in! Run .circleci/regenerate.py to update config"; exit 1)
 
   lint_python_and_config:
     docker:
@@ -264,7 +262,6 @@ jobs:
           command: .circleci/unittest/linux/scripts/setup_env.sh
 
       - save_cache:
-
           key: env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
           paths:
@@ -307,7 +304,6 @@ jobs:
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
       - restore_cache:
-
           keys:
             - env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
@@ -315,28 +311,27 @@ jobs:
           name: Setup
           command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/setup_env.sh
       - save_cache:
-
           key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
           paths:
             - conda
             - env
-#      - run:
-#          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
-#          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
-#          # They're available in all the other workflows (OSX and Windows).
-#          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
-#          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
-#          name: export CIRCLECI env var
-#          command: echo "CIRCLECI=true" >> ./env.list
+      #      - run:
+      #          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
+      #          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
+      #          # They're available in all the other workflows (OSX and Windows).
+      #          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
+      #          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
+      #          name: export CIRCLECI env var
+      #          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
-#          command: bash .circleci/unittest/linux/scripts/install.sh
+          #          command: bash .circleci/unittest/linux/scripts/install.sh
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux/scripts/install.sh
       - run:
           name: Run tests
           command: bash .circleci/unittest/linux/scripts/run_test.sh
-#          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
+      #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Codecov upload
           command: |
@@ -346,7 +341,6 @@ jobs:
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/post_process.sh
       - store_test_results:
           path: test-results
-
 
   unittest_linux_examples_gpu:
     <<: *binary_common
@@ -367,7 +361,6 @@ jobs:
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
       - restore_cache:
-
           keys:
             - env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_examples/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
@@ -375,7 +368,6 @@ jobs:
           name: Setup
           command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_examples/scripts/setup_env.sh
       - save_cache:
-
           key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_examples/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
           paths:
@@ -387,7 +379,7 @@ jobs:
       - run:
           name: Run tests
           command: bash .circleci/unittest/linux_examples/scripts/run_test.sh
-#          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
+      #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Codecov upload
           command: |
@@ -423,7 +415,6 @@ jobs:
           name: Setup
           command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_habitat/setup_env.sh
       - save_cache:
-
           key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_libs/scripts_habitat/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
           paths:
@@ -605,7 +596,6 @@ jobs:
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
       - restore_cache:
-
           keys:
             - env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_optdeps/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
@@ -613,28 +603,27 @@ jobs:
           name: Setup
           command: .circleci/unittest/linux_optdeps/scripts/setup_env.sh
       - save_cache:
-
           key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_optdeps/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
           paths:
             - conda
             - env
-#      - run:
-#          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
-#          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
-#          # They're available in all the other workflows (OSX and Windows).
-#          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
-#          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
-#          name: export CIRCLECI env var
-#          command: echo "CIRCLECI=true" >> ./env.list
+      #      - run:
+      #          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
+      #          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
+      #          # They're available in all the other workflows (OSX and Windows).
+      #          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
+      #          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
+      #          name: export CIRCLECI env var
+      #          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
-#          command: bash .circleci/unittest/linux_optdeps/scripts/install.sh
+          #          command: bash .circleci/unittest/linux_optdeps/scripts/install.sh
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_optdeps/scripts/install.sh
       - run:
           name: Run tests
           command: bash .circleci/unittest/linux_optdeps/scripts/run_test.sh
-#          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
+      #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Codecov upload
           command: |
@@ -665,7 +654,6 @@ jobs:
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
       - restore_cache:
-
           keys:
             - env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_stable/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
@@ -674,7 +662,6 @@ jobs:
           command: .circleci/unittest/linux_stable/scripts/setup_env.sh
 
       - save_cache:
-
           key: env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_stable/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
           paths:
@@ -715,7 +702,6 @@ jobs:
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
       - restore_cache:
-
           keys:
             - env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_stable/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
@@ -723,28 +709,27 @@ jobs:
           name: Setup
           command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_stable/scripts/setup_env.sh
       - save_cache:
-
           key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_stable/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
           paths:
             - conda
             - env
-#      - run:
-#          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
-#          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
-#          # They're available in all the other workflows (OSX and Windows).
-#          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
-#          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
-#          name: export CIRCLECI env var
-#          command: echo "CIRCLECI=true" >> ./env.list
+      #      - run:
+      #          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
+      #          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
+      #          # They're available in all the other workflows (OSX and Windows).
+      #          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
+      #          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
+      #          name: export CIRCLECI env var
+      #          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
-#          command: bash .circleci/unittest/linux_stable/scripts/install.sh
+          #          command: bash .circleci/unittest/linux_stable/scripts/install.sh
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_stable/scripts/install.sh
       - run:
           name: Run tests
           command: bash .circleci/unittest/linux_stable/scripts/run_test.sh
-#          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
+      #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Codecov upload
           command: |
@@ -788,7 +773,7 @@ jobs:
           name: Install torchrl, run tests
           command: |
             docker run -t --env=CUDA_VISIBLE_DEVICES="" --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/batch_scripts.sh
-#            docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/batch_scripts.sh
+      #            docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/batch_scripts.sh
       - run:
           name: Codecov upload
           command: |
@@ -817,7 +802,6 @@ jobs:
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
       - restore_cache:
-
           keys:
             - env-v3-macos-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
@@ -825,7 +809,6 @@ jobs:
           name: Setup
           command: .circleci/unittest/linux/scripts/setup_env.sh
       - save_cache:
-
           key: env-v3-macos-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
           paths:
@@ -858,16 +841,14 @@ jobs:
           name: Generate cache key
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
-      # - restore_cache:
-
-      #     keys:
-      #       - env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+      - restore_cache:
+          keys:
+            - env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
       - run:
           name: Setup
           command: .circleci/unittest/windows_optdepts/scripts/setup_env.sh
       - save_cache:
-
           key: env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
           paths:
@@ -900,7 +881,6 @@ jobs:
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
       - restore_cache:
-
           keys:
             - env-v1-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
@@ -908,7 +888,6 @@ jobs:
           name: Setup
           command: .circleci/unittest/windows_optdepts/scripts/setup_env.sh
       - save_cache:
-
           key: env-v1-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
           paths:
@@ -932,14 +911,13 @@ jobs:
       - store_test_results:
           path: test-results
 
-
 workflows:
   lint:
     jobs:
-#      - circleci_consistency
+      #      - circleci_consistency
       - lint_python_and_config
       - lint_c
-#      - type_check_python
+  #      - type_check_python
 
   build:
     jobs:
@@ -947,56 +925,56 @@ workflows:
           conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
           name: binary_linux_wheel_py3.7_cpu
-          python_version: '3.7'
+          python_version: "3.7"
           wheel_docker_image: pytorch/manylinux-cuda102
 
       - binary_linux_wheel:
           conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
           name: binary_linux_wheel_py3.8_cpu
-          python_version: '3.8'
+          python_version: "3.8"
           wheel_docker_image: pytorch/manylinux-cuda102
 
       - binary_linux_wheel:
           conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
           name: binary_linux_wheel_py3.9_cpu
-          python_version: '3.9'
+          python_version: "3.9"
           wheel_docker_image: pytorch/manylinux-cuda102
 
       - binary_linux_wheel:
           conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
           name: binary_linux_wheel_py3.10_cpu
-          python_version: '3.10'
+          python_version: "3.10"
           wheel_docker_image: pytorch/manylinux-cuda102
 
       - binary_macos_wheel:
           conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
           name: binary_macos_wheel_py3.7_cpu
-          python_version: '3.7'
+          python_version: "3.7"
           wheel_docker_image: pytorch/manylinux-cuda102
 
       - binary_macos_wheel:
           conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
           name: binary_macos_wheel_py3.8_cpu
-          python_version: '3.8'
+          python_version: "3.8"
           wheel_docker_image: pytorch/manylinux-cuda102
 
       - binary_macos_wheel:
           conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
           name: binary_macos_wheel_py3.9_cpu
-          python_version: '3.9'
+          python_version: "3.9"
           wheel_docker_image: pytorch/manylinux-cuda102
 
       - binary_macos_wheel:
           conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
           name: binary_macos_wheel_py3.10_cpu
-          python_version: '3.10'
+          python_version: "3.10"
           wheel_docker_image: pytorch/manylinux-cuda102
 
   unittest:
@@ -1004,162 +982,159 @@ workflows:
       - unittest_macos_cpu:
           cu_version: cpu
           name: unittest_macos_cpu_py3.7
-          python_version: '3.7'
+          python_version: "3.7"
       - unittest_linux_cpu:
           cu_version: cpu
           name: unittest_linux_cpu_py3.7
-          python_version: '3.7'
+          python_version: "3.7"
       - unittest_linux_gpu:
           cu_version: cu113
           name: unittest_linux_gpu_py3.7
-          python_version: '3.7'
+          python_version: "3.7"
       - unittest_linux_optdeps_gpu:
           cu_version: cu113
           name: unittest_linux_optdeps_gpu_py3.7
-          python_version: '3.7'
+          python_version: "3.7"
       - unittest_linux_stable_cpu:
           cu_version: cpu
           name: unittest_linux_stable_cpu_py3.7
-          python_version: '3.7'
+          python_version: "3.7"
       - unittest_linux_stable_gpu:
           cu_version: cu113
           name: unittest_linux_stable_gpu_py3.7
-          python_version: '3.7'
+          python_version: "3.7"
 
       - unittest_macos_cpu:
           cu_version: cpu
           name: unittest_macos_cpu_py3.8
-          python_version: '3.8'
+          python_version: "3.8"
       - unittest_linux_cpu:
           cu_version: cpu
           name: unittest_linux_cpu_py3.8
-          python_version: '3.8'
+          python_version: "3.8"
       - unittest_linux_gpu:
           cu_version: cu113
           name: unittest_linux_gpu_py3.8
-          python_version: '3.8'
+          python_version: "3.8"
       - unittest_linux_optdeps_gpu:
           cu_version: cu113
           name: unittest_linux_optdeps_gpu_py3.8
-          python_version: '3.8'
+          python_version: "3.8"
       - unittest_linux_stable_cpu:
           cu_version: cpu
           name: unittest_linux_stable_cpu_py3.8
-          python_version: '3.8'
+          python_version: "3.8"
       - unittest_linux_stable_gpu:
           cu_version: cu113
           name: unittest_linux_stable_gpu_py3.8
-          python_version: '3.8'
+          python_version: "3.8"
       # we test supported libs for 3.8 only
       - unittest_linux_habitat_gpu:
           cu_version: cu113
           name: unittest_linux_habitat_gpu_py3.8
-          python_version: '3.8'
+          python_version: "3.8"
       - unittest_linux_jumanji_gpu:
           cu_version: cu113
           name: unittest_linux_jumanji_gpu_py3.8
-          python_version: '3.8'
+          python_version: "3.8"
       - unittest_linux_brax_gpu:
           cu_version: cu113
           name: unittest_linux_brax_gpu_py3.8
-          python_version: '3.8'
+          python_version: "3.8"
       - unittest_linux_gym_gpu:
           cu_version: cu113
           name: unittest_linux_gym_gpu_py3.8
-          python_version: '3.8'
-
+          python_version: "3.8"
 
       - unittest_macos_cpu:
           cu_version: cpu
           name: unittest_macos_cpu_py3.9
-          python_version: '3.9'
+          python_version: "3.9"
       - unittest_linux_cpu:
           cu_version: cpu
           name: unittest_linux_cpu_py3.9
-          python_version: '3.9'
+          python_version: "3.9"
       - unittest_linux_gpu:
           cu_version: cu113
           name: unittest_linux_gpu_py3.9
-          python_version: '3.9'
+          python_version: "3.9"
       - unittest_linux_optdeps_gpu:
           cu_version: cu113
           name: unittest_linux_optdeps_gpu_py3.9
-          python_version: '3.9'
+          python_version: "3.9"
       - unittest_linux_stable_cpu:
           cu_version: cpu
           name: unittest_linux_stable_cpu_py3.9
-          python_version: '3.9'
+          python_version: "3.9"
       - unittest_linux_stable_gpu:
           cu_version: cu113
           name: unittest_linux_stable_gpu_py3.9
-          python_version: '3.9'
+          python_version: "3.9"
 
       - unittest_macos_cpu:
           cu_version: cpu
           name: unittest_macos_cpu_py3.10
-          python_version: '3.10'
+          python_version: "3.10"
       - unittest_linux_cpu:
           cu_version: cpu
           name: unittest_linux_cpu_py3.10
-          python_version: '3.10'
+          python_version: "3.10"
       - unittest_linux_gpu:
           cu_version: cu113
           name: unittest_linux_gpu_py3.10
-          python_version: '3.10'
+          python_version: "3.10"
       - unittest_linux_optdeps_gpu:
           cu_version: cu113
           name: unittest_linux_optdeps_gpu_py3.10
-          python_version: '3.10'
+          python_version: "3.10"
       - unittest_linux_stable_cpu:
           cu_version: cpu
           name: unittest_linux_stable_cpu_py3.10
-          python_version: '3.10'
+          python_version: "3.10"
       - unittest_linux_stable_gpu:
           cu_version: cu113
           name: unittest_linux_stable_gpu_py3.10
-          python_version: '3.10'
+          python_version: "3.10"
 
       - unittest_linux_olddeps_gpu:
           cu_version: cu113
           name: unittest_linux_olddeps_gpu_py3.9
-          python_version: '3.9'
+          python_version: "3.9"
 
       - unittest_linux_examples_gpu:
           cu_version: cu113
           name: unittest_linux_examples_gpu_py3.9
-          python_version: '3.9'
+          python_version: "3.9"
 
       - unittest_windows_cpu:
           cu_version: cpu
           name: unittest_windows_cpu_py3.7
-          python_version: '3.7'
+          python_version: "3.7"
       - unittest_windows_cpu:
           cu_version: cpu
           name: unittest_windows_cpu_py3.8
-          python_version: '3.8'
+          python_version: "3.8"
       - unittest_windows_cpu:
           cu_version: cpu
           name: unittest_windows_cpu_py3.9
-          python_version: '3.9'
+          python_version: "3.9"
       - unittest_windows_cpu:
           cu_version: cpu
           name: unittest_windows_cpu_py3.10
-          python_version: '3.10'
+          python_version: "3.10"
       - unittest_windows_gpu:
           cu_version: cu116
           name: unittest_windows_gpu_py3.7
-          python_version: '3.7'
+          python_version: "3.7"
       - unittest_windows_gpu:
           cu_version: cu116
           name: unittest_windows_gpu_py3.8
-          python_version: '3.8'
+          python_version: "3.8"
       - unittest_windows_gpu:
           cu_version: cu116
           name: unittest_windows_gpu_py3.9
-          python_version: '3.9'
+          python_version: "3.9"
       - unittest_windows_gpu:
           cu_version: cu116
           name: unittest_windows_gpu_py3.10
-          python_version: '3.10'
-
-      
+          python_version: "3.10"
