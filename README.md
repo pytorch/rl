@@ -11,7 +11,7 @@
 
 # TorchRL
 
-[**Documentation?**](#documentation) | [**TensorDict**](#tensordict-as-a-common-data-carrier-for-rl) |
+[**Documentation**](#documentation) | [**TensorDict**](#tensordict-as-a-common-data-carrier-for-rl) |
 [**Features**](#features) | [**Examples, tutorials and demos**](#examples-tutorials-and-demos) |
 [**Upcoming features**](#upcoming-features) | [**Running examples**](#running-examples) | [**Contributing**](#contributing)
 
