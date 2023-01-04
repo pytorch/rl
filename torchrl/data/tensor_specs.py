@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import itertools
 from copy import deepcopy
 from dataclasses import dataclass
 from textwrap import indent
@@ -158,6 +159,13 @@ class BoxList(Box):
 
     def __repr__(self):
         return f"{self.__class__.__name__}(boxes={self.boxes})"
+
+    @staticmethod
+    def from_nvec(nvec: torch.Tensor):
+        if nvec.ndim == 0:
+            return DiscreteBox(nvec.item())
+        else:
+            return BoxList([BoxList.from_nvec(n) for n in nvec])
 
 
 @dataclass(repr=False)
@@ -990,6 +998,11 @@ class DiscreteTensorSpec(TensorSpec):
         return super().to_numpy(val, safe)
 
     def to_onehot(self) -> OneHotDiscreteTensorSpec:
+        if len(self.shape) > 1:
+            raise RuntimeError(
+                f"DiscreteTensorSpec with shape != tensor.Size([1]) can't be converted OneHotDiscreteTensorSpec. Got "
+                f"shape={self.shape}."
+            )
         return OneHotDiscreteTensorSpec(self.space.n, self.device, self.dtype)
 
 
@@ -998,8 +1011,8 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
     """A concatenation of discrete tensor spec.
 
     Args:
-        nvec (iterable of integers): cardinality of each of the elements of
-            the tensor.
+        nvec (iterable of integers or torch.Tensor): cardinality of each of the elements of
+            the tensor. Can have several axes.
         device (str, int or torch.device, optional): device of
             the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
@@ -1014,61 +1027,77 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
 
     def __init__(
         self,
-        nvec: Sequence[int],
+        nvec: Union[Sequence[int], torch.Tensor],
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = torch.long,
     ):
+        if not isinstance(nvec, torch.Tensor):
+            nvec = torch.tensor(nvec)
+        self.nvec = nvec
         dtype, device = _default_dtype_and_device(dtype, device)
-        self._size = len(nvec)
-        shape = torch.Size([self._size])
-        space = BoxList([DiscreteBox(n) for n in nvec])
+        shape = nvec.size()
+        space = BoxList.from_nvec(nvec)
         super(DiscreteTensorSpec, self).__init__(
             shape, space, device, dtype, domain="discrete"
         )
 
+    def _rand(self, space: Box, shape: torch.Size):
+        x = []
+        for _s in space:
+            if isinstance(_s, BoxList):
+                x.append(self._rand(_s, shape))
+            else:
+                x.append(
+                    torch.randint(
+                        0,
+                        _s.n,
+                        torch.Size([1, *shape]),
+                        device=self.device,
+                        dtype=self.dtype,
+                    )
+                )
+        return torch.cat(x)
+
     def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
-        x = torch.cat(
-            [
-                torch.randint(
-                    0,
-                    space.n,
-                    torch.Size([1, *shape]),
-                    device=self.device,
-                    dtype=self.dtype,
-                )
-                for space in self.space
-            ]
-        ).squeeze()
-        _size = [self._size] if self._size > 1 else []
-        return x.T.reshape([*shape, *_size])
 
-    def _split(self, val: torch.Tensor):
-        return [val] if self._size < 2 else val.split(1, -1)
+        x = self._rand(self.space, shape)
+        _size = [] if self.shape == torch.Size([1]) else self.shape
+        return x.permute(*torch.arange(x.ndim - 1, -1, -1)).reshape([*shape, *_size])
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         if val.dtype not in (torch.int, torch.long):
-            val = torch.round(val)
-        vals = self._split(val)
-        return torch.cat(
-            [
-                _val.clamp_(min=0, max=space.n - 1).unsqueeze(0)
-                for _val, space in zip(vals, self.space)
-            ],
-            dim=-1,
-        ).squeeze()
+            val = torch.round(val).type(self.dtype)
+        val = val.unsqueeze(0)
+        for permutation in itertools.product(*[range(d) for d in self.shape]):
+            val.unsqueeze(0)[[..., *permutation]] = val.unsqueeze(0)[
+                [..., *permutation]
+            ].clamp_(min=0, max=self.nvec[permutation] - 1)
+        return val.squeeze(0)
 
     def is_in(self, val: torch.Tensor) -> bool:
-        vals = self._split(val)
-        return self._size == len(vals) and all(
-            [
-                (0 <= _val).all() and (_val < space.n).all()
-                for _val, space in zip(vals, self.space)
-            ]
+        if val.ndim < 1:
+            val = val.unsqueeze(0)
+        val_have_wrong_dim = (
+            self.shape != torch.Size([1])
+            and val.shape[-len(self.shape) :] != self.shape
         )
+        if self.dtype != val.dtype or len(self.shape) > val.ndim or val_have_wrong_dim:
+            return False
+
+        for permutation in itertools.product(*[range(d) for d in self.shape]):
+            x = val.unsqueeze(0)[[..., *permutation]]
+            if not ((0 <= x).all() and (x < self.nvec[permutation]).all()):
+                return False
+        return True
 
     def to_onehot(self) -> MultOneHotDiscreteTensorSpec:
+        if len(self.shape) > 1:
+            raise RuntimeError(
+                f"DiscreteTensorSpec with shape != tensor.Size([1]) can't be converted OneHotDiscreteTensorSpec. Got "
+                f"shape={self.shape}."
+            )
         return MultOneHotDiscreteTensorSpec(
             [_space.n for _space in self.space], self.device, self.dtype
         )
