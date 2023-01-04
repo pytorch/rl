@@ -11,6 +11,10 @@
 
 # TorchRL
 
+[**Documentation?**](#documentation) | [**TensorDict**](#tensordict-as-a-common-data-carrier-for-rl) |
+[**Features**](#features) | [**Examples, tutorials and demos**](#examples-tutorials-and-demos) |
+[**Upcoming features**](#upcoming-features) | [**Running examples**](#running-examples) | [**Contributing**](#contributing)
+
 **TorchRL** is an open-source Reinforcement Learning (RL) library for PyTorch.
 
 It provides pytorch and **python-first**, low and high level abstractions for RL that are intended to be **efficient**, **modular**, **documented** and properly **tested**.
