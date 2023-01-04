@@ -19,10 +19,10 @@ widely used replay buffers:
     TensorDictReplayBuffer
     TensorDictPrioritizedReplayBuffer
 
-Composable Replay Buffers (Prototype)
+Composable Replay Buffers
 -------------------------------------
 
-We also provide a prototyped composable replay buffer.
+We also give users the ability to compose a replay buffer using the following components:
 
 .. autosummary::
     :toctree: generated/

@@ -13,13 +13,14 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
-from torchrl.data import PrioritizedReplayBuffer, ReplayBuffer, TensorDictReplayBuffer
-from torchrl.data.replay_buffers import (
-    rb_prototype,
-    samplers,
+from torchrl.data import (
+    PrioritizedReplayBuffer,
+    RemoteTensorDictReplayBuffer,
+    ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
-    writers,
+    TensorDictReplayBuffer,
 )
+from torchrl.data.replay_buffers import samplers, writers
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
@@ -55,9 +56,9 @@ _has_tv = importlib.util.find_spec("torchvision") is not None
 @pytest.mark.parametrize(
     "rb_type",
     [
-        rb_prototype.ReplayBuffer,
-        rb_prototype.TensorDictReplayBuffer,
-        rb_prototype.RemoteTensorDictReplayBuffer,
+        ReplayBuffer,
+        TensorDictReplayBuffer,
+        RemoteTensorDictReplayBuffer,
     ],
 )
 @pytest.mark.parametrize(
@@ -82,11 +83,10 @@ class TestPrototypeBuffers:
         return rb
 
     def _get_datum(self, rb_type):
-        if rb_type is rb_prototype.ReplayBuffer:
+        if rb_type is ReplayBuffer:
             data = torch.randint(100, (1,))
         elif (
-            rb_type is rb_prototype.TensorDictReplayBuffer
-            or rb_type is rb_prototype.RemoteTensorDictReplayBuffer
+            rb_type is TensorDictReplayBuffer or rb_type is RemoteTensorDictReplayBuffer
         ):
             data = TensorDict({"a": torch.randint(100, (1,))}, [])
         else:
@@ -94,11 +94,10 @@ class TestPrototypeBuffers:
         return data
 
     def _get_data(self, rb_type, size):
-        if rb_type is rb_prototype.ReplayBuffer:
+        if rb_type is ReplayBuffer:
             data = torch.randint(100, (size, 1))
         elif (
-            rb_type is rb_prototype.TensorDictReplayBuffer
-            or rb_type is rb_prototype.RemoteTensorDictReplayBuffer
+            rb_type is TensorDictReplayBuffer or rb_type is RemoteTensorDictReplayBuffer
         ):
             data = TensorDict(
                 {
@@ -248,7 +247,7 @@ class TestStorages:
 def test_prototype_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
-    rb = rb_prototype.TensorDictReplayBuffer(
+    rb = TensorDictReplayBuffer(
         sampler=samplers.PrioritizedSampler(5, alpha=0.7, beta=0.9),
         priority_key=priority_key,
     )
@@ -314,7 +313,7 @@ def test_prototype_prb(priority_key, contiguous, device):
 
 
 @pytest.mark.parametrize("stack", [False, True])
-def test_rb_prototype_trajectories(stack):
+def test_replay_buffer_trajectories(stack):
     traj_td = TensorDict(
         {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
         batch_size=[3, 4],
@@ -322,7 +321,7 @@ def test_rb_prototype_trajectories(stack):
     if stack:
         traj_td = torch.stack([td.to_tensordict() for td in traj_td], 0)
 
-    rb = rb_prototype.TensorDictReplayBuffer(
+    rb = TensorDictReplayBuffer(
         sampler=samplers.PrioritizedSampler(
             5,
             alpha=0.7,
@@ -383,7 +382,7 @@ class TestBuffers:
             params = self._default_params_td_prb
         else:
             raise NotImplementedError(rbtype)
-        rb = rbtype(size=size, storage=storage, prefetch=prefetch, **params)
+        rb = rbtype(storage=storage, prefetch=prefetch, **params)
         return rb
 
     def _get_datum(self, rbtype):
@@ -431,17 +430,17 @@ class TestBuffers:
         rb.extend(batch1)
 
         # Added less data than storage max size
-        if size > 5:
-            assert rb._cursor == 5
+        if size > 5 or storage is None:
+            assert rb._writer._cursor == 5
         # Added more data than storage max size
         elif size < 5:
-            assert rb._cursor == 5 - size
+            assert rb._writer._cursor == 5 - size
         # Added as data as storage max size
         else:
-            assert rb._cursor == 0
+            assert rb._writer._cursor == 0
             batch2 = self._get_data(rbtype, size=size - 1)
             rb.extend(batch2)
-            assert rb._cursor == size - 1
+            assert rb._writer._cursor == size - 1
 
     def test_add(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)
@@ -525,10 +524,10 @@ def test_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
     rb = TensorDictPrioritizedReplayBuffer(
-        5,
         alpha=0.7,
         beta=0.9,
         priority_key=priority_key,
+        storage=ListStorage(5),
     )
     td1 = TensorDict(
         source={
@@ -539,7 +538,7 @@ def test_prb(priority_key, contiguous, device):
         batch_size=[3],
     ).to(device)
     rb.extend(td1)
-    s = rb.sample(2)
+    s, _ = rb.sample(2)
     assert s.batch_size == torch.Size(
         [
             2,
@@ -558,7 +557,7 @@ def test_prb(priority_key, contiguous, device):
         batch_size=[5],
     ).to(device)
     rb.extend(td2)
-    s = rb.sample(5)
+    s, _ = rb.sample(5)
     assert s.batch_size == torch.Size([5])
     assert (td2[s.get("_idx").squeeze()].get("a") == s.get("a")).all()
     assert_allclose_td(td2[s.get("_idx").squeeze()].select("a"), s.select("a"))
@@ -580,14 +579,14 @@ def test_prb(priority_key, contiguous, device):
     val = s.get("a")[0]
 
     idx0 = s.get("_idx")[0]
-    rb.update_priority(s)
-    s = rb.sample(5)
+    rb.update_tensordict_priority(s)
+    s, _ = rb.sample(5)
     assert (val == s.get("a")).sum() >= 1
     torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
     # test updating values of original td
     td2.set_("a", torch.ones_like(td2.get("a")))
-    s = rb.sample(5)
+    s, _ = rb.sample(5)
     torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
 
@@ -601,16 +600,16 @@ def test_rb_trajectories(stack):
         traj_td = torch.stack([td.to_tensordict() for td in traj_td], 0)
 
     rb = TensorDictPrioritizedReplayBuffer(
-        5,
         alpha=0.7,
         beta=0.9,
         priority_key="td_error",
+        storage=ListStorage(5),
     )
     rb.extend(traj_td)
-    sampled_td = rb.sample(3)
+    sampled_td, _ = rb.sample(3)
     sampled_td.set("td_error", torch.rand(3))
-    rb.update_priority(sampled_td)
-    sampled_td = rb.sample(3, return_weight=True)
+    rb.update_tensordict_priority(sampled_td)
+    sampled_td, _ = rb.sample(3, include_info=True)
     assert (sampled_td.get("_weight") > 0).all()
     assert sampled_td.batch_size == torch.Size([3])
 
@@ -630,12 +629,12 @@ def test_shared_storage_prioritized_sampler():
     sampler0 = RandomSampler()
     sampler1 = PrioritizedSampler(max_capacity=n, alpha=0.7, beta=1.1)
 
-    rb0 = rb_prototype.ReplayBuffer(
+    rb0 = ReplayBuffer(
         storage=storage,
         writer=writer,
         sampler=sampler0,
     )
-    rb1 = rb_prototype.ReplayBuffer(
+    rb1 = ReplayBuffer(
         storage=storage,
         writer=writer,
         sampler=sampler1,
@@ -658,25 +657,8 @@ def test_shared_storage_prioritized_sampler():
     assert rb1._sampler._sum_tree.query(0, 70) == 50
 
 
-def test_legacy_rb_does_not_attach():
-    n = 10
-    storage = LazyMemmapStorage(n)
-    writer = RoundRobinWriter()
-    sampler = RandomSampler()
-    rb = ReplayBuffer(storage=storage, size=n, prefetch=0)
-    prb = rb_prototype.ReplayBuffer(
-        storage=storage,
-        writer=writer,
-        sampler=sampler,
-    )
-
-    assert len(storage._attached_entities) == 1
-    assert prb in storage._attached_entities
-    assert rb not in storage._attached_entities
-
-
 def test_append_transform():
-    rb = rb_prototype.ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0))
+    rb = ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0))
     td = TensorDict(
         {
             "observation": torch.randn(2, 4, 3, 16),
@@ -700,9 +682,7 @@ def test_init_transform():
         -2, -1, in_keys=["observation"], out_keys=["flattened"]
     )
 
-    rb = rb_prototype.ReplayBuffer(
-        collate_fn=lambda x: torch.stack(x, 0), transform=flatten
-    )
+    rb = ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0), transform=flatten)
 
     td = TensorDict({"observation": torch.randn(2, 4, 3, 16)}, [])
     rb.add(td)
@@ -714,9 +694,7 @@ def test_insert_transform():
     flatten = FlattenObservation(
         -2, -1, in_keys=["observation"], out_keys=["flattened"]
     )
-    rb = rb_prototype.ReplayBuffer(
-        collate_fn=lambda x: torch.stack(x, 0), transform=flatten
-    )
+    rb = ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0), transform=flatten)
     td = TensorDict({"observation": torch.randn(2, 4, 3, 16, 1)}, [])
     rb.add(td)
 
@@ -760,7 +738,7 @@ transforms = [
 
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform(transform):
-    rb = rb_prototype.ReplayBuffer(
+    rb = ReplayBuffer(
         transform=transform(in_keys="observation"),
     )
 
@@ -783,9 +761,7 @@ transforms = [
 
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform_no_inkeys(transform):
-    rb = rb_prototype.ReplayBuffer(
-        collate_fn=lambda x: torch.stack(x, 0), transform=transform()
-    )
+    rb = ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0), transform=transform())
 
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
     rb.add(td)

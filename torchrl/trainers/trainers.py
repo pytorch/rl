@@ -600,7 +600,7 @@ class ReplayBufferTrainer(TrainerHookBase):
     """Replay buffer hook provider.
 
     Args:
-        replay_buffer (ReplayBuffer): replay buffer to be used.
+        replay_buffer (TensorDictReplayBuffer): replay buffer to be used.
         batch_size (int): batch size when sampling data from the
             latest collection or from the replay buffer.
         memmap (bool, optional): if True, a memmap tensordict is created.
@@ -629,7 +629,7 @@ class ReplayBufferTrainer(TrainerHookBase):
 
     def __init__(
         self,
-        replay_buffer: ReplayBuffer,
+        replay_buffer: TensorDictReplayBuffer,
         batch_size: int,
         memmap: bool = False,
         device: DEVICE_TYPING = "cpu",
@@ -669,12 +669,11 @@ class ReplayBufferTrainer(TrainerHookBase):
         self.replay_buffer.extend(batch)
 
     def sample(self, batch: TensorDictBase) -> TensorDictBase:
-        sample = self.replay_buffer.sample(self.batch_size)
+        sample, _ = self.replay_buffer.sample(self.batch_size)
         return sample.to(self.device, non_blocking=True)
 
     def update_priority(self, batch: TensorDictBase) -> None:
-        if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
-            self.replay_buffer.update_priority(batch)
+        self.replay_buffer.update_tensordict_priority(batch)
 
     def state_dict(self) -> Dict[str, Any]:
         return {

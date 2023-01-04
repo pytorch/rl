@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Sequence
+from typing import Any, Dict, Sequence
 
 import numpy as np
 import torch
@@ -25,6 +25,12 @@ class Writer(ABC):
     def extend(self, data: Sequence) -> torch.Tensor:
         """Inserts a series of data points at appropriate indices, and returns a tensor containing the indices."""
         raise NotImplementedError
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        return
 
 
 class RoundRobinWriter(Writer):
@@ -55,3 +61,9 @@ class RoundRobinWriter(Writer):
         # storage must convert the data to the appropriate format if needed
         self._storage[index] = data
         return index
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {"_cursor": self._cursor}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        self._cursor = state_dict["_cursor"]

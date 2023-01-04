@@ -6,7 +6,7 @@ import torch
 import torch.distributed.rpc as rpc
 import torch.multiprocessing as mp
 from tensordict.tensordict import TensorDict
-from torchrl.data.replay_buffers.rb_prototype import RemoteTensorDictReplayBuffer
+from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
