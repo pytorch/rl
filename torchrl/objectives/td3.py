@@ -42,11 +42,11 @@ class TD3Loss(LossModule):
             `"td_error"`.
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
+        delay_actor (bool, optional): whether to separate the target actor networks from the actor networks used for
+            data collection. Default is :obj:`False`.
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
             for data collection. Default is :obj:`False`.
     """
-
-    delay_actor: bool = False
 
     def __init__(
         self,
@@ -58,21 +58,25 @@ class TD3Loss(LossModule):
         noise_clip: float = 0.5,
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",
-        delay_qvalue: bool = True,
-    ):
+        delay_actor: bool = False,
+        delay_qvalue: bool = False,
+    ) -> None:
         if not _has_functorch:
             raise ImportError(
                 f"Failed to import functorch with error message:\n{FUNCTORCH_ERR}"
             )
 
         super().__init__()
+
+        self.delay_actor = delay_actor
+        self.delay_qvalue = delay_qvalue
+
         self.convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
         )
 
-        self.delay_qvalue = delay_qvalue
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
@@ -80,6 +84,7 @@ class TD3Loss(LossModule):
             create_target_params=self.delay_qvalue,
             compare_against=list(actor_network.parameters()),
         )
+
         self.num_qvalue_nets = num_qvalue_nets
         self.register_buffer("gamma", torch.tensor(gamma))
         self.priority_key = priotity_key
@@ -203,14 +208,15 @@ class TD3Loss(LossModule):
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
             )
         td_out = TensorDict(
-            {
+            source={
                 "loss_actor": loss_actor.mean(),
                 "loss_qvalue": loss_qval.mean(),
+                "pred_value": pred_val.mean().detach(),
                 "state_action_value_actor": state_action_value_actor.mean().detach(),
-                "next.state_value": next_state_value.mean().detach(),
+                "next_state_value": next_state_value.mean().detach(),
                 "target_value": target_value.mean().detach(),
             },
-            [],
+            batch_size=[],
         )
 
         return td_out

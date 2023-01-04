@@ -737,13 +737,15 @@ class TestTD3:
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("delay_actor, delay_value", [(False, False), (True, True)])
+    @pytest.mark.parametrize(
+        "delay_actor, delay_qvalue", [(False, False), (True, True)]
+    )
     @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
     @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
     def test_td3(
         self,
         delay_actor,
-        delay_value,
+        delay_qvalue,
         device,
         policy_noise,
         noise_clip,
@@ -760,11 +762,19 @@ class TestTD3:
             policy_noise=policy_noise,
             noise_clip=noise_clip,
             delay_actor=delay_actor,
-            delay_value=delay_value,
+            delay_qvalue=delay_qvalue,
         )
         with _check_td_steady(td):
             loss = loss_fn(td)
 
+        assert all(
+            (p.grad is None) or (p.grad == 0).all()
+            for p in loss_fn.qvalue_network_params.values(True, True)
+        )
+        assert all(
+            (p.grad is None) or (p.grad == 0).all()
+            for p in loss_fn.actor_network_params.values(True, True)
+        )
         # check that losses are independent
         for k in loss.keys():
             if not k.startswith("loss"):
@@ -773,71 +783,43 @@ class TestTD3:
             if k == "loss_actor":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params
+                    for p in loss_fn.qvalue_network_params.values(True, True)
                 )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params
+                    for p in loss_fn.actor_network_params.values(True, True)
                 )
             elif k == "loss_qvalue":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params
+                    for p in loss_fn.actor_network_params.values(True, True)
                 )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params
+                    for p in loss_fn.qvalue_network_params.values(True, True)
                 )
             else:
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
 
-        # check overall grad
         sum([item for _, item in loss.items()]).backward()
-        parameters = list(actor.parameters()) + list(value.parameters())
-        for p in parameters:
-            assert p.grad.norm() > 0.0
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
 
-        # Check param update effect on targets
-        target_actor = [p.clone() for p in loss_fn.target_actor_network_params]
-        target_value = [p.clone() for p in loss_fn.target_value_network_params]
-        for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
-        target_actor2 = [p.clone() for p in loss_fn.target_actor_network_params]
-        target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
-        if loss_fn.delay_actor:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
-        else:
-            assert not any(
-                (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
-            )
-        if loss_fn.delay_value:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
-        else:
-            assert not any(
-                (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
-            )
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
-        # check that policy is updated after parameter update
-        parameters = [p.clone() for p in actor.parameters()]
-        for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
-        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
+    @pytest.mark.parametrize("delay_actor,delay_qvalue", [(False, False), (True, True)])
     @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
     @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
     def test_td3_batcher(
-        self,
-        n,
-        delay_actor,
-        delay_value,
-        device,
-        policy_noise,
-        noise_clip,
+        self, n, delay_actor, delay_qvalue, device, policy_noise, noise_clip, gamma=0.9
     ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
@@ -847,18 +829,27 @@ class TestTD3:
             actor,
             value,
             gamma=0.9,
-            loss_function="l2",
             policy_noise=policy_noise,
             noise_clip=noise_clip,
+            delay_qvalue=delay_qvalue,
             delay_actor=delay_actor,
-            delay_value=delay_value,
         )
 
-        ms = MultiStep(gamma=0.9, n_steps_max=n).to(device)
-        ms_td = ms(td.clone())
+        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+
+        td_clone = td.clone()
+        ms_td = ms(td_clone)
+
+        torch.manual_seed(0)
+        np.random.seed(0)
+
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
+        assert loss_fn.priority_key in ms_td.keys()
+
         with torch.no_grad():
+            torch.manual_seed(0)  # log-prob is computed with a random action
+            np.random.seed(0)
             loss = loss_fn(td)
         if n == 0:
             assert_allclose_td(td, ms_td.select(*list(td.keys())))
@@ -870,10 +861,50 @@ class TestTD3:
         else:
             with pytest.raises(AssertionError):
                 assert_allclose_td(loss, loss_ms)
+
         sum([item for _, item in loss_ms.items()]).backward()
-        parameters = list(actor.parameters()) + list(value.parameters())
-        for p in parameters:
-            assert p.grad.norm() > 0.0
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+
+        # Check param update effect on targets
+        target_actor = loss_fn.target_actor_network_params.clone().values(
+            include_nested=True, leaves_only=True
+        )
+        target_qvalue = loss_fn.target_qvalue_network_params.clone().values(
+            include_nested=True, leaves_only=True
+        )
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_actor2 = loss_fn.target_actor_network_params.clone().values(
+            include_nested=True, leaves_only=True
+        )
+        target_qvalue2 = loss_fn.target_qvalue_network_params.clone().values(
+            include_nested=True, leaves_only=True
+        )
+        if loss_fn.delay_actor:
+            assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
+        else:
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
+            )
+        if loss_fn.delay_qvalue:
+            assert all(
+                (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+            )
+        else:
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
+            )
+
+        # check that policy is updated after parameter update
+        actorp_set = set(actor.parameters())
+        loss_fnp_set = set(loss_fn.parameters())
+        assert len(actorp_set.intersection(loss_fnp_set)) == len(actorp_set)
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 
 class TestSAC:
