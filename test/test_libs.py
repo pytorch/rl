@@ -531,7 +531,7 @@ class TestBrax:
 
 @pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
 @pytest.mark.parametrize(
-    "scenario_name", ["waterfall", "flocking", "discovery", "simple_spread"]
+    "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
 )
 class TestVmas:
     def test_vmas_seeding(self, scenario_name):
@@ -601,9 +601,9 @@ class TestVmas:
         tdreset = env.reset()
         tdrollout = env.rollout(max_steps=n_rollout_samples)
         env.close()
+        assert tdreset.batch_size == (env.n_agents, num_envs)
+        assert tdrollout.batch_size == (env.n_agents, num_envs, n_rollout_samples)
         del env
-        assert tdreset.batch_size == (n_agents, num_envs)
-        assert tdrollout.batch_size == (n_agents, num_envs, n_rollout_samples)
 
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
@@ -641,6 +641,27 @@ class TestVmas:
         assert str(env) == (
             f"{VmasEnv.__name__}(env={env._env}, num_envs={num_envs}, n_agents={n_agents},"
             f" batch_size={torch.Size((n_agents,num_envs))}, device={env.device}) (scenario_name={scenario_name})"
+        )
+
+    @pytest.mark.parametrize("num_envs", [1, 20])
+    @pytest.mark.parametrize("n_workers", [1, 3])
+    def test_vmas_parallel(
+        self, scenario_name, num_envs, n_workers, n_agents=5, n_rollout_samples=4
+    ):
+        def make_vmas():
+            env = VmasEnv(
+                scenario_name=scenario_name,
+                num_envs=num_envs,
+                n_agents=n_agents,
+            )
+            env.set_seed(0)
+            return env
+
+        env = ParallelEnv(n_workers, make_vmas)
+        tensordict = env.rollout(max_steps=n_rollout_samples)
+
+        assert tensordict.shape == torch.Size(
+            [n_workers, list(env.n_agents)[0], list(env.num_envs)[0], n_rollout_samples]
         )
 
 
