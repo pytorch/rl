@@ -154,7 +154,7 @@ SUPPORTED_LIBRARIES = {
 }
 
 
-def check_env_specs(env):
+def check_env_specs(env, return_contiguous=True):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
@@ -166,7 +166,7 @@ def check_env_specs(env):
 
     """
     fake_tensordict = env.fake_tensordict().flatten_keys(".")
-    real_tensordict = env.rollout(3).flatten_keys(".")
+    real_tensordict = env.rollout(3, return_contiguous=return_contiguous).flatten_keys(".")
 
     keys1 = set(fake_tensordict.keys())
     keys2 = set(real_tensordict.keys())
