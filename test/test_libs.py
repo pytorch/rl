@@ -519,9 +519,10 @@ class TestBrax:
             env = BraxEnv(envname, batch_size=batch_size, requires_grad=False)
             env.set_seed(1)
             return env
-        env = ParallelEnv(1, make_brax)
+
+        env = ParallelEnv(2, make_brax)
         tensordict = env.rollout(3)
-        print(tensordict)
+        assert tensordict.shape == torch.Size([2, *batch_size, 3])
 
 
 if __name__ == "__main__":
