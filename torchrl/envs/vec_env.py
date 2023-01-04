@@ -786,10 +786,9 @@ class ParallelEnv(_BatchedEnv):
         for i in range(self.num_workers):
             msg, data = self.parent_channels[i].recv()
             if msg != "step_result":
-                if msg != "done":
-                    raise RuntimeError(
-                        f"Expected 'done' but received {msg} from worker {i}"
-                    )
+                raise RuntimeError(
+                    f"Expected 'step_result' but received {msg} from worker {i}"
+                )
             # data is the set of updated keys
             keys = keys.union(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
@@ -1009,13 +1008,18 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
             _td = env._reset(**reset_kwargs)
+            done = _td.get("done", None)
+            if done is None:
+                _td["done"] = done = torch.zeros(
+                    *_td.batch_size, 1, dtype=torch.bool, device=env.device
+                )
             if reset_keys is None:
                 reset_keys = set(_td.keys())
             if pin_memory:
                 _td.pin_memory()
             tensordict.update_(_td)
             child_pipe.send(("reset_obs", reset_keys))
-            if _td.get("done").any():
+            if done.any():
                 raise RuntimeError(f"{env.__class__.__name__} is done after reset")
 
         elif cmd == "step":
@@ -1036,10 +1040,7 @@ def _run_worker_pipe_shared_mem(
             print("tensordict", tensordict)
             print("_td", _td)
             tensordict.update_(_td.select(*step_keys, strict=False))
-            if _td.get("done"):
-                msg = "done"
-            else:
-                msg = "step_result"
+            msg = "step_result"
             data = (msg, step_keys)
             child_pipe.send(data)
 
