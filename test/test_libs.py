@@ -639,8 +639,8 @@ class TestVmas:
             n_agents=n_agents,
         )
         assert str(env) == (
-            f"{VmasEnv.__name__}(env={env._env}, num_envs={num_envs}, n_agents={n_agents},"
-            f" batch_size={torch.Size((n_agents,num_envs))}, device={env.device}) (scenario_name={scenario_name})"
+            f"{VmasEnv.__name__}(env={env._env}, num_envs={num_envs}, n_agents={env.n_agents},"
+            f" batch_size={torch.Size((env.n_agents,num_envs))}, device={env.device}) (scenario_name={scenario_name})"
         )
 
     @pytest.mark.parametrize("num_envs", [1, 20])
