@@ -737,7 +737,7 @@ class TestTD3:
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
+    @pytest.mark.parametrize("delay_actor, delay_value", [(False, False), (True, True)])
     @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
     @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
     def test_td3(
@@ -828,7 +828,6 @@ class TestTD3:
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
-    @pytest.mark.parametrize("policy_update_delay", [1])
     @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
     @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
     def test_td3_batcher(
@@ -837,7 +836,6 @@ class TestTD3:
         delay_actor,
         delay_value,
         device,
-        policy_update_delay,
         policy_noise,
         noise_clip,
     ):
@@ -850,7 +848,6 @@ class TestTD3:
             value,
             gamma=0.9,
             loss_function="l2",
-            policy_update_delay=policy_update_delay,
             policy_noise=policy_noise,
             noise_clip=noise_clip,
             delay_actor=delay_actor,
