@@ -13,7 +13,7 @@
 
 [**Documentation**](#documentation) | [**TensorDict**](#tensordict-as-a-common-data-carrier-for-rl) |
 [**Features**](#features) | [**Examples, tutorials and demos**](#examples-tutorials-and-demos) |
-[**Upcoming features**](#upcoming-features) | [**Running examples**](#running-examples) | [**Contributing**](#contributing)
+[**Running examples**](#running-examples) | [**Upcoming features**](#upcoming-features) | [**Contributing**](#contributing)
 
 **TorchRL** is an open-source Reinforcement Learning (RL) library for PyTorch.
 
@@ -522,14 +522,6 @@ Examples are coded in a very similar way but the configuration may change from o
 
 Check the [examples markdown](examples/EXAMPLES.md) directory for more details about handling the various configuration settings.
 
-## Contributing
-
-Internal collaborations to torchrl are welcome! Feel free to fork, submit issues and PRs.
-You can checkout the detailed contribution guide [here](CONTRIBUTING.md).
-As mentioned above, a list of open contributions can be found in [here](https://github.com/pytorch/rl/issues/509).
-
-Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is commited locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
-
 
 ## Upcoming features
 
@@ -540,6 +532,15 @@ In the near future, we plan to:
 
 We welcome any contribution, should you want to contribute to these new features
 or any other, lister or not, in the issues section of this repository.
+
+
+## Contributing
+
+Internal collaborations to torchrl are welcome! Feel free to fork, submit issues and PRs.
+You can checkout the detailed contribution guide [here](CONTRIBUTING.md).
+As mentioned above, a list of open contributions can be found in [here](https://github.com/pytorch/rl/issues/509).
+
+Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is commited locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
 
 
 ## Disclaimer
