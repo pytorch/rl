@@ -514,15 +514,15 @@ class TestBrax:
         del env
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
-    def test_brax_parallel(self, envname, batch_size):
+    def test_brax_parallel(self, envname, batch_size, n=1):
         def make_brax():
             env = BraxEnv(envname, batch_size=batch_size, requires_grad=False)
             env.set_seed(1)
             return env
 
-        env = ParallelEnv(2, make_brax)
+        env = ParallelEnv(n, make_brax)
         tensordict = env.rollout(3)
-        assert tensordict.shape == torch.Size([2, *batch_size, 3])
+        assert tensordict.shape == torch.Size([n, *batch_size, 3])
 
 
 if __name__ == "__main__":
