@@ -513,6 +513,16 @@ class TestBrax:
         env.close()
         del env
 
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_brax_parallel(self, envname, batch_size):
+        def make_brax():
+            env = BraxEnv(envname, batch_size=batch_size, requires_grad=False)
+            env.set_seed(1)
+            return env
+        env = ParallelEnv(1, make_brax)
+        tensordict = env.rollout(3)
+        print(tensordict)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

@@ -1033,6 +1033,8 @@ def _run_worker_pipe_shared_mem(
                 )
             if pin_memory:
                 _td.pin_memory()
+            print("tensordict", tensordict)
+            print("_td", _td)
             tensordict.update_(_td.select(*step_keys, strict=False))
             if _td.get("done"):
                 msg = "done"
