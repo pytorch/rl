@@ -1002,17 +1002,18 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
             _td = env._reset(**reset_kwargs)
-            _td.set_default(
-                "done",
-                torch.zeros(*_td.batch_size, 1, dtype=torch.bool, device=env.device),
-            )
+            done = _td.get("done", None)
+            if done is None:
+                _td["done"] = done = torch.zeros(
+                    *_td.batch_size, 1, dtype=torch.bool, device=env.device
+                )
             if reset_keys is None:
                 reset_keys = set(_td.keys())
             if pin_memory:
                 _td.pin_memory()
             tensordict.update_(_td)
             child_pipe.send(("reset_obs", reset_keys))
-            if _td.get("done").any():
+            if done.any():
                 raise RuntimeError(f"{env.__class__.__name__} is done after reset")
 
         elif cmd == "step":
