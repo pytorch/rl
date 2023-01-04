@@ -166,7 +166,9 @@ def check_env_specs(env, return_contiguous=True):
 
     """
     fake_tensordict = env.fake_tensordict().flatten_keys(".")
-    real_tensordict = env.rollout(3, return_contiguous=return_contiguous).flatten_keys(".")
+    real_tensordict = env.rollout(3, return_contiguous=return_contiguous).flatten_keys(
+        "."
+    )
 
     keys1 = set(fake_tensordict.keys())
     keys2 = set(real_tensordict.keys())
