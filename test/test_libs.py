@@ -8,14 +8,15 @@ from sys import platform
 import numpy as np
 import pytest
 import torch
+from packaging import version
+from tensordict.tensordict import assert_allclose_td
+
 from _utils_internal import (
     get_available_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
 )
-from packaging import version
-from tensordict.tensordict import assert_allclose_td
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
@@ -643,16 +644,24 @@ class TestVmas:
             f" batch_size={torch.Size((env.n_agents,num_envs))}, device={env.device}) (scenario_name={scenario_name})"
         )
 
-    @pytest.mark.parametrize("num_envs", [1, 20])
+    @pytest.mark.parametrize("num_envs", [1, 10])
     @pytest.mark.parametrize("n_workers", [1, 3])
+    @pytest.mark.parametrize("continuous_actions", [True, False])
     def test_vmas_parallel(
-        self, scenario_name, num_envs, n_workers, n_agents=5, n_rollout_samples=4
+        self,
+        scenario_name,
+        num_envs,
+        n_workers,
+        continuous_actions,
+        n_agents=5,
+        n_rollout_samples=3,
     ):
         def make_vmas():
             env = VmasEnv(
                 scenario_name=scenario_name,
                 num_envs=num_envs,
                 n_agents=n_agents,
+                continuous_actions=continuous_actions,
             )
             env.set_seed(0)
             return env
