@@ -200,7 +200,11 @@ class BraxWrapper(_EnvWrapper):
         reward = next_state.get("reward").view(
             *self.batch_size, *self.reward_spec.shape
         )
-        done = next_state.get("done").bool().view(*self.batch_size, *self.reward_spec.shape)
+        done = (
+            next_state.get("done")
+            .bool()
+            .view(*self.batch_size, *self.reward_spec.shape)
+        )
         tensordict_out = TensorDict(
             source={
                 "observation": next_state.get("obs"),
@@ -228,8 +232,10 @@ class BraxWrapper(_EnvWrapper):
         )
 
         # extract done values
-        next_done = next_state_nograd.get("done").bool().view(
-            *self.batch_size, *self.reward_spec.shape
+        next_done = (
+            next_state_nograd.get("done")
+            .bool()
+            .view(*self.batch_size, *self.reward_spec.shape)
         )
 
         # merge with tensors with grad function
