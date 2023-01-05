@@ -503,7 +503,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         return out
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return self.dtype == val.dtype and (val.sum(-1) == 1).all()
+        return (val.sum(-1) == 1).all()
 
     def __eq__(self, other):
         return (
@@ -655,11 +655,9 @@ class BoundedTensorSpec(TensorSpec):
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return (
-            self.dtype == val.dtype
-            and (val >= self.space.minimum.to(val.device)).all()
-            and (val <= self.space.maximum.to(val.device)).all()
-        )
+        return (val >= self.space.minimum.to(val.device)).all() and (
+            val <= self.space.maximum.to(val.device)
+        ).all()
 
 
 @dataclass(repr=False)
@@ -702,7 +700,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         return torch.randn(shape, device=self.device, dtype=self.dtype)
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return self.dtype == val.dtype
+        return True
 
 
 @dataclass(repr=False)
@@ -755,7 +753,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         return r.to(self.device)
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return self.dtype == val.dtype
+        return True
 
 
 @dataclass(repr=False)
@@ -803,7 +801,7 @@ class BinaryDiscreteTensorSpec(TensorSpec):
         return tensor_to_index.gather(-1, index)
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return self.dtype == val.dtype and ((val == 0) | (val == 1)).all()
+        return ((val == 0) | (val == 1)).all()
 
 
 @dataclass(repr=False)
@@ -909,7 +907,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
     def is_in(self, val: torch.Tensor) -> bool:
         vals = self._split(val)
-        return self.dtype == val.dtype and all(
+        return all(
             [super(MultOneHotDiscreteTensorSpec, self).is_in(_val) for _val in vals]
         )
 
@@ -983,9 +981,7 @@ class DiscreteTensorSpec(TensorSpec):
         return val.clamp_(min=0, max=self.space.n - 1)
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return (
-            self.dtype == val.dtype and (0 <= val).all() and (val < self.space.n).all()
-        )
+        return (0 <= val).all() and (val < self.space.n).all()
 
     def __eq__(self, other):
         return (
@@ -1079,7 +1075,9 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         if not self.dtype.is_floating_point:
             val = torch.round(val)
         val = val.type(self.dtype)
-        val[val >= self.nvec] = self.nvec.expand_as(val)[val >= self.nvec] - 1
+        val[val >= self.nvec] = (self.nvec.expand_as(val)[val >= self.nvec] - 1).type(
+            self.dtype
+        )
         return val.squeeze(0) if val_is_scalar else val
 
     def is_in(self, val: torch.Tensor) -> bool:

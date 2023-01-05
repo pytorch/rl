@@ -253,10 +253,11 @@ def test_mult_onehot(shape, ns):
         torch.Size([4, 5]),
     ],
 )
-def test_multi_discrete(shape, ns):
+@pytest.mark.parametrize("dtype", [torch.float, torch.int, torch.long])
+def test_multi_discrete(shape, ns, dtype):
     torch.manual_seed(0)
     np.random.seed(0)
-    ts = MultiDiscreteTensorSpec(ns)
+    ts = MultiDiscreteTensorSpec(ns, dtype=dtype)
     _real_shape = shape if shape is not None else []
     nvec_shape = torch.tensor(ns).size()
     for _ in range(100):
