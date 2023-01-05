@@ -40,7 +40,7 @@ TorchRL aims at a high modularity and good runtime performance.
    tutorials/coding_dqn
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: References:
 
    reference/index

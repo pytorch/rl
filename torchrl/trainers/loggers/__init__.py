@@ -5,5 +5,6 @@
 
 from .common import Logger
 from .csv import CSVLogger
+from .mlflow import MLFlowLogger
 from .tensorboard import TensorboardLogger
 from .wandb import WandbLogger
