@@ -52,4 +52,4 @@ from .tensordict_module import (
     ValueOperator,
     WorldModelWrapper,
 )
-from .planners import CEMPlanner, MPCPlannerBase  # usort:skip
+from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip
