@@ -669,7 +669,7 @@ class ReplayBufferTrainer(TrainerHookBase):
         self.replay_buffer.extend(batch)
 
     def sample(self, batch: TensorDictBase) -> TensorDictBase:
-        sample, _ = self.replay_buffer.sample(self.batch_size)
+        sample = self.replay_buffer.sample(self.batch_size)
         return sample.to(self.device, non_blocking=True)
 
     def update_priority(self, batch: TensorDictBase) -> None:

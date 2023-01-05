@@ -253,7 +253,7 @@ len(rb)
 rb.extend(TensorDict({"a": torch.randn(2, 3)}, batch_size=[2]))
 print(len(rb))
 print(rb.sample(10))
-print(rb.sample(2)[0].contiguous())
+print(rb.sample(2).contiguous())
 
 ###############################################################################
 
@@ -262,7 +262,7 @@ from torchrl.data import TensorDictPrioritizedReplayBuffer
 
 rb = TensorDictPrioritizedReplayBuffer(alpha=0.7, beta=1.1, priority_key="td_error")
 rb.extend(TensorDict({"a": torch.randn(2, 3)}, batch_size=[2]))
-tensordict_sample = rb.sample(2)[0].contiguous()
+tensordict_sample = rb.sample(2).contiguous()
 tensordict_sample
 
 ###############################################################################
