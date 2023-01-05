@@ -204,3 +204,5 @@ Loggers
     MLFlowLogger
     TensorboardLogger
     WandbLogger
+    get_logger
+    generate_exp_name

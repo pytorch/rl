@@ -27,8 +27,8 @@ TensorDict modules
     SafeProbabilisticSequential
     SafeSequential
     WorldModelWrapper
-    tensordict_module.common.is_tensordict_compatible
-    tensordict_module.common.ensure_tensordict_compatible
+    common.is_tensordict_compatible
+    common.ensure_tensordict_compatible
 
 Hooks
 -----
