@@ -1057,20 +1057,21 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                     torch.randint(
                         0,
                         _s.n,
-                        torch.Size([1, *shape]),
+                        shape,
                         device=self.device,
                         dtype=self.dtype,
                     )
                 )
-        return torch.cat(x)
+        return torch.stack(x, -1)
 
     def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
 
         x = self._rand(self.space, shape)
-        _size = [] if self.shape == torch.Size([1]) else self.shape
-        return x.permute(*torch.arange(x.ndim - 1, -1, -1)).reshape([*shape, *_size])
+        if self.nvec.ndim > 1:
+            x = x.transpose(len(shape), -1)
+        return x.squeeze(-1)
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         if val.dtype not in (torch.int, torch.long):
