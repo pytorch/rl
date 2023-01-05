@@ -48,6 +48,13 @@ References
    :maxdepth: 3
 
    reference/index
+
+Knowledge Base
+==============
+
+.. toctree::
+   :maxdepth: 3
+
    reference/knowledge_base
 
 Indices and tables
