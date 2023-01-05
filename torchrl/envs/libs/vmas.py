@@ -48,17 +48,17 @@ class VmasWrapper(_EnvWrapper):
 
     Examples:
         >>>  env = VmasWrapper(
-        >>>      vmas.make_env(
-        >>>          scenario_name="flocking",
-        >>>          num_envs=32,
-        >>>          continuous_actions=True,
-        >>>          max_steps=200,
-        >>>          device="cpu",
-        >>>          seed=None,
-        >>>          # Scenario kwargs
-        >>>          n_agents=5,
-        >>>      )
-        >>>  )
+        ...      vmas.make_env(
+        ...          scenario_name="flocking",
+        ...          num_envs=32,
+        ...          continuous_actions=True,
+        ...          max_steps=200,
+        ...          device="cpu",
+        ...          seed=None,
+        ...          # Scenario kwargs
+        ...          n_agents=5,
+        ...      )
+        ...  )
         >>>  print(env.rollout(10))
         TensorDict(
              fields={
@@ -313,15 +313,15 @@ class VmasEnv(VmasWrapper):
 
     Examples:
         >>>  env = VmasEnv(
-        >>>      scenario_name="flocking",
-        >>>      num_envs=32,
-        >>>      continuous_actions=True,
-        >>>      max_steps=200,
-        >>>      device="cpu",
-        >>>      seed=None,
-        >>>      # Scenario kwargs
-        >>>      n_agents=5,
-        >>>  )
+        ...      scenario_name="flocking",
+        ...      num_envs=32,
+        ...      continuous_actions=True,
+        ...      max_steps=200,
+        ...      device="cpu",
+        ...      seed=None,
+        ...      # Scenario kwargs
+        ...      n_agents=5,
+        ...  )
         >>>  print(env.rollout(10))
         TensorDict(
             fields={
