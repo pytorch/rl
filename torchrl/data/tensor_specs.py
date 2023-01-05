@@ -999,8 +999,8 @@ class DiscreteTensorSpec(TensorSpec):
     def to_onehot(self) -> OneHotDiscreteTensorSpec:
         if len(self.shape) > 1:
             raise RuntimeError(
-                f"DiscreteTensorSpec with shape != torch.Size([1]) can't be converted OneHotDiscreteTensorSpec. Got "
-                f"shape={self.shape}."
+                f"DiscreteTensorSpec with shape that has several dimensions can't be converted to "
+                f"OneHotDiscreteTensorSpec. Got shape={self.shape}."
             )
         return OneHotDiscreteTensorSpec(self.space.n, self.device, self.dtype)
 
@@ -1095,7 +1095,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
     def to_onehot(self) -> MultOneHotDiscreteTensorSpec:
         if len(self.shape) > 1:
             raise RuntimeError(
-                f"DiscreteTensorSpec with shape that has several dimensions can't be converted "
+                f"DiscreteTensorSpec with shape that has several dimensions can't be converted to"
                 f"OneHotDiscreteTensorSpec. Got shape={self.shape}. This could be accomplished via padding or "
                 f"nestedtensors but it is not implemented yet. If you would like to see that feature, please submit "
                 f"an issue of torchrl's github repo. "
