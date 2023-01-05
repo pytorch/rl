@@ -508,7 +508,7 @@ class TestParallel:
             td = TensorDict(
                 source={"action": env0.action_spec.rand((N - 1,))}, batch_size=[N - 1]
             )
-            td1 = env_parallel.step(td)
+            _ = env_parallel.step(td)
 
         td_reset = TensorDict(
             source={"reset_workers": torch.zeros(N, dtype=torch.bool).bernoulli_()},
@@ -592,7 +592,7 @@ class TestParallel:
             td = TensorDict(
                 source={"action": env0.action_spec.rand((N - 1,))}, batch_size=[N - 1]
             )
-            td1 = env_parallel.step(td)
+            _ = env_parallel.step(td)
 
         td_reset = TensorDict(
             source={"reset_workers": torch.zeros(N, dtype=torch.bool).bernoulli_()},
@@ -710,7 +710,6 @@ class TestParallel:
         transformed_out,
         device,
         open_before,
-        T=10,
         N=3,
     ):
         # tests casting to device
