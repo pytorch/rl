@@ -1004,7 +1004,7 @@ class DiscreteTensorSpec(TensorSpec):
     def to_onehot(self) -> OneHotDiscreteTensorSpec:
         if len(self.shape) > 1:
             raise RuntimeError(
-                f"DiscreteTensorSpec with shape != tensor.Size([1]) can't be converted OneHotDiscreteTensorSpec. Got "
+                f"DiscreteTensorSpec with shape != torch.Size([1]) can't be converted OneHotDiscreteTensorSpec. Got "
                 f"shape={self.shape}."
             )
         return OneHotDiscreteTensorSpec(self.space.n, self.device, self.dtype)
@@ -1100,10 +1100,12 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         return True
 
     def to_onehot(self) -> MultOneHotDiscreteTensorSpec:
-        if len(self.shape) > 1:
+        if self.shape != torch.Size([1]):
             raise RuntimeError(
-                f"DiscreteTensorSpec with shape != tensor.Size([1]) can't be converted OneHotDiscreteTensorSpec. Got "
-                f"shape={self.shape}."
+                f"DiscreteTensorSpec with shape != torch.Size([1]) can't be converted OneHotDiscreteTensorSpec. Got "
+                f"shape={self.shape}. This could be accomplished via padding or nestedtensors but it is not "
+                f"implemented yet. If you would like to see that feature, please submit an issue of torchrl's github "
+                f"repo. "
             )
         return MultOneHotDiscreteTensorSpec(
             [_space.n for _space in self.space], self.device, self.dtype
