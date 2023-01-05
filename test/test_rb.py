@@ -12,19 +12,20 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from tensordict.tensordict import assert_allclose_td, TensorDictBase, TensorDict
-from torchrl.data import (
-    PrioritizedReplayBuffer,
-    ReplayBuffer,
-    TensorDictReplayBuffer,
-)
+from tensordict.prototype import is_tensorclass, tensorclass
+from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
+from torchrl.data import PrioritizedReplayBuffer, ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import (
     rb_prototype,
     samplers,
     TensorDictPrioritizedReplayBuffer,
     writers,
 )
-from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
+from torchrl.data.replay_buffers.samplers import (
+    PrioritizedSampler,
+    RandomSampler,
+    SamplerWithoutReplacement,
+)
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -32,25 +33,25 @@ from torchrl.data.replay_buffers.storages import (
 )
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
 from torchrl.envs.transforms.transforms import (
+    BinarizeReward,
+    CatFrames,
     CatTensors,
+    CenterCrop,
+    DiscreteActionProjection,
+    DoubleToFloat,
+    FiniteTensorDictCheck,
     FlattenObservation,
+    GrayScale,
+    gSDENoise,
+    ObservationNorm,
+    PinMemoryTransform,
+    Resize,
+    RewardClipping,
+    RewardScaling,
     SqueezeTransform,
     ToTensorImage,
-    RewardClipping,
-    BinarizeReward,
-    Resize,
-    CenterCrop,
     UnsqueezeTransform,
-    GrayScale,
-    ObservationNorm,
-    CatFrames,
-    RewardScaling,
-    DoubleToFloat,
     VecNorm,
-    DiscreteActionProjection,
-    FiniteTensorDictCheck,
-    gSDENoise,
-    PinMemoryTransform,
 )
 
 _has_tv = importlib.util.find_spec("torchvision") is not None
@@ -69,7 +70,7 @@ _has_tv = importlib.util.find_spec("torchvision") is not None
 )
 @pytest.mark.parametrize("writer", [writers.RoundRobinWriter])
 @pytest.mark.parametrize("storage", [ListStorage, LazyTensorStorage, LazyMemmapStorage])
-@pytest.mark.parametrize("size", [3, 100])
+@pytest.mark.parametrize("size", [3, 5, 100])
 class TestPrototypeBuffers:
     def _get_rb(self, rb_type, size, sampler, writer, storage):
 
@@ -128,6 +129,26 @@ class TestPrototypeBuffers:
         else:
             assert (s == data).all()
 
+    def test_cursor_position(self, rb_type, sampler, writer, storage, size):
+        storage = storage(size)
+        writer = writer()
+        writer.register_storage(storage)
+        batch1 = self._get_data(rb_type, size=5)
+        writer.extend(batch1)
+
+        # Added less data than storage max size
+        if size > 5:
+            assert writer._cursor == 5
+        # Added more data than storage max size
+        elif size < 5:
+            assert writer._cursor == 5 - size
+        # Added as data as storage max size
+        else:
+            assert writer._cursor == 0
+            batch2 = self._get_data(rb_type, size=size - 1)
+            writer.extend(batch2)
+            assert writer._cursor == size - 1
+
     def test_extend(self, rb_type, sampler, writer, storage, size):
         torch.manual_seed(0)
         rb = self._get_rb(
@@ -165,7 +186,6 @@ class TestPrototypeBuffers:
             new_data = new_data[0]
 
         for d in new_data:
-            found_similar = False
             for b in data:
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())
@@ -196,6 +216,80 @@ class TestPrototypeBuffers:
         if not isinstance(b, bool):
             b = b.all()
         assert b
+
+
+@pytest.mark.parametrize("max_size", [1000])
+@pytest.mark.parametrize("shape", [[3, 4]])
+@pytest.mark.parametrize("storage", [LazyTensorStorage, LazyMemmapStorage])
+class TestStorages:
+    def _get_nested_tensorclass(self, shape):
+        @tensorclass
+        class NestedTensorClass:
+            key1: torch.Tensor
+            key2: torch.Tensor
+
+        @tensorclass
+        class TensorClass:
+            key1: torch.Tensor
+            key2: torch.Tensor
+            next: NestedTensorClass
+
+        return TensorClass(
+            key1=torch.ones(*shape),
+            key2=torch.ones(*shape),
+            next=NestedTensorClass(
+                key1=torch.ones(*shape), key2=torch.ones(*shape), batch_size=shape
+            ),
+            batch_size=shape,
+        )
+
+    def _get_nested_td(self, shape):
+        nested_td = TensorDict(
+            {
+                "key1": torch.ones(*shape),
+                "key2": torch.ones(*shape),
+                "next": TensorDict(
+                    {
+                        "key1": torch.ones(*shape),
+                        "key2": torch.ones(*shape),
+                    },
+                    shape,
+                ),
+            },
+            shape,
+        )
+        return nested_td
+
+    def test_init(self, max_size, shape, storage):
+        td = self._get_nested_td(shape)
+        mystorage = storage(max_size=max_size)
+        mystorage._init(td)
+        assert mystorage._storage.shape == (max_size, *shape)
+
+    def test_set(self, max_size, shape, storage):
+        td = self._get_nested_td(shape)
+        mystorage = storage(max_size=max_size)
+        mystorage.set(list(range(td.shape[0])), td)
+        assert mystorage._storage.shape == (max_size, *shape[1:])
+        idx = list(range(1, td.shape[0] - 1))
+        tc_sample = mystorage.get(idx)
+        assert tc_sample.shape == torch.Size([td.shape[0] - 2, *td.shape[1:]])
+
+    def test_init_tensorclass(self, max_size, shape, storage):
+        tc = self._get_nested_tensorclass(shape)
+        mystorage = storage(max_size=max_size)
+        mystorage._init(tc)
+        assert is_tensorclass(mystorage._storage)
+        assert mystorage._storage.shape == (max_size, *shape)
+
+    def test_set_tensorclass(self, max_size, shape, storage):
+        tc = self._get_nested_tensorclass(shape)
+        mystorage = storage(max_size=max_size)
+        mystorage.set(list(range(tc.shape[0])), tc)
+        assert mystorage._storage.shape == (max_size, *shape[1:])
+        idx = list(range(1, tc.shape[0] - 1))
+        tc_sample = mystorage.get(idx)
+        assert tc_sample.shape == torch.Size([tc.shape[0] - 2, *tc.shape[1:]])
 
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
@@ -318,7 +412,7 @@ def test_rb_prototype_trajectories(stack):
         (TensorDictPrioritizedReplayBuffer, LazyMemmapStorage),
     ],
 )
-@pytest.mark.parametrize("size", [3, 100])
+@pytest.mark.parametrize("size", [3, 5, 100])
 @pytest.mark.parametrize("prefetch", [0])
 class TestBuffers:
     _default_params_rb = {}
@@ -379,6 +473,25 @@ class TestBuffers:
         else:
             raise NotImplementedError(rbtype)
         return data
+
+    def test_cursor_position2(self, rbtype, storage, size, prefetch):
+        torch.manual_seed(0)
+        rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
+        batch1 = self._get_data(rbtype, size=5)
+        rb.extend(batch1)
+
+        # Added less data than storage max size
+        if size > 5:
+            assert rb._cursor == 5
+        # Added more data than storage max size
+        elif size < 5:
+            assert rb._cursor == 5 - size
+        # Added as data as storage max size
+        else:
+            assert rb._cursor == 0
+            batch2 = self._get_data(rbtype, size=size - 1)
+            rb.extend(batch2)
+            assert rb._cursor == size - 1
 
     def test_add(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)
@@ -731,6 +844,39 @@ def test_smoke_replay_buffer_transform_no_inkeys(transform):
     rb._transform = mock.MagicMock()
     rb.sample(1)
     assert rb._transform.called
+
+
+@pytest.mark.parametrize("size", [10, 15, 20])
+@pytest.mark.parametrize("samples", [5, 9, 11, 14, 16])
+@pytest.mark.parametrize("drop_last", [True, False])
+def test_samplerwithoutrep(size, samples, drop_last):
+    torch.manual_seed(0)
+    storage = ListStorage(size)
+    storage.set(range(size), range(size))
+    assert len(storage) == size
+    sampler = SamplerWithoutReplacement(drop_last=drop_last)
+    visited = False
+    for _ in range(10):
+        _n_left = (
+            sampler._sample_list.numel() if sampler._sample_list is not None else size
+        )
+        if samples > size and drop_last:
+            with pytest.raises(
+                ValueError,
+                match=r"The batch size .* is greater than the storage capacity",
+            ):
+                idx, _ = sampler.sample(storage, samples)
+            break
+        idx, _ = sampler.sample(storage, samples)
+        assert idx.numel() == samples
+        if drop_last or _n_left >= samples:
+            assert idx.unique().numel() == idx.numel()
+        else:
+            visited = True
+    if not drop_last and (size % samples > 0):
+        assert visited
+    else:
+        assert not visited
 
 
 if __name__ == "__main__":

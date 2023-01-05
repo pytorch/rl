@@ -5,20 +5,20 @@
 
 from .actors import (
     Actor,
-    ActorValueOperator,
-    ValueOperator,
-    ProbabilisticActor,
-    QValueActor,
     ActorCriticOperator,
     ActorCriticWrapper,
+    ActorValueOperator,
     DistributionalQValueActor,
+    ProbabilisticActor,
+    QValueActor,
+    ValueOperator,
 )
-from .common import TensorDictModule, TensorDictModuleWrapper
+from .common import SafeModule
 from .exploration import (
-    EGreedyWrapper,
     AdditiveGaussianWrapper,
+    EGreedyWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from .probabilistic import ProbabilisticTensorDictModule
-from .sequence import TensorDictSequential
+from .probabilistic import SafeProbabilisticModule, SafeProbabilisticSequential
+from .sequence import SafeSequential
 from .world_models import WorldModelWrapper

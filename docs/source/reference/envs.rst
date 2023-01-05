@@ -50,7 +50,7 @@ With these, the following methods are implemented:
   having reproducible results.
 - :obj:`env.rollout(max_steps, policy)`: executes a rollout in the environment for
   a maximum number of steps :obj:`max_steps` and using a policy :obj:`policy`.
-  The policy should be coded using a :obj:`TensorDictModule` (or any other
+  The policy should be coded using a :obj:`SafeModule` (or any other
   :obj:`TensorDict`-compatible module).
 
 
@@ -105,17 +105,25 @@ It is also possible to reset some but not all of the environments:
             fields={
                 done: Tensor(torch.Size([4, 1]), dtype=torch.bool),
                 pixels: Tensor(torch.Size([4, 500, 500, 3]), dtype=torch.uint8),
-                reset_workers: Tensor(torch.Size([4, 1]), dtype=torch.bool)},
+                reset_workers: Tensor(torch.Size([4]), dtype=torch.bool)},
             batch_size=torch.Size([4]),
             device=None,
             is_shared=True)
 
 
-A note on performance: launching a :obj:`ParallelEnv` can take quite some time
+*A note on performance*: launching a :obj:`ParallelEnv` can take quite some time
 as it requires to launch as many python instances as there are processes. Due to
 the time that it takes to run :obj:`import torch` (and other imports), starting the
 parallel env can be a bottleneck. This is why, for instance, TorchRL tests are so slow.
 Once the environment is launched, a great speedup should be observed.
+
+Another thing to take in consideration is that :obj:`ParallelEnv`s (as well as data collectors)
+will create data buffers based on the environment specs to pass data from one process
+to another. This means that a misspecified spec (input, observation or reward) will
+cause a breakage at runtime as the data can't be written on the preallocated buffer.
+In general, an environment should be tested using the :obj:`check_env_specs`
+test function before being used in a :obj:`ParallelEnv`. This function will raise
+an assertion error whenever the preallocated buffer and the collected data mismatch.
 
 We also offer the :obj:`SerialEnv` class that enjoys the exact same API but is executed
 serially. This is mostly useful for testing purposes, when one wants to assess the
@@ -187,29 +195,34 @@ in the environment. The keys to be included in this inverse transform are passed
 
     Transform
     TransformedEnv
-    RewardClipping
-    Resize
-    CenterCrop
-    GrayScale
-    Compose
-    ToTensorImage
-    ObservationNorm
-    FlattenObservation
-    UnsqueezeTransform
-    RewardScaling
-    ObservationTransform
-    CatFrames
-    FiniteTensorDictCheck
-    DoubleToFloat
-    CatTensors
-    NoopResetEnv
     BinarizeReward
-    PinMemoryTransform
-    VecNorm
+    CatFrames
+    CatTensors
+    CenterCrop
+    Compose
+    DoubleToFloat
+    FiniteTensorDictCheck
+    FlattenObservation
+    FrameSkipTransform
+    GrayScale
     gSDENoise
+    NoopResetEnv
+    ObservationNorm
+    ObservationTransform
+    PinMemoryTransform
+    Resize
+    RewardClipping
+    RewardScaling
+    RewardSum
+    SqueezeTransform
+    StepCounter
     TensorDictPrimer
+    ToTensorImage
+    UnsqueezeTransform
+    VecNorm
     R3MTransform
     VIPTransform
+    VIPRewardTransform
 
 Helpers
 -------
@@ -223,6 +236,7 @@ Helpers
     get_available_libraries
     set_exploration_mode
     exploration_mode
+    check_env_specs
 
 Domain-specific
 ---------------

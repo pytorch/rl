@@ -1,19 +1,18 @@
-import dataclasses
-from typing import Optional, Dict, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase, make_tensordict
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import (
-    DEVICE_TYPING,
-    TensorSpec,
+    BoundedTensorSpec,
     CompositeSpec,
+    DEVICE_TYPING,
     DiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
-    NdUnboundedDiscreteTensorSpec,
+    TensorSpec,
+    UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs import GymLikeEnv
@@ -22,60 +21,26 @@ try:
     import jax
     import jumanji
     from jax import numpy as jnp
+    from torchrl.envs.libs.jax_utils import (
+        _extract_spec,
+        _ndarray_to_tensor,
+        _object_to_tensordict,
+        _tensordict_to_object,
+        _tree_flatten,
+        _tree_reshape,
+    )
 
     _has_jumanji = True
+    IMPORT_ERR = ""
 except ImportError as err:
     _has_jumanji = False
     IMPORT_ERR = str(err)
 
 
-def _ndarray_to_tensor(value: Union["jnp.ndarray", np.ndarray], device) -> torch.Tensor:
-    # tensor doesn't support conversion from jnp.ndarray.
-    if isinstance(value, jnp.ndarray):
-        value = np.asarray(value)
-    # tensor doesn't support unsigned dtypes.
-    if value.dtype == np.uint16:
-        value = value.astype(np.int16)
-    elif value.dtype == np.uint32:
-        value = value.astype(np.int32)
-    elif value.dtype == np.uint64:
-        value = value.astype(np.int64)
-    # convert to tensor.
-    return torch.tensor(value).to(device)
-
-
-def _object_to_tensordict(obj: Union, device, batch_size) -> TensorDictBase:
-    """Converts a namedtuple or a dataclass to a TensorDict."""
-    t = {}
-    if isinstance(obj, tuple) and hasattr(obj, "_fields"):  # named tuple
-        _iter = obj._fields
-    elif dataclasses.is_dataclass(obj):
-        _iter = (field.name for field in dataclasses.fields(obj))
-    else:
-        raise NotImplementedError(f"unsupported data type {type(obj)}")
-    for name in _iter:
-        value = getattr(obj, name)
-        if isinstance(value, (jnp.ndarray, np.ndarray)):
-            t[name] = _ndarray_to_tensor(value, device=device)
-        else:
-            t[name] = _object_to_tensordict(value, device, batch_size)
-    return make_tensordict(**t, device=device, batch_size=batch_size)
-
-
-def _tensordict_to_object(tensordict: TensorDictBase, object_example):
-    """Converts a TensorDict to a namedtuple or a dataclass."""
-    object_type = type(object_example)
-    t = {}
-    for name in tensordict.keys():
-        value = tensordict[name]
-        if isinstance(value, TensorDictBase):
-            t[name] = _tensordict_to_object(value, getattr(object_example, name))
-        else:
-            example = getattr(object_example, name)
-            t[name] = (
-                value.detach().numpy().reshape(example.shape).astype(example.dtype)
-            )
-    return object_type(**t)
+def _get_envs():
+    if not _has_jumanji:
+        return []
+    return jumanji.registered_environments()
 
 
 def _jumanji_to_torchrl_spec_transform(
@@ -94,26 +59,26 @@ def _jumanji_to_torchrl_spec_transform(
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return action_space_cls(spec.num_values, dtype=dtype, device=device)
     elif isinstance(spec, jumanji.specs.BoundedArray):
+        shape = spec.shape
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdBoundedTensorSpec(
-            shape=spec.shape,
+        return BoundedTensorSpec(
+            shape=shape,
             minimum=np.asarray(spec.minimum),
             maximum=np.asarray(spec.maximum),
             dtype=dtype,
             device=device,
         )
     elif isinstance(spec, jumanji.specs.Array):
+        shape = spec.shape
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         if dtype in (torch.float, torch.double, torch.half):
-            return NdUnboundedContinuousTensorSpec(
-                shape=spec.shape, dtype=dtype, device=device
+            return UnboundedContinuousTensorSpec(
+                shape=shape, dtype=dtype, device=device
             )
         else:
-            return NdUnboundedDiscreteTensorSpec(
-                shape=spec.shape, dtype=dtype, device=device
-            )
+            return UnboundedDiscreteTensorSpec(shape=shape, dtype=dtype, device=device)
     elif isinstance(spec, jumanji.specs.Spec) and hasattr(spec, "__dict__"):
         new_spec = {}
         for key, value in spec.__dict__.items():
@@ -130,41 +95,40 @@ def _jumanji_to_torchrl_spec_transform(
         raise TypeError(f"Unsupported spec type {type(spec)}")
 
 
-def _torchrl_data_to_spec_transform(data) -> TensorSpec:
-    if isinstance(data, torch.Tensor):
-        if data.dtype in (torch.float, torch.double, torch.half):
-            return NdUnboundedContinuousTensorSpec(
-                shape=data.shape, dtype=data.dtype, device=data.device
-            )
-        else:
-            return NdUnboundedDiscreteTensorSpec(
-                shape=data.shape, dtype=data.dtype, device=data.device
-            )
-    elif isinstance(data, TensorDict):
-        return CompositeSpec(
-            **{
-                key: _torchrl_data_to_spec_transform(value)
-                for key, value in data.items()
-            }
-        )
-    else:
-        raise TypeError(f"Unsupported data type {type(data)}")
-
-
 class JumanjiWrapper(GymLikeEnv):
     """Jumanji environment wrapper.
 
     Examples:
-        >>> env = jumanju.make("Snake-6x6-v0")
+        >>> env = jumanji.make("Snake-6x6-v0")
         >>> env = JumanjiWrapper(env)
-        >>> td0 = env.reset()
-        >>> print(td0)
-        >>> td1 = env.rand_step(td0)
+        >>> env.set_seed(0)
+        >>> td = env.reset()
+        >>> td["action"] = env.action_spec.rand()
+        >>> td = env.step(td)
         >>> print(td1)
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([1]), dtype=torch.int32),
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([6, 6, 5]), dtype=torch.float32)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([6, 6, 5]), dtype=torch.float32),
+                reward: Tensor(torch.Size([1]), dtype=torch.float32),
+                state: TensorDict(...)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
         >>> print(env.available_envs)
+        ['Snake-6x6-v0', 'Snake-12x12-v0', 'TSP50-v0', 'TSP100-v0', ...]
     """
 
     git_url = "https://github.com/instadeepai/jumanji"
+    available_envs = _get_envs()
+    libname = "jumanji"
 
     @property
     def lib(self):
@@ -196,14 +160,14 @@ class JumanjiWrapper(GymLikeEnv):
         key = jax.random.PRNGKey(0)
         keys = jax.random.split(key, self.batch_size.numel())
         state, _ = jax.vmap(env.reset)(jnp.stack(keys))
-        state = self._reshape(state)
+        state = _tree_reshape(state, self.batch_size)
         return state
 
     def _make_state_spec(self, env) -> TensorSpec:
         key = jax.random.PRNGKey(0)
         state, _ = env.reset(key)
         state_dict = _object_to_tensordict(state, self.device, batch_size=())
-        state_spec = _torchrl_data_to_spec_transform(state_dict)
+        state_spec = _extract_spec(state_dict)
         return state_spec
 
     def _make_input_spec(self, env) -> TensorSpec:
@@ -224,18 +188,23 @@ class JumanjiWrapper(GymLikeEnv):
             raise TypeError(f"Unsupported spec type {type(spec)}")
 
     def _make_reward_spec(self, env) -> TensorSpec:
-        return _jumanji_to_torchrl_spec_transform(env.reward_spec(), device=self.device)
+        reward_spec = _jumanji_to_torchrl_spec_transform(
+            env.reward_spec(), device=self.device
+        )
+        if not len(reward_spec.shape):
+            reward_spec.shape = torch.Size([1])
+        return reward_spec
 
     def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
 
         # extract spec from jumanji definition
-        self._input_spec = self._make_input_spec(env)
-        self._observation_spec = self._make_observation_spec(env)
-        self._reward_spec = self._make_reward_spec(env)
+        self.input_spec = self._make_input_spec(env)
+        self.observation_spec = self._make_observation_spec(env)
+        self.reward_spec = self._make_reward_spec(env)
 
         # extract state spec from instance
-        self._state_spec = self._make_state_spec(env)
-        self._input_spec["state"] = self._state_spec
+        self.state_spec = self._make_state_spec(env)
+        self.input_spec["state"] = self.state_spec
 
         # build state example for data conversion
         self._state_example = self._make_state_example(env)
@@ -257,11 +226,11 @@ class JumanjiWrapper(GymLikeEnv):
 
     def read_state(self, state):
         state_dict = _object_to_tensordict(state, self.device, self.batch_size)
-        return self._state_spec.encode(state_dict)
+        return self.state_spec.encode(state_dict)
 
     def read_obs(self, obs):
         if isinstance(obs, (list, jnp.ndarray, np.ndarray)):
-            obs_dict = _ndarray_to_tensor(obs, self.device)
+            obs_dict = _ndarray_to_tensor(obs).to(self.device)
         else:
             obs_dict = _object_to_tensordict(obs, self.device, self.batch_size)
         return super().read_obs(obs_dict)
@@ -274,25 +243,22 @@ class JumanjiWrapper(GymLikeEnv):
         reward = self.reward_spec.zero(self.batch_size)
 
         # flatten batch size into vector
-        state = self._flatten(state)
-        action = self._flatten(action)
+        state = _tree_flatten(state, self.batch_size)
+        action = _tree_flatten(action, self.batch_size)
 
         # jax vectorizing map on env.step
         state, timestep = jax.vmap(self._env.step)(state, action)
 
         # reshape batch size from vector
-        state = self._reshape(state)
-        timestep = self._reshape(timestep)
+        state = _tree_reshape(state, self.batch_size)
+        timestep = _tree_reshape(timestep, self.batch_size)
 
         # collect outputs
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
         reward = self.read_reward(reward, np.asarray(timestep.reward))
-        done = torch.tensor(
-            np.asarray(timestep.step_type == self.lib.types.StepType.LAST)
-        )
-
-        self._is_done = done
+        done = timestep.step_type == self.lib.types.StepType.LAST
+        done = _ndarray_to_tensor(done).view(torch.bool).to(self.device)
 
         # build results
         tensordict_out = TensorDict(
@@ -317,15 +283,13 @@ class JumanjiWrapper(GymLikeEnv):
         state, timestep = jax.vmap(self._env.reset)(jnp.stack(keys))
 
         # reshape batch size from vector
-        state = self._reshape(state)
-        timestep = self._reshape(timestep)
+        state = _tree_reshape(state, self.batch_size)
+        timestep = _tree_reshape(timestep, self.batch_size)
 
         # collect outputs
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
         done = torch.zeros(self.batch_size, dtype=torch.bool)
-
-        self._is_done = done
 
         # build results
         tensordict_out = TensorDict(
@@ -337,14 +301,6 @@ class JumanjiWrapper(GymLikeEnv):
         tensordict_out["state"] = state_dict
 
         return tensordict_out
-
-    def _reshape(self, x):
-        shape, n = self.batch_size, 1
-        return jax.tree_util.tree_map(lambda x: x.reshape(shape + x.shape[n:]), x)
-
-    def _flatten(self, x):
-        shape, n = (self.batch_size.numel(),), len(self.batch_size)
-        return jax.tree_util.tree_map(lambda x: x.reshape(shape + x.shape[n:]), x)
 
 
 class JumanjiEnv(JumanjiWrapper):

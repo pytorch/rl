@@ -7,11 +7,12 @@ import abc
 import os
 from collections import OrderedDict
 from copy import copy
-from typing import Any, Sequence, Union, Dict
+from typing import Any, Dict, Sequence, Union
 
 import torch
 from tensordict.memmap import MemmapTensor
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.prototype import is_tensorclass
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import _CKPT_BACKEND
 from torchrl.data.replay_buffers.utils import INT_CLASSES
@@ -235,21 +236,18 @@ class LazyTensorStorage(Storage):
                 device=self.device,
                 dtype=data.dtype,
             )
+        elif is_tensorclass(data):
+            out = (
+                data.expand(self.max_size, *data.shape).clone().zero_().to(self.device)
+            )
         else:
-            out = TensorDict({}, [self.max_size, *data.shape])
-            print("The storage is being created: ")
-            for key, tensor in data.items():
-                if isinstance(tensor, TensorDictBase):
-                    out[key] = (
-                        tensor.expand(self.max_size).clone().to(self.device).zero_()
-                    )
-                else:
-                    out[key] = torch.empty(
-                        self.max_size,
-                        *tensor.shape,
-                        device=self.device,
-                        dtype=tensor.dtype,
-                    )
+            out = (
+                data.expand(self.max_size, *data.shape)
+                .to_tensordict()
+                .zero_()
+                .clone()
+                .to(self.device)
+            )
 
         self._storage = out
         self.initialized = True
@@ -367,6 +365,21 @@ class LazyMemmapStorage(LazyTensorStorage):
             print(
                 f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
             )
+        elif is_tensorclass(data):
+            out = (
+                data.expand(self.max_size, *data.shape)
+                .clone()
+                .zero_()
+                .memmap_(prefix=self.scratch_dir)
+                .to(self.device)
+            )
+            for key, tensor in sorted(
+                out.items(include_nested=True, leaves_only=True), key=str
+            ):
+                filesize = os.path.getsize(tensor.filename) / 1024 / 1024
+                print(
+                    f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
+                )
         else:
             # out = TensorDict({}, [self.max_size, *data.shape])
             print("The storage is being created: ")
@@ -377,26 +390,12 @@ class LazyMemmapStorage(LazyTensorStorage):
                 .memmap_(prefix=self.scratch_dir)
                 .to(self.device)
             )
-            for key, tensor in sorted(out.flatten_keys(".").items()):
-                # if isinstance(tensor, TensorDictBase):
-                #     out[key] = (
-                #         tensor.expand(self.max_size, *tensor.shape)
-                #         .clone()
-                #         .zero_()
-                #         .memmap_(prefix=self.scratch_dir)
-                #         .to(self.device)
-                #     )
-                # else:
-                #     out[key] = _value = MemmapTensor(
-                #         self.max_size,
-                #         *tensor.shape,
-                #         device=self.device,
-                #         dtype=tensor.dtype,
-                #         prefix=self.scratch_dir,
-                #     )
+            for key, tensor in sorted(
+                out.items(include_nested=True, leaves_only=True), key=str
+            ):
                 filesize = os.path.getsize(tensor.filename) / 1024 / 1024
                 print(
-                    f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {[self.max_size, *tensor.shape]})."
+                    f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                 )
         self._storage = out
         self.initialized = True

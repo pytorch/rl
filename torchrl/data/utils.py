@@ -57,7 +57,7 @@ class CloudpickleWrapper(object):
 
         self.fn, self.kwargs = pickle.loads(ob)
 
-    def __call__(self, **kwargs) -> Any:
+    def __call__(self, *args, **kwargs) -> Any:
         kwargs = {k: item for k, item in kwargs.items()}
         kwargs.update(self.kwargs)
         return self.fn(**kwargs)

@@ -13,9 +13,9 @@ from packaging import version
 from tensordict import TensorDict
 from torch import nn
 from torchrl.data.tensor_specs import (
+    BoundedTensorSpec,
     DiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
 )
 from torchrl.modules import (
     ActorValueOperator,
@@ -23,20 +23,16 @@ from torchrl.modules import (
     LSTMNet,
     ProbabilisticActor,
     QValueActor,
-    TensorDictModule,
+    SafeModule,
     ValueOperator,
-)
-from torchrl.modules.functional_modules import (
-    FunctionalModule,
-    FunctionalModuleWithBuffers,
 )
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
 from torchrl.modules.models.model_based import (
     DreamerActor,
-    ObsEncoder,
     ObsDecoder,
-    RSSMPrior,
+    ObsEncoder,
     RSSMPosterior,
+    RSSMPrior,
     RSSMRollout,
 )
 from torchrl.modules.models.utils import SquashDims
@@ -261,12 +257,12 @@ def test_value_based_policy_categorical(device):
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_actorcritic(device):
-    common_module = TensorDictModule(
-        spec=None, module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
+    common_module = SafeModule(
+        module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"], spec=None
     ).to(device)
-    module = TensorDictModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
+    module = SafeModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
     policy_operator = ProbabilisticActor(
-        spec=None, module=module, dist_in_keys=["param"], return_log_prob=True
+        module=module, in_keys=["param"], spec=None, return_log_prob=True
     ).to(device)
     value_operator = ValueOperator(nn.Linear(4, 1), in_keys=["hidden"]).to(device)
     op = ActorValueOperator(
@@ -443,37 +439,9 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
     torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
 
 
-class TestFunctionalModules:
-    def test_func_seq(self):
-        module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 3))
-        fmodule, params = FunctionalModule._create_from(module)
-        x = torch.randn(3)
-        assert (fmodule(params, x) == module(x)).all()
-
-    def test_func_bn(self):
-        module = nn.Sequential(nn.Linear(3, 4), nn.BatchNorm1d(4))
-        module.eval()
-        fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
-        x = torch.randn(10, 3)
-        assert (fmodule(params, buffers, x) == module(x)).all()
-
-    def test_func_transformer(self):
-        torch.manual_seed(10)
-        batch = (
-            (10,)
-            if version.parse(torch.__version__) >= version.parse("1.11")
-            else (1, 10)
-        )
-        module = nn.Transformer(128)
-        module.eval()
-        fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
-        x = torch.randn(*batch, 128)
-        torch.testing.assert_close(fmodule(params, buffers, x, x), module(x, x))
-
-
-@pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("batch_size", [3, 5])
 class TestPlanner:
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("batch_size", [3, 5])
     def test_CEM_model_free_env(self, device, batch_size, seed=1):
         env = MockBatchedUnLockedEnv(device=device)
         torch.manual_seed(seed)
@@ -579,7 +547,7 @@ class TestDreamerComponents:
     @pytest.mark.parametrize("deter_size", [20, 30])
     @pytest.mark.parametrize("action_size", [3, 6])
     def test_rssm_prior(self, device, batch_size, stoch_size, deter_size, action_size):
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             shape=(action_size,), dtype=torch.float32, minimum=-1, maximum=1
         )
         rssm_prior = RSSMPrior(
@@ -634,7 +602,7 @@ class TestDreamerComponents:
     def test_rssm_rollout(
         self, device, batch_size, temporal_size, stoch_size, deter_size, action_size
     ):
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             shape=(action_size,), dtype=torch.float32, minimum=-1, maximum=1
         )
         rssm_prior = RSSMPrior(
@@ -649,7 +617,7 @@ class TestDreamerComponents:
         ).to(device)
 
         rssm_rollout = RSSMRollout(
-            TensorDictModule(
+            SafeModule(
                 rssm_prior,
                 in_keys=["state", "belief", "action"],
                 out_keys=[
@@ -659,7 +627,7 @@ class TestDreamerComponents:
                     ("next", "belief"),
                 ],
             ),
-            TensorDictModule(
+            SafeModule(
                 rssm_posterior,
                 in_keys=[("next", "belief"), ("next", "encoded_latents")],
                 out_keys=[

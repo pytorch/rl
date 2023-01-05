@@ -23,6 +23,11 @@ On the low-level end, torchrl comes with a set of highly re-usable functionals f
 
 TorchRL aims at (1) a high modularity and (2) good runtime performance.
 
+## Documentation
+
+The TorchRL documentation can be found [here](https://pytorch.org/rl).
+It contains tutorials and the API reference.
+
 ## TensorDict as a common data carrier for RL
 
 TorchRL relies on [`TensorDict`](https://github.com/pytorch-labs/tensordict/),
@@ -36,7 +41,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
   ```diff
   - obs, done = env.reset()
   + tensordict = env.reset()
-  policy = TensorDictModule(
+  policy = SafeModule(
       model,
       in_keys=["observation_pixels", "observation_vector"],
       out_keys=["action"],
@@ -104,16 +109,16 @@ Here's another example of an off-policy training loop in TorchRL (assuming that 
   ```
   </details>
 
-Check our TorchRL-specific [TensorDict tutorial](tutorials/tensordict.ipynb) for more information.
+Check our TorchRL-specific [TensorDict tutorial](https://pytorch.org/rl/tutorials/tensordict_tutorial.html) for more information.
 
-The associated [`TensorDictModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible!
-    
+The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible!
+
   <details>
     <summary>Code</summary>
 
   ```diff
   transformer_model = nn.Transformer(nhead=16, num_encoder_layers=12)
-  + td_module = TensorDictModule(transformer_model, in_keys=["src", "tgt"], out_keys=["out"])
+  + td_module = SafeModule(transformer_model, in_keys=["src", "tgt"], out_keys=["out"])
   src = torch.rand((10, 32, 512))
   tgt = torch.rand((20, 32, 512))
   + tensordict = TensorDict({"src": src, "tgt": tgt}, batch_size=[20, 32])
@@ -122,26 +127,26 @@ The associated [`TensorDictModule` class](torchrl/modules/tensordict_module/comm
   + out = tensordict["out"]
   ```
 
-  The `TensorDictSequential` class allows to branch sequences of `nn.Module` instances in a highly modular way.
+  The `SafeSequential` class allows to branch sequences of `nn.Module` instances in a highly modular way.
   For instance, here is an implementation of a transformer using the encoder and decoder blocks:
   ```python
   encoder_module = TransformerEncoder(...)
-  encoder = TensorDictModule(encoder_module, in_keys=["src", "src_mask"], out_keys=["memory"])
+  encoder = SafeModule(encoder_module, in_keys=["src", "src_mask"], out_keys=["memory"])
   decoder_module = TransformerDecoder(...)
-  decoder = TensorDictModule(decoder_module, in_keys=["tgt", "memory"], out_keys=["output"])
-  transformer = TensorDictSequential(encoder, decoder)
+  decoder = SafeModule(decoder_module, in_keys=["tgt", "memory"], out_keys=["output"])
+  transformer = SafeSequential(encoder, decoder)
   assert transformer.in_keys == ["src", "src_mask", "tgt"]
   assert transformer.out_keys == ["memory", "output"]
   ```
 
-  `TensorDictSequential` allows to isolate subgraphs by querying a set of desired input / output keys:
+  `SafeSequential` allows to isolate subgraphs by querying a set of desired input / output keys:
   ```python
   transformer.select_subsequence(out_keys=["memory"])  # returns the encoder
   transformer.select_subsequence(in_keys=["tgt", "memory"])  # returns the decoder
   ```
   </details>
 
-  The corresponding [tutorial](tutorials/tensordictmodule.ipynb) provides more context about its features.
+  The corresponding [tutorial](https://pytorch.org/rl/tutorials/tensordict_module.html) provides more context about its features.
 
 
 
@@ -261,33 +266,32 @@ The associated [`TensorDictModule` class](torchrl/modules/tensordict_module/comm
         kernel_sizes=[8, 4, 3],
         strides=[4, 2, 1],
     )
-    # Wrap it in a TensorDictModule, indicating what key to read in and where to
+    # Wrap it in a SafeModule, indicating what key to read in and where to
     # write out the output
-    common_module = TensorDictModule(
+    common_module = SafeModule(
         common_module,
         in_keys=["pixels"],
         out_keys=["hidden"],
     )
     # Wrap the policy module in NormalParamsWrapper, such that the output
     # tensor is split in loc and scale, and scale is mapped onto a positive space
-    policy_module = NormalParamsWrapper(
-        MLP(
-            num_cells=[64, 64],
-            out_features=32,
-            activation=nn.ELU,
-        )
-    )
-    # Wrap the nn.Module in a ProbabilisticTensorDictModule, indicating how
-    # to build the torch.distribution.Distribution object and what to do with it
-    policy_module = ProbabilisticTensorDictModule(  # stochastic policy
-        TensorDictModule(
-            policy_module,
-            in_keys=["hidden"],
-            out_keys=["loc", "scale"],
+    policy_module = SafeModule(
+        NormalParamsWrapper(
+            MLP(num_cells=[64, 64], out_features=32, activation=nn.ELU)
         ),
-        dist_in_keys=["loc", "scale"],
-        sample_out_key="action",
-        distribution_class=TanhNormal,
+        in_keys=["hidden"],
+        out_keys=["loc", "scale"],
+    )
+    # Use a SafeProbabilisticSequential to combine the SafeModule with a
+    # SafeProbabilisticModule, indicating how to build the
+    # torch.distribution.Distribution object and what to do with it
+    policy_module = SafeProbabilisticSequential(  # stochastic policy
+        policy_module,
+        SafeProbabilisticModule(
+            in_keys=["loc", "scale"],
+            out_keys="action",
+            distribution_class=TanhNormal,
+        ),
     )
     value_module = MLP(
         num_cells=[64, 64],
@@ -350,14 +354,16 @@ If you would like to contribute to new features, check our [call for contributio
 A series of [examples](examples/) are provided with an illustrative purpose:
 - [DQN (and add-ons up to Rainbow)](examples/dqn/dqn.py)
 - [DDPG](examples/ddpg/ddpg.py)
+- [A2C](examples/a2c/a2c.py)
 - [PPO](examples/ppo/ppo.py)
 - [SAC](examples/sac/sac.py)
 - [REDQ](examples/redq/redq.py)
+- [Dreamer](examples/dreamer/dreamer.py)
 
 and many more to come!
 
-We also provide [tutorials and demos](tutorials) that give a sense of what the
-library can do.
+We also provide [tutorials and demos](tutorials/README.md) that give a sense of
+what the library can do.
 
 ## Installation
 Create a conda environment where the packages will be installed.
@@ -407,7 +413,7 @@ pip3 install torchrl
 This should work on linux and MacOs (not M1). For Windows and M1/M2 machines, one
 should install the library locally (see below).
 
-The **nightly build** can be installed via 
+The **nightly build** can be installed via
 ```
 pip install torchrl-nightly
 ```
@@ -503,6 +509,9 @@ and not
 ```
 OS: macOS **** (x86_64)
 ```
+
+Versioning issues can cause error message of the type ```undefined symbol``` and such. For these, refer to the [versioning issues document](knowledge_base/VERSIONING_ISSUES.md) for a complete explanation and proposed workarounds.
+
 
 ## Running examples
 Examples are coded in a very similar way but the configuration may change from one algorithm to another (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)

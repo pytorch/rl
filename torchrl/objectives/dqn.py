@@ -11,11 +11,9 @@ from tensordict.tensordict import TensorDictBase
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import (
-    DistributionalQValueActor,
-    QValueActor,
-)
+from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
+
 from .common import LossModule
 from .utils import distance_loss, next_state_value
 
@@ -93,10 +91,10 @@ class DQNLoss(LossModule):
         td_copy = tensordict.clone()
         if td_copy.device != tensordict.device:
             raise RuntimeError(f"{tensordict} and {td_copy} have different devices")
+        assert hasattr(self.value_network, "_is_stateless")
         self.value_network(
             td_copy,
             params=self.value_network_params,
-            buffers=self.value_network_buffers,
         )
 
         action = tensordict.get("action")
@@ -114,7 +112,6 @@ class DQNLoss(LossModule):
                 self.value_network,
                 gamma=self.gamma,
                 params=self.target_value_network_params,
-                buffers=self.target_value_network_buffers,
                 next_val_key="chosen_action_value",
             )
         priority_tensor = (pred_val_index - target_value).pow(2)
@@ -203,7 +200,7 @@ class DistributionalDQNLoss(LossModule):
                 "tensordict as input"
             )
         batch_size = tensordict.batch_size[0]
-        support = self.value_network.support
+        support = self.value_network_params["support"]
         atoms = support.numel()
         Vmin = support.min().item()
         Vmax = support.max().item()
@@ -214,7 +211,7 @@ class DistributionalDQNLoss(LossModule):
         done = tensordict.get("done")
 
         steps_to_next_obs = tensordict.get("steps_to_next_obs", 1)
-        discount = self.gamma ** steps_to_next_obs
+        discount = self.gamma**steps_to_next_obs
 
         # Calculate current state probabilities (online network noise already
         # sampled)
@@ -222,7 +219,6 @@ class DistributionalDQNLoss(LossModule):
         self.value_network(
             td_clone,
             params=self.value_network_params,
-            buffers=self.value_network_buffers,
         )  # Log probabilities log p(s_t, ·; θonline)
         action_log_softmax = td_clone.get("action_value")
 
@@ -239,7 +235,6 @@ class DistributionalDQNLoss(LossModule):
             self.value_network(
                 next_td,
                 params=self.value_network_params,
-                buffers=self.value_network_buffers,
             )  # Probabilities p(s_t+n, ·; θonline)
 
             next_td_action = next_td.get("action")
@@ -251,7 +246,6 @@ class DistributionalDQNLoss(LossModule):
             self.value_network(
                 next_td,
                 params=self.target_value_network_params,
-                buffers=self.target_value_network_buffers,
             )  # Probabilities p(s_t+n, ·; θtarget)
             pns = next_td.get("action_value").exp()
             # Double-Q probabilities

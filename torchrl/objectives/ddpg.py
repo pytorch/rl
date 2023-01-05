@@ -5,18 +5,18 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from typing import Tuple
 
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.nn import make_functional, repopulate_module
+from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.modules import TensorDictModule
+from torchrl.modules import SafeModule
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
-from torchrl.objectives.utils import (
-    distance_loss,
-    hold_out_params,
-    next_state_value,
-)
+from torchrl.objectives.utils import distance_loss, hold_out_params, next_state_value
+
 from ..envs.utils import set_exploration_mode
 from .common import LossModule
 
@@ -25,8 +25,8 @@ class DDPGLoss(LossModule):
     """The DDPG Loss class.
 
     Args:
-        actor_network (TensorDictModule): a policy operator.
-        value_network (TensorDictModule): a Q value operator.
+        actor_network (SafeModule): a policy operator.
+        value_network (SafeModule): a Q value operator.
         gamma (scalar): a discount factor for return computation.
         device (str, int or torch.device, optional): a device where the losses will be computed, if it can't be found
             via the value operator.
@@ -39,8 +39,8 @@ class DDPGLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: TensorDictModule,
-        value_network: TensorDictModule,
+        actor_network: SafeModule,
+        value_network: SafeModule,
         gamma: float,
         loss_function: str = "l2",
         delay_actor: bool = False,
@@ -49,6 +49,13 @@ class DDPGLoss(LossModule):
         super().__init__()
         self.delay_actor = delay_actor
         self.delay_value = delay_value
+
+        actor_critic = ActorCriticWrapper(actor_network, value_network)
+        params = make_functional(actor_critic)
+        self.actor_critic = deepcopy(actor_critic)
+        repopulate_module(actor_network, params["module", "0"])
+        repopulate_module(value_network, params["module", "1"])
+
         self.convert_to_functional(
             actor_network,
             "actor_network",
@@ -60,6 +67,8 @@ class DDPGLoss(LossModule):
             create_target_params=self.delay_value,
             compare_against=list(actor_network.parameters()),
         )
+        self.actor_critic.module[0] = self.actor_network
+        self.actor_critic.module[1] = self.value_network
 
         self.actor_in_keys = actor_network.in_keys
 
@@ -119,11 +128,11 @@ class DDPGLoss(LossModule):
         td_copy = self.actor_network(
             td_copy,
             params=self.actor_network_params,
-            buffers=self.actor_network_buffers,
         )
         with hold_out_params(self.value_network_params) as params:
             td_copy = self.value_network(
-                td_copy, params=params, buffers=self.value_network_buffers
+                td_copy,
+                params=params,
             )
         return -td_copy.get("state_action_value")
 
@@ -136,16 +145,19 @@ class DDPGLoss(LossModule):
         self.value_network(
             td_copy,
             params=self.value_network_params,
-            buffers=self.value_network_buffers,
         )
         pred_val = td_copy.get("state_action_value").squeeze(-1)
 
-        actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
-        target_params = list(self.target_actor_network_params) + list(
-            self.target_value_network_params
-        )
-        target_buffers = list(self.target_actor_network_buffers) + list(
-            self.target_value_network_buffers
+        actor_critic = self.actor_critic
+        target_params = TensorDict(
+            {
+                "module": {
+                    "0": self.target_actor_network_params,
+                    "1": self.target_value_network_params,
+                }
+            },
+            batch_size=self.target_actor_network_params.batch_size,
+            device=self.target_actor_network_params.device,
         )
         with set_exploration_mode("mode"):
             target_value = next_state_value(
@@ -153,7 +165,6 @@ class DDPGLoss(LossModule):
                 actor_critic,
                 gamma=self.gamma,
                 params=target_params,
-                buffers=target_buffers,
             )
 
         # td_error = pred_val - target_value

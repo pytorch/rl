@@ -3,8 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional, Union
-from typing import Tuple
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -14,7 +13,7 @@ from torchrl.data import CompositeSpec
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import EnvBase
 from torchrl.envs.model_based import ModelBasedEnvBase
-from torchrl.modules.tensordict_module import TensorDictModule
+from torchrl.modules.tensordict_module import SafeModule
 
 
 class DreamerEnv(ModelBasedEnvBase):
@@ -22,10 +21,10 @@ class DreamerEnv(ModelBasedEnvBase):
 
     def __init__(
         self,
-        world_model: TensorDictModule,
+        world_model: SafeModule,
         prior_shape: Tuple[int, ...],
         belief_shape: Tuple[int, ...],
-        obs_decoder: TensorDictModule = None,
+        obs_decoder: SafeModule = None,
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
@@ -41,10 +40,10 @@ class DreamerEnv(ModelBasedEnvBase):
         """Sets the specs of the environment from the specs of the given environment."""
         super().set_specs_from_env(env)
         # self.observation_spec = CompositeSpec(
-        #     next_state=NdUnboundedContinuousTensorSpec(
+        #     next_state=UnboundedContinuousTensorSpec(
         #         shape=self.prior_shape, device=self.device
         #     ),
-        #     next_belief=NdUnboundedContinuousTensorSpec(
+        #     next_belief=UnboundedContinuousTensorSpec(
         #         shape=self.belief_shape, device=self.device
         #     ),
         # )

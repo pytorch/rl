@@ -11,19 +11,19 @@ from torch.hub import load_state_dict_from_url
 from torch.nn import Identity
 
 from torchrl.data.tensor_specs import (
-    TensorSpec,
     CompositeSpec,
-    NdUnboundedContinuousTensorSpec,
+    TensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.transforms.transforms import (
-    ToTensorImage,
+    CatTensors,
     Compose,
+    FlattenObservation,
     ObservationNorm,
     Resize,
+    ToTensorImage,
     Transform,
-    CatTensors,
-    FlattenObservation,
     UnsqueezeTransform,
 )
 
@@ -98,7 +98,7 @@ class _R3MNet(Transform):
                 del observation_spec[in_key]
 
         for out_key in self.out_keys:
-            observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
+            observation_spec[out_key] = UnboundedContinuousTensorSpec(
                 shape=torch.Size([*dim, self.outdim]), device=device
             )
 

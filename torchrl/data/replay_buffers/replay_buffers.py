@@ -7,14 +7,11 @@ import collections
 import concurrent.futures
 import threading
 from copy import deepcopy
-from typing import Any, Callable, List, Optional, Sequence, Tuple, Union, Dict
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict.tensordict import (
-    TensorDictBase,
-    LazyStackedTensorDict,
-)
+from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import Tensor
 
 from torchrl._torchrl import (
@@ -24,15 +21,11 @@ from torchrl._torchrl import (
     SumSegmentTreeFp64,
 )
 from torchrl.data.replay_buffers.storages import (
-    Storage,
-    ListStorage,
     _get_default_collate,
+    ListStorage,
+    Storage,
 )
-from torchrl.data.replay_buffers.utils import INT_CLASSES
-from torchrl.data.replay_buffers.utils import (
-    _to_numpy,
-    _to_torch,
-)
+from torchrl.data.replay_buffers.utils import _to_numpy, _to_torch, INT_CLASSES
 from torchrl.data.utils import DEVICE_TYPING
 
 
@@ -202,37 +195,15 @@ class ReplayBuffer:
         if not len(data):
             raise Exception("extending with empty data is not supported")
         with self._replay_lock:
-            cur_size = len(self._storage)
             batch_size = len(data)
-            # storage = self._storage
-            # cursor = self._cursor
-            if cur_size + batch_size <= self._capacity:
-                index = np.arange(cur_size, cur_size + batch_size)
-                # self._storage += data
-                self._cursor = (self._cursor + batch_size) % self._capacity
-            elif cur_size < self._capacity:
-                d = self._capacity - cur_size
-                index = np.empty(batch_size, dtype=np.int64)
-                index[:d] = np.arange(cur_size, self._capacity)
-                index[d:] = np.arange(batch_size - d)
-                # storage += data[:d]
-                # for i, v in enumerate(data[d:]):
-                #     storage[i] = v
-                self._cursor = batch_size - d
-            elif self._cursor + batch_size <= self._capacity:
+            if self._cursor + batch_size <= self._capacity:
                 index = np.arange(self._cursor, self._cursor + batch_size)
-                # for i, v in enumerate(data):
-                #     storage[cursor + i] = v
                 self._cursor = (self._cursor + batch_size) % self._capacity
             else:
                 d = self._capacity - self._cursor
                 index = np.empty(batch_size, dtype=np.int64)
                 index[:d] = np.arange(self._cursor, self._capacity)
                 index[d:] = np.arange(batch_size - d)
-                # for i, v in enumerate(data[:d]):
-                #     storage[cursor + i] = v
-                # for i, v in enumerate(data[d:]):
-                #     storage[i] = v
                 self._cursor = batch_size - d
             # storage must convert the data to the appropriate format if needed
             self._storage[index] = data

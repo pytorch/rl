@@ -3,11 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Union
-
 import pkg_resources
+import torch
+from tensordict.nn.probabilistic import (  # noqa
+    interaction_mode as exploration_mode,
+    set_interaction_mode as set_exploration_mode,
+)
 from tensordict.tensordict import TensorDictBase
-from torch.autograd.grad_mode import _DecoratorContextManager
 
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
@@ -151,37 +153,52 @@ SUPPORTED_LIBRARIES = {
     # "ml-agents": None,
 }
 
-EXPLORATION_MODE = None
 
+def check_env_specs(env):
+    """Tests an environment specs against the results of short rollout.
 
-class set_exploration_mode(_DecoratorContextManager):
-    """Sets the exploration mode of all ProbabilisticTDModules to the desired mode.
+    This test function should be used as a sanity check for an env wrapped with
+    torchrl's EnvBase subclasses: any discrepency between the expected data and
+    the data collected should raise an assertion error.
 
-    Args:
-        mode (str): mode to use when the policy is being called.
-
-    Examples:
-        >>> policy = Actor(action_spec, module=network, default_interaction_mode="mode")
-        >>> env.rollout(policy=policy, max_steps=100)  # rollout with the "mode" interaction mode
-        >>> with set_exploration_mode("random"):
-        >>>     env.rollout(policy=policy, max_steps=100)  # rollout with the "random" interaction mode
+    A broken environment spec will likely make it impossible to use parallel
+    environments.
 
     """
+    fake_tensordict = env.fake_tensordict().flatten_keys(".")
+    real_tensordict = env.rollout(3).flatten_keys(".")
 
-    def __init__(self, mode: str = "mode"):
-        super().__init__()
-        self.mode = mode
+    keys1 = set(fake_tensordict.keys())
+    keys2 = set(real_tensordict.keys())
+    assert keys1 == keys2
+    fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
+    fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
+    fake_tensordict = fake_tensordict.to_tensordict()
+    assert (
+        fake_tensordict.apply(lambda x: torch.zeros_like(x))
+        == real_tensordict.apply(lambda x: torch.zeros_like(x))
+    ).all()
+    for key in keys2:
+        assert fake_tensordict[key].shape == real_tensordict[key].shape
 
-    def __enter__(self) -> None:
-        global EXPLORATION_MODE
-        self.prev = EXPLORATION_MODE
-        EXPLORATION_MODE = self.mode
-
-    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        global EXPLORATION_MODE
-        EXPLORATION_MODE = self.prev
+    # test dtypes
+    real_tensordict = env.rollout(3)  # keep empty structures, for example dict()
+    for key, value in real_tensordict.items():
+        _check_dtype(key, value, env.observation_spec, env.input_spec)
 
 
-def exploration_mode() -> Union[str, None]:
-    """Returns the exploration mode currently set."""
-    return EXPLORATION_MODE
+def _check_dtype(key, value, obs_spec, input_spec):
+    if key in {"reward", "done"}:
+        return
+    elif key == "next":
+        for _key, _value in value.items():
+            _check_dtype(_key, _value, obs_spec, input_spec)
+        return
+    elif key in input_spec.keys(yield_nesting_keys=True):
+        assert input_spec[key].is_in(value), (input_spec[key], value)
+        return
+    elif key in obs_spec.keys(yield_nesting_keys=True):
+        assert obs_spec[key].is_in(value), (input_spec[key], value)
+        return
+    else:
+        raise KeyError(key)

@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import abc
+import itertools
 import warnings
-from typing import List, Optional, Sequence, Union, Tuple, Any, Dict
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -167,7 +168,7 @@ class GymLikeEnv(_EnvWrapper):
         if isinstance(observations, dict):
             observations = {key: value for key, value in observations.items()}
         if not isinstance(observations, (TensorDict, dict)):
-            key = list(self.observation_spec.keys())[0]
+            (key,) = itertools.islice(self.observation_spec.keys(), 1)
             observations = {key: observations}
         observations = self.observation_spec.encode(observations)
         return observations
@@ -203,7 +204,11 @@ class GymLikeEnv(_EnvWrapper):
 
             reward = self.read_reward(reward, _reward)
 
-            # TODO: check how to deal with np arrays
+            if isinstance(done, bool) or (
+                isinstance(done, np.ndarray) and not len(done)
+            ):
+                done = torch.tensor([done], device=self.device)
+
             done, do_break = self.read_done(done)
             if do_break:
                 break
@@ -214,7 +219,6 @@ class GymLikeEnv(_EnvWrapper):
             reward = np.nan
         reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
         done = self._to_tensor(done, dtype=torch.bool)
-        self.is_done = done
 
         tensordict_out = TensorDict(
             obs_dict, batch_size=tensordict.batch_size, device=self.device
@@ -239,8 +243,7 @@ class GymLikeEnv(_EnvWrapper):
             batch_size=self.batch_size,
             device=self.device,
         )
-        self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
-        tensordict_out.set("done", self._is_done)
+        tensordict_out.set("done", torch.zeros(*self.batch_size, 1, dtype=torch.bool))
         return tensordict_out
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:

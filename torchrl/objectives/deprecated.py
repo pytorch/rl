@@ -1,21 +1,30 @@
 import math
 from numbers import Number
-from typing import Union, Tuple
+from typing import Tuple, Union
 
 import numpy as np
 import torch
+
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
 from torch import Tensor
-
 from torchrl.envs.utils import set_exploration_mode, step_mdp
-from torchrl.modules import TensorDictModule
+from torchrl.modules import SafeModule
 from torchrl.objectives import (
+    distance_loss,
     hold_out_params,
     next_state_value as get_next_state_value,
-    distance_loss,
 )
 from torchrl.objectives.common import LossModule
+
+try:
+    from functorch import vmap
+
+    FUNCTORCH_ERR = ""
+    _has_functorch = True
+except ImportError as err:
+    FUNCTORCH_ERR = str(err)
+    _has_functorch = False
 
 
 class REDQLoss_deprecated(LossModule):
@@ -26,8 +35,8 @@ class REDQLoss_deprecated(LossModule):
     train a SAC-like algorithm.
 
     Args:
-        actor_network (TensorDictModule): the actor to be trained
-        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
+        actor_network (SafeModule): the actor to be trained
+        qvalue_network (SafeModule): a single Q-value network that will be multiplicated as many times as needed.
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
         sub_sample_len (int, optional): number of Q-value networks to be subsampled to evaluate the next state value
             Default is 2.
@@ -51,8 +60,8 @@ class REDQLoss_deprecated(LossModule):
 
     def __init__(
         self,
-        actor_network: TensorDictModule,
-        qvalue_network: TensorDictModule,
+        actor_network: SafeModule,
+        qvalue_network: SafeModule,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
         gamma: Number = 0.99,
@@ -66,6 +75,10 @@ class REDQLoss_deprecated(LossModule):
         delay_qvalue: bool = True,
         gSDE: bool = False,
     ):
+        if not _has_functorch:
+            raise ImportError(
+                f"Failed to import functorch with error message:\n{FUNCTORCH_ERR}"
+            )
         super().__init__()
         self.convert_to_functional(
             actor_network,
@@ -163,18 +176,12 @@ class REDQLoss_deprecated(LossModule):
             self.actor_network(
                 tensordict_clone,
                 params=self.actor_network_params,
-                buffers=self.actor_network_buffers,
             )
 
         with hold_out_params(self.qvalue_network_params) as params:
-            tensordict_expand = self.qvalue_network(
+            tensordict_expand = vmap(self.qvalue_network, (None, 0))(
                 tensordict_clone.select(*self.qvalue_network.in_keys),
-                tensordict_out=TensorDict(
-                    {}, [self.num_qvalue_nets, *tensordict_clone.shape]
-                ),
-                params=params,
-                buffers=self.qvalue_network_buffers,
-                vmap=True,
+                params,
             )
             state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
         loss_actor = -(
@@ -193,12 +200,7 @@ class REDQLoss_deprecated(LossModule):
             : self.sub_sample_len
         ].sort()[0]
         with torch.no_grad():
-            selected_q_params = [
-                p[selected_models_idx] for p in self.target_qvalue_network_params
-            ]
-            selected_q_buffers = [
-                b[selected_models_idx] for b in self.target_qvalue_network_buffers
-            ]
+            selected_q_params = self.target_qvalue_network_params[selected_models_idx]
 
             next_td = step_mdp(tensordict).select(
                 *self.actor_network.in_keys
@@ -208,18 +210,20 @@ class REDQLoss_deprecated(LossModule):
             with set_exploration_mode("random"):
                 self.actor_network(
                     next_td,
-                    params=list(self.target_actor_network_params),
-                    buffers=self.target_actor_network_buffers,
+                    params=self.target_actor_network_params,
                 )
             sample_log_prob = next_td.get("sample_log_prob")
             # get q-values
-            next_td = self.qvalue_network(
+            next_td = vmap(self.qvalue_network, (None, 0))(
                 next_td,
-                tensordict_out=TensorDict({}, [self.sub_sample_len, *next_td.shape]),
-                params=selected_q_params,
-                buffers=selected_q_buffers,
-                vmap=True,
+                selected_q_params,
             )
+            state_action_value = next_td.get("state_action_value")
+            if (
+                state_action_value.shape[-len(sample_log_prob.shape) :]
+                != sample_log_prob.shape
+            ):
+                sample_log_prob = sample_log_prob.unsqueeze(-1)
             state_value = (
                 next_td.get("state_action_value") - self.alpha * sample_log_prob
             )
@@ -231,12 +235,9 @@ class REDQLoss_deprecated(LossModule):
             gamma=self.gamma,
             pred_next_val=state_value,
         )
-        tensordict_expand = self.qvalue_network(
+        tensordict_expand = vmap(self.qvalue_network, (None, 0))(
             tensordict.select(*self.qvalue_network.in_keys),
-            tensordict_out=TensorDict({}, [self.num_qvalue_nets, *tensordict.shape]),
-            params=list(self.qvalue_network_params),
-            buffers=self.qvalue_network_buffers,
-            vmap=True,
+            self.qvalue_network_params,
         )
         pred_val = tensordict_expand.get("state_action_value").squeeze(-1)
         td_error = abs(pred_val - target_value)
