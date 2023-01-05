@@ -439,9 +439,9 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
     torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
 
 
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("batch_size", [3, 5])
 class TestPlanner:
-    @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("batch_size", [3, 5])
     def test_CEM_model_free_env(self, device, batch_size, seed=1):
         env = MockBatchedUnLockedEnv(device=device)
         torch.manual_seed(seed)
@@ -475,6 +475,7 @@ class TestPlanner:
             0.95,
             value_net,
         )
+        value_net(env.reset())
         planner = MPPIPlanner(
             env,
             advantage_module,

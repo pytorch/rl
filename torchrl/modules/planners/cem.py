@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.envs import EnvBase
 from torchrl.modules.planners.common import MPCPlannerBase
@@ -45,20 +45,20 @@ class CEMPlanner(MPCPlannerBase):
 
     Examples:
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
         >>> from torchrl.envs.model_based import ModelBasedEnvBase
-        >>> from torchrl.modules import TensorDictModule
+        >>> from torchrl.modules import SafeModule
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
         ...         self.observation_spec = CompositeSpec(
-        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,))
+        ...             next_hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
         ...         self.input_spec = CompositeSpec(
-        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
-        ...             action=NdUnboundedContinuousTensorSpec((1,)),
+        ...             hidden_observation=UnboundedContinuousTensorSpec((4,)),
+        ...             action=UnboundedContinuousTensorSpec((1,)),
         ...         )
-        ...         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+        ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
         ...         tensordict = TensorDict(
@@ -75,12 +75,12 @@ class CEMPlanner(MPCPlannerBase):
         >>> from torchrl.modules import MLP, WorldModelWrapper
         >>> import torch.nn as nn
         >>> world_model = WorldModelWrapper(
-        ...     TensorDictModule(
+        ...     SafeModule(
         ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
         ...         in_keys=["hidden_observation", "action"],
         ...         out_keys=["hidden_observation"],
         ...     ),
-        ...     TensorDictModule(
+        ...     SafeModule(
         ...         nn.Linear(4, 1),
         ...         in_keys=["hidden_observation"],
         ...         out_keys=["reward"],

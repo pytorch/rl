@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
-from tensordict.tensordict import TensorDictBase, TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn
 
 from torchrl.envs import EnvBase
