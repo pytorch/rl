@@ -8,8 +8,8 @@ from typing import Optional
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.modules import SafeModule, SafeProbabilisticSequential
-from torchrl.objectives import distance_loss
+from torchrl.modules.tensordict_module import SafeModule, SafeProbabilisticSequential
+from torchrl.objectives.utils import distance_loss
 from torchrl.objectives.common import LossModule
 
 
