@@ -18,5 +18,3 @@ from .trainers import (
     Trainer,
     UpdateWeights,
 )
-
-# from .loggers import *

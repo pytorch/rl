@@ -1,11 +1,16 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 from typing import Optional
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.modules import SafeModule, SafeProbabilisticSequential
-from torchrl.objectives import distance_loss
+from torchrl.modules.tensordict_module import SafeModule, SafeProbabilisticSequential
 from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import distance_loss
 
 
 class ReinforceLoss(LossModule):

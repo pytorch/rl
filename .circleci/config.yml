@@ -237,6 +237,27 @@ jobs:
           paths:
             - "*"
 
+  binary_win_wheel:
+    <<: *binary_common
+    executor: windows-cpu
+    steps:
+      - checkout_merge
+      - designate_upload_channel
+      - run:
+          name: Build wheel packages
+          no_output_timeout: 30m
+          command: |
+            set -ex
+            source packaging/windows/internal/vc_install_helper.sh
+            packaging/windows/internal/cuda_install.bat
+            packaging/build_wheels.sh
+      - store_artifacts:
+          path: dist
+      - persist_to_workspace:
+          root: dist
+          paths:
+            - "*"
+
   unittest_linux_cpu:
     <<: *binary_common
 
@@ -957,6 +978,67 @@ workflows:
           name: binary_macos_wheel_py3.10_cpu
           python_version: '3.10'
           wheel_docker_image: pytorch/manylinux-cuda102
+      
+      - binary_win_wheel:
+          cu_version: cpu
+          name: binary_win_wheel_py3.7_cpu
+          python_version: '3.7'
+
+      - binary_win_wheel:
+          cu_version: cu116
+          name: binary_win_wheel_py3.7_cu116
+          python_version: '3.7'
+
+      - binary_win_wheel:
+          cu_version: cu117
+          name: binary_win_wheel_py3.7_cu117
+          python_version: '3.7'
+
+      - binary_win_wheel:
+          cu_version: cpu
+          name: binary_win_wheel_py3.8_cpu
+          python_version: '3.8'
+
+      - binary_win_wheel:
+          cu_version: cu116
+          name: binary_win_wheel_py3.8_cu116
+          python_version: '3.8'
+
+      - binary_win_wheel:
+          cu_version: cu117
+          name: binary_win_wheel_py3.8_cu117
+          python_version: '3.8'
+
+      - binary_win_wheel:
+          cu_version: cpu
+          name: binary_win_wheel_py3.9_cpu
+          python_version: '3.9'
+
+      - binary_win_wheel:
+          cu_version: cu116
+          name: binary_win_wheel_py3.9_cu116
+          python_version: '3.9'
+
+      - binary_win_wheel:
+          cu_version: cu117
+          name: binary_win_wheel_py3.9_cu117
+          python_version: '3.9'
+
+      - binary_win_wheel:
+          cu_version: cpu
+          name: binary_win_wheel_py3.10_cpu
+          python_version: '3.10'
+
+      - binary_win_wheel:
+          cu_version: cu116
+          name: binary_win_wheel_py3.10_cu116
+          python_version: '3.10'
+
+      - binary_win_wheel:
+          cu_version: cu117
+          name: binary_win_wheel_py3.10_cu117
+          python_version: '3.10'
+
 
   unittest:
     jobs:

@@ -10,6 +10,7 @@ from .dqn import DistributionalDQNLoss, DQNLoss
 from .dreamer import DreamerActorLoss, DreamerModelLoss, DreamerValueLoss
 from .ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from .redq import REDQLoss
+from .reinforce import ReinforceLoss
 from .sac import SACLoss
 from .utils import (
     distance_loss,
