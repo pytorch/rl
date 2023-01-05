@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import abc
-import itertools
 from copy import deepcopy
 from dataclasses import dataclass
 from textwrap import indent
@@ -1041,7 +1040,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             nvec = nvec.unsqueeze(0)
         self.nvec = nvec
         dtype, device = _default_dtype_and_device(dtype, device)
-        shape = nvec.size()
+        shape = nvec.shape
         space = BoxList.from_nvec(nvec)
         super(DiscreteTensorSpec, self).__init__(
             shape, space, device, dtype, domain="discrete"
@@ -1074,14 +1073,14 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         return x.squeeze(-1)
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        if val.dtype not in (torch.int, torch.long):
-            val = torch.round(val).type(self.dtype)
-        val = val.unsqueeze(0)
-        for permutation in itertools.product(*[range(d) for d in self.shape]):
-            val.unsqueeze(0)[[..., *permutation]] = val.unsqueeze(0)[
-                [..., *permutation]
-            ].clamp_(min=0, max=self.nvec[permutation] - 1)
-        return val.squeeze(0)
+        val_is_scalar = val.ndim < 1
+        if val_is_scalar:
+            val = val.unsqueeze(0)
+        if not self.dtype.is_floating_point:
+            val = torch.round(val)
+        val = val.type(self.dtype)
+        val[val >= self.nvec] = self.nvec.expand_as(val)[val >= self.nvec] - 1
+        return val.squeeze(0) if val_is_scalar else val
 
     def is_in(self, val: torch.Tensor) -> bool:
         if val.ndim < 1:
@@ -1093,11 +1092,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         if self.dtype != val.dtype or len(self.shape) > val.ndim or val_have_wrong_dim:
             return False
 
-        for permutation in itertools.product(*[range(d) for d in self.shape]):
-            x = val.unsqueeze(0)[[..., *permutation]]
-            if not ((0 <= x).all() and (x < self.nvec[permutation]).all()):
-                return False
-        return True
+        return ((val >= torch.zeros(self.nvec.size())) & (val < self.nvec)).all().item()
 
     def to_onehot(self) -> MultOneHotDiscreteTensorSpec:
         if self.shape != torch.Size([1]):

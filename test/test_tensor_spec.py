@@ -280,8 +280,14 @@ def test_multi_discrete(shape, ns):
         )
     )
     projection = ts._project(rand)
+
     assert rand.shape == projection.shape
     assert ts.is_in(projection)
+    if projection.ndim < 1:
+        projection.fill_(-1)
+    else:
+        projection[..., 0] = -1
+    assert not ts.is_in(projection)
 
 
 @pytest.mark.parametrize(
