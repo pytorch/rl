@@ -259,8 +259,6 @@ def test_multi_discrete(shape, ns):
     ts = MultiDiscreteTensorSpec(ns)
     _real_shape = shape if shape is not None else []
     nvec_shape = torch.tensor(ns).size()
-    if nvec_shape == torch.Size([1]):
-        nvec_shape = []
     for _ in range(100):
         r = ts.rand(shape)
 
