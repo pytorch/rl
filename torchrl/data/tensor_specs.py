@@ -1093,12 +1093,12 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         return ((val >= torch.zeros(self.nvec.size())) & (val < self.nvec)).all().item()
 
     def to_onehot(self) -> MultOneHotDiscreteTensorSpec:
-        if self.shape != torch.Size([1]):
+        if len(self.shape) > 1:
             raise RuntimeError(
-                f"DiscreteTensorSpec with shape != torch.Size([1]) can't be converted OneHotDiscreteTensorSpec. Got "
-                f"shape={self.shape}. This could be accomplished via padding or nestedtensors but it is not "
-                f"implemented yet. If you would like to see that feature, please submit an issue of torchrl's github "
-                f"repo. "
+                f"DiscreteTensorSpec with shape that has several dimensions can't be converted "
+                f"OneHotDiscreteTensorSpec. Got shape={self.shape}. This could be accomplished via padding or "
+                f"nestedtensors but it is not implemented yet. If you would like to see that feature, please submit "
+                f"an issue of torchrl's github repo. "
             )
         return MultOneHotDiscreteTensorSpec(
             [_space.n for _space in self.space], self.device, self.dtype
