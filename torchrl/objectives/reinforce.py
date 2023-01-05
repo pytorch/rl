@@ -9,8 +9,8 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.modules.tensordict_module import SafeModule, SafeProbabilisticSequential
-from torchrl.objectives.utils import distance_loss
 from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import distance_loss
 
 
 class ReinforceLoss(LossModule):
