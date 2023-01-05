@@ -36,6 +36,8 @@ from torchrl.modules.models.model_based import (
     RSSMRollout,
 )
 from torchrl.modules.models.utils import SquashDims
+from torchrl.modules.planners.mppi import MPPIPlanner
+from torchrl.objectives.value import TDLambdaEstimate
 
 
 @pytest.fixture
@@ -437,9 +439,9 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
     torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
 
 
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("batch_size", [3, 5])
 class TestPlanner:
-    @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("batch_size", [3, 5])
     def test_CEM_model_free_env(self, device, batch_size, seed=1):
         env = MockBatchedUnLockedEnv(device=device)
         torch.manual_seed(seed)
@@ -448,13 +450,48 @@ class TestPlanner:
             planning_horizon=10,
             optim_steps=2,
             num_candidates=100,
-            num_top_k_candidates=2,
+            top_k=2,
         )
         td = env.reset(TensorDict({}, batch_size=batch_size).to(device))
         td_copy = td.clone()
         td = planner(td)
-        assert td.get("action").shape[1:] == env.action_spec.shape
+        assert (
+            td.get("action").shape[-len(env.action_spec.shape) :]
+            == env.action_spec.shape
+        )
+        assert env.action_spec.is_in(td.get("action"))
 
+        for key in td.keys():
+            if key != "action":
+                assert torch.allclose(td[key], td_copy[key])
+
+    def test_MPPI(self, device, batch_size, seed=1):
+        torch.manual_seed(seed)
+        env = MockBatchedUnLockedEnv(device=device)
+        value_net = nn.LazyLinear(1, device=device)
+        value_net = ValueOperator(value_net, in_keys=["observation"])
+        advantage_module = TDLambdaEstimate(
+            0.99,
+            0.95,
+            value_net,
+        )
+        value_net(env.reset())
+        planner = MPPIPlanner(
+            env,
+            advantage_module,
+            temperature=1.0,
+            planning_horizon=10,
+            optim_steps=2,
+            num_candidates=100,
+            top_k=2,
+        )
+        td = env.reset(TensorDict({}, batch_size=batch_size).to(device))
+        td_copy = td.clone()
+        td = planner(td)
+        assert (
+            td.get("action").shape[-len(env.action_spec.shape) :]
+            == env.action_spec.shape
+        )
         assert env.action_spec.is_in(td.get("action"))
 
         for key in td.keys():
