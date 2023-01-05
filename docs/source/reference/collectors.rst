@@ -60,7 +60,7 @@ Besides those compute parameters, users may choose to configure the following pa
 
 Data collectors
 ---------------
-
+.. currentmodule:: torchrl.collectors.collectors
 
 .. autosummary::
     :toctree: generated/
@@ -68,6 +68,7 @@ Data collectors
 
     MultiSyncDataCollector
     MultiaSyncDataCollector
+    RandomPolicy
     SyncDataCollector
     aSyncDataCollector
 
