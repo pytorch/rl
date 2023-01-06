@@ -1012,6 +1012,8 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
             _td = env._reset(**reset_kwargs)
+            if _td.get("_reset", None) is not None:
+                _td.del_("_reset")
             done = _td.get("done", None)
             if done is None:
                 _td["done"] = done = torch.zeros(
