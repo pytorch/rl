@@ -8,7 +8,9 @@ from typing import Dict, List
 from warnings import warn
 
 import torch
-from torchrl.data import (
+
+from torchrl._utils import implement_for
+from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
@@ -19,12 +21,10 @@ from torchrl.data import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
+from torchrl.data.utils import numpy_to_torch_dtype_dict
 
-from ..._utils import implement_for
-from ...data.utils import numpy_to_torch_dtype_dict
-
-from ..gym_like import default_info_dict_reader, GymLikeEnv
-from ..utils import _classproperty
+from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
+from torchrl.envs.utils import _classproperty
 
 try:
     import gym
