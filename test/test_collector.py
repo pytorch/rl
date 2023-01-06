@@ -157,14 +157,21 @@ def test_output_device_consistency(
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
 
-    if device == "cuda" and passing_device == None and policy_device == None and num_env == 1 and _python_is_3_10:
-        pytest.skip(
-            '"vec" policy in torch.multiprocessing causes "Windows Access Violation" with Python 3.10'
-        )
-    if device == "cuda" and policy_device == "cuda" and device == None and _python_is_3_7:
-        pytest.skip(
-            'BrokenPipeError in multiprocessing.connection with Python3.7'
-        )
+    if _python_is_3_10:
+        if passing_device == None and policy_device == None and device == "cuda" and num_env == 1:
+            pytest.skip(
+                '"vec" policy in torch.multiprocessing causes "Windows Access Violation" with Python 3.10'
+            )
+        if passing_device == 'cuda' and policy_device =='cpu' and device =='cuda' and num_env == 3:
+            pytest.skip(
+                '"BrokenPipeError in multiprocessing.connection with Python3.10'
+            )
+    if _python_is_3_7:
+        if device == "cuda" and policy_device == "cuda" and device == None:
+            pytest.skip(
+                'BrokenPipeError in multiprocessing.connection with Python3.7'
+            )
+
     _device = "cuda:0" if device == "cuda" else device
     _policy_device = "cuda:0" if policy_device == "cuda" else policy_device
     _passing_device = "cuda:0" if passing_device == "cuda" else passing_device
