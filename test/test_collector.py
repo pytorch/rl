@@ -161,7 +161,7 @@ def test_output_device_consistency(
         pytest.skip(
             '"vec" policy in torch.multiprocessing causes "Windows Access Violation" with Python 3.10'
         )
-    if device == "cuda" and policy_device == "cuda" and device == None and num_env == 3 and _python_is_3_7:
+    if device == "cuda" and policy_device == "cuda" and device == None and _python_is_3_7:
         pytest.skip(
             'BrokenPipeError in multiprocessing.connection with Python3.7'
         )
