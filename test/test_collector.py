@@ -156,21 +156,22 @@ def test_output_device_consistency(
         device == "cuda" or policy_device == "cuda" or passing_device == "cuda"
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
-
-    if _python_is_3_10:
-        if passing_device == None and policy_device == None and device == "cuda" and num_env == 1:
-            pytest.skip(
-                '"vec" policy in torch.multiprocessing causes "Windows Access Violation" with Python 3.10'
-            )
-        if passing_device == 'cuda' and policy_device =='cpu' and device =='cuda' and num_env == 3:
-            pytest.skip(
-                '"BrokenPipeError in multiprocessing.connection with Python3.10'
-            )
-    if _python_is_3_7:
-        if device == "cuda" and policy_device == "cuda" and device == None:
-            pytest.skip(
-                'BrokenPipeError in multiprocessing.connection with Python3.7'
-            )
+    
+    if _os_is_windows:
+        if _python_is_3_10:
+            if passing_device == None and policy_device == None and device == "cuda" and num_env == 1:
+                pytest.skip(
+                    '"vec" policy in torch.multiprocessing causes "Windows Access Violation" with Python 3.10'
+                )
+            if passing_device == 'cuda' and policy_device =='cpu' and device =='cuda' and num_env == 3:
+                pytest.skip(
+                    '"BrokenPipeError in multiprocessing.connection with Python3.10'
+                )
+        if _python_is_3_7:
+            if device == "cuda" and policy_device == "cuda" and device == None:
+                pytest.skip(
+                    'BrokenPipeError in multiprocessing.connection with Python3.7'
+                )
 
     _device = "cuda:0" if device == "cuda" else device
     _policy_device = "cuda:0" if policy_device == "cuda" else policy_device
@@ -1014,6 +1015,8 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
 @pytest.mark.parametrize("passing_device", ["cuda", "cpu"])
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
 def test_collector_device_combinations(device, passing_device):
+    if _os_is_windows and _python_is_3_10 and passing_device == 'cuda' and device == 'cuda':
+        pytest.skip("Windows fatal exception: access violation in torch.storage")
     def env_fn(seed):
         env = make_make_env("conv")()
         env.set_seed(seed)
