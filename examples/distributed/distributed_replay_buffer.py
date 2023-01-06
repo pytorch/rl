@@ -86,7 +86,7 @@ class DummyTrainerNode:
         for iteration in range(iterations):
             print(f"[{self.id}] Training Iteration: {iteration}")
             time.sleep(3)
-            batch, _ = rpc.rpc_sync(
+            batch = rpc.rpc_sync(
                 self.replay_buffer.owner(),
                 ReplayBufferNode.sample,
                 args=(self.replay_buffer, 16),

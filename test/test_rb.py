@@ -311,7 +311,7 @@ def test_prototype_prb(priority_key, contiguous, device):
         batch_size=[3],
     ).to(device)
     rb.extend(td1)
-    s, _ = rb.sample(2)
+    s = rb.sample(2)
     assert s.batch_size == torch.Size(
         [
             2,
@@ -330,7 +330,7 @@ def test_prototype_prb(priority_key, contiguous, device):
         batch_size=[5],
     ).to(device)
     rb.extend(td2)
-    s, _ = rb.sample(5)
+    s = rb.sample(5)
     assert s.batch_size == torch.Size([5])
     assert (td2[s.get("_idx").squeeze()].get("a") == s.get("a")).all()
     assert_allclose_td(td2[s.get("_idx").squeeze()].select("a"), s.select("a"))
@@ -353,13 +353,13 @@ def test_prototype_prb(priority_key, contiguous, device):
 
     idx0 = s.get("_idx")[0]
     rb.update_tensordict_priority(s)
-    s, _ = rb.sample(5)
+    s = rb.sample(5)
     assert (val == s.get("a")).sum() >= 1
     torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
     # test updating values of original td
     td2.set_("a", torch.ones_like(td2.get("a")))
-    s, _ = rb.sample(5)
+    s = rb.sample(5)
     torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
 
@@ -381,10 +381,10 @@ def test_replay_buffer_trajectories(stack):
         priority_key="td_error",
     )
     rb.extend(traj_td)
-    sampled_td, _ = rb.sample(3)
+    sampled_td = rb.sample(3)
     sampled_td.set("td_error", torch.rand(3))
     rb.update_tensordict_priority(sampled_td)
-    sampled_td, _ = rb.sample(3, include_info=True)
+    sampled_td = rb.sample(3, include_info=True)
     assert (sampled_td.get("_weight") > 0).all()
     assert sampled_td.batch_size == torch.Size([3])
 
@@ -589,7 +589,7 @@ def test_prb(priority_key, contiguous, device):
         batch_size=[3],
     ).to(device)
     rb.extend(td1)
-    s, _ = rb.sample(2)
+    s = rb.sample(2)
     assert s.batch_size == torch.Size(
         [
             2,
@@ -608,7 +608,7 @@ def test_prb(priority_key, contiguous, device):
         batch_size=[5],
     ).to(device)
     rb.extend(td2)
-    s, _ = rb.sample(5)
+    s = rb.sample(5)
     assert s.batch_size == torch.Size([5])
     assert (td2[s.get("_idx").squeeze()].get("a") == s.get("a")).all()
     assert_allclose_td(td2[s.get("_idx").squeeze()].select("a"), s.select("a"))
@@ -631,13 +631,13 @@ def test_prb(priority_key, contiguous, device):
 
     idx0 = s.get("_idx")[0]
     rb.update_tensordict_priority(s)
-    s, _ = rb.sample(5)
+    s = rb.sample(5)
     assert (val == s.get("a")).sum() >= 1
     torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
     # test updating values of original td
     td2.set_("a", torch.ones_like(td2.get("a")))
-    s, _ = rb.sample(5)
+    s = rb.sample(5)
     torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
 
@@ -657,10 +657,10 @@ def test_rb_trajectories(stack):
         storage=ListStorage(5),
     )
     rb.extend(traj_td)
-    sampled_td, _ = rb.sample(3)
+    sampled_td = rb.sample(3)
     sampled_td.set("td_error", torch.rand(3))
     rb.update_tensordict_priority(sampled_td)
-    sampled_td, _ = rb.sample(3, include_info=True)
+    sampled_td = rb.sample(3, include_info=True)
     assert (sampled_td.get("_weight") > 0).all()
     assert sampled_td.batch_size == torch.Size([3])
 
@@ -724,7 +724,7 @@ def test_append_transform():
 
     rb.append_transform(flatten)
 
-    sampled, _ = rb.sample(1)
+    sampled = rb.sample(1)
     assert sampled.get("observation_cat").shape[-1] == 32
 
 
@@ -737,7 +737,7 @@ def test_init_transform():
 
     td = TensorDict({"observation": torch.randn(2, 4, 3, 16)}, [])
     rb.add(td)
-    sampled, _ = rb.sample(1)
+    sampled = rb.sample(1)
     assert sampled.get("flattened").shape[-1] == 48
 
 
@@ -751,7 +751,7 @@ def test_insert_transform():
 
     rb.insert_transform(0, SqueezeTransform(-1, in_keys=["observation"]))
 
-    sampled, _ = rb.sample(1)
+    sampled = rb.sample(1)
     assert sampled.get("flattened").shape[-1] == 48
 
     with pytest.raises(ValueError):

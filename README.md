@@ -77,9 +77,9 @@ Here's another example of an off-policy training loop in TorchRL (assuming that 
   -     replay_buffer.add((obs, next_obs, action, log_prob, reward, done))
   +     replay_buffer.add(tensordict)
       for j in range(num_optim_steps):
-  -         obs, next_obs, action, hidden_state, reward, done = replay_buffer.sample(batch_size)[0]
+  -         obs, next_obs, action, hidden_state, reward, done = replay_buffer.sample(batch_size)
   -         loss = loss_fn(obs, next_obs, action, hidden_state, reward, done)
-  +         tensordict = replay_buffer.sample(batch_size)[0]
+  +         tensordict = replay_buffer.sample(batch_size)
   +         loss = loss_fn(tensordict)
           loss.backward()
           optim.step()
@@ -334,7 +334,7 @@ The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py)
     ```python
     from torchrl.objectives import DQNLoss
     loss_module = DQNLoss(value_network=value_network, gamma=0.99)
-    tensordict = replay_buffer.sample(batch_size)[0]
+    tensordict = replay_buffer.sample(batch_size)
     loss = loss_module(tensordict)
     ```
 

@@ -645,7 +645,7 @@ for i, tensordict in enumerate(collector):
     if collected_frames >= init_random_frames:
         for _ in range(optim_steps_per_batch):
             # sample from replay buffer
-            sampled_tensordict = replay_buffer.sample(batch_size)[0].clone()
+            sampled_tensordict = replay_buffer.sample(batch_size).clone()
 
             # compute loss for qnet and backprop
             with hold_out_net(actor):
@@ -889,7 +889,7 @@ for i, tensordict in enumerate(collector):
     if collected_frames >= init_random_frames:
         for _ in range(optim_steps_per_batch):
             # sample from replay buffer
-            sampled_tensordict, _ = replay_buffer.sample(batch_size_traj)
+            sampled_tensordict = replay_buffer.sample(batch_size_traj)
             # reset the batch size temporarily, and exclude index whose shape is incompatible with the new size
             index = sampled_tensordict.get("index")
             sampled_tensordict.exclude("index", inplace=True)

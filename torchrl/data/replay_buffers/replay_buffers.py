@@ -219,7 +219,7 @@ class ReplayBuffer:
         data = self._transform(data)
         return data, info
 
-    def sample(self, batch_size: int) -> Tuple[Any, dict]:
+    def sample(self, batch_size: int, return_info: bool = False) -> Any:
         """Samples a batch of data from the replay buffer.
 
         Uses Sampler to sample indices, and retrieves them from Storage.
@@ -231,20 +231,22 @@ class ReplayBuffer:
             A batch of data selected in the replay buffer.
         """
         if not self._prefetch:
-            return self._sample(batch_size)
-
-        if len(self._prefetch_queue) == 0:
             ret = self._sample(batch_size)
         else:
+            if len(self._prefetch_queue) == 0:
+                ret = self._sample(batch_size)
+            else:
+                with self._futures_lock:
+                    ret = self._prefetch_queue.popleft().result()
+
             with self._futures_lock:
-                ret = self._prefetch_queue.popleft().result()
-
-        with self._futures_lock:
-            while len(self._prefetch_queue) < self._prefetch_cap:
-                fut = self._prefetch_executor.submit(self._sample, batch_size)
-                self._prefetch_queue.append(fut)
-
-        return ret
+                while len(self._prefetch_queue) < self._prefetch_cap:
+                    fut = self._prefetch_executor.submit(self._sample, batch_size)
+                    self._prefetch_queue.append(fut)
+        
+        if return_info:
+            return ret
+        return ret[0]
 
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
         self._sampler.mark_update(index)
@@ -403,13 +405,15 @@ class TensorDictReplayBuffer(ReplayBuffer):
         self.update_priority(data.get("index"), priority)
 
     def sample(
-        self, batch_size: int, include_info: bool = False
-    ) -> Tuple[TensorDictBase, dict]:
-        data, info = super().sample(batch_size)
+        self, batch_size: int, include_info: bool = False, return_info: bool = False 
+    ) -> TensorDictBase:
+        data, info = super().sample(batch_size, return_info=True)
         if include_info:
             for k, v in info.items():
                 data.set(k, torch.tensor(v, device=data.device), inplace=True)
-        return data, info
+        if return_info:
+            return data, info
+        return data
 
 
 class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
@@ -475,8 +479,8 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def sample(self, batch_size: int, include_info: bool = False) -> TensorDictBase:
-        return super().sample(batch_size, include_info)
+    def sample(self, batch_size: int, include_info: bool = False, return_info: bool = False) -> TensorDictBase:
+        return super().sample(batch_size, include_info, return_info)
 
     def add(self, data: TensorDictBase) -> int:
         return super().add(data)
