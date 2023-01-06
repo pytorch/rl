@@ -21,11 +21,7 @@ from torch import nn, optim
 
 from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict
 from torchrl.collectors.collectors import _DataCollector
-from torchrl.data import (
-    ReplayBuffer,
-    TensorDictPrioritizedReplayBuffer,
-    TensorDictReplayBuffer,
-)
+from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode

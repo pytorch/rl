@@ -30,9 +30,6 @@ We also give users the ability to compose a replay buffer using the following co
 
     .. currentmodule:: torchrl.data.replay_buffers
 
-    torchrl.data.replay_buffers.rb_prototype.ReplayBuffer
-    torchrl.data.replay_buffers.rb_prototype.TensorDictReplayBuffer
-    torchrl.data.replay_buffers.rb_prototype.RemoteTensorDictReplayBuffer
     torchrl.data.replay_buffers.samplers.Sampler
     torchrl.data.replay_buffers.samplers.RandomSampler
     torchrl.data.replay_buffers.samplers.PrioritizedSampler

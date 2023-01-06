@@ -104,7 +104,7 @@ class ReplayBuffer:
         collate_fn: Optional[Callable] = None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
-        transform: Optional["Transform"] = None,
+        transform: Optional["Transform"] = None,  # noqa-F821
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)
@@ -246,7 +246,7 @@ class ReplayBuffer:
                 while len(self._prefetch_queue) < self._prefetch_cap:
                     fut = self._prefetch_executor.submit(self._sample, batch_size)
                     self._prefetch_queue.append(fut)
-        
+
         if return_info:
             return ret
         return ret[0]
@@ -254,7 +254,7 @@ class ReplayBuffer:
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
         self._sampler.mark_update(index)
 
-    def append_transform(self, transform: "Transform") -> None:
+    def append_transform(self, transform: "Transform") -> None:  # noqa-F821
         """Appends transform at the end.
 
         Transforms are applied in order when `sample` is called.
@@ -265,7 +265,7 @@ class ReplayBuffer:
         transform.eval()
         self._transform.append(transform)
 
-    def insert_transform(self, index: int, transform: "Transform") -> None:
+    def insert_transform(self, index: int, transform: "Transform") -> None:  # noqa-F821
         """Inserts transform.
 
         Transforms are executed in order when `sample` is called.
@@ -316,7 +316,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         collate_fn: Optional[Callable] = None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
-        transform: Optional["Transform"] = None,
+        transform: Optional["Transform"] = None,  # noqa-F821
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -408,7 +408,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         self.update_priority(data.get("index"), priority)
 
     def sample(
-        self, batch_size: int, include_info: bool = False, return_info: bool = False 
+        self, batch_size: int, include_info: bool = False, return_info: bool = False
     ) -> TensorDictBase:
         """Samples a batch of data from the replay buffer.
 
@@ -473,7 +473,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         collate_fn: Optional[Callable] = None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
-        transform: Optional["Transform"] = None,
+        transform: Optional["Transform"] = None,  # noqa-F821
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -496,7 +496,9 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def sample(self, batch_size: int, include_info: bool = False, return_info: bool = False) -> TensorDictBase:
+    def sample(
+        self, batch_size: int, include_info: bool = False, return_info: bool = False
+    ) -> TensorDictBase:
         return super().sample(batch_size, include_info, return_info)
 
     def add(self, data: TensorDictBase) -> int:
