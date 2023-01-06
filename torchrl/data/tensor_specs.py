@@ -1042,11 +1042,11 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             shape, space, device, dtype, domain="discrete"
         )
 
-    def _rand(self, space: Box, shape: torch.Size):
+    def _rand(self, space: Box, shape: torch.Size, i: int):
         x = []
         for _s in space:
             if isinstance(_s, BoxList):
-                x.append(self._rand(_s, shape))
+                x.append(self._rand(_s, shape, i - 1))
             else:
                 x.append(
                     torch.randint(
@@ -1057,16 +1057,15 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                         dtype=self.dtype,
                     )
                 )
-        return torch.stack(x, -1)
+        return torch.stack(x, -i)
 
     def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
-
-        x = self._rand(self.space, shape)
-        if self.nvec.ndim > 1:
-            x = x.transpose(len(shape), -1)
-        return x.squeeze(-1)
+        x = self._rand(self.space, shape, self.nvec.ndim)
+        if self.shape == torch.Size([1]):
+            x = x.squeeze(-1)
+        return x
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         val_is_scalar = val.ndim < 1
