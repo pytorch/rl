@@ -5,6 +5,7 @@
 import argparse
 import time
 import warnings
+import sys
 
 import pytest
 import torch
@@ -158,6 +159,8 @@ class TestStack:
         slice(200),
     ],
 )
+
+@pytest.mark.skipif(sys.platform == "win32", reason="RuntimeError from Torch serialization.py when creating td_saved on Windows")
 @pytest.mark.parametrize("dtype", [torch.float, torch.bool])
 def test_memmap(idx, dtype, large_scale=False):
     N = 5000 if large_scale else 10

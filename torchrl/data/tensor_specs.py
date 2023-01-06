@@ -461,8 +461,8 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
         if (val >= space.n).any():
             raise AssertionError("Value must be less than action space.")
-
-        val = torch.nn.functional.one_hot(val, space.n).to(torch.long)
+        
+        val = torch.nn.functional.one_hot(val.long(), space.n).to(torch.long)
         return val
 
     def to_numpy(self, val: torch.Tensor, safe: bool = True) -> np.ndarray:

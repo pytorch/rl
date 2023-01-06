@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import sys
 
 import numpy as np
 import pytest
@@ -35,7 +36,7 @@ from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
-
+_os_is_windows = sys.platform == "win32"
 
 class WrappablePolicy(nn.Module):
     def __init__(self, out_features: int, multiple_outputs: bool = False):
@@ -461,6 +462,10 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_collector_batch_size(num_env, env_name, seed=100):
+    if env_name == "vec" and num_env == 3 and _os_is_windows:
+            pytest.skip(
+                "Test timeout (> 10 min) on CI pipeline Windows machine with GPU"
+            )
     if num_env == 1:
 
         def env_fn():
