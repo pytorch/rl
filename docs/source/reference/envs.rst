@@ -292,4 +292,3 @@ Libraries
     jumanji.JumanjiWrapper
     vmas.VmasEnv
     vmas.VmasWrapper
-    habitat.HabitatEnv
