@@ -37,7 +37,7 @@ from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, Saf
 
 # torch.set_default_dtype(torch.double)
 _os_is_windows = sys.platform == "win32"
-_python_is_310 = sys.version.major == 3 and sys.version.minor == 10
+_python_is_310 = sys.version_info.major == 3 and sys.version_info.minor == 10
 
 
 class WrappablePolicy(nn.Module):
