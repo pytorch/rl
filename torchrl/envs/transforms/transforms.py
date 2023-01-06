@@ -14,7 +14,6 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
-
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -2516,8 +2515,8 @@ class RewardSum(Transform):
 
         # Batched environments
         else:
-            reset_workers = tensordict.get(
-                "reset_workers",
+            _reset = tensordict.get(
+                "_reset",
                 torch.ones(
                     *tensordict.batch_size,
                     1,
@@ -2527,7 +2526,7 @@ class RewardSum(Transform):
             )
             for out_key in self.out_keys:
                 if out_key in tensordict.keys():
-                    tensordict[out_key][reset_workers] = 0.0
+                    tensordict[out_key][_reset] = 0.0
 
         return tensordict
 
@@ -2618,7 +2617,7 @@ class StepCounter(Transform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         workers = tensordict.get(
-            "reset_workers",
+            "_reset",
             default=torch.ones(
                 *tensordict.batch_size, 1, dtype=torch.bool, device=tensordict.device
             ),
