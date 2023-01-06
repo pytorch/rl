@@ -46,6 +46,22 @@ setup_cuda() {
 
   # Now work out the CUDA settings
   case "$CU_VERSION" in
+    cu117)
+      if [[ "$OSTYPE" == "msys" ]]; then
+        export CUDA_HOME="C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.7"
+      else
+        export CUDA_HOME=/usr/local/cuda-11.7/
+      fi
+      export TORCH_CUDA_ARCH_LIST="3.5;5.0+PTX;6.0;7.0;7.5;8.0;8.6"
+      ;;
+    cu116)
+      if [[ "$OSTYPE" == "msys" ]]; then
+        export CUDA_HOME="C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.6"
+      else
+        export CUDA_HOME=/usr/local/cuda-11.6/
+      fi
+      export TORCH_CUDA_ARCH_LIST="3.5;5.0+PTX;6.0;7.0;7.5;8.0;8.6"
+      ;;
     cu115)
       if [[ "$OSTYPE" == "msys" ]]; then
         export CUDA_HOME="C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.5"
@@ -299,6 +315,12 @@ setup_conda_cudatoolkit_constraint() {
     export CONDA_BUILD_VARIANT="cpu"
   else
     case "$CU_VERSION" in
+      cu117)
+        export CONDA_CUDATOOLKIT_CONSTRAINT="- pytorch-cuda=11.7 # [not osx]"
+        ;;
+      cu116)
+        export CONDA_CUDATOOLKIT_CONSTRAINT="- pytorch-cuda=11.6 # [not osx]"
+        ;;
       cu115)
         export CONDA_CUDATOOLKIT_CONSTRAINT="- cudatoolkit >=11.5,<11.6 # [not osx]"
         ;;
@@ -346,6 +368,12 @@ setup_conda_cudatoolkit_plain_constraint() {
     export CMAKE_USE_CUDA=0
   else
     case "$CU_VERSION" in
+      cu117)
+        export CONDA_CUDATOOLKIT_CONSTRAINT="pytorch-cuda=11.7"
+        ;;
+      cu116)
+        export CONDA_CUDATOOLKIT_CONSTRAINT="pytorch-cuda=11.6"
+        ;;
       cu115)
         export CONDA_CUDATOOLKIT_CONSTRAINT="cudatoolkit=11.5"
         ;;

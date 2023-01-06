@@ -60,6 +60,26 @@ A2C
 
     A2CLoss
 
+Reinforce
+---------
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    ReinforceLoss
+
+Dreamer
+-------
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    DreamerActorLoss
+    DreamerModelLoss
+    DreamerValueLoss
+
 
 Returns
 -------
