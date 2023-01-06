@@ -154,7 +154,7 @@ SUPPORTED_LIBRARIES = {
 }
 
 
-def check_env_specs(env):
+def check_env_specs(env, return_contiguous=True):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
@@ -166,7 +166,9 @@ def check_env_specs(env):
 
     """
     fake_tensordict = env.fake_tensordict().flatten_keys(".")
-    real_tensordict = env.rollout(3).flatten_keys(".")
+    real_tensordict = env.rollout(3, return_contiguous=return_contiguous).flatten_keys(
+        "."
+    )
 
     keys1 = set(fake_tensordict.keys())
     keys2 = set(real_tensordict.keys())
@@ -202,3 +204,20 @@ def _check_dtype(key, value, obs_spec, input_spec):
         return
     else:
         raise KeyError(key)
+
+
+def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int = -1):
+    shape_len = len(tensor.shape)
+
+    if shape_len < len(batch_size):
+        raise RuntimeError(
+            f"Tensor has less dims than batch_size. shape:{tensor.shape}, batch_size: {batch_size}"
+        )
+    if tensor.shape[: len(batch_size)] != batch_size:
+        raise RuntimeError(
+            f"Tensor does not have given batch_size. shape:{tensor.shape}, batch_size: {batch_size}"
+        )
+
+    if shape_len == len(batch_size):
+        return tensor.unsqueeze(dim=dim)
+    return tensor
