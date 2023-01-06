@@ -37,7 +37,8 @@ from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, Saf
 
 # torch.set_default_dtype(torch.double)
 _os_is_windows = sys.platform == "win32"
-_python_is_310 = sys.version_info.major == 3 and sys.version_info.minor == 10
+_python_is_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
+_python_is_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
 
 class WrappablePolicy(nn.Module):
@@ -156,10 +157,11 @@ def test_output_device_consistency(
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
 
-    if device == "cuda" and policy_device == None and num_env == 1 and _python_is_310:
+    if device == "cuda" and passing_device == None and policy_device == None and num_env == 1 and _python_is_3_10:
         pytest.skip(
             '"vec" policy in torch.multiprocessing causes Windows access violation with Python 3.10'
         )
+    if device == "cuda" and policy_device == "cuda" and device == None and num_env == 3 and _python_is_3_7:
 
     _device = "cuda:0" if device == "cuda" else device
     _policy_device = "cuda:0" if policy_device == "cuda" else policy_device
