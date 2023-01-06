@@ -226,9 +226,12 @@ class ReplayBuffer:
 
         Args:
             batch_size (int): size of data to be collected.
+            return_info (bool): whether to return info. If True, the result
+                is a tuple (data, info). If False, the result is the data.
 
         Returns:
             A batch of data selected in the replay buffer.
+            A tuple containing this batch and info if return_info flag is set to True.
         """
         if not self._prefetch:
             ret = self._sample(batch_size)
@@ -407,6 +410,20 @@ class TensorDictReplayBuffer(ReplayBuffer):
     def sample(
         self, batch_size: int, include_info: bool = False, return_info: bool = False 
     ) -> TensorDictBase:
+        """Samples a batch of data from the replay buffer.
+
+        Uses Sampler to sample indices, and retrieves them from Storage.
+
+        Args:
+            batch_size (int): size of data to be collected.
+            include_info (bool): whether to add info to the returned tensordict.
+            return_info (bool): whether to return info. If True, the result
+                is a tuple (data, info). If False, the result is the data.
+
+        Returns:
+            A tensordict containing a batch of data selected in the replay buffer.
+            A tuple containing this tensordict and info if return_info flag is set to True.
+        """
         data, info = super().sample(batch_size, return_info=True)
         if include_info:
             for k, v in info.items():
