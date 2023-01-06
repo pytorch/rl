@@ -626,15 +626,16 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        if tensordict is not None and "reset_workers" in tensordict.keys():
+
+        if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
-            reset_workers = tensordict.get("reset_workers")
+            _reset = tensordict.get("_reset")
         else:
-            reset_workers = torch.ones(self.num_workers, dtype=torch.bool)
+            _reset = torch.ones((*self.batch_size,1), dtype=torch.bool)
 
         keys = set()
         for i, _env in enumerate(self._envs):
-            if not reset_workers[i]:
+            if not _reset[i].any():
                 continue
             _tensordict = tensordict[i] if tensordict is not None else None
             _td = _env._reset(tensordict=_tensordict, **kwargs)
@@ -843,29 +844,30 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         cmd_out = "reset"
-        if tensordict is not None and "reset_workers" in tensordict.keys():
+        if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
-            reset_workers = tensordict.get("reset_workers")
+            _reset = tensordict.get("_reset")
         else:
-            reset_workers = torch.ones(self.num_workers, dtype=torch.bool)
+            _reset = torch.ones((*self.batch_size,1), dtype=torch.bool)
 
         for i, channel in enumerate(self.parent_channels):
-            if not reset_workers[i]:
+            if not _reset[i].any():
                 continue
+            kwargs["tensordict"] = tensordict[i] if tensordict is not None else None
             channel.send((cmd_out, kwargs))
 
         keys = set()
         for i, channel in enumerate(self.parent_channels):
-            if not reset_workers[i]:
+            if not _reset[i].any():
                 continue
             cmd_in, new_keys = channel.recv()
             keys = keys.union(new_keys)
             if cmd_in != "reset_obs":
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
         check_count = 0
-        while self.shared_tensordict_parent.get("done").any():
+        while self.shared_tensordict_parent.get("done")[_reset].any():
             if check_count == 4:
-                raise RuntimeError("Envs have just been reset but some are still done")
+                raise RuntimeError("Envs have just been reset bur env is done on specified '_reset' dimensions.")
             else:
                 check_count += 1
                 # there might be some delay between writing the shared tensordict
@@ -1019,8 +1021,6 @@ def _run_worker_pipe_shared_mem(
                 _td.pin_memory()
             tensordict.update_(_td)
             child_pipe.send(("reset_obs", reset_keys))
-            if done.any():
-                raise RuntimeError(f"{env.__class__.__name__} is done after reset")
 
         elif cmd == "step":
             if not initialized:
