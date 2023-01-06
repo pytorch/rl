@@ -175,7 +175,7 @@ def test_output_device_consistency(
                 and num_env == 3
             ):
                 pytest.skip(
-                    '"BrokenPipeError in multiprocessing.connection with Python3.10'
+                    'BrokenPipeError in multiprocessing.connection with Python3.10'
                 )
         if _python_is_3_7:
             if device == "cuda" and policy_device == "cuda" and device is None:
