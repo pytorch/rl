@@ -87,10 +87,10 @@ class DummyTrainerNode:
             if self._ret is None:
                 self._ret = ret
             else:
-                self._ret[0].update_(ret[0])
+                self._ret.update_(ret)
         # make sure the content is read
-        self._ret[0]["observation"] + 1
-        self._ret[0]["next_observation"] + 1
+        self._ret["observation"] + 1
+        self._ret["next_observation"] + 1
         return timeit.default_timer() - start_time
 
     def _create_replay_buffer(self) -> rpc.RRef:

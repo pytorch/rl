@@ -45,7 +45,7 @@ def sample_from_buffer_remotely_returns_correct_tensordict_test(rank, name, worl
     if name == "TRAINER":
         buffer = _construct_buffer("BUFFER")
         _, inserted = _add_random_tensor_dict_to_buffer(buffer)
-        sampled, _ = _sample_from_buffer(buffer, 1)
+        sampled = _sample_from_buffer(buffer, 1)
         assert type(sampled) is type(inserted) is TensorDict
         assert (sampled == inserted)["a"].item()
 
