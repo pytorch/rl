@@ -631,7 +631,7 @@ class SerialEnv(_BatchedEnv):
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
         else:
-            _reset = torch.ones((*self.batch_size,1), dtype=torch.bool)
+            _reset = torch.ones((*self.batch_size, 1), dtype=torch.bool)
 
         keys = set()
         for i, _env in enumerate(self._envs):
@@ -848,7 +848,7 @@ class ParallelEnv(_BatchedEnv):
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
         else:
-            _reset = torch.ones((*self.batch_size,1), dtype=torch.bool)
+            _reset = torch.ones((*self.batch_size, 1), dtype=torch.bool)
 
         for i, channel in enumerate(self.parent_channels):
             if not _reset[i].any():
@@ -867,7 +867,9 @@ class ParallelEnv(_BatchedEnv):
         check_count = 0
         while self.shared_tensordict_parent.get("done")[_reset].any():
             if check_count == 4:
-                raise RuntimeError("Envs have just been reset bur env is done on specified '_reset' dimensions.")
+                raise RuntimeError(
+                    "Envs have just been reset bur env is done on specified '_reset' dimensions."
+                )
             else:
                 check_count += 1
                 # there might be some delay between writing the shared tensordict
