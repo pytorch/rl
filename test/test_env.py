@@ -511,7 +511,7 @@ class TestParallel:
             _ = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"reset_workers": torch.zeros(N, dtype=torch.bool).bernoulli_()},
+            source={"_reset": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
             batch_size=[
                 N,
             ],
@@ -595,7 +595,7 @@ class TestParallel:
             _ = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"reset_workers": torch.zeros(N, dtype=torch.bool).bernoulli_()},
+            source={"_reset": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
             batch_size=[
                 N,
             ],

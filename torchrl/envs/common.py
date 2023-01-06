@@ -462,7 +462,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         else:
             _reset = None
 
-        if (_reset is None and tensordict_reset.get("done").any()) or (_reset is not None and  tensordict_reset.get("done")[_reset].any()):
+        if (_reset is None and tensordict_reset.get("done").any()) or (
+            _reset is not None and tensordict_reset.get("done")[_reset].any()
+        ):
             raise RuntimeError(
                 f"Env {self} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
             )
