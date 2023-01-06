@@ -22,13 +22,11 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
-
 from torchrl._utils import _check_for_faulty_process, prod
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.envs.vec_env import _BatchedEnv
@@ -615,7 +613,7 @@ class SyncDataCollector(_DataCollector):
             steps = steps.clone()
             if len(self.env.batch_size):
                 self._tensordict.masked_fill_(done_or_terminated, 0)
-                self._tensordict.set("reset_workers", done_or_terminated)
+                self._tensordict.set("_reset", done_or_terminated)
             else:
                 self._tensordict.zero_()
             self.env.reset(self._tensordict)
@@ -625,7 +623,7 @@ class SyncDataCollector(_DataCollector):
                     f"Got {sum(self._tensordict.get('done'))} done envs after reset."
                 )
             if len(self.env.batch_size):
-                self._tensordict.del_("reset_workers")
+                self._tensordict.del_("_reset")
             traj_ids[done_or_terminated] = traj_ids.max() + torch.arange(
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
@@ -683,13 +681,13 @@ class SyncDataCollector(_DataCollector):
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
                 raise RuntimeError("resetting unique env with index is not permitted.")
-            reset_workers = torch.zeros(
-                *self.env.batch_size,
+            _reset = torch.zeros(
+                (*self.env.batch_size, 1),
                 dtype=torch.bool,
                 device=self.env.device,
             )
-            reset_workers[index] = 1
-            td_in = TensorDict({"reset_workers": reset_workers}, self.env.batch_size)
+            _reset[index] = 1
+            td_in = TensorDict({"_reset": _reset}, self.env.batch_size)
             self._tensordict[index].zero_()
         else:
             td_in = None
