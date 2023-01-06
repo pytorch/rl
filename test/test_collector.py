@@ -462,7 +462,7 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_collector_batch_size(num_env, env_name, seed=100):
-    if env_name == "vec" and num_env == 3 and _os_is_windows:
+    if num_env == 3 and _os_is_windows:
             pytest.skip(
                 "Test timeout (> 10 min) on CI pipeline Windows machine with GPU"
             )
