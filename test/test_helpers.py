@@ -914,7 +914,11 @@ def test_seed_generator(initial_seed):
     seeds1 = generate_seeds(initial_seed, num_seeds)
     assert seeds0 == seeds1
 
-@pytest.mark.skipif(sys.platform == "win32", reason="val1[0]-w1 consistently ~0.015 (> 0.01) in CI pipeline on Windows machine")
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="val1[0]-w1 consistently ~0.015 (> 0.01) in CI pipeline on Windows machine",
+)
 def test_timeit():
     n1 = 500
     w1 = 1e-4

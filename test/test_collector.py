@@ -37,6 +37,8 @@ from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, Saf
 
 # torch.set_default_dtype(torch.double)
 _os_is_windows = sys.platform == "win32"
+_python_is_310 = sys.version.major == 3 and sys.version.minor == 10
+
 
 class WrappablePolicy(nn.Module):
     def __init__(self, out_features: int, multiple_outputs: bool = False):
@@ -153,6 +155,11 @@ def test_output_device_consistency(
         device == "cuda" or policy_device == "cuda" or passing_device == "cuda"
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
+
+    if device == "cuda" and policy_device == None and num_env == 1 and _python_is_310:
+        pytest.skip(
+            '"vec" policy in torch.multiprocessing causes Windows access violation with Python 3.10'
+        )
 
     _device = "cuda:0" if device == "cuda" else device
     _policy_device = "cuda:0" if policy_device == "cuda" else policy_device
@@ -463,9 +470,7 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_collector_batch_size(num_env, env_name, seed=100):
     if num_env == 3 and _os_is_windows:
-            pytest.skip(
-                "Test timeout (> 10 min) on CI pipeline Windows machine with GPU"
-            )
+        pytest.skip("Test timeout (> 10 min) on CI pipeline Windows machine with GPU")
     if num_env == 1:
 
         def env_fn():

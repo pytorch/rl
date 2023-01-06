@@ -3,9 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import sys
 import time
 import warnings
-import sys
 
 import pytest
 import torch
@@ -159,8 +159,10 @@ class TestStack:
         slice(200),
     ],
 )
-
-@pytest.mark.skipif(sys.platform == "win32", reason="RuntimeError from Torch serialization.py when creating td_saved on Windows")
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="RuntimeError from Torch serialization.py when creating td_saved on Windows",
+)
 @pytest.mark.parametrize("dtype", [torch.float, torch.bool])
 def test_memmap(idx, dtype, large_scale=False):
     N = 5000 if large_scale else 10
