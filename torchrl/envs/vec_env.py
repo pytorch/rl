@@ -639,6 +639,8 @@ class SerialEnv(_BatchedEnv):
                 continue
             _tensordict = tensordict[i] if tensordict is not None else None
             _td = _env._reset(tensordict=_tensordict, **kwargs)
+            if _td.get("_reset", None) is not None:
+                _td.del_("_reset")
             keys = keys.union(_td.keys())
             self.shared_tensordicts[i].update_(_td)
 
