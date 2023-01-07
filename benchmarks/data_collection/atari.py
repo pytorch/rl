@@ -10,13 +10,14 @@ Atari game data collection benchmark
 Runs an Atari game with a random policy using a multiprocess async data collector.
 
 Performance results
-+-------------------------------+-----------+
-| Storage Type                  | 3x A100 GPUs  |
-|                               |           |
++-------------------------------+-------------------------------------------------+
+| Machine specs                  | 3x A100 GPUs,                                   |
+|                               | Intel(R) Xeon(R) Platinum 8275CL CPU @ 3.00GHz  |
+|                               |                                                 |
 +===============================+===========+
-|  Batched transforms         | 1x        |
+|  Batched transforms         | 1736.0687 fps        |
 +-------------------------------+-----------+
-| Single env transform      | 1.83x     |
+| Single env transform      | 2525.5021 fps    |
 +-------------------------------+-----------+
 
 """
@@ -51,6 +52,9 @@ if __name__ == "__main__":
 
     def make_env():
         return GymEnv("ALE/Pong-v5")
+
+    # print the raw env output
+    print(make_env().fake_tensordict())
 
     def make_transformed_env(env):
         return TransformedEnv(

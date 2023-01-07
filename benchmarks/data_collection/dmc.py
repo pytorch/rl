@@ -7,6 +7,17 @@
 DeepMind control suite data collection benchmark
 ================================================
 
+Performance results
++-------------------------------+-------------------------------------------------+
+| Machine specs                  | 3x A100 GPUs,                                   |
+|                               | Intel(R) Xeon(R) Platinum 8275CL CPU @ 3.00GHz  |
+|                               |                                                 |
++===============================+===========+
+|  Batched transforms         | 1736.0687 fps        |
++-------------------------------+-----------+
+| Single env transform      | 1.83x     |
++-------------------------------+-----------+
+
 """
 
 import time
@@ -26,10 +37,22 @@ from torchrl.envs import (
 from torchrl.envs.libs.dm_control import DMControlEnv
 
 total_frames = 100000
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    "--batched",
+    action="store_true",
+    help="if True, the transforms will be applied on batches of images.",
+)
+
 if __name__ == "__main__":
 
     def make_env():
         return DMControlEnv("cheetah", "run", from_pixels=True)
+
+    # print the raw env output
+    print(make_env().fake_tensordict())
 
     def make_transformed_env(env):
         return TransformedEnv(
@@ -41,8 +64,13 @@ if __name__ == "__main__":
             ),
         )
 
-    parallel_env = make_transformed_env(ParallelEnv(8, EnvCreator(make_env)))
-    # parallel_env = ParallelEnv(8, EnvCreator(lambda: make_transformed_env(make_env())))
+    args = parser.parse_args()
+    if args.batched:
+        parallel_env = make_transformed_env(ParallelEnv(8, EnvCreator(make_env)))
+    else:
+        parallel_env = ParallelEnv(
+            8, EnvCreator(lambda: make_transformed_env(make_env()))
+        )
     collector = MultiaSyncDataCollector(
         [
             parallel_env,
@@ -66,6 +94,6 @@ if __name__ == "__main__":
         if i >= 10:
             frames += data.numel()
     t = time.time() - t
-    print(f"frames per sec: {frames/t: 4.4f} (frames={frames}, t={t})")
     del collector
+    print(f"\n\nframes per sec: {frames/t: 4.4f} (frames={frames}, t={t})\n\n")
     exit()
