@@ -237,11 +237,11 @@ def test_mult_onehot(shape, ns):
 @pytest.mark.parametrize(
     "ns",
     [
-        [
-            5,
-        ],
+        5,
         [5, 2, 3],
         [4, 5, 1, 3],
+        [[1, 2], [3, 4]],
+        [[[2, 4], [3, 5]], [[4, 5], [2, 3]], [[2, 3], [3, 2]]],
     ],
 )
 @pytest.mark.parametrize(
@@ -253,19 +253,20 @@ def test_mult_onehot(shape, ns):
         torch.Size([4, 5]),
     ],
 )
-def test_multi_discrete(shape, ns):
+@pytest.mark.parametrize("dtype", [torch.float, torch.int, torch.long])
+def test_multi_discrete(shape, ns, dtype):
     torch.manual_seed(0)
     np.random.seed(0)
-    ts = MultiDiscreteTensorSpec(ns)
+    ts = MultiDiscreteTensorSpec(ns, dtype=dtype)
     _real_shape = shape if shape is not None else []
-    _len_ns = [len(ns)] if len(ns) > 1 else []
+    nvec_shape = torch.tensor(ns).size()
     for _ in range(100):
         r = ts.rand(shape)
 
         assert r.shape == torch.Size(
             [
                 *_real_shape,
-                *_len_ns,
+                *nvec_shape,
             ]
         )
         assert ts.is_in(r)
@@ -273,13 +274,19 @@ def test_multi_discrete(shape, ns):
         torch.Size(
             [
                 *_real_shape,
-                *_len_ns,
+                *nvec_shape,
             ]
         )
     )
     projection = ts._project(rand)
+
     assert rand.shape == projection.shape
     assert ts.is_in(projection)
+    if projection.ndim < 1:
+        projection.fill_(-1)
+    else:
+        projection[..., 0] = -1
+    assert not ts.is_in(projection)
 
 
 @pytest.mark.parametrize(
@@ -846,7 +853,7 @@ class TestEquality:
         )
         assert ts != ts_other
 
-    @pytest.mark.parametrize("nvec", [[3], [3, 4], [3, 4, 5]])
+    @pytest.mark.parametrize("nvec", [[3], [3, 4], [3, 4, 5], [[1, 2], [3, 4]]])
     def test_equality_multi_discrete(self, nvec):
         device = "cpu"
         dtype = torch.float16
