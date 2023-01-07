@@ -7,19 +7,23 @@
 DeepMind control suite data collection benchmark
 ================================================
 
+Runs a "cheetah"-"run" dm-control task with a random policy using a multiprocess async data collector.
+
+Image size: torch.Size([210, 160, 3])
+
 Performance results
-+-------------------------------+-------------------------------------------------+
-| Machine specs                  | 3x A100 GPUs,                                   |
-|                               | Intel(R) Xeon(R) Platinum 8275CL CPU @ 3.00GHz  |
-|                               |                                                 |
-+===============================+===========+
-|  Batched transforms         | 1736.0687 fps        |
-+-------------------------------+-----------+
-| Single env transform      | 1.83x     |
-+-------------------------------+-----------+
++-------------------------------+--------------------------------------------------+
+| Machine specs                 |  3x A100 GPUs,                                   |
+|                               | Intel(R) Xeon(R) Platinum 8275CL CPU @ 3.00GHz   |
+|                               |                                                  |
++===============================+==================================================+
+|  Batched transforms           | 1775.2762 fps                                    |
++-------------------------------+--------------------------------------------------+
+| Single env transform          | 2593.7481 fps                                    |
++-------------------------------+--------------------------------------------------+
 
 """
-
+import argparse
 import time
 
 import tqdm
