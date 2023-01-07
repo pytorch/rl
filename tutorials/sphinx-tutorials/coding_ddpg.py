@@ -49,12 +49,9 @@ from matplotlib import pyplot as plt
 from tensordict.nn import TensorDictModule
 from torch import nn, optim
 from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.data import (
-    CompositeSpec,
-    TensorDictPrioritizedReplayBuffer,
-    TensorDictReplayBuffer,
-)
+from torchrl.data import CompositeSpec, TensorDictReplayBuffer
 from torchrl.data.postprocs import MultiStep
+from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import (
     CatTensors,
@@ -383,29 +380,23 @@ def make_recorder(actor_model_explore, stats):
 
 def make_replay_buffer(make_replay_buffer=3):
     if prb:
-        replay_buffer = TensorDictPrioritizedReplayBuffer(
-            buffer_size,
+        sampler = PrioritizedSampler(
+            max_capacity=buffer_size,
             alpha=0.7,
             beta=0.5,
-            pin_memory=False,
-            prefetch=make_replay_buffer,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=buffer_scratch_dir,
-                device=device,
-            ),
         )
     else:
-        replay_buffer = TensorDictReplayBuffer(
+        sampler = RandomSampler()
+    replay_buffer = TensorDictReplayBuffer(
+        storage=LazyMemmapStorage(
             buffer_size,
-            pin_memory=False,
-            prefetch=make_replay_buffer,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=buffer_scratch_dir,
-                device=device,
-            ),
-        )
+            scratch_dir=buffer_scratch_dir,
+            device=device,
+        ),
+        sampler=sampler,
+        pin_memory=False,
+        prefetch=make_replay_buffer,
+    )
     return replay_buffer
 
 
@@ -696,7 +687,7 @@ for i, tensordict in enumerate(collector):
 
             # update priority
             if prb:
-                replay_buffer.update_priority(sampled_tensordict)
+                replay_buffer.update_tensordict_priority(sampled_tensordict)
 
     rewards.append(
         (i, tensordict["reward"].mean().item() / norm_factor_training / frame_skip)
@@ -958,7 +949,7 @@ for i, tensordict in enumerate(collector):
             sampled_tensordict["td_error"] = advantage.detach().pow(2).mean(1)
             sampled_tensordict["index"] = index
             if prb:
-                replay_buffer.update_priority(sampled_tensordict)
+                replay_buffer.update_tensordict_priority(sampled_tensordict)
 
     rewards.append(
         (i, tensordict["reward"].mean().item() / norm_factor_training / frame_skip)

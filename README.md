@@ -212,7 +212,6 @@ The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py)
         scratch_dir="/tmp/"
     )
     buffer = TensorDictPrioritizedReplayBuffer(
-        buffer_size=10000,
         alpha=0.7,
         beta=0.5,
         collate_fn=lambda x: x,
