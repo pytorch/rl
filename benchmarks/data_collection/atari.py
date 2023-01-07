@@ -7,7 +7,20 @@
 Atari game data collection benchmark
 ====================================
 
+Runs an Atari game with a random policy using a multiprocess async data collector.
+
+Performance results
++-------------------------------+-----------+
+| Storage Type                  | 3x A100 GPUs  |
+|                               |           |
++===============================+===========+
+|  Batched transforms         | 1x        |
++-------------------------------+-----------+
+| Single env transform      | 1.83x     |
++-------------------------------+-----------+
+
 """
+import argparse
 import time
 
 import tqdm
@@ -25,6 +38,15 @@ from torchrl.envs import (
 from torchrl.envs.libs.gym import GymEnv
 
 total_frames = 100000
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    "--batched",
+    action="store_true",
+    help="if True, the transforms will be applied on batches of images.",
+)
+
 if __name__ == "__main__":
 
     def make_env():
@@ -40,8 +62,15 @@ if __name__ == "__main__":
             ),
         )
 
-    # parallel_env = TransformedEnv(ParallelEnv(16, EnvCreator(make_env)), Compose(ToTensorImage(), GrayScale(), Resize(84, 84), ))
-    parallel_env = ParallelEnv(16, EnvCreator(lambda: make_transformed_env(make_env())))
+    args = parser.parse_args()
+    if args.batched:
+        parallel_env = make_transformed_env(
+            ParallelEnv(16, EnvCreator(lambda: make_env()))
+        )
+    else:
+        parallel_env = ParallelEnv(
+            16, EnvCreator(lambda: make_transformed_env(make_env()))
+        )
     collector = MultiaSyncDataCollector(
         [
             parallel_env,
@@ -64,6 +93,6 @@ if __name__ == "__main__":
         if i >= 10:
             frames += data.numel()
     t = time.time() - t
-    print(f"frames per sec: {frames/t: 4.4f} (frames={frames}, t={t})")
     del collector
+    print(f"\n\nframes per sec: {frames/t: 4.4f} (frames={frames}, t={t})\n\n")
     exit()
