@@ -622,8 +622,6 @@ class SyncDataCollector(_DataCollector):
                 raise RuntimeError(
                     f"Got {sum(self._tensordict.get('done'))} done envs after reset."
                 )
-            if len(self.env.batch_size):
-                self._tensordict.del_("_reset")
             traj_ids[done_or_terminated] = traj_ids.max() + torch.arange(
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
