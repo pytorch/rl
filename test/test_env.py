@@ -932,6 +932,7 @@ class TestParallel:
         td_reset = env.reset(
             TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
         )
+        env.close()
         if _reset.any():
             assert (td_reset["done"][_reset] == 0).all()
             assert (td_reset["observation"][_reset] == 0).all()
