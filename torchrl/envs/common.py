@@ -16,9 +16,10 @@ import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.data import CompositeSpec, TensorSpec
 
-from .utils import get_available_libraries, step_mdp
 from .._utils import prod, seed_generator
 from ..data.utils import DEVICE_TYPING
+
+from .utils import get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
 
