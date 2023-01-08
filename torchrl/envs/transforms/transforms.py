@@ -2616,7 +2616,7 @@ class StepCounter(Transform):
         super().__init__([])
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        workers = tensordict.get(
+        _reset = tensordict.get(
             "_reset",
             default=torch.ones(
                 *tensordict.batch_size, 1, dtype=torch.bool, device=tensordict.device
@@ -2624,7 +2624,7 @@ class StepCounter(Transform):
         )
         tensordict.set(
             "step_count",
-            (~workers)
+            (~_reset)
             * tensordict.get(
                 "step_count",
                 torch.zeros(
