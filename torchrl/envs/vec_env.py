@@ -639,7 +639,7 @@ class SerialEnv(_BatchedEnv):
                 continue
             _tensordict = tensordict[i] if tensordict is not None else None
             _td = _env._reset(tensordict=_tensordict, **kwargs)
-            if _td.get("_reset", None) is not None:
+            if "_reset" in _td.keys():
                 _td.del_("_reset")
             keys = keys.union(_td.keys())
             self.shared_tensordicts[i].update_(_td)
@@ -1014,7 +1014,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
             _td = env._reset(**reset_kwargs)
-            if _td.get("_reset", None) is not None:
+            if "_reset" in _td.keys():
                 _td.del_("_reset")
             done = _td.get("done", None)
             if done is None:
