@@ -16,6 +16,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
+from torchrl.envs import EnvBase
 from torchrl.envs.transforms.transforms import (
     CatTensors,
     Compose,
@@ -26,7 +27,6 @@ from torchrl.envs.transforms.transforms import (
     Transform,
     UnsqueezeTransform,
 )
-from torchrl.envs import EnvBase
 
 try:
     from torchvision import models
@@ -334,11 +334,16 @@ class R3MTransform(Compose):
 
         """
         if self._is_3d is None:
-            parent = self.parent
-            for key in parent.observation_spec.keys():
-                self._is_3d = len(parent.observation_spec[key].shape) == 3
-                break
+            self._is_3d = self._get_is_3d()
         return self._is_3d
+
+    def _get_is_3d(self):
+        parent = self.parent
+        for key in parent.observation_spec.keys():
+            if key in self.in_keys:
+                return len(parent.observation_spec[key].shape) == 3
+        else:
+            raise RuntimeError("Could not infer is_3d")
 
     def to(self, dest: Union[DEVICE_TYPING, torch.dtype]):
         if isinstance(dest, torch.dtype):
@@ -363,9 +368,14 @@ class R3MTransform(Compose):
             has_parent = parent is not None
         except AttributeError:
             has_parent = False
-        if has_parent:
+        if has_parent and not self.initialized:
             # we still want to capture an AttributeError here:
             self._init()
+        elif has_parent and self.initialized:
+            if self._is_3d != self._get_is_3d(self):
+                raise RuntimeError(
+                    "Resetting a new parent is not permitted if is_3d does not match."
+                )
         return out
 
     forward = _init_first(Compose.forward)
