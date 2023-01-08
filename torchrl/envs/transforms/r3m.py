@@ -26,6 +26,7 @@ from torchrl.envs.transforms.transforms import (
     Transform,
     UnsqueezeTransform,
 )
+from torchrl.envs import EnvBase
 
 try:
     from torchvision import models
@@ -167,6 +168,9 @@ class R3MTransform(Compose):
              "r3m_vec" is assumed.
         size (int, optional): Size of the image to feed to resnet.
             Defaults to 244.
+        stack_images (bool, optional): if False, the images given in the :obj:`in_keys`
+             argument will be treaded separetely and each will be given a single,
+             separated entry in the output tensordict. Defaults to :obj:`True`.
         download (bool, optional): if True, the weights will be downloaded using
             the torch.hub download API (i.e. weights will be cached for future use).
             Defaults to False.
@@ -207,6 +211,21 @@ class R3MTransform(Compose):
         self.tensor_pixels_keys = tensor_pixels_keys
 
     def _init(self):
+        """Initializer for R3M.
+
+        R3MTransform is initialized in a lazy manner: since
+        we may need to know the dimension of the input tensors,
+        we wait to properly initialize the transform until some specifics
+        attributes or methods are called.
+
+        This implies that calling these methods before registering the transform
+        in the TransformedEnv may cause bugs if the inferred attributes (such as
+        :obj:`is_3d`) do not match what was expected.
+
+        Eventually, since this behaviour is a bit cahotic we should use some other
+        way to deal with batched and non-batched input images.
+        """
+        self.initialized = True
         in_keys = self.in_keys
         model_name = self.model_name
         out_keys = self.out_keys
@@ -297,7 +316,6 @@ class R3MTransform(Compose):
             self.append(transform)
         if self.download:
             self[-1].load_weights(dir_prefix=self.download_path)
-        self.initialized = True
 
         if self._device is not None:
             self.to(self._device)
@@ -306,6 +324,15 @@ class R3MTransform(Compose):
 
     @property
     def is_3d(self):
+        """Whether the input image has 3 dims (no-batched) or more.
+
+        If no parent environment exists, it defaults to True.
+
+        The main usage is this: if there are more than one image and they need to be
+        stacked, we must know if the input image has dim 3 or 4. If 3, we need to unsqueeze
+        before stacking. If 4, we can cat along the first dimension.
+
+        """
         if self._is_3d is None:
             parent = self.parent
             for key in parent.observation_spec.keys():
@@ -328,9 +355,31 @@ class R3MTransform(Compose):
     def dtype(self):
         return self._dtype
 
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        out = super().set_container(container)
+        # try to get the parent: if it exists, initialize. Otherwise, skip
+        try:
+            parent = self.parent
+            has_parent = parent is not None
+        except AttributeError:
+            has_parent = False
+        if has_parent:
+            # we still want to capture an AttributeError here:
+            self._init()
+        return out
+
     forward = _init_first(Compose.forward)
     transform_observation_spec = _init_first(Compose.transform_observation_spec)
     transform_input_spec = _init_first(Compose.transform_input_spec)
     transform_reward_spec = _init_first(Compose.transform_reward_spec)
     reset = _init_first(Compose.reset)
     init = _init_first(Compose.init)
+    insert = _init_first(Compose.insert)
+    __iter__ = _init_first(Compose.__iter__)
+    __len__ = _init_first(Compose.__len__)
+    __getitem__ = _init_first(Compose.__getitem__)
+    _inv_call = _init_first(Compose._inv_call)
+    _step = _init_first(Compose._step)
+    append = _init_first(Compose.append)
+    dump = _init_first(Compose.dump)
+    empty_cache = _init_first(Compose.empty_cache)
