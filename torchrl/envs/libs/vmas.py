@@ -2,7 +2,6 @@ from typing import Dict, List, Optional
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
@@ -203,7 +202,18 @@ class VmasWrapper(_EnvWrapper):
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
-        obs, infos = self._env.reset(return_info=True)
+        if tensordict is not None and "_reset" in tensordict.keys():
+            envs_to_reset = tensordict.get("_reset").any(dim=0).squeeze(-1)
+            for env_index, to_reset in enumerate(envs_to_reset):
+                if to_reset:
+                    self._env.reset_at(env_index)
+            obs = []
+            infos = []
+            for agent in self.agents:
+                obs.append(self.scenario.observation(agent))
+                infos.append(self.scenario.info(agent))
+        else:
+            obs, infos = self._env.reset(return_info=True)
 
         agent_tds = []
         for i in range(self.n_agents):
