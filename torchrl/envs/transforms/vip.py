@@ -16,6 +16,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
+from torchrl.envs import EnvBase
 from torchrl.envs.transforms.transforms import (
     CatTensors,
     Compose,
@@ -26,7 +27,6 @@ from torchrl.envs.transforms.transforms import (
     Transform,
     UnsqueezeTransform,
 )
-from torchrl.envs import EnvBase
 
 try:
     from torchvision import models
