@@ -609,7 +609,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
 @dataclass(repr=False)
 class NdOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
-    """An N-dimensional One hot discrete tensor spec data class"""
+    """An N-dimensional One hot discrete tensor spec data class."""
 
     def __init__(
         self,
@@ -635,7 +635,7 @@ class NdOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             total_shape, space, device, dtype, "discrete"
         )
 
-    def rand(self, shape=torch.Size([])) -> torch.Tensor:
+    def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
         return torch.nn.functional.gumbel_softmax(
             torch.rand(*shape, self.d, self.space.n, device=self.device),
             hard=True,
@@ -645,7 +645,8 @@ class NdOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
 @dataclass(repr=False)
 class CustomNdOneHotDiscreteTensorSpec(NdOneHotDiscreteTensorSpec):
-    """A masked N-dimensional One-Hot discrete tensor spec data-class
+    """A masked N-dimensional One-Hot discrete tensor spec data-class.
+
     The aim of this class is to check / project or document a discrete space
     when it varies from environment to environment, or from step to step in the
     same environment.
@@ -688,7 +689,7 @@ class CustomNdOneHotDiscreteTensorSpec(NdOneHotDiscreteTensorSpec):
         out.mask = self.mask.to(dest)
         return out
 
-    def rand(self, shape=torch.Size([])) -> torch.Tensor:
+    def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
         mask = self.mask.expand(*shape, *self.mask.shape)
         r = torch.rand(mask.shape, device=mask.device).masked_fill_(~mask, 0.0)
         return (r == r.max(-1, keepdim=True)[0]).to(torch.long)

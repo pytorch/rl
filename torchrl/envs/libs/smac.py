@@ -1,18 +1,12 @@
 from typing import Dict, Optional
 
-import numpy as np
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import (
     CompositeSpec,
     CustomNdOneHotDiscreteTensorSpec,
-    DEVICE_TYPING,
-    DiscreteTensorSpec,
-    NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
-    NdUnboundedDiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
@@ -20,7 +14,8 @@ from torchrl.envs import GymLikeEnv
 
 try:
     import smac
-    from smac.env import StarCraft2Env
+    import smac.env
+    from smac.env.starcraft2.maps import smac_maps
 
     _has_smac = True
 except ImportError as err:
@@ -28,98 +23,108 @@ except ImportError as err:
     IMPORT_ERR = str(err)
 
 
-# TODO: discuss with Vincent if separation to ..Wrapper and ..Env classes makes sense here.
+def _get_envs():
+    if not _has_smac:
+        return []
+    return [map_name for map_name, _ in smac_maps.get_smac_map_registry().items()]
+
+
 class SC2Wrapper(GymLikeEnv):
-    """TODO: comments"""
+    """SMAC (StarCraft Multi-Agent Challenge) environment wrapper.
+
+    Examples:
+        >>> env = smac.env.StarCraft2Env("8m", seed=42) # Seed cannot be changed once environment was created.
+        >>> env = SC2Wrapper(env)
+        >>> td = env.reset()
+        >>> td["action"] = env.action_spec.rand()
+        >>> td = env.step(td)
+        >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([8, 14]), dtype=torch.int64),
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([8, 80]), dtype=torch.float32)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([8, 80]), dtype=torch.float32),
+                reward: Tensor(torch.Size([1]), dtype=torch.float32)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
+        >>> print(env.available_envs)
+        ['3m', '8m', '25m', '5m_vs_6m', '8m_vs_9m', ...]
+    """
 
     git_url = "https://github.com/oxwhirl/smac"
+    available_envs = _get_envs()
+    libname = "smac"
 
-    def __init__(self, map_name: str = None, **kwargs):
-        if map_name is not None:
-            kwargs["map_name"] = map_name
-        # TODO: process seed?
+    def __init__(self, env: smac.env.StarCraft2Env = None, **kwargs):
+        if env is not None:
+            kwargs["env"] = env
         super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):
-        pass
+        if "env" not in kwargs:
+            raise TypeError("Could not find environment key 'env' in kwargs.")
+        env = kwargs["env"]
+        if not isinstance(env, (smac.env.StarCraft2Env,)):
+            raise TypeError("env is not of type 'smac.env.StarCraft2Env'.")
 
-    def _init_env(self) -> Optional[int]:
-        # TODO: verify that isn't required.
-        pass
-
-    def _build_env(
-        self, env, seed: Optional[int] = None, **kwargs
-    ) -> "smac.env.StarCraft2Env":
-        # TODO: if required
-        # self.from_pixels = from_pixels
-        # self.pixels_only = pixels_only
-
-        # if from_pixels:
-        #     raise NotImplementedError("TODO")
+    def _build_env(self, env, **kwargs) -> smac.env.StarCraft2Env:
+        # StarCraft2Env must be initialized before _make_specs.
+        env.reset()
         return env
 
-    def _make_state_example(self, env):
-        # TODO
+    def _make_specs(self, env: smac.env.StarCraft2Env) -> None:
+        # Extract specs from definition.
+        self.reward_spec = self._make_reward_spec()
+
+        # Extract specs from instance.
+        # To extract these specs environment must be fully initialized with env.reset().
+        self.input_spec = self._make_input_spec(env)
+        self.observation_spec = self._make_observation_spec(env)
+
+        # TODO: add support for the state.
+        # self.state_spec = self._make_state_spec(env)
+        # self.input_spec["state"] = self._state_spec
+        # self._state_example = self._make_state_example(env)
+
+    def _init_env(self) -> None:
         pass
-        # key = jax.random.PRNGKey(0)
-        # keys = jax.random.split(key, self.batch_size.numel())
-        # state, _ = jax.vmap(env.reset)(jnp.stack(keys))
-        # state = self._reshape(state)
-        # return state
-
-    def _make_state_spec(self, env) -> TensorSpec:
-        # TODO
-        pass
-        # key = jax.random.PRNGKey(0)
-        # state, _ = env.reset(key)
-        # state_dict = _object_to_tensordict(state, self.device, batch_size=())
-        # state_spec = _torchrl_data_to_spec_transform(state_dict)
-        # return state_spec
-
-    def _make_input_spec(self, env: StarCraft2Env) -> TensorSpec:
-        action_spec = CustomNdOneHotDiscreteTensorSpec(
-            torch.tensor(env.get_avail_actions()), device=self.device
-        )
-        return CompositeSpec(action=action_spec)
-
-    def _make_observation_spec(self, env: StarCraft2Env) -> TensorSpec:
-        info = env.get_env_info()
-        size = torch.Size(info["n_agents"], info["obs_shape"])
-        return NdUnboundedContinuousTensorSpec(size, device=self.device)
 
     def _make_reward_spec(self) -> TensorSpec:
         return UnboundedContinuousTensorSpec(device=self.device)
 
-    def _make_specs(self, env: StarCraft2Env) -> None:
-        # extract specs from definition
-        self._reward_spec = self._make_reward_spec()
+    def _make_input_spec(self, env: smac.env.StarCraft2Env) -> TensorSpec:
+        action_spec = CustomNdOneHotDiscreteTensorSpec(
+            torch.tensor(env.get_avail_actions(), dtype=torch.bool), device=self.device
+        )
+        return CompositeSpec(action=action_spec)
 
-        # extract specs from instance
-        self._input_spec = self._make_input_spec(env)
-        self._observation_spec = self._make_observation_spec(env)
-        self._state_spec = self._make_state_spec(env)
-        self._input_spec["state"] = self._state_spec
-
-        # TODO: build state example for data conversion
-        self._state_example = self._make_state_example(env)
+    def _make_observation_spec(self, env: smac.env.StarCraft2Env) -> TensorSpec:
+        info = env.get_env_info()
+        size = torch.Size((info["n_agents"], info["obs_shape"]))
+        obs_spec = NdUnboundedContinuousTensorSpec(size, device=self.device)
+        return CompositeSpec(observation=obs_spec)
 
     def _set_seed(self, seed: Optional[int]):
-        raise NotImplementedError("Seed can be set only when creating environment.")
+        raise NotImplementedError(
+            "Seed cannot be changed once environment was created."
+        )
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
-
         env: smac.env.StarCraft2Env = self._env
         obs, state = env.reset()
 
-        # reshape batch size from vector
-        # TODO
-        state = self._reshape(state)
-        obs = self._reshape(obs)
-
         # collect outputs
-        state_dict = self.read_state(state)
+        # TODO: add support for the state.
+        # state_dict = self.read_state(state)
         obs_dict = self.read_obs(obs)
         done = torch.zeros(self.batch_size, dtype=torch.bool)
 
@@ -132,40 +137,101 @@ class SC2Wrapper(GymLikeEnv):
             device=self.device,
         )
         tensordict_out.set("done", done)
-        tensordict_out["state"] = state_dict
+        # TODO: add support for the state.
+        # tensordict_out["state"] = state_dict
+        # TODO: return available actions?
 
         return tensordict_out
 
+    def _action_transform(self, action):
+        action_np = self.action_spec.to_numpy(action)
+        return action_np
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        env: smac.env.StarCraft2Env = self._env
+
+        # perform actions
+        action = tensordict.get("action")  # this is a list of actions for each agent
+        action_np = self._action_transform(action)
+
+        # Actions are validated by the environment.
+        reward, done, info = env.step(action_np)
+
+        # collect outputs
+        # state_dict = self.read_state(state)
+        obs_dict = self.read_obs(env.get_obs())
+        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
+        done = self._to_tensor(done, dtype=torch.bool)
+
+        # build results
+        tensordict_out = TensorDict(
+            source=obs_dict,
+            batch_size=tensordict.batch_size,
+            device=self.device,
+        )
+        tensordict_out.set("reward", reward)
+        tensordict_out.set("done", done)
+        # TODO: support state.
+        # tensordict_out["state"] = state_dict
+
+        # Update available actions mask.
+        self.input_spec = self._make_input_spec(env)
+
+        return tensordict_out
+
+    def get_seed(self) -> Optional[int]:
+        return self._env.seed()
+
 
 class SC2Env(SC2Wrapper):
-    """TODO: comments"""
+    """SMAC (StarCraft Multi-Agent Challenge) environment wrapper.
+
+    Examples:
+        >>> env = SC2Env(map_name="8m", seed=42)
+        >>> td = env.rand_step()
+        >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([8, 14]), dtype=torch.int64),
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([8, 80]), dtype=torch.float32)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False),
+                reward: Tensor(torch.Size([1]), dtype=torch.float32)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
+        >>> print(env.available_envs)
+        ['3m', '8m', '25m', '5m_vs_6m', '8m_vs_9m', ...]
+    """
 
     def __init__(self, map_name: str, seed: Optional[int] = None, **kwargs):
         kwargs["map_name"] = map_name
         if seed is not None:
-            kwargs["seed"] = map_name
-
+            kwargs["seed"] = seed
         super().__init__(**kwargs)
+
+    def _check_kwargs(self, kwargs: Dict):
+        if "map_name" not in kwargs:
+            raise TypeError("Expected 'map_name' to be part of kwargs")
 
     def _build_env(
         self,
         map_name: str,
         seed: Optional[int] = None,
         **kwargs,
-    ) -> "smac.env.StarCraft2Env":
+    ) -> smac.env.StarCraft2Env:
         if not _has_smac:
             raise RuntimeError(
                 f"smac not found, unable to create smac.env.StarCraft2Env. "
                 f"Consider installing smac. More info:"
                 f" {self.git_url}. (Original error message during import: {IMPORT_ERR})."
             )
-        # TODO: check if those are required
-        # from_pixels = kwargs.pop("from_pixels", False)
-        # pixels_only = kwargs.pop("pixels_only", True)
 
-        # TODO: check if this is required
-        # self.wrapper_frame_skip = 1
-        env = smac.env.StarCraft2Env(map_name, seed, **kwargs)
+        self.wrapper_frame_skip = 1
+        env = smac.env.StarCraft2Env(map_name, seed=seed, **kwargs)
 
-        # TODO: return super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
         return super()._build_env(env)

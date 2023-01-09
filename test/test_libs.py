@@ -523,84 +523,19 @@ class TestSmac:
         final_seed = []
         tdreset = []
         tdrollout = []
-        seed = 0
+        seed = 42
         for _ in range(2):
             torch.manual_seed(seed)
             np.random.seed(seed)
             env = SC2Env(map_name, seed)
-            # final_seed.append(env.set_seed(0))
+            final_seed.append(env.get_seed())
             tdreset.append(env.reset())
             tdrollout.append(env.rollout(max_steps=50))
             env.close()
             del env
-        # TODO: in this case seed is always static?
-        # assert final_seed[0] == final_seed[1]
+        assert final_seed[0] == final_seed[1]
         assert_allclose_td(*tdreset)
         assert_allclose_td(*tdrollout)
-
-    # @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
-    # def test_jumanji_batch_size(self, envname, batch_size):
-    #     env = JumanjiEnv(envname, batch_size=batch_size)
-    #     env.set_seed(0)
-    #     tdreset = env.reset()
-    #     tdrollout = env.rollout(max_steps=50)
-    #     env.close()
-    #     del env
-    #     assert tdreset.batch_size == batch_size
-    #     assert tdrollout.batch_size[:-1] == batch_size
-    #
-    # @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
-    # def test_jumanji_spec_rollout(self, envname, batch_size):
-    #     env = JumanjiEnv(envname, batch_size=batch_size)
-    #     env.set_seed(0)
-    #     _test_fake_tensordict(env)
-    #
-    # @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
-    # def test_jumanji_consistency(self, envname, batch_size):
-    #     import jax
-    #     import jax.numpy as jnp
-    #     import numpy as onp
-    #
-    #     env = JumanjiEnv(envname, batch_size=batch_size)
-    #     obs_keys = list(env.observation_spec.keys(True))
-    #     env.set_seed(1)
-    #     rollout = env.rollout(10)
-    #
-    #     env.set_seed(1)
-    #     key = env.key
-    #     base_env = env._env
-    #     key, *keys = jax.random.split(key, np.prod(batch_size) + 1)
-    #     state, timestep = jax.vmap(base_env.reset)(jnp.stack(keys))
-    #     # state = env._reshape(state)
-    #     # timesteps.append(timestep)
-    #     for i in range(rollout.shape[-1]):
-    #         action = rollout[..., i]["action"]
-    #         # state = env._flatten(state)
-    #         action = env._flatten(env.read_action(action))
-    #         state, timestep = jax.vmap(base_env.step)(state, action)
-    #         # state = env._reshape(state)
-    #         # timesteps.append(timestep)
-    #         checked = False
-    #         for _key in obs_keys:
-    #             if isinstance(_key, str):
-    #                 _key = (_key,)
-    #             try:
-    #                 t2 = getattr(timestep, _key[0])
-    #             except AttributeError:
-    #                 try:
-    #                     t2 = getattr(timestep.observation, _key[0])
-    #                 except AttributeError:
-    #                     continue
-    #             t1 = rollout[..., i][("next", *_key)]
-    #             for __key in _key[1:]:
-    #                 t2 = getattr(t2, _key)
-    #             t2 = torch.tensor(onp.asarray(t2)).view_as(t1)
-    #             torch.testing.assert_close(t1, t2)
-    #             checked = True
-    #         if not checked:
-    #             raise AttributeError(
-    #                 f"None of the keys matched: {rollout}, {list(timestep.__dict__.keys())}"
-    #             )
 
 
 if __name__ == "__main__":
