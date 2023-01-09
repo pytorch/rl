@@ -16,7 +16,6 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs import EnvBase
 from torchrl.envs.transforms.transforms import (
     CatTensors,
     Compose,
@@ -183,7 +182,6 @@ class R3MTransform(Compose):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._is_3d = None
         cls.initialized = False
         cls._device = None
         cls._dtype = None
@@ -209,22 +207,10 @@ class R3MTransform(Compose):
         self.size = size
         self.stack_images = stack_images
         self.tensor_pixels_keys = tensor_pixels_keys
+        self._init()
 
     def _init(self):
-        """Initializer for R3M.
-
-        R3MTransform is initialized in a lazy manner: since
-        we may need to know the dimension of the input tensors,
-        we wait to properly initialize the transform until some specifics
-        attributes or methods are called.
-
-        This implies that calling these methods before registering the transform
-        in the TransformedEnv may cause bugs if the inferred attributes (such as
-        :obj:`is_3d`) do not match what was expected.
-
-        Eventually, since this behaviour is a bit cahotic we should use some other
-        way to deal with batched and non-batched input images.
-        """
+        """Initializer for R3M."""
         self.initialized = True
         in_keys = self.in_keys
         model_name = self.model_name
@@ -282,13 +268,13 @@ class R3MTransform(Compose):
             )
 
         if stack_images and len(in_keys) > 1:
-            if self.is_3d:
-                unsqueeze = UnsqueezeTransform(
-                    in_keys=in_keys,
-                    out_keys=in_keys,
-                    unsqueeze_dim=-4,
-                )
-                transforms.append(unsqueeze)
+
+            unsqueeze = UnsqueezeTransform(
+                in_keys=in_keys,
+                out_keys=in_keys,
+                unsqueeze_dim=-4,
+            )
+            transforms.append(unsqueeze)
 
             cattensors = CatTensors(
                 in_keys,
@@ -303,6 +289,7 @@ class R3MTransform(Compose):
             )
             flatten = FlattenObservation(-2, -1, out_keys)
             transforms = [*transforms, cattensors, network, flatten]
+
         else:
             network = _R3MNet(
                 in_keys=in_keys,
@@ -322,29 +309,6 @@ class R3MTransform(Compose):
         if self._dtype is not None:
             self.to(self._dtype)
 
-    @property
-    def is_3d(self):
-        """Whether the input image has 3 dims (no-batched) or more.
-
-        If no parent environment exists, it defaults to True.
-
-        The main usage is this: if there are more than one image and they need to be
-        stacked, we must know if the input image has dim 3 or 4. If 3, we need to unsqueeze
-        before stacking. If 4, we can cat along the first dimension.
-
-        """
-        if self._is_3d is None:
-            self._is_3d = self._get_is_3d()
-        return self._is_3d
-
-    def _get_is_3d(self):
-        parent = self.parent
-        for key in parent.observation_spec.keys():
-            if key in self.in_keys:
-                return len(parent.observation_spec[key].shape) == 3
-        else:
-            raise RuntimeError("Could not infer is_3d")
-
     def to(self, dest: Union[DEVICE_TYPING, torch.dtype]):
         if isinstance(dest, torch.dtype):
             self._dtype = dest
@@ -359,37 +323,3 @@ class R3MTransform(Compose):
     @property
     def dtype(self):
         return self._dtype
-
-    def set_container(self, container: Union[Transform, EnvBase]) -> None:
-        out = super().set_container(container)
-        # try to get the parent: if it exists, initialize. Otherwise, skip
-        try:
-            parent = self.parent
-            has_parent = parent is not None
-        except AttributeError:
-            has_parent = False
-        if has_parent and not self.initialized:
-            # we still want to capture an AttributeError here:
-            self._init()
-        elif has_parent and self.initialized:
-            if self._is_3d != self._get_is_3d(self):
-                raise RuntimeError(
-                    "Resetting a new parent is not permitted if is_3d does not match."
-                )
-        return out
-
-    forward = _init_first(Compose.forward)
-    transform_observation_spec = _init_first(Compose.transform_observation_spec)
-    transform_input_spec = _init_first(Compose.transform_input_spec)
-    transform_reward_spec = _init_first(Compose.transform_reward_spec)
-    reset = _init_first(Compose.reset)
-    init = _init_first(Compose.init)
-    insert = _init_first(Compose.insert)
-    __iter__ = _init_first(Compose.__iter__)
-    __len__ = _init_first(Compose.__len__)
-    __getitem__ = _init_first(Compose.__getitem__)
-    _inv_call = _init_first(Compose._inv_call)
-    _step = _init_first(Compose._step)
-    append = _init_first(Compose.append)
-    dump = _init_first(Compose.dump)
-    empty_cache = _init_first(Compose.empty_cache)

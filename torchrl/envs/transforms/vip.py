@@ -16,7 +16,6 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs import EnvBase
 from torchrl.envs.transforms.transforms import (
     CatTensors,
     Compose,
@@ -158,7 +157,6 @@ class VIPTransform(Compose):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._is_3d = None
         cls.initialized = False
         cls._device = None
         cls._dtype = None
@@ -184,22 +182,10 @@ class VIPTransform(Compose):
         self.size = size
         self.stack_images = stack_images
         self.tensor_pixels_keys = tensor_pixels_keys
+        self._init()
 
     def _init(self):
-        """Initializer for VIP.
-
-        VIPTransform is initialized in a lazy manner: since
-        we may need to know the dimension of the input tensors,
-        we wait to properly initialize the transform until some specifics
-        attributes or methods are called.
-
-        This implies that calling these methods before registering the transform
-        in the TransformedEnv may cause bugs if the inferred attributes (such as
-        :obj:`is_3d`) do not match what was expected.
-
-        Eventually, since this behaviour is a bit cahotic we should use some other
-        way to deal with batched and non-batched input images.
-        """
+        """Initializer for VIP."""
         self.initialized = True
         in_keys = self.in_keys
         model_name = self.model_name
@@ -257,13 +243,12 @@ class VIPTransform(Compose):
             )
 
         if stack_images and len(in_keys) > 1:
-            if self.is_3d:
-                unsqueeze = UnsqueezeTransform(
-                    in_keys=in_keys,
-                    out_keys=in_keys,
-                    unsqueeze_dim=-4,
-                )
-                transforms.append(unsqueeze)
+            unsqueeze = UnsqueezeTransform(
+                in_keys=in_keys,
+                out_keys=in_keys,
+                unsqueeze_dim=-4,
+            )
+            transforms.append(unsqueeze)
 
             cattensors = CatTensors(
                 in_keys,
@@ -331,35 +316,6 @@ class VIPTransform(Compose):
     @property
     def dtype(self):
         return self._dtype
-
-    def set_container(self, container: Union[Transform, EnvBase]) -> None:
-        out = super().set_container(container)
-        # try to get the parent: if it exists, initialize. Otherwise, skip
-        try:
-            parent = self.parent
-            has_parent = parent is not None
-        except AttributeError:
-            has_parent = False
-        if has_parent:
-            # we still want to capture an AttributeError here:
-            self._init()
-        return out
-
-    forward = _init_first(Compose.forward)
-    transform_observation_spec = _init_first(Compose.transform_observation_spec)
-    transform_input_spec = _init_first(Compose.transform_input_spec)
-    transform_reward_spec = _init_first(Compose.transform_reward_spec)
-    reset = _init_first(Compose.reset)
-    init = _init_first(Compose.init)
-    insert = _init_first(Compose.insert)
-    __iter__ = _init_first(Compose.__iter__)
-    __len__ = _init_first(Compose.__len__)
-    __getitem__ = _init_first(Compose.__getitem__)
-    _inv_call = _init_first(Compose._inv_call)
-    _step = _init_first(Compose._step)
-    append = _init_first(Compose.append)
-    dump = _init_first(Compose.dump)
-    empty_cache = _init_first(Compose.empty_cache)
 
 
 class VIPRewardTransform(VIPTransform):
