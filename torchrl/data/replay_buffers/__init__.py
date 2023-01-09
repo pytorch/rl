@@ -5,6 +5,7 @@
 
 from .replay_buffers import (
     PrioritizedReplayBuffer,
+    RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,

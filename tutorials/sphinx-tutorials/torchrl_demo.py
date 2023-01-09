@@ -224,7 +224,7 @@ from torchrl.data import PrioritizedReplayBuffer, ReplayBuffer
 
 ###############################################################################
 
-rb = ReplayBuffer(100, collate_fn=lambda x: x)
+rb = ReplayBuffer(collate_fn=lambda x: x)
 rb.add(1)
 rb.sample(1)
 
@@ -235,7 +235,7 @@ rb.sample(3)
 
 ###############################################################################
 
-rb = PrioritizedReplayBuffer(100, alpha=0.7, beta=1.1, collate_fn=lambda x: x)
+rb = PrioritizedReplayBuffer(alpha=0.7, beta=1.1, collate_fn=lambda x: x)
 rb.add(1)
 rb.sample(1)
 rb.update_priority(1, 0.5)
@@ -244,7 +244,7 @@ rb.update_priority(1, 0.5)
 # Here are examples of using a replaybuffer with tensordicts.
 
 collate_fn = torch.stack
-rb = ReplayBuffer(100, collate_fn=collate_fn)
+rb = ReplayBuffer(collate_fn=collate_fn)
 rb.add(TensorDict({"a": torch.randn(3)}, batch_size=[]))
 len(rb)
 
@@ -260,9 +260,7 @@ print(rb.sample(2).contiguous())
 torch.manual_seed(0)
 from torchrl.data import TensorDictPrioritizedReplayBuffer
 
-rb = TensorDictPrioritizedReplayBuffer(
-    100, alpha=0.7, beta=1.1, priority_key="td_error"
-)
+rb = TensorDictPrioritizedReplayBuffer(alpha=0.7, beta=1.1, priority_key="td_error")
 rb.extend(TensorDict({"a": torch.randn(2, 3)}, batch_size=[2]))
 tensordict_sample = rb.sample(2).contiguous()
 tensordict_sample
@@ -274,9 +272,9 @@ tensordict_sample["index"]
 ###############################################################################
 
 tensordict_sample["td_error"] = torch.rand(2)
-rb.update_priority(tensordict_sample)
+rb.update_tensordict_priority(tensordict_sample)
 
-for i, val in enumerate(rb._sum_tree):
+for i, val in enumerate(rb._sampler._sum_tree):
     print(i, val)
     if i == len(rb):
         break

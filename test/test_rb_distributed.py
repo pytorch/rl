@@ -12,7 +12,7 @@ import torch
 import torch.distributed.rpc as rpc
 import torch.multiprocessing as mp
 from tensordict.tensordict import TensorDict
-from torchrl.data.replay_buffers.rb_prototype import RemoteTensorDictReplayBuffer
+from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
@@ -51,7 +51,7 @@ def sample_from_buffer_remotely_returns_correct_tensordict_test(rank, name, worl
     if name == "TRAINER":
         buffer = _construct_buffer("BUFFER")
         _, inserted = _add_random_tensor_dict_to_buffer(buffer)
-        sampled, _ = _sample_from_buffer(buffer, 1)
+        sampled = _sample_from_buffer(buffer, 1)
         assert type(sampled) is type(inserted) is TensorDict
         assert (sampled == inserted)["a"].item()
 
