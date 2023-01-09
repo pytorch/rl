@@ -312,7 +312,6 @@ params_target_flat = params_target.flatten_keys(".")
 # shape. This storage will be instantiated later.
 
 replay_buffer = TensorDictReplayBuffer(
-    buffer_size,
     storage=LazyMemmapStorage(buffer_size),
     prefetch=n_optim,
 )
@@ -556,8 +555,7 @@ params_target_flat = params_target.flatten_keys(".")
 max_size = frames_per_batch // n_workers
 
 replay_buffer = TensorDictReplayBuffer(
-    -(-buffer_size // max_size),
-    storage=LazyMemmapStorage(buffer_size),
+    storage=LazyMemmapStorage(-(-buffer_size // max_size)),
     prefetch=n_optim,
 )
 

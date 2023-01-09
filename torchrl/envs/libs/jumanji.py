@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 from typing import Dict, Optional, Union
 
 import numpy as np
@@ -5,14 +10,14 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
     DEVICE_TYPING,
     DiscreteTensorSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
-    NdUnboundedDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
+    UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs import GymLikeEnv
@@ -62,7 +67,7 @@ def _jumanji_to_torchrl_spec_transform(
         shape = spec.shape
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdBoundedTensorSpec(
+        return BoundedTensorSpec(
             shape=shape,
             minimum=np.asarray(spec.minimum),
             maximum=np.asarray(spec.maximum),
@@ -74,13 +79,11 @@ def _jumanji_to_torchrl_spec_transform(
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         if dtype in (torch.float, torch.double, torch.half):
-            return NdUnboundedContinuousTensorSpec(
+            return UnboundedContinuousTensorSpec(
                 shape=shape, dtype=dtype, device=device
             )
         else:
-            return NdUnboundedDiscreteTensorSpec(
-                shape=shape, dtype=dtype, device=device
-            )
+            return UnboundedDiscreteTensorSpec(shape=shape, dtype=dtype, device=device)
     elif isinstance(spec, jumanji.specs.Spec) and hasattr(spec, "__dict__"):
         new_spec = {}
         for key, value in spec.__dict__.items():

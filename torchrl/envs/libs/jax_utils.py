@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import dataclasses
 from typing import Union
 
@@ -9,9 +14,9 @@ from tensordict.tensordict import make_tensordict, TensorDictBase
 from torch.utils import dlpack as torch_dlpack
 from torchrl.data import (
     CompositeSpec,
-    NdUnboundedContinuousTensorSpec,
-    NdUnboundedDiscreteTensorSpec,
     TensorSpec,
+    UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
 )
 
 
@@ -94,11 +99,11 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
 def _extract_spec(data: Union[torch.Tensor, TensorDictBase]) -> TensorSpec:
     if isinstance(data, torch.Tensor):
         if data.dtype in (torch.float, torch.double, torch.half):
-            return NdUnboundedContinuousTensorSpec(
+            return UnboundedContinuousTensorSpec(
                 shape=data.shape, dtype=data.dtype, device=data.device
             )
         else:
-            return NdUnboundedDiscreteTensorSpec(
+            return UnboundedDiscreteTensorSpec(
                 shape=data.shape, dtype=data.dtype, device=data.device
             )
     elif isinstance(data, TensorDictBase):

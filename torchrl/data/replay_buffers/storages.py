@@ -11,6 +11,7 @@ from typing import Any, Dict, Sequence, Union
 
 import torch
 from tensordict.memmap import MemmapTensor
+from tensordict.prototype import is_tensorclass
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import _CKPT_BACKEND
@@ -235,6 +236,10 @@ class LazyTensorStorage(Storage):
                 device=self.device,
                 dtype=data.dtype,
             )
+        elif is_tensorclass(data):
+            out = (
+                data.expand(self.max_size, *data.shape).clone().zero_().to(self.device)
+            )
         else:
             out = (
                 data.expand(self.max_size, *data.shape)
@@ -360,6 +365,21 @@ class LazyMemmapStorage(LazyTensorStorage):
             print(
                 f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
             )
+        elif is_tensorclass(data):
+            out = (
+                data.expand(self.max_size, *data.shape)
+                .clone()
+                .zero_()
+                .memmap_(prefix=self.scratch_dir)
+                .to(self.device)
+            )
+            for key, tensor in sorted(
+                out.items(include_nested=True, leaves_only=True), key=str
+            ):
+                filesize = os.path.getsize(tensor.filename) / 1024 / 1024
+                print(
+                    f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
+                )
         else:
             # out = TensorDict({}, [self.max_size, *data.shape])
             print("The storage is being created: ")

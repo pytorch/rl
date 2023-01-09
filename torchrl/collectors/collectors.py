@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import _pickle
 import abc
 import inspect
 import os
@@ -55,8 +56,8 @@ class RandomPolicy:
 
         Examples:
             >>> from tensordict import TensorDict
-            >>> from torchrl.data.tensor_specs import NdBoundedTensorSpec
-            >>> action_spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
+            >>> from torchrl.data.tensor_specs import BoundedTensorSpec
+            >>> action_spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
             >>> actor = RandomPolicy(spec=action_spec)
             >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
 
@@ -457,7 +458,9 @@ class SyncDataCollector(_DataCollector):
             # See #505 for additional context.
             with torch.no_grad():
                 self._tensordict_out = env.fake_tensordict()
+                self._tensordict_out = self._tensordict_out.to(self.device)
                 self._tensordict_out = self.policy(self._tensordict_out).unsqueeze(-1)
+                self._tensordict_out = self._tensordict_out.to(self.env_device)
             self._tensordict_out = (
                 self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
                 .to_tensordict()
@@ -708,7 +711,14 @@ class SyncDataCollector(_DataCollector):
             del self.env
 
     def __del__(self):
-        self.shutdown()  # make sure env is closed
+        try:
+            self.shutdown()
+        except Exception:
+            # an AttributeError will typically be raised if the collector is deleted when the program ends.
+            # In the future, insignificant changes to the close method may change the error type.
+            # We excplicitely assume that any error raised during closure in
+            # __del__ will not affect the program.
+            pass
 
     def state_dict(self) -> OrderedDict:
         """Returns the local state_dict of the data collector (environment and policy).
@@ -1016,7 +1026,19 @@ class _MultiDataCollector(_DataCollector):
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
-            proc.start()
+            try:
+                proc.start()
+            except _pickle.PicklingError as err:
+                if "<lambda>" in str(err):
+                    raise RuntimeError(
+                        """Can't open a process with doubly cloud-pickled lambda function.
+This error is likely due to an attempt to use a ParallelEnv in a
+multiprocessed data collector. To do this, consider wrapping your
+lambda function in an `torchrl.envs.EnvCreator` wrapper as follows:
+`env = ParallelEnv(N, EnvCreator(my_lambda_function))`.
+This will not only ensure that your lambda function is cloud-pickled once, but
+also that the state dict is synchronised across processes if needed."""
+                    )
             pipe_child.close()
             self.procs.append(proc)
             self.pipes.append(pipe_parent)
@@ -1027,7 +1049,14 @@ class _MultiDataCollector(_DataCollector):
         self.closed = False
 
     def __del__(self):
-        self.shutdown()
+        try:
+            self.shutdown()
+        except Exception:
+            # an AttributeError will typically be raised if the collector is deleted when the program ends.
+            # In the future, insignificant changes to the close method may change the error type.
+            # We excplicitely assume that any error raised during closure in
+            # __del__ will not affect the program.
+            pass
 
     def shutdown(self) -> None:
         """Shuts down all processes. This operation is irreversible."""
@@ -1624,8 +1653,8 @@ def _main_async_collector(
                         f"without receiving a command from main. Consider increasing the maximum idle count "
                         f"if this is expected via the environment variable MAX_IDLE_COUNT "
                         f"(current value is {_MAX_IDLE_COUNT})."
-                        f"\nIf this occurs at the end of a function, it means that your collector has not been "
-                        f"collected, consider calling `collector.shutdown()` or `del collector` at the end of the function."
+                        f"\nIf this occurs at the end of a function or program, it means that your collector has not been "
+                        f"collected, consider calling `collector.shutdown()` or `del collector` before ending the program."
                     )
                 continue
         if msg in ("continue", "continue_random"):

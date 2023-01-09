@@ -19,10 +19,10 @@ widely used replay buffers:
     TensorDictReplayBuffer
     TensorDictPrioritizedReplayBuffer
 
-Composable Replay Buffers (Prototype)
+Composable Replay Buffers
 -------------------------------------
 
-We also provide a prototyped composable replay buffer.
+We also give users the ability to compose a replay buffer using the following components:
 
 .. autosummary::
     :toctree: generated/
@@ -30,9 +30,6 @@ We also provide a prototyped composable replay buffer.
 
     .. currentmodule:: torchrl.data.replay_buffers
 
-    torchrl.data.replay_buffers.rb_prototype.ReplayBuffer
-    torchrl.data.replay_buffers.rb_prototype.TensorDictReplayBuffer
-    torchrl.data.replay_buffers.rb_prototype.RemoteTensorDictReplayBuffer
     torchrl.data.replay_buffers.samplers.Sampler
     torchrl.data.replay_buffers.samplers.RandomSampler
     torchrl.data.replay_buffers.samplers.PrioritizedSampler
@@ -64,6 +61,9 @@ TensorSpec
 
 The `TensorSpec` parent class and subclasses define the basic properties of observations and actions in TorchRL, such
 as shape, device, dtype and domain.
+It is important that your environment specs match the input and output that it sends and receives, as
+:obj:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
+Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
 
 
 .. autosummary::
@@ -74,8 +74,8 @@ as shape, device, dtype and domain.
     BoundedTensorSpec
     OneHotDiscreteTensorSpec
     UnboundedContinuousTensorSpec
-    NdBoundedTensorSpec
-    NdUnboundedContinuousTensorSpec
+    BoundedTensorSpec
+    UnboundedContinuousTensorSpec
     BinaryDiscreteTensorSpec
     MultOneHotDiscreteTensorSpec
     DiscreteTensorSpec

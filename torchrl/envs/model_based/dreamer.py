@@ -40,10 +40,10 @@ class DreamerEnv(ModelBasedEnvBase):
         """Sets the specs of the environment from the specs of the given environment."""
         super().set_specs_from_env(env)
         # self.observation_spec = CompositeSpec(
-        #     next_state=NdUnboundedContinuousTensorSpec(
+        #     next_state=UnboundedContinuousTensorSpec(
         #         shape=self.prior_shape, device=self.device
         #     ),
-        #     next_belief=NdUnboundedContinuousTensorSpec(
+        #     next_belief=UnboundedContinuousTensorSpec(
         #         shape=self.belief_shape, device=self.device
         #     ),
         # )

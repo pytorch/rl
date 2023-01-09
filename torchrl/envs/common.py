@@ -470,7 +470,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def numel(self) -> int:
         return prod(self.batch_size)
 
-    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+    def set_seed(
+        self, seed: Optional[int] = None, static_seed: bool = False
+    ) -> Optional[int]:
         """Sets the seed of the environment and returns the next seed to be used (which is the input seed if a single environment is present).
 
         Args:
@@ -491,6 +493,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             seed = new_seed
         return seed
 
+    @abc.abstractmethod
     def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError
 
@@ -674,7 +677,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # if del occurs before env has been set up, we don't want a recursion
         # error
         if "is_closed" in self.__dict__ and not self.is_closed:
-            self.close()
+            try:
+                self.close()
+            except Exception:
+                # a TypeError will typically be raised if the env is deleted when the program ends.
+                # In the future, insignificant changes to the close method may change the error type.
+                # We excplicitely assume that any error raised during closure in
+                # __del__ will not affect the program.
+                pass
 
     def to(self, device: DEVICE_TYPING) -> EnvBase:
         device = torch.device(device)
@@ -787,6 +797,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
             f"env not set in {self.__class__.__name__}, cannot access {attr}"
         )
 
+    @abc.abstractmethod
     def _init_env(self) -> Optional[int]:
         """Runs all the necessary steps such that the environment is ready to use.
 
@@ -820,21 +831,6 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
             self._env.close()
         except AttributeError:
             pass
-
-    def set_seed(
-        self, seed: Optional[int] = None, static_seed: bool = False
-    ) -> Optional[int]:
-        if seed is not None:
-            torch.manual_seed(seed)
-        self._set_seed(seed)
-        if seed is not None and not static_seed:
-            new_seed = seed_generator(seed)
-            seed = new_seed
-        return seed
-
-    @abc.abstractmethod
-    def _set_seed(self, seed: Optional[int]):
-        raise NotImplementedError
 
 
 def make_tensordict(

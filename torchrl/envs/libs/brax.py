@@ -1,13 +1,14 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 from typing import Dict, Optional, Union
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.data import (
-    CompositeSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
-)
+from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvWrapper
 
 try:
@@ -118,18 +119,18 @@ class BraxWrapper(_EnvWrapper):
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
         self.input_spec = CompositeSpec(
-            action=NdBoundedTensorSpec(
+            action=BoundedTensorSpec(
                 minimum=-1, maximum=1, shape=(env.action_size,), device=self.device
             )
         )
-        self.reward_spec = NdUnboundedContinuousTensorSpec(
+        self.reward_spec = UnboundedContinuousTensorSpec(
             shape=[
                 1,
             ],
             device=self.device,
         )
         self.observation_spec = CompositeSpec(
-            observation=NdUnboundedContinuousTensorSpec(
+            observation=UnboundedContinuousTensorSpec(
                 shape=(env.observation_size,), device=self.device
             )
         )
@@ -155,7 +156,7 @@ class BraxWrapper(_EnvWrapper):
             raise Exception("Brax requires an integer seed.")
         self._key = jax.random.PRNGKey(seed)
 
-    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+    def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
 
         # generate random keys
         self._key, *keys = jax.random.split(self._key, 1 + self.numel())
@@ -168,11 +169,13 @@ class BraxWrapper(_EnvWrapper):
         state = _object_to_tensordict(state, self.device, self.batch_size)
 
         # build result
+        reward = state.get("reward").view(*self.batch_size, *self.reward_spec.shape)
+        done = state.get("done").bool().view(*self.batch_size, *self.reward_spec.shape)
         tensordict_out = TensorDict(
             source={
                 "observation": state.get("obs"),
-                "reward": state.get("reward"),
-                "done": state.get("done").bool(),
+                "reward": reward,
+                "done": done,
                 "state": state,
             },
             batch_size=self.batch_size,
@@ -199,11 +202,19 @@ class BraxWrapper(_EnvWrapper):
         next_state = _object_to_tensordict(next_state, self.device, self.batch_size)
 
         # build result
+        reward = next_state.get("reward").view(
+            *self.batch_size, *self.reward_spec.shape
+        )
+        done = (
+            next_state.get("done")
+            .bool()
+            .view(*self.batch_size, *self.reward_spec.shape)
+        )
         tensordict_out = TensorDict(
             source={
                 "observation": next_state.get("obs"),
-                "reward": next_state.get("reward"),
-                "done": next_state.get("done").bool(),
+                "reward": reward,
+                "done": done,
                 "state": next_state,
             },
             batch_size=self.batch_size,
@@ -226,12 +237,18 @@ class BraxWrapper(_EnvWrapper):
         )
 
         # extract done values
-        next_done = next_state_nograd["done"].bool()
+        next_done = (
+            next_state_nograd.get("done")
+            .bool()
+            .view(*self.batch_size, *self.reward_spec.shape)
+        )
 
         # merge with tensors with grad function
         next_state = next_state_nograd
         next_state["obs"] = next_obs
-        next_state["reward"] = next_reward
+        next_state["reward"] = next_reward.view(
+            *self.batch_size, *self.reward_spec.shape
+        )
         next_state["qp"].update(dict(zip(qp_keys, next_qp_values)))
 
         # build result

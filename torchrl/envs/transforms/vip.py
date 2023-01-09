@@ -12,11 +12,11 @@ from torch.hub import load_state_dict_from_url
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
-    NdUnboundedContinuousTensorSpec,
     TensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.transforms import (
+from torchrl.envs.transforms.transforms import (
     CatTensors,
     Compose,
     FlattenObservation,
@@ -90,7 +90,7 @@ class _VIPNet(Transform):
                 del observation_spec[in_key]
 
         for out_key in self.out_keys:
-            observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
+            observation_spec[out_key] = UnboundedContinuousTensorSpec(
                 shape=torch.Size([*dim, self.outdim]), device=device
             )
 
@@ -142,6 +142,9 @@ class VIPTransform(Compose):
              "vip_vec" is assumed.
         size (int, optional): Size of the image to feed to resnet.
             Defaults to 244.
+        stack_images (bool, optional): if False, the images given in the :obj:`in_keys`
+             argument will be treaded separetely and each will be given a single,
+             separated entry in the output tensordict. Defaults to :obj:`True`.
         download (bool, optional): if True, the weights will be downloaded using
             the torch.hub download API (i.e. weights will be cached for future use).
             Defaults to False.
@@ -154,7 +157,6 @@ class VIPTransform(Compose):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._is_3d = None
         cls.initialized = False
         cls._device = None
         cls._dtype = None
@@ -180,8 +182,11 @@ class VIPTransform(Compose):
         self.size = size
         self.stack_images = stack_images
         self.tensor_pixels_keys = tensor_pixels_keys
+        self._init()
 
     def _init(self):
+        """Initializer for VIP."""
+        self.initialized = True
         in_keys = self.in_keys
         model_name = self.model_name
         out_keys = self.out_keys
@@ -238,13 +243,12 @@ class VIPTransform(Compose):
             )
 
         if stack_images and len(in_keys) > 1:
-            if self.is_3d:
-                unsqueeze = UnsqueezeTransform(
-                    in_keys=in_keys,
-                    out_keys=in_keys,
-                    unsqueeze_dim=-4,
-                )
-                transforms.append(unsqueeze)
+            unsqueeze = UnsqueezeTransform(
+                in_keys=in_keys,
+                out_keys=in_keys,
+                unsqueeze_dim=-4,
+            )
+            transforms.append(unsqueeze)
 
             cattensors = CatTensors(
                 in_keys,
@@ -272,7 +276,6 @@ class VIPTransform(Compose):
             self.append(transform)
         if self.download:
             self[-1].load_weights(dir_prefix=self.download_path)
-        self.initialized = True
 
         if self._device is not None:
             self.to(self._device)
@@ -281,8 +284,19 @@ class VIPTransform(Compose):
 
     @property
     def is_3d(self):
+        """Whether the input image has 3 dims (no-batched) or more.
+
+        If no parent environment exists, it defaults to True.
+
+        The main usage is this: if there are more than one image and they need to be
+        stacked, we must know if the input image has dim 3 or 4. If 3, we need to unsqueeze
+        before stacking. If 4, we can cat along the first dimension.
+
+        """
         if self._is_3d is None:
             parent = self.parent
+            if parent is None:
+                return True
             for key in parent.observation_spec.keys():
                 self._is_3d = len(parent.observation_spec[key].shape) == 3
                 break
@@ -302,13 +316,6 @@ class VIPTransform(Compose):
     @property
     def dtype(self):
         return self._dtype
-
-    forward = _init_first(Compose.forward)
-    transform_observation_spec = _init_first(Compose.transform_observation_spec)
-    transform_input_spec = _init_first(Compose.transform_input_spec)
-    transform_reward_spec = _init_first(Compose.transform_reward_spec)
-    reset = _init_first(Compose.reset)
-    init = _init_first(Compose.init)
 
 
 class VIPRewardTransform(VIPTransform):

@@ -12,11 +12,11 @@ import numpy as np
 import torch
 
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
-    NdUnboundedDiscreteTensorSpec,
     TensorSpec,
+    UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
 )
 
 from ...data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
@@ -60,7 +60,7 @@ def _dmcontrol_to_torchrl_spec_transform(
         shape = spec.shape
         if not len(shape):
             shape = torch.Size([1])
-        return NdBoundedTensorSpec(
+        return BoundedTensorSpec(
             shape=shape,
             minimum=spec.minimum,
             maximum=spec.maximum,
@@ -74,13 +74,11 @@ def _dmcontrol_to_torchrl_spec_transform(
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         if dtype in (torch.float, torch.double, torch.half):
-            return NdUnboundedContinuousTensorSpec(
+            return UnboundedContinuousTensorSpec(
                 shape=shape, dtype=dtype, device=device
             )
         else:
-            return NdUnboundedDiscreteTensorSpec(
-                shape=shape, dtype=dtype, device=device
-            )
+            return UnboundedDiscreteTensorSpec(shape=shape, dtype=dtype, device=device)
 
     else:
         raise NotImplementedError(type(spec))
