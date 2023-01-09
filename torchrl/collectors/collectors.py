@@ -22,13 +22,11 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
-
 from torchrl._utils import _check_for_faulty_process, prod
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.envs.vec_env import _BatchedEnv
@@ -700,6 +698,486 @@ class SyncDataCollector(_DataCollector):
 
         self._tensordict.update(self.env.reset(**kwargs), inplace=True)
         self._tensordict.fill_("step_count", 0)
+
+    def shutdown(self) -> None:
+        """Shuts down all workers and/or closes the local environment."""
+        if not self.closed:
+            self.closed = True
+            del self._tensordict, self._tensordict_out
+            if not self.env.is_closed:
+                self.env.close()
+            del self.env
+
+    def __del__(self):
+        try:
+            self.shutdown()
+        except Exception:
+            # an AttributeError will typically be raised if the collector is deleted when the program ends.
+            # In the future, insignificant changes to the close method may change the error type.
+            # We excplicitely assume that any error raised during closure in
+            # __del__ will not affect the program.
+            pass
+
+    def state_dict(self) -> OrderedDict:
+        """Returns the local state_dict of the data collector (environment and policy).
+
+        Returns:
+            an ordered dictionary with fields :obj:`"policy_state_dict"` and
+            `"env_state_dict"`.
+
+        """
+        if isinstance(self.env, TransformedEnv):
+            env_state_dict = self.env.transform.state_dict()
+        elif isinstance(self.env, _BatchedEnv):
+            env_state_dict = self.env.state_dict()
+        else:
+            env_state_dict = OrderedDict()
+
+        if hasattr(self.policy, "state_dict"):
+            policy_state_dict = self.policy.state_dict()
+            state_dict = OrderedDict(
+                policy_state_dict=policy_state_dict,
+                env_state_dict=env_state_dict,
+            )
+        else:
+            state_dict = OrderedDict(env_state_dict=env_state_dict)
+
+        return state_dict
+
+    def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
+        """Loads a state_dict on the environment and policy.
+
+        Args:
+            state_dict (OrderedDict): ordered dictionary containing the fields
+                `"policy_state_dict"` and :obj:`"env_state_dict"`.
+
+        """
+        strict = kwargs.get("strict", True)
+        if strict or "env_state_dict" in state_dict:
+            self.env.load_state_dict(state_dict["env_state_dict"], **kwargs)
+        if strict or "policy_state_dict" in state_dict:
+            self.policy.load_state_dict(state_dict["policy_state_dict"], **kwargs)
+
+    def __repr__(self) -> str:
+        env_str = indent(f"env={self.env}", 4 * " ")
+        policy_str = indent(f"policy={self.policy}", 4 * " ")
+        td_out_str = indent(f"td_out={self._tensordict_out}", 4 * " ")
+        string = (
+            f"{self.__class__.__name__}("
+            f"\n{env_str},"
+            f"\n{policy_str},"
+            f"\n{td_out_str},"
+            f"\nexploration={self.exploration_mode})"
+        )
+        return string
+
+class VectorizedSyncDataCollector(_DataCollector):
+    """Generic data collector for RL problems. Requires and environment constructor and a policy.
+
+    Args:
+        create_env_fn (Callable), returns an instance of EnvBase class.
+        policy (Callable, optional): Policy to be executed in the environment.
+            Must accept TensorDictBase object as input.
+        total_frames (int): lower bound of the total number of frames returned by the collector. The iterator will
+            stop once the total number of frames equates or exceeds the total number of frames passed to the
+            collector.
+        create_env_kwargs (dict, optional): Dictionary of kwargs for create_env_fn.
+        frames_per_batch (int): Time-length of a batch.
+            reset_at_each_iter and frames_per_batch == n_steps_max are equivalent configurations.
+            default: 200
+        init_random_frames (int, optional): Number of frames for which the policy is ignored before it is called.
+            This feature is mainly intended to be used in offline/model-based settings, where a batch of random
+            trajectories can be used to initialize training.
+            default=-1 (i.e. no random frames)
+        reset_at_each_iter (bool): Whether or not environments should be reset for each batch.
+            default=False.
+        postproc (Callable, optional): A Batcher is an object that will read a batch of data and return it in a useful format for training.
+            default: None.
+        device (int, str or torch.device, optional): The device on which the policy will be placed.
+            If it differs from the input policy device, the update_policy_weights_() method should be queried
+            at appropriate times during the training loop to accommodate for the lag between parameter configuration
+            at various times.
+            default = None (i.e. policy is kept on its original device)
+        seed (int, optional): seed to be used for torch and numpy.
+        pin_memory (bool): whether pin_memory() should be called on the outputs.
+        passing_device (int, str or torch.device, optional): The device on which the output TensorDict will be stored.
+            For long trajectories, it may be necessary to store the data on a different device than the one where
+            the policy is stored.
+            default = None
+        exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
+            "mode" or "mean".
+            default = "random"
+        init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
+            This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
+            default = True
+        return_same_td (bool, optional): if True, the same TensorDict will be returned at each iteration, with its values
+            updated. This feature should be used cautiously: if the same tensordict is added to a replay buffer for instance,
+            the whole content of the buffer will be identical.
+            Default is False.
+
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torch import nn
+        >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+        >>> collector = SyncDataCollector(
+        ...     create_env_fn=env_maker,
+        ...     policy=policy,
+        ...     total_frames=2000,
+        ...     frames_per_batch=200,
+        ...     init_random_frames=-1,
+        ...     reset_at_each_iter=False,
+        ...     device="cpu",
+        ...     passing_device="cpu",
+        ... )
+        >>> for i, data in enumerate(collector):
+        ...     if i == 2:
+        ...         print(data)
+        ...         break
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([200, 1]), dtype=torch.float32),
+                done: Tensor(torch.Size([200, 1]), dtype=torch.bool),
+                mask: Tensor(torch.Size([200, 1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([200, 3]), dtype=torch.float32)},
+                    batch_size=torch.Size([200]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([200, 3]), dtype=torch.float32),
+                reward: Tensor(torch.Size([200, 1]), dtype=torch.float32),
+                step_count: Tensor(torch.Size([200, 1]), dtype=torch.float32),
+                traj_ids: Tensor(torch.Size([200, 1, 1]), dtype=torch.float32)},
+            batch_size=torch.Size([200]),
+            device=cpu,
+            is_shared=False)
+        >>> del collector
+
+    """
+
+    def __init__(
+        self,
+        create_env_fn: Union[
+            EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]  # noqa: F821
+        ],  # noqa: F821
+        policy: Optional[
+            Union[
+                TensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
+        ] = None,
+        total_frames: Optional[int] = -1,
+        create_env_kwargs: Optional[dict] = None,
+        frames_per_batch: int = 200,
+        init_random_frames: int = -1,
+        reset_at_each_iter: bool = False,
+        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
+        device: DEVICE_TYPING = None,
+        passing_device: DEVICE_TYPING = None,
+        seed: Optional[int] = None,
+        pin_memory: bool = False,
+        exploration_mode: str = DEFAULT_EXPLORATION_MODE,
+        init_with_lag: bool = False,
+        return_same_td: bool = False,
+        reset_when_done: bool = True,
+    ):
+        self.closed = True
+        if seed is not None:
+            torch.manual_seed(seed)
+            np.random.seed(seed)
+
+        if create_env_kwargs is None:
+            create_env_kwargs = {}
+        if not isinstance(create_env_fn, EnvBase):
+            env = create_env_fn(**create_env_kwargs)
+        else:
+            env = create_env_fn
+            if create_env_kwargs:
+                if not isinstance(env, _BatchedEnv):
+                    raise RuntimeError(
+                        "kwargs were passed to SyncDataCollector but they can't be set "
+                        f"on environment of type {type(create_env_fn)}."
+                    )
+                env.update_kwargs(create_env_kwargs)
+
+        if passing_device is None:
+            if device is not None:
+                passing_device = device
+            elif policy is not None:
+                try:
+                    policy_device = next(policy.parameters()).device
+                except (AttributeError, StopIteration):
+                    policy_device = torch.device("cpu")
+                passing_device = policy_device
+            else:
+                passing_device = torch.device("cpu")
+
+        self.passing_device = torch.device(passing_device)
+        self.env: EnvBase = env.to(self.passing_device)
+        self.closed = False
+        self.reset_when_done = reset_when_done
+
+        (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
+            policy=policy,
+            device=device,
+            observation_spec=self.env.observation_spec,
+        )
+
+        self.env_device = env.device
+        if not total_frames > 0:
+            total_frames = float("inf")
+        self.total_frames = total_frames
+        self.reset_at_each_iter = reset_at_each_iter
+        self.init_random_frames = init_random_frames
+        self.postproc = postproc
+        if self.postproc is not None:
+            self.postproc.to(self.passing_device)
+        self.frames_per_batch = frames_per_batch
+        self.pin_memory = pin_memory
+        self.exploration_mode = (
+            exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
+        )
+        self.init_with_lag = init_with_lag and max_frames_per_traj > 0
+        self.return_same_td = return_same_td
+
+        self._tensordict = env.reset()
+        self._tensordict.set(
+            "step_count",
+            torch.zeros(self.env.batch_size, dtype=torch.int, device=env.device),
+        )
+
+        if (
+            hasattr(self.policy, "spec")
+            and self.policy.spec is not None
+            and all(v is not None for v in self.policy.spec.values())
+            and set(self.policy.spec.keys()) == set(self.policy.out_keys)
+        ):
+            # if policy spec is non-empty, all the values are not None and the keys
+            # match the out_keys we assume the user has given all relevant information
+            self._tensordict_out = (
+                env.fake_tensordict().expand(env.batch_size).to_tensordict()
+            )
+            self._tensordict_out.update(self.policy.spec.zero(env.batch_size))
+            if env.device:
+                self._tensordict_out = self._tensordict_out.to(env.device)
+            self._tensordict_out = (
+                self._tensordict_out.unsqueeze(-1)
+                .expand(*env.batch_size, self.frames_per_batch)
+                .to_tensordict()
+            )
+        else:
+            # otherwise, we perform a small number of steps with the policy to
+            # determine the relevant keys with which to pre-populate _tensordict_out.
+            # See #505 for additional context.
+            with torch.no_grad():
+                self._tensordict_out = env.fake_tensordict()
+                self._tensordict_out = self._tensordict_out.to(self.device)
+                self._tensordict_out = self.policy(self._tensordict_out).unsqueeze(-1)
+                self._tensordict_out = self._tensordict_out.to(self.env_device)
+            self._tensordict_out = (
+                self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
+                .to_tensordict()
+                .zero_()
+            )
+        # in addition to outputs of the policy, we add step_count to
+        # _tensordict_out which will be collected during rollout
+        self._tensordict_out.set(
+            "step_count",
+            torch.zeros(
+                *self._tensordict_out.batch_size,
+                dtype=torch.int64,
+                device=self.env_device,
+            ),
+        )
+
+        self._td_env = None
+        self._td_policy = None
+        self._has_been_done = None
+        self._exclude_private_keys = True
+
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+        """Sets the seeds of the environments stored in the DataCollector.
+
+        Args:
+            seed (int): integer representing the seed to be used for the environment.
+            static_seed(bool, optional): if True, the seed is not incremented.
+                Defaults to False
+
+        Returns:
+            Output seed. This is useful when more than one environment is contained in the DataCollector, as the
+            seed will be incremented for each of these. The resulting seed is the seed of the last environment.
+
+        Examples:
+            >>> from torchrl.envs import ParallelEnv
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> env_fn = lambda: GymEnv("Pendulum-v1")
+            >>> env_fn_parallel = ParallelEnv(6, env_fn)
+            >>> collector = SyncDataCollector(env_fn_parallel)
+            >>> out_seed = collector.set_seed(1)  # out_seed = 6
+
+        """
+        return self.env.set_seed(seed, static_seed=static_seed)
+
+    def iterator(self) -> Iterator[TensorDictBase]:
+        """Iterates through the DataCollector.
+
+        Yields: TensorDictBase objects containing (chunks of) trajectories
+
+        """
+        total_frames = self.total_frames
+        i = -1
+        self._frames = 0
+        while True:
+            i += 1
+            self._iter = i
+            tensordict_out = self.rollout()
+            self._frames += tensordict_out.batch_size[-1]
+            if self._frames >= total_frames:
+                self.env.close()
+
+            if self.postproc is not None:
+                tensordict_out = self.postproc(tensordict_out)
+            if self._exclude_private_keys:
+                excluded_keys = [
+                    key for key in tensordict_out.keys() if key.startswith("_")
+                ]
+                tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
+            if self.return_same_td:
+                yield tensordict_out
+            else:
+                # we must clone the values, as the tensordict is updated in-place.
+                # otherwise the following code may break:
+                # >>> for i, data in enumerate(collector):
+                # >>>      if i == 0:
+                # >>>          data0 = data
+                # >>>      elif i == 1:
+                # >>>          data1 = data
+                # >>>      else:
+                # >>>          break
+                # >>> assert data0["done"] is not data1["done"]
+                yield tensordict_out.clone()
+
+            del tensordict_out
+            if self._frames >= self.total_frames:
+                break
+
+    def _cast_to_policy(self, td: TensorDictBase) -> TensorDictBase:
+        policy_device = self.device
+        if hasattr(self.policy, "in_keys"):
+            # some keys may be absent -- TensorDictModule is resilient to missing keys
+            td = td.select(*self.policy.in_keys, strict=False)
+        if self._td_policy is None:
+            self._td_policy = td.to(policy_device)
+        else:
+            if td.device == torch.device("cpu") and self.pin_memory:
+                td.pin_memory()
+            self._td_policy.update(td, inplace=True)
+        return self._td_policy
+
+    def _cast_to_env(
+        self, td: TensorDictBase, dest: Optional[TensorDictBase] = None
+    ) -> TensorDictBase:
+        env_device = self.env_device
+        if dest is None:
+            if self._td_env is None:
+                self._td_env = td.to(env_device)
+            else:
+                self._td_env.update(td, inplace=True)
+            return self._td_env
+        else:
+            return dest.update(td, inplace=True)
+
+    def _reset_if_necessary(self) -> None:
+        done = self._tensordict.get("done")
+        if not self.reset_when_done:
+            done = torch.zeros_like(done)
+        steps = self._tensordict.get("step_count")
+        done_or_terminated = done.squeeze(-1)
+        if done_or_terminated.any():
+            steps = steps.clone()
+            if len(self.env.batch_size):
+                self._tensordict.masked_fill_(done_or_terminated, 0)
+                self._tensordict.set("_reset", done_or_terminated)
+            else:
+                self._tensordict.zero_()
+            self.env.reset(self._tensordict)
+            if self._tensordict.get("done").any():
+                raise RuntimeError(
+                    f"Got {sum(self._tensordict.get('done'))} done envs after reset."
+                )
+            steps[done_or_terminated] = 0
+            self._tensordict.set_("step_count", steps)
+
+    @torch.no_grad()
+    def rollout(self) -> TensorDictBase:
+        """Computes a rollout in the environment using the provided policy.
+
+        Returns:
+            TensorDictBase containing the computed rollout.
+
+        """
+        if self.reset_at_each_iter:
+            self._tensordict.update(self.env.reset(), inplace=True)
+            self._tensordict.fill_("step_count", 0)
+
+        with set_exploration_mode(self.exploration_mode):
+            for j in range(self.frames_per_batch):
+                if self._frames < self.init_random_frames:
+                    self.env.rand_step(self._tensordict)
+                else:
+                    td_cast = self._cast_to_policy(self._tensordict)
+                    td_cast = self.policy(td_cast)
+                    self._cast_to_env(td_cast, self._tensordict)
+                    self._tensordict = self.env.step(self._tensordict)
+
+                step_count = self._tensordict.get("step_count")
+                step_count += 1
+                # we must clone all the values, since the step / traj_id updates are done in-place
+                try:
+                    self._tensordict_out[..., j] = self._tensordict
+                except RuntimeError:
+                    # unlock the output tensordict to allow for new keys to be written
+                    # these will be missed during the sync but at least we won't get an error during the update
+                    is_shared = self._tensordict_out.is_shared()
+                    self._tensordict_out.unlock()
+                    self._tensordict_out[..., j] = self._tensordict
+                    if is_shared:
+                        self._tensordict_out.share_memory_()
+
+                self._reset_if_necessary()
+                self._tensordict.update(step_mdp(self._tensordict), inplace=True)
+
+        return self._tensordict_out
+
+    def reset(self, index=None, **kwargs) -> None:
+        """Resets the environments to a new initial state."""
+        if index is not None:
+            # check that the env supports partial reset
+            if prod(self.env.batch_size) == 0:
+                raise RuntimeError("resetting unique env with index is not permitted.")
+            _reset = torch.zeros(
+                (*self.env.batch_size, 1),
+                dtype=torch.bool,
+                device=self.env.device,
+            )
+            _reset[index] = 1
+            td_in = TensorDict({"_reset": _reset}, self.env.batch_size)
+            self._tensordict[index].zero_()
+        else:
+            _reset = None
+            td_in = None
+            self._tensordict.zero_()
+
+        if td_in:
+            self._tensordict.update(td_in, inplace=True)
+
+        self._tensordict.update(self.env.reset(**kwargs), inplace=True)
+        if _reset is not None:
+            self._tensordict["step_count"][_reset] = 0
+        else:
+            self._tensordict.fill_("step_count", 0)
 
     def shutdown(self) -> None:
         """Shuts down all workers and/or closes the local environment."""
