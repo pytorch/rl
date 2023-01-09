@@ -1027,10 +1027,8 @@ class FlattenObservation(ObservationTransform):
     """Flatten adjacent dimensions of a tensor.
 
     Args:
-        first_dim (int, optional): first dimension of the dimensions to flatten.
-            Default is 0.
-        last_dim (int, optional): last dimension of the dimensions to flatten.
-            Default is -3.
+        first_dim (int): first dimension of the dimensions to flatten.
+        last_dim (int): last dimension of the dimensions to flatten.
     """
 
     inplace = False
@@ -1038,7 +1036,7 @@ class FlattenObservation(ObservationTransform):
     def __init__(
         self,
         first_dim: int,
-        last_dim: int = -3,
+        last_dim: int,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
     ):
