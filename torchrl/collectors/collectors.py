@@ -688,6 +688,7 @@ class SyncDataCollector(_DataCollector):
             td_in = TensorDict({"_reset": _reset}, self.env.batch_size)
             self._tensordict[index].zero_()
         else:
+            _reset = None
             td_in = None
             self._tensordict.zero_()
 
@@ -695,7 +696,10 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.update(td_in, inplace=True)
 
         self._tensordict.update(self.env.reset(**kwargs), inplace=True)
-        self._tensordict.fill_("step_count", 0)
+        if _reset is not None:
+            self._tensordict["step_count"][_reset] = 0
+        else:
+            self._tensordict.fill_("step_count", 0)
 
     def shutdown(self) -> None:
         """Shuts down all workers and/or closes the local environment."""
