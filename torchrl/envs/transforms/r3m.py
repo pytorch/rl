@@ -167,6 +167,9 @@ class R3MTransform(Compose):
              "r3m_vec" is assumed.
         size (int, optional): Size of the image to feed to resnet.
             Defaults to 244.
+        stack_images (bool, optional): if False, the images given in the :obj:`in_keys`
+             argument will be treaded separetely and each will be given a single,
+             separated entry in the output tensordict. Defaults to :obj:`True`.
         download (bool, optional): if True, the weights will be downloaded using
             the torch.hub download API (i.e. weights will be cached for future use).
             Defaults to False.
@@ -179,7 +182,6 @@ class R3MTransform(Compose):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._is_3d = None
         cls.initialized = False
         cls._device = None
         cls._dtype = None
@@ -205,8 +207,11 @@ class R3MTransform(Compose):
         self.size = size
         self.stack_images = stack_images
         self.tensor_pixels_keys = tensor_pixels_keys
+        self._init()
 
     def _init(self):
+        """Initializer for R3M."""
+        self.initialized = True
         in_keys = self.in_keys
         model_name = self.model_name
         out_keys = self.out_keys
@@ -263,13 +268,13 @@ class R3MTransform(Compose):
             )
 
         if stack_images and len(in_keys) > 1:
-            if self.is_3d:
-                unsqueeze = UnsqueezeTransform(
-                    in_keys=in_keys,
-                    out_keys=in_keys,
-                    unsqueeze_dim=-4,
-                )
-                transforms.append(unsqueeze)
+
+            unsqueeze = UnsqueezeTransform(
+                in_keys=in_keys,
+                out_keys=in_keys,
+                unsqueeze_dim=-4,
+            )
+            transforms.append(unsqueeze)
 
             cattensors = CatTensors(
                 in_keys,
@@ -284,6 +289,7 @@ class R3MTransform(Compose):
             )
             flatten = FlattenObservation(-2, -1, out_keys)
             transforms = [*transforms, cattensors, network, flatten]
+
         else:
             network = _R3MNet(
                 in_keys=in_keys,
@@ -297,21 +303,11 @@ class R3MTransform(Compose):
             self.append(transform)
         if self.download:
             self[-1].load_weights(dir_prefix=self.download_path)
-        self.initialized = True
 
         if self._device is not None:
             self.to(self._device)
         if self._dtype is not None:
             self.to(self._dtype)
-
-    @property
-    def is_3d(self):
-        if self._is_3d is None:
-            parent = self.parent
-            for key in parent.observation_spec.keys():
-                self._is_3d = len(parent.observation_spec[key].shape) == 3
-                break
-        return self._is_3d
 
     def to(self, dest: Union[DEVICE_TYPING, torch.dtype]):
         if isinstance(dest, torch.dtype):
@@ -327,10 +323,3 @@ class R3MTransform(Compose):
     @property
     def dtype(self):
         return self._dtype
-
-    forward = _init_first(Compose.forward)
-    transform_observation_spec = _init_first(Compose.transform_observation_spec)
-    transform_input_spec = _init_first(Compose.transform_input_spec)
-    transform_reward_spec = _init_first(Compose.transform_reward_spec)
-    reset = _init_first(Compose.reset)
-    init = _init_first(Compose.init)
