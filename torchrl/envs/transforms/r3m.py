@@ -161,7 +161,7 @@ class R3MTransform(Compose):
 
     Args:
         model_name (str): one of resnet50, resnet34 or resnet18
-        in_keys (list of str, optional): list of input keys. If left empty, the
+        in_keys (list of str): list of input keys. If left empty, the
             "pixels" key is assumed.
         out_keys (list of str, optional): list of output keys. If left empty,
              "r3m_vec" is assumed.
@@ -190,7 +190,7 @@ class R3MTransform(Compose):
     def __init__(
         self,
         model_name: str,
-        in_keys: List[str] = None,
+        in_keys: List[str],
         out_keys: List[str] = None,
         size: int = 244,
         stack_images: bool = True,
@@ -199,7 +199,7 @@ class R3MTransform(Compose):
         tensor_pixels_keys: List[str] = None,
     ):
         super().__init__()
-        self.in_keys = in_keys
+        self.in_keys = in_keys if in_keys is not None else ["pixels"]
         self.download = download
         self.download_path = download_path
         self.model_name = model_name
@@ -258,6 +258,7 @@ class R3MTransform(Compose):
                 out_keys = ["r3m_vec"]
             else:
                 out_keys = [f"r3m_vec_{i}" for i in range(len(in_keys))]
+            self.out_keys = out_keys
         elif stack_images and len(out_keys) != 1:
             raise ValueError(
                 f"out_key must be of length 1 if stack_images is True. Got out_keys={out_keys}"
