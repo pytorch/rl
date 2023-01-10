@@ -904,6 +904,7 @@ class TestParallel:
     @pytest.mark.parametrize("batch_size", [(), (1,), (4,), (32, 5)])
     @pytest.mark.parametrize("n_workers", [1, 2])
     def test_parallel_env_reset_flag(self, batch_size, n_workers, max_steps=3):
+        torch.manual_seed(1)
         env = ParallelEnv(
             n_workers, lambda: CountingEnv(max_steps=max_steps, batch_size=batch_size)
         )
@@ -942,6 +943,7 @@ class TestParallel:
 
 @pytest.mark.parametrize("batch_size", [(), (2,), (32, 5)])
 def test_env_base_reset_flag(batch_size, max_steps=3):
+    torch.manual_seed(1)
     env = CountingEnv(max_steps=max_steps, batch_size=batch_size)
     env.set_seed(1)
 
