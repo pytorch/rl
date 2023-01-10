@@ -456,8 +456,8 @@ class TestRB:
                 )  # trainer.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
                 td2 = trainer2._modules["replay_buffer"].replay_buffer._storage._storage
                 if storage_type == "list":
-                    assert all([(_td1 == _td2).all() for _td1, _td2 in zip(td1, td2)])
-                    assert all([(_td1 is not _td2) for _td1, _td2 in zip(td1, td2)])
+                    assert all((_td1 == _td2).all() for _td1, _td2 in zip(td1, td2))
+                    assert all((_td1 is not _td2) for _td1, _td2 in zip(td1, td2))
                     assert storage2._storage is td2
                 else:
                     assert (td1 == td2).all()

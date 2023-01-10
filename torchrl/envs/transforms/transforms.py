@@ -1792,7 +1792,7 @@ class CatTensors(Transform):
             self.in_keys = self._find_in_keys()
             self._initialized = True
 
-        if all([key in tensordict.keys(include_nested=True) for key in self.in_keys]):
+        if all(key in tensordict.keys(include_nested=True) for key in self.in_keys):
             values = [tensordict.get(key) for key in self.in_keys]
             if self.unsqueeze_if_oor:
                 pos_idx = self.dim > 0
@@ -2560,7 +2560,7 @@ class RewardSum(Transform):
         if isinstance(reward_spec, CompositeSpec):
 
             # If reward_spec is a CompositeSpec, all in_keys should be keys of reward_spec
-            if not all([k in reward_spec.keys() for k in self.in_keys]):
+            if not all(k in reward_spec.keys() for k in self.in_keys):
                 raise KeyError("Not all in_keys are present in ´reward_spec´")
 
             # Define episode specs for all out_keys
