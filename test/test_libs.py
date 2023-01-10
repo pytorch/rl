@@ -687,7 +687,7 @@ class TestSmac:
         for _ in range(2):
             torch.manual_seed(seed)
             np.random.seed(seed)
-            env = SC2Env(map_name, seed)
+            env = SC2Env(map_name, seed=seed)
             final_seed.append(env.get_seed())
             tdreset.append(env.reset())
             tdrollout.append(env.rollout(max_steps=50))

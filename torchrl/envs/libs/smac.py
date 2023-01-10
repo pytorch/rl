@@ -6,7 +6,6 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.data import (
     CompositeSpec,
     CustomNdOneHotDiscreteTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
@@ -15,7 +14,7 @@ from torchrl.envs import GymLikeEnv
 try:
     import smac
     import smac.env
-    from smac.env.starcraft2.maps import smac_maps
+    from smac.env.starcraft2.maps import smac_maps, get_map_params
 
     _has_smac = True
 except ImportError as err:
@@ -62,10 +61,19 @@ class SC2Wrapper(GymLikeEnv):
     available_envs = _get_envs()
     libname = "smac"
 
-    def __init__(self, env: smac.env.StarCraft2Env = None, **kwargs):
+    def __init__(
+        self,
+        env: smac.env.StarCraft2Env = None,
+        batch_size: Optional[torch.Size] = None,
+        **kwargs,
+    ):
         if env is not None:
             kwargs["env"] = env
-        super().__init__(**kwargs)
+            if batch_size is None:
+                batch_size = torch.Size([env.n_agents])
+
+        kwargs["batch_size"] = batch_size
+        super().__init__(multi_agent_environment=True, **kwargs)
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -75,18 +83,11 @@ class SC2Wrapper(GymLikeEnv):
             raise TypeError("env is not of type 'smac.env.StarCraft2Env'.")
 
     def _build_env(self, env, **kwargs) -> smac.env.StarCraft2Env:
-        # StarCraft2Env must be initialized before _make_specs.
-        env.reset()
         return env
 
     def _make_specs(self, env: smac.env.StarCraft2Env) -> None:
         # Extract specs from definition.
         self.reward_spec = self._make_reward_spec()
-
-        # Extract specs from instance.
-        # To extract these specs environment must be fully initialized with env.reset().
-        self.input_spec = self._make_input_spec(env)
-        self.observation_spec = self._make_observation_spec(env)
 
         # TODO: add support for the state.
         # self.state_spec = self._make_state_spec(env)
@@ -94,21 +95,24 @@ class SC2Wrapper(GymLikeEnv):
         # self._state_example = self._make_state_example(env)
 
     def _init_env(self) -> None:
-        pass
+        self._env.reset()
+
+        # Before extracting environment specific specs, env.reset() must be executed.
+        self.input_spec = self._make_input_spec(self._env)
+        self.observation_spec = self._make_observation_spec(self._env)
 
     def _make_reward_spec(self) -> TensorSpec:
         return UnboundedContinuousTensorSpec(device=self.device)
 
     def _make_input_spec(self, env: smac.env.StarCraft2Env) -> TensorSpec:
+        # TODO: change in accordance with https://github.com/pytorch/rl/issues/766 resolution
         action_spec = CustomNdOneHotDiscreteTensorSpec(
             torch.tensor(env.get_avail_actions(), dtype=torch.bool), device=self.device
         )
         return CompositeSpec(action=action_spec)
 
     def _make_observation_spec(self, env: smac.env.StarCraft2Env) -> TensorSpec:
-        info = env.get_env_info()
-        size = torch.Size((info["n_agents"], info["obs_shape"]))
-        obs_spec = NdUnboundedContinuousTensorSpec(size, device=self.device)
+        obs_spec = UnboundedContinuousTensorSpec(env.get_obs_size(), device=self.device)
         return CompositeSpec(observation=obs_spec)
 
     def _set_seed(self, seed: Optional[int]):
@@ -139,7 +143,8 @@ class SC2Wrapper(GymLikeEnv):
         tensordict_out.set("done", done)
         # TODO: add support for the state.
         # tensordict_out["state"] = state_dict
-        # TODO: return available actions?
+
+        self.input_spec = self._make_input_spec(env)
 
         return tensordict_out
 
@@ -160,8 +165,9 @@ class SC2Wrapper(GymLikeEnv):
         # collect outputs
         # state_dict = self.read_state(state)
         obs_dict = self.read_obs(env.get_obs())
-        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
-        done = self._to_tensor(done, dtype=torch.bool)
+        # TODO: discuss if this is correct way to handle reward and state in case of MARL with batch_size=n_agents
+        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype).expand(self.batch_size)
+        done = self._to_tensor(done, dtype=torch.bool).expand(self.batch_size)
 
         # build results
         tensordict_out = TensorDict(
@@ -208,10 +214,17 @@ class SC2Env(SC2Wrapper):
         ['3m', '8m', '25m', '5m_vs_6m', '8m_vs_9m', ...]
     """
 
-    def __init__(self, map_name: str, seed: Optional[int] = None, **kwargs):
+    def __init__(self, map_name: str, batch_size: Optional[torch.Size] = None, seed: Optional[int] = None, **kwargs):
         kwargs["map_name"] = map_name
+
+        if batch_size is None:
+            map_info = get_map_params(map_name)
+            batch_size = torch.Size([map_info["n_agents"]])
+        kwargs["batch_size"] = batch_size
+
         if seed is not None:
             kwargs["seed"] = seed
+
         super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):

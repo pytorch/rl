@@ -52,6 +52,7 @@ printf "* Installing StarCraft 2 and SMAC maps into '${root_dir}/smac/StarCraftI
 mkdir $root_dir/smac
 cd $root_dir/smac/
 # TODO: discuss how we can cache it to avoid downloading ~4 GB on each run.
+# e.g adding this into the image (learn which one is used and how it is maintained)
 wget https://blzdistsc2-a.akamaihd.net/Linux/SC2.4.10.zip
 # The archive contains StarCraftII folder. Password comes from the documentation.
 unzip -qo -P iagreetotheeula SC2.4.10.zip

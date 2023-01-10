@@ -206,6 +206,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = True,
+        multi_agent_environment: bool = False
     ):
         super().__init__()
         if device is not None:
@@ -228,6 +229,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         ):
             self.batch_size = torch.Size([])
         self._run_type_checks = run_type_checks
+        self._multi_agent_environment = multi_agent_environment
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -524,7 +526,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = TensorDict(
                 {}, device=self.device, batch_size=self.batch_size, _run_checks=False
             )
-        action = self.action_spec.rand(self.batch_size)
+        if self._multi_agent_environment:
+            # TODO: change in accordance with https://github.com/pytorch/rl/issues/766 resolution
+            # In case of multi-agent environment, action spec includes batch_size.
+            action = self.action_spec.rand(torch.Size([]))
+        else:
+            action = self.action_spec.rand(self.batch_size)
         tensordict.set("action", action)
         return self.step(tensordict)
 
@@ -594,7 +601,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if policy is None:
 
             def policy(td):
-                return td.set("action", self.action_spec.rand(self.batch_size))
+                if self._multi_agent_environment:
+                    # TODO: change in accordance with https://github.com/pytorch/rl/issues/766 resolution
+                    # In case of multi-agent environment, action spec includes batch_size.
+                    action = self.action_spec.rand(torch.Size([]))
+                else:
+                    action = self.action_spec.rand(self.batch_size)
+                return td.set("action", action)
 
         tensordicts = []
         for i in range(max_steps):
@@ -744,12 +757,14 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         dtype: Optional[np.dtype] = None,
         device: DEVICE_TYPING = "cpu",
         batch_size: Optional[torch.Size] = None,
+        multi_agent_environment: bool = False,
         **kwargs,
     ):
         super().__init__(
             device=device,
             dtype=dtype,
             batch_size=batch_size,
+            multi_agent_environment=multi_agent_environment
         )
         if len(args):
             raise ValueError(

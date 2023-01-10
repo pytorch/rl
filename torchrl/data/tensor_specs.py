@@ -520,6 +520,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         return DiscreteTensorSpec(self.space.n, device=self.device, dtype=self.dtype)
 
 
+# TODO: ask Vincent if this should replace OneHotDiscreteTensorSpec as in https://github.com/pytorch/rl/issues/771
 @dataclass(repr=False)
 class NdOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     """An N-dimensional One hot discrete tensor spec data class."""
