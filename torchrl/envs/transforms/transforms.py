@@ -2663,7 +2663,7 @@ class StepCounter(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=torch.Size([1]), dtype=torch.int64, device=observation_spec.device
+            shape=torch.Size([]), dtype=torch.int64, device=observation_spec.device
         )
         observation_spec["step_count"].space.minimum = 0
         return observation_spec
