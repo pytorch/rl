@@ -231,6 +231,7 @@ def test_mult_onehot(shape, ns):
             assert (_r.sum(-1) == 1).all()
             assert _r.shape[-1] == _n
         np_r = ts.to_numpy(r)
+        assert not ts.is_in(torch.tensor(np_r))
         assert (ts.encode(np_r) == r).all()
 
 

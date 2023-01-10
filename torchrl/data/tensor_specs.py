@@ -878,9 +878,11 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             x.append(super(MultOneHotDiscreteTensorSpec, self).encode(v, space))
         return torch.cat(x, -1)
 
-    def _split(self, val: torch.Tensor) -> torch.Tensor:
-        vals = val.split([space.n for space in self.space], dim=-1)
-        return vals
+    def _split(self, val: torch.Tensor) -> Optional[torch.Tensor]:
+        split_sizes = [space.n for space in self.space]
+        if val.ndim < 1 or val.shape[-1] != sum(split_sizes):
+            return None
+        return val.split(split_sizes, dim=-1)
 
     def to_numpy(self, val: torch.Tensor, safe: bool = True) -> np.ndarray:
         if safe:
@@ -907,8 +909,10 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
     def is_in(self, val: torch.Tensor) -> bool:
         vals = self._split(val)
+        if vals is None:
+            return False
         return all(
-            [super(MultOneHotDiscreteTensorSpec, self).is_in(_val) for _val in vals]
+            super(MultOneHotDiscreteTensorSpec, self).is_in(_val) for _val in vals
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
