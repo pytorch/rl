@@ -832,7 +832,7 @@ class TestTransforms:
         assert (td.get("episode_reward") == 2 * td.get("reward")).all()
 
         # reset environments
-        td.set("_reset", torch.ones((batch, 1), dtype=torch.bool, device=device))
+        td.set("_reset", torch.ones(batch, dtype=torch.bool, device=device))
         rs.reset(td)
 
         # apply a third time, episode_reward should be equal to reward again
@@ -1724,7 +1724,7 @@ class TestTransforms:
             {"done": torch.zeros(*batch, 1, dtype=torch.bool)}, batch, device=device
         )
         if reset_workers:
-            td.set("_reset", torch.randn(*batch, 1) < 0)
+            td.set("_reset", torch.randn(batch) < 0)
         step_counter.reset(td)
         assert not torch.all(td.get("step_count"))
         i = 0

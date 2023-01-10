@@ -2619,7 +2619,7 @@ class StepCounter(Transform):
         _reset = tensordict.get(
             "_reset",
             default=torch.ones(
-                *tensordict.batch_size, 1, dtype=torch.bool, device=tensordict.device
+                tensordict.batch_size, dtype=torch.bool, device=tensordict.device
             ),
         )
         tensordict.set(

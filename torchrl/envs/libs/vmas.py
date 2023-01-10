@@ -203,7 +203,7 @@ class VmasWrapper(_EnvWrapper):
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
         if tensordict is not None and "_reset" in tensordict.keys():
-            envs_to_reset = tensordict.get("_reset").any(dim=0).squeeze(-1)
+            envs_to_reset = tensordict.get("_reset").any(dim=0)
             for env_index, to_reset in enumerate(envs_to_reset):
                 if to_reset:
                     self._env.reset_at(env_index)
