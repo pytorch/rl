@@ -2518,8 +2518,7 @@ class RewardSum(Transform):
             _reset = tensordict.get(
                 "_reset",
                 torch.ones(
-                    *tensordict.batch_size,
-                    1,
+                    tensordict.batch_size,
                     dtype=torch.bool,
                     device=tensordict.device,
                 ),
