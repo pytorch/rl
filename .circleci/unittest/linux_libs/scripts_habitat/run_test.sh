@@ -4,8 +4,10 @@ set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
-apt-get update && apt-get install -y git wget
+apt-get update && apt-get install -y git wget freeglut3 freeglut3-dev
 
+# find libstdc
+STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
@@ -23,10 +25,14 @@ python -c "import habitat;import habitat.utils.gym_definitions"
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 # more logging
-export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
 
 #wget https://github.com/openai/mujoco-py/blob/master/vendor/10_nvidia.json
 #mv 10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
+
+conda env config vars set MAGNUM_LOG=quiet HABITAT_SIM_LOG=quiet
+conda env config vars set LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
+
+conda deactivate && conda activate ./env
 
 # this workflow only tests the libs
 python -c "import habitat;import habitat.utils.gym_definitions"
