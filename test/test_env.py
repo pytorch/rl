@@ -930,20 +930,24 @@ class TestParallel:
         _reset = torch.randint(
             low=0, high=2, size=(*env.batch_size, 1), dtype=torch.bool
         )
+        while not _reset.any():
+            _reset = torch.randint(
+                low=0, high=2, size=(*env.batch_size, 1), dtype=torch.bool
+            )
+
         td_reset = env.reset(
             TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
         )
         env.close()
-        if _reset.any():
-            assert (td_reset["done"][_reset] == 0).all()
-            assert (td_reset["observation"][_reset] == 0).all()
-            assert (td_reset["done"][~_reset] == 1).all()
-            assert (td_reset["observation"][~_reset] == max_steps + 1).all()
+
+        assert (td_reset["done"][_reset] == 0).all()
+        assert (td_reset["observation"][_reset] == 0).all()
+        assert (td_reset["done"][~_reset] == 1).all()
+        assert (td_reset["observation"][~_reset] == max_steps + 1).all()
 
 
 @pytest.mark.parametrize("batch_size", [(), (2,), (32, 5)])
 def test_env_base_reset_flag(batch_size, max_steps=3):
-    torch.manual_seed(1)
     env = CountingEnv(max_steps=max_steps, batch_size=batch_size)
     env.set_seed(1)
 
