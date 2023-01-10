@@ -17,9 +17,9 @@ Performance results with default configuration:
 |                               | Intel(R) Xeon(R) Platinum 8275CL CPU @ 3.00GHz   |
 |                               |                                                  |
 +===============================+==================================================+
-|  Batched transforms           | 1885.2913 fps                                    |
+|  Batched transforms           | 843.6275 fps                                     |
 +-------------------------------+--------------------------------------------------+
-| Single env transform          | 1903.3575 fps                                    |
+|  Single env transform         | 863.7805 fps                                     |
 +-------------------------------+--------------------------------------------------+
 
 """
@@ -68,11 +68,19 @@ parser.add_argument(
     default=64,
     help="Number of frames in each batch of data collected.",
 )
-
+parser.add_argument(
+    "--perf_mode",
+    action="store_true",
+    help="If True, the env are created in performance mode (lower rendering quality, higher throughput)",
+)
 if __name__ == "__main__":
+    args = parser.parse_args()
 
     def make_env():
-        return HabitatEnv("HabitatRenderPick-v0", from_pixels=True)
+        return HabitatEnv(
+            "HabitatPick-v0" if args.perf_mode else "HabitatRenderPick-v0",
+            from_pixels=True,
+        )
 
     # print the raw env output
     print(make_env().fake_tensordict())
@@ -87,7 +95,6 @@ if __name__ == "__main__":
             ),
         )
 
-    args = parser.parse_args()
     if args.batched:
         parallel_env = make_transformed_env(
             ParallelEnv(args.n_envs, EnvCreator(make_env))
@@ -96,12 +103,12 @@ if __name__ == "__main__":
         parallel_env = ParallelEnv(
             args.n_envs, EnvCreator(lambda: make_transformed_env(make_env()))
         )
-    devices = list(range(torch.cuda.device_count()))[: args.n_workers_collector]
+    devices = list(range(torch.cuda.device_count()))[1 : (args.n_workers_collector + 1)]
     if len(devices) == 1:
         devices = devices[0]
     elif len(devices) < args.n_workers_collector:
         raise RuntimeError(
-            "This benchmark requires at least as many GPUs as the number of collector workers."
+            "This benchmark requires one more GPU than the number of collector workers."
         )
     collector = MultiaSyncDataCollector(
         [
