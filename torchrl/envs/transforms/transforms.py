@@ -2651,7 +2651,8 @@ class StepCounter(Transform):
         if self.max_steps is not None:
             tensordict.set(
                 "done",
-                tensordict.get("done").squeeze(-1) | next_step_count >= self.max_steps,
+                tensordict.get("done")
+                | (next_step_count >= self.max_steps).unsqueeze(-1),
             )
         return tensordict
 
