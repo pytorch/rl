@@ -221,3 +221,16 @@ def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int 
     if shape_len == len(batch_size):
         return tensor.unsqueeze(dim=dim)
     return tensor
+
+
+class classproperty:
+    """A class-property object.
+
+    Usage: Allows for iterators coded as properties.
+    """
+
+    def __init__(self, fget):
+        self.fget = fget
+
+    def __get__(self, owner_self, owner_cls):
+        return self.fget(owner_cls)
