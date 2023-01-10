@@ -73,7 +73,36 @@ rollout = base_env.rollout(32, policy)
 print("rollout, fine tuning:", rollout)
 
 ##############################################################################
-# The easyness with which we have swapped the transform from the env to the policy
+# The easiness with which we have swapped the transform from the env to the policy
 # is due to the fact that both behave like TensorDictModule: they have a set of `"in_keys"` and
 # `"out_keys"` that make it easy to read and write output in different context.
 #
+# To conclude this tutorial, let's have a look at how we could use R3M to read
+# images stored in a replay buffer (e.g. in an offline RL context). First, let's build our dataset:
+#
+from torchrl.data import LazyMemmapStorage, ReplayBuffer
+
+storage = LazyMemmapStorage(1000)
+rb = ReplayBuffer(storage=storage, transform=r3m)
+
+##############################################################################
+# We can now collect the data (random rollouts for our purpose) and fill the replay
+# buffer with it:
+#
+total = 0
+while total < 1000:
+    tensordict = base_env.rollout(1000)
+    rb.extend(tensordict)
+    total += tensordict.numel()
+
+##############################################################################
+# Let's check what our replay buffer storage looks like. It should not contain the "r3m_vec" entry
+# since we haven't used it yet:
+print("stored data:", storage._storage)
+
+##############################################################################
+# When sampling, the data will go through the R3M transform, giving us the processed data that we wanted.
+# In this way, we can train an algorithm offline on a dataset made of images:
+#
+batch = rb.sample(32)
+print("data after sampling:", batch)
