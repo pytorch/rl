@@ -101,7 +101,8 @@ while total < 1000:
 print("stored data:", storage._storage)
 
 ##############################################################################
-# When sampling, the data will go through the R3M transform, giving us the processed data that we wanted:
+# When sampling, the data will go through the R3M transform, giving us the processed data that we wanted.
+# In this way, we can train an algorithm offline on a dataset made of images:
 #
 batch = rb.sample(32)
 print("data after sampling:", batch)
