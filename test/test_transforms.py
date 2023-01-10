@@ -2284,7 +2284,9 @@ transforms = [
         id="CenterCrop",
         marks=pytest.mark.skipif(not _has_tv, reason="needs torchvision dependency"),
     ),
-    pytest.param(partial(FlattenObservation, first_dim=-3, last_dim=-3), id="FlattenObservation"),
+    pytest.param(
+        partial(FlattenObservation, first_dim=-3, last_dim=-3), id="FlattenObservation"
+    ),
     pytest.param(
         partial(UnsqueezeTransform, unsqueeze_dim=-1), id="UnsqueezeTransform"
     ),

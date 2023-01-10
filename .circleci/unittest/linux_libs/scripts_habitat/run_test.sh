@@ -30,6 +30,10 @@ export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
 
 # this workflow only tests the libs
 python -c "import habitat;import habitat.utils.gym_definitions"
+python -c """from torchrl.envs.libs.habitat import HabitatEnv
+env = HabitatEnv('HabitatRenderPick-v0')
+env.reset()
+"""
 
 coverage run -m pytest test/test_libs.py --instafail -v --durations 20 --capture no -k TestHabitat
 coverage xml -i
