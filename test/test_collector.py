@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import sys
 
 import numpy as np
 import pytest
@@ -35,6 +36,9 @@ from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
+_os_is_windows = sys.platform == "win32"
+_python_is_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
+_python_is_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
 
 class WrappablePolicy(nn.Module):
@@ -141,6 +145,10 @@ def _is_consistent_device_type(
     return tensordict_device_type == passing_device_type
 
 
+@pytest.mark.skipif(
+    _os_is_windows and _python_is_3_10,
+    reason="Windows Access Violation in torch.multiprocessing / BrokenPipeError in multiprocessing.connection",
+)
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("device", ["cuda", "cpu", None])
 @pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
@@ -152,6 +160,12 @@ def test_output_device_consistency(
         device == "cuda" or policy_device == "cuda" or passing_device == "cuda"
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
+
+    if _os_is_windows and _python_is_3_7:
+        if device == "cuda" and policy_device == "cuda" and device is None:
+            pytest.skip(
+                "BrokenPipeError in multiprocessing.connection with Python 3.7 on Windows"
+            )
 
     _device = "cuda:0" if device == "cuda" else device
     _policy_device = "cuda:0" if policy_device == "cuda" else policy_device
@@ -461,6 +475,8 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_collector_batch_size(num_env, env_name, seed=100):
+    if num_env == 3 and _os_is_windows:
+        pytest.skip("Test timeout (> 10 min) on CI pipeline Windows machine with GPU")
     if num_env == 1:
 
         def env_fn():
@@ -993,6 +1009,14 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
 @pytest.mark.parametrize("passing_device", ["cuda", "cpu"])
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
 def test_collector_device_combinations(device, passing_device):
+    if (
+        _os_is_windows
+        and _python_is_3_10
+        and passing_device == "cuda"
+        and device == "cuda"
+    ):
+        pytest.skip("Windows fatal exception: access violation in torch.storage")
+
     def env_fn(seed):
         env = make_make_env("conv")()
         env.set_seed(seed)
