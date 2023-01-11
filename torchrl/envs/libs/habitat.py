@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import functools
+import gc
 
 import torch
 
@@ -77,12 +78,17 @@ class HabitatEnv(GymEnv):
             raise ValueError("The device must be of type cuda for Habitat.")
         device_num = device.index
         kwargs = {"override_options": []}
-        for i, arg in enumerate(self._constructor_kwargs.get("override_options", [])):
-
+        for arg in self._constructor_kwargs.get("override_options", []):
             if arg.startswith("habitat.simulator.habitat_sim_v0.gpu_device_id"):
                 arg = f"habitat.simulator.habitat_sim_v0.gpu_device_id={device_num}"
                 kwargs["override_options"].append(arg)
             else:
                 kwargs["override_options"].append(arg)
+
+        self._env.close()
+        del self._env
+        gc.collect()
         self.rebuild_with_kwargs(**kwargs)
         return super().to(device)
+
+torch.compile()
