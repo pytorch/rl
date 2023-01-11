@@ -14,7 +14,6 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
-
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -2514,18 +2513,17 @@ class RewardSum(Transform):
 
         # Batched environments
         else:
-            reset_workers = tensordict.get(
-                "reset_workers",
+            _reset = tensordict.get(
+                "_reset",
                 torch.ones(
-                    *tensordict.batch_size,
-                    1,
+                    tensordict.batch_size,
                     dtype=torch.bool,
                     device=tensordict.device,
                 ),
             )
             for out_key in self.out_keys:
                 if out_key in tensordict.keys():
-                    tensordict[out_key][reset_workers] = 0.0
+                    tensordict[out_key][_reset] = 0.0
 
         return tensordict
 
@@ -2615,20 +2613,19 @@ class StepCounter(Transform):
         super().__init__([])
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        workers = tensordict.get(
-            "reset_workers",
+        _reset = tensordict.get(
+            "_reset",
             default=torch.ones(
-                *tensordict.batch_size, 1, dtype=torch.bool, device=tensordict.device
+                tensordict.batch_size, dtype=torch.bool, device=tensordict.device
             ),
         )
         tensordict.set(
             "step_count",
-            (~workers)
+            (~_reset)
             * tensordict.get(
                 "step_count",
                 torch.zeros(
-                    *tensordict.batch_size,
-                    1,
+                    tensordict.batch_size,
                     dtype=torch.int64,
                     device=tensordict.device,
                 ),
@@ -2641,8 +2638,7 @@ class StepCounter(Transform):
             tensordict.get(
                 "step_count",
                 torch.zeros(
-                    *tensordict.batch_size,
-                    1,
+                    tensordict.batch_size,
                     dtype=torch.int64,
                     device=tensordict.device,
                 ),
@@ -2653,7 +2649,8 @@ class StepCounter(Transform):
         if self.max_steps is not None:
             tensordict.set(
                 "done",
-                tensordict.get("done") | next_step_count >= self.max_steps,
+                tensordict.get("done")
+                | (next_step_count >= self.max_steps).unsqueeze(-1),
             )
         return tensordict
 
@@ -2665,7 +2662,7 @@ class StepCounter(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=torch.Size([1]), dtype=torch.int64, device=observation_spec.device
+            shape=torch.Size([]), dtype=torch.int64, device=observation_spec.device
         )
         observation_spec["step_count"].space.minimum = 0
         return observation_spec

@@ -20,6 +20,7 @@ from _utils_internal import (
 )
 from mocking_classes import (
     ActionObsMergeLinear,
+    CountingEnv,
     DiscreteActionConvMockEnv,
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
@@ -511,7 +512,7 @@ class TestParallel:
             _ = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"reset_workers": torch.zeros(N, dtype=torch.bool).bernoulli_()},
+            source={"_reset": torch.zeros(N, dtype=torch.bool).bernoulli_()},
             batch_size=[
                 N,
             ],
@@ -595,7 +596,7 @@ class TestParallel:
             _ = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"reset_workers": torch.zeros(N, dtype=torch.bool).bernoulli_()},
+            source={"_reset": torch.zeros(N, dtype=torch.bool).bernoulli_()},
             batch_size=[
                 N,
             ],
@@ -899,6 +900,78 @@ class TestParallel:
 
         env1.close()
         env2.close()
+
+    @pytest.mark.parametrize("batch_size", [(), (1,), (4,), (32, 5)])
+    @pytest.mark.parametrize("n_workers", [1, 2])
+    def test_parallel_env_reset_flag(self, batch_size, n_workers, max_steps=3):
+        torch.manual_seed(1)
+        env = ParallelEnv(
+            n_workers, lambda: CountingEnv(max_steps=max_steps, batch_size=batch_size)
+        )
+        env.set_seed(1)
+        action = env.action_spec.rand(env.batch_size)
+        action[:] = 1
+
+        for i in range(max_steps):
+            td = env.step(
+                TensorDict(
+                    {"action": action}, batch_size=env.batch_size, device=env.device
+                )
+            )
+            assert (td["done"] == 0).all()
+            assert (td["next"]["observation"] == i + 1).all()
+
+        td = env.step(
+            TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
+        )
+        assert (td["done"] == 1).all()
+        assert (td["next"]["observation"] == max_steps + 1).all()
+
+        _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+        while not _reset.any():
+            _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+
+        td_reset = env.reset(
+            TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
+        )
+        env.close()
+
+        assert (td_reset["done"][_reset] == 0).all()
+        assert (td_reset["observation"][_reset] == 0).all()
+        assert (td_reset["done"][~_reset] == 1).all()
+        assert (td_reset["observation"][~_reset] == max_steps + 1).all()
+
+
+@pytest.mark.parametrize("batch_size", [(), (2,), (32, 5)])
+def test_env_base_reset_flag(batch_size, max_steps=3):
+    env = CountingEnv(max_steps=max_steps, batch_size=batch_size)
+    env.set_seed(1)
+
+    action = env.action_spec.rand(env.batch_size)
+    action[:] = 1
+
+    for i in range(max_steps):
+        td = env.step(
+            TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
+        )
+        assert (td["done"] == 0).all()
+        assert (td["next"]["observation"] == i + 1).all()
+
+    td = env.step(
+        TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
+    )
+    assert (td["done"] == 1).all()
+    assert (td["next"]["observation"] == max_steps + 1).all()
+
+    _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+    td_reset = env.reset(
+        TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
+    )
+
+    assert (td_reset["done"][_reset] == 0).all()
+    assert (td_reset["observation"][_reset] == 0).all()
+    assert (td_reset["done"][~_reset] == 1).all()
+    assert (td_reset["observation"][~_reset] == max_steps + 1).all()
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
