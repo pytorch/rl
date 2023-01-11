@@ -90,5 +90,3 @@ class HabitatEnv(GymEnv):
         gc.collect()
         self.rebuild_with_kwargs(**kwargs)
         return super().to(device)
-
-torch.compile()
