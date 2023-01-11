@@ -394,7 +394,6 @@ class GymEnv(GymWrapper):
                     kwargs.pop("render_mode")
                 else:
                     raise err
-        self._kwargs = {"env_name": env_name, **kwargs}
         return super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
 
     @implement_for("gym", None, "0.25.1")

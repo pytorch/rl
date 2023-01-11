@@ -76,9 +76,13 @@ class HabitatEnv(GymEnv):
         if device.type != "cuda":
             raise ValueError("The device must be of type cuda for Habitat.")
         device_num = device.index
-        for i, arg in enumerate(self._kwargs.get("override_options", [])):
+        kwargs = {"override_options": []}
+        for i, arg in enumerate(self._constructor_kwargs.get("override_options", [])):
+
             if arg.startswith("habitat.simulator.habitat_sim_v0.gpu_device_id"):
                 arg = f"habitat.simulator.habitat_sim_v0.gpu_device_id={device_num}"
-                self._kwargs[i] = arg
-                break
+                kwargs["override_options"].append(arg)
+            else:
+                kwargs["override_options"].append(arg)
+        self.rebuild_with_kwargs(**kwargs)
         return super().to(device)
