@@ -305,8 +305,11 @@ class TransformedEnv(EnvBase):
         **kwargs,
     ):
         self._transform = None
-        device = kwargs.pop("device", env.device)
-        env = env.to(device)
+        device = kwargs.pop("device", None)
+        if device is not None:
+            env = env.to(device)
+        else:
+            device = env.device
         super().__init__(device=None, **kwargs)
 
         if isinstance(env, TransformedEnv):
@@ -342,7 +345,9 @@ class TransformedEnv(EnvBase):
         self.batch_size = self.base_env.batch_size
 
     def _set_env(self, env: EnvBase, device) -> None:
-        self.base_env = env.to(device)
+        if device != env.device:
+            env = env.to(device)
+        self.base_env = env
         # updates need not be inplace, as transforms may modify values out-place
         self.base_env._inplace_update = False
 
