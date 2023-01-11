@@ -4,6 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 import functools
 
+import torch
+
+from torchrl.data import DEVICE_TYPING
+from torchrl.envs import EnvBase
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.utils import classproperty
 
@@ -48,7 +52,15 @@ class HabitatEnv(GymEnv):
 
     """
 
-    __init__ = _wrap_import_error(GymEnv.__init__)
+    @_wrap_import_error
+    def __init__(self, env_name, disable_env_checker=None, **kwargs):
+        device_num = torch.device(kwargs.pop("device", 0)).index
+        kwargs["override_options"] = [
+            f"habitat.simulator.habitat_sim_v0.gpu_device_id={device_num}",
+        ]
+        super().__init__(
+            env_name=env_name, disable_env_checker=disable_env_checker, **kwargs
+        )
 
     @classproperty
     def available_envs(cls):
@@ -58,3 +70,15 @@ class HabitatEnv(GymEnv):
         if self.from_pixels:
             env.reset()
         return super()._build_gym_env(env, pixels_only)
+
+    def to(self, device: DEVICE_TYPING) -> EnvBase:
+        device = torch.device(device)
+        if device.type != "cuda":
+            raise ValueError("The device must be of type cuda for Habitat.")
+        device_num = device.index
+        for i, arg in enumerate(self._kwargs.get("override_options", [])):
+            if arg.startswith("habitat.simulator.habitat_sim_v0.gpu_device_id"):
+                arg = f"habitat.simulator.habitat_sim_v0.gpu_device_id={device_num}"
+                self._kwargs[i] = arg
+                break
+        return super().to(device)
