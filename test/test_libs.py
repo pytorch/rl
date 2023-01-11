@@ -338,12 +338,20 @@ class TestCollectorLib:
 
 
 @pytest.mark.skipif(not _has_habitat, reason="habitat not installed")
-@pytest.mark.parametrize("envname", ["HabitatRenderPick-v0", "HabitatRenderPick-v0"])
+@pytest.mark.parametrize("envname", ["HabitatRenderPick-v0", "HabitatPick-v0"])
 class TestHabitat:
     def test_habitat(self, envname):
         env = HabitatEnv(envname)
         rollout = env.rollout(3)
         check_env_specs(env)
+
+    @pytest.mark.parametrize("from_pixels", [True, False])
+    def test_habitat_render(self, envname, from_pixels):
+        env = HabitatEnv(envname, from_pixels=from_pixels)
+        rollout = env.rollout(3)
+        check_env_specs(env)
+        if from_pixels:
+            assert "pixels" in rollout.keys()
 
 
 @pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
