@@ -14,11 +14,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
-
 from torchrl.data import CompositeSpec, TensorSpec
 
 from .._utils import prod, seed_generator
 from ..data.utils import DEVICE_TYPING
+
 from .utils import get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
@@ -428,6 +428,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
         """
+        if tensordict is not None and "_reset" in tensordict.keys():
+            self._assert_tensordict_shape(tensordict)
+            _reset = tensordict.get("_reset")
+        else:
+            _reset = None
+
         tensordict_reset = self._reset(tensordict, **kwargs)
 
         done = tensordict_reset.get("done", None)
@@ -457,11 +463,16 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 *tensordict_reset.batch_size, 1, dtype=torch.bool, device=self.device
             ),
         )
-        if tensordict_reset.get("done").any():
+
+        if (_reset is None and tensordict_reset.get("done").any()) or (
+            _reset is not None and tensordict_reset.get("done")[_reset].any()
+        ):
             raise RuntimeError(
-                f"Env {self} was done after reset. This is (currently) not allowed."
+                f"Env {self} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
             )
         if tensordict is not None:
+            if "_reset" in tensordict.keys():
+                tensordict.del_("_reset")
             tensordict.update(tensordict_reset)
         else:
             tensordict = tensordict_reset

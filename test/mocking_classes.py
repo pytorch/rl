@@ -7,7 +7,6 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
-
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -718,3 +717,53 @@ class ActionObsMergeLinear(nn.Module):
 
     def forward(self, observation, action):
         return self.linear(torch.cat([observation, action], dim=-1))
+
+
+class CountingEnv(EnvBase):
+    def __init__(self, max_steps: int = 5, **kwargs):
+        super().__init__(**kwargs)
+        self.max_steps = max_steps
+
+        self.observation_spec = CompositeSpec(
+            observation=UnboundedContinuousTensorSpec((1,))
+        )
+        self.reward_spec = UnboundedContinuousTensorSpec((1,))
+        self.input_spec = CompositeSpec(action=BinaryDiscreteTensorSpec(1))
+
+        self.count = torch.zeros(
+            (*self.batch_size, 1), device=self.device, dtype=torch.int
+        )
+
+    def _set_seed(self, seed: Optional[int]):
+        torch.manual_seed(seed)
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        if tensordict is not None and "_reset" in tensordict.keys():
+            _reset = tensordict.get("_reset")
+            self.count[_reset] = 0
+        else:
+            self.count[:] = 0
+        return TensorDict(
+            source={
+                "observation": self.count.clone(),
+                "done": self.count > self.max_steps,
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        action = tensordict.get("action")
+        self.count += action.to(torch.int)
+        return TensorDict(
+            source={
+                "observation": self.count,
+                "done": self.count > self.max_steps,
+                "reward": torch.zeros_like(self.count, dtype=torch.float),
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )

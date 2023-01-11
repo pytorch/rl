@@ -174,7 +174,7 @@ class VIPTransform(Compose):
         tensor_pixels_keys: List[str] = None,
     ):
         super().__init__()
-        self.in_keys = in_keys
+        self.in_keys = in_keys if in_keys is not None else ["pixels"]
         self.download = download
         self.download_path = download_path
         self.model_name = model_name
@@ -233,6 +233,7 @@ class VIPTransform(Compose):
                 out_keys = ["vip_vec"]
             else:
                 out_keys = [f"vip_vec_{i}" for i in range(len(in_keys))]
+            self.out_keys = out_keys
         elif stack_images and len(out_keys) != 1:
             raise ValueError(
                 f"out_key must be of length 1 if stack_images is True. Got out_keys={out_keys}"

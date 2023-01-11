@@ -378,7 +378,8 @@ for j, data in enumerate(data_collector):
         frames.append(current_frames)
 
     if data["done"].any():
-        traj_lengths.append(data["step_count"][data["done"]].float().mean().item())
+        done = data["done"].squeeze(-1)
+        traj_lengths.append(data["step_count"][done].float().mean().item())
 
     # check that we have enough data to start training
     if sum(frames) > init_random_frames:
@@ -612,7 +613,8 @@ for j, data in enumerate(data_collector):
         frames.append(current_frames)
 
     if data["done"].any():
-        traj_lengths.append(data["step_count"][data["done"]].float().mean().item())
+        done = data["done"].squeeze(-1)
+        traj_lengths.append(data["step_count"][done].float().mean().item())
 
     if sum(frames) > init_random_frames:
         for _ in range(n_optim):
