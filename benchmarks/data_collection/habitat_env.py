@@ -39,6 +39,7 @@ from torchrl.envs import (
     ToTensorImage,
     TransformedEnv,
 )
+import gc
 from torchrl.envs.libs.habitat import HabitatEnv
 
 total_frames = 100000
