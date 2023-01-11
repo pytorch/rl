@@ -380,8 +380,8 @@ class VmasEnv(VmasWrapper):
         if not _has_vmas:
             raise ImportError(
                 f"vmas python package was not found. Please install this dependency. "
-                f"More info: {self.git_url} (ImportError: {IMPORT_ERR})"
-            )
+                f"More info: {self.git_url}."
+            ) from IMPORT_ERR
         kwargs["scenario_name"] = scenario_name
         kwargs["num_envs"] = num_envs
         kwargs["continuous_actions"] = continuous_actions
