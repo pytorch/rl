@@ -76,14 +76,15 @@ parser.add_argument(
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    def make_env():
-        return HabitatEnv(
-            "HabitatPick-v0" if args.perf_mode else "HabitatRenderPick-v0",
-            from_pixels=True,
-        )
+    def make_env(device=0):
+        return HabitatEnv("HabitatPick-v0" if args.perf_mode else "HabitatRenderPick-v0", from_pixels=True, device=device)
 
     # print the raw env output
-    print(make_env().fake_tensordict())
+    env = make_env(3)
+    r = env.rollout(3)
+    env.close()
+    del env, r
+    gc.collect()
 
     def make_transformed_env(env):
         return TransformedEnv(
@@ -103,7 +104,7 @@ if __name__ == "__main__":
         parallel_env = ParallelEnv(
             args.n_envs, EnvCreator(lambda: make_transformed_env(make_env()))
         )
-    devices = list(range(torch.cuda.device_count()))[1 : (args.n_workers_collector + 1)]
+    devices = list(range(torch.cuda.device_count()))[1:(args.n_workers_collector+1)]
     if len(devices) == 1:
         devices = devices[0]
     elif len(devices) < args.n_workers_collector:
