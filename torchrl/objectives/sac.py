@@ -27,7 +27,7 @@ try:
     err = ""
 except ImportError as err:
     _has_functorch = False
-    FUNCTORCH_ERROR = str(err)
+    FUNCTORCH_ERROR = err
 
 
 class SACLoss(LossModule):
@@ -94,9 +94,7 @@ class SACLoss(LossModule):
         delay_value: bool = False,
     ) -> None:
         if not _has_functorch:
-            raise ImportError(
-                f"Failed to import functorch with error message:\n{FUNCTORCH_ERROR}"
-            )
+            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
 
         # Actor

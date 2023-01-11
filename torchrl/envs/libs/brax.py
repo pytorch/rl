@@ -301,7 +301,7 @@ class BraxEnv(BraxWrapper):
                 f"brax not found, unable to create {env_name}. "
                 f"Consider downloading and installing brax from"
                 f" {self.git_url}"
-            )
+            ) from IMPORT_ERR
         from_pixels = kwargs.pop("from_pixels", False)
         pixels_only = kwargs.pop("pixels_only", True)
         requires_grad = kwargs.pop("requires_grad", False)

@@ -982,9 +982,7 @@ def _run_worker_pipe_shared_mem(
         try:
             cmd, data = child_pipe.recv()
         except EOFError as err:
-            raise EOFError(
-                f"proc {pid} failed, last command: {cmd}. " f"\nErr={str(err)}"
-            )
+            raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
         if cmd == "seed":
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
@@ -1087,9 +1085,7 @@ def _run_worker_pipe_shared_mem(
                 else:
                     result = attr
             except Exception as err:
-                raise RuntimeError(
-                    f"querying {err_msg} resulted in the following error: " f"{err}"
-                )
+                raise RuntimeError(f"querying {err_msg} resulted in an error.") from err
             if cmd not in ("to"):
                 child_pipe.send(("_".join([cmd, "done"]), result))
             else:

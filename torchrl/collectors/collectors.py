@@ -1038,7 +1038,7 @@ lambda function in an `torchrl.envs.EnvCreator` wrapper as follows:
 `env = ParallelEnv(N, EnvCreator(my_lambda_function))`.
 This will not only ensure that your lambda function is cloud-pickled once, but
 also that the state dict is synchronised across processes if needed."""
-                    )
+                    ) from err
             pipe_child.close()
             self.procs.append(proc)
             self.pipes.append(pipe_parent)
