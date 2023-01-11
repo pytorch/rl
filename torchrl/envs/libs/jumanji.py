@@ -140,6 +140,10 @@ class JumanjiWrapper(GymLikeEnv):
         return jumanji
 
     def __init__(self, env: "jumanji.env.Environment" = None, **kwargs):
+        if not _has_jumanji:
+            raise ImportError(
+                "jumanji is not installed or importing it failed. Consider checking your installation."
+            ) from IMPORT_ERR
         if env is not None:
             kwargs["env"] = env
         super().__init__(**kwargs)
@@ -331,8 +335,8 @@ class JumanjiEnv(JumanjiWrapper):
             raise RuntimeError(
                 f"jumanji not found, unable to create {env_name}. "
                 f"Consider installing jumanji. More info:"
-                f" {self.git_url}. (Original error message during import: {IMPORT_ERR})."
-            )
+                f" {self.git_url}."
+            ) from IMPORT_ERR
         from_pixels = kwargs.pop("from_pixels", False)
         pixels_only = kwargs.pop("pixels_only", True)
         assert not kwargs

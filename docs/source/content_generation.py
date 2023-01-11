@@ -6,7 +6,7 @@ from typing import List
 FILE_DIR = os.path.dirname(__file__)
 KNOWLEDGE_GEN_DIR = "reference/generated/knowledge_base"
 TUTORIALS_GEN_DIR = "reference/generated/tutorials"
-TUTORIALS_SRC_GEN_DIR = "reference/generated/tutorials/src"
+# TUTORIALS_SRC_GEN_DIR = "reference/generated/tutorials/src"
 TUTORIALS_MEDIA_GEN_DIR = "reference/generated/tutorials/media"
 
 
@@ -71,8 +71,8 @@ def generate_tutorial_references(tutorial_path: str, file_type: str) -> None:
     # Create target dir
     if file_type == "tutorial":
         target_path = os.path.join(FILE_DIR, TUTORIALS_GEN_DIR)
-    elif file_type == "src":
-        target_path = os.path.join(FILE_DIR, TUTORIALS_SRC_GEN_DIR)
+    # elif file_type == "src":
+    #     target_path = os.path.join(FILE_DIR, TUTORIALS_SRC_GEN_DIR)
     else:
         target_path = os.path.join(FILE_DIR, TUTORIALS_MEDIA_GEN_DIR)
     Path(target_path).mkdir(parents=True, exist_ok=True)

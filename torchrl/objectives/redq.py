@@ -85,9 +85,7 @@ class REDQLoss(LossModule):
         gSDE: bool = False,
     ):
         if not _has_functorch:
-            raise ImportError(
-                f"Failed to import functorch with error message:\n{FUNCTORCH_ERR}"
-            )
+            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
 
         super().__init__()
         self.convert_to_functional(

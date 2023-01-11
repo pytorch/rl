@@ -4,29 +4,19 @@
 # LICENSE file in the root directory of this source tree.
 
 import collections
-import concurrent.futures
 import threading
-from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
-import numpy as np
 import torch
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
-from torch import Tensor
 
-from torchrl._torchrl import (
-    MinSegmentTreeFp32,
-    MinSegmentTreeFp64,
-    SumSegmentTreeFp32,
-    SumSegmentTreeFp64,
-)
-from torchrl.data.replay_buffers.storages import (
-    _get_default_collate,
-    ListStorage,
-    Storage,
-)
-from torchrl.data.replay_buffers.utils import _to_numpy, _to_torch, INT_CLASSES
 from torchrl.data.utils import DEVICE_TYPING
+
+from .samplers import PrioritizedSampler, RandomSampler, Sampler
+from .storages import _get_default_collate, ListStorage, Storage
+from .utils import _to_numpy, accept_remote_rref_udf_invocation, INT_CLASSES
+from .writers import RoundRobinWriter, Writer
 
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
@@ -86,10 +76,15 @@ def pin_memory_output(fun) -> Callable:
 
 
 class ReplayBuffer:
-    """Circular replay buffer.
+    """A generic, composable replay buffer class.
 
     Args:
-        size (int): integer indicating the maximum size of the replay buffer.
+        storage (Storage, optional): the storage to be used. If none is provided
+            a default ListStorage with max_size of 1_000 will be created.
+        sampler (Sampler, optional): the sampler to be used. If none is provided
+            a default RandomSampler() will be used.
+        writer (Writer, optional): the writer to be used. If none is provided
+            a default RoundRobinWriter() will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset.
@@ -97,23 +92,26 @@ class ReplayBuffer:
             samples.
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
-        storage (Storage, optional): the storage to be used. If none is provided,
-            a ListStorage will be instantiated.
+        transform (Transform, optional): Transform to be executed when sample() is called.
+            To chain transforms use the :obj:`Compose` class.
     """
 
     def __init__(
         self,
-        size: int,
+        storage: Optional[Storage] = None,
+        sampler: Optional[Sampler] = None,
+        writer: Optional[Writer] = None,
         collate_fn: Optional[Callable] = None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
-        storage: Optional[Storage] = None,
-    ):
-        if storage is None:
-            storage = ListStorage(size)
-        self._storage = storage
-        self._capacity = size
-        self._cursor = 0
+        transform: Optional["Transform"] = None,  # noqa-F821
+    ) -> None:
+        self._storage = storage if storage is not None else ListStorage(max_size=1_000)
+        self._storage.attach(self)
+        self._sampler = sampler if sampler is not None else RandomSampler()
+        self._writer = writer if writer is not None else RoundRobinWriter()
+        self._writer.register_storage(self._storage)
+
         self._collate_fn = (
             collate_fn
             if collate_fn is not None
@@ -121,50 +119,58 @@ class ReplayBuffer:
         )
         self._pin_memory = pin_memory
 
-        self._prefetch = prefetch is not None and prefetch > 0
-        self._prefetch_cap = prefetch if prefetch is not None else 0
-        self._prefetch_fut = collections.deque()
-        if self._prefetch_cap > 0:
-            self._prefetch_executor = concurrent.futures.ThreadPoolExecutor(
-                max_workers=self._prefetch_cap
-            )
+        self._prefetch = bool(prefetch)
+        self._prefetch_cap = prefetch or 0
+        self._prefetch_queue = collections.deque()
+        if self._prefetch_cap:
+            self._prefetch_executor = ThreadPoolExecutor(max_workers=self._prefetch_cap)
 
         self._replay_lock = threading.RLock()
-        self._future_lock = threading.RLock()
+        self._futures_lock = threading.RLock()
+        from torchrl.envs.transforms.transforms import Compose
+
+        if transform is None:
+            transform = Compose()
+        elif not isinstance(transform, Compose):
+            transform = Compose(transform)
+        transform.eval()
+        self._transform = transform
 
     def __len__(self) -> int:
         with self._replay_lock:
             return len(self._storage)
 
-    @pin_memory_output
-    def __getitem__(self, index: Union[int, Tensor]) -> Any:
-        index = _to_numpy(index)
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}("
+            f"storage={self._storage}, "
+            f"sampler={self._sampler}, "
+            f"writer={self._writer}"
+            ")"
+        )
 
+    @pin_memory_output
+    def __getitem__(self, index: Union[int, torch.Tensor]) -> Any:
+        index = _to_numpy(index)
         with self._replay_lock:
             data = self._storage[index]
 
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
+
         return data
 
     def state_dict(self) -> Dict[str, Any]:
         return {
             "_storage": self._storage.state_dict(),
-            "_cursor": self._cursor,
+            "_sampler": self._sampler.state_dict(),
+            "_writer": self._writer.state_dict(),
         }
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         self._storage.load_state_dict(state_dict["_storage"])
-        self._cursor = state_dict["_cursor"]
-
-    @property
-    def capacity(self) -> int:
-        return self._capacity
-
-    @property
-    def cursor(self) -> int:
-        with self._replay_lock:
-            return self._cursor
+        self._sampler.load_state_dict(state_dict["_sampler"])
+        self._writer.load_state_dict(state_dict["_writer"])
 
     def add(self, data: Any) -> int:
         """Add a single element to the replay buffer.
@@ -176,12 +182,11 @@ class ReplayBuffer:
             index where the data lives in the replay buffer.
         """
         with self._replay_lock:
-            ret = self._cursor
-            self._storage[self._cursor] = data
-            self._cursor = (self._cursor + 1) % self._capacity
-            return ret
+            index = self._writer.add(data)
+            self._sampler.add(index)
+        return index
 
-    def extend(self, data: Sequence[Any]):
+    def extend(self, data: Sequence) -> torch.Tensor:
         """Extends the replay buffer with one or more elements contained in an iterable.
 
         Args:
@@ -190,66 +195,87 @@ class ReplayBuffer:
 
         Returns:
             Indices of the data aded to the replay buffer.
-
         """
-        if not len(data):
-            raise Exception("extending with empty data is not supported")
         with self._replay_lock:
-            batch_size = len(data)
-            if self._cursor + batch_size <= self._capacity:
-                index = np.arange(self._cursor, self._cursor + batch_size)
-                self._cursor = (self._cursor + batch_size) % self._capacity
-            else:
-                d = self._capacity - self._cursor
-                index = np.empty(batch_size, dtype=np.int64)
-                index[:d] = np.arange(self._cursor, self._capacity)
-                index[d:] = np.arange(batch_size - d)
-                self._cursor = batch_size - d
-            # storage must convert the data to the appropriate format if needed
-            self._storage[index] = data
-            return index
+            index = self._writer.extend(data)
+            self._sampler.extend(index)
+        return index
+
+    def update_priority(
+        self,
+        index: Union[int, torch.Tensor],
+        priority: Union[int, torch.Tensor],
+    ) -> None:
+        with self._replay_lock:
+            self._sampler.update_priority(index, priority)
 
     @pin_memory_output
-    def _sample(self, batch_size: int) -> Any:
-        index = torch.randint(0, len(self._storage), (batch_size,))
-
+    def _sample(self, batch_size: int) -> Tuple[Any, dict]:
         with self._replay_lock:
+            index, info = self._sampler.sample(self._storage, batch_size)
             data = self._storage[index]
+        if not isinstance(index, INT_CLASSES):
+            data = self._collate_fn(data)
+        data = self._transform(data)
+        return data, info
 
-        data = self._collate_fn(data)
-        return data
-
-    def sample(self, batch_size: int) -> Any:
+    def sample(self, batch_size: int, return_info: bool = False) -> Any:
         """Samples a batch of data from the replay buffer.
 
+        Uses Sampler to sample indices, and retrieves them from Storage.
+
         Args:
-            batch_size (int): float of data to be collected.
+            batch_size (int): size of data to be collected.
+            return_info (bool): whether to return info. If True, the result
+                is a tuple (data, info). If False, the result is the data.
 
         Returns:
-            A batch of data randomly selected in the replay buffer.
-
+            A batch of data selected in the replay buffer.
+            A tuple containing this batch and info if return_info flag is set to True.
         """
         if not self._prefetch:
-            return self._sample(batch_size)
-
-        with self._future_lock:
-            if len(self._prefetch_fut) == 0:
+            ret = self._sample(batch_size)
+        else:
+            if len(self._prefetch_queue) == 0:
                 ret = self._sample(batch_size)
             else:
-                ret = self._prefetch_fut.popleft().result()
+                with self._futures_lock:
+                    ret = self._prefetch_queue.popleft().result()
 
-            while len(self._prefetch_fut) < self._prefetch_cap:
-                fut = self._prefetch_executor.submit(self._sample, batch_size)
-                self._prefetch_fut.append(fut)
+            with self._futures_lock:
+                while len(self._prefetch_queue) < self._prefetch_cap:
+                    fut = self._prefetch_executor.submit(self._sample, batch_size)
+                    self._prefetch_queue.append(fut)
 
+        if return_info:
             return ret
+        return ret[0]
 
-    def __repr__(self) -> str:
-        string = (
-            f"{type(self).__name__}(size={len(self)}, "
-            f"pin_memory={self._pin_memory})"
-        )
-        return string
+    def mark_update(self, index: Union[int, torch.Tensor]) -> None:
+        self._sampler.mark_update(index)
+
+    def append_transform(self, transform: "Transform") -> None:  # noqa-F821
+        """Appends transform at the end.
+
+        Transforms are applied in order when `sample` is called.
+
+        Args:
+            transform (Transform): The transform to be appended
+        """
+        transform.eval()
+        self._transform.append(transform)
+
+    def insert_transform(self, index: int, transform: "Transform") -> None:  # noqa-F821
+        """Inserts transform.
+
+        Transforms are executed in order when `sample` is called.
+
+        Args:
+            index (int): Position to insert the transform.
+            transform (Transform): The transform to be appended
+        """
+        transform.eval()
+        self._transform.insert(index, transform)
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
@@ -261,12 +287,14 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         (https://arxiv.org/abs/1511.05952)
 
     Args:
-        size (int): integer indicating the maximum size of the replay buffer.
         alpha (float): exponent α determines how much prioritization is used,
             with α = 0 corresponding to the uniform case.
         beta (float): importance sampling negative exponent.
         eps (float): delta added to the priorities to ensure that the buffer
             does not contain null priorities.
+        dtype (torch.dtype): type of the data. Can be torch.float or torch.double.
+        storage (Storage, optional): the storage to be used. If none is provided
+            a default ListStorage with max_size of 1_000 will be created.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset.
@@ -274,353 +302,74 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             samples.
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
-        storage (Storage, optional): the storage to be used. If none is provided,
-            a ListStorage will be instantiated.
+        transform (Transform, optional): Transform to be executed when sample() is called.
+            To chain transforms use the :obj:`Compose` class.
     """
 
     def __init__(
         self,
-        size: int,
         alpha: float,
         beta: float,
         eps: float = 1e-8,
         dtype: torch.dtype = torch.float,
-        collate_fn=None,
-        pin_memory: bool = False,
-        prefetch: Optional[int] = None,
         storage: Optional[Storage] = None,
-    ) -> None:
-        super(PrioritizedReplayBuffer, self).__init__(
-            size,
-            collate_fn,
-            pin_memory,
-            prefetch,
-            storage=storage,
-        )
-        if alpha <= 0:
-            raise ValueError(
-                f"alpha must be strictly greater than 0, got alpha={alpha}"
-            )
-        if beta < 0:
-            raise ValueError(f"beta must be greater or equal to 0, got beta={beta}")
-
-        self._alpha = alpha
-        self._beta = beta
-        self._eps = eps
-        if dtype in (torch.float, torch.FloatType, torch.float32):
-            self._sum_tree = SumSegmentTreeFp32(size)
-            self._min_tree = MinSegmentTreeFp32(size)
-        elif dtype in (torch.double, torch.DoubleTensor, torch.float64):
-            self._sum_tree = SumSegmentTreeFp64(size)
-            self._min_tree = MinSegmentTreeFp64(size)
-        else:
-            raise NotImplementedError(
-                f"dtype {dtype} not supported by PrioritizedReplayBuffer"
-            )
-        self._max_priority = 1.0
-
-    def state_dict(self) -> Dict[str, Any]:
-        state_dict = super().state_dict()
-        state_dict["_sum_tree"] = deepcopy(self._sum_tree)
-        state_dict["_min_tree"] = deepcopy(self._min_tree)
-        state_dict["_max_priority"] = self._max_priority
-        return state_dict
-
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        self._sum_tree = state_dict.pop("_sum_tree")
-        self._min_tree = state_dict.pop("_min_tree")
-        self._max_priority = state_dict.pop("_max_priority")
-        super().load_state_dict(state_dict)
-
-    @pin_memory_output
-    def __getitem__(self, index: Union[int, Tensor]) -> Any:
-        index = _to_numpy(index)
-
-        with self._replay_lock:
-            p_min = self._min_tree.query(0, self._capacity)
-            if p_min <= 0:
-                raise ValueError(f"p_min must be greater than 0, got p_min={p_min}")
-            data = self._storage[index]
-            if isinstance(index, INT_CLASSES):
-                weight = np.array(self._sum_tree[index])
-            else:
-                weight = self._sum_tree[index]
-
-        if not isinstance(index, INT_CLASSES):
-            data = self._collate_fn(data)
-        # weight = np.power(weight / (p_min + self._eps), -self._beta)
-        weight = np.power(weight / p_min, -self._beta)
-        # x = first_field(data)
-        # if isinstance(x, torch.Tensor):
-        device = data.device if hasattr(data, "device") else torch.device("cpu")
-        weight = _to_torch(weight, device, self._pin_memory)
-        return data, weight
-
-    @property
-    def alpha(self) -> float:
-        return self._alpha
-
-    @property
-    def beta(self) -> float:
-        return self._beta
-
-    @property
-    def eps(self) -> float:
-        return self._eps
-
-    @property
-    def max_priority(self) -> float:
-        with self._replay_lock:
-            return self._max_priority
-
-    @property
-    def _default_priority(self) -> float:
-        return (self._max_priority + self._eps) ** self._alpha
-
-    def _add_or_extend(
-        self,
-        data: Any,
-        priority: Optional[torch.Tensor] = None,
-        do_add: bool = True,
-    ) -> torch.Tensor:
-        if priority is not None:
-            priority = _to_numpy(priority)
-            max_priority = np.max(priority)
-            with self._replay_lock:
-                self._max_priority = max(self._max_priority, max_priority)
-            priority = np.power(priority + self._eps, self._alpha)
-        else:
-            with self._replay_lock:
-                priority = self._default_priority
-
-        if do_add:
-            index = super(PrioritizedReplayBuffer, self).add(data)
-        else:
-            index = super(PrioritizedReplayBuffer, self).extend(data)
-
-        if not (
-            isinstance(priority, float)
-            or len(priority) == 1
-            or len(priority) == len(index)
-        ):
-            raise RuntimeError(
-                "priority should be a scalar or an iterable of the same "
-                "length as index"
-            )
-
-        with self._replay_lock:
-            self._sum_tree[index] = priority
-            self._min_tree[index] = priority
-
-        return index
-
-    def add(self, data: Any, priority: Optional[torch.Tensor] = None) -> torch.Tensor:
-        return self._add_or_extend(data, priority, True)
-
-    def extend(
-        self, data: Sequence, priority: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
-        return self._add_or_extend(data, priority, False)
-
-    @pin_memory_output
-    def _sample(self, batch_size: int) -> Tuple[Any, torch.Tensor, torch.Tensor]:
-        with self._replay_lock:
-            p_sum = self._sum_tree.query(0, self._capacity)
-            p_min = self._min_tree.query(0, self._capacity)
-            if p_sum <= 0:
-                raise RuntimeError("negative p_sum")
-            if p_min <= 0:
-                raise RuntimeError("negative p_min")
-            mass = np.random.uniform(0.0, p_sum, size=batch_size)
-            index = self._sum_tree.scan_lower_bound(mass)
-            if not isinstance(index, torch.Tensor):
-                index = torch.tensor(index)
-            if not index.ndimension():
-                index = index.reshape((1,))
-            index.clamp_max_(len(self._storage) - 1)
-            data = self._storage[index]
-            weight = self._sum_tree[index]
-
-        data = self._collate_fn(data)
-
-        # Importance sampling weight formula:
-        #   w_i = (p_i / sum(p) * N) ^ (-beta)
-        #   weight_i = w_i / max(w)
-        #   weight_i = (p_i / sum(p) * N) ^ (-beta) /
-        #       ((min(p) / sum(p) * N) ^ (-beta))
-        #   weight_i = ((p_i / sum(p) * N) / (min(p) / sum(p) * N)) ^ (-beta)
-        #   weight_i = (p_i / min(p)) ^ (-beta)
-        # weight = np.power(weight / (p_min + self._eps), -self._beta)
-        weight = np.power(weight / p_min, -self._beta)
-
-        # x = first_field(data)  # avoid calling tree.flatten
-        # if isinstance(x, torch.Tensor):
-        device = data.device if hasattr(data, "device") else torch.device("cpu")
-        weight = _to_torch(weight, device, self._pin_memory)
-        return data, weight, index
-
-    def sample(self, batch_size: int) -> Tuple[Any, np.ndarray, torch.Tensor]:
-        """Gathers a batch of data according to the non-uniform multinomial distribution with weights computed with the provided priorities of each input.
-
-        Args:
-            batch_size (int): float of data to be collected.
-
-        Returns: a random sample from the replay buffer.
-
-        """
-        if not self._prefetch:
-            return self._sample(batch_size)
-
-        with self._future_lock:
-            if len(self._prefetch_fut) == 0:
-                ret = self._sample(batch_size)
-            else:
-                ret = self._prefetch_fut.popleft().result()
-
-            while len(self._prefetch_fut) < self._prefetch_cap:
-                fut = self._prefetch_executor.submit(self._sample, batch_size)
-                self._prefetch_fut.append(fut)
-
-            return ret
-
-    def update_priority(
-        self, index: Union[int, Tensor], priority: Union[float, Tensor]
-    ) -> None:
-        """Updates the priority of the data pointed by the index.
-
-        Args:
-            index (int or torch.Tensor): indexes of the priorities to be
-                updated.
-            priority (Number or torch.Tensor): new priorities of the
-                indexed elements
-
-
-        """
-        if isinstance(index, INT_CLASSES):
-            if not isinstance(priority, float):
-                if len(priority) != 1:
-                    raise RuntimeError(
-                        f"priority length should be 1, got {len(priority)}"
-                    )
-                priority = priority.item()
-        else:
-            if not (
-                isinstance(priority, float)
-                or len(priority) == 1
-                or len(index) == len(priority)
-            ):
-                raise RuntimeError(
-                    "priority should be a number or an iterable of the same "
-                    "length as index"
-                )
-            index = _to_numpy(index)
-            priority = _to_numpy(priority)
-
-        with self._replay_lock:
-            self._max_priority = max(self._max_priority, np.max(priority))
-            priority = np.power(priority + self._eps, self._alpha)
-            self._sum_tree[index] = priority
-            self._min_tree[index] = priority
-
-
-class TensorDictReplayBuffer(ReplayBuffer):
-    """TensorDict-specific wrapper around the ReplayBuffer class."""
-
-    def __init__(
-        self,
-        size: int,
         collate_fn: Optional[Callable] = None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
-        storage: Optional[Storage] = None,
-    ):
-        super().__init__(size, collate_fn, pin_memory, prefetch, storage=storage)
-
-
-class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
-    """TensorDict-specific wrapper around the PrioritizedReplayBuffer class.
-
-    This class returns tensordicts with a new key "index" that represents
-    the index of each element in the replay buffer. It also facilitates the
-    call to the 'update_priority' method, as it only requires for the
-    tensordict to be passed to it with its new priority value.
-
-    Args:
-        size (int): integer indicating the maximum size of the replay buffer.
-        alpha (flaot): exponent α determines how much prioritization is
-            used, with α = 0 corresponding to the uniform case.
-        beta (float): importance sampling negative exponent.
-        priority_key (str, optional): key where the priority value can be
-            found in the stored tensordicts. Default is :obj:`"td_error"`
-        eps (float, optional): delta added to the priorities to ensure that the
-            buffer does not contain null priorities.
-        collate_fn (callable, optional): merges a list of samples to form a
-            mini-batch of Tensor(s)/outputs.  Used when using batched loading
-            from a map-style dataset.
-        pin_memory (bool, optional): whether pin_memory() should be called on
-            the rb samples. Default is :obj:`False`.
-        prefetch (int, optional): number of next batches to be prefetched
-            using multithreading.
-        storage (Storage, optional): the storage to be used. If none is provided,
-            a ListStorage will be instantiated.
-    """
-
-    def __init__(
-        self,
-        size: int,
-        alpha: float,
-        beta: float,
-        priority_key: str = "td_error",
-        eps: float = 1e-8,
-        collate_fn=None,
-        pin_memory: bool = False,
-        prefetch: Optional[int] = None,
-        storage: Optional[Storage] = None,
+        transform: Optional["Transform"] = None,  # noqa-F821
     ) -> None:
-        super(TensorDictPrioritizedReplayBuffer, self).__init__(
-            size=size,
-            alpha=alpha,
-            beta=beta,
-            eps=eps,
+        if storage is None:
+            storage = ListStorage(max_size=1_000)
+        sampler = PrioritizedSampler(storage.max_size, alpha, beta, eps, dtype)
+        super(PrioritizedReplayBuffer, self).__init__(
+            storage=storage,
+            sampler=sampler,
             collate_fn=collate_fn,
             pin_memory=pin_memory,
             prefetch=prefetch,
-            storage=storage,
+            transform=transform,
         )
+
+
+class TensorDictReplayBuffer(ReplayBuffer):
+    """TensorDict-specific wrapper around the ReplayBuffer class.
+
+    Args:
+        priority_key (str): the key at which priority is assumed to be stored
+            within TensorDicts added to this ReplayBuffer.
+    """
+
+    def __init__(self, priority_key: str = "td_error", **kw) -> None:
+        super().__init__(**kw)
         self.priority_key = priority_key
 
-    def _get_priority(self, tensordict: TensorDictBase) -> torch.Tensor:
-        if self.priority_key in tensordict.keys():
-            if tensordict.batch_dims:
-                tensordict = tensordict.clone(recurse=False)
-                tensordict.batch_size = []
-            try:
-                priority = tensordict.get(self.priority_key).item()
-            except ValueError:
-                raise ValueError(
-                    f"Found a priority key of size"
-                    f" {tensordict.get(self.priority_key).shape} but expected "
-                    f"scalar value"
-                )
-        else:
-            priority = self._default_priority
+    def _get_priority(self, tensordict: TensorDictBase) -> Optional[torch.Tensor]:
+        if self.priority_key not in tensordict.keys():
+            return self._sampler.default_priority
+        if tensordict.batch_dims:
+            tensordict = tensordict.clone(recurse=False)
+            tensordict.batch_size = []
+        try:
+            priority = tensordict.get(self.priority_key).item()
+        except ValueError:
+            raise ValueError(
+                f"Found a priority key of size"
+                f" {tensordict.get(self.priority_key).shape} but expected "
+                f"scalar value"
+            )
         return priority
 
-    def add(self, tensordict: TensorDictBase) -> torch.Tensor:
-        priority = self._get_priority(tensordict)
-        index = super().add(tensordict, priority)
-        tensordict.set("index", index)
+    def add(self, data: TensorDictBase) -> int:
+        index = super().add(data)
+        data.set("index", index)
+
+        priority = self._get_priority(data)
+        if priority:
+            self.update_priority(index, priority)
         return index
 
-    def extend(
-        self, tensordicts: Union[TensorDictBase, List[TensorDictBase]]
-    ) -> torch.Tensor:
+    def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
         if isinstance(tensordicts, TensorDictBase):
-            if self.priority_key in tensordicts.keys():
-                priorities = tensordicts.get(self.priority_key)
-            else:
-                priorities = None
-
             if tensordicts.batch_dims > 1:
                 # we want the tensordict to have one dimension only. The batch size
                 # of the sampled tensordicts can be changed thereafter
@@ -632,60 +381,139 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
             tensordicts.set(
                 "index",
                 torch.zeros(
-                    tensordicts.shape,
-                    device=tensordicts.device,
-                    dtype=torch.int,
+                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
                 ),
             )
-        else:
-            priorities = [self._get_priority(td) for td in tensordicts]
 
         if not isinstance(tensordicts, TensorDictBase):
             stacked_td = torch.stack(tensordicts, 0)
         else:
             stacked_td = tensordicts
-        idx = super().extend(tensordicts, priorities)
+
+        index = super().extend(stacked_td)
         stacked_td.set(
             "index",
-            torch.tensor(idx, dtype=torch.int, device=stacked_td.device),
+            torch.tensor(index, dtype=torch.int, device=stacked_td.device),
             inplace=True,
         )
-        return idx
+        self.update_tensordict_priority(stacked_td)
+        return index
 
-    def update_priority(self, tensordict: TensorDictBase) -> None:
-        """Updates the priorities of the tensordicts stored in the replay buffer.
+    def update_tensordict_priority(self, data: TensorDictBase) -> None:
+        priority = torch.tensor(
+            [self._get_priority(td) for td in data],
+            dtype=torch.float,
+            device=data.device,
+        )
+        self.update_priority(data.get("index"), priority)
 
-        Args:
-            tensordict: tensordict with key-value pairs 'self.priority_key'
-                and 'index'.
+    def sample(
+        self, batch_size: int, include_info: bool = False, return_info: bool = False
+    ) -> TensorDictBase:
+        """Samples a batch of data from the replay buffer.
 
-
-        """
-        priority = tensordict.get(self.priority_key)
-        if (priority < 0).any():
-            raise RuntimeError(
-                f"Priority must be a positive value, got "
-                f"{(priority < 0).sum()} negative priority values."
-            )
-        return super().update_priority(tensordict.get("index"), priority=priority)
-
-    def sample(self, size: int, return_weight: bool = False) -> TensorDictBase:
-        """Gather a batch of tensordicts according to the non-uniform multinomial distribution with weights computed with the priority_key of each input tensordict.
+        Uses Sampler to sample indices, and retrieves them from Storage.
 
         Args:
-            size (int): size of the batch to be returned
-            return_weight (bool, optional): if True, a '_weight' key will be
-                written in the output tensordict that indicates the weight
-                of the selected items
+            batch_size (int): size of data to be collected.
+            include_info (bool): whether to add info to the returned tensordict.
+            return_info (bool): whether to return info. If True, the result
+                is a tuple (data, info). If False, the result is the data.
 
         Returns:
-            Stack of tensordicts
-
+            A tensordict containing a batch of data selected in the replay buffer.
+            A tuple containing this tensordict and info if return_info flag is set to True.
         """
-        td, weight, _ = super(TensorDictPrioritizedReplayBuffer, self).sample(size)
-        if return_weight:
-            td.set("_weight", weight)
-        return td
+        data, info = super().sample(batch_size, return_info=True)
+        if include_info:
+            for k, v in info.items():
+                data.set(k, torch.tensor(v, device=data.device), inplace=True)
+        if return_info:
+            return data, info
+        return data
+
+
+class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
+    """TensorDict-specific wrapper around the PrioritizedReplayBuffer class.
+
+    This class returns tensordicts with a new key "index" that represents
+    the index of each element in the replay buffer. It also provides the
+    'update_tensordict_priority' method that only requires for the
+    tensordict to be passed to it with its new priority value.
+
+    Args:
+        alpha (float): exponent α determines how much prioritization is
+            used, with α = 0 corresponding to the uniform case.
+        beta (float): importance sampling negative exponent.
+        priority_key (str, optional): key where the priority value can be
+            found in the stored tensordicts. Default is :obj:`"td_error"`
+        eps (float, optional): delta added to the priorities to ensure that the
+            buffer does not contain null priorities.
+        dtype (torch.dtype): type of the data. Can be torch.float or torch.double.
+        storage (Storage, optional): the storage to be used. If none is provided
+            a default ListStorage with max_size of 1_000 will be created.
+        collate_fn (callable, optional): merges a list of samples to form a
+            mini-batch of Tensor(s)/outputs.  Used when using batched loading
+            from a map-style dataset.
+        pin_memory (bool, optional): whether pin_memory() should be called on
+            the rb samples. Default is :obj:`False`.
+        prefetch (int, optional): number of next batches to be prefetched
+            using multithreading.
+        transform (Transform, optional): Transform to be executed when sample() is called.
+            To chain transforms use the :obj:`Compose` class.
+    """
+
+    def __init__(
+        self,
+        alpha: float,
+        beta: float,
+        priority_key: str = "td_error",
+        eps: float = 1e-8,
+        storage: Optional[Storage] = None,
+        collate_fn: Optional[Callable] = None,
+        pin_memory: bool = False,
+        prefetch: Optional[int] = None,
+        transform: Optional["Transform"] = None,  # noqa-F821
+    ) -> None:
+        if storage is None:
+            storage = ListStorage(max_size=1_000)
+        sampler = PrioritizedSampler(storage.max_size, alpha, beta, eps)
+        super(TensorDictPrioritizedReplayBuffer, self).__init__(
+            priority_key=priority_key,
+            storage=storage,
+            sampler=sampler,
+            collate_fn=collate_fn,
+            pin_memory=pin_memory,
+            prefetch=prefetch,
+            transform=transform,
+        )
+
+
+@accept_remote_rref_udf_invocation
+class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
+    """A remote invocation friendly ReplayBuffer class. Public methods can be invoked by remote agents using `torch.rpc` or called locally as normal."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def sample(
+        self, batch_size: int, include_info: bool = False, return_info: bool = False
+    ) -> TensorDictBase:
+        return super().sample(batch_size, include_info, return_info)
+
+    def add(self, data: TensorDictBase) -> int:
+        return super().add(data)
+
+    def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
+        return super().extend(tensordicts)
+
+    def update_priority(
+        self, index: Union[int, torch.Tensor], priority: Union[int, torch.Tensor]
+    ) -> None:
+        return super().update_priority(index, priority)
+
+    def update_tensordict_priority(self, data: TensorDictBase) -> None:
+        return super().update_tensordict_priority(data)
 
 
 class InPlaceSampler:

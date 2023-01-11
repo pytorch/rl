@@ -14,7 +14,6 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
-
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -306,8 +305,11 @@ class TransformedEnv(EnvBase):
         **kwargs,
     ):
         self._transform = None
-        device = kwargs.pop("device", env.device)
-        env = env.to(device)
+        device = kwargs.pop("device", None)
+        if device is not None:
+            env = env.to(device)
+        else:
+            device = env.device
         super().__init__(device=None, **kwargs)
 
         if isinstance(env, TransformedEnv):
@@ -343,7 +345,9 @@ class TransformedEnv(EnvBase):
         self.batch_size = self.base_env.batch_size
 
     def _set_env(self, env: EnvBase, device) -> None:
-        self.base_env = env.to(device)
+        if device != env.device:
+            env = env.to(device)
+        self.base_env = env
         # updates need not be inplace, as transforms may modify values out-place
         self.base_env._inplace_update = False
 
@@ -1027,10 +1031,8 @@ class FlattenObservation(ObservationTransform):
     """Flatten adjacent dimensions of a tensor.
 
     Args:
-        first_dim (int, optional): first dimension of the dimensions to flatten.
-            Default is 0.
-        last_dim (int, optional): last dimension of the dimensions to flatten.
-            Default is -3.
+        first_dim (int): first dimension of the dimensions to flatten.
+        last_dim (int): last dimension of the dimensions to flatten.
     """
 
     inplace = False
@@ -1038,7 +1040,7 @@ class FlattenObservation(ObservationTransform):
     def __init__(
         self,
         first_dim: int,
-        last_dim: int = -3,
+        last_dim: int,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
     ):
@@ -1794,7 +1796,7 @@ class CatTensors(Transform):
             self.in_keys = self._find_in_keys()
             self._initialized = True
 
-        if all([key in tensordict.keys(include_nested=True) for key in self.in_keys]):
+        if all(key in tensordict.keys(include_nested=True) for key in self.in_keys):
             values = [tensordict.get(key) for key in self.in_keys]
             if self.unsqueeze_if_oor:
                 pos_idx = self.dim > 0
@@ -2516,18 +2518,17 @@ class RewardSum(Transform):
 
         # Batched environments
         else:
-            reset_workers = tensordict.get(
-                "reset_workers",
+            _reset = tensordict.get(
+                "_reset",
                 torch.ones(
-                    *tensordict.batch_size,
-                    1,
+                    tensordict.batch_size,
                     dtype=torch.bool,
                     device=tensordict.device,
                 ),
             )
             for out_key in self.out_keys:
                 if out_key in tensordict.keys():
-                    tensordict[out_key][reset_workers] = 0.0
+                    tensordict[out_key][_reset] = 0.0
 
         return tensordict
 
@@ -2562,7 +2563,7 @@ class RewardSum(Transform):
         if isinstance(reward_spec, CompositeSpec):
 
             # If reward_spec is a CompositeSpec, all in_keys should be keys of reward_spec
-            if not all([k in reward_spec.keys() for k in self.in_keys]):
+            if not all(k in reward_spec.keys() for k in self.in_keys):
                 raise KeyError("Not all in_keys are present in ´reward_spec´")
 
             # Define episode specs for all out_keys
@@ -2617,20 +2618,19 @@ class StepCounter(Transform):
         super().__init__([])
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        workers = tensordict.get(
-            "reset_workers",
+        _reset = tensordict.get(
+            "_reset",
             default=torch.ones(
-                *tensordict.batch_size, 1, dtype=torch.bool, device=tensordict.device
+                tensordict.batch_size, dtype=torch.bool, device=tensordict.device
             ),
         )
         tensordict.set(
             "step_count",
-            (~workers)
+            (~_reset)
             * tensordict.get(
                 "step_count",
                 torch.zeros(
-                    *tensordict.batch_size,
-                    1,
+                    tensordict.batch_size,
                     dtype=torch.int64,
                     device=tensordict.device,
                 ),
@@ -2643,8 +2643,7 @@ class StepCounter(Transform):
             tensordict.get(
                 "step_count",
                 torch.zeros(
-                    *tensordict.batch_size,
-                    1,
+                    tensordict.batch_size,
                     dtype=torch.int64,
                     device=tensordict.device,
                 ),
@@ -2655,7 +2654,8 @@ class StepCounter(Transform):
         if self.max_steps is not None:
             tensordict.set(
                 "done",
-                tensordict.get("done") | next_step_count >= self.max_steps,
+                tensordict.get("done")
+                | (next_step_count >= self.max_steps).unsqueeze(-1),
             )
         return tensordict
 
@@ -2667,7 +2667,7 @@ class StepCounter(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=torch.Size([1]), dtype=torch.int64, device=observation_spec.device
+            shape=torch.Size([]), dtype=torch.int64, device=observation_spec.device
         )
         observation_spec["step_count"].space.minimum = 0
         return observation_spec

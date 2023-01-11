@@ -24,7 +24,7 @@ from datetime import datetime
 import torch
 import torch.distributed.rpc as rpc
 from tensordict import TensorDict
-from torchrl.data.replay_buffers.rb_prototype import RemoteTensorDictReplayBuffer
+from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
@@ -92,10 +92,10 @@ class DummyTrainerNode:
             if self._ret is None:
                 self._ret = ret
             else:
-                self._ret[0].update_(ret[0])
+                self._ret.update_(ret)
         # make sure the content is read
-        self._ret[0]["observation"] + 1
-        self._ret[0]["next_observation"] + 1
+        self._ret["observation"] + 1
+        self._ret["next_observation"] + 1
         return timeit.default_timer() - start_time
 
     def _create_replay_buffer(self) -> rpc.RRef:

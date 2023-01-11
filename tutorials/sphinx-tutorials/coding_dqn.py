@@ -312,7 +312,6 @@ params_target_flat = params_target.flatten_keys(".")
 # shape. This storage will be instantiated later.
 
 replay_buffer = TensorDictReplayBuffer(
-    buffer_size,
     storage=LazyMemmapStorage(buffer_size),
     prefetch=n_optim,
 )
@@ -379,7 +378,8 @@ for j, data in enumerate(data_collector):
         frames.append(current_frames)
 
     if data["done"].any():
-        traj_lengths.append(data["step_count"][data["done"]].float().mean().item())
+        done = data["done"].squeeze(-1)
+        traj_lengths.append(data["step_count"][done].float().mean().item())
 
     # check that we have enough data to start training
     if sum(frames) > init_random_frames:
@@ -556,8 +556,7 @@ params_target_flat = params_target.flatten_keys(".")
 max_size = frames_per_batch // n_workers
 
 replay_buffer = TensorDictReplayBuffer(
-    -(-buffer_size // max_size),
-    storage=LazyMemmapStorage(buffer_size),
+    storage=LazyMemmapStorage(-(-buffer_size // max_size)),
     prefetch=n_optim,
 )
 
@@ -614,7 +613,8 @@ for j, data in enumerate(data_collector):
         frames.append(current_frames)
 
     if data["done"].any():
-        traj_lengths.append(data["step_count"][data["done"]].float().mean().item())
+        done = data["done"].squeeze(-1)
+        traj_lengths.append(data["step_count"][done].float().mean().item())
 
     if sum(frames) > init_random_frames:
         for _ in range(n_optim):

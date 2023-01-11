@@ -9,6 +9,7 @@ from .replay_buffers import (
     LazyTensorStorage,
     ListStorage,
     PrioritizedReplayBuffer,
+    RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     Storage,
     TensorDictPrioritizedReplayBuffer,

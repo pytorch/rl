@@ -11,7 +11,6 @@ from .trainers import (
     mask_batch,
     OptimizerHook,
     Recorder,
-    ReplayBuffer,
     ReplayBufferTrainer,
     RewardNormalizer,
     SelectKeys,
