@@ -1120,10 +1120,11 @@ def test_batch_unlocked_with_batch_size(device):
     gym_version is None or gym_version < version.parse("0.20.0"),
     reason="older versions of half-cheetah do not have 'x_position' info key.",
 )
-def test_info_dict_reader(seed=0):
+@pytest.mark.parametrize("device", get_available_devices())
+def test_info_dict_reader(device, seed=0):
     import gym
 
-    env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED))
+    env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED), device=device)
     env.set_info_dict_reader(default_info_dict_reader(["x_position"]))
 
     assert "x_position" in env.observation_spec.keys()

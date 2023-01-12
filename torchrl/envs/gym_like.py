@@ -280,7 +280,7 @@ class GymLikeEnv(_EnvWrapper):
         """
         self.info_dict_reader = info_dict_reader
         for info_key, spec in info_dict_reader.info_spec.items():
-            self.observation_spec[info_key] = spec
+            self.observation_spec[info_key] = spec.to(self.device)
         return self
 
     def __repr__(self) -> str:
