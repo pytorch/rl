@@ -1406,6 +1406,7 @@ class CompositeSpec(TensorSpec):
             if isinstance(item, TensorSpec) and item.device != self.device:
                 item = deepcopy(item).to(self.device)
             self[key] = item
+        return self
 
 
 def _keys_to_empty_composite_spec(keys):

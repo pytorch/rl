@@ -237,12 +237,23 @@ class GymLikeEnv(_EnvWrapper):
         reset_data = self._env.reset(**kwargs)
         if not isinstance(reset_data, tuple):
             reset_data = (reset_data,)
-        obs, *_ = self._output_transform(reset_data)
+        obs, *other = self._output_transform(reset_data)
+        info = None
+        if len(other) == 1:
+            info = other
+
         tensordict_out = TensorDict(
             source=self.read_obs(obs),
             batch_size=self.batch_size,
             device=self.device,
         )
+        if self.info_dict_reader is not None and info is not None:
+            self.info_dict_reader(info, tensordict_out)
+        elif info is None and self.info_dict_reader is not None:
+            # populate the reset with the items we have not seen from info
+            for key, item in self.observation_spec.items():
+                if key not in tensordict_out.keys():
+                    tensordict_out[key] = item.zero()
         tensordict_out.set("done", torch.zeros(*self.batch_size, 1, dtype=torch.bool))
         return tensordict_out
 

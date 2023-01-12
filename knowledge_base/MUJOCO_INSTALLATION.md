@@ -200,3 +200,5 @@ RuntimeError: Failed to initialize OpenGL
 4. Errors like "Onscreen rendering needs 101 device"
 
 > Make sure to set `DISPLAY` environment variable correctly.
+
+5. `ImportError: Cannot initialize a headless EGL display.`

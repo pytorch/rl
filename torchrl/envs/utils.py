@@ -172,16 +172,33 @@ def check_env_specs(env, return_contiguous=True):
 
     keys1 = set(fake_tensordict.keys())
     keys2 = set(real_tensordict.keys())
-    assert keys1 == keys2
+    if keys1 != keys2:
+        raise AssertionError(
+            "The keys of the fake tensordict and the one collected during rollout do not match:"
+            f"Got fake-real: {keys1-keys2} and real-fake: {keys2-keys1}"
+        )
     fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
     fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     fake_tensordict = fake_tensordict.to_tensordict()
-    assert (
+    if (
         fake_tensordict.apply(lambda x: torch.zeros_like(x))
-        == real_tensordict.apply(lambda x: torch.zeros_like(x))
-    ).all()
+        != real_tensordict.apply(lambda x: torch.zeros_like(x))
+    ).all():
+        raise AssertionError(
+            "zeroing the two tensordicts did not make them identical. "
+            f"Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
+        )
     for key in keys2:
-        assert fake_tensordict[key].shape == real_tensordict[key].shape
+        if fake_tensordict[key].shape != real_tensordict[key].shape:
+            raise AssertionError(
+                f"The shapes of the real and fake tensordict don't match for key {key}. "
+                f"Got fake={fake_tensordict[key].shape} and real={real_tensordict[key].shape}."
+            )
+        if fake_tensordict[key].dtype != real_tensordict[key].dtype:
+            raise AssertionError(
+                f"The dtypes of the real and fake tensordict don't match for key {key}. "
+                f"Got fake={fake_tensordict[key].dtype} and real={real_tensordict[key].dtype}."
+            )
 
     # test dtypes
     real_tensordict = env.rollout(3)  # keep empty structures, for example dict()
