@@ -65,14 +65,26 @@ def _gym_to_torchrl_spec_transform(
             if categorical_action_encoding
             else OneHotDiscreteTensorSpec
         )
-        return action_space_cls(spec.n, device=device)
-    elif isinstance(spec, gym.spaces.multi_binary.MultiBinary):
-        return BinaryDiscreteTensorSpec(spec.n, device=device)
-    elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
-        return (
-            MultiDiscreteTensorSpec(spec.nvec, device=device)
+        dtype = (
+            numpy_to_torch_dtype_dict[spec.dtype]
             if categorical_action_encoding
-            else MultOneHotDiscreteTensorSpec(spec.nvec, device=device)
+            else torch.long
+        )
+        return action_space_cls(spec.n, device=device, dtype=dtype)
+    elif isinstance(spec, gym.spaces.multi_binary.MultiBinary):
+        return BinaryDiscreteTensorSpec(
+            spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
+        )
+    elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
+        dtype = (
+            numpy_to_torch_dtype_dict[spec.dtype]
+            if categorical_action_encoding
+            else torch.long
+        )
+        return (
+            MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+            if categorical_action_encoding
+            else MultOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
         )
     elif isinstance(spec, gym.spaces.Box):
         shape = spec.shape
