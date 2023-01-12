@@ -202,3 +202,6 @@ RuntimeError: Failed to initialize OpenGL
 > Make sure to set `DISPLAY` environment variable correctly.
 
 5. `ImportError: Cannot initialize a headless EGL display.`
+  Make sure you have installed mujoco and all its dependencies (see instructions above).
+  Make sure you have set the `MUJOCO_GL=egl`.
+  Make sure you have a GPU accessible on your machine.
