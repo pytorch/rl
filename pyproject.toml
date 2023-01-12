@@ -2,7 +2,7 @@
 first_party_detection = false
 
 [build-system]
-requires = ["setuptools", "wheel", "torch"]
+requires = ["setuptools", "wheel", "torch", "ninja"]
 
 first_party_detection = false
 
