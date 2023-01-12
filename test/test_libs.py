@@ -8,8 +8,6 @@ from sys import platform
 import numpy as np
 import pytest
 import torch
-from packaging import version
-from tensordict.tensordict import assert_allclose_td
 
 from _utils_internal import (
     get_available_devices,
@@ -17,6 +15,8 @@ from _utils_internal import (
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
 )
+from packaging import version
+from tensordict.tensordict import assert_allclose_td
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
