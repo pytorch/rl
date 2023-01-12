@@ -154,7 +154,7 @@ SUPPORTED_LIBRARIES = {
 }
 
 
-def check_env_specs(env, return_contiguous=True):
+def check_env_specs(env, return_contiguous=True, check_dtype=True):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
@@ -164,6 +164,13 @@ def check_env_specs(env, return_contiguous=True):
     A broken environment spec will likely make it impossible to use parallel
     environments.
 
+    Args:
+        env (EnvBase): the env for which the specs have to be checked against data.
+        return_contiguous (bool, optional): if True, the random rollout will be called with
+            return_contiguous=True. This will fail in some cases (e.g. heterogeneous shapes
+            of inputs/outputs). Defaults to True.
+        check_dtype (bool, optional): if False, dtype checks will be skipped.
+            Defaults to True.
     """
     fake_tensordict = env.fake_tensordict().flatten_keys(".")
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous).flatten_keys(
@@ -194,7 +201,7 @@ def check_env_specs(env, return_contiguous=True):
                 f"The shapes of the real and fake tensordict don't match for key {key}. "
                 f"Got fake={fake_tensordict[key].shape} and real={real_tensordict[key].shape}."
             )
-        if fake_tensordict[key].dtype != real_tensordict[key].dtype:
+        if check_dtype and (fake_tensordict[key].dtype != real_tensordict[key].dtype):
             raise AssertionError(
                 f"The dtypes of the real and fake tensordict don't match for key {key}. "
                 f"Got fake={fake_tensordict[key].dtype} and real={real_tensordict[key].dtype}."
@@ -203,21 +210,29 @@ def check_env_specs(env, return_contiguous=True):
     # test dtypes
     real_tensordict = env.rollout(3)  # keep empty structures, for example dict()
     for key, value in real_tensordict.items():
-        _check_dtype(key, value, env.observation_spec, env.input_spec)
+        _check_isin(key, value, env.observation_spec, env.input_spec)
 
 
-def _check_dtype(key, value, obs_spec, input_spec):
+def _check_isin(key, value, obs_spec, input_spec):
     if key in {"reward", "done"}:
         return
     elif key == "next":
         for _key, _value in value.items():
-            _check_dtype(_key, _value, obs_spec, input_spec)
+            _check_isin(_key, _value, obs_spec, input_spec)
         return
     elif key in input_spec.keys(yield_nesting_keys=True):
-        assert input_spec[key].is_in(value), (input_spec[key], value)
+        if not input_spec[key].is_in(value):
+            raise AssertionError(
+                f"input_spec.is_in failed for key {key}. "
+                f"Got input_spec={input_spec[key]} and real={value}."
+            )
         return
     elif key in obs_spec.keys(yield_nesting_keys=True):
-        assert obs_spec[key].is_in(value), (input_spec[key], value)
+        if not obs_spec[key].is_in(value):
+            raise AssertionError(
+                f"obs_spec.is_in failed for key {key}. "
+                f"Got obs_spec={obs_spec[key]} and real={value}."
+            )
         return
     else:
         raise KeyError(key)
