@@ -2,6 +2,7 @@ from typing import Dict, List, Optional
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
@@ -178,6 +179,7 @@ class VmasWrapper(_EnvWrapper):
                             value, batch_size=torch.Size((self.num_envs,))
                         ).shape[1:],
                         device=self.device,
+                        dtype=torch.float32,
                     )
                     for key, value in self.scenario.info(agent0).items()
                 },
@@ -285,7 +287,7 @@ class VmasWrapper(_EnvWrapper):
         infos = TensorDict(
             source={
                 key: _selective_unsqueeze(
-                    value, batch_size=torch.Size((self.num_envs,))
+                    value.to(torch.float32), batch_size=torch.Size((self.num_envs,))
                 )
                 for key, value in infos.items()
             },
