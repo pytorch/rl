@@ -621,6 +621,17 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     def to_categorical(
         self, val: Optional[torch.Tensor] = None, safe: bool = True
     ) -> Union[DiscreteTensorSpec, torch.Tensor]:
+        """Convert a given one-hot tensor in categorical format or convert the spec to the equivalent categorical spec.
+
+        Args:
+            val (torch.Tensor, optional): One-hot tensor to convert in categorical format. If not provided, the function
+                will convert the spec to the equivalent DiscreteTensorSpec (default).
+            safe (bool): boolean value indicating whether a check should be
+                performed on the value against the domain of the spec.
+
+        Returns:
+            If val is provided, returns the categorical tensor, otherwise returns a DiscreteTensorSpec
+        """
         if val is None:
             return DiscreteTensorSpec(
                 self.space.n, device=self.device, dtype=self.dtype, shape=self.shape[:-1]
@@ -1229,6 +1240,17 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     def to_categorical(
         self, val: Optional[torch.Tensor] = None, safe: bool = True
     ) -> Union[MultiDiscreteTensorSpec, torch.Tensor]:
+        """Convert a given one-hot tensor in categorical format or convert the spec to the equivalent categorical spec.
+
+        Args:
+            val (torch.Tensor, optional): One-hot tensor to convert in categorical format. If not provided, the function
+                will convert the spec to the equivalent MultiDiscreteTensorSpec (default).
+            safe (bool): boolean value indicating whether a check should be
+                performed on the value against the domain of the spec.
+
+        Returns:
+            If val is provided, returns the categorical tensor, otherwise returns a MultiDiscreteTensorSpec
+        """
         if val is None:
             return MultiDiscreteTensorSpec(
                 [_space.n for _space in self.space],
@@ -1338,6 +1360,17 @@ class DiscreteTensorSpec(TensorSpec):
     def to_onehot(
         self, val: Optional[torch.Tensor] = None, safe: bool = True
     ) -> Union[OneHotDiscreteTensorSpec, torch.Tensor]:
+        """One-hot encode a given tensor or convert the spec to the equivalent one-hot spec.
+
+        Args:
+            val (torch.Tensor, optional): Tensor to one-hot encode. If not provided, the function will convert the
+                spec to the equivalent OneHotDiscreteTensorSpec (default).
+            safe (bool): boolean value indicating whether a check should be
+                performed on the value against the domain of the spec.
+
+        Returns:
+            If val is provided, returns the one-hot encoded tensor, otherwise returns a OneHotDiscreteTensorSpec
+        """
         if val is None:
             shape = [*self.shape, self.space.n]
             return OneHotDiscreteTensorSpec(
@@ -1507,8 +1540,20 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
 
         return ((val >= torch.zeros(self.nvec.size())) & (val < self.nvec)).all().item()
 
-    def to_onehot(self, val: Optional[torch.Tensor] = None, safe: bool = True) -> Union[
-        MultiOneHotDiscreteTensorSpec, torch.Tensor]:
+    def to_onehot(
+        self, val: Optional[torch.Tensor] = None, safe: bool = True
+    ) -> Union[MultiOneHotDiscreteTensorSpec, torch.Tensor]:
+        """One-hot encode a given tensor or convert the spec to the equivalent one-hot spec.
+
+        Args:
+            val (torch.Tensor, optional): Tensor to one-hot encode. If not provided, the function will convert the
+                spec to the equivalent MultOneHotDiscreteTensorSpec (default).
+            safe (bool): boolean value indicating whether a check should be
+                performed on the value against the domain of the spec.
+
+        Returns:
+            If val is provided, returns the one-hot encoded tensor, otherwise returns a MultOneHotDiscreteTensorSpec
+        """
         if val is None:
             nvec = [_space.n for _space in self.space]
             return MultiOneHotDiscreteTensorSpec(
