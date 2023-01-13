@@ -448,13 +448,17 @@ but got an object of type {type(transform)}."""
         tensordict = tensordict.clone(False)
         tensordict_in = self.transform.inv(tensordict)
         tensordict_out = self.base_env._step(tensordict_in)
-        tensordict_out = tensordict_out.update(
-            tensordict.exclude(*tensordict_out.keys())
+        tensordict_out = (
+            tensordict_out.update(  # update the output with the original tensordict
+                tensordict.exclude(
+                    *tensordict_out.keys()
+                )  # exclude the newly written keys
+            )
         )
         next_tensordict = self.transform._step(tensordict_out)
-        tensordict_out.update(next_tensordict, inplace=False)
+        # tensordict_out.update(next_tensordict, inplace=False)
 
-        return tensordict_out
+        return next_tensordict
 
     def set_seed(
         self, seed: Optional[int] = None, static_seed: bool = False
@@ -2671,3 +2675,89 @@ class StepCounter(Transform):
         )
         observation_spec["step_count"].space.minimum = 0
         return observation_spec
+
+
+class ExcludeTransform(Transform):
+    """Excludes keys from the input tensordict.
+
+    Args:
+        *excluded_keys (iterable of str): The name of the keys to exclude. If the key is
+            not present, it is simply ignored.
+
+    """
+
+    inplace = False
+
+    def __init__(self, *excluded_keys):
+        super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
+        if not all(isinstance(item, str) for item in excluded_keys):
+            raise ValueError("excluded_keys must be a list or tuple of strings.")
+        self.excluded_keys = excluded_keys
+        if "reward" in excluded_keys:
+            raise RuntimeError("'reward' cannot be excluded from the keys.")
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.exclude(*self.excluded_keys)
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.exclude(*self.excluded_keys)
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if any(key in observation_spec.keys() for key in self.excluded_keys):
+            return CompositeSpec(
+                **{
+                    key: value
+                    for key, value in observation_spec.items()
+                    if key not in self.excluded_keys
+                }
+            )
+        return observation_spec
+
+
+class SelectTransform(Transform):
+    """Select keys from the input tensordict.
+
+    In general, the :obj:`ExcludeTransform` should be preferred: this transforms also
+        selects the "action" (or other keys from input_spec), "done" and "reward"
+        keys but other may be necessary.
+
+    Args:
+        *selected_keys (iterable of str): The name of the keys to select. If the key is
+            not present, it is simply ignored.
+
+    """
+
+    inplace = False
+
+    def __init__(self, *selected_keys):
+        super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
+        if not all(isinstance(item, str) for item in selected_keys):
+            raise ValueError("excluded_keys must be a list or tuple of strings.")
+        self.selected_keys = selected_keys
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.parent:
+            input_keys = self.parent.input_spec.keys()
+        else:
+            input_keys = []
+        return tensordict.select(
+            *self.selected_keys, "reward", "done", *input_keys, strict=False
+        )
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.parent:
+            input_keys = self.parent.input_spec.keys()
+        else:
+            input_keys = []
+        return tensordict.select(
+            *self.selected_keys, "reward", "done", *input_keys, strict=False
+        )
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        return CompositeSpec(
+            **{
+                key: value
+                for key, value in observation_spec.items()
+                if key in self.selected_keys
+            }
+        )
