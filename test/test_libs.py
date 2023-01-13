@@ -636,7 +636,7 @@ class TestVmas:
         )
         for e in [env, wrapped]:
             e.set_seed(0)
-            check_env_specs(e, check_dtype=False)
+            check_env_specs(e)
             del e
 
     @pytest.mark.parametrize("num_envs", [1, 20])
