@@ -1219,8 +1219,9 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         vals = self._split(val)
         return torch.cat([super()._project(_val) for _val in vals], -1)
 
-    def to_categorical(self, val: Optional[torch.Tensor] = None, safe: bool = True) -> Union[
-        MultiDiscreteTensorSpec, torch.Tensor]:
+    def to_categorical(
+        self, val: Optional[torch.Tensor] = None, safe: bool = True
+    ) -> Union[MultiDiscreteTensorSpec, torch.Tensor]:
         if val is None:
             return MultiDiscreteTensorSpec(
                 [_space.n for _space in self.space],
@@ -1510,7 +1511,13 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         else:
             if safe:
                 self.assert_is_in(val)
-            return val
+            return torch.cat(
+                [
+                    torch.nn.functional.one_hot(val[..., i], n)
+                    for i, n in enumerate(self.nvec)
+                ],
+                -1,
+            )
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
