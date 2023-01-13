@@ -345,7 +345,7 @@ class TestModelBasedEnvBase:
         with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             mb_env.batch_locked = False
         td = mb_env.reset()
-        td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
+        td["action"] = mb_env.action_spec.rand()
         td_expanded = td.unsqueeze(-1).expand(10, 2).reshape(-1).to_tensordict()
         mb_env.step(td)
 
