@@ -46,8 +46,8 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         ...             batch_size=self.batch_size,
         ...             device=self.device,
         ...         )
-        ...         tensordict = tensordict.update(self.input_spec.rand(self.batch_size))
-        ...         tensordict = tensordict.update(self.observation_spec.rand(self.batch_size))
+        ...         tensordict = tensordict.update(self.input_spec.rand())
+        ...         tensordict = tensordict.update(self.observation_spec.rand())
         ...         return tensordict
         >>> # This environment is used as follows:
         >>> import torch.nn as nn

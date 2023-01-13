@@ -12,7 +12,7 @@ from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
-    MultOneHotDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
@@ -25,7 +25,7 @@ spec_dict = {
     "categorical": DiscreteTensorSpec,
     "unbounded": UnboundedContinuousTensorSpec,
     "binary": BinaryDiscreteTensorSpec,
-    "mult_one_hot": MultOneHotDiscreteTensorSpec,
+    "mult_one_hot": MultiOneHotDiscreteTensorSpec,
     "composite": CompositeSpec,
 }
 
@@ -39,7 +39,7 @@ default_spec_kwargs = {
         ]
     },
     BinaryDiscreteTensorSpec: {"n": 7},
-    MultOneHotDiscreteTensorSpec: {"nvec": [7, 3, 5]},
+    MultiOneHotDiscreteTensorSpec: {"nvec": [7, 3, 5]},
     CompositeSpec: {},
 }
 

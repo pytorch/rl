@@ -58,7 +58,7 @@ class EnvMetaData:
     def build_metadata_from_env(env) -> EnvMetaData:
         tensordict = env.fake_tensordict()
         specs = {key: getattr(env, key) for key in Specs._keys if key.endswith("_spec")}
-        specs = CompositeSpec(**specs)
+        specs = CompositeSpec(**specs, shape=env.batch_size)
         batch_size = env.batch_size
         env_str = str(env)
         device = env.device
@@ -276,7 +276,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
         if self._input_spec is None:
-            self.input_spec = CompositeSpec(action=value)
+            self.input_spec = CompositeSpec(action=value, shape=self.batch_size)
         else:
             self.input_spec["action"] = value
 
@@ -288,6 +288,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def input_spec(self, value: TensorSpec) -> None:
         if not isinstance(value, CompositeSpec):
             raise TypeError("The type of an input_spec must be Composite.")
+        if value.shape[: len(self.batch_size)] != self.batch_size:
+            raise ValueError("The value of spec.shape must match the env batch size.")
         self.__dict__["_input_spec"] = value
 
     @property
@@ -300,6 +302,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             raise TypeError(
                 f"reward_spec of type {type(value)} do not have a shape " f"attribute."
             )
+        if value.shape[: len(self.batch_size)] != self.batch_size:
+            raise ValueError("The value of spec.shape must match the env batch size.")
         if len(value.shape) == 0:
             raise RuntimeError(
                 "the reward_spec shape cannot be empty (this error"
@@ -317,6 +321,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def observation_spec(self, value: TensorSpec) -> None:
         if not isinstance(value, CompositeSpec):
             raise TypeError("The type of an observation_spec must be Composite.")
+        elif value.shape[: len(self.batch_size)] != self.batch_size:
+            raise ValueError("The value of spec.shape must match the env batch size.")
         self.__dict__["_observation_spec"] = value
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -535,7 +541,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = TensorDict(
                 {}, device=self.device, batch_size=self.batch_size, _run_checks=False
             )
-        action = self.action_spec.rand(self.batch_size)
+        action = self.action_spec.rand()
         tensordict.set("action", action)
         return self.step(tensordict)
 
@@ -605,7 +611,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if policy is None:
 
             def policy(td):
-                return td.set("action", self.action_spec.rand(self.batch_size))
+                return td.set("action", self.action_spec.rand())
 
         tensordicts = []
         for i in range(max_steps):
@@ -710,11 +716,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def fake_tensordict(self) -> TensorDictBase:
         """Returns a fake tensordict with key-value pairs that match in shape, device and dtype what can be expected during an environment rollout."""
         input_spec = self.input_spec
-        fake_input = input_spec.zero(self.batch_size)
+        fake_input = input_spec.zero()
         observation_spec = self.observation_spec
-        fake_obs = observation_spec.zero(self.batch_size)
+        fake_obs = observation_spec.zero()
         reward_spec = self.reward_spec
-        fake_reward = reward_spec.zero(self.batch_size)
+        fake_reward = reward_spec.zero()
         fake_td = TensorDict(
             {
                 **fake_obs,

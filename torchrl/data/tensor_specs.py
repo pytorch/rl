@@ -265,6 +265,13 @@ class TensorSpec:
             self.assert_is_in(val)
         return val.detach().cpu().numpy()
 
+    @property
+    def ndim(self):
+        return self.ndimension()
+
+    def ndimension(self):
+        return len(self.shape)
+
     @abc.abstractmethod
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
         """Indexes the input tensor.
@@ -275,6 +282,19 @@ class TensorSpec:
 
         Returns:
             indexed tensor
+
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def expand(self, *shape):
+        """Returns a new Spec with the extended shape.
+
+        Args:
+            *shape (tuple or iterable of int): the new shape of the Spec. Must comply with the current shape:
+                its length must be at least as long as the current shape length,
+                and its last values must be complient too; ie they can only differ
+                from it if the current dimension is a singleton.
 
         """
         raise NotImplementedError
@@ -407,6 +427,8 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
     Args:
         n (int): number of possible outcomes.
+        shape (torch.Size, optional): total shape of the sampled tensors.
+            If provided, the last dimension must match n.
         device (str, int or torch.device, optional): device of the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
         user_register (bool): experimental feature. If True, every integer
@@ -428,6 +450,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     def __init__(
         self,
         n: int,
+        shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = torch.long,
         use_register: bool = False,
@@ -438,8 +461,32 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         space = DiscreteBox(
             n,
         )
-        shape = torch.Size((space.n,))
+        if shape is None:
+            shape = torch.Size((space.n,))
+        else:
+            shape = torch.Size(shape)
+            if shape[-1] != space.n:
+                raise ValueError(
+                    f"The last value of the shape must match n for transform of type {self.__class__}. "
+                    f"Got n={space.n} and shape={shape}."
+                )
         super().__init__(shape, space, device, dtype, "discrete")
+
+    def expand(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], tuple):
+            shape = shape[0]
+        if any(val < 0 for val in shape):
+            raise ValueError(
+                f"{self.__class__.__name__}.extend does not support negative shapes."
+            )
+        if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
+            raise ValueError(
+                f"The last {self.ndim} of the extended shape must match the"
+                f"shape of the CompositeSpec in CompositeSpec.extend."
+            )
+        return self.__class__(
+            n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
+        )
 
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
@@ -611,6 +658,26 @@ class BoundedTensorSpec(TensorSpec):
             shape, ContinuousBox(minimum, maximum), device, dtype, "continuous"
         )
 
+    def expand(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], tuple):
+            shape = shape[0]
+        if any(val < 0 for val in shape):
+            raise ValueError(
+                f"{self.__class__.__name__}.extend does not support negative shapes."
+            )
+        if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
+            raise ValueError(
+                f"The last {self.ndim} of the extended shape must match the"
+                f"shape of the CompositeSpec in CompositeSpec.extend."
+            )
+        return self.__class__(
+            minimum=self.space.minimum.expand(shape),
+            maximum=self.space.maximum.expand(shape),
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
@@ -702,6 +769,20 @@ class UnboundedContinuousTensorSpec(TensorSpec):
     def is_in(self, val: torch.Tensor) -> bool:
         return True
 
+    def expand(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], tuple):
+            shape = shape[0]
+        if any(val < 0 for val in shape):
+            raise ValueError(
+                f"{self.__class__.__name__}.extend does not support negative shapes."
+            )
+        if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
+            raise ValueError(
+                f"The last {self.ndim} of the extended shape must match the"
+                f"shape of the CompositeSpec in CompositeSpec.extend."
+            )
+        return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
+
 
 @dataclass(repr=False)
 class UnboundedDiscreteTensorSpec(TensorSpec):
@@ -755,6 +836,20 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
     def is_in(self, val: torch.Tensor) -> bool:
         return True
 
+    def expand(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], tuple):
+            shape = shape[0]
+        if any(val < 0 for val in shape):
+            raise ValueError(
+                f"{self.__class__.__name__}.extend does not support negative shapes."
+            )
+        if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
+            raise ValueError(
+                f"The last {self.ndim} of the extended shape must match the"
+                f"shape of the CompositeSpec in CompositeSpec.extend."
+            )
+        return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
+
 
 @dataclass(repr=False)
 class BinaryDiscreteTensorSpec(TensorSpec):
@@ -762,9 +857,14 @@ class BinaryDiscreteTensorSpec(TensorSpec):
 
     Args:
         n (int): length of the binary vector.
+        shape (torch.Size, optional): total shape of the sampled tensors.
+            If provided, the last dimension must match n.
         device (str, int or torch.device, optional): device of the tensors.
-        dtype (str or torch.dtype, optional): dtype of the tensors.
+        dtype (str or torch.dtype, optional): dtype of the tensors. Defaults to torch.long.
 
+    Examples:
+        >>> spec = BinaryDiscreteTensorSpec(n=4, shape=(5, 4), device="cpu", dtype=torch.bool)
+        >>> print(spec.zero())
     """
 
     shape: torch.Size
@@ -776,12 +876,22 @@ class BinaryDiscreteTensorSpec(TensorSpec):
     def __init__(
         self,
         n: int,
+        shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Union[str, torch.dtype] = torch.long,
     ):
         dtype, device = _default_dtype_and_device(dtype, device)
-        shape = torch.Size((n,))
         box = BinaryBox(n)
+        if shape is None:
+            shape = torch.Size((n,))
+        else:
+            shape = torch.Size(shape)
+            if shape[-1] != box.n:
+                raise ValueError(
+                    f"The last value of the shape must match n for transform of type {self.__class__}. "
+                    f"Got n={box.n} and shape={shape}."
+                )
+
         super().__init__(shape, box, device, dtype, domain="discrete")
 
     def rand(self, shape=None) -> torch.Tensor:
@@ -803,20 +913,38 @@ class BinaryDiscreteTensorSpec(TensorSpec):
     def is_in(self, val: torch.Tensor) -> bool:
         return ((val == 0) | (val == 1)).all()
 
+    def expand(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], tuple):
+            shape = shape[0]
+        if any(val < 0 for val in shape):
+            raise ValueError(
+                f"{self.__class__.__name__}.extend does not support negative shapes."
+            )
+        if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
+            raise ValueError(
+                f"The last {self.ndim} of the extended shape must match the"
+                f"shape of the CompositeSpec in CompositeSpec.extend."
+            )
+        return self.__class__(
+            n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
+        )
+
 
 @dataclass(repr=False)
-class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
+class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     """A concatenation of one-hot discrete tensor spec.
 
     Args:
         nvec (iterable of integers): cardinality of each of the elements of
             the tensor.
+        shape (torch.Size, optional): total shape of the sampled tensors.
+            If provided, the last dimension must match sum(nvec).
         device (str, int or torch.device, optional): device of
             the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
 
     Examples:
-        >>> ts = MultOneHotDiscreteTensorSpec((3,2,3))
+        >>> ts = MultiOneHotDiscreteTensorSpec((3,2,3))
         >>> ts.is_in(torch.tensor([0,0,1,
         ...                        0,1,
         ...                        1,0,0]))
@@ -831,12 +959,21 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     def __init__(
         self,
         nvec: Sequence[int],
+        shape: Optional[torch.Size] = None,
         device=None,
         dtype=torch.long,
         use_register=False,
     ):
         dtype, device = _default_dtype_and_device(dtype, device)
-        shape = torch.Size((sum(nvec),))
+        if shape is None:
+            shape = torch.Size((sum(nvec),))
+        else:
+            shape = torch.Size(shape)
+            if shape[-1] != sum(nvec):
+                raise ValueError(
+                    f"The last value of the shape must match sum(nvec) for transform of type {self.__class__}. "
+                    f"Got sum(nvec)={sum(nvec)} and shape={shape}."
+                )
         space = BoxList([DiscreteBox(n) for n in nvec])
         self.use_register = use_register
         super(OneHotDiscreteTensorSpec, self).__init__(
@@ -875,7 +1012,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
                 raise RuntimeError(
                     f"value {v} is greater than the allowed max {space.n}"
                 )
-            x.append(super(MultOneHotDiscreteTensorSpec, self).encode(v, space))
+            x.append(super(MultiOneHotDiscreteTensorSpec, self).encode(v, space))
         return torch.cat(x, -1)
 
     def _split(self, val: torch.Tensor) -> Optional[torch.Tensor]:
@@ -912,7 +1049,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         if vals is None:
             return False
         return all(
-            super(MultOneHotDiscreteTensorSpec, self).is_in(_val) for _val in vals
+            super(MultiOneHotDiscreteTensorSpec, self).is_in(_val) for _val in vals
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
@@ -922,6 +1059,23 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     def to_categorical(self) -> MultiDiscreteTensorSpec:
         return MultiDiscreteTensorSpec(
             [_space.n for _space in self.space], self.device, self.dtype
+        )
+
+    def expand(self, *shape):
+        nvecs = [space.n for space in self.space]
+        if len(shape) == 1 and isinstance(shape[0], tuple):
+            shape = shape[0]
+        if any(val < 0 for val in shape):
+            raise ValueError(
+                f"{self.__class__.__name__}.extend does not support negative shapes."
+            )
+        if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
+            raise ValueError(
+                f"The last {self.ndim} of the extended shape must match the"
+                f"shape of the CompositeSpec in CompositeSpec.extend."
+            )
+        return self.__class__(
+            nvec=nvecs, shape=shape, device=self.device, dtype=self.dtype
         )
 
 
@@ -943,7 +1097,7 @@ class DiscreteTensorSpec(TensorSpec):
 
     Args:
         n (int): number of possible outcomes.
-        shape: (torch.Size, optional): shape of the variable, default is "(1,)".
+        shape: (torch.Size, optional): shape of the variable, default is "torch.Size([])".
         device (str, int or torch.device, optional): device of the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
 
@@ -1008,6 +1162,22 @@ class DiscreteTensorSpec(TensorSpec):
             )
         return OneHotDiscreteTensorSpec(self.space.n, self.device, self.dtype)
 
+    def expand(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], tuple):
+            shape = shape[0]
+        if any(val < 0 for val in shape):
+            raise ValueError(
+                f"{self.__class__.__name__}.extend does not support negative shapes."
+            )
+        if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
+            raise ValueError(
+                f"The last {self.ndim} of the extended shape must match the"
+                f"shape of the CompositeSpec in CompositeSpec.extend."
+            )
+        return self.__class__(
+            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+        )
+
 
 @dataclass(repr=False)
 class MultiDiscreteTensorSpec(DiscreteTensorSpec):
@@ -1016,6 +1186,8 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
     Args:
         nvec (iterable of integers or torch.Tensor): cardinality of each of the elements of
             the tensor. Can have several axes.
+        shape (torch.Size, optional): total shape of the sampled tensors.
+            If provided, the last dimension must match nvec.shape[-1].
         device (str, int or torch.device, optional): device of
             the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
@@ -1031,6 +1203,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
     def __init__(
         self,
         nvec: Union[Sequence[int], torch.Tensor, int],
+        shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = torch.long,
     ):
@@ -1040,7 +1213,16 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             nvec = nvec.unsqueeze(0)
         self.nvec = nvec
         dtype, device = _default_dtype_and_device(dtype, device)
-        shape = nvec.shape
+        if shape is None:
+            shape = nvec.shape
+        else:
+            shape = torch.Size(shape)
+            if shape[-1] != nvec.shape[-1]:
+                raise ValueError(
+                    f"The last value of the shape must match nvec.shape[-1] for transform of type {self.__class__}. "
+                    f"Got nvec.shape[-1]={sum(nvec)} and shape={shape}."
+                )
+
         space = BoxList.from_nvec(nvec)
         super(DiscreteTensorSpec, self).__init__(
             shape, space, device, dtype, domain="discrete"
@@ -1095,7 +1277,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
 
         return ((val >= torch.zeros(self.nvec.size())) & (val < self.nvec)).all().item()
 
-    def to_onehot(self) -> MultOneHotDiscreteTensorSpec:
+    def to_onehot(self) -> MultiOneHotDiscreteTensorSpec:
         if len(self.shape) > 1:
             raise RuntimeError(
                 f"DiscreteTensorSpec with shape that has several dimensions can't be converted to"
@@ -1103,8 +1285,24 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                 f"nestedtensors but it is not implemented yet. If you would like to see that feature, please submit "
                 f"an issue of torchrl's github repo. "
             )
-        return MultOneHotDiscreteTensorSpec(
+        return MultiOneHotDiscreteTensorSpec(
             [_space.n for _space in self.space], self.device, self.dtype
+        )
+
+    def expand(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], tuple):
+            shape = shape[0]
+        if any(val < 0 for val in shape):
+            raise ValueError(
+                f"{self.__class__.__name__}.extend does not support negative shapes."
+            )
+        if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
+            raise ValueError(
+                f"The last {self.ndim} of the extended shape must match the"
+                f"shape of the CompositeSpec in CompositeSpec.extend."
+            )
+        return self.__class__(
+            nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype
         )
 
 
@@ -1172,6 +1370,7 @@ class CompositeSpec(TensorSpec):
 
     """
 
+    shape: torch.Size
     domain: str = "composite"
 
     @classmethod
@@ -1179,8 +1378,51 @@ class CompositeSpec(TensorSpec):
         cls._device = torch.device("cpu")
         return super().__new__(cls)
 
-    def __init__(self, *args, **kwargs):
-        self._specs = kwargs
+    @property
+    def shape(self):
+        return self._shape
+
+    @shape.setter
+    def shape(self, value: torch.Size):
+        for key, spec in self.items():
+            if spec.shape[: self.ndim] != self.shape:
+                raise ValueError(
+                    f"The shape of the spec and the CompositeSpec mismatch during shape resetting: the "
+                    f"{self.ndim} first dimensions should match but got self['{key}'].shape={spec.shape} and "
+                    f"CompositeSpec.shape={self.shape}."
+                )
+        self._shape = torch.Size(value)
+
+    @property
+    def ndim(self):
+        return self.ndimension()
+
+    def ndimension(self):
+        return len(self.shape)
+
+    def set(self, name, spec):
+        if spec is not None:
+            shape = spec.shape
+            if shape[: self.ndim] != self.shape:
+                raise ValueError(
+                    "The shape of the spec and the CompositeSpec mismatch: the first "
+                    f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
+                    f"CompositeSpec.shape={self.shape}."
+                )
+        self._specs[name] = spec
+
+    def __init__(self, *args, shape=None, **kwargs):
+        if shape is None:
+            # Should we do this? Other specs have a default empty shape, maybe it would make sense to keep it
+            # optional for composite (for clarity and easiness of use).
+            # warnings.warn("shape=None for CompositeSpec will soon be deprecated. Make sure you set the "
+            #               "batch size of your CompositeSpec as you would do for a tensordict.")
+            shape = []
+        self._shape = torch.Size(shape)
+        self._specs = {}
+        for key, value in kwargs.items():
+            self.set(key, value)
+
         if len(kwargs):
             _device = None
             for key, item in self.items():
@@ -1262,7 +1504,7 @@ class CompositeSpec(TensorSpec):
                 f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
                 f"All devices of CompositeSpec must match."
             )
-        self._specs[key] = value
+        self.set(key, value)
 
     def __iter__(self):
         for k in self._specs:
@@ -1407,6 +1649,25 @@ class CompositeSpec(TensorSpec):
                 item = deepcopy(item).to(self.device)
             self[key] = item
         return self
+
+    def expand(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], tuple):
+            shape = shape[0]
+        if any(val < 0 for val in shape):
+            raise ValueError("CompositeSpec.extend does not support negative shapes.")
+        if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
+            raise ValueError(
+                f"The last {self.ndim} of the extended shape must match the"
+                f"shape of the CompositeSpec in CompositeSpec.extend."
+            )
+        out = CompositeSpec(
+            {
+                key: value.expand(*shape, *value.shape[self.ndim :])
+                for key, value in tuple(self.items())
+            },
+            shape=shape,
+        )
+        return out
 
 
 def _keys_to_empty_composite_spec(keys):

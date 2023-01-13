@@ -294,15 +294,29 @@ class _BatchedEnv(EnvBase):
             self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
             self._device = meta_data[0].device
             # TODO: check that all action_spec and reward spec match (issue #351)
-            self.reward_spec = meta_data[0].specs["reward_spec"]
+
+            reward_spec = meta_data[0].specs["reward_spec"]
+            reward_spec = reward_spec.expand(self.num_workers, *reward_spec.shape)
+            self.reward_spec = reward_spec
+
             _observation_spec = {}
             for md in meta_data:
                 _observation_spec.update(dict(**md.specs["observation_spec"]))
-            self.observation_spec = CompositeSpec(**_observation_spec)
+            observation_spec = CompositeSpec(
+                **_observation_spec, shape=meta_data[0].batch_size
+            )
+            observation_spec = observation_spec.expand(
+                self.num_workers, *observation_spec.shape
+            )
+            self.observation_spec = observation_spec
+
             _input_spec = {}
             for md in meta_data:
                 _input_spec.update(dict(**md.specs["input_spec"]))
-            self.input_spec = CompositeSpec(**_input_spec)
+            input_spec = CompositeSpec(**_input_spec, shape=meta_data[0].batch_size)
+            input_spec = input_spec.expand(self.num_workers, *input_spec.shape)
+            self.input_spec = input_spec
+
             self._dummy_env_str = str(meta_data[0])
             self._env_tensordict = torch.stack(
                 [meta_data.tensordict for meta_data in meta_data], 0
