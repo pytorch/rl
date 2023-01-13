@@ -309,7 +309,15 @@ def test_multi_discrete(shape, ns, dtype):
         99,
     ],
 )
+@pytest.mark.parametrize(
+    "shape",
+    [
+        torch.Size([3]),
+        torch.Size([4, 5]),
+    ],
+)
 @pytest.mark.parametrize("device", get_available_devices())
+<<<<<<< HEAD:test/test_specs.py
 @pytest.mark.parametrize(
     "shape",
     [
@@ -329,6 +337,9 @@ def test_discrete_conversion(n, device, shape):
     assert categorical != one_hot
     assert categorical.to_onehot() == one_hot
     assert one_hot.to_categorical() == categorical
+
+    assert categorical.is_in(one_hot.to_categorical(one_hot.rand(shape)))
+    assert one_hot.is_in(categorical.to_onehot(categorical.rand(shape)))
 
 
 @pytest.mark.parametrize(
@@ -359,8 +370,6 @@ def test_multi_discrete_conversion(ns, shape, device):
 
     assert categorical.is_in(one_hot.to_categorical(one_hot.rand(shape)))
     assert one_hot.is_in(categorical.to_onehot(categorical.rand(shape)))
-
-    categorical.to_onehot()
 
 
 @pytest.mark.parametrize("is_complete", [True, False])

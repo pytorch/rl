@@ -618,10 +618,17 @@ class OneHotDiscreteTensorSpec(TensorSpec):
                 and self.use_register == other.use_register
         )
 
-    def to_categorical(self) -> DiscreteTensorSpec:
-        return DiscreteTensorSpec(
-            self.space.n, device=self.device, dtype=self.dtype, shape=self.shape[:-1]
-        )
+    def to_categorical(
+        self, val: Optional[torch.Tensor] = None, safe: bool = True
+    ) -> Union[DiscreteTensorSpec, torch.Tensor]:
+        if val is None:
+            return DiscreteTensorSpec(
+                self.space.n, device=self.device, dtype=self.dtype, shape=self.shape[:-1]
+            )
+        else:
+            if safe:
+                self.assert_is_in(val)
+            return val.argmax(-1)
 
 
 @dataclass(repr=False)
@@ -1328,16 +1335,18 @@ class DiscreteTensorSpec(TensorSpec):
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
         return super().to_numpy(val, safe)
 
-    def to_onehot(self) -> OneHotDiscreteTensorSpec:
-        # if len(self.shape) > 1:
-        #     raise RuntimeError(
-        #         f"DiscreteTensorSpec with shape that has several dimensions can't be converted to "
-        #         f"OneHotDiscreteTensorSpec. Got shape={self.shape}."
-        #     )
-        shape = [*self.shape, self.space.n]
-        return OneHotDiscreteTensorSpec(
-            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
-        )
+    def to_onehot(
+        self, val: Optional[torch.Tensor] = None, safe: bool = True
+    ) -> Union[OneHotDiscreteTensorSpec, torch.Tensor]:
+        if val is None:
+            shape = [*self.shape, self.space.n]
+            return OneHotDiscreteTensorSpec(
+                n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+            )
+        else:
+            if safe:
+                self.assert_is_in(val)
+            return torch.nn.functional.one_hot(val, self.space.n)
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
