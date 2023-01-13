@@ -292,6 +292,11 @@ class SyncDataCollector(_DataCollector):
             updated. This feature should be used cautiously: if the same tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
             Default is False.
+        env_batch_size_mask (Tuple[bool, ...], optional): a list of bools of the same length as env.batch_size,
+            with a value of True it indicates to consider the corresponding dimension of env.batch_size as part of the
+            batch of environemnts used to collect frames, with a value of False it indicates NOT to consider that dimension
+            as part of the batch of environemnts used to collect frames (used for agent dimension in multi-agent settings).
+            Default is None (corresponding to all True).
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -363,6 +368,7 @@ class SyncDataCollector(_DataCollector):
         init_with_lag: bool = False,
         return_same_td: bool = False,
         reset_when_done: bool = True,
+        env_batch_size_mask: Optional[Tuple[bool, ...]] = None,
     ):
         self.closed = True
         if seed is not None:
@@ -399,7 +405,24 @@ class SyncDataCollector(_DataCollector):
         self.env: EnvBase = env.to(self.passing_device)
         self.closed = False
         self.reset_when_done = reset_when_done
-        self.n_env = self.env.numel()
+
+        if env_batch_size_mask is not None and len(env_batch_size_mask) != len(
+            self.env.batch_size
+        ):
+            raise RuntimeError(
+                f"Batch size mask and env batch size have different lengths: mask={env_batch_size_mask}, env.batch_size={self.env.batch_size}"
+            )
+        self.env_batch_size_masked = (
+            env.batch_size
+            if env_batch_size_mask is None
+            else torch.Size(
+                [
+                    (dim if is_in else 1)
+                    for dim, is_in in zip(env.batch_size, env_batch_size_mask)
+                ]
+            )
+        )
+        self.n_env = prod(self.env_batch_size_masked)
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
@@ -641,8 +664,13 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.update(self.env.reset(), inplace=True)
             self._tensordict.fill_("step_count", 0)
 
-        n = self.env.batch_size[0] if len(self.env.batch_size) else 1
-        self._tensordict.set("traj_ids", torch.arange(n).view(self.env.batch_size[:1]))
+        n = max(1, self.env_batch_size_masked.numel())
+        self._tensordict.set(
+            "traj_ids",
+            torch.arange(n)
+            .view(self.env_batch_size_masked)
+            .expand(self.env.batch_size),
+        )
 
         with set_exploration_mode(self.exploration_mode):
             for j in range(self.frames_per_batch):
