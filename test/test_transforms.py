@@ -22,7 +22,7 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
 )
-from tensordict import TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp, Tensor
 from torchrl._utils import prod
 from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
@@ -30,39 +30,41 @@ from torchrl.envs import (
     BinarizeReward,
     CatFrames,
     CatTensors,
+    CenterCrop,
     Compose,
+    DiscreteActionProjection,
     DoubleToFloat,
+    EnvBase,
     EnvCreator,
+    ExcludeTransform,
     FiniteTensorDictCheck,
     FlattenObservation,
+    FrameSkipTransform,
     GrayScale,
+    gSDENoise,
+    NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
+    PinMemoryTransform,
     R3MTransform,
     Resize,
     RewardClipping,
     RewardScaling,
     RewardSum,
+    SelectTransform,
     SerialEnv,
+    SqueezeTransform,
     StepCounter,
+    TensorDictPrimer,
     ToTensorImage,
+    TransformedEnv,
+    UnsqueezeTransform,
     VIPTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
-from torchrl.envs.transforms import TransformedEnv, VecNorm
+from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
-from torchrl.envs.transforms.transforms import (
-    _has_tv,
-    CenterCrop,
-    DiscreteActionProjection,
-    FrameSkipTransform,
-    gSDENoise,
-    NoopResetEnv,
-    PinMemoryTransform,
-    SqueezeTransform,
-    TensorDictPrimer,
-    UnsqueezeTransform,
-)
+from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs
 
@@ -2266,6 +2268,54 @@ def test_batch_unlocked_with_batch_size_transformed(device):
         RuntimeError, match="Expected a tensordict with shape==env.shape, "
     ):
         env.step(td_expanded)
+
+
+class TestExcludeSelect:
+    class EnvWithManyKeys(EnvBase):
+        def __init__(self):
+            super().__init__()
+            self.observation_spec = CompositeSpec(
+                a=UnboundedContinuousTensorSpec(3),
+                b=UnboundedContinuousTensorSpec(3),
+                c=UnboundedContinuousTensorSpec(3),
+            )
+            self.reward_spec = UnboundedContinuousTensorSpec(1)
+            self.input_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(2))
+
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            return self.observation_spec.rand().update(
+                {
+                    "reward": self.reward_spec.rand(),
+                    "done": torch.zeros(1, dtype=torch.bool),
+                }
+            )
+
+        def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+            return self.observation_spec.rand().update(
+                {"done": torch.zeros(1, dtype=torch.bool)}
+            )
+
+        def _set_seed(self, seed):
+            return seed + 1
+
+    def test_exclude(self):
+        base_env = TestExcludeSelect.EnvWithManyKeys()
+        env = TransformedEnv(base_env, ExcludeTransform("a"))
+        check_env_specs(env)
+        assert "a" not in env.reset().keys()
+        assert "b" in env.reset().keys()
+        assert "c" in env.reset().keys()
+
+    def test_select(self):
+        base_env = TestExcludeSelect.EnvWithManyKeys()
+        env = TransformedEnv(base_env, SelectTransform("b", "c"))
+        check_env_specs(env)
+        assert "a" not in env.reset().keys()
+        assert "b" in env.reset().keys()
+        assert "c" in env.reset().keys()
 
 
 transforms = [

@@ -208,7 +208,9 @@ in the environment. The keys to be included in this inverse transform are passed
     CatTensors
     CenterCrop
     Compose
+    DiscreteActionProjection
     DoubleToFloat
+    ExcludeTransform
     FiniteTensorDictCheck
     FlattenObservation
     FrameSkipTransform
@@ -218,19 +220,20 @@ in the environment. The keys to be included in this inverse transform are passed
     ObservationNorm
     ObservationTransform
     PinMemoryTransform
+    R3MTransform
     Resize
     RewardClipping
     RewardScaling
     RewardSum
+    SelectTransform
     SqueezeTransform
     StepCounter
     TensorDictPrimer
     ToTensorImage
     UnsqueezeTransform
     VecNorm
-    R3MTransform
-    VIPTransform
     VIPRewardTransform
+    VIPTransform
 
 Recorders
 ---------
