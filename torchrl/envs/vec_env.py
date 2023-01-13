@@ -283,9 +283,21 @@ class _BatchedEnv(EnvBase):
         meta_data = deepcopy(self.meta_data)
         if self._single_task:
             self._batch_size = meta_data.batch_size
-            self.observation_spec = meta_data.specs["observation_spec"]
-            self.reward_spec = meta_data.specs["reward_spec"]
-            self.input_spec = meta_data.specs["input_spec"]
+            observation_spec = meta_data.specs["observation_spec"]
+
+            observation_spec = observation_spec.expand(
+                self.num_workers, *observation_spec.shape
+            )
+            self.observation_spec = observation_spec
+
+            reward_spec = meta_data.specs["reward_spec"]
+            reward_spec = reward_spec.expand(self.num_workers, *reward_spec.shape)
+            self.reward_spec = reward_spec
+
+            input_spec = meta_data.specs["input_spec"]
+            input_spec = input_spec.expand(self.num_workers, *input_spec.shape)
+            self.input_spec = input_spec
+
             self._dummy_env_str = meta_data.env_str
             self._device = meta_data.device
             self._env_tensordict = meta_data.tensordict

@@ -490,7 +490,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
-            shape = torch.Size([])
+            shape = self.shape[:-1]
+        else:
+            shape = torch.Size([*shape, *self.shape[:-1]])
         return torch.nn.functional.gumbel_softmax(
             torch.rand(torch.Size([*shape, self.space.n]), device=self.device),
             hard=True,
@@ -695,10 +697,16 @@ class BoundedTensorSpec(TensorSpec):
                 out[out < a] = a.expand_as(out)[out < a]
             return out
         else:
-            interval = self.space.maximum - self.space.minimum
-            r = torch.rand(
-                torch.Size([*shape, *interval.shape]), device=interval.device
-            )
+            if self.space.maximum.dtype == torch.bool:
+                maxi = self.space.maximum.int()
+            else:
+                maxi = self.space.maximum
+            if self.space.minimum.dtype == torch.bool:
+                mini = self.space.minimum.int()
+            else:
+                mini = self.space.minimum
+            interval = maxi - mini
+            r = torch.rand(torch.Size([*shape, *self.shape]), device=interval.device)
             r = interval * r
             r = self.space.minimum + r
             r = r.to(self.dtype).to(self.device)
@@ -982,7 +990,10 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
     def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
         if shape is None:
-            shape = torch.Size([])
+            shape = self.shape[:-1]
+        else:
+            shape = torch.Size([*shape, *self.shape[:-1]])
+
         x = torch.cat(
             [
                 torch.nn.functional.one_hot(
@@ -1247,7 +1258,9 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
 
     def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
         if shape is None:
-            shape = torch.Size([])
+            shape = self.shape[:-1]
+        else:
+            shape = torch.Size([*shape, *self.shape[:-1]])
         x = self._rand(self.space, shape, self.nvec.ndim)
         if self.shape == torch.Size([1]):
             x = x.squeeze(-1)

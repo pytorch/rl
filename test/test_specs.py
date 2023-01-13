@@ -1111,10 +1111,14 @@ class TestExpand:
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
         spec2 = spec.expand(*shape2_real)
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
 
     @pytest.mark.parametrize("shape2", [(), (5,)])
     @pytest.mark.parametrize(
@@ -1140,10 +1144,14 @@ class TestExpand:
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
         spec2 = spec.expand(*shape2_real)
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
 
     def test_composite(self):
         batch_size = (5,)
@@ -1230,10 +1238,14 @@ class TestExpand:
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
         spec2 = spec.expand(*shape2_real)
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
 
     @pytest.mark.parametrize(
         "shape1",
@@ -1261,10 +1273,14 @@ class TestExpand:
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
         spec2 = spec.expand(*shape2_real)
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
 
     @pytest.mark.parametrize(
         "shape1",
@@ -1292,10 +1308,14 @@ class TestExpand:
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
         spec2 = spec.expand(*shape2_real)
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
 
     @pytest.mark.parametrize(
         "shape1",
@@ -1323,10 +1343,14 @@ class TestExpand:
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
         spec2 = spec.expand(*shape2_real)
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
 
     @pytest.mark.parametrize(
         "shape1",
@@ -1354,10 +1378,14 @@ class TestExpand:
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
         spec2 = spec.expand(*shape2_real)
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
 
     @pytest.mark.parametrize(
         "shape1",
@@ -1387,3 +1415,10 @@ class TestExpand:
         assert spec2 is not spec
         assert spec2.dtype == spec.dtype
         assert (spec2.zero() == spec.zero()).all()
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
+        spec2 = spec.expand(*shape2_real)
+        assert spec2 is not spec
+        assert spec2.dtype == spec.dtype
+        assert spec2.rand().shape == spec2.shape
+        assert spec2.zero().shape == spec2.shape
