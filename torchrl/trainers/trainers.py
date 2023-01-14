@@ -1157,8 +1157,6 @@ class Recorder(TrainerHookBase):
                         out[self.out_keys[key]] = mean_value
                         out["total_" + self.out_keys[key]] = total_value
                         continue
-                    if key == "solved":
-                        value = value.any().float()
                     out[self.out_keys[key]] = value
                 out["log_pbar"] = self.log_pbar
         self._count += 1
