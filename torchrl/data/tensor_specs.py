@@ -1642,7 +1642,7 @@ class CompositeSpec(TensorSpec):
                 for key in self.keys(True)
                 if isinstance(key, str) and self[key] is not None
             },
-            shape,
+            torch.Size([*shape, *self.shape]),
             device=self.device,
         )
 

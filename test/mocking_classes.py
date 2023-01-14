@@ -122,7 +122,8 @@ class MockSerialEnv(EnvBase):
                         *batch_size,
                         1,
                     )
-                )
+                ),
+                shape=batch_size,
             )
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec(
@@ -132,7 +133,7 @@ class MockSerialEnv(EnvBase):
                 )
             )
         if input_spec is None:
-            input_spec = CompositeSpec(action=action_spec)
+            input_spec = CompositeSpec(action=action_spec, shape=batch_size)
         cls._reward_spec = reward_spec
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
