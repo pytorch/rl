@@ -24,7 +24,11 @@ from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
 from torchrl._utils import _check_for_faulty_process, prod
-from torchrl.collectors.utils import split_trajectories, numel_with_mask, get_batch_size_masked
+from torchrl.collectors.utils import (
+    get_batch_size_masked,
+    numel_with_mask,
+    split_trajectories,
+)
 from torchrl.data import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
@@ -408,8 +412,12 @@ class SyncDataCollector(_DataCollector):
         self.reset_when_done = reset_when_done
 
         self.env_batch_size_mask = env_batch_size_mask
-        self.out_batch_size_mask = None if env_batch_size_mask is None else list(env_batch_size_mask) + [True]
-        self.env_batch_size_masked = get_batch_size_masked(self.env.batch_size, self.env_batch_size_mask)
+        self.out_batch_size_mask = (
+            None if env_batch_size_mask is None else list(env_batch_size_mask) + [True]
+        )
+        self.env_batch_size_masked = get_batch_size_masked(
+            self.env.batch_size, self.env_batch_size_mask
+        )
         self.n_env = max(1, self.env_batch_size_masked.numel())
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
@@ -545,7 +553,9 @@ class SyncDataCollector(_DataCollector):
             i += 1
             self._iter = i
             tensordict_out = self.rollout()
-            self._frames += numel_with_mask(tensordict_out.batch_size, self.out_batch_size_mask)
+            self._frames += numel_with_mask(
+                tensordict_out.batch_size, self.out_batch_size_mask
+            )
             if self._frames >= total_frames:
                 self.env.close()
 
@@ -656,7 +666,8 @@ class SyncDataCollector(_DataCollector):
             "traj_ids",
             torch.arange(self.n_env)
             .view(self.env_batch_size_masked)
-            .expand(self.env.batch_size).clone(),
+            .expand(self.env.batch_size)
+            .clone(),
         )
 
         with set_exploration_mode(self.exploration_mode):
@@ -969,7 +980,9 @@ class _MultiDataCollector(_DataCollector):
                 )
 
         self.env_batch_size_mask = env_batch_size_mask
-        self.out_batch_size_mask = None if env_batch_size_mask is None else list(env_batch_size_mask) + [True]
+        self.out_batch_size_mask = (
+            None if env_batch_size_mask is None else list(env_batch_size_mask) + [True]
+        )
         self.total_frames = total_frames if total_frames > 0 else float("inf")
         self.reset_at_each_iter = reset_at_each_iter
         self.postprocs = postproc
@@ -1281,8 +1294,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     out_tensordicts_shared[idx] = data
                 else:
                     idx = new_data
-                workers_frames[idx] = (
-                    workers_frames[idx] + numel_with_mask(out_tensordicts_shared[idx].batch_size, self.out_batch_size_mask)
+                workers_frames[idx] = workers_frames[idx] + numel_with_mask(
+                    out_tensordicts_shared[idx].batch_size, self.out_batch_size_mask
                 )
 
                 if workers_frames[idx] >= self.total_frames:
