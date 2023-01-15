@@ -292,10 +292,10 @@ class SyncDataCollector(_DataCollector):
             updated. This feature should be used cautiously: if the same tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
             Default is False.
-        env_batch_size_mask (Tuple[bool, ...], optional): a list of bools of the same length as env.batch_size,
+        env_batch_size_mask (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size,
             with a value of True it indicates to consider the corresponding dimension of env.batch_size as part of the
-            batch of environemnts used to collect frames, with a value of False it indicates NOT to consider that dimension
-            as part of the batch of environemnts used to collect frames (used for agent dimension in multi-agent settings).
+            batch of environments used to collect frames. A value of False it indicates NOT to consider that dimension
+            as part of the batch of environments used to collect frames (used for agent dimension in multi-agent settings).
             Default is None (corresponding to all True).
 
     Examples:
@@ -368,7 +368,7 @@ class SyncDataCollector(_DataCollector):
         init_with_lag: bool = False,
         return_same_td: bool = False,
         reset_when_done: bool = True,
-        env_batch_size_mask: Optional[Tuple[bool, ...]] = None,
+        env_batch_size_mask: Optional[Sequence[bool]] = None,
     ):
         self.closed = True
         if seed is not None:
@@ -418,7 +418,7 @@ class SyncDataCollector(_DataCollector):
             else torch.Size(
                 [
                     (dim if is_in else 1)
-                    for dim, is_in in zip(env.batch_size, env_batch_size_mask)
+                    for dim, is_in in zip(self.env.batch_size, env_batch_size_mask)
                 ]
             )
         )
@@ -848,7 +848,7 @@ class _MultiDataCollector(_DataCollector):
         init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
             This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
             default = True
-       exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
+        exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
             "mode" or "mean".
             default = "random"
         reset_when_done (bool, optional): if True, the contained environment will be reset
@@ -858,6 +858,12 @@ class _MultiDataCollector(_DataCollector):
             in other words, if the env is a multi-agent env, all agents will be
             reset once one of them is done.
             Defaults to `True`.
+        env_batch_size_mask ((list of) Sequence[bool], optional): can be a list of sequences, one for each environment, or
+            one sequence, shared by all environments. Each sequence contains bool values and is of the same length as env.batch_size.
+            A value of True it indicates to consider the corresponding dimension of env.batch_size as part of the batch of environments
+            used to collect frames, with a value of False it indicates NOT to consider that dimension as part of the
+            batch of environments used to collect frames (used for agent dimension in multi-agent settings).
+            Default is None (corresponding to all True).
 
     """
 
@@ -886,6 +892,8 @@ class _MultiDataCollector(_DataCollector):
         init_with_lag: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         reset_when_done: bool = True,
+        env_batch_size_mask:
+            Union[Sequence[Sequence[bool]], Sequence[bool], None] = None,
     ):
         self.closed = True
         self.create_env_fn = create_env_fn
@@ -976,6 +984,21 @@ class _MultiDataCollector(_DataCollector):
                     f"Found {type(passing_devices)} instead."
                 )
 
+        if env_batch_size_mask is not None:
+            if isinstance(env_batch_size_mask[0], Sequence):
+                if len(env_batch_size_mask) != self.num_workers:
+                    raise RuntimeError(
+                        f"Number of batch_size masks provided {len(env_batch_size_mask)} does not match"
+                        f" number of collector workers {self.num_workers}"
+                    )
+                self.env_batch_size_masks = list(env_batch_size_mask)
+            else:
+                self.env_batch_size_masks = [
+                    env_batch_size_mask for _ in range(self.num_workers)
+                ]
+        else:
+            self.env_batch_size_masks = [None for _ in range(self.num_workers)]
+
         self.total_frames = total_frames if total_frames > 0 else float("inf")
         self.reset_at_each_iter = reset_at_each_iter
         self.postprocs = postproc
@@ -1051,6 +1074,7 @@ class _MultiDataCollector(_DataCollector):
                 "exploration_mode": self.exploration_mode,
                 "reset_when_done": self.reset_when_done,
                 "idx": i,
+                "env_batch_size_mask": self.env_batch_size_masks[i],
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
@@ -1551,6 +1575,11 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
             This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
             default = True
+        env_batch_size_mask (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size,
+            with a value of True it indicates to consider the corresponding dimension of env.batch_size as part of the
+            batch of environments used to collect frames. A value of False it indicates NOT to consider that dimension
+            as part of the batch of environments used to collect frames (used for agent dimension in multi-agent settings).
+            Default is None (corresponding to all True).
 
     """
 
@@ -1574,6 +1603,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         device: Optional[Union[int, str, torch.device]] = None,
         passing_device: Optional[Union[int, str, torch.device]] = None,
         seed: Optional[int] = None,
+        env_batch_size_mask: Optional[Sequence[bool]] = None,
         pin_memory: bool = False,
         **kwargs,
     ):
@@ -1592,6 +1622,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             passing_devices=[passing_device] if passing_device is not None else None,
             seed=seed,
             pin_memory=pin_memory,
+            env_batch_size_mask=env_batch_size_mask,
             **kwargs,
         )
 
@@ -1615,6 +1646,7 @@ def _main_async_collector(
     init_with_lag: bool = False,
     exploration_mode: str = DEFAULT_EXPLORATION_MODE,
     reset_when_done: bool = True,
+    env_batch_size_mask: Optional[Sequence[bool]] = None,
     verbose: bool = False,
 ) -> None:
     pipe_parent.close()
@@ -1639,6 +1671,7 @@ def _main_async_collector(
         exploration_mode=exploration_mode,
         reset_when_done=reset_when_done,
         return_same_td=True,
+        env_batch_size_mask=env_batch_size_mask,
     )
     if verbose:
         print("Sync data collector created")
