@@ -656,7 +656,7 @@ class SyncDataCollector(_DataCollector):
             "traj_ids",
             torch.arange(self.n_env)
             .view(self.env_batch_size_masked)
-            .expand(self.env.batch_size),
+            .expand(self.env.batch_size).clone(),
         )
 
         with set_exploration_mode(self.exploration_mode):
