@@ -63,7 +63,7 @@ class RandomPolicy:
         self.action_spec = action_spec
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        return td.set("action", self.action_spec.rand(td.batch_size))
+        return td.set("action", self.action_spec.rand())
 
 
 def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:

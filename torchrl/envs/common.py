@@ -70,7 +70,7 @@ class EnvMetaData:
         batch_size = torch.Size([*size])
         return EnvMetaData(
             tensordict,
-            self.specs,
+            self.specs.expand(size),
             batch_size,
             self.env_str,
             self.device,
