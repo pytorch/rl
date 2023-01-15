@@ -22,8 +22,9 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
+
 from torchrl._utils import _check_for_faulty_process, prod
-from torchrl.collectors.utils import split_trajectories
+from torchrl.collectors.utils import split_trajectories, numel_with_mask, get_batch_size_masked
 from torchrl.data import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
@@ -406,23 +407,10 @@ class SyncDataCollector(_DataCollector):
         self.closed = False
         self.reset_when_done = reset_when_done
 
-        if env_batch_size_mask is not None and len(env_batch_size_mask) != len(
-            self.env.batch_size
-        ):
-            raise RuntimeError(
-                f"Batch size mask and env batch size have different lengths: mask={env_batch_size_mask}, env.batch_size={self.env.batch_size}"
-            )
-        self.env_batch_size_masked = (
-            env.batch_size
-            if env_batch_size_mask is None
-            else torch.Size(
-                [
-                    (dim if is_in else 1)
-                    for dim, is_in in zip(self.env.batch_size, env_batch_size_mask)
-                ]
-            )
-        )
-        self.n_env = prod(self.env_batch_size_masked)
+        self.env_batch_size_mask = env_batch_size_mask
+        self.out_batch_size_mask = None if env_batch_size_mask is None else list(env_batch_size_mask) + [True]
+        self.env_batch_size_masked = get_batch_size_masked(self.env.batch_size, self.env_batch_size_mask)
+        self.n_env = max(1, self.env_batch_size_masked.numel())
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
@@ -557,7 +545,7 @@ class SyncDataCollector(_DataCollector):
             i += 1
             self._iter = i
             tensordict_out = self.rollout()
-            self._frames += tensordict_out.numel()
+            self._frames += numel_with_mask(tensordict_out.batch_size, self.out_batch_size_mask)
             if self._frames >= total_frames:
                 self.env.close()
 
@@ -664,10 +652,9 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.update(self.env.reset(), inplace=True)
             self._tensordict.fill_("step_count", 0)
 
-        n = max(1, self.env_batch_size_masked.numel())
         self._tensordict.set(
             "traj_ids",
-            torch.arange(n)
+            torch.arange(self.n_env)
             .view(self.env_batch_size_masked)
             .expand(self.env.batch_size),
         )
@@ -695,7 +682,6 @@ class SyncDataCollector(_DataCollector):
                     self._tensordict_out[..., j] = self._tensordict
                     if is_shared:
                         self._tensordict_out.share_memory_()
-
                 self._reset_if_necessary()
                 self._tensordict.update(step_mdp(self._tensordict), inplace=True)
 
@@ -858,11 +844,10 @@ class _MultiDataCollector(_DataCollector):
             in other words, if the env is a multi-agent env, all agents will be
             reset once one of them is done.
             Defaults to `True`.
-        env_batch_size_mask ((list of) Sequence[bool], optional): can be a list of sequences, one for each environment, or
-            one sequence, shared by all environments. Each sequence contains bool values and is of the same length as env.batch_size.
-            A value of True it indicates to consider the corresponding dimension of env.batch_size as part of the batch of environments
-            used to collect frames, with a value of False it indicates NOT to consider that dimension as part of the
-            batch of environments used to collect frames (used for agent dimension in multi-agent settings).
+        env_batch_size_mask (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size,
+            with a value of True it indicates to consider the corresponding dimension of env.batch_size as part of the
+            batch of environments used to collect frames. A value of False it indicates NOT to consider that dimension
+            as part of the batch of environments used to collect frames (used for agent dimension in multi-agent settings).
             Default is None (corresponding to all True).
 
     """
@@ -892,8 +877,7 @@ class _MultiDataCollector(_DataCollector):
         init_with_lag: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         reset_when_done: bool = True,
-        env_batch_size_mask:
-            Union[Sequence[Sequence[bool]], Sequence[bool], None] = None,
+        env_batch_size_mask: Optional[Sequence[bool]] = None,
     ):
         self.closed = True
         self.create_env_fn = create_env_fn
@@ -984,21 +968,8 @@ class _MultiDataCollector(_DataCollector):
                     f"Found {type(passing_devices)} instead."
                 )
 
-        if env_batch_size_mask is not None:
-            if isinstance(env_batch_size_mask[0], Sequence):
-                if len(env_batch_size_mask) != self.num_workers:
-                    raise RuntimeError(
-                        f"Number of batch_size masks provided {len(env_batch_size_mask)} does not match"
-                        f" number of collector workers {self.num_workers}"
-                    )
-                self.env_batch_size_masks = list(env_batch_size_mask)
-            else:
-                self.env_batch_size_masks = [
-                    env_batch_size_mask for _ in range(self.num_workers)
-                ]
-        else:
-            self.env_batch_size_masks = [None for _ in range(self.num_workers)]
-
+        self.env_batch_size_mask = env_batch_size_mask
+        self.out_batch_size_mask = None if env_batch_size_mask is None else list(env_batch_size_mask) + [True]
         self.total_frames = total_frames if total_frames > 0 else float("inf")
         self.reset_at_each_iter = reset_at_each_iter
         self.postprocs = postproc
@@ -1074,7 +1045,7 @@ class _MultiDataCollector(_DataCollector):
                 "exploration_mode": self.exploration_mode,
                 "reset_when_done": self.reset_when_done,
                 "idx": i,
-                "env_batch_size_mask": self.env_batch_size_masks[i],
+                "env_batch_size_mask": self.env_batch_size_mask,
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
@@ -1311,7 +1282,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 else:
                     idx = new_data
                 workers_frames[idx] = (
-                    workers_frames[idx] + out_tensordicts_shared[idx].numel()
+                    workers_frames[idx] + numel_with_mask(out_tensordicts_shared[idx].batch_size, self.out_batch_size_mask)
                 )
 
                 if workers_frames[idx] >= self.total_frames:
@@ -1349,7 +1320,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 frames += out.get("mask").sum().item()
             else:
                 out = out_buffer.clone()
-                frames += prod(out.shape)
+                frames += numel_with_mask(out.batch_size, self.out_batch_size_mask)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
@@ -1469,7 +1440,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             i += 1
             idx, j, out = self._get_from_queue()
 
-            worker_frames = out.numel()
+            worker_frames = numel_with_mask(out.batch_size, self.out_batch_size_mask)
             if self.split_trajs:
                 out = split_trajectories(out)
             self._frames += worker_frames

@@ -3,7 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Callable
+from typing import Callable, Optional
+from typing import Sequence
 
 import torch
 from tensordict.tensordict import pad, TensorDictBase
@@ -68,3 +69,25 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     ).contiguous()
     td = td.unflatten_keys(sep)
     return td
+
+
+def numel_with_mask(batch_size: torch.Size, mask: Optional[Sequence[bool]] = None):
+    return max(1, get_batch_size_masked(batch_size, mask).numel())
+
+
+def get_batch_size_masked(batch_size: torch.Size, mask: Optional[Sequence[bool]] = None):
+    if mask is None:
+        return batch_size
+    if mask is not None and len(mask) != len(batch_size):
+        raise RuntimeError(
+            f"Batch size mask and env batch size have different lengths: mask={mask}, env.batch_size={batch_size}"
+        )
+    return torch.Size(
+        [
+            (dim if is_in else 1)
+            for dim, is_in in zip(
+                batch_size,
+                mask,
+            )
+        ]
+    )
