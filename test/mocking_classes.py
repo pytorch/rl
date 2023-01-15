@@ -339,7 +339,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
             )
             action_spec = action_spec_cls(*batch_size, 7)
         if reward_spec is None:
-            reward_spec = UnboundedContinuousTensorSpec()
+            reward_spec = UnboundedContinuousTensorSpec(shape=(1,))
 
         if input_spec is None:
             cls._out_key = "observation_orig"
@@ -432,7 +432,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
                 ),
             )
         if reward_spec is None:
-            reward_spec = UnboundedContinuousTensorSpec(shape=batch_size)
+            reward_spec = UnboundedContinuousTensorSpec(shape=(*batch_size, 1))
 
         if input_spec is None:
             cls._out_key = "observation_orig"
@@ -538,7 +538,7 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
         if action_spec is None:
             action_spec = OneHotDiscreteTensorSpec(7, shape=(*batch_size, 7))
         if reward_spec is None:
-            reward_spec = UnboundedContinuousTensorSpec(shape=batch_size)
+            reward_spec = UnboundedContinuousTensorSpec(shape=(*batch_size, 1))
 
         if input_spec is None:
             cls._out_key = "pixels_orig"
@@ -666,7 +666,7 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
             action_spec = BoundedTensorSpec(-1, 1, [*batch_size, pixel_shape[-1]])
 
         if reward_spec is None:
-            reward_spec = UnboundedContinuousTensorSpec(shape=batch_size)
+            reward_spec = UnboundedContinuousTensorSpec(shape=(*batch_size, 1))
         if input_spec is None:
             cls._out_key = "pixels_orig"
             input_spec = CompositeSpec(

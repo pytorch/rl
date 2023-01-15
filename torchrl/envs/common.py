@@ -353,24 +353,20 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         reward = tensordict_out.get("reward")
         # unsqueeze rewards if needed
-        expected_reward_shape = self.reward_spec.shape
-        n = len(expected_reward_shape)
-        if len(reward.shape) >= n and reward.shape[-n:] != expected_reward_shape:
-            reward = reward.view(*reward.shape[:n], *expected_reward_shape)
-            tensordict_out.set("reward", reward)
-        elif len(reward.shape) < n:
-            reward = reward.view(expected_reward_shape)
+        batch_size = tensordict_out.shape
+        dims = len(batch_size)
+        expected_reward_shape = self.reward_spec.shape[dims:]
+        actual_reward_shape = reward.shape[dims:]
+        if actual_reward_shape != expected_reward_shape:
+            reward = reward.view([*batch_size, *expected_reward_shape])
             tensordict_out.set("reward", reward)
 
         done = tensordict_out.get("done")
         # unsqueeze done if needed
-        expected_done_shape = torch.Size([*tensordict_out.batch_size, 1])
-        n = len(expected_done_shape)
-        if len(done.shape) >= n and done.shape[-n:] != expected_done_shape:
-            done = done.view(*done.shape[:n], *expected_done_shape)
-            tensordict_out.set("done", done)
-        elif len(done.shape) < n:
-            done = done.view(expected_done_shape)
+        expected_done_shape = torch.Size([1])
+        actual_done_shape = done.shape[dims:]
+        if actual_done_shape != expected_done_shape:
+            done = done.view([*batch_size, *expected_done_shape])
             tensordict_out.set("done", done)
 
         if tensordict_out is tensordict:
@@ -443,10 +439,23 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         done = tensordict_reset.get("done", None)
         if done is not None:
             # unsqueeze done if needed
-            expected_done_shape = torch.Size([*tensordict_reset.batch_size, 1])
-            if done.shape != expected_done_shape:
-                done = done.view(expected_done_shape)
+            batch_size = tensordict_reset.shape
+            dims = len(batch_size)
+            expected_done_shape = torch.Size([1])
+            actual_done_shape = done.shape[dims:]
+            if actual_done_shape != expected_done_shape:
+                done = done.view([*batch_size, *expected_done_shape])
                 tensordict_reset.set("done", done)
+        else:
+            tensordict_reset.set(
+                "done",
+                torch.zeros(
+                    *tensordict_reset.batch_size,
+                    1,
+                    dtype=torch.bool,
+                    device=self.device,
+                ),
+            )
 
         if tensordict_reset.device != self.device:
             tensordict_reset = tensordict_reset.to(self.device)
@@ -460,13 +469,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             raise RuntimeError(
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
-
-        tensordict_reset.set_default(
-            "done",
-            torch.zeros(
-                *tensordict_reset.batch_size, 1, dtype=torch.bool, device=self.device
-            ),
-        )
 
         if (_reset is None and tensordict_reset.get("done").any()) or (
             _reset is not None and tensordict_reset.get("done")[_reset].any()
@@ -725,7 +727,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "next": fake_obs.clone(),
                 **fake_input,
                 "reward": fake_reward,
-                "done": fake_reward.to(torch.bool),
+                "done": torch.zeros(
+                    (*self.batch_size, 1), dtype=torch.bool, device=self.device
+                ),
             },
             batch_size=self.batch_size,
             device=self.device,

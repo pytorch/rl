@@ -1045,6 +1045,8 @@ def _run_worker_pipe_shared_mem(
                 _td["done"] = done = torch.zeros(
                     *_td.batch_size, 1, dtype=torch.bool, device=env.device
                 )
+            elif done is not None and done.shape != torch.Size([*_td.batch_size, 1]):
+                _td.set("done", done.unsqueeze(-1))
             if reset_keys is None:
                 reset_keys = set(_td.keys())
             if pin_memory:
