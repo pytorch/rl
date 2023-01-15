@@ -670,7 +670,7 @@ class SyncDataCollector(_DataCollector):
                     self._tensordict = self.env.step(self._tensordict)
 
                 step_count = self._tensordict.get("step_count")
-                step_count += 1
+                self._tensordict.set_("step_count", step_count + 1)
                 # we must clone all the values, since the step / traj_id updates are done in-place
                 try:
                     self._tensordict_out[..., j] = self._tensordict
