@@ -714,7 +714,7 @@ class TestEnvPool:
     @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
     @pytest.mark.parametrize("transformed_out", [True, False])
     def test_env_device(
-        self, env_name, frame_skip, transformed_in, transformed_out, device
+        self, env_name, frame_skip, transformed_out, device
     ):
         # tests creation on device
         torch.manual_seed(0)

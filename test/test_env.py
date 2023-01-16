@@ -688,7 +688,7 @@ class TestParallel:
         torch.manual_seed(0)
         N = 3
 
-        env_parallel, env_serial, env0 = _make_envs(
+        env_parallel, env_serial, _, env0 = _make_envs(
             env_name,
             frame_skip,
             transformed_in=transformed_in,
