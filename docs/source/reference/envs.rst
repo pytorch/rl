@@ -60,6 +60,8 @@ With these, the following methods are implemented:
 
     EnvBase
     GymLikeEnv
+    EnvMetaData
+    Specs
 
 Vectorized envs
 ---------------
@@ -75,11 +77,16 @@ environments in parallel.
 As this class inherits from :obj:`EnvBase`, it enjoys the exact same API as other environment.
 Of course, a :obj:`ParallelEnv` will have a batch size that corresponds to its environment count:
 
+It is important that your environment specs match the input and output that it sends and receives, as
+:obj:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
+Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
+
 .. code-block::
    :caption: Parallel environment
 
         >>> def make_env():
         ...     return GymEnv("Pendulum-v1", from_pixels=True, g=9.81, device="cuda:0")
+        >>> check_env_specs(env)  # this must pass for ParallelEnv to work
         >>> env = ParallelEnv(4, make_env)
         >>> print(env.batch_size)
         torch.Size([4])
@@ -105,7 +112,7 @@ It is also possible to reset some but not all of the environments:
             fields={
                 done: Tensor(torch.Size([4, 1]), dtype=torch.bool),
                 pixels: Tensor(torch.Size([4, 500, 500, 3]), dtype=torch.uint8),
-                reset_workers: Tensor(torch.Size([4, 1]), dtype=torch.bool)},
+                reset_workers: Tensor(torch.Size([4]), dtype=torch.bool)},
             batch_size=torch.Size([4]),
             device=None,
             is_shared=True)
@@ -135,6 +142,7 @@ behaviour of a :obj:`ParallelEnv` without launching the subprocesses.
 
     SerialEnv
     ParallelEnv
+    EnvCreator
 
 
 Transforms
@@ -195,30 +203,52 @@ in the environment. The keys to be included in this inverse transform are passed
 
     Transform
     TransformedEnv
-    RewardClipping
-    Resize
-    CenterCrop
-    GrayScale
-    Compose
-    ToTensorImage
-    ObservationNorm
-    FlattenObservation
-    UnsqueezeTransform
-    RewardScaling
-    ObservationTransform
-    CatFrames
-    FiniteTensorDictCheck
-    DoubleToFloat
-    CatTensors
-    NoopResetEnv
     BinarizeReward
-    PinMemoryTransform
-    VecNorm
+    CatFrames
+    CatTensors
+    CenterCrop
+    Compose
+    DiscreteActionProjection
+    DoubleToFloat
+    ExcludeTransform
+    FiniteTensorDictCheck
+    FlattenObservation
+    FrameSkipTransform
+    GrayScale
     gSDENoise
-    TensorDictPrimer
+    NoopResetEnv
+    ObservationNorm
+    ObservationTransform
+    PinMemoryTransform
     R3MTransform
-    VIPTransform
+    Resize
+    RewardClipping
+    RewardScaling
+    RewardSum
+    SelectTransform
+    SqueezeTransform
+    StepCounter
+    TensorDictPrimer
+    ToTensorImage
+    UnsqueezeTransform
+    VecNorm
     VIPRewardTransform
+    VIPTransform
+
+Recorders
+---------
+
+.. currentmodule:: torchrl.record
+
+Recorders are transforms that register data as they come in, for logging purposes.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    TensorDictRecorder
+    VideoRecorder
+
 
 Helpers
 -------
@@ -254,10 +284,14 @@ Libraries
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    gym.GymEnv
-    gym.GymWrapper
+    brax.BraxEnv
+    brax.BraxWrapper
     dm_control.DMControlEnv
     dm_control.DMControlWrapper
+    gym.GymEnv
+    gym.GymWrapper
+    habitat.HabitatEnv
     jumanji.JumanjiEnv
     jumanji.JumanjiWrapper
-    habitat.HabitatEnv
+    vmas.VmasEnv
+    vmas.VmasWrapper

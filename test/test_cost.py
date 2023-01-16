@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import re
 from copy import deepcopy
 
 _has_functorch = True
@@ -21,19 +22,18 @@ import pytest
 import torch
 from _utils_internal import dtype_fixture, get_available_devices  # noqa
 from mocking_classes import ContinuousActionConvMockEnv
-from tensordict.nn import get_functional
+from tensordict.nn import get_functional, TensorDictModule
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from tensordict.tensordict import assert_allclose_td, TensorDict
-from tensordict.utils import expand_as_right
 from torch import autograd, nn
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.envs.model_based.dreamer import DreamerEnv
@@ -43,6 +43,7 @@ from torchrl.modules import (
     QValueActor,
     SafeModule,
     SafeProbabilisticModule,
+    SafeProbabilisticSequential,
     SafeSequential,
     WorldModelWrapper,
 )
@@ -129,7 +130,7 @@ class TestDQN:
         elif action_spec_type == "categorical":
             action_spec = DiscreteTensorSpec(action_dim)
         elif action_spec_type == "nd_bounded":
-            action_spec = NdBoundedTensorSpec(
+            action_spec = BoundedTensorSpec(
                 -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
             )
         else:
@@ -251,20 +252,22 @@ class TestDQN:
         if action_spec_type == "categorical":
             action_value = torch.max(action_value, -1, keepdim=True)[0]
             action = torch.argmax(action, -1, keepdim=True)
+        # action_value = action_value.unsqueeze(-1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
-                "action_value": action_value
-                * expand_as_right(mask.to(obs.dtype).squeeze(-1), action_value),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
         )
         return td
@@ -414,7 +417,7 @@ class TestDDPG:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Linear(obs_dim, action_dim)
@@ -486,16 +489,18 @@ class TestDDPG:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -642,16 +647,16 @@ class TestSAC:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
-            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
             module=module,
+            in_keys=["loc", "scale"],
+            spec=action_spec,
             distribution_class=TanhNormal,
-            dist_in_keys=["loc", "scale"],
         )
         return actor.to(device)
 
@@ -724,16 +729,18 @@ class TestSAC:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = torch.ones(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -1019,17 +1026,17 @@ class TestREDQ:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             module=module,
+            in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             return_log_prob=True,
-            dist_in_keys=["loc", "scale"],
-            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
+            spec=action_spec,
         )
         return actor.to(device)
 
@@ -1079,7 +1086,7 @@ class TestREDQ:
         common = SafeModule(CommonClass(), in_keys=["observation"], out_keys=["hidden"])
         actor_subnet = ProbabilisticActor(
             SafeModule(ActorClass(), in_keys=["hidden"], out_keys=["loc", "scale"]),
-            dist_in_keys=["loc", "scale"],
+            in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             return_log_prob=True,
         )
@@ -1127,16 +1134,18 @@ class TestREDQ:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -1472,7 +1481,7 @@ class TestPPO:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
@@ -1480,8 +1489,8 @@ class TestPPO:
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
-            dist_in_keys=["loc", "scale"],
-            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
+            in_keys=["loc", "scale"],
+            spec=action_spec,
         )
         return actor.to(device)
 
@@ -1495,7 +1504,7 @@ class TestPPO:
 
     def _create_mock_actor_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         base_layer = nn.Linear(obs_dim, 5)
@@ -1506,8 +1515,8 @@ class TestPPO:
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
-            dist_in_keys=["loc", "scale"],
-            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
+            in_keys=["loc", "scale"],
+            spec=action_spec,
         )
         module = nn.Sequential(base_layer, nn.Linear(5, 1))
         value = ValueOperator(
@@ -1541,7 +1550,7 @@ class TestPPO:
                 "done": done,
                 "reward": reward,
                 "action": action,
-                "sample_log_prob": torch.randn_like(action[..., :1]) / 10,
+                "sample_log_prob": torch.randn_like(action[..., 1]) / 10,
             },
             device=device,
         )
@@ -1562,23 +1571,25 @@ class TestPPO:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = torch.ones(batch, T, dtype=torch.bool, device=device)
         params_mean = torch.randn_like(action) / 10
         params_scale = torch.rand_like(action) / 10
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
-                "sample_log_prob": torch.randn_like(action[..., :1])
-                / 10
-                * mask.to(obs.dtype),
-                "loc": params_mean * mask.to(obs.dtype),
-                "scale": params_scale * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "sample_log_prob": (torch.randn_like(action[..., 1]) / 10).masked_fill_(
+                    ~mask, 0.0
+                ),
+                "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -1596,23 +1607,25 @@ class TestPPO:
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td":
             advantage = TDEstimate(
-                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(
-            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
-        )
-
+        loss_fn = loss_class(actor, value, gamma=0.9, loss_critic_type="l2")
+        with pytest.raises(
+            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
+        ):
+            _ = loss_fn(td)
+        advantage(td)
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -1658,20 +1671,17 @@ class TestPPO:
                 gamma=0.9,
                 lmbda=0.9,
                 value_network=value,
-                gradient_mode=False,
             )
         elif advantage == "td":
             advantage = TDEstimate(
                 gamma=0.9,
                 value_network=value,
-                gradient_mode=False,
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
                 gamma=0.9,
                 lmbda=0.9,
                 value_network=value,
-                gradient_mode=False,
             )
         else:
             raise NotImplementedError
@@ -1680,9 +1690,13 @@ class TestPPO:
             value,
             gamma=0.9,
             loss_critic_type="l2",
-            advantage_module=advantage,
         )
 
+        with pytest.raises(
+            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
+        ):
+            _ = loss_fn(td)
+        advantage(td)
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -1730,29 +1744,33 @@ class TestPPO:
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td":
             advantage = TDEstimate(
-                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(
-            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
-        )
+        loss_fn = loss_class(actor, value, gamma=0.9, loss_critic_type="l2")
 
         floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
         # fill params with zero
         for p in params:
             p.data.zero_()
         # assert len(list(floss_fn.parameters())) == 0
+        with pytest.raises(
+            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
+        ):
+            _ = floss_fn(params, buffers, td)
+        advantage(td)
         loss = floss_fn(params, buffers, td)
+
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
@@ -1790,16 +1808,16 @@ class TestA2C:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = NdBoundedTensorSpec(
+        action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             module=module,
+            in_keys=["loc", "scale"],
+            spec=action_spec,
             distribution_class=TanhNormal,
-            dist_in_keys=["loc", "scale"],
-            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
         )
         return actor.to(device)
 
@@ -1826,23 +1844,26 @@ class TestA2C:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         params_mean = torch.randn_like(action) / 10
         params_scale = torch.rand_like(action) / 10
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                },
                 "done": done,
                 "mask": mask,
-                "reward": reward * mask.to(obs.dtype),
-                "action": action * mask.to(obs.dtype),
-                "sample_log_prob": torch.randn_like(action[..., :1])
-                / 10
-                * mask.to(obs.dtype),
-                "loc": params_mean * mask.to(obs.dtype),
-                "scale": params_scale * mask.to(obs.dtype),
+                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
+                    ~mask, 0.0
+                )
+                / 10,
+                "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
         )
@@ -1859,22 +1880,20 @@ class TestA2C:
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td":
             advantage = TDEstimate(
-                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         else:
             raise NotImplementedError
 
-        loss_fn = A2CLoss(
-            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
-        )
+        loss_fn = A2CLoss(actor, value, gamma=0.9, loss_critic_type="l2")
 
         # Check error is raised when actions require grads
         td["action"].requires_grad = True
@@ -1885,16 +1904,13 @@ class TestA2C:
             _ = loss_fn._log_probs(td)
         td["action"].requires_grad = False
 
-        # Check error is raised when advantage_diff_key present and does not required grad
-        td[loss_fn.advantage_diff_key] = torch.randn_like(td["reward"])
-        with pytest.raises(
-            RuntimeError,
-            match="value_target retrieved from tensordict does not require grad.",
-        ):
-            loss = loss_fn.loss_critic(td)
-        td = td.exclude(loss_fn.advantage_diff_key)
-        assert loss_fn.advantage_diff_key not in td.keys()
+        td = td.exclude(loss_fn.value_target_key)
 
+        with pytest.raises(
+            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
+        ):
+            _ = loss_fn(td)
+        advantage(td)
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -1938,25 +1954,28 @@ class TestA2C:
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td":
             advantage = TDEstimate(
-                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
-                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         else:
             raise NotImplementedError
 
-        loss_fn = A2CLoss(
-            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
-        )
+        loss_fn = A2CLoss(actor, value, gamma=0.9, loss_critic_type="l2")
 
         floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
 
+        with pytest.raises(
+            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
+        ):
+            _ = floss_fn(params, buffers, td)
+        advantage(td)
         loss = floss_fn(params, buffers, td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -2002,30 +2021,28 @@ class TestReinforce:
             module,
             distribution_class=TanhNormal,
             return_log_prob=True,
-            dist_in_keys=["loc", "scale"],
-            spec=CompositeSpec(
-                action=NdUnboundedContinuousTensorSpec(n_act), loc=None, scale=None
-            ),
+            in_keys=["loc", "scale"],
+            spec=UnboundedContinuousTensorSpec(n_act),
         )
         if advantage == "gae":
-            advantage_module = GAE(
+            advantage = GAE(
                 gamma=gamma,
                 lmbda=0.9,
                 value_network=get_functional(value_net),
-                gradient_mode=gradient_mode,
+                differentiable=gradient_mode,
             )
         elif advantage == "td":
-            advantage_module = TDEstimate(
+            advantage = TDEstimate(
                 gamma=gamma,
                 value_network=get_functional(value_net),
-                gradient_mode=gradient_mode,
+                differentiable=gradient_mode,
             )
         elif advantage == "td_lambda":
-            advantage_module = TDLambdaEstimate(
+            advantage = TDLambdaEstimate(
                 gamma=0.9,
                 lmbda=0.9,
                 value_network=get_functional(value_net),
-                gradient_mode=gradient_mode,
+                differentiable=gradient_mode,
             )
         else:
             raise NotImplementedError
@@ -2034,7 +2051,6 @@ class TestReinforce:
             actor_net,
             critic=value_net,
             gamma=gamma,
-            advantage_module=advantage_module,
             delay_value=delay_value,
         )
 
@@ -2049,6 +2065,12 @@ class TestReinforce:
             [batch],
         )
 
+        with pytest.raises(
+            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
+        ):
+            _ = loss_fn(td)
+        params = TensorDict(value_net.state_dict(), []).unflatten_keys(".")
+        advantage(td, params=params)
         loss_td = loss_fn(td)
         autograd.grad(
             loss_td.get("loss_actor"),
@@ -2124,8 +2146,8 @@ class TestDreamer:
     def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "state": NdUnboundedContinuousTensorSpec(state_dim),
-            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2199,8 +2221,8 @@ class TestDreamer:
     def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "state": NdUnboundedContinuousTensorSpec(state_dim),
-            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2248,8 +2270,8 @@ class TestDreamer:
     def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
-            "state": NdUnboundedContinuousTensorSpec(state_dim),
-            "belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -2261,16 +2283,18 @@ class TestDreamer:
             num_cells=mlp_num_units,
             activation_class=nn.ELU,
         )
-        actor_model = SafeProbabilisticModule(
+        actor_model = SafeProbabilisticSequential(
             SafeModule(
                 actor_module,
                 in_keys=["state", "belief"],
                 out_keys=["loc", "scale"],
             ),
-            dist_in_keys=["loc", "scale"],
-            sample_out_key="action",
-            default_interaction_mode="random",
-            distribution_class=TanhNormal,
+            SafeProbabilisticModule(
+                in_keys=["loc", "scale"],
+                out_keys="action",
+                default_interaction_mode="random",
+                distribution_class=TanhNormal,
+            ),
         )
         with torch.no_grad():
             td = TensorDict(
@@ -2871,17 +2895,14 @@ def test_shared_params(dest, expected_dtype, expected_device):
     )
     td_module_action = ProbabilisticActor(
         module=module_action,
+        in_keys=["loc", "scale"],
+        out_keys=["action"],
         spec=None,
-        dist_in_keys=["loc", "scale"],
-        sample_out_key=["action"],
         distribution_class=TanhNormal,
         return_log_prob=True,
     )
     module_value = torch.nn.Linear(4, 1)
-    td_module_value = ValueOperator(
-        module=module_value,
-        in_keys=["hidden"],
-    )
+    td_module_value = ValueOperator(module=module_value, in_keys=["hidden"])
     td_module = ActorValueOperator(td_module_hidden, td_module_action, td_module_value)
 
     class MyLoss(LossModule):
@@ -2948,6 +2969,97 @@ def test_shared_params(dest, expected_dtype, expected_device):
         assert (qvalparam == loss.actor_network_params[key]).all(), key
         if i == 1:
             break
+
+
+class TestAdv:
+    @pytest.mark.parametrize(
+        "adv,kwargs",
+        [[GAE, {"lmbda": 0.95}], [TDEstimate, {}], [TDLambdaEstimate, {"lmbda": 0.95}]],
+    )
+    def test_dispatch(
+        self,
+        adv,
+        kwargs,
+    ):
+        value_net = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+        )
+        module = adv(
+            gamma=0.98,
+            value_network=value_net,
+            differentiable=False,
+            **kwargs,
+        )
+        kwargs = {
+            "obs": torch.randn(1, 10, 3),
+            "reward": torch.randn(1, 10, 1, requires_grad=True),
+            "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+            "next_obs": torch.randn(1, 10, 3),
+        }
+        advantage, value_target = module(**kwargs)
+        assert advantage.shape == torch.Size([1, 10, 1])
+        assert value_target.shape == torch.Size([1, 10, 1])
+
+    @pytest.mark.parametrize(
+        "adv,kwargs",
+        [[GAE, {"lmbda": 0.95}], [TDEstimate, {}], [TDLambdaEstimate, {"lmbda": 0.95}]],
+    )
+    def test_diff_reward(
+        self,
+        adv,
+        kwargs,
+    ):
+        value_net = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+        )
+        module = adv(
+            gamma=0.98,
+            value_network=value_net,
+            differentiable=True,
+            **kwargs,
+        )
+        td = TensorDict(
+            {
+                "obs": torch.randn(1, 10, 3),
+                "reward": torch.randn(1, 10, 1, requires_grad=True),
+                "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                "next": {"obs": torch.randn(1, 10, 3)},
+            },
+            [1, 10],
+        )
+        td = module(td.clone(False))
+        # check that the advantage can't backprop to the value params
+        td["advantage"].sum().backward()
+        for p in value_net.parameters():
+            assert p.grad is None or (p.grad == 0).all()
+        # check that rewards have a grad
+        assert td["reward"].grad.norm() > 0
+
+    @pytest.mark.parametrize(
+        "adv,kwargs",
+        [[GAE, {"lmbda": 0.95}], [TDEstimate, {}], [TDLambdaEstimate, {"lmbda": 0.95}]],
+    )
+    def test_non_differentiable(self, adv, kwargs):
+        value_net = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+        )
+        module = adv(
+            gamma=0.98,
+            value_network=value_net,
+            differentiable=False,
+            **kwargs,
+        )
+        td = TensorDict(
+            {
+                "obs": torch.randn(1, 10, 3),
+                "reward": torch.randn(1, 10, 1, requires_grad=True),
+                "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                "next": {"obs": torch.randn(1, 10, 3)},
+            },
+            [1, 10],
+        )
+        td = module(td.clone(False))
+        assert td["advantage"].is_leaf
 
 
 if __name__ == "__main__":

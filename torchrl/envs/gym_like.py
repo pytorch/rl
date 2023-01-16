@@ -204,7 +204,11 @@ class GymLikeEnv(_EnvWrapper):
 
             reward = self.read_reward(reward, _reward)
 
-            # TODO: check how to deal with np arrays
+            if isinstance(done, bool) or (
+                isinstance(done, np.ndarray) and not len(done)
+            ):
+                done = torch.tensor([done], device=self.device)
+
             done, do_break = self.read_done(done)
             if do_break:
                 break
@@ -215,7 +219,6 @@ class GymLikeEnv(_EnvWrapper):
             reward = np.nan
         reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
         done = self._to_tensor(done, dtype=torch.bool)
-        self.is_done = done
 
         tensordict_out = TensorDict(
             obs_dict, batch_size=tensordict.batch_size, device=self.device
@@ -234,14 +237,24 @@ class GymLikeEnv(_EnvWrapper):
         reset_data = self._env.reset(**kwargs)
         if not isinstance(reset_data, tuple):
             reset_data = (reset_data,)
-        obs, *_ = self._output_transform(reset_data)
+        obs, *other = self._output_transform(reset_data)
+        info = None
+        if len(other) == 1:
+            info = other
+
         tensordict_out = TensorDict(
             source=self.read_obs(obs),
             batch_size=self.batch_size,
             device=self.device,
         )
-        self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
-        tensordict_out.set("done", self._is_done)
+        if self.info_dict_reader is not None and info is not None:
+            self.info_dict_reader(info, tensordict_out)
+        elif info is None and self.info_dict_reader is not None:
+            # populate the reset with the items we have not seen from info
+            for key, item in self.observation_spec.items():
+                if key not in tensordict_out.keys():
+                    tensordict_out[key] = item.zero()
+        tensordict_out.set("done", torch.zeros(*self.batch_size, 1, dtype=torch.bool))
         return tensordict_out
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
@@ -278,7 +291,7 @@ class GymLikeEnv(_EnvWrapper):
         """
         self.info_dict_reader = info_dict_reader
         for info_key, spec in info_dict_reader.info_spec.items():
-            self.observation_spec[info_key] = spec
+            self.observation_spec[info_key] = spec.to(self.device)
         return self
 
     def __repr__(self) -> str:

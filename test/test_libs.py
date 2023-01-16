@@ -8,6 +8,7 @@ from sys import platform
 import numpy as np
 import pytest
 import torch
+
 from _utils_internal import (
     _make_envs,
     get_available_devices,
@@ -22,10 +23,12 @@ from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
+from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs
 
 from torchrl.envs.vec_env import _has_envpool
@@ -45,6 +48,9 @@ if _has_gym:
 if _has_dmc:
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
+
+if _has_vmas:
+    import vmas
 
 IS_OSX = platform == "darwin"
 
@@ -337,16 +343,30 @@ class TestCollectorLib:
 
 
 @pytest.mark.skipif(not _has_habitat, reason="habitat not installed")
-@pytest.mark.parametrize("envname", ["HabitatRenderPick-v0", "HabitatRenderPick-v0"])
+@pytest.mark.parametrize("envname", ["HabitatRenderPick-v0", "HabitatPick-v0"])
 class TestHabitat:
     def test_habitat(self, envname):
         env = HabitatEnv(envname)
         rollout = env.rollout(3)
         check_env_specs(env)
 
+    @pytest.mark.parametrize("from_pixels", [True, False])
+    def test_habitat_render(self, envname, from_pixels):
+        env = HabitatEnv(envname, from_pixels=from_pixels)
+        rollout = env.rollout(3)
+        check_env_specs(env)
+        if from_pixels:
+            assert "pixels" in rollout.keys()
+
 
 @pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
-@pytest.mark.parametrize("envname", ["Snake-6x6-v0", "TSP50-v0"])
+@pytest.mark.parametrize(
+    "envname",
+    [
+        "TSP50-v0",
+        "Snake-6x6-v0",
+    ],
+)
 class TestJumanji:
     def test_jumanji_seeding(self, envname):
         final_seed = []
@@ -387,6 +407,7 @@ class TestJumanji:
         import jax
         import jax.numpy as jnp
         import numpy as onp
+        from torchrl.envs.libs.jax_utils import _tree_flatten
 
         env = JumanjiEnv(envname, batch_size=batch_size)
         obs_keys = list(env.observation_spec.keys(True))
@@ -403,7 +424,7 @@ class TestJumanji:
         for i in range(rollout.shape[-1]):
             action = rollout[..., i]["action"]
             # state = env._flatten(state)
-            action = env._flatten(env.read_action(action))
+            action = _tree_flatten(env.read_action(action), env.batch_size)
             state, timestep = jax.vmap(base_env.step)(state, action)
             # state = env._reshape(state)
             # timesteps.append(timestep)
@@ -713,6 +734,242 @@ class TestEnvPool:
         assert out.device == torch.device(device)
 
         env_multithreaded.close()
+
+
+@pytest.mark.skipif(not _has_brax, reason="brax not installed")
+@pytest.mark.parametrize("envname", ["fast"])
+class TestBrax:
+    def test_brax_seeding(self, envname):
+        final_seed = []
+        tdreset = []
+        tdrollout = []
+        for _ in range(2):
+            env = BraxEnv(envname)
+            torch.manual_seed(0)
+            np.random.seed(0)
+            final_seed.append(env.set_seed(0))
+            tdreset.append(env.reset())
+            tdrollout.append(env.rollout(max_steps=50))
+            env.close()
+            del env
+        assert final_seed[0] == final_seed[1]
+        assert_allclose_td(*tdreset)
+        assert_allclose_td(*tdrollout)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_brax_batch_size(self, envname, batch_size):
+        env = BraxEnv(envname, batch_size=batch_size)
+        env.set_seed(0)
+        tdreset = env.reset()
+        tdrollout = env.rollout(max_steps=50)
+        env.close()
+        del env
+        assert tdreset.batch_size == batch_size
+        assert tdrollout.batch_size[:-1] == batch_size
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_brax_spec_rollout(self, envname, batch_size):
+        env = BraxEnv(envname, batch_size=batch_size)
+        env.set_seed(0)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    @pytest.mark.parametrize("requires_grad", [False, True])
+    def test_brax_consistency(self, envname, batch_size, requires_grad):
+        import jax
+        import jax.numpy as jnp
+        from torchrl.envs.libs.jax_utils import (
+            _ndarray_to_tensor,
+            _tensor_to_ndarray,
+            _tree_flatten,
+        )
+
+        env = BraxEnv(envname, batch_size=batch_size, requires_grad=requires_grad)
+        env.set_seed(1)
+        rollout = env.rollout(10)
+
+        env.set_seed(1)
+        key = env._key
+        base_env = env._env
+        key, *keys = jax.random.split(key, np.prod(batch_size) + 1)
+        state = jax.vmap(base_env.reset)(jnp.stack(keys))
+        for i in range(rollout.shape[-1]):
+            action = rollout[..., i]["action"]
+            action = _tensor_to_ndarray(action.clone())
+            action = _tree_flatten(action, env.batch_size)
+            state = jax.vmap(base_env.step)(state, action)
+            t1 = rollout[..., i][("next", "observation")]
+            t2 = _ndarray_to_tensor(state.obs).view_as(t1)
+            torch.testing.assert_close(t1, t2)
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_brax_grad(self, envname, batch_size):
+        batch_size = (1,)
+        env = BraxEnv(envname, batch_size=batch_size, requires_grad=True)
+        env.set_seed(0)
+        td1 = env.reset()
+        action = torch.randn(batch_size + env.action_spec.shape)
+        action.requires_grad_(True)
+        td1["action"] = action
+        td2 = env.step(td1)
+        td2["reward"].mean().backward()
+        env.close()
+        del env
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
+    def test_brax_parallel(self, envname, batch_size, n=1):
+        def make_brax():
+            env = BraxEnv(envname, batch_size=batch_size, requires_grad=False)
+            env.set_seed(1)
+            return env
+
+        env = ParallelEnv(n, make_brax)
+        tensordict = env.rollout(3)
+        assert tensordict.shape == torch.Size([n, *batch_size, 3])
+
+
+@pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
+@pytest.mark.parametrize(
+    "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+)
+class TestVmas:
+    def test_vmas_seeding(self, scenario_name):
+        final_seed = []
+        tdreset = []
+        tdrollout = []
+        for _ in range(2):
+            env = VmasEnv(
+                scenario_name=scenario_name,
+                num_envs=4,
+            )
+            final_seed.append(env.set_seed(0))
+            tdreset.append(env.reset())
+            tdrollout.append(env.rollout(max_steps=10))
+            env.close()
+            del env
+        assert final_seed[0] == final_seed[1]
+        assert_allclose_td(*tdreset)
+        assert_allclose_td(*tdrollout)
+
+    @pytest.mark.parametrize(
+        "batch_size", [(), (12,), (12, 2), (12, 3), (12, 3, 1), (12, 3, 4)]
+    )
+    def test_vmas_batch_size_error(self, scenario_name, batch_size):
+        num_envs = 12
+        n_agents = 2
+        if len(batch_size) > 1:
+            with pytest.raises(
+                TypeError,
+                match="Batch size used in constructor is not compatible with vmas.",
+            ):
+                env = VmasEnv(
+                    scenario_name=scenario_name,
+                    num_envs=num_envs,
+                    n_agents=n_agents,
+                    batch_size=batch_size,
+                )
+        elif len(batch_size) == 1 and batch_size != (num_envs,):
+            with pytest.raises(
+                TypeError,
+                match="Batch size used in constructor does not match vmas batch size.",
+            ):
+                env = VmasEnv(
+                    scenario_name=scenario_name,
+                    num_envs=num_envs,
+                    n_agents=n_agents,
+                    batch_size=batch_size,
+                )
+        else:
+            env = VmasEnv(
+                scenario_name=scenario_name,
+                num_envs=num_envs,
+                n_agents=n_agents,
+                batch_size=batch_size,
+            )
+
+    @pytest.mark.parametrize("num_envs", [1, 20])
+    @pytest.mark.parametrize("n_agents", [1, 5])
+    def test_vmas_batch_size(self, scenario_name, num_envs, n_agents):
+        n_rollout_samples = 5
+        env = VmasEnv(
+            scenario_name=scenario_name,
+            num_envs=num_envs,
+            n_agents=n_agents,
+        )
+        env.set_seed(0)
+        tdreset = env.reset()
+        tdrollout = env.rollout(max_steps=n_rollout_samples)
+        env.close()
+        assert tdreset.batch_size == (env.n_agents, num_envs)
+        assert tdrollout.batch_size == (env.n_agents, num_envs, n_rollout_samples)
+        del env
+
+    @pytest.mark.parametrize("num_envs", [1, 20])
+    @pytest.mark.parametrize("n_agents", [1, 5])
+    @pytest.mark.parametrize("continuous_actions", [True, False])
+    def test_vmas_spec_rollout(
+        self, scenario_name, num_envs, n_agents, continuous_actions
+    ):
+        env = VmasEnv(
+            scenario_name=scenario_name,
+            num_envs=num_envs,
+            n_agents=n_agents,
+            continuous_actions=continuous_actions,
+        )
+        wrapped = VmasWrapper(
+            vmas.make_env(
+                scenario_name=scenario_name,
+                num_envs=num_envs,
+                n_agents=n_agents,
+                continuous_actions=continuous_actions,
+            )
+        )
+        for e in [env, wrapped]:
+            e.set_seed(0)
+            check_env_specs(e)
+            del e
+
+    @pytest.mark.parametrize("num_envs", [1, 20])
+    @pytest.mark.parametrize("n_agents", [1, 5])
+    def test_vmas_repr(self, scenario_name, num_envs, n_agents):
+        env = VmasEnv(
+            scenario_name=scenario_name,
+            num_envs=num_envs,
+            n_agents=n_agents,
+        )
+        assert str(env) == (
+            f"{VmasEnv.__name__}(env={env._env}, num_envs={num_envs}, n_agents={env.n_agents},"
+            f" batch_size={torch.Size((env.n_agents,num_envs))}, device={env.device}) (scenario_name={scenario_name})"
+        )
+
+    @pytest.mark.parametrize("num_envs", [1, 10])
+    @pytest.mark.parametrize("n_workers", [1, 3])
+    @pytest.mark.parametrize("continuous_actions", [True, False])
+    def test_vmas_parallel(
+        self,
+        scenario_name,
+        num_envs,
+        n_workers,
+        continuous_actions,
+        n_agents=5,
+        n_rollout_samples=3,
+    ):
+        def make_vmas():
+            env = VmasEnv(
+                scenario_name=scenario_name,
+                num_envs=num_envs,
+                n_agents=n_agents,
+                continuous_actions=continuous_actions,
+            )
+            env.set_seed(0)
+            return env
+
+        env = ParallelEnv(n_workers, make_vmas)
+        tensordict = env.rollout(max_steps=n_rollout_samples)
+
+        assert tensordict.shape == torch.Size(
+            [n_workers, list(env.n_agents)[0], list(env.num_envs)[0], n_rollout_samples]
+        )
 
 
 if __name__ == "__main__":

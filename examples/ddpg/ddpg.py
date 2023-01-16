@@ -4,10 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import dataclasses
-import os
-import pathlib
-import uuid
-from datetime import datetime
 
 import hydra
 import torch.cuda
@@ -34,6 +30,7 @@ from torchrl.trainers.helpers.losses import LossConfig, make_ddpg_loss
 from torchrl.trainers.helpers.models import DDPGModelConfig, make_ddpg_actor
 from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
+from torchrl.trainers.loggers.utils import generate_exp_name, get_logger
 
 config_fields = [
     (config_field.name, config_field.type, config_field)
@@ -77,33 +74,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         else torch.device("cuda:0")
     )
 
-    exp_name = "_".join(
-        [
-            "DDPG",
-            cfg.exp_name,
-            str(uuid.uuid4())[:8],
-            datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
-        ]
+    exp_name = generate_exp_name("DDPG", cfg.exp_name)
+    logger = get_logger(
+        logger_type=cfg.logger, logger_name="ddpg_logging", experiment_name=exp_name
     )
-    if cfg.logger == "tensorboard":
-        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
-
-        logger = TensorboardLogger(log_dir="ddpg_logging", exp_name=exp_name)
-    elif cfg.logger == "csv":
-        from torchrl.trainers.loggers.csv import CSVLogger
-
-        logger = CSVLogger(log_dir="ddpg_logging", exp_name=exp_name)
-    elif cfg.logger == "wandb":
-        from torchrl.trainers.loggers.wandb import WandbLogger
-
-        logger = WandbLogger(log_dir="ddpg_logging", exp_name=exp_name)
-    elif cfg.logger == "mlflow":
-        from torchrl.trainers.loggers.mlflow import MLFlowLogger
-
-        logger = MLFlowLogger(
-            tracking_uri=pathlib.Path(os.path.abspath("ddpg_logging")).as_uri(),
-            exp_name=exp_name,
-        )
     video_tag = exp_name if cfg.record_video else ""
 
     key, init_env_steps, stats = None, None, None

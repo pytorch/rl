@@ -47,8 +47,9 @@ from .tensordict_module import (
     QValueActor,
     SafeModule,
     SafeProbabilisticModule,
+    SafeProbabilisticSequential,
     SafeSequential,
     ValueOperator,
     WorldModelWrapper,
 )
-from .planners import CEMPlanner, MPCPlannerBase  # usort:skip
+from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip

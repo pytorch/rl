@@ -21,6 +21,7 @@ from _utils_internal import (
 )
 from mocking_classes import (
     ActionObsMergeLinear,
+    CountingEnv,
     DiscreteActionConvMockEnv,
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
@@ -268,6 +269,16 @@ class TestModelBasedEnvBase:
 
 
 class TestParallel:
+    @pytest.mark.parametrize("num_parallel_env", [1, 10])
+    @pytest.mark.parametrize("env_batch_size", [[], (32,), (32, 1), (32, 0)])
+    def test_env_with_batch_size(self, num_parallel_env, env_batch_size):
+        env = MockBatchedLockedEnv(device="cpu", batch_size=torch.Size(env_batch_size))
+        env.set_seed(1)
+        parallel_env = ParallelEnv(num_parallel_env, lambda: env)
+        parallel_env.start()
+        assert parallel_env.batch_size == (num_parallel_env, *env_batch_size)
+        parallel_env.close()
+
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
     @pytest.mark.parametrize("share_individual_td", [True, False])
@@ -323,6 +334,9 @@ class TestParallel:
         env2 = DMControlEnv("humanoid", "walk")
         env2_obs_keys = list(env2.observation_spec.keys())
 
+        assert len(env1_obs_keys)
+        assert len(env2_obs_keys)
+
         def env1_maker():
             return TransformedEnv(
                 DMControlEnv("humanoid", "stand"),
@@ -350,6 +364,7 @@ class TestParallel:
             )
 
         env = ParallelEnv(2, [env1_maker, env2_maker])
+        # env = SerialEnv(2, [env1_maker, env2_maker])
         assert not env._single_task
 
         td = env.rollout(10, return_contiguous=False)
@@ -396,10 +411,10 @@ class TestParallel:
                 source={"action": env0.action_spec.rand((N - 1,))},
                 batch_size=[N - 1],
             )
-            td1 = env_parallel.step(td)
+            _ = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
+            source={"_reset": torch.zeros(N, dtype=torch.bool).bernoulli_()},
             batch_size=[
                 N,
             ],
@@ -482,10 +497,10 @@ class TestParallel:
                 source={"action": env0.action_spec.rand((N - 1,))},
                 batch_size=[N - 1],
             )
-            td1 = env_parallel.step(td)
+            _ = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
+            source={"_reset": torch.zeros(N, dtype=torch.bool).bernoulli_()},
             batch_size=[
                 N,
             ],
@@ -600,7 +615,6 @@ class TestParallel:
         transformed_out,
         device,
         open_before,
-        T=10,
         N=3,
     ):
         # tests casting to device
@@ -791,6 +805,78 @@ class TestParallel:
         env1.close()
         env2.close()
 
+    @pytest.mark.parametrize("batch_size", [(), (1,), (4,), (32, 5)])
+    @pytest.mark.parametrize("n_workers", [1, 2])
+    def test_parallel_env_reset_flag(self, batch_size, n_workers, max_steps=3):
+        torch.manual_seed(1)
+        env = ParallelEnv(
+            n_workers, lambda: CountingEnv(max_steps=max_steps, batch_size=batch_size)
+        )
+        env.set_seed(1)
+        action = env.action_spec.rand(env.batch_size)
+        action[:] = 1
+
+        for i in range(max_steps):
+            td = env.step(
+                TensorDict(
+                    {"action": action}, batch_size=env.batch_size, device=env.device
+                )
+            )
+            assert (td["done"] == 0).all()
+            assert (td["next"]["observation"] == i + 1).all()
+
+        td = env.step(
+            TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
+        )
+        assert (td["done"] == 1).all()
+        assert (td["next"]["observation"] == max_steps + 1).all()
+
+        _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+        while not _reset.any():
+            _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+
+        td_reset = env.reset(
+            TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
+        )
+        env.close()
+
+        assert (td_reset["done"][_reset] == 0).all()
+        assert (td_reset["observation"][_reset] == 0).all()
+        assert (td_reset["done"][~_reset] == 1).all()
+        assert (td_reset["observation"][~_reset] == max_steps + 1).all()
+
+
+@pytest.mark.parametrize("batch_size", [(), (2,), (32, 5)])
+def test_env_base_reset_flag(batch_size, max_steps=3):
+    env = CountingEnv(max_steps=max_steps, batch_size=batch_size)
+    env.set_seed(1)
+
+    action = env.action_spec.rand(env.batch_size)
+    action[:] = 1
+
+    for i in range(max_steps):
+        td = env.step(
+            TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
+        )
+        assert (td["done"] == 0).all()
+        assert (td["next"]["observation"] == i + 1).all()
+
+    td = env.step(
+        TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
+    )
+    assert (td["done"] == 1).all()
+    assert (td["next"]["observation"] == max_steps + 1).all()
+
+    _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+    td_reset = env.reset(
+        TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
+    )
+
+    assert (td_reset["done"][_reset] == 0).all()
+    assert (td_reset["observation"][_reset] == 0).all()
+    assert (td_reset["done"][~_reset] == 1).all()
+    assert (td_reset["observation"][~_reset] == max_steps + 1).all()
+
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
 def test_seed():
@@ -938,10 +1024,11 @@ def test_batch_unlocked_with_batch_size(device):
     gym_version is None or gym_version < version.parse("0.20.0"),
     reason="older versions of half-cheetah do not have 'x_position' info key.",
 )
-def test_info_dict_reader(seed=0):
+@pytest.mark.parametrize("device", get_available_devices())
+def test_info_dict_reader(device, seed=0):
     import gym
 
-    env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED))
+    env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED), device=device)
     env.set_info_dict_reader(default_info_dict_reader(["x_position"]))
 
     assert "x_position" in env.observation_spec.keys()

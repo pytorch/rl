@@ -135,8 +135,8 @@ Trainer and hooks
     :toctree: generated/
     :template: rl_template.rst
 
-    Trainer
     BatchSubSampler
+    ClearCudaCache
     CountFramesLog
     LogReward
     OptimizerHook
@@ -144,8 +144,9 @@ Trainer and hooks
     ReplayBuffer
     RewardNormalizer
     SelectKeys
+    Trainer
+    TrainerHookBase
     UpdateWeights
-    ClearCudaCache
 
 
 Builders
@@ -157,27 +158,27 @@ Builders
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    make_trainer
-    sync_sync_collector
-    sync_async_collector
+    make_a2c_loss
+    make_a2c_model
     make_collector_offpolicy
     make_collector_onpolicy
-    transformed_env_constructor
-    parallel_env_constructor
-    make_sac_loss
-    make_a2c_loss
-    make_dqn_loss
-    make_ddpg_loss
-    make_target_updater
-    make_ppo_loss
-    make_redq_loss
-    make_dqn_actor
     make_ddpg_actor
+    make_ddpg_loss
+    make_dqn_actor
+    make_dqn_loss
+    make_ppo_loss
     make_ppo_model
-    make_a2c_model
-    make_sac_model
+    make_redq_loss
     make_redq_model
     make_replay_buffer
+    make_sac_loss
+    make_sac_model
+    make_target_updater
+    make_trainer
+    parallel_env_constructor
+    sync_async_collector
+    sync_sync_collector
+    transformed_env_constructor
 
 Utils
 -----
@@ -188,3 +189,20 @@ Utils
 
     correct_for_frame_skip
     get_stats_random_rollout
+
+Loggers
+-------
+
+.. currentmodule:: torchrl.trainers.loggers
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    Logger
+    CSVLogger
+    MLFlowLogger
+    TensorboardLogger
+    WandbLogger
+    get_logger
+    generate_exp_name

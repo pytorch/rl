@@ -11,6 +11,10 @@
 
 # TorchRL
 
+[**Documentation**](#documentation) | [**TensorDict**](#tensordict-as-a-common-data-carrier-for-rl) |
+[**Features**](#features) | [**Examples, tutorials and demos**](#examples-tutorials-and-demos) |
+[**Running examples**](#running-examples) | [**Upcoming features**](#upcoming-features) | [**Contributing**](#contributing)
+
 **TorchRL** is an open-source Reinforcement Learning (RL) library for PyTorch.
 
 It provides pytorch and **python-first**, low and high level abstractions for RL that are intended to be **efficient**, **modular**, **documented** and properly **tested**.
@@ -22,6 +26,11 @@ TorchRL aims at having as few dependencies as possible (python standard library,
 On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](torchrl/objectives/costs), [returns](torchrl/objectives/returns) and data processing.
 
 TorchRL aims at (1) a high modularity and (2) good runtime performance.
+
+## Documentation
+
+The TorchRL documentation can be found [here](https://pytorch.org/rl).
+It contains tutorials and the API reference.
 
 ## TensorDict as a common data carrier for RL
 
@@ -203,7 +212,6 @@ The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py)
         scratch_dir="/tmp/"
     )
     buffer = TensorDictPrioritizedReplayBuffer(
-        buffer_size=10000,
         alpha=0.7,
         beta=0.5,
         collate_fn=lambda x: x,
@@ -270,24 +278,23 @@ The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py)
     )
     # Wrap the policy module in NormalParamsWrapper, such that the output
     # tensor is split in loc and scale, and scale is mapped onto a positive space
-    policy_module = NormalParamsWrapper(
-        MLP(
-            num_cells=[64, 64],
-            out_features=32,
-            activation=nn.ELU,
-        )
-    )
-    # Wrap the nn.Module in a SafeProbabilisticModule, indicating how
-    # to build the torch.distribution.Distribution object and what to do with it
-    policy_module = SafeProbabilisticModule(  # stochastic policy
-        SafeModule(
-            policy_module,
-            in_keys=["hidden"],
-            out_keys=["loc", "scale"],
+    policy_module = SafeModule(
+        NormalParamsWrapper(
+            MLP(num_cells=[64, 64], out_features=32, activation=nn.ELU)
         ),
-        dist_in_keys=["loc", "scale"],
-        sample_out_key="action",
-        distribution_class=TanhNormal,
+        in_keys=["hidden"],
+        out_keys=["loc", "scale"],
+    )
+    # Use a SafeProbabilisticSequential to combine the SafeModule with a
+    # SafeProbabilisticModule, indicating how to build the
+    # torch.distribution.Distribution object and what to do with it
+    policy_module = SafeProbabilisticSequential(  # stochastic policy
+        policy_module,
+        SafeProbabilisticModule(
+            in_keys=["loc", "scale"],
+            out_keys="action",
+            distribution_class=TanhNormal,
+        ),
     )
     value_module = MLP(
         num_cells=[64, 64],
@@ -514,14 +521,6 @@ Examples are coded in a very similar way but the configuration may change from o
 
 Check the [examples markdown](examples/EXAMPLES.md) directory for more details about handling the various configuration settings.
 
-## Contributing
-
-Internal collaborations to torchrl are welcome! Feel free to fork, submit issues and PRs.
-You can checkout the detailed contribution guide [here](CONTRIBUTING.md).
-As mentioned above, a list of open contributions can be found in [here](https://github.com/pytorch/rl/issues/509).
-
-Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is commited locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
-
 
 ## Upcoming features
 
@@ -534,6 +533,15 @@ We welcome any contribution, should you want to contribute to these new features
 or any other, lister or not, in the issues section of this repository.
 
 
+## Contributing
+
+Internal collaborations to torchrl are welcome! Feel free to fork, submit issues and PRs.
+You can checkout the detailed contribution guide [here](CONTRIBUTING.md).
+As mentioned above, a list of open contributions can be found in [here](https://github.com/pytorch/rl/issues/509).
+
+Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is commited locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
+
+
 ## Disclaimer
 
 This library is not officially released yet and is subject to change.
@@ -542,3 +550,4 @@ The features are available before an official release so that users and collabor
 
 # License
 TorchRL is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+

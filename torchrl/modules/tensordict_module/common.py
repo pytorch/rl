@@ -50,8 +50,8 @@ def _check_all_str(list_of_str, first_level=True):
             return [_check_all_str(item, False) for item in list_of_str]
         except Exception as err:
             raise TypeError(
-                f"Expected a list of strings but got: {list_of_str} that raised the following error: {err}."
-            )
+                f"Expected a list of strings but got: {list_of_str}."
+            ) from err
 
 
 def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
@@ -89,8 +89,8 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
         ):
             # "_is_stateless" in module.__dict__ and module._is_stateless:
             raise RuntimeError(
-                f"vmap cannot be used with safe=True, consider turning the safe mode off. (original error message: {err})"
-            )
+                "vmap cannot be used with safe=True, consider turning the safe mode off."
+            ) from err
         else:
             raise err
 
@@ -121,10 +121,10 @@ class SafeModule(TensorDictModule):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn.functional_modules import make_functional
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data import UnboundedContinuousTensorSpec
         >>> from torchrl.modules import SafeModule
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
-        >>> spec = NdUnboundedContinuousTensorSpec(8)
+        >>> spec = UnboundedContinuousTensorSpec(8)
         >>> module = torch.nn.GRUCell(4, 8)
         >>> td_fmodule = SafeModule(
         ...    module=module,

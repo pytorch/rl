@@ -5,7 +5,7 @@
 from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Callable, Optional, Sequence, Union
 
-from torchrl.data import NdUnboundedContinuousTensorSpec
+from torchrl.data import UnboundedContinuousTensorSpec
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
@@ -89,7 +89,7 @@ def make_env_transforms(
         env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
-        env.append_transform(FlattenObservation(0))
+        env.append_transform(FlattenObservation(0, -3))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
         if stats is None:
             obs_stats = {
@@ -125,8 +125,8 @@ def make_env_transforms(
     )
 
     default_dict = {
-        "state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
-        "belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
+        "state": UnboundedContinuousTensorSpec(cfg.state_dim),
+        "belief": UnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
     }
     env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)

@@ -12,7 +12,10 @@ from torch import nn
 from torchrl.data import CompositeSpec, TensorSpec, UnboundedContinuousTensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
-from torchrl.modules.tensordict_module.probabilistic import SafeProbabilisticModule
+from torchrl.modules.tensordict_module.probabilistic import (
+    SafeProbabilisticModule,
+    SafeProbabilisticSequential,
+)
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 
@@ -26,10 +29,10 @@ class Actor(SafeModule):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data import UnboundedContinuousTensorSpec
         >>> from torchrl.modules import Actor
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
-        >>> action_spec = NdUnboundedContinuousTensorSpec(4)
+        >>> action_spec = UnboundedContinuousTensorSpec(4)
         >>> module = torch.nn.Linear(4, 4)
         >>> td_module = Actor(
         ...    module=module,
@@ -68,7 +71,7 @@ class Actor(SafeModule):
         )
 
 
-class ProbabilisticActor(SafeProbabilisticModule):
+class ProbabilisticActor(SafeProbabilisticSequential):
     """General class for probabilistic actors in RL.
 
     The Actor class comes with default values for the out_keys (["action"])
@@ -79,13 +82,12 @@ class ProbabilisticActor(SafeProbabilisticModule):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn.functional_modules import make_functional
-        >>> from torchrl.data import NdBoundedTensorSpec
+        >>> from torchrl.data import BoundedTensorSpec
         >>> from torchrl.modules import ProbabilisticActor, NormalParamWrapper, SafeModule, TanhNormal
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
-        >>> action_spec = NdBoundedTensorSpec(shape=torch.Size([4]),
+        >>> action_spec = BoundedTensorSpec(shape=torch.Size([4]),
         ...    minimum=-1, maximum=1)
         >>> module = NormalParamWrapper(torch.nn.Linear(4, 8))
-        >>> params = make_functional(module)
         >>> tensordict_module = SafeModule(module, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> td_module = ProbabilisticActor(
         ...    module=tensordict_module,
@@ -93,6 +95,7 @@ class ProbabilisticActor(SafeProbabilisticModule):
         ...    dist_in_keys=["loc", "scale"],
         ...    distribution_class=TanhNormal,
         ...    )
+        >>> params = make_functional(td_module)
         >>> td = td_module(td, params=params)
         >>> td
         TensorDict(
@@ -110,26 +113,25 @@ class ProbabilisticActor(SafeProbabilisticModule):
     def __init__(
         self,
         module: SafeModule,
-        dist_in_keys: Union[str, Sequence[str]],
-        sample_out_key: Optional[Sequence[str]] = None,
+        in_keys: Union[str, Sequence[str]],
+        out_keys: Optional[Sequence[str]] = None,
         spec: Optional[TensorSpec] = None,
         **kwargs,
     ):
-        if sample_out_key is None:
-            sample_out_key = ["action"]
+        if out_keys is None:
+            out_keys = ["action"]
         if (
-            "action" in sample_out_key
+            "action" in out_keys
             and spec is not None
             and not isinstance(spec, CompositeSpec)
         ):
             spec = CompositeSpec(action=spec)
 
         super().__init__(
-            module=module,
-            dist_in_keys=dist_in_keys,
-            sample_out_key=sample_out_key,
-            spec=spec,
-            **kwargs,
+            module,
+            SafeProbabilisticModule(
+                in_keys=in_keys, out_keys=out_keys, spec=spec, **kwargs
+            ),
         )
 
 
@@ -146,7 +148,7 @@ class ValueOperator(SafeModule):
         >>> from tensordict import TensorDict
         >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch import nn
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data import UnboundedContinuousTensorSpec
         >>> from torchrl.modules import ValueOperator
         >>> td = TensorDict({"observation": torch.randn(3, 4), "action": torch.randn(3, 2)}, [3,])
         >>> class CustomModule(nn.Module):
@@ -567,9 +569,9 @@ class ActorValueOperator(SafeSequential):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.modules import ProbabilisticActor, SafeModule
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
+        >>> from torchrl.data import UnboundedContinuousTensorSpec, BoundedTensorSpec
         >>> from torchrl.modules import ValueOperator, TanhNormal, ActorValueOperator, NormalParamWrapper
-        >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
+        >>> spec_hidden = UnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
         >>> td_module_hidden = SafeModule(
         ...    module=module_hidden,
@@ -577,7 +579,7 @@ class ActorValueOperator(SafeSequential):
         ...    in_keys=["observation"],
         ...    out_keys=["hidden"],
         ...    )
-        >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
+        >>> spec_action = BoundedTensorSpec(-1, 1, torch.Size([8]))
         >>> module_action = SafeModule(
         ...     NormalParamWrapper(torch.nn.Linear(4, 8)),
         ...     in_keys=["hidden"],
@@ -652,6 +654,8 @@ class ActorValueOperator(SafeSequential):
 
     def get_policy_operator(self) -> SafeSequential:
         """Returns a stand-alone policy operator that maps an observation to an action."""
+        if isinstance(self.module[1], SafeProbabilisticSequential):
+            return SafeProbabilisticSequential(self.module[0], *self.module[1].module)
         return SafeSequential(self.module[0], self.module[1])
 
     def get_value_operator(self) -> SafeSequential:
@@ -699,9 +703,9 @@ class ActorCriticOperator(ActorValueOperator):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.modules import ProbabilisticActor, SafeModule
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
+        >>> from torchrl.data import UnboundedContinuousTensorSpec, BoundedTensorSpec
         >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper, MLP
-        >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
+        >>> spec_hidden = UnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
         >>> td_module_hidden = SafeModule(
         ...    module=module_hidden,
@@ -709,7 +713,7 @@ class ActorCriticOperator(ActorValueOperator):
         ...    in_keys=["observation"],
         ...    out_keys=["hidden"],
         ...    )
-        >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
+        >>> spec_action = BoundedTensorSpec(-1, 1, torch.Size([8]))
         >>> module_action = NormalParamWrapper(torch.nn.Linear(4, 8))
         >>> module_action = SafeModule(module_action, in_keys=["hidden"], out_keys=["loc", "scale"])
         >>> td_module_action = ProbabilisticActor(
@@ -828,7 +832,7 @@ class ActorCriticWrapper(SafeSequential):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
+        >>> from torchrl.data import UnboundedContinuousTensorSpec, BoundedTensorSpec
         >>> from torchrl.modules import (
                 ActorCriticWrapper,
                 ProbabilisticActor,
@@ -837,7 +841,7 @@ class ActorCriticWrapper(SafeSequential):
                 TanhNormal,
                 ValueOperator,
             )
-        >>> action_spec = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
+        >>> action_spec = BoundedTensorSpec(-1, 1, torch.Size([8]))
         >>> action_module = SafeModule(
                 NormalParamWrapper(torch.nn.Linear(4, 8)),
                 in_keys=["observation"],

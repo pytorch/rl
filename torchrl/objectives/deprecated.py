@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import math
 from numbers import Number
 from typing import Tuple, Union
@@ -76,9 +81,7 @@ class REDQLoss_deprecated(LossModule):
         gSDE: bool = False,
     ):
         if not _has_functorch:
-            raise ImportError(
-                f"Failed to import functorch with error message:\n{FUNCTORCH_ERR}"
-            )
+            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
         super().__init__()
         self.convert_to_functional(
             actor_network,
@@ -218,6 +221,12 @@ class REDQLoss_deprecated(LossModule):
                 next_td,
                 selected_q_params,
             )
+            state_action_value = next_td.get("state_action_value")
+            if (
+                state_action_value.shape[-len(sample_log_prob.shape) :]
+                != sample_log_prob.shape
+            ):
+                sample_log_prob = sample_log_prob.unsqueeze(-1)
             state_value = (
                 next_td.get("state_action_value") - self.alpha * sample_log_prob
             )

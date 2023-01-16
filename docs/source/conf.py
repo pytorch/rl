@@ -182,5 +182,5 @@ from content_generation import (
 
 generate_knowledge_base_references("../../knowledge_base")
 generate_tutorial_references("../../tutorials/sphinx-tutorials/", "tutorial")
-generate_tutorial_references("../../tutorials/src/", "src")
+# generate_tutorial_references("../../tutorials/src/", "src")
 generate_tutorial_references("../../tutorials/media/", "media")

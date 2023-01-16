@@ -5,25 +5,30 @@ torchrl.modules package
 
 TensorDict modules
 ------------------
-
+.. currentmodule:: torchrl.modules.tensordict_module
 
 .. autosummary::
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
-    SafeModule
-    SafeProbabilisticModule
-    SafeSequential
     Actor
-    ProbabilisticActor
-    ValueOperator
-    QValueActor
-    DistributionalQValueActor
-    ActorValueOperator
     ActorCriticOperator
     ActorCriticWrapper
-    tensordict_module.common.is_tensordict_compatible
-    tensordict_module.common.ensure_tensordict_compatible
+    ActorValueOperator
+    DistributionalQValueActor
+    ProbabilisticActor
+    QValueActor
+    ValueOperator
+    SafeModule
+    AdditiveGaussianWrapper
+    EGreedyWrapper
+    OrnsteinUhlenbeckProcessWrapper
+    SafeProbabilisticModule
+    SafeProbabilisticSequential
+    SafeSequential
+    WorldModelWrapper
+    common.is_tensordict_compatible
+    common.ensure_tensordict_compatible
 
 Hooks
 -----
@@ -83,6 +88,7 @@ Planners
 
     CEMPlanner
     MPCPlannerBase
+    MPPIPlanner
 
 
 Distributions
@@ -92,6 +98,8 @@ Distributions
     :template: rl_template_noinherit.rst
 
     Delta
+    IndependentNormal
+    NormalParamWrapper
     TanhNormal
     TruncatedNormal
     TanhDelta

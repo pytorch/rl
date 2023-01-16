@@ -26,7 +26,6 @@ gamma: 0.99
 entropy_coef: 0.01  # Entropy factor for the A2C loss
 critic_coef: 0.25  # Critic factor for the A2C loss
 critic_loss_function: l2  # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
-advantage_in_loss: False  # if True, the advantage is computed on the sub-batch
 
 # Trainer
 optim_steps_per_batch: 1  # Number of optimization steps in between two collection of data.

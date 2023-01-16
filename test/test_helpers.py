@@ -5,6 +5,8 @@
 
 import argparse
 import dataclasses
+import sys
+
 from time import sleep
 
 import pytest
@@ -27,7 +29,7 @@ from mocking_classes import (
     MockSerialEnv,
 )
 from packaging import version
-from torchrl.data import CompositeSpec, NdBoundedTensorSpec
+from torchrl.data import BoundedTensorSpec, CompositeSpec
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import ObservationNorm
 from torchrl.envs.transforms.transforms import (
@@ -229,7 +231,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
             raise
 
         if cfg.gSDE:
-            tsf_loc = actor.module[-1].module.transform(td.get("loc"))
+            tsf_loc = actor.module[0].module[-1].module.transform(td.get("loc"))
             if exploration == "random":
                 with pytest.raises(AssertionError):
                     torch.testing.assert_close(td.get("action"), tsf_loc)
@@ -365,9 +367,11 @@ def test_ppo_maker(
 
         if cfg.gSDE:
             if cfg.shared_mapping:
-                tsf_loc = actor[-1].module[-1].module.transform(td_clone.get("loc"))
+                tsf_loc = actor[-2].module[-1].module.transform(td_clone.get("loc"))
             else:
-                tsf_loc = actor.module[-1].module.transform(td_clone.get("loc"))
+                tsf_loc = (
+                    actor.module[0].module[-1].module.transform(td_clone.get("loc"))
+                )
 
             if exploration == "random":
                 with pytest.raises(AssertionError):
@@ -413,7 +417,6 @@ def test_ppo_maker(
 def test_a2c_maker(
     device, from_pixels, shared_mapping, gsde, exploration, action_space
 ):
-    A2CModelConfig.advantage_in_loss = False
     if not gsde and exploration != "random":
         pytest.skip("no need to test this setting")
     flags = list(from_pixels + shared_mapping + gsde)
@@ -518,9 +521,11 @@ def test_a2c_maker(
 
         if cfg.gSDE:
             if cfg.shared_mapping:
-                tsf_loc = actor[-1].module[-1].module.transform(td_clone.get("loc"))
+                tsf_loc = actor[-2].module[-1].module.transform(td_clone.get("loc"))
             else:
-                tsf_loc = actor.module[-1].module.transform(td_clone.get("loc"))
+                tsf_loc = (
+                    actor.module[0].module[-1].module.transform(td_clone.get("loc"))
+                )
 
             if exploration == "random":
                 with pytest.raises(AssertionError):
@@ -554,9 +559,6 @@ def test_a2c_maker(
         proof_environment.close()
         del proof_environment
 
-        cfg.advantage_in_loss = False
-        loss_fn = make_a2c_loss(actor_value, cfg)
-        cfg.advantage_in_loss = True
         loss_fn = make_a2c_loss(actor_value, cfg)
 
 
@@ -633,7 +635,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             expected_keys += ["_eps_gSDE"]
 
         if cfg.gSDE:
-            tsf_loc = actor.module[-1].module.transform(td_clone.get("loc"))
+            tsf_loc = actor.module[0].module[-1].module.transform(td_clone.get("loc"))
             if exploration == "random":
                 with pytest.raises(AssertionError):
                     torch.testing.assert_close(td_clone.get("action"), tsf_loc)
@@ -765,7 +767,7 @@ def test_redq_make(device, from_pixels, gsde, exploration):
             raise
 
         if cfg.gSDE:
-            tsf_loc = actor.module[-1].module.transform(td.get("loc"))
+            tsf_loc = actor.module[0].module[-1].module.transform(td.get("loc"))
             if exploration == "random":
                 with pytest.raises(AssertionError):
                     torch.testing.assert_close(td.get("action"), tsf_loc)
@@ -914,6 +916,10 @@ def test_seed_generator(initial_seed):
     assert seeds0 == seeds1
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="val1[0]-w1 consistently ~0.015 (> 0.01) in CI pipeline on Windows machine",
+)
 def test_timeit():
     n1 = 500
     w1 = 1e-4
@@ -988,7 +994,7 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
     if keys:
         obs_spec = CompositeSpec(
             **{
-                key: NdBoundedTensorSpec(maximum=1, minimum=1, shape=torch.Size([1]))
+                key: BoundedTensorSpec(maximum=1, minimum=1, shape=torch.Size([1]))
                 for key in keys
             }
         )
@@ -996,9 +1002,7 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
         env = ContinuousActionVecMockEnv(
             device=device,
             observation_spec=obs_spec,
-            action_spec=NdBoundedTensorSpec(
-                minimum=1, maximum=2, shape=torch.Size((1,))
-            ),
+            action_spec=BoundedTensorSpec(minimum=1, maximum=2, shape=torch.Size((1,))),
         )
         env.out_key = "observation"
     else:
@@ -1029,7 +1033,7 @@ def test_initialize_stats_from_non_obs_transform(device):
     env.set_seed(1)
 
     t_env = TransformedEnv(env)
-    t_env.transform = FlattenObservation(first_dim=0)
+    t_env.transform = FlattenObservation(first_dim=0, last_dim=-3)
     pre_init_state_dict = t_env.transform.state_dict()
     initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
     post_init_state_dict = t_env.transform.state_dict()

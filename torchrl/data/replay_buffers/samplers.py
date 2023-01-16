@@ -1,5 +1,11 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 from abc import ABC, abstractmethod
-from typing import Any, Tuple, Union
+from copy import deepcopy
+from typing import Any, Dict, Tuple, Union
 
 import numpy as np
 import torch
@@ -40,12 +46,78 @@ class Sampler(ABC):
     def default_priority(self) -> float:
         return 1.0
 
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        return
+
 
 class RandomSampler(Sampler):
     """A uniformly random sampler for composable replay buffers."""
 
-    def sample(self, storage: Storage, batch_size: int) -> Tuple[np.array, dict]:
-        index = np.random.randint(0, len(storage), size=batch_size)
+    def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
+        index = torch.randint(0, len(storage), (batch_size,))
+        return index, {}
+
+
+class SamplerWithoutReplacement(Sampler):
+    """A data-consuming sampler that ensures that the same sample is not present in consecutive batches.
+
+    Args:
+        drop_last (bool, optional): if True, the last incomplete sample (if any) will be dropped.
+            If False, this last sample will be kept and (unlike with torch dataloaders)
+            completed with other samples from a fresh indices permutation.
+
+    *Caution*: If the size of the storage changes in between two calls, the samples will be re-shuffled
+    (as we can't generally keep track of which samples have been sampled before and which haven't).
+
+    Similarly, it is expected that the storage content remains the same in between two calls,
+    but this is not enforced.
+
+    When the sampler reaches the end of the list of available indices, a new sample order
+    will be generated and the resulting indices will be completed with this new draw, which
+    can lead to duplicated indices, unless the :obj:`drop_last` argument is set to :obj:`True`.
+
+    """
+
+    def __init__(self, drop_last: bool = False):
+        self._sample_list = None
+        self.len_storage = 0
+        self.drop_last = drop_last
+
+    def _single_sample(self, len_storage, batch_size):
+        index = self._sample_list[:batch_size]
+        self._sample_list = self._sample_list[batch_size:]
+        if not self._sample_list.numel():
+            self._sample_list = torch.randperm(len_storage)
+        return index
+
+    def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
+        len_storage = len(storage)
+        if not len_storage:
+            raise RuntimeError("An empty storage was passed")
+        if self.len_storage != len_storage or self._sample_list is None:
+            self._sample_list = torch.randperm(len_storage)
+        if len_storage < batch_size and self.drop_last:
+            raise ValueError(
+                f"The batch size ({batch_size}) is greater than the storage capacity ({len_storage}). "
+                "This makes it impossible to return a sample without repeating indices. "
+                "Consider changing the sampler class or turn the 'drop_last' argument to False."
+            )
+        self.len_storage = len_storage
+        index = self._single_sample(len_storage, batch_size)
+        while index.numel() < batch_size:
+            if self.drop_last:
+                index = self._single_sample(len_storage, batch_size)
+            else:
+                index = torch.cat(
+                    [
+                        index,
+                        self._single_sample(len_storage, batch_size - index.numel()),
+                    ],
+                    0,
+                )
         return index, {}
 
 
@@ -92,7 +164,7 @@ class PrioritizedSampler(Sampler):
             self._min_tree = MinSegmentTreeFp64(self._max_capacity)
         else:
             raise NotImplementedError(
-                f"dtype {dtype} not supported by PrioritizedReplayBuffer"
+                f"dtype {dtype} not supported by PrioritizedSampler"
             )
         self._max_priority = 1.0
 
@@ -189,3 +261,21 @@ class PrioritizedSampler(Sampler):
 
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
         self.update_priority(index, self.default_priority)
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "_alpha": self._alpha,
+            "_beta": self._beta,
+            "_eps": self._eps,
+            "_max_priority": self._max_priority,
+            "_sum_tree": deepcopy(self._sum_tree),
+            "_min_tree": deepcopy(self._min_tree),
+        }
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        self._alpha = state_dict["_alpha"]
+        self._beta = state_dict["_beta"]
+        self._eps = state_dict["_eps"]
+        self._max_priority = state_dict["_max_priority"]
+        self._sum_tree = state_dict.pop("_sum_tree")
+        self._min_tree = state_dict.pop("_min_tree")

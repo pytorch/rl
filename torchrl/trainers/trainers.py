@@ -21,11 +21,7 @@ from torch import nn, optim
 
 from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict
 from torchrl.collectors.collectors import _DataCollector
-from torchrl.data import (
-    ReplayBuffer,
-    TensorDictPrioritizedReplayBuffer,
-    TensorDictReplayBuffer,
-)
+from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
@@ -600,7 +596,7 @@ class ReplayBufferTrainer(TrainerHookBase):
     """Replay buffer hook provider.
 
     Args:
-        replay_buffer (ReplayBuffer): replay buffer to be used.
+        replay_buffer (TensorDictReplayBuffer): replay buffer to be used.
         batch_size (int): batch size when sampling data from the
             latest collection or from the replay buffer.
         memmap (bool, optional): if True, a memmap tensordict is created.
@@ -629,7 +625,7 @@ class ReplayBufferTrainer(TrainerHookBase):
 
     def __init__(
         self,
-        replay_buffer: ReplayBuffer,
+        replay_buffer: TensorDictReplayBuffer,
         batch_size: int,
         memmap: bool = False,
         device: DEVICE_TYPING = "cpu",
@@ -646,7 +642,7 @@ class ReplayBufferTrainer(TrainerHookBase):
     def extend(self, batch: TensorDictBase) -> TensorDictBase:
         if self.flatten_tensordicts:
             if "mask" in batch.keys():
-                batch = batch[batch.get("mask").squeeze(-1)]
+                batch = batch[batch.get("mask")]
             else:
                 batch = batch.reshape(-1)
         else:
@@ -673,8 +669,7 @@ class ReplayBufferTrainer(TrainerHookBase):
         return sample.to(self.device, non_blocking=True)
 
     def update_priority(self, batch: TensorDictBase) -> None:
-        if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
-            self.replay_buffer.update_priority(batch)
+        self.replay_buffer.update_tensordict_priority(batch)
 
     def state_dict(self) -> Dict[str, Any]:
         return {
@@ -810,9 +805,7 @@ class LogReward(TrainerHookBase):
     def __call__(self, batch: TensorDictBase) -> Dict:
         if "mask" in batch.keys():
             return {
-                self.logname: batch.get("reward")[batch.get("mask").squeeze(-1)]
-                .mean()
-                .item(),
+                self.logname: batch.get("reward")[batch.get("mask")].mean().item(),
                 "log_pbar": self.log_pbar,
             }
         return {
@@ -857,7 +850,7 @@ class RewardNormalizer(TrainerHookBase):
     def update_reward_stats(self, batch: TensorDictBase) -> None:
         reward = batch.get("reward")
         if "mask" in batch.keys():
-            reward = reward[batch.get("mask").squeeze(-1)]
+            reward = reward[batch.get("mask")]
         if self._update_has_been_called and not self._normalize_has_been_called:
             # We'd like to check that rewards are normalized. Problem is that the trainer can collect data without calling steps...
             # raise RuntimeError(
@@ -935,7 +928,7 @@ def mask_batch(batch: TensorDictBase) -> TensorDictBase:
     """
     if "mask" in batch.keys():
         mask = batch.get("mask")
-        return batch[mask.squeeze(-1)]
+        return batch[mask]
     return batch
 
 
@@ -997,7 +990,7 @@ class BatchSubSampler(TrainerHookBase):
         if "mask" in batch.keys():
             # if a valid mask is present, it's important to sample only
             # valid steps
-            traj_len = batch.get("mask").sum(1).squeeze()
+            traj_len = batch.get("mask").sum(-1)
             sub_traj_len = max(
                 self.min_sub_traj_len,
                 min(sub_traj_len, traj_len.min().int().item()),
@@ -1008,7 +1001,7 @@ class BatchSubSampler(TrainerHookBase):
                 * batch.shape[1]
             )
         len_mask = traj_len >= sub_traj_len
-        valid_trajectories = torch.arange(batch.shape[0])[len_mask]
+        valid_trajectories = torch.arange(batch.shape[0], device=batch.device)[len_mask]
 
         batch_size = self.batch_size // sub_traj_len
         if batch_size == 0:
@@ -1164,8 +1157,6 @@ class Recorder(TrainerHookBase):
                         out[self.out_keys[key]] = mean_value
                         out["total_" + self.out_keys[key]] = total_value
                         continue
-                    if key == "solved":
-                        value = value.any().float()
                     out[self.out_keys[key]] = value
                 out["log_pbar"] = self.log_pbar
         self._count += 1

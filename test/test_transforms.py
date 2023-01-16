@@ -22,51 +22,51 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
 )
-from tensordict import TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp, Tensor
 from torchrl._utils import prod
-from torchrl.data import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs import (
     BinarizeReward,
     CatFrames,
     CatTensors,
+    CenterCrop,
     Compose,
+    DiscreteActionProjection,
     DoubleToFloat,
+    EnvBase,
     EnvCreator,
+    ExcludeTransform,
     FiniteTensorDictCheck,
     FlattenObservation,
+    FrameSkipTransform,
     GrayScale,
+    gSDENoise,
+    NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
+    PinMemoryTransform,
     R3MTransform,
     Resize,
     RewardClipping,
     RewardScaling,
+    RewardSum,
+    SelectTransform,
     SerialEnv,
+    SqueezeTransform,
+    StepCounter,
+    TensorDictPrimer,
     ToTensorImage,
+    TransformedEnv,
+    UnsqueezeTransform,
     VIPTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
-from torchrl.envs.transforms import TransformedEnv, VecNorm
+from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
-from torchrl.envs.transforms.transforms import (
-    _has_tv,
-    CenterCrop,
-    DiscreteActionProjection,
-    gSDENoise,
-    NoopResetEnv,
-    PinMemoryTransform,
-    SqueezeTransform,
-    TensorDictPrimer,
-    UnsqueezeTransform,
-)
+from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
+from torchrl.envs.utils import check_env_specs
 
 TIMEOUT = 10.0
 
@@ -313,7 +313,9 @@ def test_added_transforms_are_in_eval_mode():
 
 class TestTransformedEnv:
     def test_independent_obs_specs_from_shared_env(self):
-        obs_spec = CompositeSpec(observation=BoundedTensorSpec(minimum=0, maximum=10))
+        obs_spec = CompositeSpec(
+            observation=BoundedTensorSpec(minimum=0, maximum=10, shape=torch.Size((1,)))
+        )
         base_env = ContinuousActionVecMockEnv(observation_spec=obs_spec)
         t1 = TransformedEnv(base_env, transform=ObservationNorm(loc=3, scale=2))
         t2 = TransformedEnv(base_env, transform=ObservationNorm(loc=1, scale=6))
@@ -375,17 +377,53 @@ def test_transform_parent():
     t3 = RewardClipping(0.1, 0.5)
     env.append_transform(t3)
 
-    t1_parent_gt = t1._parent
-    t2_parent_gt = t2._parent
-    t3_parent_gt = t3._parent
+    t1_parent_gt = t1._container
+    t2_parent_gt = t2._container
+    t3_parent_gt = t3._container
 
     _ = t1.parent
     _ = t2.parent
     _ = t3.parent
 
-    assert t1_parent_gt == t1._parent
-    assert t2_parent_gt == t2._parent
-    assert t3_parent_gt == t3._parent
+    assert t1_parent_gt == t1._container
+    assert t2_parent_gt == t2._container
+    assert t3_parent_gt == t3._container
+
+
+def test_transform_parent_cache():
+    """Tests the caching and uncaching of the transformed envs."""
+    env = TransformedEnv(
+        ContinuousActionVecMockEnv(),
+        FrameSkipTransform(3),
+    )
+
+    # print the parent
+    assert (
+        type(env.transform.parent.transform) is Compose
+        and len(env.transform.parent.transform) == 0
+    )
+    transform = env.transform
+    parent1 = env.transform.parent
+    parent2 = env.transform.parent
+    assert parent1 is parent2
+
+    # change the env, re-print the parent
+    env.insert_transform(0, NoopResetEnv(3))
+    parent3 = env.transform[-1].parent
+    assert parent1 is not parent3
+    assert type(parent3.transform[0]) is NoopResetEnv
+
+    # change the env, re-print the parent
+    env.insert_transform(0, CatTensors(["observation"]))
+    parent4 = env.transform[-1].parent
+    assert parent1 is not parent4
+    assert parent3 is not parent4
+    assert type(parent4.transform[0]) is CatTensors
+    assert type(parent4.transform[1]) is NoopResetEnv
+
+    # check that we don't keep track of the wrong parent
+    env.transform = NoopResetEnv(3)
+    assert transform.parent is None
 
 
 class TestTransforms:
@@ -416,12 +454,12 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16))
+            observation_spec = BoundedTensorSpec(-1, 1, (nchannels, 16, 16))
             observation_spec = resize.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([nchannels, 20, 21])
         else:
             observation_spec = CompositeSpec(
-                {key: NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
+                {key: BoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
             observation_spec = resize.transform_observation_spec(observation_spec)
             for key in keys:
@@ -456,12 +494,12 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16))
+            observation_spec = BoundedTensorSpec(-1, 1, (nchannels, 16, 16))
             observation_spec = cc.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([nchannels, 20, h])
         else:
             observation_spec = CompositeSpec(
-                {key: NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
+                {key: BoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
             observation_spec = cc.transform_observation_spec(observation_spec)
             for key in keys:
@@ -496,19 +534,79 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
+            observation_spec = BoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
             observation_spec = flatten.transform_observation_spec(observation_spec)
             assert observation_spec.shape[-3] == expected_size
         else:
             observation_spec = CompositeSpec(
                 {
-                    key: NdBoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
+                    key: BoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
                     for key in keys
                 }
             )
             observation_spec = flatten.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].shape[-3] == expected_size
+
+    @pytest.mark.skipif(not _has_gym, reason="gym not installed")
+    @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
+    def test_frame_skip_transform_builtin(self, skip):
+        torch.manual_seed(0)
+        if skip < 0:
+            with pytest.raises(
+                ValueError,
+                match="frame_skip should have a value greater or equal to one",
+            ):
+                FrameSkipTransform(skip)
+            return
+        else:
+            fs = FrameSkipTransform(skip)
+        base_env = GymEnv(PENDULUM_VERSIONED, frame_skip=skip)
+        tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), fs)
+        base_env.set_seed(0)
+        env.base_env.set_seed(0)
+        td1 = base_env.reset()
+        td2 = env.reset()
+        for key in td1.keys():
+            torch.testing.assert_close(td1[key], td2[key])
+        for i in range(10):
+            td1 = base_env.step(tensordicts[i].clone()).flatten_keys()
+            td2 = env.step(tensordicts[i].clone()).flatten_keys()
+            for key in td1.keys():
+                torch.testing.assert_close(td1[key], td2[key])
+
+    @pytest.mark.skipif(not _has_gym, reason="gym not installed")
+    @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
+    def test_frame_skip_transform_unroll(self, skip):
+        torch.manual_seed(0)
+        if skip < 0:
+            with pytest.raises(
+                ValueError,
+                match="frame_skip should have a value greater or equal to one",
+            ):
+                FrameSkipTransform(skip)
+            return
+        else:
+            fs = FrameSkipTransform(skip)
+        base_env = GymEnv(PENDULUM_VERSIONED)
+        tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), fs)
+        base_env.set_seed(0)
+        env.base_env.set_seed(0)
+        td1 = base_env.reset()
+        td2 = env.reset()
+        for key in td1.keys():
+            torch.testing.assert_close(td1[key], td2[key])
+        for i in range(10):
+            r = 0.0
+            for _ in range(skip):
+                td1 = base_env.step(tensordicts[i].clone()).flatten_keys()
+                r = td1.get("reward") + r
+            td1.set("reward", r)
+            td2 = env.step(tensordicts[i].clone()).flatten_keys()
+            for key in td1.keys():
+                torch.testing.assert_close(td1[key], td2[key])
 
     @pytest.mark.parametrize("unsqueeze_dim", [1, -2])
     @pytest.mark.parametrize("nchannels", [1, 3])
@@ -549,13 +647,13 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
+            observation_spec = BoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
             observation_spec = unsqueeze.transform_observation_spec(observation_spec)
             assert observation_spec.shape == expected_size
         else:
             observation_spec = CompositeSpec(
                 {
-                    key: NdBoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
+                    key: BoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
                     for key in keys
                 }
             )
@@ -697,16 +795,74 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16))
+            observation_spec = BoundedTensorSpec(-1, 1, (nchannels, 16, 16))
             observation_spec = gs.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([1, 16, 16])
         else:
             observation_spec = CompositeSpec(
-                {key: NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
+                {key: BoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
             observation_spec = gs.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([1, 16, 16])
+
+    @pytest.mark.parametrize(
+        "keys",
+        [["done", "reward"]],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_sum_reward(self, keys, device):
+        torch.manual_seed(0)
+        batch = 4
+        rs = RewardSum()
+        td = TensorDict(
+            {
+                "done": torch.zeros((batch, 1), dtype=torch.bool),
+                "reward": torch.rand((batch, 1)),
+            },
+            device=device,
+            batch_size=[batch],
+        )
+
+        # apply one time, episode_reward should be equal to reward again
+        td = rs(td)
+        assert "episode_reward" in td.keys()
+        assert (td.get("episode_reward") == td.get("reward")).all()
+
+        # apply a second time, episode_reward should twice the reward
+        td = rs(td)
+        assert (td.get("episode_reward") == 2 * td.get("reward")).all()
+
+        # reset environments
+        td.set("_reset", torch.ones(batch, dtype=torch.bool, device=device))
+        rs.reset(td)
+
+        # apply a third time, episode_reward should be equal to reward again
+        td = rs(td)
+        assert (td.get("episode_reward") == td.get("reward")).all()
+
+        # test transform_observation_spec
+        base_env = ContinuousActionVecMockEnv(
+            reward_spec=UnboundedContinuousTensorSpec(shape=(3, 16, 16)),
+        )
+        transfomed_env = TransformedEnv(base_env, RewardSum())
+        transformed_observation_spec1 = transfomed_env.specs["observation_spec"]
+        assert isinstance(transformed_observation_spec1, CompositeSpec)
+        assert "episode_reward" in transformed_observation_spec1.keys()
+        assert "observation" in transformed_observation_spec1.keys()
+
+        base_env = ContinuousActionVecMockEnv(
+            reward_spec=UnboundedContinuousTensorSpec(),
+            observation_spec=CompositeSpec(
+                observation=UnboundedContinuousTensorSpec(),
+                some_extra_observation=UnboundedContinuousTensorSpec(),
+            ),
+        )
+        transfomed_env = TransformedEnv(base_env, RewardSum())
+        transformed_observation_spec2 = transfomed_env.specs["observation_spec"]
+        assert isinstance(transformed_observation_spec2, CompositeSpec)
+        assert "some_extra_observation" in transformed_observation_spec2.keys()
+        assert "episode_reward" in transformed_observation_spec2.keys()
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
@@ -735,7 +891,7 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(0, 255, (16, 16, 3))
+            observation_spec = BoundedTensorSpec(0, 255, (16, 16, 3))
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
             )
@@ -744,7 +900,7 @@ class TestTransforms:
             assert (observation_spec.space.maximum == 1).all()
         else:
             observation_spec = CompositeSpec(
-                {key: NdBoundedTensorSpec(0, 255, (16, 16, 3)) for key in keys}
+                {key: BoundedTensorSpec(0, 255, (16, 16, 3)) for key in keys}
             )
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
@@ -781,12 +937,12 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(0, 255, (nchannels, 16, 16))
+            observation_spec = BoundedTensorSpec(0, 255, (nchannels, 16, 16))
             observation_spec = compose.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([nchannels * N, 16, 16])
         else:
             observation_spec = CompositeSpec(
-                {key: NdBoundedTensorSpec(0, 255, (nchannels, 16, 16)) for key in keys}
+                {key: BoundedTensorSpec(0, 255, (nchannels, 16, 16)) for key in keys}
             )
             observation_spec = compose.transform_observation_spec(observation_spec)
             for key in keys:
@@ -872,7 +1028,7 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(
+            observation_spec = BoundedTensorSpec(
                 0, 1, (nchannels, 16, 16), device=device
             )
             observation_spec = on.transform_observation_spec(observation_spec)
@@ -886,7 +1042,7 @@ class TestTransforms:
         else:
             observation_spec = CompositeSpec(
                 {
-                    key: NdBoundedTensorSpec(0, 1, (nchannels, 16, 16), device=device)
+                    key: BoundedTensorSpec(0, 1, (nchannels, 16, 16), device=device)
                     for key in keys
                 }
             )
@@ -905,30 +1061,49 @@ class TestTransforms:
     @pytest.mark.parametrize("size", [1, 3])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("standard_normal", [True, False])
-    def test_observationnorm_init_stats(self, keys, size, device, standard_normal):
-        base_env = ContinuousActionVecMockEnv(
-            observation_spec=CompositeSpec(
-                observation=NdBoundedTensorSpec(
-                    minimum=1, maximum=1, shape=torch.Size([size])
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_observationnorm_init_stats(
+        self, keys, size, device, standard_normal, parallel
+    ):
+        def make_env():
+            base_env = ContinuousActionVecMockEnv(
+                observation_spec=CompositeSpec(
+                    observation=BoundedTensorSpec(
+                        minimum=1, maximum=1, shape=torch.Size([size])
+                    ),
+                    observation_orig=BoundedTensorSpec(
+                        minimum=1, maximum=1, shape=torch.Size([size])
+                    ),
                 ),
-                observation_orig=NdBoundedTensorSpec(
-                    minimum=1, maximum=1, shape=torch.Size([size])
+                action_spec=BoundedTensorSpec(
+                    minimum=1, maximum=1, shape=torch.Size((size,))
                 ),
-            ),
-            action_spec=NdBoundedTensorSpec(
-                minimum=1, maximum=1, shape=torch.Size((size,))
-            ),
-            seed=0,
-        )
-        base_env.out_key = "observation"
+                seed=0,
+            )
+            base_env.out_key = "observation"
+            return base_env
+
+        if parallel:
+            base_env = SerialEnv(3, make_env)
+            reduce_dim = (0, 1)
+            cat_dim = 1
+        else:
+            base_env = make_env()
+            reduce_dim = 0
+            cat_dim = 0
+
         t_env = TransformedEnv(
             base_env,
             transform=ObservationNorm(in_keys=keys, standard_normal=standard_normal),
         )
         if len(keys) > 1:
-            t_env.transform.init_stats(num_iter=11, key="observation")
+            t_env.transform.init_stats(
+                num_iter=11, key="observation", cat_dim=cat_dim, reduce_dim=reduce_dim
+            )
         else:
-            t_env.transform.init_stats(num_iter=11)
+            t_env.transform.init_stats(
+                num_iter=11, reduce_dim=reduce_dim, cat_dim=cat_dim
+            )
 
         assert t_env.transform.loc.shape == t_env.observation_spec["observation"].shape
         assert (
@@ -944,6 +1119,25 @@ class TestTransforms:
 
         with pytest.raises(RuntimeError, match="Loc/Scale are already initialized"):
             transform.init_stats(num_iter=11)
+
+    def test_observationnorm_wrong_catdim(self):
+        transform = ObservationNorm(in_keys="next_observation", loc=0, scale=1)
+
+        with pytest.raises(
+            ValueError, match="cat_dim must be part of or equal to reduce_dim"
+        ):
+            transform.init_stats(num_iter=11, cat_dim=1)
+
+        with pytest.raises(
+            ValueError, match="cat_dim must be part of or equal to reduce_dim"
+        ):
+            transform.init_stats(num_iter=11, cat_dim=2, reduce_dim=(0, 1))
+
+        with pytest.raises(
+            ValueError,
+            match="cat_dim must be specified if reduce_dim is not an integer",
+        ):
+            transform.init_stats(num_iter=11, reduce_dim=(0, 1))
 
     def test_observationnorm_init_stats_multiple_keys_error(self):
         transform = ObservationNorm(in_keys=["next_observation", "next_pixels"])
@@ -982,16 +1176,14 @@ class TestTransforms:
     def test_observationnorm_infinite_stats_error(self, device):
         base_env = ContinuousActionVecMockEnv(
             observation_spec=CompositeSpec(
-                observation=NdBoundedTensorSpec(
+                observation=BoundedTensorSpec(
                     minimum=1, maximum=1, shape=torch.Size([1])
                 ),
-                observation_orig=NdBoundedTensorSpec(
+                observation_orig=BoundedTensorSpec(
                     minimum=1, maximum=1, shape=torch.Size([1])
                 ),
             ),
-            action_spec=NdBoundedTensorSpec(
-                minimum=1, maximum=1, shape=torch.Size((1,))
-            ),
+            action_spec=BoundedTensorSpec(minimum=1, maximum=1, shape=torch.Size((1,))),
             seed=0,
         )
         base_env.out_key = "observation"
@@ -1015,7 +1207,7 @@ class TestTransforms:
         maxes = [0.5, 1]
         observation_spec = CompositeSpec(
             {
-                key: NdBoundedTensorSpec(
+                key: BoundedTensorSpec(
                     space_min, space_max, (1, 3, 3), dtype=torch.double
                 )
                 for key, space_min, space_max in zip(keys, mins, maxes)
@@ -1025,7 +1217,7 @@ class TestTransforms:
         result = cat_frames.transform_observation_spec(observation_spec)
         observation_spec = CompositeSpec(
             {
-                key: NdBoundedTensorSpec(
+                key: BoundedTensorSpec(
                     space_min, space_max, (1, 3, 3), dtype=torch.double
                 )
                 for key, space_min, space_max in zip(keys, mins, maxes)
@@ -1136,20 +1328,20 @@ class TestTransforms:
         assert td.get("dont touch").dtype == torch.double
 
         if len(keys_total) == 1 and len(keys_inv) and keys[0] == "action":
-            action_spec = NdBoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
+            action_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
             input_spec = CompositeSpec(action=action_spec)
             action_spec = double2float.transform_input_spec(input_spec)
             assert action_spec.dtype == torch.float
 
         elif len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
+            observation_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
             observation_spec = double2float.transform_observation_spec(observation_spec)
             assert observation_spec.dtype == torch.float
 
         else:
             observation_spec = CompositeSpec(
                 {
-                    key: NdBoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
+                    key: BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
                     for key in keys
                 }
             )
@@ -1193,12 +1385,12 @@ class TestTransforms:
         assert td.get("dont touch").shape == dont_touch.shape
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(0, 1, (1, 4, 32))
+            observation_spec = BoundedTensorSpec(0, 1, (1, 4, 32))
             observation_spec = cattensors.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([1, len(keys) * 4, 32])
         else:
             observation_spec = CompositeSpec(
-                {key: NdBoundedTensorSpec(0, 1, (1, 4, 32)) for key in keys}
+                {key: BoundedTensorSpec(0, 1, (1, 4, 32)) for key in keys}
             )
             observation_spec = cattensors.transform_observation_spec(observation_spec)
             assert observation_spec["observation_out"].shape == torch.Size(
@@ -1237,14 +1429,30 @@ class TestTransforms:
         else:
             assert transformed_env.step_count == 30
 
+    @pytest.mark.parametrize("random", [True, False])
+    @pytest.mark.parametrize("compose", [True, False])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_noop_reset_env_error(self, random, device, compose):
+        torch.manual_seed(0)
+        env = SerialEnv(3, lambda: ContinuousActionVecMockEnv())
+        env.set_seed(100)
+        noop_reset_env = NoopResetEnv(random=random)
+        transformed_env = TransformedEnv(env)
+        transformed_env.append_transform(noop_reset_env)
+        with pytest.raises(
+            ValueError,
+            match="there is more than one done state in the parent environment",
+        ):
+            transformed_env.reset()
+
     @pytest.mark.parametrize(
         "default_keys", [["action"], ["action", "monkeys jumping on the bed"]]
     )
     @pytest.mark.parametrize(
         "spec",
         [
-            CompositeSpec(b=NdBoundedTensorSpec(-3, 3, [4])),
-            NdBoundedTensorSpec(-3, 3, [4]),
+            CompositeSpec(b=BoundedTensorSpec(-3, 3, [4])),
+            BoundedTensorSpec(-3, 3, [4]),
         ],
     )
     @pytest.mark.parametrize("random", [True, False])
@@ -1507,6 +1715,46 @@ class TestTransforms:
             assert env._observation_spec is not None
             assert env._reward_spec is not None
 
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
+    @pytest.mark.parametrize("max_steps", [None, 1, 5, 50])
+    @pytest.mark.parametrize("reset_workers", [True, False])
+    def test_step_counter(self, max_steps, device, batch, reset_workers):
+        torch.manual_seed(0)
+        step_counter = StepCounter(max_steps)
+        td = TensorDict(
+            {"done": torch.zeros(*batch, 1, dtype=torch.bool)}, batch, device=device
+        )
+        if reset_workers:
+            td.set("_reset", torch.randn(batch) < 0)
+        step_counter.reset(td)
+        assert not torch.all(td.get("step_count"))
+        i = 0
+        while max_steps is None or i < max_steps:
+            step_counter._step(td)
+            i += 1
+            assert torch.all(td.get("step_count") == i)
+            if max_steps is None:
+                break
+        if max_steps is not None:
+            assert torch.all(td.get("step_count") == max_steps)
+            assert torch.all(td.get("done"))
+        step_counter.reset(td)
+        if reset_workers:
+            assert torch.all(
+                torch.masked_select(td.get("step_count"), td.get("_reset")) == 0
+            )
+            assert torch.all(
+                torch.masked_select(td.get("step_count"), ~td.get("_reset")) == i
+            )
+        else:
+            assert torch.all(td.get("step_count") == 0)
+
+    def test_step_counter_observation_spec(self):
+        transformed_env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(50))
+        check_env_specs(transformed_env)
+        transformed_env.close()
+
 
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.parametrize("device", get_available_devices())
@@ -1642,12 +1890,12 @@ class TestR3M:
         r3m_net = _R3MNet(in_keys, out_keys, model, del_keys)
 
         observation_spec = CompositeSpec(
-            {key: NdBoundedTensorSpec(-1, 1, (3, 16, 16), device) for key in in_keys}
+            {key: BoundedTensorSpec(-1, 1, (3, 16, 16), device) for key in in_keys}
         )
         if del_keys:
             exp_ts = CompositeSpec(
                 {
-                    key: NdUnboundedContinuousTensorSpec(r3m_net.outdim, device)
+                    key: UnboundedContinuousTensorSpec(r3m_net.outdim, device)
                     for key in out_keys
                 }
             )
@@ -1665,7 +1913,7 @@ class TestR3M:
             for key in in_keys:
                 ts_dict[key] = observation_spec[key]
             for key in out_keys:
-                ts_dict[key] = NdUnboundedContinuousTensorSpec(r3m_net.outdim, device)
+                ts_dict[key] = UnboundedContinuousTensorSpec(r3m_net.outdim, device)
             exp_ts = CompositeSpec(ts_dict)
 
             observation_spec_out = r3m_net.transform_observation_spec(observation_spec)
@@ -1899,12 +2147,12 @@ class TestVIP:
         vip_net = _VIPNet(in_keys, out_keys, model, del_keys)
 
         observation_spec = CompositeSpec(
-            {key: NdBoundedTensorSpec(-1, 1, (3, 16, 16), device) for key in in_keys}
+            {key: BoundedTensorSpec(-1, 1, (3, 16, 16), device) for key in in_keys}
         )
         if del_keys:
             exp_ts = CompositeSpec(
                 {
-                    key: NdUnboundedContinuousTensorSpec(vip_net.outdim, device)
+                    key: UnboundedContinuousTensorSpec(vip_net.outdim, device)
                     for key in out_keys
                 }
             )
@@ -1922,7 +2170,7 @@ class TestVIP:
             for key in in_keys:
                 ts_dict[key] = observation_spec[key]
             for key in out_keys:
-                ts_dict[key] = NdUnboundedContinuousTensorSpec(vip_net.outdim, device)
+                ts_dict[key] = UnboundedContinuousTensorSpec(vip_net.outdim, device)
             exp_ts = CompositeSpec(ts_dict)
 
             observation_spec_out = vip_net.transform_observation_spec(observation_spec)
@@ -2022,6 +2270,54 @@ def test_batch_unlocked_with_batch_size_transformed(device):
         env.step(td_expanded)
 
 
+class TestExcludeSelect:
+    class EnvWithManyKeys(EnvBase):
+        def __init__(self):
+            super().__init__()
+            self.observation_spec = CompositeSpec(
+                a=UnboundedContinuousTensorSpec(3),
+                b=UnboundedContinuousTensorSpec(3),
+                c=UnboundedContinuousTensorSpec(3),
+            )
+            self.reward_spec = UnboundedContinuousTensorSpec(1)
+            self.input_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(2))
+
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            return self.observation_spec.rand().update(
+                {
+                    "reward": self.reward_spec.rand(),
+                    "done": torch.zeros(1, dtype=torch.bool),
+                }
+            )
+
+        def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+            return self.observation_spec.rand().update(
+                {"done": torch.zeros(1, dtype=torch.bool)}
+            )
+
+        def _set_seed(self, seed):
+            return seed + 1
+
+    def test_exclude(self):
+        base_env = TestExcludeSelect.EnvWithManyKeys()
+        env = TransformedEnv(base_env, ExcludeTransform("a"))
+        check_env_specs(env)
+        assert "a" not in env.reset().keys()
+        assert "b" in env.reset().keys()
+        assert "c" in env.reset().keys()
+
+    def test_select(self):
+        base_env = TestExcludeSelect.EnvWithManyKeys()
+        env = TransformedEnv(base_env, SelectTransform("b", "c"))
+        check_env_specs(env)
+        assert "a" not in env.reset().keys()
+        assert "b" in env.reset().keys()
+        assert "c" in env.reset().keys()
+
+
 transforms = [
     ToTensorImage,
     pytest.param(
@@ -2038,7 +2334,9 @@ transforms = [
         id="CenterCrop",
         marks=pytest.mark.skipif(not _has_tv, reason="needs torchvision dependency"),
     ),
-    pytest.param(partial(FlattenObservation, first_dim=-3), id="FlattenObservation"),
+    pytest.param(
+        partial(FlattenObservation, first_dim=-3, last_dim=-3), id="FlattenObservation"
+    ),
     pytest.param(
         partial(UnsqueezeTransform, unsqueeze_dim=-1), id="UnsqueezeTransform"
     ),

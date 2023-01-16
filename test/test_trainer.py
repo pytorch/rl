@@ -200,10 +200,11 @@ class TestRB:
         torch.manual_seed(0)
         trainer = mocking_trainer()
         S = 100
+        storage = ListStorage(S)
         if prioritized:
-            replay_buffer = TensorDictPrioritizedReplayBuffer(S, 1.1, 0.9)
+            replay_buffer = TensorDictPrioritizedReplayBuffer(1.1, 0.9, storage=storage)
         else:
-            replay_buffer = TensorDictReplayBuffer(S)
+            replay_buffer = TensorDictReplayBuffer(storage=storage)
 
         N = 9
         rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
@@ -234,11 +235,9 @@ class TestRB:
         if prioritized:
             for idx in range(min(S, batch)):
                 if idx in td_out.get("index"):
-                    assert replay_buffer._sum_tree[idx] != 1.0
+                    assert replay_buffer._sampler._sum_tree[idx] != 1.0
                 else:
-                    assert replay_buffer._sum_tree[idx] == 1.0
-        else:
-            assert "index" not in td_out.keys()
+                    assert replay_buffer._sampler._sum_tree[idx] == 1.0
 
     @pytest.mark.parametrize(
         "storage_type",
@@ -260,14 +259,12 @@ class TestRB:
 
         if prioritized:
             replay_buffer = TensorDictPrioritizedReplayBuffer(
-                S,
                 1.1,
                 0.9,
                 storage=storage,
             )
         else:
             replay_buffer = TensorDictReplayBuffer(
-                S,
                 storage=storage,
             )
 
@@ -295,18 +292,21 @@ class TestRB:
         trainer2 = mocking_trainer()
         if prioritized:
             replay_buffer2 = TensorDictPrioritizedReplayBuffer(
-                S, 1.1, 0.9, storage=storage
+                1.1, 0.9, storage=storage
             )
         else:
-            replay_buffer2 = TensorDictReplayBuffer(S, storage=storage)
+            replay_buffer2 = TensorDictReplayBuffer(storage=storage)
         N = 9
         rb_trainer2 = ReplayBufferTrainer(replay_buffer=replay_buffer2, batch_size=N)
         rb_trainer2.register(trainer2)
         sd = trainer.state_dict()
         trainer2.load_state_dict(sd)
 
-        assert rb_trainer2.replay_buffer.cursor > 0
-        assert rb_trainer2.replay_buffer.cursor == rb_trainer.replay_buffer.cursor
+        assert rb_trainer2.replay_buffer._writer._cursor > 0
+        assert (
+            rb_trainer2.replay_buffer._writer._cursor
+            == rb_trainer.replay_buffer._writer._cursor
+        )
 
         if storage_type == "list":
             assert len(rb_trainer2.replay_buffer._storage._storage) > 0
@@ -397,14 +397,12 @@ class TestRB:
             storage = make_storage()
             if prioritized:
                 replay_buffer = TensorDictPrioritizedReplayBuffer(
-                    S,
                     1.1,
                     0.9,
                     storage=storage,
                 )
             else:
                 replay_buffer = TensorDictReplayBuffer(
-                    S,
                     storage=storage,
                 )
 
@@ -431,14 +429,12 @@ class TestRB:
             storage2 = make_storage()
             if prioritized:
                 replay_buffer2 = TensorDictPrioritizedReplayBuffer(
-                    S,
                     1.1,
                     0.9,
                     storage=storage2,
                 )
             else:
                 replay_buffer2 = TensorDictReplayBuffer(
-                    S,
                     storage=storage2,
                 )
             N = 9
@@ -460,8 +456,8 @@ class TestRB:
                 )  # trainer.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
                 td2 = trainer2._modules["replay_buffer"].replay_buffer._storage._storage
                 if storage_type == "list":
-                    assert all([(_td1 == _td2).all() for _td1, _td2 in zip(td1, td2)])
-                    assert all([(_td1 is not _td2) for _td1, _td2 in zip(td1, td2)])
+                    assert all((_td1 == _td2).all() for _td1, _td2 in zip(td1, td2))
+                    assert all((_td1 is not _td2) for _td1, _td2 in zip(td1, td2))
                     assert storage2._storage is td2
                 else:
                     assert (td1 == td2).all()
@@ -773,7 +769,7 @@ def test_masking():
     )
     td_out = trainer._process_batch_hook(td)
     assert td_out.shape[0] == td.get("mask").sum()
-    assert (td["tensor"][td["mask"].squeeze(-1)] == td_out["tensor"]).all()
+    assert (td["tensor"][td["mask"]] == td_out["tensor"]).all()
 
 
 class TestSubSampler:

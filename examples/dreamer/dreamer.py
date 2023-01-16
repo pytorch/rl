@@ -1,6 +1,4 @@
 import dataclasses
-import uuid
-from datetime import datetime
 from pathlib import Path
 
 import hydra
@@ -42,6 +40,7 @@ from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.models import DreamerConfig, make_dreamer
 from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
 from torchrl.trainers.helpers.trainers import TrainerConfig
+from torchrl.trainers.loggers.utils import generate_exp_name, get_logger
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
 config_fields = [
@@ -83,41 +82,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
     else:
         device = torch.device("cpu")
     print(f"Using device {device}")
-    exp_name = "_".join(
-        [
-            "Dreamer",
-            cfg.exp_name,
-            str(uuid.uuid4())[:8],
-            datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
-        ]
+
+    exp_name = generate_exp_name("Dreamer", cfg.exp_name)
+    logger = get_logger(
+        logger_type=cfg.logger,
+        logger_name="dreamer",
+        experiment_name=exp_name,
+        wandb_kwargs={
+            "project": "torchrl",
+            "group": f"Dreamer_{cfg.env_name}",
+            "offline": cfg.offline_logging,
+        },
     )
-
-    if cfg.logger == "wandb":
-        from torchrl.trainers.loggers.wandb import WandbLogger
-
-        logger = WandbLogger(
-            f"dreamer/{exp_name}",
-            project="torchrl",
-            group=f"Dreamer_{cfg.env_name}",
-            offline=cfg.offline_logging,
-        )
-    elif cfg.logger == "csv":
-        from torchrl.trainers.loggers.csv import CSVLogger
-
-        logger = CSVLogger(
-            f"{exp_name}",
-            log_dir="dreamer",
-        )
-    elif cfg.logger == "tensorboard":
-        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
-
-        logger = TensorboardLogger(
-            f"{exp_name}",
-            log_dir="dreamer",
-        )
-    else:
-        raise NotImplementedError(cfg.logger)
-
     video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
     key, init_env_steps, stats = None, None, None

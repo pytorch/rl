@@ -11,9 +11,9 @@ from tensordict import TensorDict
 from tensordict.nn.functional_modules import make_functional
 from torch import nn
 from torchrl.data.tensor_specs import (
+    BoundedTensorSpec,
     CompositeSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import NormalParamWrapper, SafeModule, TanhNormal
@@ -21,7 +21,10 @@ from torchrl.modules.tensordict_module.common import (
     ensure_tensordict_compatible,
     is_tensordict_compatible,
 )
-from torchrl.modules.tensordict_module.probabilistic import SafeProbabilisticModule
+from torchrl.modules.tensordict_module.probabilistic import (
+    SafeProbabilisticModule,
+    SafeProbabilisticSequential,
+)
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 _has_functorch = False
@@ -84,8 +87,8 @@ class TestTDModule:
                 return self.linear_1(x), self.linear_2(x)
 
         spec_dict = {
-            "_": NdUnboundedContinuousTensorSpec((4,)),
-            "out_2": NdUnboundedContinuousTensorSpec((3,)),
+            "_": UnboundedContinuousTensorSpec((4,)),
+            "out_2": UnboundedContinuousTensorSpec((3,)),
         }
 
         # warning due to "_" in spec keys
@@ -111,9 +114,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
 
         if safe and spec is None:
             with pytest.raises(
@@ -173,16 +176,11 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
         else:
             raise NotImplementedError
-        spec = (
-            CompositeSpec(out=spec, **{out_key: None for out_key in out_keys})
-            if spec is not None
-            else None
-        )
 
         kwargs = {"distribution_class": TanhNormal}
         if out_keys == ["loc", "scale"]:
@@ -198,25 +196,24 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tensordict_module = SafeProbabilisticModule(
-                    module=net,
+                prob_module = SafeProbabilisticModule(
+                    in_keys=dist_in_keys,
+                    out_keys=["out"],
                     spec=spec,
-                    dist_in_keys=dist_in_keys,
-                    sample_out_key=["out"],
                     safe=safe,
                     **kwargs,
                 )
             return
         else:
-            tensordict_module = SafeProbabilisticModule(
-                module=net,
+            prob_module = SafeProbabilisticModule(
+                in_keys=dist_in_keys,
+                out_keys=["out"],
                 spec=spec,
-                dist_in_keys=dist_in_keys,
-                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
 
+        tensordict_module = SafeProbabilisticSequential(net, prob_module)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         with set_exploration_mode(exp_mode):
             tensordict_module(td)
@@ -242,9 +239,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
 
         if safe and spec is None:
             with pytest.raises(
@@ -286,24 +283,21 @@ class TestTDModule:
         torch.manual_seed(0)
         param_multiplier = 2
 
-        net = NormalParamWrapper(nn.Linear(3, 4 * param_multiplier))
-        params = make_functional(net)
-
         tdnet = SafeModule(
-            module=net, spec=None, in_keys=["in"], out_keys=["loc", "scale"]
+            module=NormalParamWrapper(nn.Linear(3, 4 * param_multiplier)),
+            spec=None,
+            in_keys=["in"],
+            out_keys=["loc", "scale"],
         )
 
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
         else:
             raise NotImplementedError
-        spec = (
-            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
-        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -313,24 +307,25 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tensordict_module = SafeProbabilisticModule(
-                    module=tdnet,
+                prob_module = SafeProbabilisticModule(
+                    in_keys=["loc", "scale"],
+                    out_keys=["out"],
                     spec=spec,
-                    dist_in_keys=["loc", "scale"],
-                    sample_out_key=["out"],
                     safe=safe,
                     **kwargs,
                 )
             return
         else:
-            tensordict_module = SafeProbabilisticModule(
-                module=tdnet,
+            prob_module = SafeProbabilisticModule(
+                in_keys=["loc", "scale"],
+                out_keys=["out"],
                 spec=spec,
-                dist_in_keys=["loc", "scale"],
-                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
+
+        tensordict_module = SafeProbabilisticSequential(tdnet, prob_module)
+        params = make_functional(tensordict_module)
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tensordict_module(td, params=params)
@@ -355,9 +350,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 32)
+            spec = BoundedTensorSpec(-0.1, 0.1, 32)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(32)
+            spec = UnboundedContinuousTensorSpec(32)
 
         if safe and spec is None:
             with pytest.raises(
@@ -399,23 +394,21 @@ class TestTDModule:
         torch.manual_seed(0)
         param_multiplier = 2
 
-        net = NormalParamWrapper(nn.BatchNorm1d(32 * param_multiplier))
-        params = make_functional(net)
         tdnet = SafeModule(
-            module=net, spec=None, in_keys=["in"], out_keys=["loc", "scale"]
+            module=NormalParamWrapper(nn.BatchNorm1d(32 * param_multiplier)),
+            spec=None,
+            in_keys=["in"],
+            out_keys=["loc", "scale"],
         )
 
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 32)
+            spec = BoundedTensorSpec(-0.1, 0.1, 32)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(32)
+            spec = UnboundedContinuousTensorSpec(32)
         else:
             raise NotImplementedError
-        spec = (
-            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
-        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -425,24 +418,26 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = SafeProbabilisticModule(
-                    module=tdnet,
+                prob_module = SafeProbabilisticModule(
+                    in_keys=["loc", "scale"],
+                    out_keys=["out"],
                     spec=spec,
-                    dist_in_keys=["loc", "scale"],
-                    sample_out_key=["out"],
                     safe=safe,
                     **kwargs,
                 )
+
             return
         else:
-            tdmodule = SafeProbabilisticModule(
-                module=tdnet,
+            prob_module = SafeProbabilisticModule(
+                in_keys=["loc", "scale"],
+                out_keys=["out"],
                 spec=spec,
-                dist_in_keys=["loc", "scale"],
-                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
+
+        tdmodule = SafeProbabilisticSequential(tdnet, prob_module)
+        params = make_functional(tdmodule)
 
         td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
         tdmodule(td, params=params)
@@ -469,9 +464,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
 
         if safe and spec is None:
             with pytest.raises(
@@ -542,20 +537,17 @@ class TestTDModule:
 
         net = NormalParamWrapper(nn.Linear(3, 4 * param_multiplier))
         tdnet = SafeModule(
-            module=net, spec=None, in_keys=["in"], out_keys=["loc", "scale"]
+            module=net, in_keys=["in"], out_keys=["loc", "scale"], spec=None
         )
 
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
         else:
             raise NotImplementedError
-        spec = (
-            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
-        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -565,25 +557,24 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = SafeProbabilisticModule(
-                    module=tdnet,
+                prob_module = SafeProbabilisticModule(
+                    in_keys=["loc", "scale"],
+                    out_keys=["out"],
                     spec=spec,
-                    dist_in_keys=["loc", "scale"],
-                    sample_out_key=["out"],
                     safe=safe,
                     **kwargs,
                 )
             return
         else:
-            tdmodule = SafeProbabilisticModule(
-                module=tdnet,
+            prob_module = SafeProbabilisticModule(
+                in_keys=["loc", "scale"],
+                out_keys=["out"],
                 spec=spec,
-                dist_in_keys=["loc", "scale"],
-                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
 
+        tdmodule = SafeProbabilisticSequential(tdnet, prob_module)
         params = make_functional(tdmodule)
 
         # vmap = True
@@ -649,9 +640,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
 
         kwargs = {}
 
@@ -701,9 +692,6 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td)
-
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
@@ -725,19 +713,15 @@ class TestTDSequence:
             dummy_net = nn.Linear(4, 4)
             net2 = nn.Linear(4, 4 * param_multiplier)
         net2 = NormalParamWrapper(net2)
-        net2 = SafeModule(module=net2, in_keys=["hidden"], out_keys=["loc", "scale"])
 
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
         else:
             raise NotImplementedError
-        spec = (
-            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
-        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -746,48 +730,59 @@ class TestTDSequence:
         else:
             tdmodule1 = SafeModule(
                 net1,
-                spec=None,
                 in_keys=["in"],
                 out_keys=["hidden"],
+                spec=None,
                 safe=False,
             )
             dummy_tdmodule = SafeModule(
                 dummy_net,
-                spec=None,
                 in_keys=["hidden"],
                 out_keys=["hidden"],
+                spec=None,
                 safe=False,
             )
-            tdmodule2 = SafeProbabilisticModule(
-                spec=spec,
+            tdmodule2 = SafeModule(
                 module=net2,
-                dist_in_keys=["loc", "scale"],
-                sample_out_key=["out"],
+                in_keys=["hidden"],
+                out_keys=["loc", "scale"],
+                spec=None,
+                safe=False,
+            )
+
+            prob_module = SafeProbabilisticModule(
+                spec=spec,
+                in_keys=["loc", "scale"],
+                out_keys=["out"],
                 safe=False,
                 **kwargs,
             )
-            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = SafeProbabilisticSequential(
+                tdmodule1, dummy_tdmodule, tdmodule2, prob_module
+            )
 
         assert hasattr(tdmodule, "__setitem__")
-        assert len(tdmodule) == 3
+        assert len(tdmodule) == 4
         tdmodule[1] = tdmodule2
-        assert len(tdmodule) == 3
+        tdmodule[2] = prob_module
+        assert len(tdmodule) == 4
 
         assert hasattr(tdmodule, "__delitem__")
+        assert len(tdmodule) == 4
+        del tdmodule[3]
         assert len(tdmodule) == 3
-        del tdmodule[2]
-        assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
         assert tdmodule[0] is tdmodule1
         assert tdmodule[1] is tdmodule2
+        assert tdmodule[2] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tdmodule(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        dist, *_ = tdmodule.get_dist(td)
+        dist = tdmodule.get_dist(td)
         assert dist.rsample().shape[: td.ndimension()] == td.shape
 
         # test bounds
@@ -809,9 +804,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
 
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
@@ -858,9 +853,6 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td, params=params)
-
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
@@ -878,19 +870,14 @@ class TestTDSequence:
         net2 = nn.Linear(4, 4 * param_multiplier)
         net2 = NormalParamWrapper(net2)
 
-        net2 = SafeModule(module=net2, in_keys=["hidden"], out_keys=["loc", "scale"])
-
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
         else:
             raise NotImplementedError
-        spec = (
-            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
-        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -907,40 +894,48 @@ class TestTDSequence:
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = SafeProbabilisticModule(
-                net2,
+            tdmodule2 = SafeModule(
+                module=net2, in_keys=["hidden"], out_keys=["loc", "scale"]
+            )
+
+            prob_module = SafeProbabilisticModule(
+                in_keys=["loc", "scale"],
+                out_keys=["out"],
                 spec=spec,
-                dist_in_keys=["loc", "scale"],
-                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = SafeProbabilisticSequential(
+                tdmodule1, dummy_tdmodule, tdmodule2, prob_module
+            )
 
         params = make_functional(tdmodule, funs_to_decorate=["forward", "get_dist"])
 
         assert hasattr(tdmodule, "__setitem__")
-        assert len(tdmodule) == 3
+        assert len(tdmodule) == 4
         tdmodule[1] = tdmodule2
+        tdmodule[2] = prob_module
         params["module", "1"] = params["module", "2"]
-        assert len(tdmodule) == 3
+        params["module", "2"] = params["module", "3"]
+        assert len(tdmodule) == 4
 
         assert hasattr(tdmodule, "__delitem__")
+        assert len(tdmodule) == 4
+        del tdmodule[3]
+        del params["module", "3"]
         assert len(tdmodule) == 3
-        del tdmodule[2]
-        del params["module", "2"]
-        assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
         assert tdmodule[0] is tdmodule1
         assert tdmodule[1] is tdmodule2
+        assert tdmodule[2] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tdmodule(td, params=params)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        dist, *_ = tdmodule.get_dist(td, params=params)
+        dist = tdmodule.get_dist(td, params=params)
         assert dist.rsample().shape[: td.ndimension()] == td.shape
 
         # test bounds
@@ -951,11 +946,7 @@ class TestTDSequence:
 
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    def test_functional_with_buffer(
-        self,
-        safe,
-        spec_type,
-    ):
+    def test_functional_with_buffer(self, safe, spec_type):
         torch.manual_seed(0)
         param_multiplier = 1
 
@@ -968,9 +959,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 7)
+            spec = BoundedTensorSpec(-0.1, 0.1, 7)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(7)
+            spec = UnboundedContinuousTensorSpec(7)
 
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
@@ -1015,9 +1006,6 @@ class TestTDSequence:
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
         tdmodule(td, params=params)
 
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td, params=params)
-
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 7])
 
@@ -1029,11 +1017,7 @@ class TestTDSequence:
 
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    def test_functional_with_buffer_probabilistic(
-        self,
-        safe,
-        spec_type,
-    ):
+    def test_functional_with_buffer_probabilistic(self, safe, spec_type):
         torch.manual_seed(0)
         param_multiplier = 2
 
@@ -1043,19 +1027,15 @@ class TestTDSequence:
             nn.Linear(7, 7 * param_multiplier), nn.BatchNorm1d(7 * param_multiplier)
         )
         net2 = NormalParamWrapper(net2)
-        net2 = SafeModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
 
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 7)
+            spec = BoundedTensorSpec(-0.1, 0.1, 7)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(7)
+            spec = UnboundedContinuousTensorSpec(7)
         else:
             raise NotImplementedError
-        spec = (
-            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
-        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -1063,47 +1043,59 @@ class TestTDSequence:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
             tdmodule1 = SafeModule(
-                net1, spec=None, in_keys=["in"], out_keys=["hidden"], safe=False
+                net1, in_keys=["in"], out_keys=["hidden"], spec=None, safe=False
             )
             dummy_tdmodule = SafeModule(
                 dummy_net,
-                spec=None,
                 in_keys=["hidden"],
                 out_keys=["hidden"],
+                spec=None,
                 safe=False,
             )
-            tdmodule2 = SafeProbabilisticModule(
+            tdmodule2 = SafeModule(
                 net2,
+                in_keys=["hidden"],
+                out_keys=["loc", "scale"],
+                spec=None,
+                safe=False,
+            )
+
+            prob_module = SafeProbabilisticModule(
+                in_keys=["loc", "scale"],
+                out_keys=["out"],
                 spec=spec,
-                dist_in_keys=["loc", "scale"],
-                sample_out_key=["out"],
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = SafeProbabilisticSequential(
+                tdmodule1, dummy_tdmodule, tdmodule2, prob_module
+            )
 
         params = make_functional(tdmodule, ["forward", "get_dist"])
 
         assert hasattr(tdmodule, "__setitem__")
-        assert len(tdmodule) == 3
+        assert len(tdmodule) == 4
         tdmodule[1] = tdmodule2
+        tdmodule[2] = prob_module
         params["module", "1"] = params["module", "2"]
-        assert len(tdmodule) == 3
+        params["module", "2"] = params["module", "3"]
+        assert len(tdmodule) == 4
 
         assert hasattr(tdmodule, "__delitem__")
+        assert len(tdmodule) == 4
+        del tdmodule[3]
+        del params["module", "3"]
         assert len(tdmodule) == 3
-        del tdmodule[2]
-        del params["module", "2"]
-        assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
         assert tdmodule[0] is tdmodule1
         assert tdmodule[1] is tdmodule2
+        assert tdmodule[2] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
         tdmodule(td, params=params)
 
-        dist, *_ = tdmodule.get_dist(td, params=params)
+        dist = tdmodule.get_dist(td, params=params)
         assert dist.rsample().shape[: td.ndimension()] == td.shape
 
         assert td.shape == torch.Size([3])
@@ -1131,9 +1123,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
 
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
@@ -1226,19 +1218,15 @@ class TestTDSequence:
 
         net2 = nn.Linear(4, 4 * param_multiplier)
         net2 = NormalParamWrapper(net2)
-        net2 = SafeModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
 
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = BoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = UnboundedContinuousTensorSpec(4)
         else:
             raise NotImplementedError
-        spec = (
-            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
-        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -1252,15 +1240,15 @@ class TestTDSequence:
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = SafeProbabilisticModule(
-                net2,
+            tdmodule2 = SafeModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
+            prob_module = SafeProbabilisticModule(
+                in_keys=["loc", "scale"],
+                out_keys=["out"],
                 spec=spec,
-                sample_out_key=["out"],
-                dist_in_keys=["loc", "scale"],
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = SafeSequential(tdmodule1, tdmodule2)
+            tdmodule = SafeProbabilisticSequential(tdmodule1, tdmodule2, prob_module)
 
         params = make_functional(tdmodule)
 
@@ -1352,33 +1340,36 @@ class TestTDSequence:
         net3 = NormalParamWrapper(net3)
         net3 = SafeModule(net3, in_keys=["c"], out_keys=["loc", "scale"])
 
-        spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
-        spec = CompositeSpec(out=spec, loc=None, scale=None)
+        spec = BoundedTensorSpec(-0.1, 0.1, 4)
 
         kwargs = {"distribution_class": TanhNormal}
 
         tdmodule1 = SafeModule(
             net1,
-            spec=None,
             in_keys=["a"],
             out_keys=["hidden"],
+            spec=None,
             safe=False,
         )
-        tdmodule2 = SafeProbabilisticModule(
+        tdmodule2 = SafeProbabilisticSequential(
             net2,
-            spec=spec,
-            sample_out_key=["out"],
-            dist_in_keys=["loc", "scale"],
-            safe=True,
-            **kwargs,
+            SafeProbabilisticModule(
+                in_keys=["loc", "scale"],
+                out_keys=["out"],
+                spec=spec,
+                safe=True,
+                **kwargs,
+            ),
         )
-        tdmodule3 = SafeProbabilisticModule(
+        tdmodule3 = SafeProbabilisticSequential(
             net3,
-            spec=spec,
-            sample_out_key=["out"],
-            dist_in_keys=["loc", "scale"],
-            safe=True,
-            **kwargs,
+            SafeProbabilisticModule(
+                in_keys=["loc", "scale"],
+                out_keys=["out"],
+                spec=spec,
+                safe=True,
+                **kwargs,
+            ),
         )
         tdmodule = SafeSequential(
             tdmodule1, tdmodule2, tdmodule3, partial_tolerant=True
