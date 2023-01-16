@@ -301,10 +301,12 @@ class MockBatchedLockedEnv(EnvBase):
             dtype=torch.bool,
             device=self.device,
         )
-
         return TensorDict(
             {"reward": n, "done": done, "observation": n},
-            batch_size,
+            [
+                *leading_batch_size,
+                *batch_size,
+            ],
             device=self.device,
         )
 
@@ -504,8 +506,9 @@ class ContinuousActionVecMockEnv(_MockEnv):
         tensordict.set(self._out_key, self._get_out_obs(obs))
 
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
-        reward = done.any(-1).unsqueeze(-1)
-        done = done.all(-1).unsqueeze(-1)
+        while done.shape != tensordict.shape:
+            done = done.any(-1)
+        done = reward = done.unsqueeze(-1)
         tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
         return tensordict
