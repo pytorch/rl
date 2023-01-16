@@ -353,20 +353,27 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         reward = tensordict_out.get("reward")
         # unsqueeze rewards if needed
-        batch_size = tensordict_out.shape
+        # the input tensordict may have more leading dimensions than the batch_size
+        # e.g. in model-based contexts.
+        batch_size = self.batch_size
         dims = len(batch_size)
-        expected_reward_shape = self.reward_spec.shape[dims:]
-        actual_reward_shape = reward.shape[dims:]
+        leading_batch_size = (
+            tensordict_out.batch_size[:-dims] if dims else tensordict_out.shape
+        )
+        expected_reward_shape = torch.Size(
+            [*leading_batch_size, *self.reward_spec.shape]
+        )
+        actual_reward_shape = reward.shape
         if actual_reward_shape != expected_reward_shape:
-            reward = reward.view([*batch_size, *expected_reward_shape])
+            reward = reward.view(expected_reward_shape)
             tensordict_out.set("reward", reward)
 
         done = tensordict_out.get("done")
         # unsqueeze done if needed
-        expected_done_shape = torch.Size([1])
-        actual_done_shape = done.shape[dims:]
+        expected_done_shape = torch.Size([*leading_batch_size, *batch_size, 1])
+        actual_done_shape = done.shape
         if actual_done_shape != expected_done_shape:
-            done = done.view([*batch_size, *expected_done_shape])
+            done = done.view(expected_done_shape)
             tensordict_out.set("done", done)
 
         if tensordict_out is tensordict:
@@ -439,12 +446,17 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         done = tensordict_reset.get("done", None)
         if done is not None:
             # unsqueeze done if needed
-            batch_size = tensordict_reset.shape
+            # the input tensordict may have more leading dimensions than the batch_size
+            # e.g. in model-based contexts.
+            batch_size = self.batch_size
             dims = len(batch_size)
-            expected_done_shape = torch.Size([1])
-            actual_done_shape = done.shape[dims:]
+            leading_batch_size = (
+                tensordict_reset.batch_size[:-dims] if dims else tensordict_reset.shape
+            )
+            expected_done_shape = torch.Size([*leading_batch_size, *batch_size, 1])
+            actual_done_shape = done
             if actual_done_shape != expected_done_shape:
-                done = done.view([*batch_size, *expected_done_shape])
+                done = done.view(expected_done_shape)
                 tensordict_reset.set("done", done)
         else:
             tensordict_reset.set(

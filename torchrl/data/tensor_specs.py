@@ -159,12 +159,15 @@ class BoxList(Box):
     def __repr__(self):
         return f"{self.__class__.__name__}(boxes={self.boxes})"
 
+    def __len__(self):
+        return len(self.boxes)
+
     @staticmethod
     def from_nvec(nvec: torch.Tensor):
         if nvec.ndim == 0:
             return DiscreteBox(nvec.item())
         else:
-            return BoxList([BoxList.from_nvec(n) for n in nvec])
+            return BoxList([BoxList.from_nvec(n) for n in nvec.unbind(-1)])
 
 
 @dataclass(repr=False)
@@ -465,7 +468,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             shape = torch.Size((space.n,))
         else:
             shape = torch.Size(shape)
-            if shape[-1] != space.n:
+            if not len(shape) or shape[-1] != space.n:
                 raise ValueError(
                     f"The last value of the shape must match n for transform of type {self.__class__}. "
                     f"Got n={space.n} and shape={shape}."
@@ -566,7 +569,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         )
 
     def to_categorical(self) -> DiscreteTensorSpec:
-        return DiscreteTensorSpec(self.space.n, device=self.device, dtype=self.dtype)
+        return DiscreteTensorSpec(
+            self.space.n, device=self.device, dtype=self.dtype, shape=self.shape[:-1]
+        )
 
 
 @dataclass(repr=False)
@@ -1068,8 +1073,12 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         return torch.cat([super()._project(_val) for _val in vals], -1)
 
     def to_categorical(self) -> MultiDiscreteTensorSpec:
+
         return MultiDiscreteTensorSpec(
-            [_space.n for _space in self.space], self.device, self.dtype
+            [_space.n for _space in self.space],
+            device=self.device,
+            dtype=self.dtype,
+            shape=[*self.shape[:-1], len(self.space)],
         )
 
     def expand(self, *shape):
@@ -1166,12 +1175,15 @@ class DiscreteTensorSpec(TensorSpec):
         return super().to_numpy(val, safe)
 
     def to_onehot(self) -> OneHotDiscreteTensorSpec:
-        if len(self.shape) > 1:
-            raise RuntimeError(
-                f"DiscreteTensorSpec with shape that has several dimensions can't be converted to "
-                f"OneHotDiscreteTensorSpec. Got shape={self.shape}."
-            )
-        return OneHotDiscreteTensorSpec(self.space.n, self.device, self.dtype)
+        # if len(self.shape) > 1:
+        #     raise RuntimeError(
+        #         f"DiscreteTensorSpec with shape that has several dimensions can't be converted to "
+        #         f"OneHotDiscreteTensorSpec. Got shape={self.shape}."
+        #     )
+        shape = [*self.shape, self.space.n]
+        return OneHotDiscreteTensorSpec(
+            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+        )
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], tuple):
@@ -1233,6 +1245,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                     f"The last value of the shape must match nvec.shape[-1] for transform of type {self.__class__}. "
                     f"Got nvec.shape[-1]={sum(nvec)} and shape={shape}."
                 )
+        self.nvec = self.nvec.expand(shape)
 
         space = BoxList.from_nvec(nvec)
         super(DiscreteTensorSpec, self).__init__(
@@ -1243,7 +1256,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         x = []
         for _s in space:
             if isinstance(_s, BoxList):
-                x.append(self._rand(_s, shape, i - 1))
+                x.append(self._rand(_s, shape[:-1], i - 1))
             else:
                 x.append(
                     torch.randint(
@@ -1254,14 +1267,17 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                         dtype=self.dtype,
                     )
                 )
-        return torch.stack(x, -i)
+        return torch.stack(x, -1)
 
     def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
         if shape is None:
             shape = self.shape[:-1]
         else:
-            shape = torch.Size([*shape, *self.shape[:-1]])
-        x = self._rand(self.space, shape, self.nvec.ndim)
+            shape = (
+                *shape,
+                *self.shape[:-1],
+            )
+        x = self._rand(space=self.space, shape=shape, i=self.nvec.ndim)
         if self.shape == torch.Size([1]):
             x = x.squeeze(-1)
         return x
@@ -1298,8 +1314,12 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                 f"nestedtensors but it is not implemented yet. If you would like to see that feature, please submit "
                 f"an issue of torchrl's github repo. "
             )
+        nvec = [_space.n for _space in self.space]
         return MultiOneHotDiscreteTensorSpec(
-            [_space.n for _space in self.space], self.device, self.dtype
+            nvec,
+            device=self.device,
+            dtype=self.dtype,
+            shape=[*self.shape[:-1], sum(nvec)],
         )
 
     def expand(self, *shape):

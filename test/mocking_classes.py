@@ -107,7 +107,7 @@ class MockSerialEnv(EnvBase):
         reward_spec=None,
         **kwargs,
     ):
-        batch_size = kwargs.get("batch_size", torch.Size([]))
+        batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if action_spec is None:
             action_spec = UnboundedContinuousTensorSpec(
                 (
@@ -185,7 +185,7 @@ class MockBatchedLockedEnv(EnvBase):
         reward_spec=None,
         **kwargs,
     ):
-        batch_size = kwargs.get("batch_size", torch.Size([]))
+        batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if action_spec is None:
             action_spec = UnboundedContinuousTensorSpec(
                 (
@@ -243,11 +243,19 @@ class MockBatchedLockedEnv(EnvBase):
         self.max_val = max(self.counter + 100, self.counter * 2)
 
     def _step(self, tensordict):
+        if len(self.batch_size):
+            leading_batch_size = (
+                tensordict.shape[: -len(self.batch_size)]
+                if tensordict is not None
+                else []
+            )
+        else:
+            leading_batch_size = tensordict.shape if tensordict is not None else []
         self.counter += 1
         # We use tensordict.batch_size instead of self.batch_size since this method will also be used by MockBatchedUnLockedEnv
         n = (
             torch.full(
-                (*tensordict.batch_size, *self.observation_spec["observation"].shape),
+                [*leading_batch_size, *self.observation_spec["observation"].shape],
                 self.counter,
             )
             .to(self.device)
@@ -255,9 +263,11 @@ class MockBatchedLockedEnv(EnvBase):
         )
         done = self.counter >= self.max_val
         done = torch.full(
-            (*tensordict.batch_size, 1), done, dtype=torch.bool, device=self.device
+            (*leading_batch_size, *self.batch_size, 1),
+            done,
+            dtype=torch.bool,
+            device=self.device,
         )
-
         return TensorDict(
             {"reward": n, "done": done, "observation": n},
             tensordict.batch_size,
@@ -266,20 +276,31 @@ class MockBatchedLockedEnv(EnvBase):
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         self.max_val = max(self.counter + 100, self.counter * 2)
-        if tensordict is None:
-            batch_size = self.batch_size
+        batch_size = self.batch_size
+        if len(batch_size):
+            leading_batch_size = (
+                tensordict.shape[: -len(self.batch_size)]
+                if tensordict is not None
+                else []
+            )
         else:
-            batch_size = tensordict.batch_size
+            leading_batch_size = tensordict.shape if tensordict is not None else []
 
         n = (
             torch.full(
-                (*batch_size, *self.observation_spec["observation"].shape), self.counter
+                [*leading_batch_size, *self.observation_spec["observation"].shape],
+                self.counter,
             )
             .to(self.device)
             .to(torch.get_default_dtype())
         )
         done = self.counter >= self.max_val
-        done = torch.full((*batch_size, 1), done, dtype=torch.bool, device=self.device)
+        done = torch.full(
+            (*leading_batch_size, *batch_size, 1),
+            done,
+            dtype=torch.bool,
+            device=self.device,
+        )
 
         return TensorDict(
             {"reward": n, "done": done, "observation": n},
@@ -318,7 +339,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         categorical_action_encoding=False,
         **kwargs,
     ):
-        batch_size = kwargs.get("batch_size", torch.Size([]))
+        batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         size = cls.size = 7
         if observation_spec is None:
             cls.out_key = "observation"
@@ -409,7 +430,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         from_pixels=False,
         **kwargs,
     ):
-        batch_size = kwargs.get("batch_size", torch.Size([]))
+        batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         size = cls.size = 7
         if observation_spec is None:
             cls.out_key = "observation"
@@ -523,7 +544,7 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
         from_pixels=True,
         **kwargs,
     ):
-        batch_size = kwargs.get("batch_size", torch.Size([]))
+        batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if observation_spec is None:
             cls.out_key = "pixels"
             observation_spec = CompositeSpec(
@@ -551,7 +572,6 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
             )
         return super().__new__(
             *args,
-            batch_size=batch_size,
             observation_spec=observation_spec,
             action_spec=action_spec,
             reward_spec=reward_spec,
@@ -581,7 +601,7 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
         categorical_action_encoding=False,
         **kwargs,
     ):
-        batch_size = kwargs.get("batch_size", torch.Size([]))
+        batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if observation_spec is None:
             cls.out_key = "pixels"
             observation_spec = CompositeSpec(
@@ -612,7 +632,6 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
 
         return super().__new__(
             *args,
-            batch_size=batch_size,
             observation_spec=observation_spec,
             action_spec=action_spec,
             reward_spec=reward_spec,
@@ -647,7 +666,7 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
         pixel_shape=None,
         **kwargs,
     ):
-        batch_size = kwargs.get("batch_size", torch.Size([]))
+        batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if pixel_shape is None:
             pixel_shape = [1, 7, 7]
         if observation_spec is None:
@@ -703,7 +722,7 @@ class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
         from_pixels=True,
         **kwargs,
     ):
-        batch_size = kwargs.get("batch_size", torch.Size([]))
+        batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if observation_spec is None:
             cls.out_key = "pixels"
             observation_spec = CompositeSpec(

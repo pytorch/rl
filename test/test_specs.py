@@ -270,8 +270,8 @@ def test_multi_discrete(shape, ns, dtype):
                 *_real_shape,
                 *nvec_shape,
             ]
-        )
-        assert ts.is_in(r)
+        ), (r.shape, ns, shape, _real_shape, nvec_shape)
+        assert ts.is_in(r), (r, r.shape, ns)
     rand = torch.rand(
         torch.Size(
             [
@@ -301,9 +301,21 @@ def test_multi_discrete(shape, ns, dtype):
     ],
 )
 @pytest.mark.parametrize("device", get_available_devices())
-def test_discrete_conversion(n, device):
-    categorical = DiscreteTensorSpec(n, device=device)
-    one_hot = OneHotDiscreteTensorSpec(n, device=device)
+@pytest.mark.parametrize(
+    "shape",
+    [
+        None,
+        [],
+        [
+            1,
+        ],
+        [1, 2],
+    ],
+)
+def test_discrete_conversion(n, device, shape):
+    categorical = DiscreteTensorSpec(n, device=device, shape=shape)
+    shape_one_hot = [n] if not shape else [*shape, n]
+    one_hot = OneHotDiscreteTensorSpec(n, device=device, shape=shape_one_hot)
 
     assert categorical != one_hot
     assert categorical.to_onehot() == one_hot
@@ -642,21 +654,33 @@ class TestEquality:
         dtype = torch.float16
         use_register = False
 
-        ts = OneHotDiscreteTensorSpec(n, device, dtype, use_register)
+        ts = OneHotDiscreteTensorSpec(
+            n=n, device=device, dtype=dtype, use_register=use_register
+        )
 
-        ts_same = OneHotDiscreteTensorSpec(n, device, dtype, use_register)
+        ts_same = OneHotDiscreteTensorSpec(
+            n=n, device=device, dtype=dtype, use_register=use_register
+        )
         assert ts == ts_same
 
-        ts_other = OneHotDiscreteTensorSpec(n + 1, device, dtype, use_register)
+        ts_other = OneHotDiscreteTensorSpec(
+            n=n + 1, device=device, dtype=dtype, use_register=use_register
+        )
         assert ts != ts_other
 
-        ts_other = OneHotDiscreteTensorSpec(n, "cpu:0", dtype, use_register)
+        ts_other = OneHotDiscreteTensorSpec(
+            n=n, device="cpu:0", dtype=dtype, use_register=use_register
+        )
         assert ts != ts_other
 
-        ts_other = OneHotDiscreteTensorSpec(n, device, torch.float64, use_register)
+        ts_other = OneHotDiscreteTensorSpec(
+            n=n, device=device, dtype=torch.float64, use_register=use_register
+        )
         assert ts != ts_other
 
-        ts_other = OneHotDiscreteTensorSpec(n, device, dtype, not use_register)
+        ts_other = OneHotDiscreteTensorSpec(
+            n=n, device=device, dtype=dtype, use_register=not use_register
+        )
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
@@ -730,21 +754,25 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        ts = DiscreteTensorSpec(n, shape, device, dtype)
+        ts = DiscreteTensorSpec(n=n, shape=shape, device=device, dtype=dtype)
 
-        ts_same = DiscreteTensorSpec(n, shape, device, dtype)
+        ts_same = DiscreteTensorSpec(n=n, shape=shape, device=device, dtype=dtype)
         assert ts == ts_same
 
-        ts_other = DiscreteTensorSpec(n + 1, shape, device, dtype)
+        ts_other = DiscreteTensorSpec(n=n + 1, shape=shape, device=device, dtype=dtype)
         assert ts != ts_other
 
-        ts_other = DiscreteTensorSpec(n, shape, "cpu:0", dtype)
+        ts_other = DiscreteTensorSpec(n=n, shape=shape, device="cpu:0", dtype=dtype)
         assert ts != ts_other
 
-        ts_other = DiscreteTensorSpec(n, shape, device, torch.float64)
+        ts_other = DiscreteTensorSpec(
+            n=n, shape=shape, device=device, dtype=torch.float64
+        )
         assert ts != ts_other
 
-        ts_other = DiscreteTensorSpec(n, torch.Size([2]), device, torch.float64)
+        ts_other = DiscreteTensorSpec(
+            n=n, shape=torch.Size([2]), device=device, dtype=torch.float64
+        )
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
