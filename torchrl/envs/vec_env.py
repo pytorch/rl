@@ -1141,7 +1141,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _set_seed(self, seed: Optional[int]):
         if seed is not None:
             self._env = envpool.make(
-                task_id=self.task_id,
+                task_id=self.env_name,
                 env_type=self.env_type,
                 num_envs=self.num_workers,
                 gym_reset_return_info=True,
@@ -1164,10 +1164,11 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         action = tensordict.get("action")
         if self.flatten:
             action = action.flatten()
+
+        action = action.to(torch.device("cpu"))
         step_output = self._env.step(action.detach().numpy())
 
         tensordict_out = self._output_transform_step(step_output)
-
         return tensordict_out
 
     def _get_input_spec(self) -> TensorSpec:
@@ -1211,7 +1212,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _start_workers(self) -> None:
         """Starts the various envs."""
         self._env = envpool.make(
-            task_id=self.task_id,
+            task_id=self.env_name,
             env_type=self.env_type,
             num_envs=self.num_workers,
             gym_reset_return_info=True,
@@ -1276,7 +1277,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 class MultiThreadedEnv(MultiThreadedEnvWrapper):
     """Multithreaded execution of environments.
 
-    >>> env = MultiThreadedEnv(num_workers=3, task_id="Pendulum-v1", env_type="gym")
+    >>> env = MultiThreadedEnv(num_workers=3, env_name="Pendulum-v1", env_type="gym")
     >>> env.reset()
     >>> env.rand_step()
     >>> env.rollout(5)
@@ -1293,7 +1294,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         **kwargs,
     ):
 
-        self.task_id = env_name.replace("ALE/", "")
+        self.env_name = env_name.replace("ALE/", "")
         self.num_workers = num_workers
         self.env_type = env_type
         self.batch_size = torch.Size([batch_size or num_workers])
@@ -1301,7 +1302,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         self.create_env_kwargs = create_env_kwargs or {}
 
         kwargs["num_workers"] = num_workers
-        kwargs["env_name"] = self.task_id
+        kwargs["env_name"] = self.env_name
         kwargs["env_type"] = env_type
         kwargs["create_env_kwargs"] = create_env_kwargs
         super().__init__(**kwargs)
