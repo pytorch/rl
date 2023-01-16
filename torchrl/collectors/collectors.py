@@ -22,6 +22,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
+
 from torchrl._utils import _check_for_faulty_process, prod
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import TensorSpec
@@ -655,7 +656,7 @@ class SyncDataCollector(_DataCollector):
                     self._tensordict = self.env.step(self._tensordict)
 
                 step_count = self._tensordict.get("step_count")
-                step_count += 1
+                self._tensordict.set_("step_count", step_count + 1)
                 # we must clone all the values, since the step / traj_id updates are done in-place
                 try:
                     self._tensordict_out[..., j] = self._tensordict
