@@ -23,7 +23,7 @@ from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process
 from torchrl.data import CompositeSpec, TensorSpec, UnboundedContinuousTensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
-from torchrl.envs.common import EnvBase
+from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 from torchrl.envs.libs.dm_control import _dmcontrol_to_torchrl_spec_transform, _has_dmc
 
@@ -1107,41 +1107,12 @@ def _run_worker_pipe_shared_mem(
                 child_pipe.send(("_".join([cmd, "done"]), None))
 
 
-class MultiThreadedEnv(EnvBase):
-    """Multithreaded execution of environments.
-
-    >>> env = MultiThreadedEnv(num_workers=3, task_id="Pendulum-v1", env_type="gym")
-    >>> env.reset()
-    >>> env.rand_step()
-    >>> env.rollout(5)
-    >>> env.close()
-    """
-
-    _verbose: bool = False
-    _excluded_wrapped_keys = [
-        "is_closed",
-        "parent_channels",
-        "batch_size",
-        "_dummy_env_str",
-    ]
+class MultiThreadedEnvWrapper(_EnvWrapper):
+    """Wrapper for envpool environments."""
 
     def __init__(
         self,
-        num_workers: int,
-        task_id: str,
-        env_type: str,
-        batch_size: Optional[int] = None,
-        create_env_kwargs: Optional[Union[dict, Sequence[dict]]] = None,
-        env_input_keys: Optional[Sequence[str]] = None,
-        pin_memory: bool = False,
-        selected_keys: Optional[Sequence[str]] = None,
-        excluded_keys: Optional[Sequence[str]] = None,
-        share_individual_td: Optional[bool] = None,
-        shared_memory: bool = True,
-        memmap: bool = False,
-        policy_proof: Optional[Callable] = None,
-        device: Optional[DEVICE_TYPING] = "cpu",
-        allow_step_when_done: bool = False,
+        **kwargs,
     ):
         if not _has_envpool:
             raise ImportError(
@@ -1149,137 +1120,93 @@ class MultiThreadedEnv(EnvBase):
 (Got the error message: {IMPORT_ERR_ENVPOOL}).
 """
             )
-        self._device = device
-        self.is_closed = False
-        self.task_id = task_id.replace("ALE/", "")
-        self.num_workers = num_workers
-        self.env_type = env_type
-        self.create_env_kwargs = create_env_kwargs or {}
-        super().__init__(device=device)
 
-        self.policy_proof = policy_proof
+        super().__init__(**kwargs)
 
-        self.env_input_keys = env_input_keys
-        self.pin_memory = pin_memory
-        self.selected_keys = selected_keys
-        self.excluded_keys = excluded_keys
-        self.share_individual_td = bool(share_individual_td)
-        self.allow_step_when_done = allow_step_when_done
-        self._batch_size = torch.Size([batch_size or num_workers])
-
-        self._observation_spec = None
-        self._reward_spec = None
-        self._input_spec = None
-
-        self._dummy_env_str = None
-        self._seeds = None
-        self.flatten = False
         self.obs = torch.empty(
             self.num_workers, *self.observation_spec["observation"].shape
         )
 
-    def _create_td(self) -> None:
+    def _check_kwargs(self, kwargs: Dict):
         pass
 
-    def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
-        """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
+    def _build_env(self, env):
+        return env
 
-        Args:
-            kwargs (dict or list of dict): new kwargs to use with the environments
+    def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
+        self.input_spec = self._get_input_spec()
+        self.reward_spec = self._get_reward_spec()
+        self.observation_spec = self._get_observation_spec()
 
-        """
-        if isinstance(kwargs, dict):
-            for _kwargs in self.create_env_kwargs:
-                _kwargs.update(kwargs)
+    def _set_seed(self, seed: Optional[int]):
+        if seed is not None:
+            self._env = envpool.make(
+                task_id=self.task_id,
+                env_type=self.env_type,
+                num_envs=self.num_workers,
+                gym_reset_return_info=True,
+                **self.create_env_kwargs,
+                seed=seed,
+            )
+
+    def _init_env(self) -> Optional[int]:
+        pass
+
+    def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        reset_workers = self._parse_reset_workers(tensordict)
+
+        reset_data = self._env.reset(reset_workers)
+        tensordict_out = self._output_transform_reset(reset_data, reset_workers)
+        return tensordict_out
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+
+        action = tensordict.get("action")
+        if self.flatten:
+            action = action.flatten()
+        step_output = self._env.step(action.detach().numpy())
+
+        tensordict_out = self._output_transform_step(step_output)
+
+        return tensordict_out
+
+    def _get_input_spec(self) -> TensorSpec:
+        action_spec = self._env.spec.action_spec()
+        if action_spec.shape == ():
+            self.flatten = True
+            action_spec = BoundedArray(
+                shape=(1,),
+                dtype=action_spec.dtype,
+                name=action_spec.name,
+                minimum=action_spec.minimum,
+                maximum=action_spec.maximum,
+            )
+        if self.env_type == "dm":
+            transformed_spec = _dmcontrol_to_torchrl_spec_transform(
+                action_spec,
+                device=self.device,
+            )
+            input_spec = CompositeSpec(action=transformed_spec)
         else:
-            for _kwargs, _new_kwargs in zip(self.create_env_kwargs, kwargs):
-                _kwargs.update(_new_kwargs)
-
-    def state_dict(self) -> OrderedDict:
-        raise NotImplementedError
-
-    def load_state_dict(self, state_dict: OrderedDict) -> None:
-        raise NotImplementedError
-
-    @property
-    def batch_size(self) -> TensorSpec:
-        if "_batch_size" not in self.__dir__():
-            raise AttributeError("_batch_size is not initialized")
-        if self._batch_size is None:
-            self._set_properties()
-        return self._batch_size
-
-    @property
-    def device(self) -> torch.device:
-        if self._device is None:
-            self._set_properties()
-        return self._device
-
-    @device.setter
-    def device(self, value: DEVICE_TYPING) -> None:
-        self.to(value)
-
-    @property
-    def action_spec(self) -> TensorSpec:
-        return self.input_spec["action"]
-
-    @property
-    def input_spec(self) -> TensorSpec:
-        if self._input_spec is None:
-            action_spec = self._env.spec.action_spec()
-            if action_spec.shape == ():
-                self.flatten = True
-                action_spec = BoundedArray(
-                    shape=(1,),
-                    dtype=action_spec.dtype,
-                    name=action_spec.name,
-                    minimum=action_spec.minimum,
-                    maximum=action_spec.maximum,
-                )
-            if self.env_type == "dm":
-                transformed_spec = _dmcontrol_to_torchrl_spec_transform(
+            input_spec = CompositeSpec(
+                action=_dmcontrol_to_torchrl_spec_transform(
                     action_spec,
                     device=self.device,
                 )
-                self._input_spec = CompositeSpec(action=transformed_spec)
-            else:
-                self._input_spec = CompositeSpec(
-                    action=_dmcontrol_to_torchrl_spec_transform(
-                        action_spec,
-                        device=self.device,
-                    )
-                )
-
-        return self._input_spec
-
-    @input_spec.setter
-    def input_spec(self, value: TensorSpec) -> None:
-        self._input_spec = value
-
-    @property
-    def observation_spec(self) -> TensorSpec:
-        if self._observation_spec is None:
-            obs_spec = self._env.spec.observation_spec().obs
-            self._observation_spec = _dmcontrol_to_torchrl_spec_transform(
-                obs_spec, device=self.device
             )
-            self._observation_spec = CompositeSpec(observation=self._observation_spec)
-        return self._observation_spec
+        return input_spec
 
-    @observation_spec.setter
-    def observation_spec(self, value: TensorSpec) -> None:
-        self._observation_spec = value
+    def _get_observation_spec(self) -> TensorSpec:
+        obs_spec = self._env.spec.observation_spec().obs
+        observation_spec = _dmcontrol_to_torchrl_spec_transform(
+            obs_spec, device=self.device
+        )
+        return CompositeSpec(observation=observation_spec)
 
-    @property
-    def reward_spec(self) -> TensorSpec:
-        if self._reward_spec is None:
-            self._reward_spec = UnboundedContinuousTensorSpec(
-                device=self.device,
-            )
-        return self._reward_spec
-
-    def is_done_set_fn(self, value: bool) -> None:
-        self._is_done = value.all()
+    def _get_reward_spec(self) -> TensorSpec:
+        return UnboundedContinuousTensorSpec(
+            device=self.device,
+        )
 
     def _start_workers(self) -> None:
         """Starts the various envs."""
@@ -1301,21 +1228,6 @@ class MultiThreadedEnv(EnvBase):
             f"\n\tbatch_size={self.batch_size})"
         )
 
-    def close(self) -> None:
-        self.is_closed = True
-
-    @_check_start
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-
-        action = tensordict.get("action")
-        if self.flatten:
-            action = action.flatten()
-        step_output = self._env.step(action.detach().numpy())
-
-        tensordict_out = self._output_transform_step(step_output)
-
-        return tensordict_out
-
     def _parse_reset_workers(self, tensordict):
 
         if tensordict is None or "reset_workers" not in tensordict.keys():
@@ -1324,14 +1236,6 @@ class MultiThreadedEnv(EnvBase):
         if reset_workers is None:
             return None
         return np.where(reset_workers)[0]
-
-    @_check_start
-    def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        reset_workers = self._parse_reset_workers(tensordict)
-
-        reset_data = self._env.reset(reset_workers)
-        tensordict_out = self._output_transform_reset(reset_data, reset_workers)
-        return tensordict_out
 
     def _output_transform_reset(self, envpool_output, reset_workers):
         if self.env_type == "gym":
@@ -1368,39 +1272,57 @@ class MultiThreadedEnv(EnvBase):
         tensordict_out.set("done", self._is_done)
         return tensordict_out
 
-    @_check_start
-    def _set_seed(self, seed: Optional[int]):
-        if seed is not None:
-            self._env = envpool.make(
-                task_id=self.task_id,
-                env_type=self.env_type,
-                num_envs=self.num_workers,
-                gym_reset_return_info=True,
-                **self.create_env_kwargs,
-                seed=seed,
-            )
 
-    def start(self) -> None:
-        if not self.is_closed:
-            raise RuntimeError("trying to start a environment that is not closed.")
-        self._start_workers()
+class MultiThreadedEnv(MultiThreadedEnvWrapper):
+    """Multithreaded execution of environments.
 
-    def to(self, device: DEVICE_TYPING):
-        device = torch.device(device)
-        if device == self.device:
-            return self
-        self._device = device
-        if not self.is_closed:
-            warn(
-                "Casting an open environment to another device requires closing and re-opening it. "
-                "This may have unexpected and unwanted effects (e.g. on seeding etc.)"
-            )
-            # the tensordicts must be re-created on device
-            super().to(device)
-            self.close()
-            self.start()
-        else:
-            self.input_spec = self.input_spec.to(device)
-            self.reward_spec = self.reward_spec.to(device)
-            self.observation_spec = self.observation_spec.to(device)
-        return self
+    >>> env = MultiThreadedEnv(num_workers=3, task_id="Pendulum-v1", env_type="gym")
+    >>> env.reset()
+    >>> env.rand_step()
+    >>> env.rollout(5)
+    >>> #env.close()
+    """
+
+    def __init__(
+        self,
+        num_workers,
+        env_name,
+        env_type,
+        batch_size=None,
+        create_env_kwargs=None,
+        **kwargs,
+    ):
+
+        self.task_id = env_name.replace("ALE/", "")
+        self.num_workers = num_workers
+        self.env_type = env_type
+        self.batch_size = torch.Size([batch_size or num_workers])
+        self.flatten = False
+        self.create_env_kwargs = create_env_kwargs or {}
+
+        kwargs["num_workers"] = num_workers
+        kwargs["env_name"] = self.task_id
+        kwargs["env_type"] = env_type
+        kwargs["create_env_kwargs"] = create_env_kwargs
+        super().__init__(**kwargs)
+
+    def _build_env(
+        self,
+        env_name: str,
+        num_workers,
+        env_type,
+        create_env_kwargs,
+    ) -> Any:
+        env = envpool.make(
+            task_id=env_name,
+            env_type=env_type,
+            num_envs=num_workers,
+            gym_reset_return_info=True,
+            **create_env_kwargs,
+        )
+        return super()._build_env(env)
+
+    def __repr__(self) -> str:
+        return f"""{self.__class__.__name__}(env={self.env_name}, env_type={self.env_type},
+         num_workers={self.num_workers}, batch_size={self.batch_size}, device={self.device})
+         """

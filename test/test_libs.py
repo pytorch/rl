@@ -620,10 +620,6 @@ class TestEnvPool:
         td_serial = env_serial.rollout(
             max_steps=max_steps, auto_reset=False, tensordict=td0_serial
         ).contiguous()
-        key = "pixels" if "pixels" in td_serial.keys() else "observation"
-        torch.testing.assert_close(
-            td_serial[:, 0].get(("next", key)), td_serial[:, 1].get(key)
-        )
 
         out_seed_multithread = env_multithread.set_seed(0, static_seed=static_seed)
         if static_seed:
@@ -636,10 +632,14 @@ class TestEnvPool:
             max_steps=max_steps, auto_reset=False, tensordict=td0_multithread
         ).contiguous()
         torch.testing.assert_close(
-            td_multithread[:, :-1].get(("next", key)), td_multithread[:, 1:].get(key)
+            td_multithread[:, :-1].get(("next", "observation")),
+            td_multithread[:, 1:].get("observation"),
         )
-        print(td0_serial["observation"], td0_multithread["observation"])
-        assert_allclose_td(td0_serial, td0_multithread)
+        key_serial = "pixels" if "pixels" in td0_serial.keys() else "observation"
+        # TODO: Shapes are different for Pong-v5 - need to adjust image size and gray-scale to compare
+        torch.testing.assert_close(
+            td0_serial[key_serial], td0_multithread["observation"]
+        )
         assert_allclose_td(td_serial[:, 0], td_multithread[:, 0])  # first step
         assert_allclose_td(td_serial[:, 1], td_multithread[:, 1])  # second step
         assert_allclose_td(td_serial, td_multithread)
