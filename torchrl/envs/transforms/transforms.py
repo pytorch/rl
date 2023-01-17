@@ -2761,3 +2761,68 @@ class SelectTransform(Transform):
                 if key in self.selected_keys
             }
         )
+
+
+class TimeMaxPoolTranform(Transform):
+    """Takes the maximum of each observation values over the last buffer_size observations.
+
+    """
+
+    inplace = False
+    invertible = False
+
+    def __init__(
+        self,
+        in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
+        buffer_size: int = 1,
+    ):
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        if buffer_size < 1:
+            raise ValueError("TimeMaxPoolTranform buffer_size should have a value greater or equal to one.")
+        if self.in_keys is None:
+            self.in_keys = ["observation"]
+        self.buffer_size = buffer_size
+        self._buffers = dict()
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Resets episode rewards."""
+        # Non-batched environments
+        if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
+            for in_key in self.in_keys:
+                self._buffers[in_key] = 0.0
+
+        # Batched environments
+        else:
+            _reset = tensordict.get(
+                "_reset",
+                torch.ones(
+                    tensordict.batch_size,
+                    dtype=torch.bool,
+                    device=tensordict.device,
+                ),
+            )
+            for in_key in self.in_keys:
+                if in_key in self._buffers.keys():
+                    self._buffers[in_key][:, _reset] = 0.0
+
+        return tensordict
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Updates the episode rewards with the step rewards."""
+        for in_key in self.in_keys:
+
+            # Lazy init of buffers
+            if in_key not in self._buffers.keys():
+                self._buffers[in_key] = torch.zeros(self.buffer_size, *tensordict[in_key].shape)
+
+            # shift obs 1 position to the right
+            self._buffers[in_key][1:] = self._buffers[in_key][:-1]
+            # add new obs
+            self._buffers[in_key][0].copy_(tensordict[in_key])
+            # apply max pooling
+            pooled_tensor, _ = self._buffers[in_key].max(dim=0)
+            # add to Tensordict
+            tensordict.set(in_key, pooled_tensor)
+
+        return tensordict
