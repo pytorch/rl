@@ -2217,7 +2217,7 @@ def test_batch_locked_transformed(device):
     with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
         env.batch_locked = False
     td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
+    td["action"] = env.action_spec.rand()
     td_expanded = td.expand(2).clone()
     env.step(td)
 
@@ -2241,7 +2241,7 @@ def test_batch_unlocked_transformed(device):
     with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
         env.batch_locked = False
     td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
+    td["action"] = env.action_spec.rand()
     td_expanded = td.expand(2).clone()
     env.step(td)
     env.step(td_expanded)
