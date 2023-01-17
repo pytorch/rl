@@ -39,6 +39,8 @@ _NO_CHECK_SPEC_ENCODE = get_binary_env_var("NO_CHECK_SPEC_ENCODE")
 
 _DEFAULT_SHAPE = torch.Size((1,))
 
+DEVICE_ERR_MSG = "device of empty CompositeSpec is not defined."
+
 
 def _default_dtype_and_device(
     dtype: Union[None, torch.dtype],
@@ -1475,7 +1477,7 @@ class CompositeSpec(TensorSpec):
                     _device = item.device
                 elif item.device != _device:
                     raise RuntimeError(
-                        f"Setting a new attribute ({key}) on another device ({item.device} against {self.device}). "
+                        f"Setting a new attribute ({key}) on another device ({item.device} against {_device}). "
                         f"All devices of CompositeSpec must match."
                     )
         self._device = _device
@@ -1507,15 +1509,16 @@ class CompositeSpec(TensorSpec):
             if _device is None:
                 raise RuntimeError(
                     "device of empty CompositeSpec is not defined. "
-                    "You can set it directly by calling"
+                    "You can set it directly by calling "
                     "`spec.device = device`."
                 )
             self._device = _device
         return self._device
 
     @device.setter
-    def device(self, value: DEVICE_TYPING):
-        self._device = value
+    def device(self, device: DEVICE_TYPING):
+        device = torch.device(device)
+        self.to(device)
 
     def __getitem__(self, item):
         if isinstance(item, tuple) and len(item) > 1:
@@ -1540,11 +1543,29 @@ class CompositeSpec(TensorSpec):
             raise TypeError(f"Got key of type {type(key)} when a string was expected.")
         if key in {"shape", "device", "dtype", "space"}:
             raise AttributeError(f"CompositeSpec[{key}] cannot be set")
-        if value is not None and value.device != self.device:
-            raise RuntimeError(
-                f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
-                f"All devices of CompositeSpec must match."
-            )
+        try:
+            if value is not None and value.device != self.device:
+                raise RuntimeError(
+                    f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
+                    f"All devices of CompositeSpec must match."
+                )
+        except RuntimeError as err:
+            cond1 = DEVICE_ERR_MSG in str(err)
+            cond2 = self._device is None
+            if cond1 and cond2:
+                try:
+                    device_val = value.device
+                    self.to(device_val)
+                except RuntimeError as suberr:
+                    if DEVICE_ERR_MSG in str(suberr):
+                        pass
+                    else:
+                        raise suberr
+            elif cond1:
+                pass
+            else:
+                raise err
+
         self.set(key, value)
 
     def __iter__(self):
@@ -1650,8 +1671,9 @@ class CompositeSpec(TensorSpec):
             raise ValueError(
                 "Only device casting is allowed with specs of type CompositeSpec."
             )
-
-        self.device = torch.device(dest)
+        if self._device and self._device == torch.device(dest):
+            return self
+        self._device = torch.device(dest)
         for key, value in list(self.items()):
             if value is None:
                 continue
@@ -1686,8 +1708,21 @@ class CompositeSpec(TensorSpec):
             if key in self.keys(True) and isinstance(self[key], CompositeSpec):
                 self[key].update(item)
                 continue
-            if isinstance(item, TensorSpec) and item.device != self.device:
-                item = deepcopy(item).to(self.device)
+            try:
+                if isinstance(item, TensorSpec) and item.device != self.device:
+                    item = deepcopy(item).to(self.device)
+            except RuntimeError as err:
+                if DEVICE_ERR_MSG in str(err):
+                    try:
+                        item_device = item.device
+                        self.device = item_device
+                    except RuntimeError as suberr:
+                        if DEVICE_ERR_MSG in str(suberr):
+                            pass
+                        else:
+                            raise suberr
+                else:
+                    raise err
             self[key] = item
         return self
 
