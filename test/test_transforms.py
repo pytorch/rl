@@ -1112,6 +1112,59 @@ class TestTransforms:
             t_env.transform.loc.device == t_env.observation_spec["observation"].device
         )
 
+    @pytest.mark.parametrize("keys", [["pixels"], ["pixels", "stuff"]])
+    @pytest.mark.parametrize("size", [1, 3])
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_observationnorm_init_stats_pixels(
+        self, keys, size, device, standard_normal, parallel
+    ):
+        def make_env():
+            base_env = DiscreteActionConvMockEnvNumpy(
+                seed=0,
+            )
+            base_env.out_key = "pixels"
+            return base_env
+
+        if parallel:
+            base_env = SerialEnv(3, make_env)
+            reduce_dim = (0, 1, 3, 4)
+            keep_dim = (3, 4)
+            cat_dim = 1
+        else:
+            base_env = make_env()
+            reduce_dim = (0, 2, 3)
+            keep_dim = (2, 3)
+            cat_dim = 0
+
+        t_env = TransformedEnv(
+            base_env,
+            transform=ObservationNorm(in_keys=keys, standard_normal=standard_normal),
+        )
+        if len(keys) > 1:
+            t_env.transform.init_stats(
+                num_iter=11,
+                key="pixels",
+                cat_dim=cat_dim,
+                reduce_dim=reduce_dim,
+                keep_dims=keep_dim,
+            )
+        else:
+            t_env.transform.init_stats(
+                num_iter=11,
+                reduce_dim=reduce_dim,
+                cat_dim=cat_dim,
+                keep_dims=keep_dim,
+            )
+
+        assert t_env.transform.loc.shape == torch.Size(
+            [t_env.observation_spec["pixels"].shape[0], 1, 1]
+        )
+        assert t_env.transform.scale.shape == torch.Size(
+            [t_env.observation_spec["pixels"].shape[0], 1, 1]
+        )
+
     def test_observationnorm_stats_already_initialized_error(self):
         transform = ObservationNorm(in_keys="next_observation", loc=0, scale=1)
 
