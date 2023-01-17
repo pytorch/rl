@@ -1139,17 +1139,6 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         self.reward_spec = self._get_reward_spec()
         self.observation_spec = self._get_observation_spec()
 
-    def _set_seed(self, seed: Optional[int]):
-        if seed is not None:
-            self._env = envpool.make(
-                task_id=self.env_name,
-                env_type=self.env_type,
-                num_envs=self.num_workers,
-                gym_reset_return_info=True,
-                **self.create_env_kwargs,
-                seed=seed,
-            )
-
     def _init_env(self) -> Optional[int]:
         pass
 
@@ -1184,19 +1173,12 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
                 minimum=action_spec.minimum,
                 maximum=action_spec.maximum,
             )
-        if self.env_type == "dm":
-            transformed_spec = _dmcontrol_to_torchrl_spec_transform(
+        input_spec = CompositeSpec(
+            action=_dmcontrol_to_torchrl_spec_transform(
                 action_spec,
                 device=self.device,
             )
-            input_spec = CompositeSpec(action=transformed_spec)
-        else:
-            input_spec = CompositeSpec(
-                action=_dmcontrol_to_torchrl_spec_transform(
-                    action_spec,
-                    device=self.device,
-                )
-            )
+        )
         return input_spec
 
     def _get_observation_spec(self) -> TensorSpec:
@@ -1230,10 +1212,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return np.where(reset_workers)[0]
 
     def _output_transform_reset(self, envpool_output, reset_workers):
-        if self.env_type == "gym":
-            obs, _ = envpool_output
-        else:
-            obs = envpool_output.observation.obs
+        obs, _ = envpool_output
         if reset_workers is not None:
             for i, worker in enumerate(reset_workers):
                 self.obs[worker] = torch.tensor(obs[i])
@@ -1250,11 +1229,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return tensordict_out
 
     def _output_transform_step(self, envpool_output):
-        if self.env_type == "gym":
-            obs, reward, *_ = envpool_output
-        else:
-            obs = envpool_output.observation.obs
-            reward = envpool_output.reward
+        obs, reward, *_ = envpool_output
         tensordict_out = TensorDict(
             {"observation": torch.tensor(obs), "reward": torch.tensor(reward)},
             batch_size=self.batch_size,
@@ -1268,18 +1243,17 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 class MultiThreadedEnv(MultiThreadedEnvWrapper):
     """Multithreaded execution of environments.
 
-    >>> env = MultiThreadedEnv(num_workers=3, env_name="Pendulum-v1", env_type="gym")
+    >>> env = MultiThreadedEnv(num_workers=3, env_name="Pendulum-v1")
     >>> env.reset()
     >>> env.rand_step()
     >>> env.rollout(5)
-    >>> #env.close()
+    >>> env.close()
     """
 
     def __init__(
         self,
         num_workers,
         env_name,
-        env_type,
         batch_size=None,
         create_env_kwargs=None,
         **kwargs,
@@ -1287,14 +1261,12 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
 
         self.env_name = env_name.replace("ALE/", "")
         self.num_workers = num_workers
-        self.env_type = env_type
         self.batch_size = torch.Size([batch_size or num_workers])
         self.flatten = False
         self.create_env_kwargs = create_env_kwargs or {}
 
         kwargs["num_workers"] = num_workers
         kwargs["env_name"] = self.env_name
-        kwargs["env_type"] = env_type
         kwargs["create_env_kwargs"] = create_env_kwargs
         super().__init__(**kwargs)
 
@@ -1302,19 +1274,27 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         self,
         env_name: str,
         num_workers,
-        env_type,
         create_env_kwargs,
     ) -> Any:
+        create_env_kwargs = create_env_kwargs or {}
         env = envpool.make(
             task_id=env_name,
-            env_type=env_type,
+            env_type="gym",
             num_envs=num_workers,
             gym_reset_return_info=True,
             **create_env_kwargs,
         )
         return super()._build_env(env)
 
+    def _set_seed(self, seed: Optional[int]):
+        if seed is not None:
+            self.create_env_kwargs["seed"] = seed
+            self._env = self._build_env(
+                env_name=self.env_name,
+                num_workers=self.num_workers,
+                create_env_kwargs=self.create_env_kwargs,
+            )
+
     def __repr__(self) -> str:
-        return f"""{self.__class__.__name__}(env={self.env_name}, env_type={self.env_type},
-         num_workers={self.num_workers}, batch_size={self.batch_size}, device={self.device})
-         """
+        return f"{self.__class__.__name__}(env={self.env_name}, num_workers={self.num_workers}, \
+         batch_size={self.batch_size}, device={self.device})"

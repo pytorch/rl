@@ -169,7 +169,6 @@ def _make_envs(
         env_multithread = MultiThreadedEnv(
             N,
             env_name,
-            env_type="gym",
             create_env_kwargs=multithreaded_kwargs,
             device=device,
         )
