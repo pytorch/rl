@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from textwrap import indent
@@ -236,7 +237,10 @@ class TensorSpec:
             val = torch.tensor(val, dtype=self.dtype, device=self.device)
             if val.shape[-len(self.shape) :] != self.shape:
                 # option 1: add a singleton dim at the end
-                if self.shape == torch.Size([1]):
+                if (
+                    val.shape[-len(self.shape) :] == self.shape[:-1]
+                    and self.shape[-1] == 1
+                ):
                     val = val.unsqueeze(-1)
                 else:
                     raise RuntimeError(
@@ -476,7 +480,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         super().__init__(shape, space, device, dtype, "discrete")
 
     def expand(self, *shape):
-        if len(shape) == 1 and isinstance(shape[0], tuple):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
@@ -666,7 +670,7 @@ class BoundedTensorSpec(TensorSpec):
         )
 
     def expand(self, *shape):
-        if len(shape) == 1 and isinstance(shape[0], tuple):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
@@ -735,9 +739,15 @@ class BoundedTensorSpec(TensorSpec):
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return (val >= self.space.minimum.to(val.device)).all() and (
-            val <= self.space.maximum.to(val.device)
-        ).all()
+        try:
+            return (val >= self.space.minimum.to(val.device)).all() and (
+                val <= self.space.maximum.to(val.device)
+            ).all()
+        except RuntimeError as err:
+            if "The size of tensor a" in str(err):
+                warnings.warn(f"Got a shape mismatch: {str(err)}")
+                return False
+            raise err
 
 
 @dataclass(repr=False)
@@ -783,7 +793,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         return True
 
     def expand(self, *shape):
-        if len(shape) == 1 and isinstance(shape[0], tuple):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
@@ -850,7 +860,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         return True
 
     def expand(self, *shape):
-        if len(shape) == 1 and isinstance(shape[0], tuple):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
@@ -927,7 +937,7 @@ class BinaryDiscreteTensorSpec(TensorSpec):
         return ((val == 0) | (val == 1)).all()
 
     def expand(self, *shape):
-        if len(shape) == 1 and isinstance(shape[0], tuple):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
@@ -1083,7 +1093,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
     def expand(self, *shape):
         nvecs = [space.n for space in self.space]
-        if len(shape) == 1 and isinstance(shape[0], tuple):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
@@ -1186,7 +1196,7 @@ class DiscreteTensorSpec(TensorSpec):
         )
 
     def expand(self, *shape):
-        if len(shape) == 1 and isinstance(shape[0], tuple):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
@@ -1323,7 +1333,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         )
 
     def expand(self, *shape):
-        if len(shape) == 1 and isinstance(shape[0], tuple):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
@@ -1444,7 +1454,7 @@ class CompositeSpec(TensorSpec):
                 )
         self._specs[name] = spec
 
-    def __init__(self, *args, shape=None, **kwargs):
+    def __init__(self, *args, shape=None, device=None, **kwargs):
         if shape is None:
             # Should we do this? Other specs have a default empty shape, maybe it would make sense to keep it
             # optional for composite (for clarity and easiness of use).
@@ -1456,8 +1466,8 @@ class CompositeSpec(TensorSpec):
         for key, value in kwargs.items():
             self.set(key, value)
 
+        _device = device
         if len(kwargs):
-            _device = None
             for key, item in self.items():
                 if item is None:
                     continue
@@ -1468,10 +1478,8 @@ class CompositeSpec(TensorSpec):
                         f"Setting a new attribute ({key}) on another device ({item.device} against {self.device}). "
                         f"All devices of CompositeSpec must match."
                     )
-            self._device = _device
+        self._device = _device
         if len(args):
-            if not len(kwargs):
-                self._device = None
             if len(args) > 1:
                 raise RuntimeError(
                     "Got multiple arguments, when at most one is expected for CompositeSpec."
@@ -1684,7 +1692,7 @@ class CompositeSpec(TensorSpec):
         return self
 
     def expand(self, *shape):
-        if len(shape) == 1 and isinstance(shape[0], tuple):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError("CompositeSpec.extend does not support negative shapes.")
@@ -1699,6 +1707,7 @@ class CompositeSpec(TensorSpec):
                 for key, value in tuple(self.items())
             },
             shape=shape,
+            device=self.device,
         )
         return out
 

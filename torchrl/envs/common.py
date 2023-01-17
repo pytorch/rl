@@ -289,7 +289,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if not isinstance(value, CompositeSpec):
             raise TypeError("The type of an input_spec must be Composite.")
         if value.shape[: len(self.batch_size)] != self.batch_size:
-            raise ValueError("The value of spec.shape must match the env batch size.")
+            raise ValueError(
+                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+            )
         self.__dict__["_input_spec"] = value
 
     @property
@@ -322,7 +324,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if not isinstance(value, CompositeSpec):
             raise TypeError("The type of an observation_spec must be Composite.")
         elif value.shape[: len(self.batch_size)] != self.batch_size:
-            raise ValueError("The value of spec.shape must match the env batch size.")
+            raise ValueError(
+                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+            )
         self.__dict__["_observation_spec"] = value
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
