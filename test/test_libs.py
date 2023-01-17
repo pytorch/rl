@@ -451,10 +451,25 @@ class TestJumanji:
                 )
 
 
+CLASSIC_CONTROL_ENVS = [
+    PENDULUM_VERSIONED,
+    "MountainCar-v0",
+    "MountainCarContinuous-v0",
+    "Acrobot-v1",
+    "CartPole-v0",
+]
+
+ATARI_ENVS = ["ALE/Pong-v5", "ALE/Breakout-v5"]
+
+GYM_ENVS = CLASSIC_CONTROL_ENVS + ATARI_ENVS
+
+DM_ENVS = ["CheetahRun-v1"]
+
+
 @pytest.mark.skipif(not _has_envpool, reason="no envpool library found")
 class TestEnvPool:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
+    @pytest.mark.parametrize("env_name", GYM_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [False, True])
     @pytest.mark.parametrize("transformed_out", [False, True])
@@ -504,8 +519,9 @@ class TestEnvPool:
         env_multithreaded.close()
         env0.close()
 
+    # Doesn't work with PONG_VERSIONED because output is uint8
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
+    @pytest.mark.parametrize("env_name", CLASSIC_CONTROL_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [True, False])
     @pytest.mark.parametrize("transformed_out", [True, False])
@@ -590,13 +606,7 @@ class TestEnvPool:
         env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize(
-        "env_name",
-        [
-            PENDULUM_VERSIONED,
-            PONG_VERSIONED,
-        ],
-    )
+    @pytest.mark.parametrize("env_name", CLASSIC_CONTROL_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [False, True])
     @pytest.mark.parametrize("transformed_out", [True, False])
@@ -670,7 +680,7 @@ class TestEnvPool:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
+    @pytest.mark.parametrize("env_name", GYM_ENVS)
     @pytest.mark.parametrize("transformed_out", [False, True])
     @pytest.mark.parametrize("open_before", [False, True])
     def test_multithreaded_env_cast(
@@ -711,7 +721,7 @@ class TestEnvPool:
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
+    @pytest.mark.parametrize("env_name", GYM_ENVS)
     @pytest.mark.parametrize("transformed_out", [True, False])
     def test_env_device(self, env_name, frame_skip, transformed_out, device):
         # tests creation on device

@@ -1110,6 +1110,8 @@ def _run_worker_pipe_shared_mem(
 class MultiThreadedEnvWrapper(_EnvWrapper):
     """Wrapper for envpool environments."""
 
+    _verbose: bool = False
+
     def __init__(
         self,
         **kwargs,
@@ -1122,7 +1124,6 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             )
 
         super().__init__(**kwargs)
-
         self.obs = torch.empty(
             self.num_workers, *self.observation_spec["observation"].shape
         )
@@ -1157,6 +1158,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
         reset_data = self._env.reset(reset_workers)
         tensordict_out = self._output_transform_reset(reset_data, reset_workers)
+        self.is_closed = False
         return tensordict_out
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1208,17 +1210,6 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return UnboundedContinuousTensorSpec(
             device=self.device,
         )
-
-    def _start_workers(self) -> None:
-        """Starts the various envs."""
-        self._env = envpool.make(
-            task_id=self.env_name,
-            env_type=self.env_type,
-            num_envs=self.num_workers,
-            gym_reset_return_info=True,
-            **self.create_env_kwargs,
-        )
-        self.is_closed = False
 
     def __repr__(self) -> str:
         if self._dummy_env_str is None:
