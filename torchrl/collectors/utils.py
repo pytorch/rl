@@ -59,7 +59,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
             torch.ones(
                 out_split.shape,
                 dtype=torch.bool,
-                device=out_split._get_meta("done").device,
+                device=out_split.get("done").device,
             ),
         )
     MAX = max(*[out_split.shape[0] for out_split in out_splits])
