@@ -2565,7 +2565,6 @@ class RewardSum(Transform):
 
         episode_specs = {}
         if isinstance(reward_spec, CompositeSpec):
-
             # If reward_spec is a CompositeSpec, all in_keys should be keys of reward_spec
             if not all(k in reward_spec.keys() for k in self.in_keys):
                 raise KeyError("Not all in_keys are present in ´reward_spec´")
@@ -2580,7 +2579,6 @@ class RewardSum(Transform):
                 episode_specs.update({out_key: episode_spec})
 
         else:
-
             # If reward_spec is not a CompositeSpec, the only in_key should be ´reward´
             if not set(self.in_keys) == {"reward"}:
                 raise KeyError(
@@ -2784,11 +2782,13 @@ class TimeMaxPool(Transform):
     ):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         if T < 1:
-            raise ValueError("TimeMaxPoolTranform N parameter should have a value greater or equal to one.")
+            raise ValueError(
+                "TimeMaxPoolTranform N parameter should have a value greater or equal to one."
+            )
         if self.in_keys is None:
             self.in_keys = ["observation"]
         self.buffer_size = T
-        self._buffers = dict()
+        self._buffers = {}
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
@@ -2816,13 +2816,15 @@ class TimeMaxPool(Transform):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
         for in_key in self.in_keys:
-
             # Lazy init of buffers
             if in_key not in self._buffers.keys():
-                self._buffers[in_key] = torch.zeros(self.buffer_size, *tensordict[in_key].shape)
+                self._buffers[in_key] = torch.zeros(
+                    self.buffer_size, *tensordict[in_key].shape
+                )
 
             # shift obs 1 position to the right
-            self._buffers[in_key][1:] = self._buffers[in_key][:-1]
+            self._buffers[in_key] = torch.roll(self._buffers[in_key], shifts=1, dims=0)
+            # self._buffers[in_key][1:] = self._buffers[in_key][:-1]
             # add new obs
             self._buffers[in_key][0].copy_(tensordict[in_key])
             # apply max pooling
