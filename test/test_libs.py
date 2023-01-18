@@ -11,6 +11,7 @@ import torch
 
 from _utils_internal import (
     _make_envs,
+    _make_multithreaded_env,
     get_available_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
@@ -476,10 +477,9 @@ class TestEnvPool:
     def test_env_basic_operation(
         self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=3
     ):
-        _, _, env_multithreaded, _ = _make_envs(
+        env_multithreaded = _make_multithreaded_env(
             env_name,
             frame_skip,
-            transformed_in=transformed_in,
             transformed_out=transformed_out,
             N=N,
         )
@@ -510,7 +510,9 @@ class TestEnvPool:
         )
         env_multithreaded.reset(tensordict=td_reset)
 
-        td = env_multithreaded.rollout(policy=None, max_steps=T)
+        td = env_multithreaded.rollout(
+            policy=None, max_steps=T, break_when_any_done=False
+        )
         assert (
             td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
         ), f"{td.shape}, {td.get('done').sum(1)}"
@@ -552,10 +554,9 @@ class TestEnvPool:
                 res = torch.argmax(self.lin(x), axis=-1, keepdim=True)
                 return res
 
-        _, _, env_multithreaded, _ = _make_envs(
+        env_multithreaded = _make_multithreaded_env(
             env_name,
             frame_skip,
-            transformed_in=transformed_in,
             transformed_out=transformed_out,
             N=N,
             selected_keys=selected_keys,
@@ -611,7 +612,9 @@ class TestEnvPool:
         )
         env_multithreaded.reset(tensordict=td_reset)
 
-        td = env_multithreaded.rollout(policy=policy, max_steps=T)
+        td = env_multithreaded.rollout(
+            policy=policy, max_steps=T, break_when_any_done=False
+        )
         assert (
             td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
         ), f"{td.shape}, {td.get('done').sum(1)}"
@@ -621,61 +624,59 @@ class TestEnvPool:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", CLASSIC_CONTROL_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [False, True])
     @pytest.mark.parametrize("transformed_out", [True, False])
-    @pytest.mark.parametrize("static_seed", [True, False])
     def test_multithreaded_env_seed(
-        self, env_name, frame_skip, transformed_in, transformed_out, static_seed
+        self, env_name, frame_skip, transformed_out, seed=100, N=4
     ):
-        _, env_serial, env_multithread, env0 = _make_envs(
-            env_name, frame_skip, transformed_in, transformed_out, 1
+        # Create the first env, set the seed, and perform a sequence of operations
+        env = _make_multithreaded_env(
+            env_name,
+            frame_skip,
+            transformed_out=True,
+            N=N,
         )
-        env0.set_seed(0, static_seed=static_seed)
+        action = env.action_spec.rand((N,))
+        env.set_seed(seed)
+        td0a = env.reset()
+        td1a = env.step(td0a.clone().set("action", action))
+        td2a = env.rollout(max_steps=10)
 
-        out_seed_serial = env_serial.set_seed(0, static_seed=static_seed)
-        if static_seed:
-            assert out_seed_serial == 0
-        td0_serial = env_serial.reset()
-        torch.manual_seed(0)
-
-        max_steps = 2
-
-        td_serial = env_serial.rollout(
-            max_steps=max_steps, auto_reset=False, tensordict=td0_serial
-        ).contiguous()
-
-        out_seed_multithread = env_multithread.set_seed(0, static_seed=static_seed)
-        if static_seed:
-            assert out_seed_serial == 0
-        td0_multithread = env_multithread.reset()
-
-        torch.manual_seed(0)
-        assert out_seed_multithread == out_seed_serial
-        td_multithread = env_multithread.rollout(
-            max_steps=max_steps, auto_reset=False, tensordict=td0_multithread
-        ).contiguous()
-        torch.testing.assert_close(
-            td_multithread[:, :-1].get(("next", "observation")),
-            td_multithread[:, 1:].get("observation"),
+        # Create a new env, set the seed, and repeat same operations
+        _, _, env, _ = _make_envs(
+            env_name,
+            frame_skip,
+            transformed_in=False,
+            transformed_out=True,
+            N=N,
         )
-        key_serial = "pixels" if "pixels" in td0_serial.keys() else "observation"
-        # TODO: Shapes are different for Pong-v5 - need to adjust image size and gray-scale to compare
-        torch.testing.assert_close(
-            td0_serial[key_serial], td0_multithread["observation"]
-        )
-        assert_allclose_td(td_serial[:, 0], td_multithread[:, 0])  # first step
-        assert_allclose_td(td_serial[:, 1], td_multithread[:, 1])  # second step
-        assert_allclose_td(td_serial, td_multithread)
+        env.set_seed(seed)
+        td0b = env.reset()
+        td1b = env.step(td0b.clone().set("action", action))
+        td2b = env.rollout(max_steps=10)
 
-        env_multithread.close()
-        env_serial.close()
+        # Check that results on two envs are identical
+        assert_allclose_td(td0a, td0b.select(*td0a.keys()))
+        assert_allclose_td(td1a, td1b)
+        assert_allclose_td(td2a, td2b)
+
+        # Check that results are different if seed is different
+        env.set_seed(
+            seed=seed + 10,
+        )
+        td0c = env.reset()
+        td1c = env.step(td0c.clone().set("action", action))
+
+        with pytest.raises(AssertionError):
+            assert_allclose_td(td0a, td0c.select(*td0a.keys()))
+        with pytest.raises(AssertionError):
+            assert_allclose_td(td1a, td1c)
+        env.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     def test_multithread_env_shutdown(self):
-        _, _, env, _ = _make_envs(
+        env = _make_multithreaded_env(
             PENDULUM_VERSIONED,
             1,
-            transformed_in=True,
             transformed_out=False,
             N=3,
         )
@@ -707,10 +708,9 @@ class TestEnvPool:
         N=3,
     ):
         # tests casting to device
-        _, _, env_multithread, _ = _make_envs(
+        env_multithread = _make_multithreaded_env(
             env_name,
             frame_skip,
-            transformed_in=False,
             transformed_out=transformed_out,
             N=N,
         )
@@ -741,10 +741,9 @@ class TestEnvPool:
         torch.manual_seed(0)
         N = 3
 
-        _, _, env_multithreaded, _ = _make_envs(
+        env_multithreaded = _make_multithreaded_env(
             env_name,
             frame_skip,
-            transformed_in=False,
             transformed_out=transformed_out,
             device=device,
             N=N,

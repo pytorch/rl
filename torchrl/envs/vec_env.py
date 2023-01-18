@@ -1121,6 +1121,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             )
 
         super().__init__(**kwargs)
+        print(self.observation_spec)
         self.obs = torch.empty(
             self.num_workers, *self.observation_spec["observation"].shape
         )
@@ -1142,7 +1143,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         reset_workers = self._parse_reset_workers(tensordict)
         reset_data = self._env.reset(reset_workers)
-        tensordict_out = self._output_transform_reset(reset_data, reset_workers)
+        tensordict_out = self._transform_reset_output(reset_data, reset_workers)
         self.is_closed = False
         return tensordict_out
 
@@ -1152,7 +1153,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         # Action needs to be moved to CPU and converted to numpy before being passed to envpool
         action = action.to(torch.device("cpu"))
         step_output = self._env.step(action.detach().numpy())
-        tensordict_out = self._output_transform_step(step_output)
+        tensordict_out = self._transform_step_output(step_output)
         return tensordict_out
 
     def _get_input_spec(self) -> TensorSpec:
@@ -1200,13 +1201,12 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             return None
         return np.where(reset_workers)[0]
 
-    def _output_transform_reset(self, envpool_output, reset_workers):
-        obs, _ = envpool_output
+    def _transform_reset_output(self, envpool_output, reset_workers):
         if reset_workers is not None:
             for i, worker in enumerate(reset_workers):
-                self.obs[worker] = torch.tensor(obs[i])
+                self.obs[worker] = torch.tensor(envpool_output[i])
         else:
-            self.obs = torch.tensor(obs)
+            self.obs = torch.tensor(envpool_output)
 
         tensordict_out = TensorDict(
             {"observation": self.obs},
@@ -1217,14 +1217,14 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         tensordict_out.set("done", self._is_done)
         return tensordict_out
 
-    def _output_transform_step(self, envpool_output):
-        obs, reward, *_ = envpool_output
+    def _transform_step_output(self, envpool_output):
+        obs, reward, done, *_ = envpool_output
         tensordict_out = TensorDict(
             {"observation": torch.tensor(obs), "reward": torch.tensor(reward)},
             batch_size=self.batch_size,
             device=self.device,
         )
-        self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
+        self._is_done = done
         tensordict_out.set("done", self._is_done)
         return tensordict_out
 
@@ -1269,7 +1269,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
             task_id=env_name,
             env_type="gym",
             num_envs=num_workers,
-            gym_reset_return_info=True,
+            gym_reset_return_info=False,
             **create_env_kwargs,
         )
         return super()._build_env(env)

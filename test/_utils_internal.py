@@ -162,76 +162,93 @@ def _make_envs(
     env_serial = SerialEnv(
         N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
     )
-    if _has_envpool:
-        multithreaded_kwargs = (
-            {"frame_skip": frame_skip} if env_name == "ALE/Pong-v5" else {}
+
+    if transformed_out:
+        t_out = get_transform_out(env_name, transformed_in)
+
+        env0 = TransformedEnv(
+            env0,
+            t_out(),
         )
-        env_multithread = MultiThreadedEnv(
-            N,
+        env_parallel = TransformedEnv(
+            env_parallel,
+            t_out(),
+        )
+        env_serial = TransformedEnv(
+            env_serial,
+            t_out(),
+        )
+    else:
+        t_out = None
+
+    if _has_envpool:
+        env_multithread = _make_multithreaded_env(
             env_name,
-            create_env_kwargs=multithreaded_kwargs,
-            device=device,
+            frame_skip,
+            t_out,
+            N,
+            selected_keys=None,
+            device="cpu",
+            kwargs=None,
         )
     else:
         env_multithread = None
 
-    if transformed_out:
-        if env_name == "ALE/Pong-v5":
-
-            def t_out():
-                return (
-                    Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
-                    if not transformed_in
-                    else Compose(*[ObservationNorm(in_keys=["pixels"], loc=0, scale=1)])
-                )
-
-            env0 = TransformedEnv(
-                env0,
-                t_out(),
-            )
-            env_parallel = TransformedEnv(
-                env_parallel,
-                t_out(),
-            )
-            env_serial = TransformedEnv(
-                env_serial,
-                t_out(),
-            )
-            if _has_envpool:
-                env_multithread = TransformedEnv(
-                    env_multithread,
-                    t_out(),
-                )
-        else:
-
-            def t_out():
-                return (
-                    Compose(
-                        ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
-                        RewardClipping(0, 0.1),
-                    )
-                    if not transformed_in
-                    else Compose(
-                        ObservationNorm(in_keys=["observation"], loc=1.0, scale=1.0)
-                    )
-                )
-
-            env0 = TransformedEnv(
-                env0,
-                t_out(),
-            )
-            env_parallel = TransformedEnv(
-                env_parallel,
-                t_out(),
-            )
-            env_serial = TransformedEnv(
-                env_serial,
-                t_out(),
-            )
-            if _has_envpool:
-                env_multithread = TransformedEnv(
-                    env_multithread,
-                    t_out(),
-                )
-
     return env_parallel, env_serial, env_multithread, env0
+
+
+def _make_multithreaded_env(
+    env_name,
+    frame_skip,
+    transformed_out,
+    N,
+    selected_keys=None,
+    device="cpu",
+    kwargs=None,
+):
+
+    torch.manual_seed(0)
+    multithreaded_kwargs = (
+        {"frame_skip": frame_skip} if env_name == "ALE/Pong-v5" else {}
+    )
+    env_multithread = MultiThreadedEnv(
+        N,
+        env_name,
+        create_env_kwargs=multithreaded_kwargs,
+        device=device,
+    )
+
+    if transformed_out:
+        env_multithread = TransformedEnv(
+            env_multithread,
+            get_transform_out(env_name, transformed_in=False)(),
+        )
+    return env_multithread
+
+
+def get_transform_out(env_name, transformed_in):
+
+    if env_name == "ALE/Pong-v5":
+
+        def t_out():
+            return (
+                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
+                if not transformed_in
+                else Compose(*[ObservationNorm(in_keys=["pixels"], loc=0, scale=1)])
+            )
+
+    else:
+
+        def t_out():
+            return (
+                Compose(
+                    ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
+                    RewardClipping(0, 0.1),
+                )
+                if not transformed_in
+                else Compose(
+                    ObservationNorm(in_keys=["observation"], loc=1.0, scale=1.0)
+                )
+            )
+
+    return t_out
