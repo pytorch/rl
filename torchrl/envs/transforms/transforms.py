@@ -2819,7 +2819,9 @@ class TimeMaxPool(Transform):
             # Lazy init of buffers
             if in_key not in self._buffers.keys():
                 self._buffers[in_key] = torch.zeros(
-                    self.buffer_size, *tensordict[in_key].shape
+                    self.buffer_size,
+                    *tensordict[in_key].shape,
+                    dtype=tensordict[in_key].dtype,
                 )
 
             # shift obs 1 position to the right
