@@ -476,7 +476,7 @@ class TestEnvPool:
     def test_env_basic_operation(
         self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=3
     ):
-        _, _, env_multithreaded, env0 = _make_envs(
+        _, _, env_multithreaded, _ = _make_envs(
             env_name,
             frame_skip,
             transformed_in=transformed_in,
@@ -484,12 +484,11 @@ class TestEnvPool:
             N=N,
         )
         td = TensorDict(
-            source={"action": env0.action_spec.rand((N,))},
+            source={"action": env_multithreaded.action_spec.rand((N,))},
             batch_size=[
                 N,
             ],
         )
-        print(f"env0.action_spec={env0.action_spec} td={td}")
         td1 = env_multithreaded.step(td)
         assert not td1.is_shared()
         assert "done" in td1.keys()
@@ -498,7 +497,7 @@ class TestEnvPool:
         with pytest.raises(RuntimeError):
             # number of actions does not match number of workers
             td = TensorDict(
-                source={"action": env0.action_spec.rand((N - 1,))},
+                source={"action": env_multithreaded.action_spec.rand((N - 1,))},
                 batch_size=[N - 1],
             )
             td1 = env_multithreaded.step(td)
@@ -517,7 +516,6 @@ class TestEnvPool:
         ), f"{td.shape}, {td.get('done').sum(1)}"
 
         env_multithreaded.close()
-        env0.close()
 
     # Doesn't work with PONG_VERSIONED because output is uint8
     @pytest.mark.skipif(not _has_gym, reason="no gym")
@@ -543,7 +541,18 @@ class TestEnvPool:
         T=10,
         N=3,
     ):
-        _, _, env_multithreaded, env0 = _make_envs(
+        class DiscreteChoice(torch.nn.Module):
+            """Dummy module producing discrete output. Necessary when the action space is discrete."""
+
+            def __init__(self, out_dim: int):
+                super().__init__()
+                self.lin = nn.LazyLinear(out_dim)
+
+            def forward(self, x):
+                res = torch.argmax(self.lin(x), axis=-1, keepdim=True)
+                return res
+
+        _, _, env_multithreaded, _ = _make_envs(
             env_name,
             frame_skip,
             transformed_in=transformed_in,
@@ -551,6 +560,11 @@ class TestEnvPool:
             N=N,
             selected_keys=selected_keys,
         )
+        if env_multithreaded.action_spec.shape:
+            module = nn.LazyLinear(env_multithreaded.action_spec.shape[-1])
+        else:
+            # Action space is discrete
+            module = DiscreteChoice(env_multithreaded.action_spec.space.n)
 
         policy = ActorCriticOperator(
             SafeModule(
@@ -561,7 +575,7 @@ class TestEnvPool:
             ),
             SafeModule(
                 spec=None,
-                module=nn.LazyLinear(env0.action_spec.shape[-1]),
+                module=module,
                 in_keys=["hidden"],
                 out_keys=["action"],
             ),
@@ -571,7 +585,7 @@ class TestEnvPool:
         )
 
         td = TensorDict(
-            source={"action": env0.action_spec.rand((N,))},
+            source={"action": env_multithreaded.action_spec.rand((N,))},
             batch_size=[
                 N,
             ],
@@ -584,7 +598,7 @@ class TestEnvPool:
         with pytest.raises(RuntimeError):
             # number of actions does not match number of workers
             td = TensorDict(
-                source={"action": env0.action_spec.rand((N - 1,))},
+                source={"action": env_multithreaded.action_spec.rand((N - 1,))},
                 batch_size=[N - 1],
             )
             td1 = env_multithreaded.step(td)
@@ -603,7 +617,6 @@ class TestEnvPool:
         ), f"{td.shape}, {td.get('done').sum(1)}"
 
         env_multithreaded.close()
-        env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", CLASSIC_CONTROL_ENVS)

@@ -25,10 +25,7 @@ from torchrl.data import CompositeSpec, TensorSpec, UnboundedContinuousTensorSpe
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
-from torchrl.envs.libs.dm_control import _dmcontrol_to_torchrl_spec_transform, _has_dmc
-
-if _has_dmc:
-    from dm_env.specs import BoundedArray
+from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 
 try:
     import envpool
@@ -1108,7 +1105,7 @@ def _run_worker_pipe_shared_mem(
 
 
 class MultiThreadedEnvWrapper(_EnvWrapper):
-    """Wrapper for envpool environments."""
+    """Wrapper for envpool-based multithreaded environments."""
 
     _verbose: bool = False
 
@@ -1134,7 +1131,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _build_env(self, env):
         return env
 
-    def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
+    def _make_specs(self, env: "envpool.atari.AtariGymEnvPool") -> None:  # noqa: F821
         self.input_spec = self._get_input_spec()
         self.reward_spec = self._get_reward_spec()
         self.observation_spec = self._get_observation_spec()
@@ -1144,7 +1141,6 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         reset_workers = self._parse_reset_workers(tensordict)
-
         reset_data = self._env.reset(reset_workers)
         tensordict_out = self._output_transform_reset(reset_data, reset_workers)
         self.is_closed = False
@@ -1153,38 +1149,31 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
 
         action = tensordict.get("action")
-        if self.flatten:
-            action = action.flatten()
-
+        # Action needs to be moved to CPU and converted to numpy before being passed to envpool
         action = action.to(torch.device("cpu"))
         step_output = self._env.step(action.detach().numpy())
-
         tensordict_out = self._output_transform_step(step_output)
         return tensordict_out
 
     def _get_input_spec(self) -> TensorSpec:
-        action_spec = self._env.spec.action_spec()
-        if action_spec.shape == ():
-            self.flatten = True
-            action_spec = BoundedArray(
-                shape=(1,),
-                dtype=action_spec.dtype,
-                name=action_spec.name,
-                minimum=action_spec.minimum,
-                maximum=action_spec.maximum,
-            )
+        # Envpool provides Gym-compatible specs as env.spec.action_space and
+        # DM_Control-compatible specs as env.spec.action_spec(). We use the Gym ones.
+        action_spec = self._env.spec.action_space
         input_spec = CompositeSpec(
-            action=_dmcontrol_to_torchrl_spec_transform(
+            action=_gym_to_torchrl_spec_transform(
                 action_spec,
                 device=self.device,
+                categorical_action_encoding=True,
             )
         )
         return input_spec
 
     def _get_observation_spec(self) -> TensorSpec:
-        obs_spec = self._env.spec.observation_spec().obs
-        observation_spec = _dmcontrol_to_torchrl_spec_transform(
-            obs_spec, device=self.device
+        obs_spec = self._env.spec.observation_space
+        observation_spec = _gym_to_torchrl_spec_transform(
+            obs_spec,
+            device=self.device,
+            categorical_action_encoding=True,
         )
         return CompositeSpec(observation=observation_spec)
 
@@ -1262,7 +1251,6 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         self.env_name = env_name.replace("ALE/", "")
         self.num_workers = num_workers
         self.batch_size = torch.Size([batch_size or num_workers])
-        self.flatten = False
         self.create_env_kwargs = create_env_kwargs or {}
 
         kwargs["num_workers"] = num_workers
