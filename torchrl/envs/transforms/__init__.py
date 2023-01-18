@@ -30,6 +30,7 @@ from .transforms import (
     SqueezeTransform,
     StepCounter,
     TensorDictPrimer,
+    TimeMaxPool,
     ToTensorImage,
     Transform,
     TransformedEnv,

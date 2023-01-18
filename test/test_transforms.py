@@ -56,6 +56,7 @@ from torchrl.envs import (
     SqueezeTransform,
     StepCounter,
     TensorDictPrimer,
+    TimeMaxPool,
     ToTensorImage,
     TransformedEnv,
     UnsqueezeTransform,
@@ -863,6 +864,31 @@ class TestTransforms:
         assert isinstance(transformed_observation_spec2, CompositeSpec)
         assert "some_extra_observation" in transformed_observation_spec2.keys()
         assert "episode_reward" in transformed_observation_spec2.keys()
+
+    @pytest.mark.parametrize("T", [1, 3, 5])
+    def text_time_max_pool(self, T, device):
+
+        batch = 4
+        nodes = 4
+        keys = ["observation"]
+        time_max_pool = TimeMaxPool(keys, T)
+
+        td_list = []
+        for _ in range(T):
+            td_list.append(torch.rand(batch, nodes))
+        max_vals, _ = torch.max(torch.stack(td_list), dim=0)
+
+        for _ in range(T):
+            env_td = TensorDict(
+                {
+                    "observation": torch.ones((batch, 1), dtype=torch.bool),
+                },
+                device=device,
+                batch_size=[batch],
+            )
+            transformed_td = time_max_pool(env_td)
+
+        assert max_vals == transformed_td["observation"]
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(

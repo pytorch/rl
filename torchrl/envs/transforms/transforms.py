@@ -2763,9 +2763,14 @@ class SelectTransform(Transform):
         )
 
 
-class TimeMaxPoolTranform(Transform):
-    """Takes the maximum of each observation values over the last buffer_size observations.
+class TimeMaxPool(Transform):
+    """Take the maximum value in each position over the last T observations.
 
+    This transform take the maximum value in each position for all in_keys tensors over the last T time steps.
+
+    Args:
+        T: int
+            Number of time steps over which to apply max pooling.
     """
 
     inplace = False
@@ -2775,18 +2780,18 @@ class TimeMaxPoolTranform(Transform):
         self,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
-        buffer_size: int = 1,
+        T: int = 1,
     ):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
-        if buffer_size < 1:
-            raise ValueError("TimeMaxPoolTranform buffer_size should have a value greater or equal to one.")
+        if T < 1:
+            raise ValueError("TimeMaxPoolTranform N parameter should have a value greater or equal to one.")
         if self.in_keys is None:
             self.in_keys = ["observation"]
-        self.buffer_size = buffer_size
+        self.buffer_size = T
         self._buffers = dict()
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Resets episode rewards."""
+        """Resets _buffers."""
         # Non-batched environments
         if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
             for in_key in self.in_keys:
@@ -2809,7 +2814,7 @@ class TimeMaxPoolTranform(Transform):
         return tensordict
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Updates the episode rewards with the step rewards."""
+        """Update the episode tensordict with max pooled keys."""
         for in_key in self.in_keys:
 
             # Lazy init of buffers
@@ -2822,7 +2827,7 @@ class TimeMaxPoolTranform(Transform):
             self._buffers[in_key][0].copy_(tensordict[in_key])
             # apply max pooling
             pooled_tensor, _ = self._buffers[in_key].max(dim=0)
-            # add to Tensordict
+            # add to tensordict
             tensordict.set(in_key, pooled_tensor)
 
         return tensordict
