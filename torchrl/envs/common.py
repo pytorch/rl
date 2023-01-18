@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import abc
-import gc
 from copy import deepcopy
 from numbers import Number
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Union
@@ -429,7 +428,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
         """
-        gc.collect()
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")

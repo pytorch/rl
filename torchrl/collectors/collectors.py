@@ -337,6 +337,7 @@ class SyncDataCollector(_DataCollector):
 
     """
 
+    @torch.no_grad()
     def __init__(
         self,
         create_env_fn: Union[
@@ -568,6 +569,9 @@ class SyncDataCollector(_DataCollector):
                 break
 
     def _cast_to_policy(self, td: TensorDictBase) -> TensorDictBase:
+        if self.device == self.env_device:
+            self._td_policy = td
+            return self._td_policy
         policy_device = self.device
         if hasattr(self.policy, "in_keys"):
             # some keys may be absent -- TensorDictModule is resilient to missing keys
@@ -583,6 +587,9 @@ class SyncDataCollector(_DataCollector):
     def _cast_to_env(
         self, td: TensorDictBase, dest: Optional[TensorDictBase] = None
     ) -> TensorDictBase:
+        if self.device == self.env_device:
+            self._td_env = td
+            return self._td_env
         env_device = self.env_device
         if dest is None:
             if self._td_env is None:
@@ -647,7 +654,9 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.fill_("step_count", 0)
 
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
-        self._tensordict.set("traj_ids", torch.arange(n).view(self.env.batch_size[:1]))
+        self._tensordict.set(
+            "traj_ids", torch.arange(n).view(self.env.batch_size[:1]), inplace=True
+        )
 
         with set_exploration_mode(self.exploration_mode):
             for j in range(self.frames_per_batch):
