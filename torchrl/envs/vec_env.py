@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import gc
 import os
 from collections import OrderedDict
 from copy import deepcopy
@@ -1005,6 +1006,7 @@ def _run_worker_pipe_shared_mem(
             initialized = True
 
         elif cmd == "reset":
+            gc.collect()
             reset_kwargs = data
             if verbose:
                 print(f"resetting worker {pid}")
