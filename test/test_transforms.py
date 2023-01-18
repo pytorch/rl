@@ -866,7 +866,7 @@ class TestTransforms:
         assert "episode_reward" in transformed_observation_spec2.keys()
 
     @pytest.mark.parametrize("T", [1, 3, 5])
-    def text_time_max_pool(self, T, device):
+    def test_time_max_pool(self, T, device):
 
         batch = 4
         nodes = 4
