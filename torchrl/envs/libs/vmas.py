@@ -2,9 +2,8 @@ from typing import Dict, List, Optional
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-
-from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.envs.common import _EnvWrapper
+from torchrl.data import CompositeSpec, DEVICE_TYPING, UnboundedContinuousTensorSpec
+from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 from torchrl.envs.utils import _selective_unsqueeze
 
@@ -318,6 +317,10 @@ class VmasWrapper(_EnvWrapper):
             f"{self.__class__.__name__}(env={self._env}, num_envs={self.num_envs}, n_agents={self.n_agents},"
             f" batch_size={self.batch_size}, device={self.device})"
         )
+
+    def to(self, device: DEVICE_TYPING) -> EnvBase:
+        self._env.to(device)
+        return super().to(device)
 
 
 class VmasEnv(VmasWrapper):

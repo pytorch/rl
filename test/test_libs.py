@@ -8,7 +8,6 @@ from sys import platform
 import numpy as np
 import pytest
 import torch
-
 from _utils_internal import (
     get_available_devices,
     HALFCHEETAH_VERSIONED,
@@ -680,6 +679,29 @@ class TestVmas:
         assert tensordict.shape == torch.Size(
             [n_workers, list(env.n_agents)[0], list(env.num_envs)[0], n_rollout_samples]
         )
+
+    @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
+    @pytest.mark.parametrize("first", [0, 1])
+    def test_to_device(self, scenario_name: str, first: int):
+        devices = get_available_devices()
+
+        def make_vmas():
+            env = VmasEnv(
+                scenario_name=scenario_name,
+                num_envs=7,
+                n_agents=3,
+                seed=0,
+                device=devices[first],
+            )
+            return env
+
+        env = ParallelEnv(3, make_vmas)
+
+        assert env.rollout(max_steps=3).device == devices[first]
+
+        env.to(devices[1 - first])
+
+        assert env.rollout(max_steps=3).device == devices[1 - first]
 
 
 if __name__ == "__main__":
