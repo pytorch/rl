@@ -2767,8 +2767,9 @@ class TimeMaxPool(Transform):
     This transform take the maximum value in each position for all in_keys tensors over the last T time steps.
 
     Args:
-        T: int
-            Number of time steps over which to apply max pooling.
+        in_keys (sequence of str, optional): input keys on which the max pool will be applied. Defaults to "observation" if left empty.
+        out_keys (sequence of str, optional): output keys where the output will be written. Defaults to `in_keys` if left empty.
+        T (int, optional): Number of time steps over which to apply max pooling.
     """
 
     inplace = False
@@ -2783,7 +2784,11 @@ class TimeMaxPool(Transform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         if T < 1:
             raise ValueError(
-                "TimeMaxPoolTranform N parameter should have a value greater or equal to one."
+                "TimeMaxPoolTranform T parameter should have a value greater or equal to one."
+            )
+        if len(self.in_keys) != len(self.out_keys):
+            raise ValueError(
+                "TimeMaxPoolTranform in_keys and out_keys don't have the same number of elements"
             )
         if self.in_keys is None:
             self.in_keys = ["observation"]
@@ -2815,23 +2820,39 @@ class TimeMaxPool(Transform):
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
-        for in_key in self.in_keys:
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
             # Lazy init of buffers
             if in_key not in self._buffers.keys():
                 self._buffers[in_key] = torch.zeros(
                     self.buffer_size,
                     *tensordict[in_key].shape,
                     dtype=tensordict[in_key].dtype,
+                    device=tensordict[in_key].device,
                 )
 
             # shift obs 1 position to the right
             self._buffers[in_key] = torch.roll(self._buffers[in_key], shifts=1, dims=0)
-            # self._buffers[in_key][1:] = self._buffers[in_key][:-1]
             # add new obs
             self._buffers[in_key][0].copy_(tensordict[in_key])
             # apply max pooling
             pooled_tensor, _ = self._buffers[in_key].max(dim=0)
             # add to tensordict
-            tensordict.set(in_key, pooled_tensor)
+            tensordict.set(out_key, pooled_tensor)
 
         return tensordict
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        transformed_spec = CompositeSpec(
+            **{
+                key: value
+                for key, value in observation_spec.items()
+                if key in self.selected_keys
+            }
+        )
+
+        # Add out_key specs if necessary
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if out_key not in transformed_spec:
+                transformed_spec[out_key] = observation_spec[in_key]
+
+        return transformed_spec
