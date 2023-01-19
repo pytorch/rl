@@ -689,7 +689,7 @@ class TestVmas:
         n_workers,
         n_agents=5,
         n_rollout_samples=3,
-        max_steps=2,
+        max_steps=3,
     ):
         def make_vmas():
             env = VmasEnv(
@@ -715,10 +715,10 @@ class TestVmas:
         )
         tensordict = env.rand_step()
 
-        assert tensordict["done"][_reset].all() is False
+        assert tensordict["done"][_reset].all().item() is False
         # vmas resets all the agent dimension if only one of the agents needs resetting
         # thus, here we check that where we did not reset any agent, all agents are still done
-        assert tensordict["done"].all(dim=1)[~_reset.any(dim=1)].all() is True
+        assert tensordict["done"].all(dim=1)[~_reset.any(dim=1)].all().item() is True
 
     @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
     @pytest.mark.parametrize("first", [0, 1])
