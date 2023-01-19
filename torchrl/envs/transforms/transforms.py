@@ -448,13 +448,17 @@ but got an object of type {type(transform)}."""
         tensordict = tensordict.clone(False)
         tensordict_in = self.transform.inv(tensordict)
         tensordict_out = self.base_env._step(tensordict_in)
-        tensordict_out = tensordict_out.update(
-            tensordict.exclude(*tensordict_out.keys())
+        tensordict_out = (
+            tensordict_out.update(  # update the output with the original tensordict
+                tensordict.exclude(
+                    *tensordict_out.keys()
+                )  # exclude the newly written keys
+            )
         )
         next_tensordict = self.transform._step(tensordict_out)
-        tensordict_out.update(next_tensordict, inplace=False)
+        # tensordict_out.update(next_tensordict, inplace=False)
 
-        return tensordict_out
+        return next_tensordict
 
     def set_seed(
         self, seed: Optional[int] = None, static_seed: bool = False
@@ -1374,6 +1378,7 @@ class ObservationNorm(ObservationTransform):
         reduce_dim: Union[int, Tuple[int]] = 0,
         cat_dim: Optional[int] = None,
         key: Optional[str] = None,
+        keep_dims: Optional[Tuple[int]] = None,
     ) -> None:
         """Initializes the loc and scale stats of the parent environment.
 
@@ -1393,6 +1398,10 @@ class ObservationNorm(ObservationTransform):
             key (str, optional): if provided, the summary statistics will be
                 retrieved from that key in the resulting tensordicts.
                 Otherwise, the first key in :obj:`ObservationNorm.in_keys` will be used.
+            keep_dims (tuple of int, optional): the dimensions to keep in the loc and scale.
+                For instance, one may want the location and scale to have shape [C, 1, 1]
+                when normalizing a 3D tensor over the last two dimensions, but not the
+                third. Defaults to None.
 
         """
         if cat_dim is None:
@@ -1439,12 +1448,23 @@ class ObservationNorm(ObservationTransform):
             data.append(tensordict.get(key))
 
         data = torch.cat(data, cat_dim)
-        loc = data.mean(reduce_dim)
-        scale = data.std(reduce_dim)
+        if isinstance(reduce_dim, int):
+            reduce_dim = [reduce_dim]
+        if keep_dims is not None:
+            if not all(k in reduce_dim for k in keep_dims):
+                raise ValueError("keep_dim elements must be part of reduce_dim list.")
+        else:
+            keep_dims = []
+        loc = data.mean(reduce_dim, keepdim=True)
+        scale = data.std(reduce_dim, keepdim=True)
+        for r in sorted(reduce_dim, reverse=True):
+            if r not in keep_dims:
+                loc = loc.squeeze(r)
+                scale = scale.squeeze(r)
 
         if not self.standard_normal:
-            loc = loc / scale
-            scale = 1 / scale
+            scale = 1 / scale.clamp_min(self.eps)
+            loc = -loc * scale
 
         if not torch.isfinite(loc).all():
             raise RuntimeError("Non-finite values found in loc")
@@ -2515,9 +2535,22 @@ class RewardSum(Transform):
         """Resets episode rewards."""
         # Non-batched environments
         if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
-            for out_key in self.out_keys:
+            for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key in tensordict.keys():
-                    tensordict[out_key] = 0.0
+                    tensordict[out_key] = torch.zeros_like(tensordict[out_key])
+                elif in_key == "reward":
+                    tensordict[out_key] = self.parent.reward_spec.zero()
+                else:
+                    try:
+                        tensordict[out_key] = self.parent.observation_spec[
+                            in_key
+                        ].zero()
+                    except KeyError as err:
+                        raise KeyError(
+                            f"The key {in_key} was not found in the parent "
+                            f"observation_spec with keys "
+                            f"{list(self.parent.observation_spec.keys())}. "
+                        ) from err
 
         # Batched environments
         else:
@@ -2529,9 +2562,27 @@ class RewardSum(Transform):
                     device=tensordict.device,
                 ),
             )
-            for out_key in self.out_keys:
+            for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key in tensordict.keys():
-                    tensordict[out_key][_reset] = 0.0
+                    z = torch.zeros_like(tensordict[out_key])
+                    _reset = _reset.view_as(z)
+                    tensordict[out_key][_reset] = z[_reset]
+                elif in_key == "reward":
+                    # Since the episode reward is not in the tensordict, we need to allocate it
+                    # with zeros entirely (regardless of the _reset mask)
+                    z = self.parent.reward_spec.zero(self.parent.batch_size)
+                    tensordict[out_key] = z
+                else:
+                    try:
+                        tensordict[out_key] = self.parent.observation_spec[in_key].zero(
+                            self.parent.batch_size
+                        )
+                    except KeyError as err:
+                        raise KeyError(
+                            f"The key {in_key} was not found in the parent "
+                            f"observation_spec with keys "
+                            f"{list(self.parent.observation_spec.keys())}. "
+                        ) from err
 
         return tensordict
 
@@ -2553,8 +2604,7 @@ class RewardSum(Transform):
                         *tensordict.shape, 1, dtype=reward.dtype, device=reward.device
                     ),
                 )
-            tensordict[out_key] += reward
-
+            tensordict[out_key] = tensordict[out_key] + reward
         return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -2678,3 +2728,89 @@ class StepCounter(Transform):
         )
         observation_spec["step_count"].space.minimum = 0
         return observation_spec
+
+
+class ExcludeTransform(Transform):
+    """Excludes keys from the input tensordict.
+
+    Args:
+        *excluded_keys (iterable of str): The name of the keys to exclude. If the key is
+            not present, it is simply ignored.
+
+    """
+
+    inplace = False
+
+    def __init__(self, *excluded_keys):
+        super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
+        if not all(isinstance(item, str) for item in excluded_keys):
+            raise ValueError("excluded_keys must be a list or tuple of strings.")
+        self.excluded_keys = excluded_keys
+        if "reward" in excluded_keys:
+            raise RuntimeError("'reward' cannot be excluded from the keys.")
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.exclude(*self.excluded_keys)
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.exclude(*self.excluded_keys)
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if any(key in observation_spec.keys() for key in self.excluded_keys):
+            return CompositeSpec(
+                **{
+                    key: value
+                    for key, value in observation_spec.items()
+                    if key not in self.excluded_keys
+                }
+            )
+        return observation_spec
+
+
+class SelectTransform(Transform):
+    """Select keys from the input tensordict.
+
+    In general, the :obj:`ExcludeTransform` should be preferred: this transforms also
+        selects the "action" (or other keys from input_spec), "done" and "reward"
+        keys but other may be necessary.
+
+    Args:
+        *selected_keys (iterable of str): The name of the keys to select. If the key is
+            not present, it is simply ignored.
+
+    """
+
+    inplace = False
+
+    def __init__(self, *selected_keys):
+        super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
+        if not all(isinstance(item, str) for item in selected_keys):
+            raise ValueError("excluded_keys must be a list or tuple of strings.")
+        self.selected_keys = selected_keys
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.parent:
+            input_keys = self.parent.input_spec.keys()
+        else:
+            input_keys = []
+        return tensordict.select(
+            *self.selected_keys, "reward", "done", *input_keys, strict=False
+        )
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.parent:
+            input_keys = self.parent.input_spec.keys()
+        else:
+            input_keys = []
+        return tensordict.select(
+            *self.selected_keys, "reward", "done", *input_keys, strict=False
+        )
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        return CompositeSpec(
+            **{
+                key: value
+                for key, value in observation_spec.items()
+                if key in self.selected_keys
+            }
+        )

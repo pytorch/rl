@@ -77,6 +77,7 @@ from torchrl.objectives import (
     KLPENPPOLoss,
     PPOLoss,
     SACLoss,
+    TD3Loss,
 )
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.deprecated import DoubleREDQLoss_deprecated, REDQLoss_deprecated
@@ -647,6 +648,270 @@ class TestDDPG:
         parameters = list(actor.parameters()) + list(value.parameters())
         for p in parameters:
             assert p.grad.norm() > 0.0
+
+
+class TestTD3:
+    seed = 0
+
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # Actor
+        action_spec = BoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        module = nn.Linear(obs_dim, action_dim)
+        actor = Actor(
+            spec=action_spec,
+            module=module,
+        )
+        return actor.to(device)
+
+    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # Actor
+        class ValueClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(obs_dim + action_dim, 1)
+
+            def forward(self, obs, act):
+                return self.linear(torch.cat([obs, act], -1))
+
+        module = ValueClass()
+        value = ValueOperator(
+            module=module,
+            in_keys=["observation", "action"],
+        )
+        return value.to(device)
+
+    def _create_mock_distributional_actor(
+        self, batch=2, obs_dim=3, action_dim=4, atoms=5, vmin=1, vmax=5
+    ):
+        raise NotImplementedError
+
+    def _create_mock_data_td3(
+        self, batch=8, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
+        # create a tensordict
+        obs = torch.randn(batch, obs_dim, device=device)
+        next_obs = torch.randn(batch, obs_dim, device=device)
+        if atoms:
+            raise NotImplementedError
+        else:
+            action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
+        reward = torch.randn(batch, 1, device=device)
+        done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        td = TensorDict(
+            batch_size=(batch,),
+            source={
+                "observation": obs,
+                "next": {"observation": next_obs},
+                "done": done,
+                "reward": reward,
+                "action": action,
+            },
+            device=device,
+        )
+        return td
+
+    def _create_seq_mock_data_td3(
+        self, batch=8, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
+        # create a tensordict
+        total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
+        obs = total_obs[:, :T]
+        next_obs = total_obs[:, 1:]
+        if atoms:
+            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+                -1, 1
+            )
+        else:
+            action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+        reward = torch.randn(batch, T, 1, device=device)
+        done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs * mask.to(obs.dtype),
+                "next": {"observation": next_obs * mask.to(obs.dtype)},
+                "done": done,
+                "mask": mask,
+                "reward": reward * mask.to(obs.dtype),
+                "action": action * mask.to(obs.dtype),
+            },
+            device=device,
+        )
+        return td
+
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "delay_actor, delay_qvalue", [(False, False), (True, True)]
+    )
+    @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
+    @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
+    def test_td3(
+        self,
+        delay_actor,
+        delay_qvalue,
+        device,
+        policy_noise,
+        noise_clip,
+    ):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        td = self._create_mock_data_td3(device=device)
+        loss_fn = TD3Loss(
+            actor,
+            value,
+            gamma=0.9,
+            loss_function="l2",
+            policy_noise=policy_noise,
+            noise_clip=noise_clip,
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
+        )
+        with _check_td_steady(td):
+            loss = loss_fn(td)
+
+        assert all(
+            (p.grad is None) or (p.grad == 0).all()
+            for p in loss_fn.qvalue_network_params.values(True, True)
+        )
+        assert all(
+            (p.grad is None) or (p.grad == 0).all()
+            for p in loss_fn.actor_network_params.values(True, True)
+        )
+        # check that losses are independent
+        for k in loss.keys():
+            if not k.startswith("loss"):
+                continue
+            loss[k].sum().backward(retain_graph=True)
+            if k == "loss_actor":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(True, True)
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(True, True)
+                )
+            elif k == "loss_qvalue":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(True, True)
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(True, True)
+                )
+            else:
+                raise NotImplementedError(k)
+            loss_fn.zero_grad()
+
+        sum([item for _, item in loss.items()]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("delay_actor,delay_qvalue", [(False, False), (True, True)])
+    @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
+    @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
+    def test_td3_batcher(
+        self, n, delay_actor, delay_qvalue, device, policy_noise, noise_clip, gamma=0.9
+    ):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        td = self._create_seq_mock_data_td3(device=device)
+        loss_fn = TD3Loss(
+            actor,
+            value,
+            gamma=0.9,
+            policy_noise=policy_noise,
+            noise_clip=noise_clip,
+            delay_qvalue=delay_qvalue,
+            delay_actor=delay_actor,
+        )
+
+        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+
+        td_clone = td.clone()
+        ms_td = ms(td_clone)
+
+        torch.manual_seed(0)
+        np.random.seed(0)
+
+        with _check_td_steady(ms_td):
+            loss_ms = loss_fn(ms_td)
+        assert loss_fn.priority_key in ms_td.keys()
+
+        with torch.no_grad():
+            torch.manual_seed(0)  # log-prob is computed with a random action
+            np.random.seed(0)
+            loss = loss_fn(td)
+        if n == 0:
+            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            _loss = sum([item for _, item in loss.items()])
+            _loss_ms = sum([item for _, item in loss_ms.items()])
+            assert (
+                abs(_loss - _loss_ms) < 1e-3
+            ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
+        else:
+            with pytest.raises(AssertionError):
+                assert_allclose_td(loss, loss_ms)
+
+        sum([item for _, item in loss_ms.items()]).backward()
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+
+        # Check param update effect on targets
+        target_actor = loss_fn.target_actor_network_params.clone().values(
+            include_nested=True, leaves_only=True
+        )
+        target_qvalue = loss_fn.target_qvalue_network_params.clone().values(
+            include_nested=True, leaves_only=True
+        )
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_actor2 = loss_fn.target_actor_network_params.clone().values(
+            include_nested=True, leaves_only=True
+        )
+        target_qvalue2 = loss_fn.target_qvalue_network_params.clone().values(
+            include_nested=True, leaves_only=True
+        )
+        if loss_fn.delay_actor:
+            assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
+        else:
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
+            )
+        if loss_fn.delay_qvalue:
+            assert all(
+                (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+            )
+        else:
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
+            )
+
+        # check that policy is updated after parameter update
+        actorp_set = set(actor.parameters())
+        loss_fnp_set = set(loss_fn.parameters())
+        assert len(actorp_set.intersection(loss_fnp_set)) == len(actorp_set)
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 
 class TestSAC:

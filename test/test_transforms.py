@@ -22,7 +22,7 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
 )
-from tensordict import TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp, Tensor
 from torchrl._utils import prod
 from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
@@ -30,39 +30,41 @@ from torchrl.envs import (
     BinarizeReward,
     CatFrames,
     CatTensors,
+    CenterCrop,
     Compose,
+    DiscreteActionProjection,
     DoubleToFloat,
+    EnvBase,
     EnvCreator,
+    ExcludeTransform,
     FiniteTensorDictCheck,
     FlattenObservation,
+    FrameSkipTransform,
     GrayScale,
+    gSDENoise,
+    NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
+    PinMemoryTransform,
     R3MTransform,
     Resize,
     RewardClipping,
     RewardScaling,
     RewardSum,
+    SelectTransform,
     SerialEnv,
+    SqueezeTransform,
     StepCounter,
+    TensorDictPrimer,
     ToTensorImage,
+    TransformedEnv,
+    UnsqueezeTransform,
     VIPTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
-from torchrl.envs.transforms import TransformedEnv, VecNorm
+from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
-from torchrl.envs.transforms.transforms import (
-    _has_tv,
-    CenterCrop,
-    DiscreteActionProjection,
-    FrameSkipTransform,
-    gSDENoise,
-    NoopResetEnv,
-    PinMemoryTransform,
-    SqueezeTransform,
-    TensorDictPrimer,
-    UnsqueezeTransform,
-)
+from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs
 
@@ -1114,6 +1116,59 @@ class TestTransforms:
         assert t_env.transform.loc.dtype == t_env.observation_spec["observation"].dtype
         assert (
             t_env.transform.loc.device == t_env.observation_spec["observation"].device
+        )
+
+    @pytest.mark.parametrize("keys", [["pixels"], ["pixels", "stuff"]])
+    @pytest.mark.parametrize("size", [1, 3])
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_observationnorm_init_stats_pixels(
+        self, keys, size, device, standard_normal, parallel
+    ):
+        def make_env():
+            base_env = DiscreteActionConvMockEnvNumpy(
+                seed=0,
+            )
+            base_env.out_key = "pixels"
+            return base_env
+
+        if parallel:
+            base_env = SerialEnv(3, make_env)
+            reduce_dim = (0, 1, 3, 4)
+            keep_dim = (3, 4)
+            cat_dim = 1
+        else:
+            base_env = make_env()
+            reduce_dim = (0, 2, 3)
+            keep_dim = (2, 3)
+            cat_dim = 0
+
+        t_env = TransformedEnv(
+            base_env,
+            transform=ObservationNorm(in_keys=keys, standard_normal=standard_normal),
+        )
+        if len(keys) > 1:
+            t_env.transform.init_stats(
+                num_iter=11,
+                key="pixels",
+                cat_dim=cat_dim,
+                reduce_dim=reduce_dim,
+                keep_dims=keep_dim,
+            )
+        else:
+            t_env.transform.init_stats(
+                num_iter=11,
+                reduce_dim=reduce_dim,
+                cat_dim=cat_dim,
+                keep_dims=keep_dim,
+            )
+
+        assert t_env.transform.loc.shape == torch.Size(
+            [t_env.observation_spec["pixels"].shape[0], 1, 1]
+        )
+        assert t_env.transform.scale.shape == torch.Size(
+            [t_env.observation_spec["pixels"].shape[0], 1, 1]
         )
 
     def test_observationnorm_stats_already_initialized_error(self):
@@ -2269,6 +2324,54 @@ def test_batch_unlocked_with_batch_size_transformed(device):
         RuntimeError, match="Expected a tensordict with shape==env.shape, "
     ):
         env.step(td_expanded)
+
+
+class TestExcludeSelect:
+    class EnvWithManyKeys(EnvBase):
+        def __init__(self):
+            super().__init__()
+            self.observation_spec = CompositeSpec(
+                a=UnboundedContinuousTensorSpec(3),
+                b=UnboundedContinuousTensorSpec(3),
+                c=UnboundedContinuousTensorSpec(3),
+            )
+            self.reward_spec = UnboundedContinuousTensorSpec(1)
+            self.input_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(2))
+
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            return self.observation_spec.rand().update(
+                {
+                    "reward": self.reward_spec.rand(),
+                    "done": torch.zeros(1, dtype=torch.bool),
+                }
+            )
+
+        def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+            return self.observation_spec.rand().update(
+                {"done": torch.zeros(1, dtype=torch.bool)}
+            )
+
+        def _set_seed(self, seed):
+            return seed + 1
+
+    def test_exclude(self):
+        base_env = TestExcludeSelect.EnvWithManyKeys()
+        env = TransformedEnv(base_env, ExcludeTransform("a"))
+        check_env_specs(env)
+        assert "a" not in env.reset().keys()
+        assert "b" in env.reset().keys()
+        assert "c" in env.reset().keys()
+
+    def test_select(self):
+        base_env = TestExcludeSelect.EnvWithManyKeys()
+        env = TransformedEnv(base_env, SelectTransform("b", "c"))
+        check_env_specs(env)
+        assert "a" not in env.reset().keys()
+        assert "b" in env.reset().keys()
+        assert "c" in env.reset().keys()
 
 
 transforms = [
