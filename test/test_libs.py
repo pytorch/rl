@@ -15,7 +15,7 @@ from _utils_internal import (
     PONG_VERSIONED,
 )
 from packaging import version
-from tensordict.tensordict import assert_allclose_td
+from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
@@ -679,6 +679,46 @@ class TestVmas:
         assert tensordict.shape == torch.Size(
             [n_workers, list(env.n_agents)[0], list(env.num_envs)[0], n_rollout_samples]
         )
+
+    @pytest.mark.parametrize("num_envs", [1, 10])
+    @pytest.mark.parametrize("n_workers", [1, 3])
+    def test_vmas_reset(
+        self,
+        scenario_name,
+        num_envs,
+        n_workers,
+        n_agents=5,
+        n_rollout_samples=3,
+        max_steps=2,
+    ):
+        def make_vmas():
+            env = VmasEnv(
+                scenario_name=scenario_name,
+                num_envs=num_envs,
+                n_agents=n_agents,
+                max_steps=max_steps,
+            )
+            env.set_seed(0)
+            return env
+
+        env = ParallelEnv(n_workers, make_vmas)
+        tensordict = env.rollout(max_steps=n_rollout_samples)
+
+        assert tensordict["done"].squeeze(-1)[..., -1].all()
+
+        _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+        while not _reset.any():
+            _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+
+        env.reset(
+            TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
+        )
+        tensordict = env.rand_step()
+
+        assert tensordict["done"][_reset].all() is False
+        # vmas resets all the agent dimension if only one of the agents needs resetting
+        # thus, here we check that where we did not reset any agent, all agents are still done
+        assert tensordict["done"].all(dim=1)[~_reset.any(dim=1)].all() is True
 
     @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
     @pytest.mark.parametrize("first", [0, 1])
