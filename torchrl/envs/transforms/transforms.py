@@ -1554,8 +1554,12 @@ class CatFrames(ObservationTransform):
         if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
             for in_key in self.in_keys:
                 buffer_name = f"_cat_buffers_{in_key}"
-                buffer = getattr(self, buffer_name)
-                buffer.fill_(0.0)
+                try:
+                    buffer = getattr(self, buffer_name)
+                    buffer.fill_(0.0)
+                except AttributeError:
+                    # we'll instantiate later, when needed
+                    pass
 
         # Batched environments
         else:
@@ -1568,12 +1572,31 @@ class CatFrames(ObservationTransform):
                 ),
             )
             for in_key in self.in_keys:
-                if in_key in self._cat_buffers.keys():
-                    buffer_name = f"_cat_buffers_{in_key}"
+                buffer_name = f"_cat_buffers_{in_key}"
+                try:
                     buffer = getattr(self, buffer_name)
                     buffer[_reset] = 0.0
+                except AttributeError:
+                    # we'll instantiate later, when needed
+                    pass
 
         return tensordict
+
+    def _make_missing_buffer(self, data, buffer_name):
+        shape = list(data.shape)
+        d = shape[self.cat_dim]
+        shape[self.cat_dim] = d * self.N
+        shape = torch.Size(shape)
+        self.register_buffer(
+            buffer_name,
+            torch.zeros(
+                shape,
+                dtype=data.dtype,
+                device=data.device,
+            ),
+        )
+        buffer = getattr(self, buffer_name)
+        return buffer
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
@@ -1587,18 +1610,7 @@ class CatFrames(ObservationTransform):
                 # shift obs 1 position to the right
                 buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.cat_dim))
             except AttributeError:
-                shape = list(data.shape)
-                shape[self.cat_dim] = d * self.N
-                shape = torch.Size(shape)
-                self.register_buffer(
-                    buffer_name,
-                    torch.zeros(
-                        shape,
-                        dtype=tensordict[in_key].dtype,
-                        device=tensordict[in_key].device,
-                    ),
-                )
-                buffer = getattr(self, buffer_name)
+                buffer = self._make_missing_buffer(data, buffer_name)
             # add new obs
             idx = self.cat_dim
             if idx < 0:
