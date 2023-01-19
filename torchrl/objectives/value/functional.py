@@ -435,9 +435,10 @@ def vec_td_lambda_return_estimate(
         gamma = gamma * not_done
         gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
         if not rolling_gamma and done[..., :-1, :].any():
-            raise RuntimeError("Not implemented")
-            gammas[..., 1:, :] *= not_done.view(-1, 1, T, 1)
-            gammas[..., 1:, :] += done.view(-1, 1, T, 1)
+            gammas[..., 1:, :] *= 1 - done.view(-1, T).diag_embed().unsqueeze(-1).to(
+                next_state_value.dtype
+            )
+            # gammas[..., 1:, :] += done.view(-1, 1, T, 1)
             # gammas *= not_done.view(-1, T, 1, 1)
     else:
         if rolling_gamma is not None:
