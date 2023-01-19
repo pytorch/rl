@@ -1521,27 +1521,95 @@ class CatFrames(ObservationTransform):
         cat_dim (int, optional): dimension along which concatenate the
             observations. Default is `cat_dim=-3`.
         in_keys (list of int, optional): keys pointing to the frames that have
-            to be concatenated.
+            to be concatenated. Defaults to ["pixels"].
+        out_keys (list of int, optional): keys pointing to where the output
+            has to be written. Defaults to the value of `in_keys`.
 
     """
 
     inplace = False
+    _CAT_DIM_ERR = (
+        "cat_dim must be > 0 to accomodate for tensordict of "
+        "different batch-sizes (since negative dims are batch invariant)."
+    )
 
     def __init__(
         self,
         N: int = 4,
         cat_dim: int = -3,
         in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
-        super().__init__(in_keys=in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.N = N
+        if cat_dim > 0:
+            raise ValueError(self._CAT_DIM_ERR)
         self.cat_dim = cat_dim
-        self.buffer = []
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        self.buffer = []
+        """Resets _buffers."""
+        # Non-batched environments
+        if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
+            for in_key in self.in_keys:
+                buffer_name = f"_cat_buffers_{in_key}"
+                buffer = getattr(self, buffer_name)
+                buffer.fill_(0.0)
+
+        # Batched environments
+        else:
+            _reset = tensordict.get(
+                "_reset",
+                torch.ones(
+                    tensordict.batch_size,
+                    dtype=torch.bool,
+                    device=tensordict.device,
+                ),
+            )
+            for in_key in self.in_keys:
+                if in_key in self._cat_buffers.keys():
+                    buffer_name = f"_cat_buffers_{in_key}"
+                    buffer = getattr(self, buffer_name)
+                    buffer[_reset] = 0.0
+
+        return tensordict
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Update the episode tensordict with max pooled keys."""
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            # Lazy init of buffers
+            buffer_name = f"_cat_buffers_{in_key}"
+            data = tensordict[in_key]
+            d = data.size(self.cat_dim)
+            try:
+                buffer = getattr(self, buffer_name)
+                # shift obs 1 position to the right
+                buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.cat_dim))
+            except AttributeError:
+                shape = list(data.shape)
+                shape[self.cat_dim] = d * self.N
+                shape = torch.Size(shape)
+                self.register_buffer(
+                    buffer_name,
+                    torch.zeros(
+                        shape,
+                        dtype=tensordict[in_key].dtype,
+                        device=tensordict[in_key].device,
+                    ),
+                )
+                buffer = getattr(self, buffer_name)
+            # add new obs
+            idx = self.cat_dim
+            if idx < 0:
+                idx = buffer.ndimension() + idx
+            else:
+                raise ValueError(self._CAT_DIM_ERR)
+            idx = [slice(None, None) for _ in range(idx)] + [slice(-d, None)]
+            buffer[idx].copy_(data)
+            # add to tensordict
+            tensordict.set(out_key, buffer.clone())
+
         return tensordict
 
     @_apply_to_composite
@@ -1556,17 +1624,6 @@ class CatFrames(ObservationTransform):
             shape[self.cat_dim] = self.N * shape[self.cat_dim]
             observation_spec.shape = torch.Size(shape)
         return observation_spec
-
-    def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
-        self.buffer.append(obs)
-        self.buffer = self.buffer[-self.N :]
-        buffer = list(reversed(self.buffer))
-        buffer = [buffer[0]] * (self.N - len(buffer)) + buffer
-        if len(buffer) != self.N:
-            raise RuntimeError(
-                f"actual buffer length ({buffer}) differs from expected (" f"{self.N})"
-            )
-        return torch.cat(buffer, self.cat_dim)
 
     def __repr__(self) -> str:
         return (

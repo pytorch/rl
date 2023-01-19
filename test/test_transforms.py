@@ -1289,24 +1289,31 @@ class TestTransforms:
                 )
 
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_catframes_buffer_check_latest_frame(self, device):
+    @pytest.mark.parametrize("d", range(1, 4))
+    def test_catframes_buffer_check_latest_frame(self, device, d):
         key1 = "first key"
         key2 = "second key"
         N = 4
         keys = [key1, key2]
-        key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
-        key2_tensor = torch.ones(1, 1, 3, 3, device=device)
+        key1_tensor = torch.ones(1, d, 3, 3, device=device) * 2
+        key2_tensor = torch.ones(1, d, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
         cat_frames = CatFrames(N=N, in_keys=keys)
 
-        cat_frames(td)
-        latest_frame = td.get(key2)
+        tdclone = cat_frames(td.clone())
+        latest_frame = tdclone.get(key2)
 
-        assert latest_frame.shape[1] == N
-        for i in range(0, N - 1):
-            assert torch.equal(latest_frame[0][i], key2_tensor[0][0])
-        assert torch.equal(latest_frame[0][N - 1], key1_tensor[0][0])
+        assert latest_frame.shape[1] == N * d
+        assert (latest_frame[0, :-d] == 0).all()
+        assert (latest_frame[0, -d:] == 1).all()
+
+        tdclone = cat_frames(td.clone())
+        latest_frame = tdclone.get(key2)
+
+        assert latest_frame.shape[1] == N * d
+        assert (latest_frame[0, : -2 * d] == 0).all()
+        assert (latest_frame[0, -2 * d :] == 1).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_catframes_reset(self, device):
@@ -1314,19 +1321,23 @@ class TestTransforms:
         key2 = "second key"
         N = 4
         keys = [key1, key2]
-        key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
-        key2_tensor = torch.ones(1, 1, 3, 3, device=device)
+        key1_tensor = torch.randn(1, 1, 3, 3, device=device)
+        key2_tensor = torch.randn(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
         cat_frames = CatFrames(N=N, in_keys=keys)
 
         cat_frames(td)
-        buffer_length1 = len(cat_frames.buffer)
+        buffer = getattr(cat_frames, f"_cat_buffers_{key1}")
+
         passed_back_td = cat_frames.reset(td)
 
-        assert buffer_length1 == 2
         assert td is passed_back_td
-        assert 0 == len(cat_frames.buffer)
+        assert (0 == buffer).all()
+
+        _ = cat_frames._call(td)
+        assert (0 == buffer[..., :-1, :, :]).all()
+        assert (0 != buffer[..., -1:, :, :]).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_finitetensordictcheck(self, device):
