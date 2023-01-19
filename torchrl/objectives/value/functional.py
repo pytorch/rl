@@ -220,7 +220,6 @@ def td_lambda_return_estimate(
                 "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
             )
     not_done = 1 - done.to(next_state_value.dtype)
-    next_state_value = not_done * next_state_value
 
     returns = torch.empty_like(next_state_value)
 
@@ -231,6 +230,7 @@ def td_lambda_return_estimate(
     if not (isinstance(gamma, torch.Tensor) and gamma.shape == not_done.shape):
         single_gamma = True
         gamma = torch.full_like(next_state_value, gamma)
+    gamma = gamma * not_done
 
     single_lambda = False
     if not (isinstance(lmbda, torch.Tensor) and lmbda.shape == not_done.shape):
@@ -416,19 +416,29 @@ def vec_td_lambda_return_estimate(
 
     next_state_value = next_state_value.view(-1, 1, T)
     reward = reward.view(-1, 1, T)
-    done = done.view(-1, 1, T)
+    # done = done.view(-1, 1, T)
 
     """Vectorized version of td_lambda_advantage_estimate"""
     device = reward.device
     not_done = 1 - done.to(next_state_value.dtype)
-    next_state_value = not_done * next_state_value
 
     first_below_thr_gamma = None
 
-    if isinstance(gamma, torch.Tensor) and gamma.numel() > 1:
+    # 3 use cases: (1) there is one gamma per time step, (2) there is a single gamma but
+    # some intermediate dones and (3) there is a single gamma and no done.
+    # (3) can be treated much faster than (1) and (2) (lower mem footprint)
+    if (isinstance(gamma, torch.Tensor) and gamma.numel() > 1) or done.any():
+
         if rolling_gamma is None:
             rolling_gamma = True
+        # if rolling_gamma:
+        gamma = gamma * not_done
         gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
+        if not rolling_gamma and done[..., :-1, :].any():
+            raise RuntimeError("Not implemented")
+            gammas[..., 1:, :] *= not_done.view(-1, 1, T, 1)
+            gammas[..., 1:, :] += done.view(-1, 1, T, 1)
+            # gammas *= not_done.view(-1, T, 1, 1)
     else:
         if rolling_gamma is not None:
             raise RuntimeError(
@@ -485,7 +495,6 @@ def vec_td_lambda_return_estimate(
         v2 = _custom_conv1d(
             next_state_value, dec * (gammas * (1 - lambdas)).transpose(1, 2)
         )
-
         v3 = next_state_value
         v3[..., :-1] = 0
         v3 = _custom_conv1d(v3, dec * (gammas * lambdas).transpose(1, 2))
