@@ -2887,18 +2887,6 @@ class TimeMaxPool(Transform):
 
         return tensordict
 
+    @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        transformed_spec = CompositeSpec(
-            **{
-                key: value
-                for key, value in observation_spec.items()
-                if key in self.selected_keys
-            }
-        )
-
-        # Add out_key specs if necessary
-        for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if out_key not in transformed_spec:
-                transformed_spec[out_key] = observation_spec[in_key]
-
-        return transformed_spec
+        return observation_spec
