@@ -1165,10 +1165,10 @@ class TestTransforms:
             )
 
         assert t_env.transform.loc.shape == torch.Size(
-            [t_env.observation_spec["pixels"].shape[0], 1, 1]
+            [t_env.observation_spec["pixels"].shape[-3], 1, 1]
         )
         assert t_env.transform.scale.shape == torch.Size(
-            [t_env.observation_spec["pixels"].shape[0], 1, 1]
+            [t_env.observation_spec["pixels"].shape[-3], 1, 1]
         )
 
     def test_observationnorm_stats_already_initialized_error(self):
