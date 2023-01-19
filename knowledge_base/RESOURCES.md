@@ -16,6 +16,7 @@ See [here](https://pytorch.org/functorch/stable/)
 - [RL lectures from Deepmind](https://www.deepmind.com/learning-resources/reinforcement-learning-lecture-series-2021)
 - [Best benchmarks](https://neptune.ai/blog/best-benchmarks-for-reinforcement-learning)
 - [Awesome RL: Reinforcement learning resources curated](https://github.com/aikorea/awesome-rl)
+- [A Succinct Summary of Reinforcement Learning](https://arxiv.org/abs/2301.01379)
 
 ### Forums
 
