@@ -2781,6 +2781,8 @@ class TimeMaxPool(Transform):
         out_keys: Optional[Sequence[str]] = None,
         T: int = 1,
     ):
+        if self.in_keys is None:
+            self.in_keys = ["observation"]
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         if T < 1:
             raise ValueError(
@@ -2790,8 +2792,6 @@ class TimeMaxPool(Transform):
             raise ValueError(
                 "TimeMaxPoolTranform in_keys and out_keys don't have the same number of elements"
             )
-        if self.in_keys is None:
-            self.in_keys = ["observation"]
         self.buffer_size = T
         self._buffers = {}
 
