@@ -438,8 +438,6 @@ def vec_td_lambda_return_estimate(
             gammas[..., 1:, :] *= 1 - done.view(-1, T).diag_embed().unsqueeze(-1).to(
                 next_state_value.dtype
             )
-            # gammas[..., 1:, :] += done.view(-1, 1, T, 1)
-            # gammas *= not_done.view(-1, T, 1, 1)
     else:
         if rolling_gamma is not None:
             raise RuntimeError(
