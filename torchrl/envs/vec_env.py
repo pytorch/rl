@@ -1203,15 +1203,16 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return np.where(reset_workers)[0]
 
     def _transform_reset_output(self, envpool_output, reset_workers):
+        observation, _ = envpool_output
         if reset_workers is not None:
-            if isinstance(envpool_output, treevalue.TreeValue):
-                envpool_output = treevalue.FastTreeValue(envpool_output)
+            if isinstance(observation, treevalue.TreeValue):
+                observation = treevalue.FastTreeValue(observation)
             for i, worker in enumerate(reset_workers):
                 self.obs[worker] = self._treevalue_or_numpy_to_tensor_or_tensordict(
-                    envpool_output[i]
+                    observation[i]
                 )
         else:
-            self.obs = self._treevalue_or_numpy_to_tensor_or_tensordict(envpool_output)
+            self.obs = self._treevalue_or_numpy_to_tensor_or_tensordict(observation)
 
         tensordict_out = TensorDict(
             {"observation": self.obs},
@@ -1287,7 +1288,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
             task_id=env_name,
             env_type="gym",
             num_envs=num_workers,
-            gym_reset_return_info=False,
+            gym_reset_return_info=True,
             **create_env_kwargs,
         )
         return super()._build_env(env)
