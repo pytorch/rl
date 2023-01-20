@@ -1343,7 +1343,7 @@ class CompositeSpec(TensorSpec):
         )
 
     def keys(
-        self, yield_nesting_keys: bool = False, nested_keys: bool = False
+        self, yield_nesting_keys: bool = False, nested_keys: bool = True
     ) -> KeysView:
         """Keys of the CompositeSpec.
 
@@ -1352,10 +1352,10 @@ class CompositeSpec(TensorSpec):
                 will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
                 will lead to the keys :obj:`["next", ("next", "obs")]`. Default is :obj:`False`, i.e.
                 only nested keys will be returned.
-            nested_keys (bool, optional): if :obj:`True`, the returned keys will not be nested. They will
+            nested_keys (bool, optional): if :obj:`False`, the returned keys will not be nested. They will
                 represent only the immediate children of the root, and not the whole nested sequence, i.e. a
                 :obj:`CompositeSpec(next=CompositeSpec(obs=None))` will lead to the keys
-                :obj:`["next"]. Default is :obj:`False`, i.e. nested keys will be returned.
+                :obj:`["next"]. Default is :obj:`True`, i.e. nested keys will be returned.
         """
         return _CompositeSpecKeysView(
             self, _yield_nesting_keys=yield_nesting_keys, nested_keys=nested_keys
