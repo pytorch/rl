@@ -1202,7 +1202,7 @@ class CompositeSpec(TensorSpec):
                     "Got multiple arguments, when at most one is expected for CompositeSpec."
                 )
             argdict = args[0]
-            if not isinstance(argdict, dict):
+            if not isinstance(argdict, (dict, CompositeSpec)):
                 raise RuntimeError(
                     f"Expected a dictionary of specs, but got an argument of type {type(argdict)}."
                 )

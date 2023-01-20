@@ -22,7 +22,7 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
 )
-from tensordict import TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp, Tensor
 from torchrl._utils import prod
 from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
@@ -30,39 +30,41 @@ from torchrl.envs import (
     BinarizeReward,
     CatFrames,
     CatTensors,
+    CenterCrop,
     Compose,
+    DiscreteActionProjection,
     DoubleToFloat,
+    EnvBase,
     EnvCreator,
+    ExcludeTransform,
     FiniteTensorDictCheck,
     FlattenObservation,
+    FrameSkipTransform,
     GrayScale,
+    gSDENoise,
+    NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
+    PinMemoryTransform,
     R3MTransform,
     Resize,
     RewardClipping,
     RewardScaling,
     RewardSum,
+    SelectTransform,
     SerialEnv,
+    SqueezeTransform,
     StepCounter,
+    TensorDictPrimer,
     ToTensorImage,
+    TransformedEnv,
+    UnsqueezeTransform,
     VIPTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
-from torchrl.envs.transforms import TransformedEnv, VecNorm
+from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
-from torchrl.envs.transforms.transforms import (
-    _has_tv,
-    CenterCrop,
-    DiscreteActionProjection,
-    FrameSkipTransform,
-    gSDENoise,
-    NoopResetEnv,
-    PinMemoryTransform,
-    SqueezeTransform,
-    TensorDictPrimer,
-    UnsqueezeTransform,
-)
+from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs
 
@@ -1112,6 +1114,59 @@ class TestTransforms:
             t_env.transform.loc.device == t_env.observation_spec["observation"].device
         )
 
+    @pytest.mark.parametrize("keys", [["pixels"], ["pixels", "stuff"]])
+    @pytest.mark.parametrize("size", [1, 3])
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_observationnorm_init_stats_pixels(
+        self, keys, size, device, standard_normal, parallel
+    ):
+        def make_env():
+            base_env = DiscreteActionConvMockEnvNumpy(
+                seed=0,
+            )
+            base_env.out_key = "pixels"
+            return base_env
+
+        if parallel:
+            base_env = SerialEnv(3, make_env)
+            reduce_dim = (0, 1, 3, 4)
+            keep_dim = (3, 4)
+            cat_dim = 1
+        else:
+            base_env = make_env()
+            reduce_dim = (0, 2, 3)
+            keep_dim = (2, 3)
+            cat_dim = 0
+
+        t_env = TransformedEnv(
+            base_env,
+            transform=ObservationNorm(in_keys=keys, standard_normal=standard_normal),
+        )
+        if len(keys) > 1:
+            t_env.transform.init_stats(
+                num_iter=11,
+                key="pixels",
+                cat_dim=cat_dim,
+                reduce_dim=reduce_dim,
+                keep_dims=keep_dim,
+            )
+        else:
+            t_env.transform.init_stats(
+                num_iter=11,
+                reduce_dim=reduce_dim,
+                cat_dim=cat_dim,
+                keep_dims=keep_dim,
+            )
+
+        assert t_env.transform.loc.shape == torch.Size(
+            [t_env.observation_spec["pixels"].shape[0], 1, 1]
+        )
+        assert t_env.transform.scale.shape == torch.Size(
+            [t_env.observation_spec["pixels"].shape[0], 1, 1]
+        )
+
     def test_observationnorm_stats_already_initialized_error(self):
         transform = ObservationNorm(in_keys="next_observation", loc=0, scale=1)
 
@@ -1234,24 +1289,31 @@ class TestTransforms:
                 )
 
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_catframes_buffer_check_latest_frame(self, device):
+    @pytest.mark.parametrize("d", range(1, 4))
+    def test_catframes_buffer_check_latest_frame(self, device, d):
         key1 = "first key"
         key2 = "second key"
         N = 4
         keys = [key1, key2]
-        key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
-        key2_tensor = torch.ones(1, 1, 3, 3, device=device)
+        key1_tensor = torch.ones(1, d, 3, 3, device=device) * 2
+        key2_tensor = torch.ones(1, d, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
         cat_frames = CatFrames(N=N, in_keys=keys)
 
-        cat_frames(td)
-        latest_frame = td.get(key2)
+        tdclone = cat_frames(td.clone())
+        latest_frame = tdclone.get(key2)
 
-        assert latest_frame.shape[1] == N
-        for i in range(0, N - 1):
-            assert torch.equal(latest_frame[0][i], key2_tensor[0][0])
-        assert torch.equal(latest_frame[0][N - 1], key1_tensor[0][0])
+        assert latest_frame.shape[1] == N * d
+        assert (latest_frame[0, :-d] == 0).all()
+        assert (latest_frame[0, -d:] == 1).all()
+
+        tdclone = cat_frames(td.clone())
+        latest_frame = tdclone.get(key2)
+
+        assert latest_frame.shape[1] == N * d
+        assert (latest_frame[0, : -2 * d] == 0).all()
+        assert (latest_frame[0, -2 * d :] == 1).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_catframes_reset(self, device):
@@ -1259,19 +1321,23 @@ class TestTransforms:
         key2 = "second key"
         N = 4
         keys = [key1, key2]
-        key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
-        key2_tensor = torch.ones(1, 1, 3, 3, device=device)
+        key1_tensor = torch.randn(1, 1, 3, 3, device=device)
+        key2_tensor = torch.randn(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
         cat_frames = CatFrames(N=N, in_keys=keys)
 
         cat_frames(td)
-        buffer_length1 = len(cat_frames.buffer)
+        buffer = getattr(cat_frames, f"_cat_buffers_{key1}")
+
         passed_back_td = cat_frames.reset(td)
 
-        assert buffer_length1 == 2
         assert td is passed_back_td
-        assert 0 == len(cat_frames.buffer)
+        assert (0 == buffer).all()
+
+        _ = cat_frames._call(td)
+        assert (0 == buffer[..., :-1, :, :]).all()
+        assert (0 != buffer[..., -1:, :, :]).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_finitetensordictcheck(self, device):
@@ -2266,6 +2332,54 @@ def test_batch_unlocked_with_batch_size_transformed(device):
         RuntimeError, match="Expected a tensordict with shape==env.shape, "
     ):
         env.step(td_expanded)
+
+
+class TestExcludeSelect:
+    class EnvWithManyKeys(EnvBase):
+        def __init__(self):
+            super().__init__()
+            self.observation_spec = CompositeSpec(
+                a=UnboundedContinuousTensorSpec(3),
+                b=UnboundedContinuousTensorSpec(3),
+                c=UnboundedContinuousTensorSpec(3),
+            )
+            self.reward_spec = UnboundedContinuousTensorSpec(1)
+            self.input_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(2))
+
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            return self.observation_spec.rand().update(
+                {
+                    "reward": self.reward_spec.rand(),
+                    "done": torch.zeros(1, dtype=torch.bool),
+                }
+            )
+
+        def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+            return self.observation_spec.rand().update(
+                {"done": torch.zeros(1, dtype=torch.bool)}
+            )
+
+        def _set_seed(self, seed):
+            return seed + 1
+
+    def test_exclude(self):
+        base_env = TestExcludeSelect.EnvWithManyKeys()
+        env = TransformedEnv(base_env, ExcludeTransform("a"))
+        check_env_specs(env)
+        assert "a" not in env.reset().keys()
+        assert "b" in env.reset().keys()
+        assert "c" in env.reset().keys()
+
+    def test_select(self):
+        base_env = TestExcludeSelect.EnvWithManyKeys()
+        env = TransformedEnv(base_env, SelectTransform("b", "c"))
+        check_env_specs(env)
+        assert "a" not in env.reset().keys()
+        assert "b" in env.reset().keys()
+        assert "c" in env.reset().keys()
 
 
 transforms = [

@@ -380,13 +380,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 obs = tensordict_out.get(key)
                 self.observation_spec.type_check(obs, key)
 
-            if tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype:
+            if tensordict_out.get("reward").dtype is not self.reward_spec.dtype:
                 raise TypeError(
                     f"expected reward.dtype to be {self.reward_spec.dtype} "
                     f"but got {tensordict_out.get('reward').dtype}"
                 )
 
-            if tensordict_out._get_meta("done").dtype is not torch.bool:
+            if tensordict_out.get("done").dtype is not torch.bool:
                 raise TypeError(
                     f"expected done.dtype to be torch.bool but got {tensordict_out.get('done').dtype}"
                 )
