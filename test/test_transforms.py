@@ -890,8 +890,6 @@ class TestTransforms:
             )
             transformed_td = time_max_pool(env_td)
 
-            print(time_max_pool._buffers["observation"])
-
         assert (max_vals == transformed_td["observation"]).all()
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
