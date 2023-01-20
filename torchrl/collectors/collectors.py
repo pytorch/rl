@@ -9,6 +9,7 @@ import inspect
 import os
 import queue
 import time
+import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
@@ -430,15 +431,16 @@ class SyncDataCollector(_DataCollector):
         )
         self.n_env = max(1, self.env_batch_size_masked.numel())
 
-        self.mask_tensor = torch.ones(
-            *self.env.batch_size,
-            dtype=torch.bool,
-            device=self.env.device,
-        )
-        for dim in self.env_batch_size_unmasked_indeces:
-            self.mask_tensor.index_fill_(
-                dim, torch.arange(1, self.env.batch_size[dim]), 0
+        if len(env.batch_size):
+            self.mask_tensor = torch.ones(
+                *self.env.batch_size,
+                dtype=torch.bool,
+                device=self.env.device,
             )
+            for dim in self.env_batch_size_unmasked_indeces:
+                self.mask_tensor.index_fill_(
+                    dim, torch.arange(1, self.env.batch_size[dim]), 0
+                )
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
@@ -457,8 +459,9 @@ class SyncDataCollector(_DataCollector):
             self.postproc.to(self.passing_device)
         self.max_frames_per_traj = max_frames_per_traj
         if frames_per_batch % self.n_env != 0:
-            raise RuntimeError(
-                f"frames_per_batch {frames_per_batch} is not exactly divisible by the number of batched environments {self.n_env}, this is currently not allowed"
+            warnings.warn(
+                f"frames_per_batch {frames_per_batch} is not exactly divisible by the number of batched environments {self.n_env}, "
+                f" this results in more frames_per_batch per iteration that requeste"
             )
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.pin_memory = pin_memory
@@ -681,8 +684,9 @@ class SyncDataCollector(_DataCollector):
                 )
             steps[done_or_terminated] = 0
 
-            traj_ids = traj_ids[self.mask_tensor]
-            done_or_terminated = done_or_terminated[self.mask_tensor]
+            if len(self.env.batch_size):
+                traj_ids = traj_ids[self.mask_tensor]
+                done_or_terminated = done_or_terminated[self.mask_tensor]
 
             traj_ids[done_or_terminated] = traj_ids.max() + torch.arange(
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
@@ -1304,8 +1308,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
     @property
     def frames_per_batch_worker(self):
         if self.frames_per_batch % self.num_workers != 0:
-            raise RuntimeError(
-                f"frames_per_batch {self.frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers}, this is currently not allowed"
+            warnings.warn(
+                f"frames_per_batch {self.frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers},"
+                f" this results in more frames_per_batch per iteration that requested"
             )
         return -(-self.frames_per_batch // self.num_workers)
 
