@@ -1130,8 +1130,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
         # Buffer to keep the latest observation for each worker
         self.obs: Union[torch.tensor, TensorDict] = self.observation_spec[
-                "observation"
-            ].zero((self.num_workers,))
+            "observation"
+        ].zero((self.num_workers,))
 
     def _check_kwargs(self, kwargs: Dict):
         pass
@@ -1249,8 +1249,11 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _set_seed(self, seed: Optional[int]):
         if seed is not None:
-            print("MultiThreadedEnvWrapper._set_seed ignored, as setting seed in an existing envorinment is not\
-                   supported by envpool. Please create a new environment, passing the seed to the constructor.")
+            print(
+                "MultiThreadedEnvWrapper._set_seed ignored, as setting seed in an existing envorinment is not\
+                   supported by envpool. Please create a new environment, passing the seed to the constructor."
+            )
+
 
 class MultiThreadedEnv(MultiThreadedEnvWrapper):
     """Multithreaded execution of environments.

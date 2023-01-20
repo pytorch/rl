@@ -24,7 +24,6 @@ from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.vec_env import MultiThreadedEnvWrapper
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
@@ -33,7 +32,7 @@ from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs
 
-from torchrl.envs.vec_env import _has_envpool
+from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
 if _has_gym:
@@ -474,7 +473,9 @@ class TestEnvPool:
     @pytest.mark.parametrize("env_name", ALL_ENVS)
     def test_env_wrapper_creation(self, env_name):
         env_name = env_name.replace("ALE/", "")
-        envpool_env = envpool.make(task_id=env_name, env_type="gym", num_envs=4, gym_reset_return_info=True)
+        envpool_env = envpool.make(
+            task_id=env_name, env_type="gym", num_envs=4, gym_reset_return_info=True
+        )
         env = MultiThreadedEnvWrapper(envpool_env)
         env.reset()
         env.rand_step()
