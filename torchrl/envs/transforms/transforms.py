@@ -2941,7 +2941,7 @@ class TimeMaxPool(Transform):
                 except AttributeError:
                     # we'll instantiate later, when needed
                     pass
-                
+
         return tensordict
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -2957,7 +2957,7 @@ class TimeMaxPool(Transform):
                         *tensordict[in_key].shape,
                         dtype=tensordict[in_key].dtype,
                         device=tensordict[in_key].device,
-                    )
+                    ),
                 )
             buffer = getattr(self, buffer_name)
             # shift obs 1 position to the right
