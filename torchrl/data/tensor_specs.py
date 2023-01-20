@@ -635,22 +635,22 @@ class BoundedTensorSpec(TensorSpec):
             if shape is not None and shape != maximum.shape:
                 raise RuntimeError(err_msg)
             shape = maximum.shape
-            minimum = minimum.expand(*shape)
+            minimum = minimum.expand(*shape).contiguous()
         elif minimum.ndimension():
             if shape is not None and shape != minimum.shape:
                 raise RuntimeError(err_msg)
             shape = minimum.shape
-            maximum = maximum.expand(*shape)
+            maximum = maximum.expand(*shape).contiguous()
         elif shape is None:
             raise RuntimeError(err_msg)
         else:
-            minimum = minimum.expand(*shape)
-            maximum = maximum.expand(*shape)
+            minimum = minimum.expand(*shape).contiguous()
+            maximum = maximum.expand(*shape).contiguous()
 
         if minimum.numel() > maximum.numel():
-            maximum = maximum.expand_as(minimum)
+            maximum = maximum.expand_as(minimum).contiguous()
         elif maximum.numel() > minimum.numel():
-            minimum = minimum.expand_as(maximum)
+            minimum = minimum.expand_as(maximum).contiguous()
         if shape is None:
             shape = minimum.shape
         else:
@@ -684,8 +684,8 @@ class BoundedTensorSpec(TensorSpec):
                 f"shape of the CompositeSpec in CompositeSpec.extend."
             )
         return self.__class__(
-            minimum=self.space.minimum.expand(shape),
-            maximum=self.space.maximum.expand(shape),
+            minimum=self.space.minimum.expand(shape).contiguous(),
+            maximum=self.space.maximum.expand(shape).contiguous(),
             shape=shape,
             device=self.device,
             dtype=self.dtype,
