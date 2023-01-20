@@ -911,7 +911,6 @@ class TestParallel:
         env.set_seed(1)
         action = env.action_spec.rand()
         action[:] = 1
-
         for i in range(max_steps):
             td = env.step(
                 TensorDict(

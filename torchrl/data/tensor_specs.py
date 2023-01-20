@@ -1764,7 +1764,7 @@ class CompositeSpec(TensorSpec):
             indent(f"{k}: {str(item)}", 4 * " ") for k, item in self._specs.items()
         ]
         sub_str = ",\n".join(sub_str)
-        return f"CompositeSpec(\n{sub_str}, device={self._device})"
+        return f"CompositeSpec(\n{sub_str}, device={self._device}, shape={self.shape})"
 
     def type_check(
         self,
@@ -1839,7 +1839,7 @@ class CompositeSpec(TensorSpec):
                 "Only device casting is allowed with specs of type CompositeSpec."
             )
         if self._device and self._device == torch.device(dest):
-            return self.__class__(**self._specs, device=self._device)
+            return self.__class__(**self._specs, device=self._device, shape=self.shape)
 
         _device = torch.device(dest)
         items = list(self.items())
@@ -1849,11 +1849,13 @@ class CompositeSpec(TensorSpec):
                 kwargs[key] = value
                 continue
             kwargs[key] = value.to(dest)
-        return self.__class__(**kwargs, device=_device)
+        return self.__class__(**kwargs, device=_device, shape=self.shape)
 
     def clone(self) -> CompositeSpec:
         return self.__class__(
-            **{key: item.clone() for key, item in self.items()}, device=self._device
+            **{key: item.clone() for key, item in self.items()},
+            device=self._device,
+            shape=self.shape,
         )
 
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:

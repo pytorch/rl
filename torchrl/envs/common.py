@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import abc
-from copy import deepcopy
 from numbers import Number
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Union
 
@@ -89,10 +88,10 @@ class EnvMetaData:
 
     def expand(self, *size: int) -> EnvMetaData:
         tensordict = self.tensordict.expand(*size).to_tensordict()
-        batch_size = torch.Size([*size])
+        batch_size = torch.Size(list(size))
         return EnvMetaData(
             tensordict,
-            self.specs.expand(size),
+            self.specs.expand(*size),
             batch_size,
             self.env_str,
             self.device,
