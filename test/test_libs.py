@@ -5,7 +5,6 @@
 import argparse
 from sys import platform
 from typing import Optional, Union
-import contextlib
 
 import numpy as np
 import pytest
@@ -465,6 +464,7 @@ GYM_ENVS = CLASSIC_CONTROL_ENVS + ATARI_ENVS
 DM_ENVS = ["CheetahRun-v1"]
 ALL_ENVS = GYM_ENVS + DM_ENVS
 
+
 @pytest.mark.skipif(not _has_envpool, reason="no envpool library found")
 class TestEnvPool:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
@@ -583,7 +583,8 @@ class TestEnvPool:
                 out_keys=["action"],
             ),
             ValueOperator(
-                module=MLP(out_features=1, num_cells=[], layer_kwargs={"dtype": dtype}), in_keys=["hidden", "action"],
+                module=MLP(out_features=1, num_cells=[], layer_kwargs={"dtype": dtype}),
+                in_keys=["hidden", "action"],
             ),
         )
 

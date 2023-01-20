@@ -238,13 +238,15 @@ def get_transform_out(env_name, transformed_in):
             )
 
     elif env_name == "CheetahRun-v1":
+
         def t_out():
-            return (
-                Compose(
-                    ObservationNorm(in_keys=[("observation", "velocity")], loc=0.5, scale=1.1),
-                    RewardClipping(0, 0.1),
-                )
+            return Compose(
+                ObservationNorm(
+                    in_keys=[("observation", "velocity")], loc=0.5, scale=1.1
+                ),
+                RewardClipping(0, 0.1),
             )
+
     else:
 
         def t_out():

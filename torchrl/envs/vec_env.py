@@ -30,6 +30,7 @@ from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 try:
     import envpool
     import treevalue
+
     _has_envpool = True
 except ImportError as err:
     _has_envpool = False
@@ -1122,7 +1123,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
         super().__init__(**kwargs)
         # Buffer to keep the latest observation for each worker
-        self.obs: Union[torch.tensor, TensorDict] = self.observation_spec["observation"].zero((self.num_workers,))
+        self.obs: Union[torch.tensor, TensorDict] = self.observation_spec[
+            "observation"
+        ].zero((self.num_workers,))
 
     def _check_kwargs(self, kwargs: Dict):
         pass
@@ -1204,7 +1207,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             if isinstance(envpool_output, treevalue.TreeValue):
                 envpool_output = treevalue.FastTreeValue(envpool_output)
             for i, worker in enumerate(reset_workers):
-                self.obs[worker] = self._treevalue_or_numpy_to_tensor_or_tensordict(envpool_output[i])
+                self.obs[worker] = self._treevalue_or_numpy_to_tensor_or_tensordict(
+                    envpool_output[i]
+                )
         else:
             self.obs = self._treevalue_or_numpy_to_tensor_or_tensordict(envpool_output)
 
@@ -1240,7 +1245,6 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _treevalue_to_tensordict(self, tv):
         return {k[0]: torch.tensor(v) for k, v in treevalue.flatten(tv)}
-
 
 
 class MultiThreadedEnv(MultiThreadedEnvWrapper):
