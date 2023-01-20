@@ -419,7 +419,7 @@ class SyncDataCollector(_DataCollector):
         self.permute_out_batch_size = [
             i for i, is_batch in enumerate(self.mask_out_batch_size) if is_batch
         ] + [i for i, is_batch in enumerate(self.mask_out_batch_size) if not is_batch]
-        self.env_batch_size_umasked = [
+        self.env_batch_size_unmasked = [
             env.batch_size[i]
             for i, is_batch in enumerate(self.mask_env_batch_size)
             if not is_batch
@@ -569,9 +569,9 @@ class SyncDataCollector(_DataCollector):
             # Bring all batch dimensions to the front (only performs computation if it is not already the case)
             tensordict_out = tensordict_out.permute(self.permute_out_batch_size)
             # Flatten all batch dimensions into first one and leave unmasked dimensions untouched
-            if len(self.env_batch_size_umasked) > 0:
+            if len(self.env_batch_size_unmasked) > 0:
                 tensordict_out = tensordict_out.reshape(
-                    self.frames_per_batch * self.n_env, *self.env_batch_size_umasked
+                    self.frames_per_batch * self.n_env, *self.env_batch_size_unmasked
                 )
             else:
                 tensordict_out = tensordict_out.view(-1).to_tensordict()
