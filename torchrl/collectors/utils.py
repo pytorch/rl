@@ -69,12 +69,6 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     td = td.unflatten_keys(sep)
     return td
 
-
-def numel_with_mask(batch_size: torch.Size, mask: Optional[Sequence[bool]] = None):
-    """Performs numel() with a given mask."""
-    return max(1, get_batch_size_masked(batch_size, mask).numel())
-
-
 def get_batch_size_masked(
     batch_size: torch.Size, mask: Optional[Sequence[bool]] = None
 ):
