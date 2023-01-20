@@ -22,7 +22,6 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
-
 from torchrl._utils import _check_for_faulty_process, prod
 from torchrl.collectors.utils import (
     get_batch_size_masked,
@@ -297,7 +296,7 @@ class SyncDataCollector(_DataCollector):
             updated. This feature should be used cautiously: if the same tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
             Default is False.
-        env_batch_size_mask (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size,
+        mask_env_batch_size (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size,
             with a value of True it indicates to consider the corresponding dimension of env.batch_size as part of the
             batch of environments used to collect frames. A value of False it indicates NOT to consider that dimension
             as part of the batch of environments used to collect frames (used for agent dimension in multi-agent settings).
@@ -373,7 +372,7 @@ class SyncDataCollector(_DataCollector):
         init_with_lag: bool = False,
         return_same_td: bool = False,
         reset_when_done: bool = True,
-        env_batch_size_mask: Optional[Sequence[bool]] = None,
+        mask_env_batch_size: Optional[Sequence[bool]] = None,
     ):
         self.closed = True
         if seed is not None:
@@ -411,12 +410,23 @@ class SyncDataCollector(_DataCollector):
         self.closed = False
         self.reset_when_done = reset_when_done
 
-        self.env_batch_size_mask = env_batch_size_mask
-        self.out_batch_size_mask = (
-            None if env_batch_size_mask is None else list(env_batch_size_mask) + [True]
-        )
+        # Batch sizes and masks
+        if mask_env_batch_size is None:
+            mask_env_batch_size = [True for _ in self.env.batch_size]
+        else:
+            mask_env_batch_size = list(mask_env_batch_size)
+        self.mask_env_batch_size = mask_env_batch_size
+        self.mask_out_batch_size = mask_env_batch_size + [True]
+        self.permute_out_batch_size = [
+            i for i, is_batch in enumerate(self.mask_out_batch_size) if is_batch
+        ] + [i for i, is_batch in enumerate(self.mask_out_batch_size) if not is_batch]
+        self.env_batch_size_umasked = [
+            env.batch_size[i]
+            for i, is_batch in enumerate(self.mask_env_batch_size)
+            if not is_batch
+        ]
         self.env_batch_size_masked = get_batch_size_masked(
-            self.env.batch_size, self.env_batch_size_mask
+            self.env.batch_size, self.mask_env_batch_size
         )
         self.n_env = max(1, self.env_batch_size_masked.numel())
 
@@ -550,7 +560,6 @@ class SyncDataCollector(_DataCollector):
         Yields: TensorDictBase objects containing (chunks of) trajectories
 
         """
-        total_frames = self.total_frames
         i = -1
         self._frames = 0
         while True:
@@ -558,10 +567,20 @@ class SyncDataCollector(_DataCollector):
             self._iter = i
             tensordict_out = self.rollout()
             self._frames += numel_with_mask(
-                tensordict_out.batch_size, self.out_batch_size_mask
+                tensordict_out.batch_size, self.mask_out_batch_size
             )
-            if self._frames >= total_frames:
+            if self._frames >= self.total_frames:
                 self.env.close()
+
+            # Bring all batch dimensions to the front (only performs computation if it is not already the case)
+            tensordict_out = tensordict_out.permute(self.permute_out_batch_size)
+            # Flatten all batch dimensions into first one and leave unmasked dimensions untouched
+            if len(self.env_batch_size_umasked) > 0:
+                tensordict_out = tensordict_out.reshape(
+                    self.frames_per_batch * self.n_env, *self.env_batch_size_umasked
+                )
+            else:
+                tensordict_out = tensordict_out.view(-1).to_tensordict()
 
             if self.split_trajs:
                 tensordict_out = split_trajectories(tensordict_out)
@@ -863,7 +882,7 @@ class _MultiDataCollector(_DataCollector):
             in other words, if the env is a multi-agent env, all agents will be
             reset once one of them is done.
             Defaults to `True`.
-        env_batch_size_mask (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size,
+        mask_env_batch_size (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size,
             with a value of True it indicates to consider the corresponding dimension of env.batch_size as part of the
             batch of environments used to collect frames. A value of False it indicates NOT to consider that dimension
             as part of the batch of environments used to collect frames (used for agent dimension in multi-agent settings).
@@ -896,7 +915,7 @@ class _MultiDataCollector(_DataCollector):
         init_with_lag: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         reset_when_done: bool = True,
-        env_batch_size_mask: Optional[Sequence[bool]] = None,
+        mask_env_batch_size: Optional[Sequence[bool]] = None,
     ):
         self.closed = True
         self.create_env_fn = create_env_fn
@@ -987,10 +1006,7 @@ class _MultiDataCollector(_DataCollector):
                     f"Found {type(passing_devices)} instead."
                 )
 
-        self.env_batch_size_mask = env_batch_size_mask
-        self.out_batch_size_mask = (
-            None if env_batch_size_mask is None else list(env_batch_size_mask) + [True]
-        )
+        self.mask_env_batch_size = mask_env_batch_size
         self.total_frames = total_frames if total_frames > 0 else float("inf")
         self.reset_at_each_iter = reset_at_each_iter
         self.postprocs = postproc
@@ -1066,7 +1082,7 @@ class _MultiDataCollector(_DataCollector):
                 "exploration_mode": self.exploration_mode,
                 "reset_when_done": self.reset_when_done,
                 "idx": i,
-                "env_batch_size_mask": self.env_batch_size_mask,
+                "mask_env_batch_size": self.mask_env_batch_size,
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
@@ -1306,8 +1322,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     out_tensordicts_shared[idx] = data
                 else:
                     idx = new_data
-                workers_frames[idx] = workers_frames[idx] + numel_with_mask(
-                    out_tensordicts_shared[idx].batch_size, self.out_batch_size_mask
+                workers_frames[idx] = (
+                    workers_frames[idx] + out_tensordicts_shared[idx].batch_size[0]
                 )
 
                 if workers_frames[idx] >= self.total_frames:
@@ -1345,7 +1361,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 frames += out.get("mask").sum().item()
             else:
                 out = out_buffer.clone()
-                frames += numel_with_mask(out.batch_size, self.out_batch_size_mask)
+                frames += out.batch_size[0]
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
@@ -1465,7 +1481,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             i += 1
             idx, j, out = self._get_from_queue()
 
-            worker_frames = numel_with_mask(out.batch_size, self.out_batch_size_mask)
+            worker_frames = out.batch_size[0]
             if self.split_trajs:
                 out = split_trajectories(out)
             self._frames += worker_frames
@@ -1571,7 +1587,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
             This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
             default = True
-        env_batch_size_mask (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size,
+        mask_env_batch_size (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size,
             with a value of True it indicates to consider the corresponding dimension of env.batch_size as part of the
             batch of environments used to collect frames. A value of False it indicates NOT to consider that dimension
             as part of the batch of environments used to collect frames (used for agent dimension in multi-agent settings).
@@ -1599,7 +1615,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         device: Optional[Union[int, str, torch.device]] = None,
         passing_device: Optional[Union[int, str, torch.device]] = None,
         seed: Optional[int] = None,
-        env_batch_size_mask: Optional[Sequence[bool]] = None,
+        mask_env_batch_size: Optional[Sequence[bool]] = None,
         pin_memory: bool = False,
         **kwargs,
     ):
@@ -1618,7 +1634,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             passing_devices=[passing_device] if passing_device is not None else None,
             seed=seed,
             pin_memory=pin_memory,
-            env_batch_size_mask=env_batch_size_mask,
+            mask_env_batch_size=mask_env_batch_size,
             **kwargs,
         )
 
@@ -1642,7 +1658,7 @@ def _main_async_collector(
     init_with_lag: bool = False,
     exploration_mode: str = DEFAULT_EXPLORATION_MODE,
     reset_when_done: bool = True,
-    env_batch_size_mask: Optional[Sequence[bool]] = None,
+    mask_env_batch_size: Optional[Sequence[bool]] = None,
     verbose: bool = False,
 ) -> None:
     pipe_parent.close()
@@ -1667,7 +1683,7 @@ def _main_async_collector(
         exploration_mode=exploration_mode,
         reset_when_done=reset_when_done,
         return_same_td=True,
-        env_batch_size_mask=env_batch_size_mask,
+        mask_env_batch_size=mask_env_batch_size,
     )
     if verbose:
         print("Sync data collector created")
