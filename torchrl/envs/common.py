@@ -38,6 +38,11 @@ dtype_map = {
 class EnvMetaData:
     """A class for environment meta-data storage and passing in multiprocessed settings."""
 
+    def __new__(cls, *args, **kwargs):
+        self._spec = None
+        self._tensordict = None
+        return cls
+
     def __init__(
         self,
         tensordict: TensorDictBase,
@@ -53,6 +58,22 @@ class EnvMetaData:
         self.env_str = env_str
         self.device = device
         self.batch_locked = batch_locked
+
+    @property
+    def tensordict(self):
+        return self._tensordict.to(self.device)
+
+    @property
+    def spec(self):
+        return self._specs.to(self.device)
+
+    @tensordict.setter
+    def tensordict(self, value: TensorDictBase):
+        self._tensordict = value.to("cpu")
+
+    @spec.setter
+    def spec(self, value: CompositeSpec):
+        self._spec = value.to("cpu")
 
     @staticmethod
     def build_metadata_from_env(env) -> EnvMetaData:
@@ -89,17 +110,6 @@ class EnvMetaData:
         return EnvMetaData(
             tensordict, specs, self.batch_size, self.env_str, device, self.batch_locked
         )
-
-    def __setstate__(self, state):
-        state["tensordict"] = state["tensordict"].to_tensordict().to(state["device"])
-        state["specs"] = state["specs"].clone().to(state["device"])
-        self.__dict__.update(state)
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["tensordict"] = state["tensordict"].to_tensordict().to("cpu")
-        state["specs"] = state["specs"].clone().to("cpu")
-        return state
 
 
 class Specs:
