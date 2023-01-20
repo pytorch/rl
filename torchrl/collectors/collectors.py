@@ -25,7 +25,6 @@ from torch.utils.data import IterableDataset
 from torchrl._utils import _check_for_faulty_process, prod
 from torchrl.collectors.utils import (
     get_batch_size_masked,
-    numel_with_mask,
     split_trajectories,
 )
 from torchrl.data import TensorSpec
@@ -566,11 +565,6 @@ class SyncDataCollector(_DataCollector):
             i += 1
             self._iter = i
             tensordict_out = self.rollout()
-            self._frames += numel_with_mask(
-                tensordict_out.batch_size, self.mask_out_batch_size
-            )
-            if self._frames >= self.total_frames:
-                self.env.close()
 
             # Bring all batch dimensions to the front (only performs computation if it is not already the case)
             tensordict_out = tensordict_out.permute(self.permute_out_batch_size)
@@ -581,6 +575,10 @@ class SyncDataCollector(_DataCollector):
                 )
             else:
                 tensordict_out = tensordict_out.view(-1).to_tensordict()
+
+            self._frames += tensordict_out.batch_size[0]
+            if self._frames >= self.total_frames:
+                self.env.close()
 
             if self.split_trajs:
                 tensordict_out = split_trajectories(tensordict_out)
