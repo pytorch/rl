@@ -22,7 +22,6 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
-
 from torchrl._utils import _check_for_faulty_process, prod
 from torchrl.collectors.utils import (
     get_batch_size_masked,
@@ -436,6 +435,10 @@ class SyncDataCollector(_DataCollector):
         if self.postproc is not None:
             self.postproc.to(self.passing_device)
         self.max_frames_per_traj = max_frames_per_traj
+        if frames_per_batch % self.n_env != 0:
+            raise RuntimeError(
+                f"frames_per_batch {frames_per_batch} is not exactly divisible by the number of batched environments {self.n_env}, this is currently not allowed"
+            )
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.pin_memory = pin_memory
         self.exploration_mode = (
@@ -1259,6 +1262,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     @property
     def frames_per_batch_worker(self):
+        if self.frames_per_batch % self.num_workers != 0:
+            raise RuntimeError(
+                f"frames_per_batch {self.frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers}, this is currently not allowed"
+            )
         return -(-self.frames_per_batch // self.num_workers)
 
     @property
