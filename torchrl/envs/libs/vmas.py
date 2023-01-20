@@ -204,17 +204,23 @@ class VmasWrapper(_EnvWrapper):
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
         if tensordict is not None and "_reset" in tensordict.keys():
-            envs_to_reset = tensordict.get("_reset").any(dim=0)
+            _reset = tensordict.get("_reset")
+            envs_to_reset = _reset.any(dim=0)
             for env_index, to_reset in enumerate(envs_to_reset):
                 if to_reset:
                     self._env.reset_at(env_index)
+            done = _selective_unsqueeze(self._env.done(), batch_size=(self.num_envs,))
             obs = []
             infos = []
+            dones = []
             for agent in self.agents:
                 obs.append(self.scenario.observation(agent))
                 infos.append(self.scenario.info(agent))
+                dones.append(done.clone())
+
         else:
             obs, infos = self._env.reset(return_info=True)
+            dones = None
 
         agent_tds = []
         for i in range(self.n_agents):
@@ -231,6 +237,8 @@ class VmasWrapper(_EnvWrapper):
 
             if infos is not None:
                 agent_td.set("info", agent_info)
+            if dones is not None:
+                agent_td.set("done", dones[i])
             agent_tds.append(agent_td)
 
         tensordict_out = torch.stack(agent_tds, dim=0)

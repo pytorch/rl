@@ -710,11 +710,9 @@ class TestVmas:
         while not _reset.any():
             _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
 
-        env.reset(
+        tensordict = env.reset(
             TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
         )
-        tensordict = env.rand_step()
-
         assert tensordict["done"][_reset].all().item() is False
         # vmas resets all the agent dimension if only one of the agents needs resetting
         # thus, here we check that where we did not reset any agent, all agents are still done
