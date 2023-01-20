@@ -1463,7 +1463,8 @@ class _CompositeSpecKeysView:
                 if self._yield_nesting_keys:
                     yield key
             else:
-                yield key
+                if not isinstance(item, CompositeSpec) or len(item):
+                    yield key
 
     def __len__(self):
         i = 0
