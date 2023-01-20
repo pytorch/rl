@@ -3095,6 +3095,21 @@ class TestValues:
             done,
             rolling_gamma,
         )
+        if has_done and rolling_gamma is False:
+            with pytest.raises(
+                NotImplementedError,
+                match="TDLambda is not implemented for consecutive trajectories",
+            ):
+                v2 = vec_td_lambda_advantage_estimate(
+                    gamma_tensor,
+                    lmbda,
+                    state_value,
+                    next_state_value,
+                    reward,
+                    done,
+                    rolling_gamma,
+                )
+            return
         v2 = vec_td_lambda_advantage_estimate(
             gamma_tensor,
             lmbda,
@@ -3193,6 +3208,21 @@ class TestValues:
         )
         torch.testing.assert_close(v1, torch.cat([v1a, v1b], -2), rtol=1e-4, atol=1e-4)
 
+        if not rolling_gamma:
+            with pytest.raises(
+                NotImplementedError,
+                match="TDLambda is not implemented for consecutive trajectories",
+            ):
+                v2 = vec_td_lambda_advantage_estimate(
+                    gamma_tensor,
+                    lmbda,
+                    state_value,
+                    next_state_value,
+                    reward,
+                    done,
+                    rolling_gamma,
+                )
+            return
         v2 = vec_td_lambda_advantage_estimate(
             gamma_tensor,
             lmbda,

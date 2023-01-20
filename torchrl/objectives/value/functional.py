@@ -230,7 +230,6 @@ def td_lambda_return_estimate(
     if not (isinstance(gamma, torch.Tensor) and gamma.shape == not_done.shape):
         single_gamma = True
         gamma = torch.full_like(next_state_value, gamma)
-    gamma = gamma * not_done
 
     single_lambda = False
     if not (isinstance(lmbda, torch.Tensor) and lmbda.shape == not_done.shape):
@@ -245,6 +244,7 @@ def td_lambda_return_estimate(
         )
 
     if rolling_gamma:
+        gamma = gamma * not_done
         g = next_state_value[..., -1, :]
         for i in reversed(range(T)):
             g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * (
@@ -257,7 +257,7 @@ def td_lambda_return_estimate(
             _gamma = gamma[..., k, :]
             _lambda = lmbda[..., k, :]
             for i in reversed(range(k, T)):
-                g = reward[..., i, :] + _gamma * (
+                g = reward[..., i, :] + _gamma * not_done[..., i, :] * (
                     (1 - _lambda) * next_state_value[..., i, :] + _lambda * g
                 )
             returns[..., k, :] = g
@@ -432,11 +432,15 @@ def vec_td_lambda_return_estimate(
         if rolling_gamma is None:
             rolling_gamma = True
         # if rolling_gamma:
-        gamma = gamma * not_done
+        if rolling_gamma:
+            gamma = gamma * not_done
         gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
-        if not rolling_gamma and done[..., :-1, :].any():
-            gammas[..., 1:, :] *= 1 - done.view(-1, T).diag_embed().unsqueeze(-1).to(
-                next_state_value.dtype
+        if not rolling_gamma and not done[..., 1:, :][done[..., :-1, :]].all():
+            raise NotImplementedError(
+                "TDLambda is not implemented for consecutive trajectories. "
+                "Use `torch.collectors.utils.split_trajectories` first to obtain "
+                "a padded version of the input, or use the non-vectorized version "
+                "of td-lambda."
             )
     else:
         if rolling_gamma is not None:
