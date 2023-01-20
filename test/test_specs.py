@@ -469,10 +469,10 @@ class TestComposite:
         # Note: trivial test in case there is only one device available.
         ts = self._composite_spec(is_complete, device, dtype)
         ts.rand()
-        ts.to(dest)
-        cast_r = ts.rand()
+        td_to = ts.to(dest)
+        cast_r = td_to.rand()
 
-        assert ts.device == dest
+        assert td_to.device == dest
         assert cast_r["obs"].device == dest
         if is_complete:
             assert cast_r["act"].device == dest
@@ -1450,3 +1450,216 @@ class TestExpand:
         assert spec2.dtype == spec.dtype
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
+
+
+class TestClone:
+    @pytest.mark.parametrize(
+        "shape1",
+        [
+            None,
+            (4,),
+            (5, 4),
+        ],
+    )
+    def test_binary(self, shape1):
+        spec = BinaryDiscreteTensorSpec(
+            n=4, shape=shape1, device="cpu", dtype=torch.bool
+        )
+        assert spec == spec.clone()
+        assert spec is not spec.clone()
+
+    @pytest.mark.parametrize(
+        "shape1,mini,maxi",
+        [
+            [(10,), -torch.ones([]), torch.ones([])],
+            [None, -torch.ones([10]), torch.ones([])],
+            [None, -torch.ones([]), torch.ones([10])],
+            [(10,), -torch.ones([]), torch.ones([10])],
+            [(10,), -torch.ones([10]), torch.ones([])],
+            [(10,), -torch.ones([10]), torch.ones([10])],
+        ],
+    )
+    def test_bounded(self, shape1, mini, maxi):
+        spec = BoundedTensorSpec(
+            mini, maxi, shape=shape1, device="cpu", dtype=torch.bool
+        )
+        assert spec == spec.clone()
+        assert spec is not spec.clone()
+
+    def test_composite(self):
+        batch_size = (5,)
+        spec1 = BoundedTensorSpec(
+            -torch.ones([*batch_size, 10]),
+            torch.ones([*batch_size, 10]),
+            shape=(
+                *batch_size,
+                10,
+            ),
+            device="cpu",
+            dtype=torch.bool,
+        )
+        spec2 = BinaryDiscreteTensorSpec(
+            n=4, shape=(*batch_size, 4), device="cpu", dtype=torch.bool
+        )
+        spec3 = DiscreteTensorSpec(
+            n=4, shape=batch_size, device="cpu", dtype=torch.long
+        )
+        spec4 = MultiDiscreteTensorSpec(
+            nvec=(4, 5, 6), shape=(*batch_size, 3), device="cpu", dtype=torch.long
+        )
+        spec5 = MultiOneHotDiscreteTensorSpec(
+            nvec=(4, 5, 6), shape=(*batch_size, 15), device="cpu", dtype=torch.long
+        )
+        spec6 = OneHotDiscreteTensorSpec(
+            n=15, shape=(*batch_size, 15), device="cpu", dtype=torch.long
+        )
+        spec7 = UnboundedContinuousTensorSpec(
+            shape=(*batch_size, 9),
+            device="cpu",
+            dtype=torch.float64,
+        )
+        spec8 = UnboundedDiscreteTensorSpec(
+            shape=(*batch_size, 9),
+            device="cpu",
+            dtype=torch.long,
+        )
+        spec = CompositeSpec(
+            spec1=spec1,
+            spec2=spec2,
+            spec3=spec3,
+            spec4=spec4,
+            spec5=spec5,
+            spec6=spec6,
+            spec7=spec7,
+            spec8=spec8,
+            shape=batch_size,
+        )
+        assert spec is not spec.clone()
+        spec_clone = spec.clone()
+        for key, item in spec.items():
+            assert item == spec_clone[key], key
+        assert spec == spec.clone()
+
+    @pytest.mark.parametrize(
+        "shape1",
+        [
+            None,
+            (),
+            (5,),
+        ],
+    )
+    def test_discrete(
+        self,
+        shape1,
+    ):
+        spec = DiscreteTensorSpec(n=4, shape=shape1, device="cpu", dtype=torch.long)
+        assert spec == spec.clone()
+        assert spec is not spec.clone()
+
+    @pytest.mark.parametrize(
+        "shape1",
+        [
+            None,
+            (),
+            (5,),
+        ],
+    )
+    def test_multidiscrete(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (3,)
+        else:
+            shape1 = (*shape1, 3)
+        spec = MultiDiscreteTensorSpec(
+            nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long
+        )
+        assert spec == spec.clone()
+        assert spec is not spec.clone()
+
+    @pytest.mark.parametrize(
+        "shape1",
+        [
+            None,
+            (),
+            (5,),
+        ],
+    )
+    def test_multionehot(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = MultiOneHotDiscreteTensorSpec(
+            nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long
+        )
+        assert spec == spec.clone()
+        assert spec is not spec.clone()
+
+    @pytest.mark.parametrize(
+        "shape1",
+        [
+            None,
+            (),
+            (5,),
+        ],
+    )
+    def test_onehot(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = OneHotDiscreteTensorSpec(
+            n=15, shape=shape1, device="cpu", dtype=torch.long
+        )
+        assert spec == spec.clone()
+        assert spec is not spec.clone()
+
+    @pytest.mark.parametrize(
+        "shape1",
+        [
+            None,
+            (),
+            (5,),
+        ],
+    )
+    def test_unbounded(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = UnboundedContinuousTensorSpec(
+            shape=shape1, device="cpu", dtype=torch.float64
+        )
+        assert spec == spec.clone()
+        assert spec is not spec.clone()
+
+    @pytest.mark.parametrize(
+        "shape1",
+        [
+            None,
+            (),
+            (5,),
+        ],
+    )
+    def test_unboundeddiscrete(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = UnboundedDiscreteTensorSpec(shape=shape1, device="cpu", dtype=torch.long)
+        assert spec == spec.clone()
+        assert spec is not spec.clone()

@@ -100,6 +100,9 @@ class Box:
     def __repr__(self):
         return f"{self.__class__.__name__}()"
 
+    def clone(self) -> DiscreteBox:
+        return deepcopy(self)
+
 
 @dataclass(repr=False)
 class ContinuousBox(Box):
@@ -108,18 +111,23 @@ class ContinuousBox(Box):
     minimum: torch.Tensor
     maximum: torch.Tensor
 
+    def __post_init__(self):
+        self.minimum = self.minimum.clone()
+        self.maximum = self.maximum.clone()
+
     def __iter__(self):
         yield self.minimum
         yield self.maximum
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ContinuousBox:
-        self.minimum = self.minimum.to(dest)
-        self.maximum = self.maximum.to(dest)
-        return self
+        return self.__class__(self.minimum.to(dest), self.maximum.to(dest))
+
+    def clone(self) -> ContinuousBox:
+        return self.__class__(self.minimum.clone(), self.maximum.clone())
 
     def __repr__(self):
-        min_str = f"minimum={self.minimum}"
-        max_str = f"maximum={self.maximum}"
+        min_str = f"minimum=Tensor(shape={self.minimum.shape}, device={self.minimum.device}, dtype={self.minimum.dtype}, contiguous={self.maximum.is_contiguous()})"
+        max_str = f"maximum=Tensor(shape={self.maximum.shape}, device={self.maximum.device}, dtype={self.maximum.dtype}, contiguous={self.maximum.is_contiguous()})"
         return f"{self.__class__.__name__}({min_str}, {max_str})"
 
     def __eq__(self, other):
@@ -140,7 +148,7 @@ class DiscreteBox(Box):
     register = invertible_dict()
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> DiscreteBox:
-        return self
+        return deepcopy(self)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(n={self.n})"
@@ -180,7 +188,7 @@ class BinaryBox(Box):
     n: int
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ContinuousBox:
-        return self
+        return deepcopy(self)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(n={self.n})"
@@ -395,14 +403,13 @@ class TensorSpec:
             shape = torch.Size([])
         return torch.zeros((*shape, *self.shape), dtype=self.dtype, device=self.device)
 
+    @abc.abstractmethod
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> "TensorSpec":
-        if self.space is not None:
-            self.space.to(dest)
-        if isinstance(dest, (torch.device, str, int)):
-            self.device = torch.device(dest)
-        else:
-            self.dtype = dest
-        return self
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def clone(self) -> "TensorSpec":
+        raise NotImplementedError
 
     def __repr__(self):
         shape_str = "shape=" + str(self.shape)
@@ -480,6 +487,30 @@ class OneHotDiscreteTensorSpec(TensorSpec):
                     f"Got n={space.n} and shape={shape}."
                 )
         super().__init__(shape, space, device, dtype, "discrete")
+
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        if isinstance(dest, torch.dtype):
+            dest_dtype = dest
+            dest_device = self.device
+        else:
+            dest_dtype = self.dtype
+            dest_device = torch.device(dest)
+        return self.__class__(
+            n=self.space.n,
+            shape=self.shape,
+            device=dest_device,
+            dtype=dest_dtype,
+            use_register=self.use_register,
+        )
+
+    def clone(self) -> CompositeSpec:
+        return self.__class__(
+            n=self.space.n,
+            shape=self.shape,
+            device=self.device,
+            dtype=self.dtype,
+            use_register=self.use_register,
+        )
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
@@ -635,22 +666,22 @@ class BoundedTensorSpec(TensorSpec):
             if shape is not None and shape != maximum.shape:
                 raise RuntimeError(err_msg)
             shape = maximum.shape
-            minimum = minimum.expand(*shape).contiguous()
+            minimum = minimum.expand(*shape).clone()
         elif minimum.ndimension():
             if shape is not None and shape != minimum.shape:
                 raise RuntimeError(err_msg)
             shape = minimum.shape
-            maximum = maximum.expand(*shape).contiguous()
+            maximum = maximum.expand(*shape).clone()
         elif shape is None:
             raise RuntimeError(err_msg)
         else:
-            minimum = minimum.expand(*shape).contiguous()
-            maximum = maximum.expand(*shape).contiguous()
+            minimum = minimum.expand(*shape).clone()
+            maximum = maximum.expand(*shape).clone()
 
         if minimum.numel() > maximum.numel():
-            maximum = maximum.expand_as(minimum).contiguous()
+            maximum = maximum.expand_as(minimum).clone()
         elif maximum.numel() > minimum.numel():
-            minimum = minimum.expand_as(maximum).contiguous()
+            minimum = minimum.expand_as(maximum).clone()
         if shape is None:
             shape = minimum.shape
         else:
@@ -684,8 +715,8 @@ class BoundedTensorSpec(TensorSpec):
                 f"shape of the CompositeSpec in CompositeSpec.extend."
             )
         return self.__class__(
-            minimum=self.space.minimum.expand(shape).contiguous(),
-            maximum=self.space.maximum.expand(shape).contiguous(),
+            minimum=self.space.minimum.expand(shape).clone(),
+            maximum=self.space.maximum.expand(shape).clone(),
             shape=shape,
             device=self.device,
             dtype=self.dtype,
@@ -751,6 +782,30 @@ class BoundedTensorSpec(TensorSpec):
                 return False
             raise err
 
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        if isinstance(dest, torch.dtype):
+            dest_dtype = dest
+            dest_device = self.device
+        else:
+            dest_dtype = self.dtype
+            dest_device = torch.device(dest)
+        return self.__class__(
+            minimum=self.space.minimum.to(dest),
+            maximum=self.space.maximum.to(dest),
+            shape=self.shape,
+            device=dest_device,
+            dtype=dest_dtype,
+        )
+
+    def clone(self) -> CompositeSpec:
+        return self.__class__(
+            minimum=self.space.minimum.clone(),
+            maximum=self.space.maximum.clone(),
+            shape=self.shape,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
 
 @dataclass(repr=False)
 class UnboundedContinuousTensorSpec(TensorSpec):
@@ -784,6 +839,18 @@ class UnboundedContinuousTensorSpec(TensorSpec):
             dtype=dtype,
             domain="continuous",
         )
+
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        if isinstance(dest, torch.dtype):
+            dest_dtype = dest
+            dest_device = self.device
+        else:
+            dest_dtype = self.dtype
+            dest_device = torch.device(dest)
+        return self.__class__(shape=self.shape, device=dest_device, dtype=dest_dtype)
+
+    def clone(self) -> CompositeSpec:
+        return self.__class__(shape=self.shape, device=self.device, dtype=self.dtype)
 
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
@@ -847,6 +914,18 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
             dtype=dtype,
             domain="continuous",
         )
+
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        if isinstance(dest, torch.dtype):
+            dest_dtype = dest
+            dest_device = self.device
+        else:
+            dest_dtype = self.dtype
+            dest_device = torch.device(dest)
+        return self.__class__(shape=self.shape, device=dest_device, dtype=dest_dtype)
+
+    def clone(self) -> CompositeSpec:
+        return self.__class__(shape=self.shape, device=self.device, dtype=self.dtype)
 
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
@@ -954,6 +1033,22 @@ class BinaryDiscreteTensorSpec(TensorSpec):
             n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
         )
 
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        if isinstance(dest, torch.dtype):
+            dest_dtype = dest
+            dest_device = self.device
+        else:
+            dest_dtype = self.dtype
+            dest_device = torch.device(dest)
+        return self.__class__(
+            n=self.space.n, shape=self.shape, device=dest_device, dtype=dest_dtype
+        )
+
+    def clone(self) -> CompositeSpec:
+        return self.__class__(
+            n=self.space.n, shape=self.shape, device=self.device, dtype=self.dtype
+        )
+
 
 @dataclass(repr=False)
 class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
@@ -989,6 +1084,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         dtype=torch.long,
         use_register=False,
     ):
+        self.nvec = nvec
         dtype, device = _default_dtype_and_device(dtype, device)
         if shape is None:
             shape = torch.Size((sum(nvec),))
@@ -1003,6 +1099,28 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         self.use_register = use_register
         super(OneHotDiscreteTensorSpec, self).__init__(
             shape, space, device, dtype, domain="discrete"
+        )
+
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        if isinstance(dest, torch.dtype):
+            dest_dtype = dest
+            dest_device = self.device
+        else:
+            dest_dtype = self.dtype
+            dest_device = torch.device(dest)
+        return self.__class__(
+            nvec=deepcopy(self.nvec),
+            shape=self.shape,
+            device=dest_device,
+            dtype=dest_dtype,
+        )
+
+    def clone(self) -> CompositeSpec:
+        return self.__class__(
+            nvec=deepcopy(self.nvec),
+            shape=self.shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
@@ -1213,6 +1331,25 @@ class DiscreteTensorSpec(TensorSpec):
             n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
         )
 
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        if isinstance(dest, torch.dtype):
+            dest_dtype = dest
+            dest_device = self.device
+        else:
+            dest_dtype = self.dtype
+            dest_device = torch.device(dest)
+        return self.__class__(
+            n=self.space.n, shape=self.shape, device=dest_device, dtype=dest_dtype
+        )
+
+    def clone(self) -> CompositeSpec:
+        return self.__class__(
+            n=self.space.n,
+            shape=self.shape,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
 
 @dataclass(repr=False)
 class MultiDiscreteTensorSpec(DiscreteTensorSpec):
@@ -1259,9 +1396,28 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                 )
         self.nvec = self.nvec.expand(shape)
 
-        space = BoxList.from_nvec(nvec)
+        space = BoxList.from_nvec(self.nvec)
         super(DiscreteTensorSpec, self).__init__(
             shape, space, device, dtype, domain="discrete"
+        )
+
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        if isinstance(dest, torch.dtype):
+            dest_dtype = dest
+            dest_device = self.device
+        else:
+            dest_dtype = self.dtype
+            dest_device = torch.device(dest)
+        return self.__class__(
+            n=self.nvec.to(dest), shape=None, device=dest_device, dtype=dest_dtype
+        )
+
+    def clone(self) -> CompositeSpec:
+        return self.__class__(
+            nvec=self.nvec.clone(),
+            shape=None,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def _rand(self, space: Box, shape: torch.Size, i: int):
@@ -1471,6 +1627,9 @@ class CompositeSpec(TensorSpec):
         _device = device
         if len(kwargs):
             for key, item in self.items():
+                if item is None:
+                    continue
+
                 try:
                     item_device = item.device
                 except RuntimeError as err:
@@ -1480,8 +1639,6 @@ class CompositeSpec(TensorSpec):
                     else:
                         raise err
 
-                if item is None:
-                    continue
                 if _device is None:
                     _device = item_device
                 elif item_device != _device:
@@ -1607,7 +1764,7 @@ class CompositeSpec(TensorSpec):
             indent(f"{k}: {str(item)}", 4 * " ") for k, item in self._specs.items()
         ]
         sub_str = ",\n".join(sub_str)
-        return f"CompositeSpec(\n{sub_str})"
+        return f"CompositeSpec(\n{sub_str}, device={self._device})"
 
     def type_check(
         self,
@@ -1682,13 +1839,22 @@ class CompositeSpec(TensorSpec):
                 "Only device casting is allowed with specs of type CompositeSpec."
             )
         if self._device and self._device == torch.device(dest):
-            return self
-        self._device = torch.device(dest)
-        for key, value in list(self.items()):
+            return self.__class__(**self._specs, device=self._device)
+
+        _device = torch.device(dest)
+        items = list(self.items())
+        kwargs = {}
+        for key, value in items:
             if value is None:
+                kwargs[key] = value
                 continue
-            self[key] = value.to(dest)
-        return self
+            kwargs[key] = value.to(dest)
+        return self.__class__(**kwargs, device=_device)
+
+    def clone(self) -> CompositeSpec:
+        return self.__class__(
+            **{key: item.clone() for key, item in self.items()}, device=self._device
+        )
 
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
         return {key: self[key]._to_numpy(val) for key, val in val.items()}
@@ -1708,7 +1874,7 @@ class CompositeSpec(TensorSpec):
 
     def __eq__(self, other):
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self._device == other._device
             and self._specs == other._specs
         )

@@ -56,12 +56,18 @@ class EnvMetaData:
 
     @staticmethod
     def build_metadata_from_env(env) -> EnvMetaData:
-        tensordict = env.fake_tensordict()
-        specs = {key: getattr(env, key) for key in Specs._keys if key.endswith("_spec")}
+        tensordict = env.fake_tensordict().clone()
+        specs = {
+            "input_spec": env.input_spec,
+            "observation_spec": env.observation_spec,
+            "reward_spec": env.reward_spec,
+        }
         specs = CompositeSpec(**specs, shape=env.batch_size)
+
         batch_size = env.batch_size
         env_str = str(env)
         device = env.device
+        specs.to("cpu").clone().to(device).clone()
         batch_locked = env.batch_locked
         return EnvMetaData(tensordict, specs, batch_size, env_str, device, batch_locked)
 
@@ -78,7 +84,7 @@ class EnvMetaData:
         )
 
     def to(self, device: DEVICE_TYPING) -> EnvMetaData:
-        tensordict = self.tensordict.to(device)
+        tensordict = self.tensordict.contiguous().to(device)
         specs = self.specs.to(device)
         return EnvMetaData(
             tensordict, specs, self.batch_size, self.env_str, device, self.batch_locked
@@ -86,13 +92,13 @@ class EnvMetaData:
 
     def __setstate__(self, state):
         state["tensordict"] = state["tensordict"].to_tensordict().to(state["device"])
-        state["specs"] = deepcopy(state["specs"]).to(state["device"])
+        state["specs"] = state["specs"].clone().to(state["device"])
         self.__dict__.update(state)
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state["tensordict"] = state["tensordict"].to("cpu")
-        state["specs"] = state["specs"].to("cpu")
+        state["tensordict"] = state["tensordict"].to_tensordict().to("cpu")
+        state["specs"] = state["specs"].clone().to("cpu")
         return state
 
 
