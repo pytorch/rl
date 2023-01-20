@@ -78,12 +78,12 @@ class EnvMetaData:
             "observation_spec": env.observation_spec,
             "reward_spec": env.reward_spec,
         }
-        specs = CompositeSpec(**specs, shape=env.batch_size)
+        specs = CompositeSpec(**specs, shape=env.batch_size).to("cpu")
 
         batch_size = env.batch_size
         env_str = str(env)
         device = env.device
-        specs = specs.to("cpu").clone().to(device).clone()
+        specs = specs.to("cpu")
         batch_locked = env.batch_locked
         return EnvMetaData(tensordict, specs, batch_size, env_str, device, batch_locked)
 
