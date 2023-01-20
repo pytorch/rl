@@ -2961,7 +2961,7 @@ class TimeMaxPool(Transform):
                 )
             buffer = getattr(self, buffer_name)
             # shift obs 1 position to the right
-            buffer = torch.roll(buffer, shifts=1, dims=0)
+            buffer.copy_(torch.roll(buffer, shifts=1, dims=0))
             # add new obs
             buffer[0].copy_(tensordict[in_key])
             # apply max pooling
