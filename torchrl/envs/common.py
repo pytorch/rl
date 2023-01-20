@@ -47,11 +47,11 @@ class EnvMetaData:
         device: torch.device,
         batch_locked: bool = True,
     ):
+        self.device = device
         self.tensordict = tensordict
         self.specs = specs
         self.batch_size = batch_size
         self.env_str = env_str
-        self.device = device
         self.batch_locked = batch_locked
 
     @property
