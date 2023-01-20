@@ -1112,6 +1112,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def __init__(
         self,
+        env=None,
         **kwargs,
     ):
         if not _has_envpool:
@@ -1120,12 +1121,17 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 (Got the error message: {IMPORT_ERR_ENVPOOL}).
 """
             )
+        if env is not None:
+            kwargs["env"] = env
+            self.num_workers = env.config["num_envs"]
+            self.batch_size = torch.Size([self.num_workers])
 
         super().__init__(**kwargs)
+
         # Buffer to keep the latest observation for each worker
         self.obs: Union[torch.tensor, TensorDict] = self.observation_spec[
-            "observation"
-        ].zero((self.num_workers,))
+                "observation"
+            ].zero((self.num_workers,))
 
     def _check_kwargs(self, kwargs: Dict):
         pass
@@ -1185,13 +1191,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         )
 
     def __repr__(self) -> str:
-        if self._dummy_env_str is None:
-            self._dummy_env_str = self._set_properties()
-        return (
-            f"{self.__class__.__name__}("
-            f"\n\tenv={self._dummy_env_str}, "
-            f"\n\tbatch_size={self.batch_size})"
-        )
+        return f"{self.__class__.__name__}(num_workers={self.num_workers}, device={self.device})"
 
     def _parse_reset_workers(self, tensordict):
 
@@ -1247,6 +1247,10 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _treevalue_to_tensordict(self, tv):
         return {k[0]: torch.tensor(v) for k, v in treevalue.flatten(tv)}
 
+    def _set_seed(self, seed: Optional[int]):
+        if seed is not None:
+            print("MultiThreadedEnvWrapper._set_seed ignored, as setting seed in an existing envorinment is not\
+                   supported by envpool. Please create a new environment, passing the seed to the constructor.")
 
 class MultiThreadedEnv(MultiThreadedEnvWrapper):
     """Multithreaded execution of environments.
@@ -1303,5 +1307,4 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
             )
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(env={self.env_name}, num_workers={self.num_workers}, \
-         batch_size={self.batch_size}, device={self.device})"
+        return f"{self.__class__.__name__}(env={self.env_name}, num_workers={self.num_workers}, device={self.device})"

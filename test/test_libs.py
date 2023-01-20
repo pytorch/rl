@@ -24,6 +24,7 @@ from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs.vec_env import MultiThreadedEnvWrapper
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
@@ -52,6 +53,9 @@ if _has_dmc:
 
 if _has_vmas:
     import vmas
+
+if _has_envpool:
+    import envpool
 
 IS_OSX = platform == "darwin"
 
@@ -467,6 +471,14 @@ ALL_ENVS = GYM_ENVS + DM_ENVS
 
 @pytest.mark.skipif(not _has_envpool, reason="no envpool library found")
 class TestEnvPool:
+    @pytest.mark.parametrize("env_name", ALL_ENVS)
+    def test_env_wrapper_creation(self, env_name):
+        env_name = env_name.replace("ALE/", "")
+        envpool_env = envpool.make(task_id=env_name, env_type="gym", num_envs=4, gym_reset_return_info=True)
+        env = MultiThreadedEnvWrapper(envpool_env)
+        env.reset()
+        env.rand_step()
+
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", ALL_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
