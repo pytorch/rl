@@ -223,10 +223,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             # we want an error to be raised if we pass batch_size but
             # it's already been set
             self.batch_size = torch.Size(batch_size)
-        elif ("batch_size" not in self.__dir__()) and (
-            "batch_size" not in self.__class__.__dict__
-        ):
-            self.batch_size = torch.Size([])
         self._run_type_checks = run_type_checks
 
     @classmethod
@@ -268,6 +264,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @run_type_checks.setter
     def run_type_checks(self, run_type_checks: bool) -> None:
         self._run_type_checks = run_type_checks
+
+    @property
+    def batch_size(self) -> TensorSpec:
+        if ("_batch_size" not in self.__dir__()) and (
+            "_batch_size" not in self.__class__.__dict__
+        ):
+            self._batch_size = torch.Size([])
+        return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, value: torch.Size) -> None:
+        self._batch_size = torch.Size(value)
 
     @property
     def action_spec(self) -> TensorSpec:

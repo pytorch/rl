@@ -1471,11 +1471,20 @@ class CompositeSpec(TensorSpec):
         _device = device
         if len(kwargs):
             for key, item in self.items():
+                try:
+                    item_device = item.device
+                except RuntimeError as err:
+                    cond1 = DEVICE_ERR_MSG in str(err)
+                    if cond1:
+                        item_device = _device
+                    else:
+                        raise err
+
                 if item is None:
                     continue
                 if _device is None:
-                    _device = item.device
-                elif item.device != _device:
+                    _device = item_device
+                elif item_device != _device:
                     raise RuntimeError(
                         f"Setting a new attribute ({key}) on another device ({item.device} against {_device}). "
                         f"All devices of CompositeSpec must match."
@@ -1644,6 +1653,7 @@ class CompositeSpec(TensorSpec):
         return TensorDict(
             _dict,
             batch_size=shape,
+            device=self._device,
         )
 
     def keys(self, yield_nesting_keys: bool = False) -> KeysView:
@@ -1693,7 +1703,7 @@ class CompositeSpec(TensorSpec):
                 if isinstance(key, str) and self[key] is not None
             },
             torch.Size([*shape, *self.shape]),
-            device=self.device,
+            device=self._device,
         )
 
     def __eq__(self, other):
@@ -1742,7 +1752,7 @@ class CompositeSpec(TensorSpec):
                 for key, value in tuple(self.items())
             },
             shape=shape,
-            device=self.device,
+            device=self._device,
         )
         return out
 

@@ -342,7 +342,7 @@ class TestCollectorLib:
 class TestHabitat:
     def test_habitat(self, envname):
         env = HabitatEnv(envname)
-        rollout = env.rollout(3)
+        _ = env.rollout(3)
         check_env_specs(env)
 
     @pytest.mark.parametrize("from_pixels", [True, False])
@@ -518,7 +518,7 @@ class TestBrax:
         env = BraxEnv(envname, batch_size=batch_size, requires_grad=True)
         env.set_seed(0)
         td1 = env.reset()
-        action = torch.randn(batch_size + env.action_spec.shape)
+        action = torch.randn(env.action_spec.shape)
         action.requires_grad_(True)
         td1["action"] = action
         td2 = env.step(td1)
@@ -572,7 +572,7 @@ class TestVmas:
                 TypeError,
                 match="Batch size used in constructor is not compatible with vmas.",
             ):
-                env = VmasEnv(
+                _ = VmasEnv(
                     scenario_name=scenario_name,
                     num_envs=num_envs,
                     n_agents=n_agents,
@@ -583,14 +583,14 @@ class TestVmas:
                 TypeError,
                 match="Batch size used in constructor does not match vmas batch size.",
             ):
-                env = VmasEnv(
+                _ = VmasEnv(
                     scenario_name=scenario_name,
                     num_envs=num_envs,
                     n_agents=n_agents,
                     batch_size=batch_size,
                 )
         else:
-            env = VmasEnv(
+            _ = VmasEnv(
                 scenario_name=scenario_name,
                 num_envs=num_envs,
                 n_agents=n_agents,
