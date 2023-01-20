@@ -83,7 +83,7 @@ class EnvMetaData:
         batch_size = env.batch_size
         env_str = str(env)
         device = env.device
-        specs.to("cpu").clone().to(device).clone()
+        specs = specs.to("cpu").clone().to(device).clone()
         batch_locked = env.batch_locked
         return EnvMetaData(tensordict, specs, batch_size, env_str, device, batch_locked)
 
