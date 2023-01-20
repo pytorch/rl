@@ -2846,7 +2846,13 @@ class TimeMaxPool(Transform):
         # Non-batched environments
         if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
             for in_key in self.in_keys:
-                self._buffers[in_key] = 0.0
+                try:
+                    buffer_name = f"_maxpool_buffer_{in_key}"
+                    buffer = getattr(self, buffer_name)
+                    buffer.fill_(0.0)
+                except AttributeError:
+                    # we'll instantiate later, when needed
+                    pass
 
         # Batched environments
         else:
@@ -2859,29 +2865,38 @@ class TimeMaxPool(Transform):
                 ),
             )
             for in_key in self.in_keys:
-                if in_key in self._buffers.keys():
-                    self._buffers[in_key][:, _reset] = 0.0
-
+                buffer_name = f"_maxpool_buffer_{in_key}"
+                try:
+                    buffer = getattr(self, buffer_name)
+                    buffer[:, _reset] = 0.0
+                except AttributeError:
+                    # we'll instantiate later, when needed
+                    pass
+                
         return tensordict
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             # Lazy init of buffers
-            if in_key not in self._buffers.keys():
-                self._buffers[in_key] = torch.zeros(
-                    self.buffer_size,
-                    *tensordict[in_key].shape,
-                    dtype=tensordict[in_key].dtype,
-                    device=tensordict[in_key].device,
+            buffer_name = f"_maxpool_buffer_{in_key}"
+            if not hasattr(self, buffer_name):
+                self.register_buffer(
+                    buffer_name,
+                    torch.zeros(
+                        self.buffer_size,
+                        *tensordict[in_key].shape,
+                        dtype=tensordict[in_key].dtype,
+                        device=tensordict[in_key].device,
+                    )
                 )
-
+            buffer = getattr(self, buffer_name)
             # shift obs 1 position to the right
-            self._buffers[in_key] = torch.roll(self._buffers[in_key], shifts=1, dims=0)
+            buffer = torch.roll(buffer, shifts=1, dims=0)
             # add new obs
-            self._buffers[in_key][0].copy_(tensordict[in_key])
+            buffer[0].copy_(tensordict[in_key])
             # apply max pooling
-            pooled_tensor, _ = self._buffers[in_key].max(dim=0)
+            pooled_tensor, _ = buffer.max(dim=0)
             # add to tensordict
             tensordict.set(out_key, pooled_tensor)
 
