@@ -29,7 +29,7 @@ from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 
 try:
     import envpool
-
+    import treevalue
     _has_envpool = True
 except ImportError as err:
     _has_envpool = False
@@ -1121,10 +1121,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             )
 
         super().__init__(**kwargs)
-        print(self.observation_spec)
-        self.obs = torch.empty(
-            self.num_workers, *self.observation_spec["observation"].shape
-        )
+        # Buffer to keep the latest observation for each worker
+        self.obs: Union[torch.tensor, TensorDict] = self.observation_spec["observation"].zero((self.num_workers,))
 
     def _check_kwargs(self, kwargs: Dict):
         pass
@@ -1203,10 +1201,12 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _transform_reset_output(self, envpool_output, reset_workers):
         if reset_workers is not None:
+            if isinstance(envpool_output, treevalue.TreeValue):
+                envpool_output = treevalue.FastTreeValue(envpool_output)
             for i, worker in enumerate(reset_workers):
-                self.obs[worker] = torch.tensor(envpool_output[i])
+                self.obs[worker] = self._treevalue_or_numpy_to_tensor_or_tensordict(envpool_output[i])
         else:
-            self.obs = torch.tensor(envpool_output)
+            self.obs = self._treevalue_or_numpy_to_tensor_or_tensordict(envpool_output)
 
         tensordict_out = TensorDict(
             {"observation": self.obs},
@@ -1219,14 +1219,28 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _transform_step_output(self, envpool_output):
         obs, reward, done, *_ = envpool_output
+
+        obs = self._treevalue_or_numpy_to_tensor_or_tensordict(obs)
+
         tensordict_out = TensorDict(
-            {"observation": torch.tensor(obs), "reward": torch.tensor(reward)},
+            {"observation": obs, "reward": torch.tensor(reward)},
             batch_size=self.batch_size,
             device=self.device,
         )
         self._is_done = done
         tensordict_out.set("done", self._is_done)
         return tensordict_out
+
+    def _treevalue_or_numpy_to_tensor_or_tensordict(self, x):
+        if isinstance(x, treevalue.TreeValue):
+            ret = self._treevalue_to_tensordict(x)
+        else:
+            ret = torch.tensor(x)
+        return ret
+
+    def _treevalue_to_tensordict(self, tv):
+        return {k[0]: torch.tensor(v) for k, v in treevalue.flatten(tv)}
+
 
 
 class MultiThreadedEnv(MultiThreadedEnvWrapper):

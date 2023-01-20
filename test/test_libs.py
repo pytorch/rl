@@ -4,13 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 from sys import platform
+from typing import Optional, Union
+import contextlib
 
 import numpy as np
 import pytest
 import torch
 
 from _utils_internal import (
-    _make_envs,
     _make_multithreaded_env,
     get_available_devices,
     HALFCHEETAH_VERSIONED,
@@ -459,23 +460,19 @@ CLASSIC_CONTROL_ENVS = [
     "Acrobot-v1",
     "CartPole-v0",
 ]
-
 ATARI_ENVS = ["ALE/Pong-v5", "ALE/Breakout-v5"]
-
 GYM_ENVS = CLASSIC_CONTROL_ENVS + ATARI_ENVS
-
 DM_ENVS = ["CheetahRun-v1"]
-
+ALL_ENVS = GYM_ENVS + DM_ENVS
 
 @pytest.mark.skipif(not _has_envpool, reason="no envpool library found")
 class TestEnvPool:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", GYM_ENVS)
+    @pytest.mark.parametrize("env_name", ALL_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [False, True])
     @pytest.mark.parametrize("transformed_out", [False, True])
     def test_env_basic_operation(
-        self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=3
+        self, env_name, frame_skip, transformed_out, T=10, N=3
     ):
         env_multithreaded = _make_multithreaded_env(
             env_name,
@@ -519,11 +516,10 @@ class TestEnvPool:
 
         env_multithreaded.close()
 
-    # Doesn't work with PONG_VERSIONED because output is uint8
+    # Don't run on Atari envs because output is uint8
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", CLASSIC_CONTROL_ENVS)
+    @pytest.mark.parametrize("env_name", CLASSIC_CONTROL_ENVS + DM_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [True, False])
     @pytest.mark.parametrize("transformed_out", [True, False])
     @pytest.mark.parametrize(
         "selected_keys",
@@ -537,7 +533,6 @@ class TestEnvPool:
         self,
         env_name,
         frame_skip,
-        transformed_in,
         transformed_out,
         selected_keys,
         T=10,
@@ -546,9 +541,9 @@ class TestEnvPool:
         class DiscreteChoice(torch.nn.Module):
             """Dummy module producing discrete output. Necessary when the action space is discrete."""
 
-            def __init__(self, out_dim: int):
+            def __init__(self, out_dim: int, dtype: Optional[Union[torch.dtype, str]]):
                 super().__init__()
-                self.lin = nn.LazyLinear(out_dim)
+                self.lin = nn.LazyLinear(out_dim, dtype=dtype)
 
             def forward(self, x):
                 res = torch.argmax(self.lin(x), axis=-1, keepdim=True)
@@ -561,17 +556,24 @@ class TestEnvPool:
             N=N,
             selected_keys=selected_keys,
         )
+        if env_name == "CheetahRun-v1":
+            in_keys = [("observation", "velocity")]
+            dtype = torch.float64
+        else:
+            in_keys = ["observation"]
+            dtype = torch.float32
+
         if env_multithreaded.action_spec.shape:
-            module = nn.LazyLinear(env_multithreaded.action_spec.shape[-1])
+            module = nn.LazyLinear(env_multithreaded.action_spec.shape[-1], dtype=dtype)
         else:
             # Action space is discrete
-            module = DiscreteChoice(env_multithreaded.action_spec.space.n)
+            module = DiscreteChoice(env_multithreaded.action_spec.space.n, dtype=dtype)
 
         policy = ActorCriticOperator(
             SafeModule(
                 spec=None,
-                module=nn.LazyLinear(12),
-                in_keys=["observation"],
+                module=nn.LazyLinear(12, dtype=dtype),
+                in_keys=in_keys,
                 out_keys=["hidden"],
             ),
             SafeModule(
@@ -581,7 +583,7 @@ class TestEnvPool:
                 out_keys=["action"],
             ),
             ValueOperator(
-                module=MLP(out_features=1, num_cells=[]), in_keys=["hidden", "action"]
+                module=MLP(out_features=1, num_cells=[], layer_kwargs={"dtype": dtype}), in_keys=["hidden", "action"],
             ),
         )
 
@@ -591,6 +593,7 @@ class TestEnvPool:
                 N,
             ],
         )
+
         td1 = env_multithreaded.step(td)
         assert not td1.is_shared()
         assert "done" in td1.keys()
@@ -611,7 +614,6 @@ class TestEnvPool:
             ],
         )
         env_multithreaded.reset(tensordict=td_reset)
-
         td = env_multithreaded.rollout(
             policy=policy, max_steps=T, break_when_any_done=False
         )
@@ -622,7 +624,7 @@ class TestEnvPool:
         env_multithreaded.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", CLASSIC_CONTROL_ENVS)
+    @pytest.mark.parametrize("env_name", ALL_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_out", [True, False])
     def test_multithreaded_env_seed(
@@ -642,10 +644,9 @@ class TestEnvPool:
         td2a = env.rollout(max_steps=10)
 
         # Create a new env, set the seed, and repeat same operations
-        _, _, env, _ = _make_envs(
+        env = _make_multithreaded_env(
             env_name,
             frame_skip,
-            transformed_in=False,
             transformed_out=True,
             N=N,
         )
@@ -660,16 +661,17 @@ class TestEnvPool:
         assert_allclose_td(td2a, td2b)
 
         # Check that results are different if seed is different
-        env.set_seed(
-            seed=seed + 10,
-        )
-        td0c = env.reset()
-        td1c = env.step(td0c.clone().set("action", action))
-
-        with pytest.raises(AssertionError):
-            assert_allclose_td(td0a, td0c.select(*td0a.keys()))
-        with pytest.raises(AssertionError):
-            assert_allclose_td(td1a, td1c)
+        # Skip Pong, since there different actions can lead to the same result
+        if env_name != "ALE/Pong-v5":
+            env.set_seed(
+                seed=seed + 10,
+            )
+            td0c = env.reset()
+            td1c = env.step(td0c.clone().set("action", action))
+            with pytest.raises(AssertionError):
+                assert_allclose_td(td0a, td0c.select(*td0a.keys()))
+            with pytest.raises(AssertionError):
+                assert_allclose_td(td1a, td1c)
         env.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
@@ -694,7 +696,7 @@ class TestEnvPool:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", GYM_ENVS)
+    @pytest.mark.parametrize("env_name", ALL_ENVS)
     @pytest.mark.parametrize("transformed_out", [False, True])
     @pytest.mark.parametrize("open_before", [False, True])
     def test_multithreaded_env_cast(
@@ -734,7 +736,7 @@ class TestEnvPool:
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", GYM_ENVS)
+    @pytest.mark.parametrize("env_name", ALL_ENVS)
     @pytest.mark.parametrize("transformed_out", [True, False])
     def test_env_device(self, env_name, frame_skip, transformed_out, device):
         # tests creation on device

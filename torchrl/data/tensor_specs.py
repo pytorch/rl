@@ -1342,7 +1342,7 @@ class CompositeSpec(TensorSpec):
             batch_size=shape,
         )
 
-    def keys(self, yield_nesting_keys: bool = False) -> KeysView:
+    def keys(self, yield_nesting_keys: bool = False, nested_keys: bool = False) -> KeysView:
         """Keys of the CompositeSpec.
 
         Args:
@@ -1351,7 +1351,7 @@ class CompositeSpec(TensorSpec):
                 will lead to the keys :obj:`["next", ("next", "obs")]`. Default is :obj:`False`, i.e.
                 only nested keys will be returned.
         """
-        return _CompositeSpecKeysView(self, _yield_nesting_keys=yield_nesting_keys)
+        return _CompositeSpecKeysView(self, _yield_nesting_keys=yield_nesting_keys, nested_keys=nested_keys)
 
     def items(self) -> ItemsView:
         return self._specs.items()

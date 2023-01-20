@@ -340,7 +340,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict.is_locked = True  # make sure _step does not modify the tensordict
         tensordict_out = self._step(tensordict)
         tensordict.is_locked = False
-        obs_keys = set(self.observation_spec.keys())
+        # Keys need to be non-nested for tensordict_out.exclude below
+        obs_keys = set(self.observation_spec.keys(nested_keys=False))
         tensordict_out_select = tensordict_out.select(*obs_keys)
         tensordict_out = tensordict_out.exclude(*obs_keys)
         tensordict_out.set("next", tensordict_out_select)
@@ -391,7 +392,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     f"expected done.dtype to be torch.bool but got {tensordict_out.get('done').dtype}"
                 )
         tensordict.update(tensordict_out, inplace=self._inplace_update)
-
         del tensordict_out
         return tensordict
 
