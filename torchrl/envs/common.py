@@ -39,8 +39,8 @@ class EnvMetaData:
     """A class for environment meta-data storage and passing in multiprocessed settings."""
 
     def __new__(cls, *args, **kwargs):
-        self._spec = None
-        self._tensordict = None
+        cls._spec = None
+        cls._tensordict = None
         return cls
 
     def __init__(
