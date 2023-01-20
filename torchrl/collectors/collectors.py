@@ -416,7 +416,7 @@ class SyncDataCollector(_DataCollector):
         self.mask_out_batch_size = mask_env_batch_size + [True]
 
         self.env_batch_size_unmasked_indeces = [
-            i for i, is_batch in enumerate(self.mask_out_batch_size) if not is_batch
+            i for i, is_batch in enumerate(self.mask_env_batch_size) if not is_batch
         ]
         self.permute_out_batch_size = [
             i for i, is_batch in enumerate(self.mask_out_batch_size) if is_batch
