@@ -3095,12 +3095,12 @@ class TestValues:
             done,
             rolling_gamma,
         )
-        if has_done and rolling_gamma is False:
+        if has_done and rolling_gamma is False and done[..., :-1, :].any():
             with pytest.raises(
                 NotImplementedError,
                 match="TDLambda is not implemented for consecutive trajectories",
             ):
-                v2 = vec_td_lambda_advantage_estimate(
+                _ = vec_td_lambda_advantage_estimate(
                     gamma_tensor,
                     lmbda,
                     state_value,
