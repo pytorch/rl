@@ -23,10 +23,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 from torchrl._utils import _check_for_faulty_process, prod
-from torchrl.collectors.utils import (
-    get_batch_size_masked,
-    split_trajectories,
-)
+from torchrl.collectors.utils import get_batch_size_masked, split_trajectories
 from torchrl.data import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
@@ -416,9 +413,13 @@ class SyncDataCollector(_DataCollector):
             mask_env_batch_size = list(mask_env_batch_size)
         self.mask_env_batch_size = mask_env_batch_size
         self.mask_out_batch_size = mask_env_batch_size + [True]
+
+        self.env_batch_size_unmasked_indeces = [
+            i for i, is_batch in enumerate(self.mask_out_batch_size) if not is_batch
+        ]
         self.permute_out_batch_size = [
             i for i, is_batch in enumerate(self.mask_out_batch_size) if is_batch
-        ] + [i for i, is_batch in enumerate(self.mask_out_batch_size) if not is_batch]
+        ] + self.env_batch_size_unmasked_indeces
         self.env_batch_size_unmasked = [
             env.batch_size[i]
             for i, is_batch in enumerate(self.mask_env_batch_size)
@@ -428,6 +429,16 @@ class SyncDataCollector(_DataCollector):
             self.env.batch_size, self.mask_env_batch_size
         )
         self.n_env = max(1, self.env_batch_size_masked.numel())
+
+        self.mask_tensor = torch.ones(
+            *self.env.batch_size,
+            dtype=torch.bool,
+            device=self.env.device,
+        )
+        for dim in self.env_batch_size_unmasked_indeces:
+            self.mask_tensor.index_fill_(
+                dim, torch.arange(1, self.env.batch_size[dim]), 0
+            )
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
@@ -668,10 +679,21 @@ class SyncDataCollector(_DataCollector):
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
                 )
+            steps[done_or_terminated] = 0
+
+            traj_ids = traj_ids[self.mask_tensor]
+            done_or_terminated = done_or_terminated[self.mask_tensor]
+
             traj_ids[done_or_terminated] = traj_ids.max() + torch.arange(
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
-            steps[done_or_terminated] = 0
+
+            traj_ids = (
+                traj_ids.view(self.env_batch_size_masked)
+                .expand(self.env.batch_size)
+                .clone()
+            )
+
             self._tensordict.set_("traj_ids", traj_ids)  # no ops if they already match
             self._tensordict.set_("step_count", steps)
 
