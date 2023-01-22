@@ -393,7 +393,6 @@ class SyncDataCollector(_DataCollector):
                         f"on environment of type {type(create_env_fn)}."
                     )
                 env.update_kwargs(create_env_kwargs)
-
         if passing_device is None:
             if device is not None:
                 passing_device = device
@@ -438,6 +437,7 @@ class SyncDataCollector(_DataCollector):
         ] + env_batch_size_unmasked_indeces
         # env.batch_size with masked dimensions set to 1.
         # Also returns error in case the input mask is malformed
+
         self.env_batch_size_masked = get_batch_size_masked(
             self.env.batch_size, self.mask_env_batch_size
         )
@@ -475,7 +475,7 @@ class SyncDataCollector(_DataCollector):
         if frames_per_batch % self.n_env != 0:
             warnings.warn(
                 f"frames_per_batch {frames_per_batch} is not exactly divisible by the number of batched environments {self.n_env}, "
-                f" this results in more frames_per_batch per iteration that requeste"
+                f" this results in more frames_per_batch per iteration that requested"
             )
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.pin_memory = pin_memory
