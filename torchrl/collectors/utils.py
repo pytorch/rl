@@ -116,6 +116,7 @@ def bring_forward_and_squash_batch_sizes(
     permute: Sequence[int],
     batch_size_unmasked: Sequence[int],
 ) -> TensorDictBase:
+    """Permutes the batch dimesnions attording to the permute indeces and then squashes all leadning dimesnions apart from batch_size_unmasked."""
     # Bring all batch dimensions to the front (only performs computation if it is not already the case)
     tensordict = tensordict.permute(permute)
     # Flatten all batch dimensions into first one and leave unmasked dimensions untouched
