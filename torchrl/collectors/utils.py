@@ -31,7 +31,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     Takes a tensordict with a key traj_ids that indicates the id of each trajectory.
     The input tensordict has batch_size = B x *other_dims
 
-    From there, builds a B/T x *other_dims x T x ... zero-padded tensordict with B batches on max duration T
+    From there, builds a B / T x *other_dims x T x ... zero-padded tensordict with B / T batches on max duration T
     """
     # TODO: incorporate tensordict.split once it's implemented
     env_batch_size_unmasked = rollout_tensordict.batch_size[1:]
