@@ -215,6 +215,7 @@ class _BatchedEnv(EnvBase):
         if self._single_task:
             # if EnvCreator, the metadata are already there
             meta_data = get_env_metadata(create_env_fn[0], create_env_kwargs[0])
+            print("device of ", type(self), ":", meta_data.device)
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
             )
@@ -242,7 +243,7 @@ class _BatchedEnv(EnvBase):
                 _kwargs.update(_new_kwargs)
 
     def _set_properties(self):
-        meta_data = self.meta_data.clone()
+        meta_data = self.meta_data
         if self._single_task:
             self._batch_size = meta_data.batch_size
             observation_spec = meta_data.specs["observation_spec"]

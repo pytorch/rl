@@ -59,7 +59,7 @@ class EnvMetaData:
         return self._tensordict.to(self.device)
 
     @property
-    def spec(self):
+    def specs(self):
         return self._specs.to(self.device)
 
     @tensordict.setter
@@ -67,8 +67,8 @@ class EnvMetaData:
         self._tensordict = value.to("cpu")
 
     @spec.setter
-    def spec(self, value: CompositeSpec):
-        self._spec = value.to("cpu")
+    def specs(self, value: CompositeSpec):
+        self._specs = value.to("cpu")
 
     @staticmethod
     def build_metadata_from_env(env) -> EnvMetaData:
