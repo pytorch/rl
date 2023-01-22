@@ -24,7 +24,11 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 from torchrl._utils import _check_for_faulty_process
-from torchrl.collectors.utils import get_batch_size_masked, split_trajectories
+from torchrl.collectors.utils import (
+    bring_forward_and_squash_batch_sizes,
+    get_batch_size_masked,
+    split_trajectories,
+)
 from torchrl.data import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
@@ -429,6 +433,9 @@ class SyncDataCollector(_DataCollector):
         self.permute_out_batch_size = [
             i for i, is_batch in enumerate(self.mask_out_batch_size) if is_batch
         ] + env_batch_size_unmasked_indeces
+        self.permute_env_batch_size = [
+            i for i, is_batch in enumerate(self.mask_env_batch_size) if is_batch
+        ] + env_batch_size_unmasked_indeces
         # env.batch_size with masked dimensions set to 1.
         # Also returns error in case the input mask is malformed
         self.env_batch_size_masked = get_batch_size_masked(
@@ -533,6 +540,11 @@ class SyncDataCollector(_DataCollector):
                 device=self.env_device,
             ),
         )
+        self._tensordict_out = bring_forward_and_squash_batch_sizes(
+            self._tensordict_out,
+            self.permute_out_batch_size,
+            self.env_batch_size_unmasked,
+        )
 
         if split_trajs is None:
             if not self.reset_when_done:
@@ -585,20 +597,9 @@ class SyncDataCollector(_DataCollector):
             self._iter = i
             tensordict_out = self.rollout()
 
-            # Bring all batch dimensions to the front (only performs computation if it is not already the case)
-            tensordict_out = tensordict_out.permute(self.permute_out_batch_size)
-            # Flatten all batch dimensions into first one and leave unmasked dimensions untouched
-            if len(self.env_batch_size_unmasked) > 0:
-                tensordict_out = tensordict_out.reshape(
-                    self.frames_per_batch * self.n_env, *self.env_batch_size_unmasked
-                )
-            else:
-                tensordict_out = tensordict_out.view(-1).to_tensordict()
-
             self._frames += tensordict_out.batch_size[0]
             if self._frames >= self.total_frames:
                 self.env.close()
-
             if self.split_trajs:
                 tensordict_out = split_trajectories(tensordict_out)
             if self.postproc is not None:
@@ -739,15 +740,25 @@ class SyncDataCollector(_DataCollector):
 
                 step_count = self._tensordict.get("step_count")
                 self._tensordict.set_("step_count", step_count + 1)
+
+                tensordict = bring_forward_and_squash_batch_sizes(
+                    self._tensordict,
+                    self.permute_env_batch_size,
+                    self.env_batch_size_unmasked,
+                )
                 # we must clone all the values, since the step / traj_id updates are done in-place
                 try:
-                    self._tensordict_out[..., j] = self._tensordict
+                    self._tensordict_out[
+                        j * self.n_env : (j + 1) * self.n_env
+                    ] = tensordict
                 except RuntimeError:
                     # unlock the output tensordict to allow for new keys to be written
                     # these will be missed during the sync but at least we won't get an error during the update
                     is_shared = self._tensordict_out.is_shared()
                     self._tensordict_out.unlock()
-                    self._tensordict_out[..., j] = self._tensordict
+                    self._tensordict_out[
+                        j * self.n_env : (j + 1) * self.n_env
+                    ] = tensordict
                     if is_shared:
                         self._tensordict_out.share_memory_()
                 self._reset_if_necessary()

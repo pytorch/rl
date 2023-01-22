@@ -58,9 +58,9 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
                 dtype=torch.bool,
             ),
         )
-        rollout_tensordict = rollout_tensordict.view(
+        rollout_tensordict = rollout_tensordict.reshape(
             -1, *env_batch_size_unmasked, splits[0]
-        ).to_tensordict()
+        )
         return rollout_tensordict.unflatten_keys(sep)
     out_splits = rollout_tensordict.view(-1, *env_batch_size_unmasked).split(splits, 0)
 
@@ -92,7 +92,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
 
 def get_batch_size_masked(
     batch_size: torch.Size, mask: Optional[Sequence[bool]] = None
-):
+) -> torch.Size:
     """Returns a size with the masked dimensions equal to 1."""
     if mask is None:
         return batch_size
@@ -109,3 +109,15 @@ def get_batch_size_masked(
             )
         ]
     )
+
+
+def bring_forward_and_squash_batch_sizes(
+    tensordict: TensorDictBase,
+    permute: Sequence[int],
+    batch_size_unmasked: Sequence[int],
+) -> TensorDictBase:
+    # Bring all batch dimensions to the front (only performs computation if it is not already the case)
+    tensordict = tensordict.permute(permute)
+    # Flatten all batch dimensions into first one and leave unmasked dimensions untouched
+    tensordict = tensordict.reshape(-1, *batch_size_unmasked)
+    return tensordict
