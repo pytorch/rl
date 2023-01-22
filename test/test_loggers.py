@@ -13,15 +13,14 @@ from time import sleep
 import pytest
 import torch
 from torchrl.record.loggers import (
-    _has_mlflow,
-    _has_tb,
-    _has_tv,
-    _has_wandb,
     CSVLogger,
     MLFlowLogger,
     TensorboardLogger,
     WandbLogger,
 )
+from torchrl.record.loggers.mlflow import _has_mlflow, _has_tv
+from torchrl.record.loggers.tensorboard import _has_tb
+from torchrl.record.loggers.wandb import _has_wandb
 
 if _has_tv:
     import torchvision
