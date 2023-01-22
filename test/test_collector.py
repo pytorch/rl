@@ -319,8 +319,16 @@ def test_collector_env_reset():
         continue
     steps = _data["step_count"]
     done = _data["done"].squeeze(-1)
+    traj_ids = _data["traj_ids"]
     # we don't want just one done
     assert done.sum() > 3
+    for i in traj_ids.unique():
+        # check that after a done, the next step count is always 1
+        assert (steps[traj_ids == i][0] == 1).all()
+        # check that step counts are positive for not first elements of traj
+        assert (steps[traj_ids == i][1:] > 1).all()
+        # check that non-last elements of trajectories are not done
+        assert (done[traj_ids == i][:-1] == 0).all()
     # check that split traj has a minimum total reward of -21 (for pong only)
     _data = split_trajectories(_data)
     assert _data["reward"].sum(-2).min() == -21
