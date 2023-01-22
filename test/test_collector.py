@@ -592,7 +592,7 @@ def test_collector_batch_size_with_env_batch_size(
                 mask_env_batch_size=mask_env_batch_size,
                 pin_memory=False,
             )
-            assert False
+            raise AssertionError
         except RuntimeError:
             return
 
