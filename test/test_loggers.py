@@ -12,10 +12,16 @@ from time import sleep
 
 import pytest
 import torch
-from torchrl.trainers.loggers.csv import CSVLogger
-from torchrl.trainers.loggers.mlflow import _has_mlflow, _has_tv, MLFlowLogger
-from torchrl.trainers.loggers.tensorboard import _has_tb, TensorboardLogger
-from torchrl.trainers.loggers.wandb import _has_wandb, WandbLogger
+from torchrl.record.loggers import (
+    _has_mlflow,
+    _has_tb,
+    _has_tv,
+    _has_wandb,
+    CSVLogger,
+    MLFlowLogger,
+    TensorboardLogger,
+    WandbLogger,
+)
 
 if _has_tv:
     import torchvision
