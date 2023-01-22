@@ -45,7 +45,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     sep = ".-|-."
     rollout_tensordict = rollout_tensordict.flatten_keys(sep)
     traj_ids = rollout_tensordict.get("traj_ids")[mask].view(-1)
-    unique_traj_ids = traj_ids.unique()
+    unique_traj_ids = traj_ids.unique(sorted=False)
     MAX = max([(traj_ids == i).count_nonzero() for i in unique_traj_ids])
 
     out_splits = []
