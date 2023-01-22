@@ -45,17 +45,12 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     sep = ".-|-."
     rollout_tensordict = rollout_tensordict.flatten_keys(sep)
     traj_ids = rollout_tensordict.get("traj_ids")[mask].view(-1)
-
-    traj_masks = []
-    MAX = 0
-    for i in traj_ids.unique():
-        traj_mask = traj_ids == i
-        MAX = max(MAX, traj_mask.count_nonzero())
-        traj_masks.append(traj_mask)
+    unique_traj_ids = traj_ids.unique()
+    MAX = max([(traj_ids == i).count_nonzero() for i in unique_traj_ids])
 
     out_splits = []
-    for traj_mask in traj_masks:
-        out_split = rollout_tensordict[traj_mask]
+    for i in unique_traj_ids:
+        out_split = rollout_tensordict[traj_ids == i]
         out_split.set(
             "mask",
             torch.ones(
