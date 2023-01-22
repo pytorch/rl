@@ -883,7 +883,7 @@ class CountingEnv(EnvBase):
             self.count[:] = 0
         return TensorDict(
             source={
-                "observation": self.count.clone(),
+                "observation": self.count.float().clone(),
                 "done": self.count > self.max_steps,
             },
             batch_size=self.batch_size,
@@ -898,7 +898,7 @@ class CountingEnv(EnvBase):
         self.count += action.to(torch.int)
         return TensorDict(
             source={
-                "observation": self.count,
+                "observation": self.count.float(),
                 "done": self.count > self.max_steps,
                 "reward": torch.zeros_like(self.count, dtype=torch.float),
             },

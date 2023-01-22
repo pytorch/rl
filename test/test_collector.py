@@ -9,20 +9,20 @@ import sys
 import numpy as np
 import pytest
 import torch
-from tensordict.nn import TensorDictModule
-from tensordict.tensordict import assert_allclose_td, TensorDict
-from torch import nn
-
 from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
 from mocking_classes import (
     ContinuousActionVecMockEnv,
+    CountingEnv,
     DiscreteActionConvMockEnv,
     DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
     MockSerialEnv,
 )
-from torchrl._utils import seed_generator
+from tensordict.nn import TensorDictModule
+from tensordict.tensordict import assert_allclose_td, TensorDict
+from torch import nn
+from torchrl._utils import prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
@@ -531,6 +531,145 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         if i == 5:
             break
     ccollector.shutdown()
+
+
+@pytest.mark.parametrize("n_env_workers", [1, 3])
+@pytest.mark.parametrize("batch_size", [(), (2, 4)])
+@pytest.mark.parametrize("mask_env_batch_size", [None, (True, False, True)])
+def test_collector_batch_size_with_env_batch_size(
+    n_env_workers,
+    batch_size,
+    mask_env_batch_size,
+    max_steps=5,
+    n_collector_workers=4,
+    seed=100,
+):
+    if n_env_workers == 3 and _os_is_windows:
+        pytest.skip("Test timeout (> 10 min) on CI pipeline Windows machine with GPU")
+    if n_env_workers == 1:
+        env = lambda: CountingEnv(max_steps=max_steps, batch_size=batch_size)
+        if mask_env_batch_size is not None:
+            mask_env_batch_size = mask_env_batch_size[1:]
+    else:
+        env = lambda: ParallelEnv(
+            num_workers=n_env_workers,
+            create_env_fn=lambda: CountingEnv(
+                max_steps=max_steps, batch_size=batch_size
+            ),
+        )
+    new_batch_size = env().batch_size
+    policy = TensorDictModule(
+        nn.Linear(1, 1), in_keys=["observation"], out_keys=["action"]
+    )
+    torch.manual_seed(0)
+    np.random.seed(0)
+
+    env_unmasked_dims = [
+        dim
+        for i, dim in enumerate(new_batch_size)
+        if mask_env_batch_size is not None and not mask_env_batch_size[i]
+    ]
+    n_batch_envs = max(
+        1,
+        prod(
+            [
+                dim
+                for i, dim in enumerate(new_batch_size)
+                if mask_env_batch_size is None or mask_env_batch_size[i]
+            ]
+        ),
+    )
+    frames_per_batch = n_collector_workers * n_batch_envs * n_env_workers * 5
+
+    if mask_env_batch_size is not None and len(mask_env_batch_size) != len(
+        new_batch_size
+    ):
+        with pytest.raises(
+            RuntimeError,
+            match=(
+                f"Batch size mask and env batch size have different"
+                f" lengths: mask={mask_env_batch_size}, env.batch_size={new_batch_size}"
+            ),
+        ):
+            ccollector = MultiaSyncDataCollector(
+                create_env_fn=[env for _ in range(n_collector_workers)],
+                policy=policy,
+                frames_per_batch=frames_per_batch,
+                mask_env_batch_size=mask_env_batch_size,
+                pin_memory=False,
+                split_trajs=False,
+            )
+            return
+
+    # Multi async no split traj
+    ccollector = MultiaSyncDataCollector(
+        create_env_fn=[env for _ in range(n_collector_workers)],
+        policy=policy,
+        frames_per_batch=frames_per_batch,
+        mask_env_batch_size=mask_env_batch_size,
+        pin_memory=False,
+        split_trajs=False,
+    )
+    ccollector.set_seed(seed)
+    for i, b in enumerate(ccollector):
+        assert b.batch_size == torch.Size([frames_per_batch, *env_unmasked_dims])
+        if i == 1:
+            break
+    ccollector.shutdown()
+
+    # Multi async split traj
+    ccollector = MultiaSyncDataCollector(
+        create_env_fn=[env for _ in range(n_collector_workers)],
+        policy=policy,
+        frames_per_batch=frames_per_batch,
+        max_frames_per_traj=max_steps,
+        mask_env_batch_size=mask_env_batch_size,
+        pin_memory=False,
+        split_trajs=True,
+    )
+    ccollector.set_seed(seed)
+    for i, b in enumerate(ccollector):
+        assert b.batch_size[1:] == torch.Size([*env_unmasked_dims, max_steps])
+        if i == 1:
+            break
+    ccollector.shutdown()
+
+    # Multi sync no split traj
+    ccollector = MultiSyncDataCollector(
+        create_env_fn=[env for _ in range(n_collector_workers)],
+        policy=policy,
+        frames_per_batch=frames_per_batch,
+        mask_env_batch_size=mask_env_batch_size,
+        pin_memory=False,
+        split_trajs=False,
+    )
+    ccollector.set_seed(seed)
+    for i, b in enumerate(ccollector):
+        assert b.batch_size == torch.Size([frames_per_batch, *env_unmasked_dims])
+        if i == 1:
+            break
+    ccollector.shutdown()
+
+    # Multi sync split traj
+    ccollector = MultiSyncDataCollector(
+        create_env_fn=[env for _ in range(n_collector_workers)],
+        policy=policy,
+        frames_per_batch=frames_per_batch,
+        max_frames_per_traj=max_steps,
+        mask_env_batch_size=mask_env_batch_size,
+        pin_memory=False,
+        split_trajs=True,
+    )
+    ccollector.set_seed(seed)
+    for i, b in enumerate(ccollector):
+        assert b.batch_size[1:] == torch.Size([*env_unmasked_dims, max_steps])
+        if i == 1:
+            break
+    ccollector.shutdown()
+
+
+def test_collector_batch_size_advanced():
+    pass
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
