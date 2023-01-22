@@ -27,7 +27,7 @@ from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import SafeModule
 from torchrl.objectives.common import LossModule
-from torchrl.trainers.loggers import Logger
+from torchrl.record.loggers import Logger
 
 try:
     from tqdm import tqdm

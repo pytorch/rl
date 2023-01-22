@@ -24,8 +24,8 @@ from torchrl.envs.transforms import (
     TransformedEnv,
 )
 from torchrl.envs.transforms.transforms import FlattenObservation, TensorDictPrimer
+from torchrl.record.loggers import Logger
 from torchrl.record.recorder import VideoRecorder
-from torchrl.trainers.loggers import Logger
 
 __all__ = [
     "transformed_env_constructor",
