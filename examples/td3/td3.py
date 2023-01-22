@@ -38,7 +38,7 @@ from torchrl.modules.distributions import TanhDelta
 
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.td3 import TD3Loss
-from torchrl.trainers.loggers.utils import generate_exp_name, get_logger
+from torchrl.record.loggers import generate_exp_name, get_logger
 
 
 def env_maker(task, frame_skip=1, device="cpu", from_pixels=False):
