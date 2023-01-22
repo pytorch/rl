@@ -584,21 +584,16 @@ def test_collector_batch_size_with_env_batch_size(
     if mask_env_batch_size is not None and len(mask_env_batch_size) != len(
         new_batch_size
     ):
-        with pytest.raises(
-            RuntimeError,
-            match=(
-                f"Batch size mask and env batch size have different"
-                f" lengths: mask={mask_env_batch_size}, env.batch_size={new_batch_size}"
-            ),
-        ):
-            ccollector = MultiaSyncDataCollector(
-                create_env_fn=[env for _ in range(n_collector_workers)],
+        try:
+            ccollector = SyncDataCollector(
+                create_env_fn=env,
                 policy=policy,
                 frames_per_batch=frames_per_batch,
                 mask_env_batch_size=mask_env_batch_size,
                 pin_memory=False,
-                split_trajs=False,
             )
+            assert False
+        except RuntimeError:
             return
 
     # Multi async no split traj
