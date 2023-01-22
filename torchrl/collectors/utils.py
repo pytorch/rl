@@ -34,7 +34,6 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     From there, builds a B / T x *other_dims x T x ... zero-padded tensordict with B / T batches on max duration T
     """
     # TODO: incorporate tensordict.split once it's implemented
-    env_batch_size_unmasked = rollout_tensordict.batch_size[1:]
     mask = torch.ones(
         rollout_tensordict.batch_size,
         device=rollout_tensordict.device,
@@ -45,33 +44,18 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
 
     sep = ".-|-."
     rollout_tensordict = rollout_tensordict.flatten_keys(sep)
-    traj_ids = rollout_tensordict.get("traj_ids")[mask]
-    splits = traj_ids.view(-1)
-    splits = [(splits == i).sum().item() for i in splits.unique_consecutive()]
-    # if all splits are identical then we can skip this function
-    if len(set(splits)) == 1:
-        rollout_tensordict.set(
-            "mask",
-            torch.ones(
-                rollout_tensordict.shape,
-                device=rollout_tensordict.device,
-                dtype=torch.bool,
-            ),
-        )
-        rollout_tensordict = rollout_tensordict.reshape(
-            -1, *env_batch_size_unmasked, splits[0]
-        )
-        return rollout_tensordict.unflatten_keys(sep)
-    out_splits = rollout_tensordict.view(-1, *env_batch_size_unmasked).split(splits, 0)
+    traj_ids = rollout_tensordict.get("traj_ids")[mask].view(-1)
 
-    for i in range(len(out_splits)):
-        assert (
-            out_splits[i]["traj_ids"]
-            == rollout_tensordict.get("traj_ids")[mask].unique_consecutive()[i]
-        ).all()
+    traj_masks = []
+    MAX = 0
+    for i in traj_ids.unique():
+        traj_mask = traj_ids == i
+        MAX = max(MAX, traj_mask.count_nonzero(0))
+        traj_masks.append(traj_mask)
 
-    MAX = max(*[out_split.shape[0] for out_split in out_splits])
-    for i, out_split in enumerate(out_splits):
+    out_splits = []
+    for traj_mask in traj_masks:
+        out_split = rollout_tensordict[traj_mask]
         out_split.set(
             "mask",
             torch.ones(
@@ -80,10 +64,9 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
                 device=out_split.get("done").device,
             ),
         )
-        out_splits[i] = pad(out_split, [0, MAX - out_split.shape[0]])
-        out_splits[i] = out_splits[i].permute(
-            -1, *range(len(out_splits[i].batch_size) - 1)
-        )
+        out_split = pad(out_split, [0, MAX - out_split.shape[0]])
+        out_split = out_split.permute(-1, *range(len(out_split.batch_size) - 1))
+        out_splits.append(out_split)
 
     td = torch.stack(out_splits, 0).contiguous()
     td = td.unflatten_keys(sep)
