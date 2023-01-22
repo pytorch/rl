@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import collections
 import multiprocessing as mp
-from copy import copy, deepcopy
+from copy import copy
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
@@ -405,7 +405,7 @@ but got an object of type {type(transform)}."""
         """Observation spec of the transformed environment."""
         if self._observation_spec is None or not self.cache_specs:
             observation_spec = self.transform.transform_observation_spec(
-                deepcopy(self.base_env.observation_spec)
+                self.base_env.observation_spec.clone()
             )
             if self.cache_specs:
                 self.__dict__["_observation_spec"] = observation_spec
@@ -423,7 +423,7 @@ but got an object of type {type(transform)}."""
         """Action spec of the transformed environment."""
         if self._input_spec is None or not self.cache_specs:
             input_spec = self.transform.transform_input_spec(
-                deepcopy(self.base_env.input_spec)
+                self.base_env.input_spec.clone()
             )
             if self.cache_specs:
                 self.__dict__["_input_spec"] = input_spec
@@ -436,7 +436,7 @@ but got an object of type {type(transform)}."""
         """Reward spec of the transformed environment."""
         if self._reward_spec is None or not self.cache_specs:
             reward_spec = self.transform.transform_reward_spec(
-                deepcopy(self.base_env.reward_spec)
+                self.base_env.reward_spec.clone()
             )
             if self.cache_specs:
                 self.__dict__["_reward_spec"] = reward_spec

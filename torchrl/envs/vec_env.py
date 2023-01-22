@@ -227,44 +227,6 @@ class _BatchedEnv(EnvBase):
                 )
         self._set_properties()
 
-    # def _prepare_dummy_env(
-    #     self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
-    # ):
-    #     self._dummy_env_instance = None
-    #     if self._single_task:
-    #         # if EnvCreator, the metadata are already there
-    #         if isinstance(create_env_fn[0], EnvCreator):
-    #             self._dummy_env_fun = create_env_fn[0]
-    #             self._dummy_env_fun.create_env_kwargs.update(create_env_kwargs[0])
-    #         # get the metadata
-    #
-    #         try:
-    #             self._dummy_env_fun = CloudpickleWrapper(
-    #                 create_env_fn[0], **create_env_kwargs[0]
-    #             )
-    #         except RuntimeError as err:
-    #             if isinstance(create_env_fn[0], EnvCreator):
-    #                 self._dummy_env_fun = create_env_fn[0]
-    #                 self._dummy_env_fun.create_env_kwargs.update(create_env_kwargs[0])
-    #             else:
-    #                 raise err
-    #     else:
-    #         n_tasks = len(create_env_fn)
-    #         self._dummy_env_fun = []
-    #         for i in range(n_tasks):
-    #             try:
-    #                 self._dummy_env_fun.append(
-    #                     CloudpickleWrapper(create_env_fn[i], **create_env_kwargs[i])
-    #                 )
-    #             except RuntimeError as err:
-    #                 if isinstance(create_env_fn[i], EnvCreator):
-    #                     self._dummy_env_fun.append(create_env_fn[i])
-    #                     self._dummy_env_fun[i].create_env_kwargs.update(
-    #                         create_env_kwargs[i]
-    #                     )
-    #                 else:
-    #                     raise err
-
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
 
@@ -280,7 +242,7 @@ class _BatchedEnv(EnvBase):
                 _kwargs.update(_new_kwargs)
 
     def _set_properties(self):
-        meta_data = deepcopy(self.meta_data)
+        meta_data = self.meta_data.clone()
         if self._single_task:
             self._batch_size = meta_data.batch_size
             observation_spec = meta_data.specs["observation_spec"]

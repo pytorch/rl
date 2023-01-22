@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+from copy import deepcopy
 from numbers import Number
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Union
 
@@ -94,6 +95,16 @@ class EnvMetaData:
             self.specs.expand(*size),
             batch_size,
             self.env_str,
+            self.device,
+            self.batch_locked,
+        )
+
+    def clone(self):
+        return EnvMetaData(
+            self.tensordict.clone(),
+            self.specs.clone(),
+            torch.Size([*self.batch_size]),
+            deepcopy(self.env_str),
             self.device,
             self.batch_locked,
         )
