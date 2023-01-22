@@ -22,7 +22,7 @@ from .tensor_specs import (
     DEVICE_TYPING,
     DiscreteTensorSpec,
     MultiDiscreteTensorSpec,
-    MultOneHotDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,

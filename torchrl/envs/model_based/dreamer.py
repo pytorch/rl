@@ -51,6 +51,7 @@ class DreamerEnv(ModelBasedEnvBase):
             state=self.observation_spec["state"],
             belief=self.observation_spec["belief"],
             action=self.action_spec.to(self.device),
+            shape=env.batch_size,
         )
 
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:

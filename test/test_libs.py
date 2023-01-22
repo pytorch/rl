@@ -292,7 +292,6 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
 
 
 @pytest.mark.skipif(IS_OSX, reason="rendering unstable on osx, skipping")
-@pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
 @pytest.mark.parametrize(
     "env_lib,env_args,env_kwargs",
     [
@@ -306,6 +305,11 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
 @pytest.mark.parametrize("device", get_available_devices())
 class TestCollectorLib:
     def test_collector_run(self, env_lib, env_args, env_kwargs, device):
+        if not _has_dmc and env_lib is DMControlEnv:
+            raise pytest.skip("no dmc")
+        if not _has_gym and env_lib is GymEnv:
+            raise pytest.skip("no gym")
+
         from_pixels = env_kwargs.get("from_pixels", False)
         if from_pixels and (not torch.has_cuda or not torch.cuda.device_count()):
             raise pytest.skip("no cuda device")
@@ -314,7 +318,7 @@ class TestCollectorLib:
         env = ParallelEnv(3, env_fn)
         collector = MultiaSyncDataCollector(
             create_env_fn=[env, env],
-            policy=RandomPolicy(env.action_spec),
+            policy=RandomPolicy(action_spec=env.action_spec),
             total_frames=-1,
             max_frames_per_traj=100,
             frames_per_batch=21,
@@ -341,7 +345,7 @@ class TestCollectorLib:
 class TestHabitat:
     def test_habitat(self, envname):
         env = HabitatEnv(envname)
-        rollout = env.rollout(3)
+        _ = env.rollout(3)
         check_env_specs(env)
 
     @pytest.mark.parametrize("from_pixels", [True, False])
@@ -517,7 +521,7 @@ class TestBrax:
         env = BraxEnv(envname, batch_size=batch_size, requires_grad=True)
         env.set_seed(0)
         td1 = env.reset()
-        action = torch.randn(batch_size + env.action_spec.shape)
+        action = torch.randn(env.action_spec.shape)
         action.requires_grad_(True)
         td1["action"] = action
         td2 = env.step(td1)
@@ -571,7 +575,7 @@ class TestVmas:
                 TypeError,
                 match="Batch size used in constructor is not compatible with vmas.",
             ):
-                env = VmasEnv(
+                _ = VmasEnv(
                     scenario_name=scenario_name,
                     num_envs=num_envs,
                     n_agents=n_agents,
@@ -582,14 +586,14 @@ class TestVmas:
                 TypeError,
                 match="Batch size used in constructor does not match vmas batch size.",
             ):
-                env = VmasEnv(
+                _ = VmasEnv(
                     scenario_name=scenario_name,
                     num_envs=num_envs,
                     n_agents=n_agents,
                     batch_size=batch_size,
                 )
         else:
-            env = VmasEnv(
+            _ = VmasEnv(
                 scenario_name=scenario_name,
                 num_envs=num_envs,
                 n_agents=n_agents,

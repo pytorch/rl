@@ -52,7 +52,6 @@ class TruncatedStandardNormal(Distribution):
             .tolist()
         ):
             raise ValueError("Incorrect truncation range")
-        # eps = torch.finfo(self.a.dtype).eps * 10
         eps = self.eps
         self._dtype_min_gt_0 = eps
         self._dtype_max_lt_1 = 1 - eps
