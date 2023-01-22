@@ -66,7 +66,7 @@ class EnvMetaData:
     def tensordict(self, value: TensorDictBase):
         self._tensordict = value.to("cpu")
 
-    @spec.setter
+    @specs.setter
     def specs(self, value: CompositeSpec):
         self._specs = value.to("cpu")
 
