@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
-import warnings
 from tempfile import TemporaryDirectory
 from typing import Any, Dict, Optional
 
@@ -18,22 +17,21 @@ from torch import Tensor
 
 from .common import Logger
 
-_has_mlflow = False
+MLFLOW_ERR = None
 try:
     import mlflow
 
     _has_mlflow = True
-except ImportError:
-    warnings.warn("mlflow could not be imported")
-_has_omgaconf = False
+except ImportError as err:
+    _has_mlflow = False
+    MLFLOW_ERR = err
+
 try:
     from omegaconf import OmegaConf
 
     _has_omgaconf = True
 except ImportError:
-    warnings.warn(
-        "OmegaConf could not be imported. Cannot log hydra configs without OmegaConf"
-    )
+    _has_omgaconf = False
 
 
 class MLFlowLogger(Logger):
@@ -67,7 +65,7 @@ class MLFlowLogger(Logger):
             mlflow.ActiveRun: The mlflow experiment object.
         """
         if not _has_mlflow:
-            raise ImportError("MLFlow is not installed")
+            raise ImportError("MLFlow is not installed") from MLFLOW_ERR
         self.id = mlflow.create_experiment(**self._mlflow_kwargs)
         return mlflow.start_run(experiment_id=self.id)
 

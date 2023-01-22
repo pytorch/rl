@@ -11,6 +11,7 @@ from hydra.core.config_store import ConfigStore
 from torchrl.envs.transforms import RewardScaling
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.objectives.value import TDEstimate
+from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
     OnPolicyCollectorConfig,
@@ -27,7 +28,6 @@ from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.losses import A2CLossConfig, make_a2c_loss
 from torchrl.trainers.helpers.models import A2CModelConfig, make_a2c_model
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
-from torchrl.trainers.loggers.utils import generate_exp_name, get_logger
 
 config_fields = [
     (config_field.name, config_field.type, config_field)
