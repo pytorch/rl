@@ -900,8 +900,12 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
             min_value = False
             max_value = True
         else:
-            min_value = torch.iinfo(dtype).min
-            max_value = torch.iinfo(dtype).max
+            if dtype.is_floating_point:
+                min_value = torch.finfo(dtype).min
+                max_value = torch.finfo(dtype).max
+            else:
+                min_value = torch.iinfo(dtype).min
+                max_value = torch.iinfo(dtype).max
         space = ContinuousBox(
             torch.full(shape, min_value, device=device),
             torch.full(shape, max_value, device=device),
