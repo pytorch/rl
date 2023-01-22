@@ -188,7 +188,7 @@ def get_env_metadata(
                 f"got EnvCreator.create_env_kwargs={env_or_creator.create_env_kwargs} and "
                 f"kwargs = {kwargs}"
             )
-        return env_or_creator.meta_data
+        return env_or_creator.meta_data.clone()
     else:
         raise NotImplementedError(
             f"env of type {type(env_or_creator)} is not supported by get_env_metadata."

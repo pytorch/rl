@@ -14,7 +14,7 @@ from torchrl.data import (
     CompositeSpec,
     DiscreteTensorSpec,
     MultiDiscreteTensorSpec,
-    MultOneHotDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
@@ -84,7 +84,7 @@ def _gym_to_torchrl_spec_transform(
         return (
             MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
             if categorical_action_encoding
-            else MultOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+            else MultiOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
         )
     elif isinstance(spec, gym.spaces.Box):
         shape = spec.shape

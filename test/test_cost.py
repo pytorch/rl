@@ -31,7 +31,7 @@ from torchrl.data import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
-    MultOneHotDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
@@ -142,7 +142,10 @@ class TestDQN:
             return module.to(device)
         actor = QValueActor(
             spec=CompositeSpec(
-                action=action_spec, action_value=None, chosen_action_value=None
+                action=action_spec,
+                action_value=None,
+                chosen_action_value=None,
+                shape=[],
             ),
             module=module,
         ).to(device)
@@ -161,7 +164,7 @@ class TestDQN:
     ):
         # Actor
         if action_spec_type == "mult_one_hot":
-            action_spec = MultOneHotDiscreteTensorSpec([atoms] * action_dim)
+            action_spec = MultiOneHotDiscreteTensorSpec([atoms] * action_dim)
         elif action_spec_type == "one_hot":
             action_spec = OneHotDiscreteTensorSpec(action_dim)
         elif action_spec_type == "categorical":
@@ -176,7 +179,11 @@ class TestDQN:
         # if is_nn_module:
         #     return module
         actor = DistributionalQValueActor(
-            spec=CompositeSpec(action=action_spec, action_value=None),
+            spec=CompositeSpec(
+                action=action_spec,
+                action_value=None,
+                shape=[],
+            ),
             module=module,
             support=support,
             action_space="categorical"

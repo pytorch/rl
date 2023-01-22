@@ -1104,10 +1104,14 @@ class TestTransforms:
             t_env.transform.init_stats(
                 num_iter=11, reduce_dim=reduce_dim, cat_dim=cat_dim
             )
-
-        assert t_env.transform.loc.shape == t_env.observation_spec["observation"].shape
+        batch_dims = len(t_env.batch_size)
         assert (
-            t_env.transform.scale.shape == t_env.observation_spec["observation"].shape
+            t_env.transform.loc.shape
+            == t_env.observation_spec["observation"].shape[batch_dims:]
+        )
+        assert (
+            t_env.transform.scale.shape
+            == t_env.observation_spec["observation"].shape[batch_dims:]
         )
         assert t_env.transform.loc.dtype == t_env.observation_spec["observation"].dtype
         assert (
@@ -1161,10 +1165,10 @@ class TestTransforms:
             )
 
         assert t_env.transform.loc.shape == torch.Size(
-            [t_env.observation_spec["pixels"].shape[0], 1, 1]
+            [t_env.observation_spec["pixels"].shape[-3], 1, 1]
         )
         assert t_env.transform.scale.shape == torch.Size(
-            [t_env.observation_spec["pixels"].shape[0], 1, 1]
+            [t_env.observation_spec["pixels"].shape[-3], 1, 1]
         )
 
     def test_observationnorm_stats_already_initialized_error(self):
@@ -2279,7 +2283,7 @@ def test_batch_locked_transformed(device):
     with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
         env.batch_locked = False
     td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
+    td["action"] = env.action_spec.rand()
     td_expanded = td.expand(2).clone()
     env.step(td)
 
@@ -2303,7 +2307,7 @@ def test_batch_unlocked_transformed(device):
     with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
         env.batch_locked = False
     td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
+    td["action"] = env.action_spec.rand()
     td_expanded = td.expand(2).clone()
     env.step(td)
     env.step(td_expanded)
@@ -2322,11 +2326,10 @@ def test_batch_unlocked_with_batch_size_transformed(device):
 
     with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
         env.batch_locked = False
-
     td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
-    td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
+    td["action"] = env.action_spec.rand()
     env.step(td)
+    td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
 
     with pytest.raises(
         RuntimeError, match="Expected a tensordict with shape==env.shape, "
