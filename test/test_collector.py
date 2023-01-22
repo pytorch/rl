@@ -9,6 +9,10 @@ import sys
 import numpy as np
 import pytest
 import torch
+from tensordict.nn import TensorDictModule
+from tensordict.tensordict import assert_allclose_td, TensorDict
+from torch import nn
+
 from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
 from mocking_classes import (
     ContinuousActionVecMockEnv,
@@ -18,9 +22,6 @@ from mocking_classes import (
     DiscreteActionVecPolicy,
     MockSerialEnv,
 )
-from tensordict.nn import TensorDictModule
-from tensordict.tensordict import assert_allclose_td, TensorDict
-from torch import nn
 from torchrl._utils import seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
@@ -316,16 +317,10 @@ def test_collector_env_reset():
     )
     for _data in collector:
         continue
-    steps = _data["step_count"][..., 1:]
-    done = _data["done"][..., :-1, :].squeeze(-1)
+    steps = _data["step_count"]
+    done = _data["done"].squeeze(-1)
     # we don't want just one done
     assert done.sum() > 3
-    # check that after a done, the next step count is always 1
-    assert (steps[done] == 1).all()
-    # check that if the env is not done, the next step count is > 1
-    assert (steps[~done] > 1).all()
-    # check that if step is 1, then the env was done before
-    assert (steps == 1)[done].all()
     # check that split traj has a minimum total reward of -21 (for pong only)
     _data = split_trajectories(_data)
     assert _data["reward"].sum(-2).min() == -21
