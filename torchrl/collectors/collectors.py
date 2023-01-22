@@ -1381,12 +1381,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     out=out_buffer,
                 )
 
+            frames += out_buffer.batch_size[0]
             if self.split_trajs:
                 out = split_trajectories(out_buffer)
-                frames += out.get("mask").sum().item()
             else:
                 out = out_buffer.clone()
-                frames += out.batch_size[0]
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
