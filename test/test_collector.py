@@ -373,9 +373,8 @@ def test_collector_done_persist(num_env, env_name, seed=5):
     )
     for _, d in enumerate(collector):  # noqa
         break
-
-    assert (d["done"].sum(-2) >= 1).all()
-    assert torch.unique(d["traj_ids"], dim=-1).shape[-1] == 1
+    assert (d["done"].sum() >= 1).all()
+    assert torch.unique(d["traj_ids"]).shape[0] == num_env
 
     del collector
 
