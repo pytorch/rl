@@ -50,7 +50,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     MAX = 0
     for i in traj_ids.unique():
         traj_mask = traj_ids == i
-        MAX = max(MAX, traj_mask.count_nonzero(0))
+        MAX = max(MAX, traj_mask.count_nonzero())
         traj_masks.append(traj_mask)
 
     out_splits = []
