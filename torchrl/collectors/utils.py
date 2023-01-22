@@ -35,8 +35,8 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     """
     # TODO: incorporate tensordict.split once it's implemented
     env_batch_size_unmasked = rollout_tensordict.batch_size[1:]
-    mask = torch.ones_like(
-        rollout_tensordict.get("traj_ids"),
+    mask = torch.ones(
+        rollout_tensordict.batch_size,
         device=rollout_tensordict.device,
         dtype=torch.bool,
     )
