@@ -67,9 +67,9 @@ class CEMPlanner(MPCPlannerBase):
         ...             device=self.device,
         ...         )
         ...         tensordict = tensordict.update(
-        ...             self.input_spec.rand(self.batch_size))
+        ...             self.input_spec.rand())
         ...         tensordict = tensordict.update(
-        ...             self.observation_spec.rand(self.batch_size))
+        ...             self.observation_spec.rand())
         ...         return tensordict
         ...
         >>> from torchrl.modules import MLP, WorldModelWrapper

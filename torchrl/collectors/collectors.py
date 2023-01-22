@@ -64,7 +64,7 @@ class RandomPolicy:
         self.action_spec = action_spec
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        return td.set("action", self.action_spec.rand(td.batch_size))
+        return td.set("action", self.action_spec.rand())
 
 
 def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
@@ -440,10 +440,8 @@ class SyncDataCollector(_DataCollector):
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
-            self._tensordict_out = (
-                env.fake_tensordict().expand(env.batch_size).to_tensordict()
-            )
-            self._tensordict_out.update(self.policy.spec.zero(env.batch_size))
+            self._tensordict_out = env.fake_tensordict().to_tensordict()
+            self._tensordict_out.update(self.policy.spec.zero())
             if env.device:
                 self._tensordict_out = self._tensordict_out.to(env.device)
             self._tensordict_out = (

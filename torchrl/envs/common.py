@@ -47,53 +47,74 @@ class EnvMetaData:
         device: torch.device,
         batch_locked: bool = True,
     ):
+        self.device = device
         self.tensordict = tensordict
         self.specs = specs
         self.batch_size = batch_size
         self.env_str = env_str
-        self.device = device
         self.batch_locked = batch_locked
+
+    @property
+    def tensordict(self):
+        return self._tensordict.to(self.device)
+
+    @property
+    def specs(self):
+        return self._specs.to(self.device)
+
+    @tensordict.setter
+    def tensordict(self, value: TensorDictBase):
+        self._tensordict = value.to("cpu")
+
+    @specs.setter
+    def specs(self, value: CompositeSpec):
+        self._specs = value.to("cpu")
 
     @staticmethod
     def build_metadata_from_env(env) -> EnvMetaData:
-        tensordict = env.fake_tensordict()
-        specs = {key: getattr(env, key) for key in Specs._keys if key.endswith("_spec")}
-        specs = CompositeSpec(**specs)
+        tensordict = env.fake_tensordict().clone()
+        specs = {
+            "input_spec": env.input_spec,
+            "observation_spec": env.observation_spec,
+            "reward_spec": env.reward_spec,
+        }
+        specs = CompositeSpec(**specs, shape=env.batch_size).to("cpu")
+
         batch_size = env.batch_size
         env_str = str(env)
         device = env.device
+        specs = specs.to("cpu")
         batch_locked = env.batch_locked
         return EnvMetaData(tensordict, specs, batch_size, env_str, device, batch_locked)
 
     def expand(self, *size: int) -> EnvMetaData:
         tensordict = self.tensordict.expand(*size).to_tensordict()
-        batch_size = torch.Size([*size])
+        batch_size = torch.Size(list(size))
         return EnvMetaData(
             tensordict,
-            self.specs,
+            self.specs.expand(*size),
             batch_size,
             self.env_str,
             self.device,
             self.batch_locked,
         )
 
+    def clone(self):
+        return EnvMetaData(
+            self.tensordict.clone(),
+            self.specs.clone(),
+            torch.Size([*self.batch_size]),
+            deepcopy(self.env_str),
+            self.device,
+            self.batch_locked,
+        )
+
     def to(self, device: DEVICE_TYPING) -> EnvMetaData:
-        tensordict = self.tensordict.to(device)
+        tensordict = self.tensordict.contiguous().to(device)
         specs = self.specs.to(device)
         return EnvMetaData(
             tensordict, specs, self.batch_size, self.env_str, device, self.batch_locked
         )
-
-    def __setstate__(self, state):
-        state["tensordict"] = state["tensordict"].to_tensordict().to(state["device"])
-        state["specs"] = deepcopy(state["specs"]).to(state["device"])
-        self.__dict__.update(state)
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["tensordict"] = state["tensordict"].to("cpu")
-        state["specs"] = state["specs"].to("cpu")
-        return state
 
 
 class Specs:
@@ -223,10 +244,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             # we want an error to be raised if we pass batch_size but
             # it's already been set
             self.batch_size = torch.Size(batch_size)
-        elif ("batch_size" not in self.__dir__()) and (
-            "batch_size" not in self.__class__.__dict__
-        ):
-            self.batch_size = torch.Size([])
         self._run_type_checks = run_type_checks
 
     @classmethod
@@ -270,13 +287,25 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self._run_type_checks = run_type_checks
 
     @property
+    def batch_size(self) -> TensorSpec:
+        if ("_batch_size" not in self.__dir__()) and (
+            "_batch_size" not in self.__class__.__dict__
+        ):
+            self._batch_size = torch.Size([])
+        return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, value: torch.Size) -> None:
+        self._batch_size = torch.Size(value)
+
+    @property
     def action_spec(self) -> TensorSpec:
         return self.input_spec["action"]
 
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
         if self._input_spec is None:
-            self.input_spec = CompositeSpec(action=value)
+            self.input_spec = CompositeSpec(action=value, shape=self.batch_size)
         else:
             self.input_spec["action"] = value
 
@@ -288,6 +317,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def input_spec(self, value: TensorSpec) -> None:
         if not isinstance(value, CompositeSpec):
             raise TypeError("The type of an input_spec must be Composite.")
+        if value.shape[: len(self.batch_size)] != self.batch_size:
+            raise ValueError(
+                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+            )
         self.__dict__["_input_spec"] = value
 
     @property
@@ -300,6 +333,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             raise TypeError(
                 f"reward_spec of type {type(value)} do not have a shape " f"attribute."
             )
+        if value.shape[: len(self.batch_size)] != self.batch_size:
+            raise ValueError("The value of spec.shape must match the env batch size.")
         if len(value.shape) == 0:
             raise RuntimeError(
                 "the reward_spec shape cannot be empty (this error"
@@ -317,6 +352,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def observation_spec(self, value: TensorSpec) -> None:
         if not isinstance(value, CompositeSpec):
             raise TypeError("The type of an observation_spec must be Composite.")
+        elif value.shape[: len(self.batch_size)] != self.batch_size:
+            raise ValueError(
+                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+            )
         self.__dict__["_observation_spec"] = value
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -347,25 +386,26 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         reward = tensordict_out.get("reward")
         # unsqueeze rewards if needed
-        expected_reward_shape = torch.Size(
-            [*tensordict_out.batch_size, *self.reward_spec.shape]
+        # the input tensordict may have more leading dimensions than the batch_size
+        # e.g. in model-based contexts.
+        batch_size = self.batch_size
+        dims = len(batch_size)
+        leading_batch_size = (
+            tensordict_out.batch_size[:-dims] if dims else tensordict_out.shape
         )
-        n = len(expected_reward_shape)
-        if len(reward.shape) >= n and reward.shape[-n:] != expected_reward_shape:
-            reward = reward.view(*reward.shape[:n], *expected_reward_shape)
-            tensordict_out.set("reward", reward)
-        elif len(reward.shape) < n:
+        expected_reward_shape = torch.Size(
+            [*leading_batch_size, *self.reward_spec.shape]
+        )
+        actual_reward_shape = reward.shape
+        if actual_reward_shape != expected_reward_shape:
             reward = reward.view(expected_reward_shape)
             tensordict_out.set("reward", reward)
 
         done = tensordict_out.get("done")
         # unsqueeze done if needed
-        expected_done_shape = torch.Size([*tensordict_out.batch_size, 1])
-        n = len(expected_done_shape)
-        if len(done.shape) >= n and done.shape[-n:] != expected_done_shape:
-            done = done.view(*done.shape[:n], *expected_done_shape)
-            tensordict_out.set("done", done)
-        elif len(done.shape) < n:
+        expected_done_shape = torch.Size([*leading_batch_size, *batch_size, 1])
+        actual_done_shape = done.shape
+        if actual_done_shape != expected_done_shape:
             done = done.view(expected_done_shape)
             tensordict_out.set("done", done)
 
@@ -439,10 +479,28 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         done = tensordict_reset.get("done", None)
         if done is not None:
             # unsqueeze done if needed
-            expected_done_shape = torch.Size([*tensordict_reset.batch_size, 1])
-            if done.shape != expected_done_shape:
+            # the input tensordict may have more leading dimensions than the batch_size
+            # e.g. in model-based contexts.
+            batch_size = self.batch_size
+            dims = len(batch_size)
+            leading_batch_size = (
+                tensordict_reset.batch_size[:-dims] if dims else tensordict_reset.shape
+            )
+            expected_done_shape = torch.Size([*leading_batch_size, *batch_size, 1])
+            actual_done_shape = done
+            if actual_done_shape != expected_done_shape:
                 done = done.view(expected_done_shape)
                 tensordict_reset.set("done", done)
+        else:
+            tensordict_reset.set(
+                "done",
+                torch.zeros(
+                    *tensordict_reset.batch_size,
+                    1,
+                    dtype=torch.bool,
+                    device=self.device,
+                ),
+            )
 
         if tensordict_reset.device != self.device:
             tensordict_reset = tensordict_reset.to(self.device)
@@ -456,13 +514,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             raise RuntimeError(
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
-
-        tensordict_reset.set_default(
-            "done",
-            torch.zeros(
-                *tensordict_reset.batch_size, 1, dtype=torch.bool, device=self.device
-            ),
-        )
 
         if (_reset is None and tensordict_reset.get("done").any()) or (
             _reset is not None and tensordict_reset.get("done")[_reset].any()
@@ -535,7 +586,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = TensorDict(
                 {}, device=self.device, batch_size=self.batch_size, _run_checks=False
             )
-        action = self.action_spec.rand(self.batch_size)
+        action = self.action_spec.rand()
         tensordict.set("action", action)
         return self.step(tensordict)
 
@@ -605,7 +656,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if policy is None:
 
             def policy(td):
-                return td.set("action", self.action_spec.rand(self.batch_size))
+                return td.set("action", self.action_spec.rand())
 
         tensordicts = []
         for i in range(max_steps):
@@ -710,18 +761,20 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def fake_tensordict(self) -> TensorDictBase:
         """Returns a fake tensordict with key-value pairs that match in shape, device and dtype what can be expected during an environment rollout."""
         input_spec = self.input_spec
-        fake_input = input_spec.zero(self.batch_size)
+        fake_input = input_spec.zero()
         observation_spec = self.observation_spec
-        fake_obs = observation_spec.zero(self.batch_size)
+        fake_obs = observation_spec.zero()
         reward_spec = self.reward_spec
-        fake_reward = reward_spec.zero(self.batch_size)
+        fake_reward = reward_spec.zero()
         fake_td = TensorDict(
             {
                 **fake_obs,
                 "next": fake_obs.clone(),
                 **fake_input,
                 "reward": fake_reward,
-                "done": fake_reward.to(torch.bool),
+                "done": torch.zeros(
+                    (*self.batch_size, 1), dtype=torch.bool, device=self.device
+                ),
             },
             batch_size=self.batch_size,
             device=self.device,

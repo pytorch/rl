@@ -122,6 +122,11 @@ class VmasWrapper(_EnvWrapper):
                 "Batch size used in constructor is not compatible with vmas."
             )
         self.batch_size = torch.Size([self.n_agents, *self.batch_size])
+        self.input_spec = self.input_spec.expand(self.batch_size)
+        self.observation_spec = self.observation_spec.expand(self.batch_size)
+        self.reward_spec = self.reward_spec.expand(
+            [*self.batch_size, *self.reward_spec.shape]
+        )
 
     @property
     def lib(self):
@@ -158,12 +163,12 @@ class VmasWrapper(_EnvWrapper):
                     device=self.device,
                 )
             )
-        )
+        ).expand(self.batch_size)
 
         self.reward_spec = UnboundedContinuousTensorSpec(
             shape=torch.Size((1,)),
             device=self.device,
-        )
+        ).expand([*self.batch_size, 1])
 
         self.observation_spec = CompositeSpec(
             observation=(
@@ -184,7 +189,7 @@ class VmasWrapper(_EnvWrapper):
                     for key, value in self.scenario.info(agent0).items()
                 },
             ).to(self.device),
-        )
+        ).expand(self.batch_size)
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
