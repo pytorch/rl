@@ -23,7 +23,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
-from torchrl._utils import _check_for_faulty_process, prod
+from torchrl._utils import _check_for_faulty_process
 from torchrl.collectors.utils import get_batch_size_masked, split_trajectories
 from torchrl.data import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -415,29 +415,36 @@ class SyncDataCollector(_DataCollector):
         self.mask_env_batch_size = mask_env_batch_size
         self.mask_out_batch_size = mask_env_batch_size + [True]
 
-        self.env_batch_size_unmasked_indeces = [
+        # Indices of env.batch_size dims not in the batch
+        env_batch_size_unmasked_indeces = [
             i for i, is_batch in enumerate(self.mask_env_batch_size) if not is_batch
         ]
-        self.permute_out_batch_size = [
-            i for i, is_batch in enumerate(self.mask_out_batch_size) if is_batch
-        ] + self.env_batch_size_unmasked_indeces
+        # env.batch_size dims not in the batch
         self.env_batch_size_unmasked = [
             env.batch_size[i]
             for i, is_batch in enumerate(self.mask_env_batch_size)
             if not is_batch
         ]
+        # Permutation indices: fist all batch dims and then all masked out dims
+        self.permute_out_batch_size = [
+            i for i, is_batch in enumerate(self.mask_out_batch_size) if is_batch
+        ] + env_batch_size_unmasked_indeces
+        # env.batch_size with masked dimensions set to 1.
+        # Also returns error in case the input mask is malformed
         self.env_batch_size_masked = get_batch_size_masked(
             self.env.batch_size, self.mask_env_batch_size
         )
+        # Number of batched environments used for collection
         self.n_env = max(1, self.env_batch_size_masked.numel())
 
-        if len(env.batch_size):
+        if len(self.env_batch_size_unmasked):
+            # Mask used to only consider batch dimensions in trajectories
             self.mask_tensor = torch.ones(
                 *self.env.batch_size,
                 dtype=torch.bool,
                 device=self.env.device,
             )
-            for dim in self.env_batch_size_unmasked_indeces:
+            for dim in env_batch_size_unmasked_indeces:
                 self.mask_tensor.index_fill_(
                     dim, torch.arange(1, self.env.batch_size[dim]), 0
                 )
@@ -684,7 +691,7 @@ class SyncDataCollector(_DataCollector):
                 )
             steps[done_or_terminated] = 0
 
-            if len(self.env.batch_size):
+            if len(self.env_batch_size_unmasked):
                 traj_ids = traj_ids[self.mask_tensor]
                 done_or_terminated = done_or_terminated[self.mask_tensor]
 
@@ -692,11 +699,12 @@ class SyncDataCollector(_DataCollector):
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
 
-            traj_ids = (
-                traj_ids.view(self.env_batch_size_masked)
-                .expand(self.env.batch_size)
-                .clone()
-            )
+            if len(self.env_batch_size_unmasked):
+                traj_ids = (
+                    traj_ids.view(self.env_batch_size_masked)
+                    .expand(self.env.batch_size)
+                    .clone()
+                )
 
             self._tensordict.set_("traj_ids", traj_ids)  # no ops if they already match
             self._tensordict.set_("step_count", steps)
@@ -753,7 +761,7 @@ class SyncDataCollector(_DataCollector):
         """Resets the environments to a new initial state."""
         if index is not None:
             # check that the env supports partial reset
-            if prod(self.env.batch_size) == 0:
+            if self.n_env == 0:
                 raise RuntimeError("resetting unique env with index is not permitted.")
             _reset = torch.zeros(
                 self.env.batch_size,
@@ -771,7 +779,9 @@ class SyncDataCollector(_DataCollector):
         if td_in:
             self._tensordict.update(td_in, inplace=True)
 
-        self._tensordict.update(self.env.reset(**kwargs), inplace=True)
+        self._tensordict.update(
+            self.env.reset(tensordict=td_in, **kwargs), inplace=True
+        )
         if _reset is not None:
             self._tensordict["step_count"][_reset] = 0
         else:
