@@ -2914,20 +2914,26 @@ class TimeMaxPool(Transform):
                 "TimeMaxPoolTranform in_keys and out_keys don't have the same number of elements"
             )
         self.buffer_size = T
-        self._buffers = {}
+        for in_key in self.in_keys:
+            buffer_name = f"_maxpool_buffer_{in_key}"
+            setattr(
+                self,
+                buffer_name,
+                torch.nn.parameter.UninitializedBuffer(
+                    device=torch.device("cpu"), dtype=torch.get_default_dtype()
+                ),
+            )
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
         # Non-batched environments
         if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
             for in_key in self.in_keys:
-                try:
-                    buffer_name = f"_maxpool_buffer_{in_key}"
-                    buffer = getattr(self, buffer_name)
-                    buffer.fill_(0.0)
-                except AttributeError:
-                    # we'll instantiate later, when needed
-                    pass
+                buffer_name = f"_maxpool_buffer_{in_key}"
+                buffer = getattr(self, buffer_name)
+                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                    continue
+                buffer.fill_(0.0)
 
         # Batched environments
         else:
@@ -2941,30 +2947,27 @@ class TimeMaxPool(Transform):
             )
             for in_key in self.in_keys:
                 buffer_name = f"_maxpool_buffer_{in_key}"
-                try:
-                    buffer = getattr(self, buffer_name)
-                    buffer[:, _reset] = 0.0
-                except AttributeError:
-                    # we'll instantiate later, when needed
-                    pass
+                buffer = getattr(self, buffer_name)
+                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                    continue
+                buffer[:, _reset] = 0.0
 
         return tensordict
+
+    def _make_missing_buffer(self, data, buffer_name):
+        buffer = getattr(self, buffer_name)
+        buffer.materialize((self.buffer_size,) + data.shape)
+        buffer = buffer.to(data.dtype).to(data.device).zero_()
+        setattr(self, buffer_name, buffer)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             # Lazy init of buffers
             buffer_name = f"_maxpool_buffer_{in_key}"
-            if not hasattr(self, buffer_name):
-                self.register_buffer(
-                    buffer_name,
-                    torch.zeros(
-                        self.buffer_size,
-                        *tensordict[in_key].shape,
-                        dtype=tensordict[in_key].dtype,
-                        device=tensordict[in_key].device,
-                    ),
-                )
+            if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                data = tensordict[in_key]
+                self._make_missing_buffer(data, buffer_name)
             buffer = getattr(self, buffer_name)
             # shift obs 1 position to the right
             buffer.copy_(torch.roll(buffer, shifts=1, dims=0))
