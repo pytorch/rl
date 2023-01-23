@@ -30,8 +30,8 @@ from torchrl.envs.transforms import (
     VecNorm,
 )
 from torchrl.envs.transforms.transforms import FlattenObservation, gSDENoise
+from torchrl.record.loggers import Logger
 from torchrl.record.recorder import VideoRecorder
-from torchrl.trainers.loggers import Logger
 
 LIBS = {
     "gym": GymEnv,

@@ -27,7 +27,7 @@ from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import SafeModule
 from torchrl.objectives.common import LossModule
-from torchrl.trainers.loggers import Logger
+from torchrl.record.loggers import Logger
 
 try:
     from tqdm import tqdm
@@ -1157,8 +1157,6 @@ class Recorder(TrainerHookBase):
                         out[self.out_keys[key]] = mean_value
                         out["total_" + self.out_keys[key]] = total_value
                         continue
-                    if key == "solved":
-                        value = value.any().float()
                     out[self.out_keys[key]] = value
                 out["log_pbar"] = self.log_pbar
         self._count += 1

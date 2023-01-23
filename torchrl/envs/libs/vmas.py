@@ -122,6 +122,11 @@ class VmasWrapper(_EnvWrapper):
                 "Batch size used in constructor is not compatible with vmas."
             )
         self.batch_size = torch.Size([self.n_agents, *self.batch_size])
+        self.input_spec = self.input_spec.expand(self.batch_size)
+        self.observation_spec = self.observation_spec.expand(self.batch_size)
+        self.reward_spec = self.reward_spec.expand(
+            [*self.batch_size, *self.reward_spec.shape]
+        )
 
     @property
     def lib(self):
@@ -158,12 +163,12 @@ class VmasWrapper(_EnvWrapper):
                     device=self.device,
                 )
             )
-        )
+        ).expand(self.batch_size)
 
         self.reward_spec = UnboundedContinuousTensorSpec(
             shape=torch.Size((1,)),
             device=self.device,
-        )
+        ).expand([*self.batch_size, 1])
 
         self.observation_spec = CompositeSpec(
             observation=(
@@ -179,11 +184,12 @@ class VmasWrapper(_EnvWrapper):
                             value, batch_size=torch.Size((self.num_envs,))
                         ).shape[1:],
                         device=self.device,
+                        dtype=torch.float32,
                     )
                     for key, value in self.scenario.info(agent0).items()
                 },
             ).to(self.device),
-        )
+        ).expand(self.batch_size)
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -203,7 +209,18 @@ class VmasWrapper(_EnvWrapper):
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
-        obs, infos = self._env.reset(return_info=True)
+        if tensordict is not None and "_reset" in tensordict.keys():
+            envs_to_reset = tensordict.get("_reset").any(dim=0)
+            for env_index, to_reset in enumerate(envs_to_reset):
+                if to_reset:
+                    self._env.reset_at(env_index)
+            obs = []
+            infos = []
+            for agent in self.agents:
+                obs.append(self.scenario.observation(agent))
+                infos.append(self.scenario.info(agent))
+        else:
+            obs, infos = self._env.reset(return_info=True)
 
         agent_tds = []
         for i in range(self.n_agents):
@@ -275,7 +292,7 @@ class VmasWrapper(_EnvWrapper):
         infos = TensorDict(
             source={
                 key: _selective_unsqueeze(
-                    value, batch_size=torch.Size((self.num_envs,))
+                    value.to(torch.float32), batch_size=torch.Size((self.num_envs,))
                 )
                 for key, value in infos.items()
             },
@@ -370,8 +387,8 @@ class VmasEnv(VmasWrapper):
         if not _has_vmas:
             raise ImportError(
                 f"vmas python package was not found. Please install this dependency. "
-                f"More info: {self.git_url} (ImportError: {IMPORT_ERR})"
-            )
+                f"More info: {self.git_url}."
+            ) from IMPORT_ERR
         kwargs["scenario_name"] = scenario_name
         kwargs["num_envs"] = num_envs
         kwargs["continuous_actions"] = continuous_actions

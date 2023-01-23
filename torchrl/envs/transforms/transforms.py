@@ -7,14 +7,13 @@ from __future__ import annotations
 
 import collections
 import multiprocessing as mp
-from copy import copy, deepcopy
+from copy import copy
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
-
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -51,7 +50,7 @@ def _apply_to_composite(function):
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if in_key in observation_spec.keys():
                     d[out_key] = function(self, observation_spec[in_key])
-            return CompositeSpec(d)
+            return CompositeSpec(d, shape=observation_spec.shape)
         else:
             return function(self, observation_spec)
 
@@ -306,8 +305,11 @@ class TransformedEnv(EnvBase):
         **kwargs,
     ):
         self._transform = None
-        device = kwargs.pop("device", env.device)
-        env = env.to(device)
+        device = kwargs.pop("device", None)
+        if device is not None:
+            env = env.to(device)
+        else:
+            device = env.device
         super().__init__(device=None, **kwargs)
 
         if isinstance(env, TransformedEnv):
@@ -343,7 +345,9 @@ class TransformedEnv(EnvBase):
         self.batch_size = self.base_env.batch_size
 
     def _set_env(self, env: EnvBase, device) -> None:
-        self.base_env = env.to(device)
+        if device != env.device:
+            env = env.to(device)
+        self.base_env = env
         # updates need not be inplace, as transforms may modify values out-place
         self.base_env._inplace_update = False
 
@@ -401,7 +405,7 @@ but got an object of type {type(transform)}."""
         """Observation spec of the transformed environment."""
         if self._observation_spec is None or not self.cache_specs:
             observation_spec = self.transform.transform_observation_spec(
-                deepcopy(self.base_env.observation_spec)
+                self.base_env.observation_spec.clone()
             )
             if self.cache_specs:
                 self.__dict__["_observation_spec"] = observation_spec
@@ -419,7 +423,7 @@ but got an object of type {type(transform)}."""
         """Action spec of the transformed environment."""
         if self._input_spec is None or not self.cache_specs:
             input_spec = self.transform.transform_input_spec(
-                deepcopy(self.base_env.input_spec)
+                self.base_env.input_spec.clone()
             )
             if self.cache_specs:
                 self.__dict__["_input_spec"] = input_spec
@@ -432,7 +436,7 @@ but got an object of type {type(transform)}."""
         """Reward spec of the transformed environment."""
         if self._reward_spec is None or not self.cache_specs:
             reward_spec = self.transform.transform_reward_spec(
-                deepcopy(self.base_env.reward_spec)
+                self.base_env.reward_spec.clone()
             )
             if self.cache_specs:
                 self.__dict__["_reward_spec"] = reward_spec
@@ -444,13 +448,17 @@ but got an object of type {type(transform)}."""
         tensordict = tensordict.clone(False)
         tensordict_in = self.transform.inv(tensordict)
         tensordict_out = self.base_env._step(tensordict_in)
-        tensordict_out = tensordict_out.update(
-            tensordict.exclude(*tensordict_out.keys())
+        tensordict_out = (
+            tensordict_out.update(  # update the output with the original tensordict
+                tensordict.exclude(
+                    *tensordict_out.keys()
+                )  # exclude the newly written keys
+            )
         )
         next_tensordict = self.transform._step(tensordict_out)
-        tensordict_out.update(next_tensordict, inplace=False)
+        # tensordict_out.update(next_tensordict, inplace=False)
 
-        return tensordict_out
+        return next_tensordict
 
     def set_seed(
         self, seed: Optional[int] = None, static_seed: bool = False
@@ -853,7 +861,7 @@ class RewardClipping(Transform):
             return BoundedTensorSpec(
                 self.clamp_min,
                 self.clamp_max,
-                torch.Size((1,)),
+                shape=reward_spec.shape,
                 device=reward_spec.device,
                 dtype=reward_spec.dtype,
             )
@@ -894,7 +902,9 @@ class BinarizeReward(Transform):
         return (reward > 0.0).to(torch.long)
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        return BinaryDiscreteTensorSpec(n=1, device=reward_spec.device)
+        return BinaryDiscreteTensorSpec(
+            n=1, device=reward_spec.device, shape=reward_spec.shape
+        )
 
 
 class Resize(ObservationTransform):
@@ -1001,7 +1011,8 @@ class CenterCrop(ObservationTransform):
                     if key in self.in_keys
                     else _obs_spec
                     for key, _obs_spec in observation_spec._specs.items()
-                }
+                },
+                shape=observation_spec.shape,
             )
 
         space = observation_spec.space
@@ -1367,6 +1378,7 @@ class ObservationNorm(ObservationTransform):
         reduce_dim: Union[int, Tuple[int]] = 0,
         cat_dim: Optional[int] = None,
         key: Optional[str] = None,
+        keep_dims: Optional[Tuple[int]] = None,
     ) -> None:
         """Initializes the loc and scale stats of the parent environment.
 
@@ -1386,6 +1398,10 @@ class ObservationNorm(ObservationTransform):
             key (str, optional): if provided, the summary statistics will be
                 retrieved from that key in the resulting tensordicts.
                 Otherwise, the first key in :obj:`ObservationNorm.in_keys` will be used.
+            keep_dims (tuple of int, optional): the dimensions to keep in the loc and scale.
+                For instance, one may want the location and scale to have shape [C, 1, 1]
+                when normalizing a 3D tensor over the last two dimensions, but not the
+                third. Defaults to None.
 
         """
         if cat_dim is None:
@@ -1432,12 +1448,23 @@ class ObservationNorm(ObservationTransform):
             data.append(tensordict.get(key))
 
         data = torch.cat(data, cat_dim)
-        loc = data.mean(reduce_dim)
-        scale = data.std(reduce_dim)
+        if isinstance(reduce_dim, int):
+            reduce_dim = [reduce_dim]
+        if keep_dims is not None:
+            if not all(k in reduce_dim for k in keep_dims):
+                raise ValueError("keep_dim elements must be part of reduce_dim list.")
+        else:
+            keep_dims = []
+        loc = data.mean(reduce_dim, keepdim=True)
+        scale = data.std(reduce_dim, keepdim=True)
+        for r in sorted(reduce_dim, reverse=True):
+            if r not in keep_dims:
+                loc = loc.squeeze(r)
+                scale = scale.squeeze(r)
 
         if not self.standard_normal:
-            loc = loc / scale
-            scale = 1 / scale
+            scale = 1 / scale.clamp_min(self.eps)
+            loc = -loc * scale
 
         if not torch.isfinite(loc).all():
             raise RuntimeError("Non-finite values found in loc")
@@ -1497,27 +1524,106 @@ class CatFrames(ObservationTransform):
         cat_dim (int, optional): dimension along which concatenate the
             observations. Default is `cat_dim=-3`.
         in_keys (list of int, optional): keys pointing to the frames that have
-            to be concatenated.
+            to be concatenated. Defaults to ["pixels"].
+        out_keys (list of int, optional): keys pointing to where the output
+            has to be written. Defaults to the value of `in_keys`.
 
     """
 
     inplace = False
+    _CAT_DIM_ERR = (
+        "cat_dim must be > 0 to accomodate for tensordict of "
+        "different batch-sizes (since negative dims are batch invariant)."
+    )
 
     def __init__(
         self,
         N: int = 4,
         cat_dim: int = -3,
         in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
-        super().__init__(in_keys=in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.N = N
+        if cat_dim > 0:
+            raise ValueError(self._CAT_DIM_ERR)
         self.cat_dim = cat_dim
-        self.buffer = []
+        for in_key in self.in_keys:
+            buffer_name = f"_cat_buffers_{in_key}"
+            setattr(
+                self,
+                buffer_name,
+                torch.nn.parameter.UninitializedBuffer(
+                    device=torch.device("cpu"), dtype=torch.get_default_dtype()
+                ),
+            )
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        self.buffer = []
+        """Resets _buffers."""
+        # Non-batched environments
+        if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
+            for in_key in self.in_keys:
+                buffer_name = f"_cat_buffers_{in_key}"
+                buffer = getattr(self, buffer_name)
+                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                    continue
+                buffer.fill_(0.0)
+
+        # Batched environments
+        else:
+            _reset = tensordict.get(
+                "_reset",
+                torch.ones(
+                    tensordict.batch_size,
+                    dtype=torch.bool,
+                    device=tensordict.device,
+                ),
+            )
+            for in_key in self.in_keys:
+                buffer_name = f"_cat_buffers_{in_key}"
+                buffer = getattr(self, buffer_name)
+                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                    continue
+                buffer[_reset] = 0.0
+
+        return tensordict
+
+    def _make_missing_buffer(self, data, buffer_name):
+        shape = list(data.shape)
+        d = shape[self.cat_dim]
+        shape[self.cat_dim] = d * self.N
+        shape = torch.Size(shape)
+        getattr(self, buffer_name).materialize(shape)
+        buffer = getattr(self, buffer_name).to(data.dtype).to(data.device).zero_()
+        setattr(self, buffer_name, buffer)
+        return buffer
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Update the episode tensordict with max pooled keys."""
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            # Lazy init of buffers
+            buffer_name = f"_cat_buffers_{in_key}"
+            data = tensordict[in_key]
+            d = data.size(self.cat_dim)
+            buffer = getattr(self, buffer_name)
+            if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                buffer = self._make_missing_buffer(data, buffer_name)
+            else:
+                # shift obs 1 position to the right
+                buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.cat_dim))
+            # add new obs
+            idx = self.cat_dim
+            if idx < 0:
+                idx = buffer.ndimension() + idx
+            else:
+                raise ValueError(self._CAT_DIM_ERR)
+            idx = [slice(None, None) for _ in range(idx)] + [slice(-d, None)]
+            buffer[idx].copy_(data)
+            # add to tensordict
+            tensordict.set(out_key, buffer.clone())
+
         return tensordict
 
     @_apply_to_composite
@@ -1532,17 +1638,6 @@ class CatFrames(ObservationTransform):
             shape[self.cat_dim] = self.N * shape[self.cat_dim]
             observation_spec.shape = torch.Size(shape)
         return observation_spec
-
-    def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
-        self.buffer.append(obs)
-        self.buffer = self.buffer[-self.N :]
-        buffer = list(reversed(self.buffer))
-        buffer = [buffer[0]] * (self.N - len(buffer)) + buffer
-        if len(buffer) != self.N:
-            raise RuntimeError(
-                f"actual buffer length ({buffer}) differs from expected (" f"{self.N})"
-            )
-        return torch.cat(buffer, self.cat_dim)
 
     def __repr__(self) -> str:
         return (
@@ -1792,7 +1887,7 @@ class CatTensors(Transform):
             self.in_keys = self._find_in_keys()
             self._initialized = True
 
-        if all([key in tensordict.keys(include_nested=True) for key in self.in_keys]):
+        if all(key in tensordict.keys(include_nested=True) for key in self.in_keys):
             values = [tensordict.get(key) for key in self.in_keys]
             if self.unsqueeze_if_oor:
                 pos_idx = self.dim > 0
@@ -2508,24 +2603,54 @@ class RewardSum(Transform):
         """Resets episode rewards."""
         # Non-batched environments
         if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
-            for out_key in self.out_keys:
+            for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key in tensordict.keys():
-                    tensordict[out_key] = 0.0
+                    tensordict[out_key] = torch.zeros_like(tensordict[out_key])
+                elif in_key == "reward":
+                    tensordict[out_key] = self.parent.reward_spec.zero()
+                else:
+                    try:
+                        tensordict[out_key] = self.parent.observation_spec[
+                            in_key
+                        ].zero()
+                    except KeyError as err:
+                        raise KeyError(
+                            f"The key {in_key} was not found in the parent "
+                            f"observation_spec with keys "
+                            f"{list(self.parent.observation_spec.keys())}. "
+                        ) from err
 
         # Batched environments
         else:
-            reset_workers = tensordict.get(
-                "reset_workers",
+            _reset = tensordict.get(
+                "_reset",
                 torch.ones(
-                    *tensordict.batch_size,
-                    1,
+                    tensordict.batch_size,
                     dtype=torch.bool,
                     device=tensordict.device,
                 ),
             )
-            for out_key in self.out_keys:
+            for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key in tensordict.keys():
-                    tensordict[out_key][reset_workers] = 0.0
+                    z = torch.zeros_like(tensordict[out_key])
+                    _reset = _reset.view_as(z)
+                    tensordict[out_key][_reset] = z[_reset]
+                elif in_key == "reward":
+                    # Since the episode reward is not in the tensordict, we need to allocate it
+                    # with zeros entirely (regardless of the _reset mask)
+                    z = self.parent.reward_spec.zero(self.parent.batch_size)
+                    tensordict[out_key] = z
+                else:
+                    try:
+                        tensordict[out_key] = self.parent.observation_spec[in_key].zero(
+                            self.parent.batch_size
+                        )
+                    except KeyError as err:
+                        raise KeyError(
+                            f"The key {in_key} was not found in the parent "
+                            f"observation_spec with keys "
+                            f"{list(self.parent.observation_spec.keys())}. "
+                        ) from err
 
         return tensordict
 
@@ -2547,8 +2672,7 @@ class RewardSum(Transform):
                         *tensordict.shape, 1, dtype=reward.dtype, device=reward.device
                     ),
                 )
-            tensordict[out_key] += reward
-
+            tensordict[out_key] = tensordict[out_key] + reward
         return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -2558,9 +2682,8 @@ class RewardSum(Transform):
 
         episode_specs = {}
         if isinstance(reward_spec, CompositeSpec):
-
             # If reward_spec is a CompositeSpec, all in_keys should be keys of reward_spec
-            if not all([k in reward_spec.keys() for k in self.in_keys]):
+            if not all(k in reward_spec.keys() for k in self.in_keys):
                 raise KeyError("Not all in_keys are present in ´reward_spec´")
 
             # Define episode specs for all out_keys
@@ -2573,7 +2696,6 @@ class RewardSum(Transform):
                 episode_specs.update({out_key: episode_spec})
 
         else:
-
             # If reward_spec is not a CompositeSpec, the only in_key should be ´reward´
             if not set(self.in_keys) == {"reward"}:
                 raise KeyError(
@@ -2590,7 +2712,9 @@ class RewardSum(Transform):
 
         # Update observation_spec with episode_specs
         if not isinstance(observation_spec, CompositeSpec):
-            observation_spec = CompositeSpec(observation=observation_spec)
+            observation_spec = CompositeSpec(
+                observation=observation_spec, shape=self.parent.batch_size
+            )
         observation_spec.update(episode_specs)
         return observation_spec
 
@@ -2615,20 +2739,19 @@ class StepCounter(Transform):
         super().__init__([])
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        workers = tensordict.get(
-            "reset_workers",
+        _reset = tensordict.get(
+            "_reset",
             default=torch.ones(
-                *tensordict.batch_size, 1, dtype=torch.bool, device=tensordict.device
+                tensordict.batch_size, dtype=torch.bool, device=tensordict.device
             ),
         )
         tensordict.set(
             "step_count",
-            (~workers)
+            (~_reset)
             * tensordict.get(
                 "step_count",
                 torch.zeros(
-                    *tensordict.batch_size,
-                    1,
+                    tensordict.batch_size,
                     dtype=torch.int64,
                     device=tensordict.device,
                 ),
@@ -2641,8 +2764,7 @@ class StepCounter(Transform):
             tensordict.get(
                 "step_count",
                 torch.zeros(
-                    *tensordict.batch_size,
-                    1,
+                    tensordict.batch_size,
                     dtype=torch.int64,
                     device=tensordict.device,
                 ),
@@ -2653,7 +2775,8 @@ class StepCounter(Transform):
         if self.max_steps is not None:
             tensordict.set(
                 "done",
-                tensordict.get("done") | next_step_count >= self.max_steps,
+                tensordict.get("done")
+                | (next_step_count >= self.max_steps).unsqueeze(-1),
             )
         return tensordict
 
@@ -2665,7 +2788,198 @@ class StepCounter(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=torch.Size([1]), dtype=torch.int64, device=observation_spec.device
+            shape=self.parent.batch_size,
+            dtype=torch.int64,
+            device=observation_spec.device,
         )
         observation_spec["step_count"].space.minimum = 0
+        return observation_spec
+
+
+class ExcludeTransform(Transform):
+    """Excludes keys from the input tensordict.
+
+    Args:
+        *excluded_keys (iterable of str): The name of the keys to exclude. If the key is
+            not present, it is simply ignored.
+
+    """
+
+    inplace = False
+
+    def __init__(self, *excluded_keys):
+        super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
+        if not all(isinstance(item, str) for item in excluded_keys):
+            raise ValueError("excluded_keys must be a list or tuple of strings.")
+        self.excluded_keys = excluded_keys
+        if "reward" in excluded_keys:
+            raise RuntimeError("'reward' cannot be excluded from the keys.")
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.exclude(*self.excluded_keys)
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.exclude(*self.excluded_keys)
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if any(key in observation_spec.keys() for key in self.excluded_keys):
+            return CompositeSpec(
+                **{
+                    key: value
+                    for key, value in observation_spec.items()
+                    if key not in self.excluded_keys
+                }
+            )
+        return observation_spec
+
+
+class SelectTransform(Transform):
+    """Select keys from the input tensordict.
+
+    In general, the :obj:`ExcludeTransform` should be preferred: this transforms also
+        selects the "action" (or other keys from input_spec), "done" and "reward"
+        keys but other may be necessary.
+
+    Args:
+        *selected_keys (iterable of str): The name of the keys to select. If the key is
+            not present, it is simply ignored.
+
+    """
+
+    inplace = False
+
+    def __init__(self, *selected_keys):
+        super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
+        if not all(isinstance(item, str) for item in selected_keys):
+            raise ValueError("excluded_keys must be a list or tuple of strings.")
+        self.selected_keys = selected_keys
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.parent:
+            input_keys = self.parent.input_spec.keys()
+        else:
+            input_keys = []
+        return tensordict.select(
+            *self.selected_keys, "reward", "done", *input_keys, strict=False
+        )
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.parent:
+            input_keys = self.parent.input_spec.keys()
+        else:
+            input_keys = []
+        return tensordict.select(
+            *self.selected_keys, "reward", "done", *input_keys, strict=False
+        )
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        return CompositeSpec(
+            **{
+                key: value
+                for key, value in observation_spec.items()
+                if key in self.selected_keys
+            }
+        )
+
+
+class TimeMaxPool(Transform):
+    """Take the maximum value in each position over the last T observations.
+
+    This transform take the maximum value in each position for all in_keys tensors over the last T time steps.
+
+    Args:
+        in_keys (sequence of str, optional): input keys on which the max pool will be applied. Defaults to "observation" if left empty.
+        out_keys (sequence of str, optional): output keys where the output will be written. Defaults to `in_keys` if left empty.
+        T (int, optional): Number of time steps over which to apply max pooling.
+    """
+
+    inplace = False
+    invertible = False
+
+    def __init__(
+        self,
+        in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
+        T: int = 1,
+    ):
+        if in_keys is None:
+            in_keys = ["observation"]
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        if T < 1:
+            raise ValueError(
+                "TimeMaxPoolTranform T parameter should have a value greater or equal to one."
+            )
+        if len(self.in_keys) != len(self.out_keys):
+            raise ValueError(
+                "TimeMaxPoolTranform in_keys and out_keys don't have the same number of elements"
+            )
+        self.buffer_size = T
+        for in_key in self.in_keys:
+            buffer_name = f"_maxpool_buffer_{in_key}"
+            setattr(
+                self,
+                buffer_name,
+                torch.nn.parameter.UninitializedBuffer(
+                    device=torch.device("cpu"), dtype=torch.get_default_dtype()
+                ),
+            )
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Resets _buffers."""
+        # Non-batched environments
+        if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
+            for in_key in self.in_keys:
+                buffer_name = f"_maxpool_buffer_{in_key}"
+                buffer = getattr(self, buffer_name)
+                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                    continue
+                buffer.fill_(0.0)
+
+        # Batched environments
+        else:
+            _reset = tensordict.get(
+                "_reset",
+                torch.ones(
+                    tensordict.batch_size,
+                    dtype=torch.bool,
+                    device=tensordict.device,
+                ),
+            )
+            for in_key in self.in_keys:
+                buffer_name = f"_maxpool_buffer_{in_key}"
+                buffer = getattr(self, buffer_name)
+                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                    continue
+                buffer[:, _reset] = 0.0
+
+        return tensordict
+
+    def _make_missing_buffer(self, data, buffer_name):
+        buffer = getattr(self, buffer_name)
+        buffer.materialize((self.buffer_size,) + data.shape)
+        buffer = buffer.to(data.dtype).to(data.device).zero_()
+        setattr(self, buffer_name, buffer)
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Update the episode tensordict with max pooled keys."""
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            # Lazy init of buffers
+            buffer_name = f"_maxpool_buffer_{in_key}"
+            buffer = getattr(self, buffer_name)
+            if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                data = tensordict[in_key]
+                self._make_missing_buffer(data, buffer_name)
+            # shift obs 1 position to the right
+            buffer.copy_(torch.roll(buffer, shifts=1, dims=0))
+            # add new obs
+            buffer[0].copy_(tensordict[in_key])
+            # apply max pooling
+            pooled_tensor, _ = buffer.max(dim=0)
+            # add to tensordict
+            tensordict.set(out_key, pooled_tensor)
+
+        return tensordict
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         return observation_spec

@@ -13,6 +13,7 @@ from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.objectives.value import GAE
 from torchrl.record import VideoRecorder
+from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
     OnPolicyCollectorConfig,
@@ -29,7 +30,6 @@ from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.losses import make_ppo_loss, PPOLossConfig
 from torchrl.trainers.helpers.models import make_ppo_model, PPOModelConfig
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
-from torchrl.trainers.loggers.utils import generate_exp_name, get_logger
 
 config_fields = [
     (config_field.name, config_field.type, config_field)

@@ -220,7 +220,6 @@ def td_lambda_return_estimate(
                 "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
             )
     not_done = 1 - done.to(next_state_value.dtype)
-    next_state_value = not_done * next_state_value
 
     returns = torch.empty_like(next_state_value)
 
@@ -245,6 +244,7 @@ def td_lambda_return_estimate(
         )
 
     if rolling_gamma:
+        gamma = gamma * not_done
         g = next_state_value[..., -1, :]
         for i in reversed(range(T)):
             g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * (
@@ -256,8 +256,10 @@ def td_lambda_return_estimate(
             g = next_state_value[..., -1, :]
             _gamma = gamma[..., k, :]
             _lambda = lmbda[..., k, :]
+            nd = not_done
+            _gamma = _gamma.unsqueeze(-2) * nd
             for i in reversed(range(k, T)):
-                g = reward[..., i, :] + _gamma * (
+                g = reward[..., i, :] + _gamma[..., i, :] * (
                     (1 - _lambda) * next_state_value[..., i, :] + _lambda * g
                 )
             returns[..., k, :] = g
@@ -416,19 +418,37 @@ def vec_td_lambda_return_estimate(
 
     next_state_value = next_state_value.view(-1, 1, T)
     reward = reward.view(-1, 1, T)
-    done = done.view(-1, 1, T)
 
     """Vectorized version of td_lambda_advantage_estimate"""
     device = reward.device
     not_done = 1 - done.to(next_state_value.dtype)
-    next_state_value = not_done * next_state_value
 
     first_below_thr_gamma = None
 
-    if isinstance(gamma, torch.Tensor) and gamma.numel() > 1:
+    # 3 use cases: (1) there is one gamma per time step, (2) there is a single gamma but
+    # some intermediate dones and (3) there is a single gamma and no done.
+    # (3) can be treated much faster than (1) and (2) (lower mem footprint)
+    if (isinstance(gamma, torch.Tensor) and gamma.numel() > 1) or done.any():
         if rolling_gamma is None:
             rolling_gamma = True
+        if rolling_gamma:
+            gamma = gamma * not_done
         gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
+
+        if not rolling_gamma:
+            done_follows_done = done[..., 1:, :][done[..., :-1, :]].all()
+            if not done_follows_done:
+                raise NotImplementedError(
+                    "When using rolling_gamma=False and vectorized TD(lambda), "
+                    "make sure that conseducitve trajectories are separated as different batch "
+                    "items. Propagating a gamma value across trajectories is not permitted with "
+                    "this method. Check that you need to use rolling_gamma=False, and if so "
+                    "consider using the non-vectorized version of the return computation or splitting "
+                    "your trajectories."
+                )
+            else:
+                gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, 1, T, 1)
+
     else:
         if rolling_gamma is not None:
             raise RuntimeError(
@@ -483,10 +503,10 @@ def vec_td_lambda_return_estimate(
             lambdas = lambdas[:, :, :1].transpose(1, 2)
 
         v2 = _custom_conv1d(
-            next_state_value, dec * (gammas * (1 - lambdas)).transpose(1, 2)
+            next_state_value * not_done.view_as(next_state_value),
+            dec * (gammas * (1 - lambdas)).transpose(1, 2),
         )
-
-        v3 = next_state_value
+        v3 = next_state_value * not_done.view_as(next_state_value)
         v3[..., :-1] = 0
         v3 = _custom_conv1d(v3, dec * (gammas * lambdas).transpose(1, 2))
         return (v1 + v2 + v3).view(shape)

@@ -12,6 +12,7 @@ from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import EGreedyWrapper
 from torchrl.record import VideoRecorder
+from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     OffPolicyCollectorConfig,
@@ -29,7 +30,6 @@ from torchrl.trainers.helpers.losses import LossConfig, make_dqn_loss
 from torchrl.trainers.helpers.models import DiscreteModelConfig, make_dqn_actor
 from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
-from torchrl.trainers.loggers.utils import generate_exp_name, get_logger
 
 config_fields = [
     (config_field.name, config_field.type, config_field)

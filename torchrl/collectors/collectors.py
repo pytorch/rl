@@ -28,7 +28,6 @@ from torchrl.collectors.utils import split_trajectories
 from torchrl.data import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.envs.vec_env import _BatchedEnv
@@ -65,7 +64,7 @@ class RandomPolicy:
         self.action_spec = action_spec
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        return td.set("action", self.action_spec.rand(td.batch_size))
+        return td.set("action", self.action_spec.rand())
 
 
 def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
@@ -441,10 +440,8 @@ class SyncDataCollector(_DataCollector):
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
-            self._tensordict_out = (
-                env.fake_tensordict().expand(env.batch_size).to_tensordict()
-            )
-            self._tensordict_out.update(self.policy.spec.zero(env.batch_size))
+            self._tensordict_out = env.fake_tensordict().to_tensordict()
+            self._tensordict_out.update(self.policy.spec.zero())
             if env.device:
                 self._tensordict_out = self._tensordict_out.to(env.device)
             self._tensordict_out = (
@@ -615,17 +612,19 @@ class SyncDataCollector(_DataCollector):
             steps = steps.clone()
             if len(self.env.batch_size):
                 self._tensordict.masked_fill_(done_or_terminated, 0)
-                self._tensordict.set("reset_workers", done_or_terminated)
+                _reset = done_or_terminated
+                self._tensordict.set("_reset", _reset)
             else:
+                _reset = None
                 self._tensordict.zero_()
             self.env.reset(self._tensordict)
 
-            if self._tensordict.get("done").any():
+            if (_reset is None and self._tensordict.get("done").any()) or (
+                _reset is not None and self._tensordict.get("done")[_reset].any()
+            ):
                 raise RuntimeError(
-                    f"Got {sum(self._tensordict.get('done'))} done envs after reset."
+                    f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
                 )
-            if len(self.env.batch_size):
-                self._tensordict.del_("reset_workers")
             traj_ids[done_or_terminated] = traj_ids.max() + torch.arange(
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
@@ -659,7 +658,7 @@ class SyncDataCollector(_DataCollector):
                     self._tensordict = self.env.step(self._tensordict)
 
                 step_count = self._tensordict.get("step_count")
-                step_count += 1
+                self._tensordict.set_("step_count", step_count + 1)
                 # we must clone all the values, since the step / traj_id updates are done in-place
                 try:
                     self._tensordict_out[..., j] = self._tensordict
@@ -683,15 +682,16 @@ class SyncDataCollector(_DataCollector):
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
                 raise RuntimeError("resetting unique env with index is not permitted.")
-            reset_workers = torch.zeros(
-                *self.env.batch_size,
+            _reset = torch.zeros(
+                self.env.batch_size,
                 dtype=torch.bool,
                 device=self.env.device,
             )
-            reset_workers[index] = 1
-            td_in = TensorDict({"reset_workers": reset_workers}, self.env.batch_size)
+            _reset[index] = 1
+            td_in = TensorDict({"_reset": _reset}, self.env.batch_size)
             self._tensordict[index].zero_()
         else:
+            _reset = None
             td_in = None
             self._tensordict.zero_()
 
@@ -699,7 +699,10 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.update(td_in, inplace=True)
 
         self._tensordict.update(self.env.reset(**kwargs), inplace=True)
-        self._tensordict.fill_("step_count", 0)
+        if _reset is not None:
+            self._tensordict["step_count"][_reset] = 0
+        else:
+            self._tensordict.fill_("step_count", 0)
 
     def shutdown(self) -> None:
         """Shuts down all workers and/or closes the local environment."""
@@ -1038,7 +1041,7 @@ lambda function in an `torchrl.envs.EnvCreator` wrapper as follows:
 `env = ParallelEnv(N, EnvCreator(my_lambda_function))`.
 This will not only ensure that your lambda function is cloud-pickled once, but
 also that the state dict is synchronised across processes if needed."""
-                    )
+                    ) from err
             pipe_child.close()
             self.procs.append(proc)
             self.pipes.append(pipe_parent)

@@ -227,44 +227,6 @@ class _BatchedEnv(EnvBase):
                 )
         self._set_properties()
 
-    # def _prepare_dummy_env(
-    #     self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
-    # ):
-    #     self._dummy_env_instance = None
-    #     if self._single_task:
-    #         # if EnvCreator, the metadata are already there
-    #         if isinstance(create_env_fn[0], EnvCreator):
-    #             self._dummy_env_fun = create_env_fn[0]
-    #             self._dummy_env_fun.create_env_kwargs.update(create_env_kwargs[0])
-    #         # get the metadata
-    #
-    #         try:
-    #             self._dummy_env_fun = CloudpickleWrapper(
-    #                 create_env_fn[0], **create_env_kwargs[0]
-    #             )
-    #         except RuntimeError as err:
-    #             if isinstance(create_env_fn[0], EnvCreator):
-    #                 self._dummy_env_fun = create_env_fn[0]
-    #                 self._dummy_env_fun.create_env_kwargs.update(create_env_kwargs[0])
-    #             else:
-    #                 raise err
-    #     else:
-    #         n_tasks = len(create_env_fn)
-    #         self._dummy_env_fun = []
-    #         for i in range(n_tasks):
-    #             try:
-    #                 self._dummy_env_fun.append(
-    #                     CloudpickleWrapper(create_env_fn[i], **create_env_kwargs[i])
-    #                 )
-    #             except RuntimeError as err:
-    #                 if isinstance(create_env_fn[i], EnvCreator):
-    #                     self._dummy_env_fun.append(create_env_fn[i])
-    #                     self._dummy_env_fun[i].create_env_kwargs.update(
-    #                         create_env_kwargs[i]
-    #                     )
-    #                 else:
-    #                     raise err
-
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
 
@@ -280,12 +242,19 @@ class _BatchedEnv(EnvBase):
                 _kwargs.update(_new_kwargs)
 
     def _set_properties(self):
-        meta_data = deepcopy(self.meta_data)
+        meta_data = self.meta_data
         if self._single_task:
             self._batch_size = meta_data.batch_size
-            self.observation_spec = meta_data.specs["observation_spec"]
-            self.reward_spec = meta_data.specs["reward_spec"]
-            self.input_spec = meta_data.specs["input_spec"]
+            observation_spec = meta_data.specs["observation_spec"]
+
+            self.observation_spec = observation_spec
+
+            reward_spec = meta_data.specs["reward_spec"]
+            self.reward_spec = reward_spec
+
+            input_spec = meta_data.specs["input_spec"]
+            self.input_spec = input_spec
+
             self._dummy_env_str = meta_data.env_str
             self._device = meta_data.device
             self._env_tensordict = meta_data.tensordict
@@ -294,15 +263,29 @@ class _BatchedEnv(EnvBase):
             self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
             self._device = meta_data[0].device
             # TODO: check that all action_spec and reward spec match (issue #351)
-            self.reward_spec = meta_data[0].specs["reward_spec"]
+
+            reward_spec = meta_data[0].specs["reward_spec"]
+            reward_spec = reward_spec.expand(self.num_workers, *reward_spec.shape)
+            self.reward_spec = reward_spec
+
             _observation_spec = {}
             for md in meta_data:
                 _observation_spec.update(dict(**md.specs["observation_spec"]))
-            self.observation_spec = CompositeSpec(**_observation_spec)
+            observation_spec = CompositeSpec(
+                **_observation_spec, shape=meta_data[0].batch_size
+            )
+            observation_spec = observation_spec.expand(
+                self.num_workers, *observation_spec.shape
+            )
+            self.observation_spec = observation_spec
+
             _input_spec = {}
             for md in meta_data:
                 _input_spec.update(dict(**md.specs["input_spec"]))
-            self.input_spec = CompositeSpec(**_input_spec)
+            input_spec = CompositeSpec(**_input_spec, shape=meta_data[0].batch_size)
+            input_spec = input_spec.expand(self.num_workers, *input_spec.shape)
+            self.input_spec = input_spec
+
             self._dummy_env_str = str(meta_data[0])
             self._env_tensordict = torch.stack(
                 [meta_data.tensordict for meta_data in meta_data], 0
@@ -626,18 +609,21 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        if tensordict is not None and "reset_workers" in tensordict.keys():
+
+        if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
-            reset_workers = tensordict.get("reset_workers")
+            _reset = tensordict.get("_reset")
         else:
-            reset_workers = torch.ones(self.num_workers, dtype=torch.bool)
+            _reset = torch.ones(self.batch_size, dtype=torch.bool)
 
         keys = set()
         for i, _env in enumerate(self._envs):
-            if not reset_workers[i]:
+            if not _reset[i].any():
                 continue
             _tensordict = tensordict[i] if tensordict is not None else None
             _td = _env._reset(tensordict=_tensordict, **kwargs)
+            if "_reset" in _td.keys():
+                _td.del_("_reset")
             keys = keys.union(_td.keys())
             self.shared_tensordicts[i].update_(_td)
 
@@ -843,29 +829,32 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         cmd_out = "reset"
-        if tensordict is not None and "reset_workers" in tensordict.keys():
+        if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
-            reset_workers = tensordict.get("reset_workers")
+            _reset = tensordict.get("_reset")
         else:
-            reset_workers = torch.ones(self.num_workers, dtype=torch.bool)
+            _reset = torch.ones(self.batch_size, dtype=torch.bool)
 
         for i, channel in enumerate(self.parent_channels):
-            if not reset_workers[i]:
+            if not _reset[i].any():
                 continue
+            kwargs["tensordict"] = tensordict[i] if tensordict is not None else None
             channel.send((cmd_out, kwargs))
 
         keys = set()
         for i, channel in enumerate(self.parent_channels):
-            if not reset_workers[i]:
+            if not _reset[i].any():
                 continue
             cmd_in, new_keys = channel.recv()
             keys = keys.union(new_keys)
             if cmd_in != "reset_obs":
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
         check_count = 0
-        while self.shared_tensordict_parent.get("done").any():
+        while self.shared_tensordict_parent.get("done")[_reset].any():
             if check_count == 4:
-                raise RuntimeError("Envs have just been reset but some are still done")
+                raise RuntimeError(
+                    "Envs have just been reset bur env is done on specified '_reset' dimensions."
+                )
             else:
                 check_count += 1
                 # there might be some delay between writing the shared tensordict
@@ -976,9 +965,7 @@ def _run_worker_pipe_shared_mem(
         try:
             cmd, data = child_pipe.recv()
         except EOFError as err:
-            raise EOFError(
-                f"proc {pid} failed, last command: {cmd}. " f"\nErr={str(err)}"
-            )
+            raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
         if cmd == "seed":
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
@@ -1008,19 +995,21 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
             _td = env._reset(**reset_kwargs)
+            if "_reset" in _td.keys():
+                _td.del_("_reset")
             done = _td.get("done", None)
             if done is None:
                 _td["done"] = done = torch.zeros(
                     *_td.batch_size, 1, dtype=torch.bool, device=env.device
                 )
+            elif done is not None and done.shape != torch.Size([*_td.batch_size, 1]):
+                _td.set("done", done.unsqueeze(-1))
             if reset_keys is None:
                 reset_keys = set(_td.keys())
             if pin_memory:
                 _td.pin_memory()
             tensordict.update_(_td)
             child_pipe.send(("reset_obs", reset_keys))
-            if done.any():
-                raise RuntimeError(f"{env.__class__.__name__} is done after reset")
 
         elif cmd == "step":
             if not initialized:
@@ -1081,9 +1070,7 @@ def _run_worker_pipe_shared_mem(
                 else:
                     result = attr
             except Exception as err:
-                raise RuntimeError(
-                    f"querying {err_msg} resulted in the following error: " f"{err}"
-                )
+                raise RuntimeError(f"querying {err_msg} resulted in an error.") from err
             if cmd not in ("to"):
                 child_pipe.send(("_".join([cmd, "done"]), result))
             else:

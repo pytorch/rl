@@ -330,6 +330,7 @@ from torchrl.envs import (
     Compose,
     NoopResetEnv,
     ObservationNorm,
+    StepCounter,
     ToTensorImage,
     TransformedEnv,
 )
@@ -358,7 +359,7 @@ base_env = ParallelEnv(
     lambda: GymEnv("Pendulum-v1", frame_skip=3, from_pixels=True, pixels_only=False),
 )
 env = TransformedEnv(
-    base_env, Compose(NoopResetEnv(3), ToTensorImage())
+    base_env, Compose(StepCounter(), ToTensorImage())
 )  # applies transforms on batch of envs
 env.append_transform(ObservationNorm(in_keys=["pixels"], loc=2, scale=1))
 env.reset()
@@ -587,9 +588,9 @@ tensordicts = TensorDict({}, [max_steps])
 for i in range(max_steps):
     actor(tensordict)
     tensordicts[i] = env.step(tensordict)
-    tensordict = step_mdp(tensordict)  # roughly equivalent to obs = next_obs
-    if env.is_done:
+    if tensordict["done"].any():
         break
+    tensordict = step_mdp(tensordict)  # roughly equivalent to obs = next_obs
 
 tensordicts_prealloc = tensordicts.clone()
 print("total steps:", i)
@@ -607,9 +608,9 @@ tensordicts = []
 for _ in range(max_steps):
     actor(tensordict)
     tensordicts.append(env.step(tensordict))
-    tensordict = step_mdp(tensordict)  # roughly equivalent to obs = next_obs
-    if env.is_done:
+    if tensordict["done"].any():
         break
+    tensordict = step_mdp(tensordict)  # roughly equivalent to obs = next_obs
 tensordicts_stack = torch.stack(tensordicts, 0)
 print("total steps:", i)
 print(tensordicts_stack)

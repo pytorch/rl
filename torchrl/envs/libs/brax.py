@@ -114,25 +114,38 @@ class BraxWrapper(_EnvWrapper):
         key = jax.random.PRNGKey(0)
         state = env.reset(key)
         state_dict = _object_to_tensordict(state, self.device, batch_size=())
-        state_spec = _extract_spec(state_dict)
+        state_spec = _extract_spec(state_dict).expand(self.batch_size)
         return state_spec
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
         self.input_spec = CompositeSpec(
             action=BoundedTensorSpec(
-                minimum=-1, maximum=1, shape=(env.action_size,), device=self.device
-            )
+                minimum=-1,
+                maximum=1,
+                shape=(
+                    *self.batch_size,
+                    env.action_size,
+                ),
+                device=self.device,
+            ),
+            shape=self.batch_size,
         )
         self.reward_spec = UnboundedContinuousTensorSpec(
             shape=[
+                *self.batch_size,
                 1,
             ],
             device=self.device,
         )
         self.observation_spec = CompositeSpec(
             observation=UnboundedContinuousTensorSpec(
-                shape=(env.observation_size,), device=self.device
-            )
+                shape=(
+                    *self.batch_size,
+                    env.observation_size,
+                ),
+                device=self.device,
+            ),
+            shape=self.batch_size,
         )
         # extract state spec from instance
         self.state_spec = self._make_state_spec(env)
@@ -169,8 +182,8 @@ class BraxWrapper(_EnvWrapper):
         state = _object_to_tensordict(state, self.device, self.batch_size)
 
         # build result
-        reward = state.get("reward").view(*self.batch_size, *self.reward_spec.shape)
-        done = state.get("done").bool().view(*self.batch_size, *self.reward_spec.shape)
+        reward = state.get("reward").view(*self.reward_spec.shape)
+        done = state.get("done").bool().view(*self.reward_spec.shape)
         tensordict_out = TensorDict(
             source={
                 "observation": state.get("obs"),
@@ -202,14 +215,8 @@ class BraxWrapper(_EnvWrapper):
         next_state = _object_to_tensordict(next_state, self.device, self.batch_size)
 
         # build result
-        reward = next_state.get("reward").view(
-            *self.batch_size, *self.reward_spec.shape
-        )
-        done = (
-            next_state.get("done")
-            .bool()
-            .view(*self.batch_size, *self.reward_spec.shape)
-        )
+        reward = next_state.get("reward").view(self.reward_spec.shape)
+        done = next_state.get("done").bool().view(self.reward_spec.shape)
         tensordict_out = TensorDict(
             source={
                 "observation": next_state.get("obs"),
@@ -236,19 +243,13 @@ class BraxWrapper(_EnvWrapper):
             self, state, action, *qp_values
         )
 
-        # extract done values
-        next_done = (
-            next_state_nograd.get("done")
-            .bool()
-            .view(*self.batch_size, *self.reward_spec.shape)
-        )
+        # extract done values: we assume a shape identical to reward
+        next_done = next_state_nograd.get("done").bool().view(*self.reward_spec.shape)
 
         # merge with tensors with grad function
         next_state = next_state_nograd
         next_state["obs"] = next_obs
-        next_state["reward"] = next_reward.view(
-            *self.batch_size, *self.reward_spec.shape
-        )
+        next_state["reward"] = next_reward.view(*self.reward_spec.shape)
         next_state["qp"].update(dict(zip(qp_keys, next_qp_values)))
 
         # build result
@@ -301,7 +302,7 @@ class BraxEnv(BraxWrapper):
                 f"brax not found, unable to create {env_name}. "
                 f"Consider downloading and installing brax from"
                 f" {self.git_url}"
-            )
+            ) from IMPORT_ERR
         from_pixels = kwargs.pop("from_pixels", False)
         pixels_only = kwargs.pop("pixels_only", True)
         requires_grad = kwargs.pop("requires_grad", False)

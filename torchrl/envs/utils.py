@@ -154,7 +154,7 @@ SUPPORTED_LIBRARIES = {
 }
 
 
-def check_env_specs(env, return_contiguous=True):
+def check_env_specs(env, return_contiguous=True, check_dtype=True):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
@@ -164,6 +164,13 @@ def check_env_specs(env, return_contiguous=True):
     A broken environment spec will likely make it impossible to use parallel
     environments.
 
+    Args:
+        env (EnvBase): the env for which the specs have to be checked against data.
+        return_contiguous (bool, optional): if True, the random rollout will be called with
+            return_contiguous=True. This will fail in some cases (e.g. heterogeneous shapes
+            of inputs/outputs). Defaults to True.
+        check_dtype (bool, optional): if False, dtype checks will be skipped.
+            Defaults to True.
     """
     fake_tensordict = env.fake_tensordict().flatten_keys(".")
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous).flatten_keys(
@@ -172,35 +179,60 @@ def check_env_specs(env, return_contiguous=True):
 
     keys1 = set(fake_tensordict.keys())
     keys2 = set(real_tensordict.keys())
-    assert keys1 == keys2
+    if keys1 != keys2:
+        raise AssertionError(
+            "The keys of the fake tensordict and the one collected during rollout do not match:"
+            f"Got fake-real: {keys1-keys2} and real-fake: {keys2-keys1}"
+        )
     fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
     fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     fake_tensordict = fake_tensordict.to_tensordict()
-    assert (
+    if (
         fake_tensordict.apply(lambda x: torch.zeros_like(x))
-        == real_tensordict.apply(lambda x: torch.zeros_like(x))
-    ).all()
+        != real_tensordict.apply(lambda x: torch.zeros_like(x))
+    ).all():
+        raise AssertionError(
+            "zeroing the two tensordicts did not make them identical. "
+            f"Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
+        )
     for key in keys2:
-        assert fake_tensordict[key].shape == real_tensordict[key].shape
+        if fake_tensordict[key].shape != real_tensordict[key].shape:
+            raise AssertionError(
+                f"The shapes of the real and fake tensordict don't match for key {key}. "
+                f"Got fake={fake_tensordict[key].shape} and real={real_tensordict[key].shape}."
+            )
+        if check_dtype and (fake_tensordict[key].dtype != real_tensordict[key].dtype):
+            raise AssertionError(
+                f"The dtypes of the real and fake tensordict don't match for key {key}. "
+                f"Got fake={fake_tensordict[key].dtype} and real={real_tensordict[key].dtype}."
+            )
 
     # test dtypes
     real_tensordict = env.rollout(3)  # keep empty structures, for example dict()
-    for key, value in real_tensordict.items():
-        _check_dtype(key, value, env.observation_spec, env.input_spec)
+    for key, value in real_tensordict[..., -1].items():
+        _check_isin(key, value, env.observation_spec, env.input_spec)
 
 
-def _check_dtype(key, value, obs_spec, input_spec):
+def _check_isin(key, value, obs_spec, input_spec):
     if key in {"reward", "done"}:
         return
     elif key == "next":
         for _key, _value in value.items():
-            _check_dtype(_key, _value, obs_spec, input_spec)
+            _check_isin(_key, _value, obs_spec, input_spec)
         return
     elif key in input_spec.keys(yield_nesting_keys=True):
-        assert input_spec[key].is_in(value), (input_spec[key], value)
+        if not input_spec[key].is_in(value):
+            raise AssertionError(
+                f"input_spec.is_in failed for key {key}. "
+                f"Got input_spec={input_spec[key]} and real={value}."
+            )
         return
     elif key in obs_spec.keys(yield_nesting_keys=True):
-        assert obs_spec[key].is_in(value), (input_spec[key], value)
+        if not obs_spec[key].is_in(value):
+            raise AssertionError(
+                f"obs_spec.is_in failed for key {key}. "
+                f"Got obs_spec={obs_spec[key]} and real={value}."
+            )
         return
     else:
         raise KeyError(key)
@@ -221,3 +253,16 @@ def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int 
     if shape_len == len(batch_size):
         return tensor.unsqueeze(dim=dim)
     return tensor
+
+
+class classproperty:
+    """A class-property object.
+
+    Usage: Allows for iterators coded as properties.
+    """
+
+    def __init__(self, fget):
+        self.fget = fget
+
+    def __get__(self, owner_self, owner_cls):
+        return self.fget(owner_cls)

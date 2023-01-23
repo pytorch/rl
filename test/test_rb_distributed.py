@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import sys
 import time
 
 import pytest
@@ -55,6 +56,10 @@ def sample_from_buffer_remotely_returns_correct_tensordict_test(rank, name, worl
         assert (sampled == inserted)["a"].item()
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Distributed package support on Windows is a prototype feature and is subject to changes.",
+)
 @pytest.mark.parametrize("names", [["BUFFER", "TRAINER"]])
 @pytest.mark.parametrize(
     "func",

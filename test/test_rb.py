@@ -5,6 +5,7 @@
 
 import argparse
 import importlib
+import sys
 from functools import partial
 from unittest import mock
 
@@ -57,6 +58,7 @@ from torchrl.envs.transforms.transforms import (
 )
 
 _has_tv = importlib.util.find_spec("torchvision") is not None
+_os_is_windows = sys.platform == "win32"
 
 
 @pytest.mark.parametrize(
@@ -117,6 +119,10 @@ class TestPrototypeBuffers:
         return data
 
     def test_add(self, rb_type, sampler, writer, storage, size):
+        if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
+            pytest.skip(
+                "Distributed package support on Windows is a prototype feature and is subject to changes."
+            )
         torch.manual_seed(0)
         rb = self._get_rb(
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
@@ -150,6 +156,10 @@ class TestPrototypeBuffers:
             assert writer._cursor == size - 1
 
     def test_extend(self, rb_type, sampler, writer, storage, size):
+        if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
+            pytest.skip(
+                "Distributed package support on Windows is a prototype feature and is subject to changes."
+            )
         torch.manual_seed(0)
         rb = self._get_rb(
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
@@ -175,6 +185,10 @@ class TestPrototypeBuffers:
                 raise RuntimeError("did not find match")
 
     def test_sample(self, rb_type, sampler, writer, storage, size):
+        if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
+            pytest.skip(
+                "Distributed package support on Windows is a prototype feature and is subject to changes."
+            )
         torch.manual_seed(0)
         rb = self._get_rb(
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
@@ -202,6 +216,10 @@ class TestPrototypeBuffers:
                 raise RuntimeError("did not find match")
 
     def test_index(self, rb_type, sampler, writer, storage, size):
+        if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
+            pytest.skip(
+                "Distributed package support on Windows is a prototype feature and is subject to changes."
+            )
         torch.manual_seed(0)
         rb = self._get_rb(
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
