@@ -625,7 +625,7 @@ def test_collector_batch_size_with_env_batch_size(
     )
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
-        assert b.batch_size[1:] == torch.Size([*env_unmasked_dims, max_steps])
+        assert b.batch_size == torch.Size([b["traj_ids"].unique(sorted=False).shape[0],*env_unmasked_dims, max_steps])
         if i == 1:
             break
     ccollector.shutdown()
@@ -658,7 +658,7 @@ def test_collector_batch_size_with_env_batch_size(
     )
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
-        assert b.batch_size[1:] == torch.Size([*env_unmasked_dims, max_steps])
+        assert b.batch_size == torch.Size([b["traj_ids"].unique(sorted=False).shape[0],*env_unmasked_dims, max_steps])
         if i == 1:
             break
     ccollector.shutdown()
