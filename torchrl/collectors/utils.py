@@ -25,13 +25,17 @@ def _stack_output_zip(fun) -> Callable:
     return stacked_output_fun
 
 
-def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
+def split_trajectories(
+    rollout_tensordict: TensorDictBase, sort: bool = True
+) -> TensorDictBase:
     """A util function for trajectory separation.
 
     Takes a tensordict with a key traj_ids that indicates the id of each trajectory.
     The input tensordict has batch_size = B x *other_dims
 
     From there, builds a B / T x *other_dims x T x ... zero-padded tensordict with B / T batches on max duration T
+
+    If sorted=True the trajectories are also sorted based on traj_id.
     """
     # TODO: incorporate tensordict.split once it's implemented
     mask = torch.ones(
@@ -45,7 +49,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     sep = ".-|-."
     rollout_tensordict = rollout_tensordict.flatten_keys(sep)
     traj_ids = rollout_tensordict.get("traj_ids")[mask].view(-1)
-    unique_traj_ids = traj_ids.unique(sorted=False)
+    unique_traj_ids = traj_ids.unique(sorted=sort)
     MAX = max([(traj_ids == i).count_nonzero() for i in unique_traj_ids])
 
     out_splits = []
