@@ -193,7 +193,7 @@ Utils
 Loggers
 -------
 
-.. currentmodule:: torchrl.recorder.loggers
+.. currentmodule:: torchrl.record.loggers
 
 .. autosummary::
     :toctree: generated/
