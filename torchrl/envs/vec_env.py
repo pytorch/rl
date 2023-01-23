@@ -28,6 +28,7 @@ from torchrl.envs.env_creator import get_env_metadata
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 
 try:
+    # Libraries necessary for MultiThreadedEnv
     import envpool
     import treevalue
 
@@ -1112,7 +1113,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def __init__(
         self,
-        env=None,
+        env: Optional["envpool.python.envpool.EnvPoolMixin"] = None,
         **kwargs,
     ):
         if not _has_envpool:
@@ -1124,22 +1125,30 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         if env is not None:
             kwargs["env"] = env
             self.num_workers = env.config["num_envs"]
+            # For synchronous mode batch size is equal to the number of workers
             self.batch_size = torch.Size([self.num_workers])
-
+        print(f"in MultiThreadedEnvWrapper.__init__: env={env}")
         super().__init__(**kwargs)
 
         # Buffer to keep the latest observation for each worker
+        # It's a TensorDict when the observation consists of several variables, e.g. "position" and "velocity"
         self.obs: Union[torch.tensor, TensorDict] = self.observation_spec[
             "observation"
         ].zero((self.num_workers,))
 
     def _check_kwargs(self, kwargs: Dict):
-        pass
+        if "env" not in kwargs:
+            raise TypeError("Could not find environment key 'env' in kwargs.")
+        env = kwargs["env"]
+        if not isinstance(env, (envpool.python.envpool.EnvPoolMixin,)):
+            raise TypeError("env is not of type 'envpool.python.envpool.EnvPoolMixin'.")
 
-    def _build_env(self, env):
+    def _build_env(self, env: "envpool.python.envpool.EnvPoolMixin"):
         return env
 
-    def _make_specs(self, env: "envpool.atari.AtariGymEnvPool") -> None:  # noqa: F821
+    def _make_specs(
+        self, env: "envpool.python.envpool.EnvPoolMixin"
+    ) -> None:  # noqa: F821
         self.input_spec = self._get_input_spec()
         self.reward_spec = self._get_reward_spec()
         self.observation_spec = self._get_observation_spec()
@@ -1341,6 +1350,11 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
                 num_workers=self.num_workers,
                 create_env_kwargs=self.create_env_kwargs,
             )
+
+    def _check_kwargs(self, kwargs: Dict):
+        for arg in ["num_workers", "env_name"]:
+            if arg not in kwargs:
+                raise TypeError(f"Expected '{arg}' to be part of kwargs")
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(env={self.env_name}, num_workers={self.num_workers}, device={self.device})"

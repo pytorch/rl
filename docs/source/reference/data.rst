@@ -77,7 +77,7 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
     BoundedTensorSpec
     UnboundedContinuousTensorSpec
     BinaryDiscreteTensorSpec
-    MultiOneHotDiscreteTensorSpec
+    MultOneHotDiscreteTensorSpec
     DiscreteTensorSpec
     CompositeSpec
 
