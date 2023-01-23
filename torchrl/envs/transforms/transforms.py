@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import collections
 import multiprocessing as mp
-from copy import copy, deepcopy
+from copy import copy
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
@@ -50,7 +50,7 @@ def _apply_to_composite(function):
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if in_key in observation_spec.keys():
                     d[out_key] = function(self, observation_spec[in_key])
-            return CompositeSpec(d)
+            return CompositeSpec(d, shape=observation_spec.shape)
         else:
             return function(self, observation_spec)
 
@@ -405,7 +405,7 @@ but got an object of type {type(transform)}."""
         """Observation spec of the transformed environment."""
         if self._observation_spec is None or not self.cache_specs:
             observation_spec = self.transform.transform_observation_spec(
-                deepcopy(self.base_env.observation_spec)
+                self.base_env.observation_spec.clone()
             )
             if self.cache_specs:
                 self.__dict__["_observation_spec"] = observation_spec
@@ -423,7 +423,7 @@ but got an object of type {type(transform)}."""
         """Action spec of the transformed environment."""
         if self._input_spec is None or not self.cache_specs:
             input_spec = self.transform.transform_input_spec(
-                deepcopy(self.base_env.input_spec)
+                self.base_env.input_spec.clone()
             )
             if self.cache_specs:
                 self.__dict__["_input_spec"] = input_spec
@@ -436,7 +436,7 @@ but got an object of type {type(transform)}."""
         """Reward spec of the transformed environment."""
         if self._reward_spec is None or not self.cache_specs:
             reward_spec = self.transform.transform_reward_spec(
-                deepcopy(self.base_env.reward_spec)
+                self.base_env.reward_spec.clone()
             )
             if self.cache_specs:
                 self.__dict__["_reward_spec"] = reward_spec
@@ -861,7 +861,7 @@ class RewardClipping(Transform):
             return BoundedTensorSpec(
                 self.clamp_min,
                 self.clamp_max,
-                torch.Size((1,)),
+                shape=reward_spec.shape,
                 device=reward_spec.device,
                 dtype=reward_spec.dtype,
             )
@@ -902,7 +902,9 @@ class BinarizeReward(Transform):
         return (reward > 0.0).to(torch.long)
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        return BinaryDiscreteTensorSpec(n=1, device=reward_spec.device)
+        return BinaryDiscreteTensorSpec(
+            n=1, device=reward_spec.device, shape=reward_spec.shape
+        )
 
 
 class Resize(ObservationTransform):
@@ -1009,7 +1011,8 @@ class CenterCrop(ObservationTransform):
                     if key in self.in_keys
                     else _obs_spec
                     for key, _obs_spec in observation_spec._specs.items()
-                }
+                },
+                shape=observation_spec.shape,
             )
 
         space = observation_spec.space
@@ -1547,6 +1550,15 @@ class CatFrames(ObservationTransform):
         if cat_dim > 0:
             raise ValueError(self._CAT_DIM_ERR)
         self.cat_dim = cat_dim
+        for in_key in self.in_keys:
+            buffer_name = f"_cat_buffers_{in_key}"
+            setattr(
+                self,
+                buffer_name,
+                torch.nn.parameter.UninitializedBuffer(
+                    device=torch.device("cpu"), dtype=torch.get_default_dtype()
+                ),
+            )
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
@@ -1554,12 +1566,10 @@ class CatFrames(ObservationTransform):
         if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
             for in_key in self.in_keys:
                 buffer_name = f"_cat_buffers_{in_key}"
-                try:
-                    buffer = getattr(self, buffer_name)
-                    buffer.fill_(0.0)
-                except AttributeError:
-                    # we'll instantiate later, when needed
-                    pass
+                buffer = getattr(self, buffer_name)
+                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                    continue
+                buffer.fill_(0.0)
 
         # Batched environments
         else:
@@ -1573,12 +1583,10 @@ class CatFrames(ObservationTransform):
             )
             for in_key in self.in_keys:
                 buffer_name = f"_cat_buffers_{in_key}"
-                try:
-                    buffer = getattr(self, buffer_name)
-                    buffer[_reset] = 0.0
-                except AttributeError:
-                    # we'll instantiate later, when needed
-                    pass
+                buffer = getattr(self, buffer_name)
+                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                    continue
+                buffer[_reset] = 0.0
 
         return tensordict
 
@@ -1587,15 +1595,9 @@ class CatFrames(ObservationTransform):
         d = shape[self.cat_dim]
         shape[self.cat_dim] = d * self.N
         shape = torch.Size(shape)
-        self.register_buffer(
-            buffer_name,
-            torch.zeros(
-                shape,
-                dtype=data.dtype,
-                device=data.device,
-            ),
-        )
-        buffer = getattr(self, buffer_name)
+        getattr(self, buffer_name).materialize(shape)
+        buffer = getattr(self, buffer_name).to(data.dtype).to(data.device).zero_()
+        setattr(self, buffer_name, buffer)
         return buffer
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1605,12 +1607,12 @@ class CatFrames(ObservationTransform):
             buffer_name = f"_cat_buffers_{in_key}"
             data = tensordict[in_key]
             d = data.size(self.cat_dim)
-            try:
-                buffer = getattr(self, buffer_name)
+            buffer = getattr(self, buffer_name)
+            if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                buffer = self._make_missing_buffer(data, buffer_name)
+            else:
                 # shift obs 1 position to the right
                 buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.cat_dim))
-            except AttributeError:
-                buffer = self._make_missing_buffer(data, buffer_name)
             # add new obs
             idx = self.cat_dim
             if idx < 0:
@@ -2710,7 +2712,9 @@ class RewardSum(Transform):
 
         # Update observation_spec with episode_specs
         if not isinstance(observation_spec, CompositeSpec):
-            observation_spec = CompositeSpec(observation=observation_spec)
+            observation_spec = CompositeSpec(
+                observation=observation_spec, shape=self.parent.batch_size
+            )
         observation_spec.update(episode_specs)
         return observation_spec
 
@@ -2784,7 +2788,9 @@ class StepCounter(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=torch.Size([]), dtype=torch.int64, device=observation_spec.device
+            shape=self.parent.batch_size,
+            dtype=torch.int64,
+            device=observation_spec.device,
         )
         observation_spec["step_count"].space.minimum = 0
         return observation_spec

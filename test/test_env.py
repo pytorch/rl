@@ -345,7 +345,7 @@ class TestModelBasedEnvBase:
         with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             mb_env.batch_locked = False
         td = mb_env.reset()
-        td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
+        td["action"] = mb_env.action_spec.rand()
         td_expanded = td.unsqueeze(-1).expand(10, 2).reshape(-1).to_tensordict()
         mb_env.step(td)
 
@@ -360,7 +360,7 @@ class TestModelBasedEnvBase:
         with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             mb_env.batch_locked = False
         td = mb_env.reset()
-        td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
+        td["action"] = mb_env.action_spec.rand()
         td_expanded = td.expand(2)
         mb_env.step(td)
         # we should be able to do a step with a tensordict that has been expended
@@ -909,9 +909,8 @@ class TestParallel:
             n_workers, lambda: CountingEnv(max_steps=max_steps, batch_size=batch_size)
         )
         env.set_seed(1)
-        action = env.action_spec.rand(env.batch_size)
+        action = env.action_spec.rand()
         action[:] = 1
-
         for i in range(max_steps):
             td = env.step(
                 TensorDict(
@@ -947,7 +946,7 @@ def test_env_base_reset_flag(batch_size, max_steps=3):
     env = CountingEnv(max_steps=max_steps, batch_size=batch_size)
     env.set_seed(1)
 
-    action = env.action_spec.rand(env.batch_size)
+    action = env.action_spec.rand()
     action[:] = 1
 
     for i in range(max_steps):
@@ -1071,7 +1070,7 @@ def test_batch_locked(device):
     with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
         env.batch_locked = False
     td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
+    td["action"] = env.action_spec.rand()
     td_expanded = td.expand(2).clone()
     td = env.step(td)
 
@@ -1089,7 +1088,7 @@ def test_batch_unlocked(device):
     with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
         env.batch_locked = False
     td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
+    td["action"] = env.action_spec.rand()
     td_expanded = td.expand(2).clone()
     td = env.step(td)
 
@@ -1105,7 +1104,7 @@ def test_batch_unlocked_with_batch_size(device):
         env.batch_locked = False
 
     td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
+    td["action"] = env.action_spec.rand()
     td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
     td = env.step(td)
 

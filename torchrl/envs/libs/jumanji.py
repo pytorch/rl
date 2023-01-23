@@ -184,15 +184,17 @@ class JumanjiWrapper(GymLikeEnv):
             action=_jumanji_to_torchrl_spec_transform(
                 env.action_spec(), device=self.device
             ),
-        )
+        ).expand(self.batch_size)
 
     def _make_observation_spec(self, env) -> TensorSpec:
         spec = env.observation_spec()
         new_spec = _jumanji_to_torchrl_spec_transform(spec, device=self.device)
         if isinstance(spec, jumanji.specs.Array):
-            return CompositeSpec(observation=new_spec)
+            return CompositeSpec(observation=new_spec).expand(self.batch_size)
         elif isinstance(spec, jumanji.specs.Spec):
-            return CompositeSpec(**{k: v for k, v in new_spec.items()})
+            return CompositeSpec(**{k: v for k, v in new_spec.items()}).expand(
+                self.batch_size
+            )
         else:
             raise TypeError(f"Unsupported spec type {type(spec)}")
 
@@ -202,7 +204,7 @@ class JumanjiWrapper(GymLikeEnv):
         )
         if not len(reward_spec.shape):
             reward_spec.shape = torch.Size([1])
-        return reward_spec
+        return reward_spec.expand([*self.batch_size, *reward_spec.shape])
 
     def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
 
@@ -212,7 +214,7 @@ class JumanjiWrapper(GymLikeEnv):
         self.reward_spec = self._make_reward_spec(env)
 
         # extract state spec from instance
-        self.state_spec = self._make_state_spec(env)
+        self.state_spec = self._make_state_spec(env).expand(self.batch_size)
         self.input_spec["state"] = self.state_spec
 
         # build state example for data conversion
@@ -249,7 +251,7 @@ class JumanjiWrapper(GymLikeEnv):
         # prepare inputs
         state = _tensordict_to_object(tensordict.get("state"), self._state_example)
         action = self.read_action(tensordict.get("action"))
-        reward = self.reward_spec.zero(self.batch_size)
+        reward = self.reward_spec.zero()
 
         # flatten batch size into vector
         state = _tree_flatten(state, self.batch_size)

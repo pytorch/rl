@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from copy import deepcopy
 from typing import List, Optional, Union
 
 import numpy as np
@@ -46,8 +45,8 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         ...             batch_size=self.batch_size,
         ...             device=self.device,
         ...         )
-        ...         tensordict = tensordict.update(self.input_spec.rand(self.batch_size))
-        ...         tensordict = tensordict.update(self.observation_spec.rand(self.batch_size))
+        ...         tensordict = tensordict.update(self.input_spec.rand())
+        ...         tensordict = tensordict.update(self.observation_spec.rand())
         ...         return tensordict
         >>> # This environment is used as follows:
         >>> import torch.nn as nn
@@ -139,9 +138,9 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
 
     def set_specs_from_env(self, env: EnvBase):
         """Sets the specs of the environment from the specs of the given environment."""
-        self.observation_spec = deepcopy(env.observation_spec).to(self.device)
-        self.reward_spec = deepcopy(env.reward_spec).to(self.device)
-        self.input_spec = deepcopy(env.input_spec).to(self.device)
+        self.observation_spec = env.observation_spec.clone().to(self.device)
+        self.reward_spec = env.reward_spec.clone().to(self.device)
+        self.input_spec = env.input_spec.clone().to(self.device)
 
     def _step(
         self,

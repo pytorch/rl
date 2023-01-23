@@ -23,7 +23,7 @@ class DreamerActor(nn.Module):
     time step.
     It outputs the mean and the scale of the action distribution.
 
-    Reference: https://arxiv.org/abs/1912.016034
+    Reference: https://arxiv.org/abs/1912.01603
 
     Args:
         out_features (int): Number of output features.
