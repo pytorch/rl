@@ -446,6 +446,8 @@ def vec_td_lambda_return_estimate(
                     "consider using the non-vectorized version of the return computation or splitting "
                     "your trajectories."
                 )
+            else:
+                gammas = gammas * done.view(-1, 1, T, 1)
 
     else:
         if rolling_gamma is not None:
