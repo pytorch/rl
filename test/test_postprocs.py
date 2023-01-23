@@ -6,8 +6,9 @@ import argparse
 
 import pytest
 import torch
-from _utils_internal import get_available_devices
 from tensordict.tensordict import assert_allclose_td, TensorDict
+
+from _utils_internal import get_available_devices
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.postprocs.postprocs import MultiStep
 
@@ -121,7 +122,7 @@ class TestSplits:
             traj_ids[done] = traj_ids.max() + torch.arange(1, done.sum() + 1)
             steps_count[done] = 0
 
-        out = torch.stack(out, 1).contiguous()
+        out = torch.stack(out, 1).view(-1).contiguous()
         return out
 
     @pytest.mark.parametrize("num_workers", range(3, 34, 3))
@@ -129,8 +130,8 @@ class TestSplits:
     def test_splits(self, num_workers, traj_len):
 
         trajs = TestSplits.create_fake_trajs(num_workers, traj_len)
-        assert trajs.shape[0] == num_workers
-        assert trajs.shape[1] == traj_len
+        assert trajs.shape[0] == num_workers * traj_len
+        assert len(trajs.shape) == 1
         split_trajs = split_trajectories(trajs)
         assert split_trajs.shape[0] == split_trajs.get("traj_ids").max() + 1
         assert split_trajs.shape[1] == split_trajs.get("steps_count").max() + 1
