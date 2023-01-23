@@ -31,9 +31,10 @@ def split_trajectories(
     """A util function for trajectory separation.
 
     Takes a tensordict with a key traj_ids that indicates the id of each trajectory.
-    The input tensordict has batch_size = B x *other_dims
+    The input tensordict has batch_size = (B x *masked_dims)
 
-    From there, builds a B / T x *other_dims x T x ... zero-padded tensordict with B / T batches on max duration T
+    From there, builds a (number_of_trajectories x *masked_dims x T) zero-padded tensordict
+    with number_of_trajectories batches of shape ( *masked_dims, T) with max duration T
 
     If sorted=True the trajectories are also sorted based on traj_id.
     """
