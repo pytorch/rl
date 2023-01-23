@@ -505,7 +505,7 @@ def vec_td_lambda_return_estimate(
         v2 = _custom_conv1d(
             next_state_value, dec * (gammas * (1 - lambdas)).transpose(1, 2)
         )
-        v3 = next_state_value.clone()
+        v3 = next_state_value.clone() * not_done.view_as(next_state_value)
         v3[..., :-1] = 0
         v3 = _custom_conv1d(v3, dec * (gammas * lambdas).transpose(1, 2))
         return (v1 + v2 + v3).view(shape)
