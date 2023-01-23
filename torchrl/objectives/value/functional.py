@@ -431,8 +431,8 @@ def vec_td_lambda_return_estimate(
     if (isinstance(gamma, torch.Tensor) and gamma.numel() > 1) or done.any():
         if rolling_gamma is None:
             rolling_gamma = True
-        # if rolling_gamma:
-        gamma = gamma * not_done
+        if rolling_gamma:
+            gamma = gamma * not_done
         gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
 
         if not rolling_gamma:
@@ -446,8 +446,8 @@ def vec_td_lambda_return_estimate(
                     "consider using the non-vectorized version of the return computation or splitting "
                     "your trajectories."
                 )
-            # else:
-            #     gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, T, 1, 1)
+            else:
+                gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, 1, T, 1) * not_done.view(-1, T, 1, 1)
 
     else:
         if rolling_gamma is not None:
