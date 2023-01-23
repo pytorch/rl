@@ -12,6 +12,7 @@ import torch
 
 from _utils_internal import (
     _make_multithreaded_env,
+    CARTPOLE_VERSIONED,
     get_available_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
@@ -455,24 +456,24 @@ class TestJumanji:
                 )
 
 
-CLASSIC_CONTROL_ENVS = [
+ENVPOOL_CLASSIC_CONTROL_ENVS = [
     PENDULUM_VERSIONED,
     "MountainCar-v0",
     "MountainCarContinuous-v0",
     "Acrobot-v1",
-    "CartPole-v0",
+    CARTPOLE_VERSIONED,
 ]
-ATARI_ENVS = ["ALE/Pong-v5", "ALE/Breakout-v5"]
-GYM_ENVS = CLASSIC_CONTROL_ENVS + ATARI_ENVS
-DM_ENVS = ["CheetahRun-v1"]
-ALL_ENVS = GYM_ENVS + DM_ENVS
+ENVPOOL_ATARI_ENVS = [PONG_VERSIONED]
+ENVPOOL_GYM_ENVS = ENVPOOL_CLASSIC_CONTROL_ENVS + ENVPOOL_ATARI_ENVS
+ENVPOOL_DM_ENVS = ["CheetahRun-v1"]
+ENVPOOL_ALL_ENVS = ENVPOOL_GYM_ENVS + ENVPOOL_DM_ENVS
 
 
-@pytest.mark.skipif(not _has_envpool, reason="no envpool library found")
+@pytest.mark.skipif(not _has_envpool, reason="No envpool library found")
 class TestEnvPool:
-    @pytest.mark.parametrize("env_name", ALL_ENVS)
+    @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
     def test_env_wrapper_creation(self, env_name):
-        env_name = env_name.replace("ALE/", "")
+        env_name = env_name.replace("ALE/", "")  # EnvPool naming convention
         envpool_env = envpool.make(
             task_id=env_name, env_type="gym", num_envs=4, gym_reset_return_info=True
         )
@@ -481,7 +482,7 @@ class TestEnvPool:
         env.rand_step()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", ALL_ENVS)
+    @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_out", [False, True])
     def test_env_basic_operation(
@@ -531,7 +532,7 @@ class TestEnvPool:
 
     # Don't run on Atari envs because output is uint8
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", CLASSIC_CONTROL_ENVS + DM_ENVS)
+    @pytest.mark.parametrize("env_name", ENVPOOL_CLASSIC_CONTROL_ENVS + ENVPOOL_DM_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_out", [True, False])
     @pytest.mark.parametrize(
@@ -638,7 +639,7 @@ class TestEnvPool:
         env_multithreaded.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", ALL_ENVS)
+    @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_out", [True, False])
     def test_multithreaded_env_seed(
@@ -710,7 +711,7 @@ class TestEnvPool:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", ALL_ENVS)
+    @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
     @pytest.mark.parametrize("transformed_out", [False, True])
     @pytest.mark.parametrize("open_before", [False, True])
     def test_multithreaded_env_cast(
@@ -750,7 +751,7 @@ class TestEnvPool:
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", ALL_ENVS)
+    @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
     @pytest.mark.parametrize("transformed_out", [True, False])
     def test_env_device(self, env_name, frame_skip, transformed_out, device):
         # tests creation on device

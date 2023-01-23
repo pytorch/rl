@@ -1352,7 +1352,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
             )
 
     def _check_kwargs(self, kwargs: Dict):
-        for arg in ["num_workers", "env_name"]:
+        for arg in ["num_workers", "env_name", "create_env_kwargs"]:
             if arg not in kwargs:
                 raise TypeError(f"Expected '{arg}' to be part of kwargs")
 
