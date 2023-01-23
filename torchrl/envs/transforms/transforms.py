@@ -2965,10 +2965,10 @@ class TimeMaxPool(Transform):
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             # Lazy init of buffers
             buffer_name = f"_maxpool_buffer_{in_key}"
+            buffer = getattr(self, buffer_name)
             if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
                 data = tensordict[in_key]
                 self._make_missing_buffer(data, buffer_name)
-            buffer = getattr(self, buffer_name)
             # shift obs 1 position to the right
             buffer.copy_(torch.roll(buffer, shifts=1, dims=0))
             # add new obs
