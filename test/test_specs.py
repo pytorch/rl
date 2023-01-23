@@ -240,9 +240,9 @@ def test_mult_onehot(shape, ns):
         for _r, _n in zip(rsplit, ns):
             assert (_r.sum(-1) == 1).all()
             assert _r.shape[-1] == _n
-        np_r = ts.to_numpy(r)
-        assert not ts.is_in(torch.tensor(np_r))
-        assert (ts.encode(np_r) == r).all()
+        categorical = ts.to_categorical(r)
+        assert not ts.is_in(categorical)
+        assert (ts.encode(categorical) == r).all()
 
 
 @pytest.mark.parametrize(
@@ -309,15 +309,7 @@ def test_multi_discrete(shape, ns, dtype):
         99,
     ],
 )
-@pytest.mark.parametrize(
-    "shape",
-    [
-        torch.Size([3]),
-        torch.Size([4, 5]),
-    ],
-)
 @pytest.mark.parametrize("device", get_available_devices())
-<<<<<<< HEAD:test/test_specs.py
 @pytest.mark.parametrize(
     "shape",
     [
@@ -1040,21 +1032,22 @@ class TestSpec:
         action_spec = MultiOneHotDiscreteTensorSpec((10, 5))
 
         actions_tensors = [action_spec.rand() for _ in range(10)]
-        actions_numpy = [action_spec.to_numpy(a) for a in actions_tensors]
-        actions_tensors_2 = [action_spec.encode(a) for a in actions_numpy]
+        actions_categorical = [action_spec.to_categorical(a) for a in actions_tensors]
+        actions_tensors_2 = [action_spec.encode(a) for a in actions_categorical]
         assert all(
             [(a1 == a2).all() for a1, a2 in zip(actions_tensors, actions_tensors_2)]
         )
 
-        actions_numpy = [
-            np.concatenate(
-                [np.random.randint(0, 10, (1,)), np.random.randint(0, 5, (1,))], 0
-            )
+        actions_categorical = [
+            torch.cat((torch.randint(0, 10, (1,)), torch.randint(0, 5, (1,))), 0)
             for a in actions_tensors
         ]
-        actions_tensors = [action_spec.encode(a) for a in actions_numpy]
-        actions_numpy_2 = [action_spec.to_numpy(a) for a in actions_tensors]
-        assert all((a1 == a2).all() for a1, a2 in zip(actions_numpy, actions_numpy_2))
+        actions_tensors = [action_spec.encode(a) for a in actions_categorical]
+        actions_categorical_2 = [action_spec.to_categorical(a) for a in actions_tensors]
+        assert all(
+            (a1 == a2).all()
+            for a1, a2 in zip(actions_categorical, actions_categorical_2)
+        )
 
     def test_one_hot_discrete_action_spec_rand(self):
         torch.manual_seed(0)
@@ -1091,14 +1084,14 @@ class TestSpec:
         action_spec = MultiOneHotDiscreteTensorSpec((10, 5))
 
         actions_tensors = [action_spec.rand() for _ in range(10)]
-        actions_numpy = [action_spec.to_numpy(a) for a in actions_tensors]
-        actions_tensors_2 = [action_spec.encode(a) for a in actions_numpy]
+        actions_categorical = [action_spec.to_categorical(a) for a in actions_tensors]
+        actions_tensors_2 = [action_spec.encode(a) for a in actions_categorical]
         assert all(
             [(a1 == a2).all() for a1, a2 in zip(actions_tensors, actions_tensors_2)]
         )
 
-        sample = np.stack(
-            [action_spec.to_numpy(action_spec.rand()) for _ in range(N)], 0
+        sample = torch.stack(
+            [action_spec.to_categorical(action_spec.rand()) for _ in range(N)], 0
         )
         assert sample.shape[0] == N
         assert sample.shape[1] == 2
