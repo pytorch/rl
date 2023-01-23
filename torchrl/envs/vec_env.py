@@ -1155,7 +1155,6 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return tensordict_out
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-
         action = tensordict.get("action")
         # Action needs to be moved to CPU and converted to numpy before being passed to envpool
         action = action.to(torch.device("cpu"))
@@ -1202,7 +1201,11 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             return None
         return np.where(reset_workers)[0]
 
-    def _transform_reset_output(self, envpool_output, reset_workers):
+    def _transform_reset_output(
+        self,
+        envpool_output: Tuple[Union["treevalue.TreeValue", np.ndarray], Any],
+        reset_workers: Optional[List[int]],
+    ):
         """Process output of envpool env.reset."""
         observation, _ = envpool_output
         if reset_workers is not None:
@@ -1276,27 +1279,36 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
 
 class MultiThreadedEnv(MultiThreadedEnvWrapper):
-    """Multithreaded execution of environments.
+    """Multithreaded execution of environments based on EnvPool.
+
+    An alternative to ParallelEnv based on multithreading. It's faster, as it doesn't require new process spawning, but
+    less flexible, as it only supports environments implemented in EnvPool library.
+    Currently only supports synchronous execution mode, when the batch size is equal to the number of workers, see
+    https://envpool.readthedocs.io/en/latest/content/python_interface.html#batch-size.
 
     >>> env = MultiThreadedEnv(num_workers=3, env_name="Pendulum-v1")
     >>> env.reset()
     >>> env.rand_step()
     >>> env.rollout(5)
     >>> env.close()
+
+    Args:
+        num_workers: number of worker threads to create.
+        env_name: name of the environment, corresponding to task_id in EnvPool.
+        create_env_kwargs: additional arguments which will be passed to envpool.make.
     """
 
     def __init__(
         self,
         num_workers: int,
         env_name: str,
-        batch_size: Optional[int] = None,
         create_env_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
 
         self.env_name = env_name.replace("ALE/", "")  # Naming convention of EnvPool
         self.num_workers = num_workers
-        self.batch_size = torch.Size([batch_size or num_workers])
+        self.batch_size = torch.Size([num_workers])
         self.create_env_kwargs = create_env_kwargs or {}
 
         kwargs["num_workers"] = num_workers
@@ -1321,6 +1333,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         return super()._build_env(env)
 
     def _set_seed(self, seed: Optional[int]):
+        """Library EnvPool only support setting a seed by recreating the environment."""
         if seed is not None:
             self.create_env_kwargs["seed"] = seed
             self._env = self._build_env(
