@@ -3067,14 +3067,15 @@ class TestValues:
     @pytest.mark.parametrize("T", [50, 3])
     @pytest.mark.parametrize("rolling_gamma", [True, False, None])
     @pytest.mark.parametrize("has_done", [True, False])
+    @pytest.mark.parametrize("seed", range(1))
     def test_vectdlambda_rand_gamma(
-        self, device, lmbda, N, T, rolling_gamma, dtype_fixture, has_done  # noqa
+        self, device, lmbda, N, T, rolling_gamma, dtype_fixture, has_done, seed  # noqa
     ):
         """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
         with gamma being a random tensor
 
         """
-        torch.manual_seed(0)
+        torch.manual_seed(seed)
 
         done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
         if has_done:
@@ -3095,12 +3096,12 @@ class TestValues:
             done,
             rolling_gamma,
         )
-        if has_done and rolling_gamma is False and done[..., :-1, :].any():
+        if rolling_gamma is False and not done[..., 1:, :][done[..., :-1, :]].all():
+            # if a not-done follows a done, then rolling_gamma=False cannot be used
             with pytest.raises(
-                NotImplementedError,
-                match="TDLambda is not implemented for consecutive trajectories",
+                NotImplementedError, match="When using rolling_gamma=False"
             ):
-                _ = vec_td_lambda_advantage_estimate(
+                vec_td_lambda_advantage_estimate(
                     gamma_tensor,
                     lmbda,
                     state_value,
@@ -3210,10 +3211,9 @@ class TestValues:
 
         if not rolling_gamma:
             with pytest.raises(
-                NotImplementedError,
-                match="TDLambda is not implemented for consecutive trajectories",
+                NotImplementedError, match="When using rolling_gamma=False"
             ):
-                v2 = vec_td_lambda_advantage_estimate(
+                vec_td_lambda_advantage_estimate(
                     gamma_tensor,
                     lmbda,
                     state_value,
@@ -3250,6 +3250,11 @@ class TestValues:
             done[..., T // 2 :, :],
             rolling_gamma,
         )
+
+        torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(v1a, v2a, rtol=1e-4, atol=1e-4)
+
+        torch.testing.assert_close(v1b, v2b, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(v2, torch.cat([v2a, v2b], -2), rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("device", get_available_devices())
@@ -3379,6 +3384,7 @@ class TestValues:
             reward[..., T // 2 :, :],
             done[..., T // 2 :, :],
         )[0]
+        torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(v2, torch.cat([v2a, v2b], -2), rtol=1e-4, atol=1e-4)
 
 
