@@ -71,15 +71,15 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
     :template: rl_template.rst
 
     TensorSpec
+    BinaryDiscreteTensorSpec
     BoundedTensorSpec
+    CompositeSpec
+    DiscreteTensorSpec
+    MultiDiscreteTensorSpec
+    MultiOneHotDiscreteTensorSpec
     OneHotDiscreteTensorSpec
     UnboundedContinuousTensorSpec
-    BoundedTensorSpec
-    UnboundedContinuousTensorSpec
-    BinaryDiscreteTensorSpec
-    MultOneHotDiscreteTensorSpec
-    DiscreteTensorSpec
-    CompositeSpec
+    UnboundedDiscreteTensorSpec
 
 
 Utils
