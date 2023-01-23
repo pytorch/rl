@@ -447,7 +447,7 @@ def vec_td_lambda_return_estimate(
                     "your trajectories."
                 )
             else:
-                gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, T, 1).expand(-1, T, T).tril()
+                gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, T, 1).expand(-1, T, T).tril().unsqueeze(-1)
 
     else:
         if rolling_gamma is not None:
