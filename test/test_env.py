@@ -399,7 +399,6 @@ class TestParallel:
                 N,
             ],
         )
-        print(f"env0.action_spec={env0.action_spec} td={td}")
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
         assert "done" in td1.keys()
@@ -425,7 +424,6 @@ class TestParallel:
         assert (
             td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
         ), f"{td.shape}, {td.get('done').sum(1)}"
-
         env_parallel.close()
         # env_serial.close()  # never opened
         env0.close()
@@ -565,7 +563,6 @@ class TestParallel:
         assert_allclose_td(td_serial[:, 0], td_parallel[:, 0])  # first step
         assert_allclose_td(td_serial[:, 1], td_parallel[:, 1])  # second step
         assert_allclose_td(td_serial, td_parallel)
-
         env_parallel.close()
         env_serial.close()
 

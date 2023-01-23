@@ -11,7 +11,7 @@ from copy import deepcopy
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
 from time import sleep
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 from warnings import warn
 
 import numpy as np
@@ -1194,7 +1194,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return f"{self.__class__.__name__}(num_workers={self.num_workers}, device={self.device})"
 
     def _parse_reset_workers(self, tensordict):
-
+        """Convert worker information from mask to indices, e.g. (0, 1, 0, 0, 1) to  (1, 4)."""
         if tensordict is None or "reset_workers" not in tensordict.keys():
             return None
         reset_workers = tensordict.get("reset_workers")
@@ -1203,16 +1203,21 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return np.where(reset_workers)[0]
 
     def _transform_reset_output(self, envpool_output, reset_workers):
+        """Process output of envpool env.reset."""
         observation, _ = envpool_output
         if reset_workers is not None:
+            # Only specified workers were reset - need to set observation buffer values only for them
             if isinstance(observation, treevalue.TreeValue):
+                # If observation contain several fields, it will be returned as treevalue.TreeValue.
+                # Convert to treevalue.FastTreeValue to allow indexing
                 observation = treevalue.FastTreeValue(observation)
             for i, worker in enumerate(reset_workers):
-                self.obs[worker] = self._treevalue_or_numpy_to_tensor_or_tensordict(
+                self.obs[worker] = self._treevalue_or_numpy_to_tensor_or_dict(
                     observation[i]
                 )
         else:
-            self.obs = self._treevalue_or_numpy_to_tensor_or_tensordict(observation)
+            # All workers were reset - rewrite the whole observation buffer
+            self.obs = self._treevalue_or_numpy_to_tensor_or_dict(observation)
 
         tensordict_out = TensorDict(
             {"observation": self.obs},
@@ -1223,10 +1228,13 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         tensordict_out.set("done", self._is_done)
         return tensordict_out
 
-    def _transform_step_output(self, envpool_output):
+    def _transform_step_output(
+        self, envpool_output: Tuple[Any, Any, Any, ...]
+    ) -> TensorDict:
+        """Process output of envpool env.step."""
         obs, reward, done, *_ = envpool_output
 
-        obs = self._treevalue_or_numpy_to_tensor_or_tensordict(obs)
+        obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
 
         tensordict_out = TensorDict(
             {"observation": obs, "reward": torch.tensor(reward)},
@@ -1237,14 +1245,26 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         tensordict_out.set("done", self._is_done)
         return tensordict_out
 
-    def _treevalue_or_numpy_to_tensor_or_tensordict(self, x):
+    def _treevalue_or_numpy_to_tensor_or_dict(
+        self, x: Union["treevalue.TreeValue", np.ndarray]
+    ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+        """Converts observation returned by EnvPool.
+
+        EnvPool step and reset return observation as a numpy array or a TreeValue of numpy arrays, which we convert
+        to a tensor or a dictionary of tensors. Currently only supports depth 1 trees, but can easily be extended to
+        arbitrary depth if necessary.
+        """
         if isinstance(x, treevalue.TreeValue):
-            ret = self._treevalue_to_tensordict(x)
+            ret = self._treevalue_to_dict(x)
         else:
             ret = torch.tensor(x)
         return ret
 
-    def _treevalue_to_tensordict(self, tv):
+    def _treevalue_to_dict(self, tv: "treevalue.TreeValue") -> Dict[str, Any]:
+        """Converts TreeValue to a dictionary.
+
+        Currently only supports depth 1 trees, but can easily be extended to arbitrary depth if necessary.
+        """
         return {k[0]: torch.tensor(v) for k, v in treevalue.flatten(tv)}
 
     def _set_seed(self, seed: Optional[int]):
@@ -1267,14 +1287,14 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
 
     def __init__(
         self,
-        num_workers,
-        env_name,
-        batch_size=None,
-        create_env_kwargs=None,
+        num_workers: int,
+        env_name: str,
+        batch_size: Optional[int] = None,
+        create_env_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
 
-        self.env_name = env_name.replace("ALE/", "")
+        self.env_name = env_name.replace("ALE/", "")  # Naming convention of EnvPool
         self.num_workers = num_workers
         self.batch_size = torch.Size([batch_size or num_workers])
         self.create_env_kwargs = create_env_kwargs or {}
@@ -1287,8 +1307,8 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
     def _build_env(
         self,
         env_name: str,
-        num_workers,
-        create_env_kwargs,
+        num_workers: int,
+        create_env_kwargs: Optional[Dict[str, Any]],
     ) -> Any:
         create_env_kwargs = create_env_kwargs or {}
         env = envpool.make(
