@@ -6,9 +6,9 @@ import argparse
 
 import pytest
 import torch
-from tensordict.tensordict import assert_allclose_td, TensorDict
 
 from _utils_internal import get_available_devices
+from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.postprocs.postprocs import MultiStep
 
