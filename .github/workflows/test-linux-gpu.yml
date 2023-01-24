@@ -41,8 +41,6 @@ jobs:
         cd $work_dir
         ./.circleci/unittest/linux/scripts/setup_env.sh
 
-        echo "MUJOCO_GL: $MUJOCO_GL" 
-
         ## install.sh
         ./.circleci/unittest/linux/scripts/install.sh
 
