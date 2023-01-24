@@ -209,7 +209,7 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True):
 
     # test dtypes
     real_tensordict = env.rollout(3)  # keep empty structures, for example dict()
-    for key, value in real_tensordict.items():
+    for key, value in real_tensordict[..., -1].items():
         _check_isin(key, value, env.observation_spec, env.input_spec)
 
 

@@ -27,6 +27,7 @@ from torchrl.objectives.dreamer import (
     DreamerModelLoss,
     DreamerValueLoss,
 )
+from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     OffPolicyCollectorConfig,
@@ -40,7 +41,6 @@ from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.models import DreamerConfig, make_dreamer
 from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
 from torchrl.trainers.helpers.trainers import TrainerConfig
-from torchrl.trainers.loggers.utils import generate_exp_name, get_logger
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
 config_fields = [

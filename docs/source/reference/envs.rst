@@ -229,6 +229,7 @@ in the environment. The keys to be included in this inverse transform are passed
     SqueezeTransform
     StepCounter
     TensorDictPrimer
+    TimeMaxPool
     ToTensorImage
     UnsqueezeTransform
     VecNorm

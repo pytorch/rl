@@ -99,3 +99,13 @@ Errors to look for that may be related to this misconception are the following:
     are being used, using vectorized maps and functional programming (through 
     functorch) instead of looping over the model configurations can provide a
     significant speedup.
+
+## Common bugs
+- For bugs related to mujoco (incl. DeepMind Control suite and other libraries),
+  refer to the [MUJOCO_INSTALLATION](MUJOCO_INSTALLATION.md) file.
+- `ValueError: bad value(s) in fds_to_keep`: this can have multiple reasons. One that is common in torchrl
+  is that you are trying to send a tensor across processes that is a view of another tensor.
+  For instance, when sending the tensor `b = tensor.expand(new_shape)` across processes, the reference to the original
+  content will be lost (as the `expand` operation keeps the reference to the original tensor).
+  To debug this, look for such operations (`view`, `permute`, `expand`, etc.) and call `clone()` or `contiguous()` after
+  the call to the function.

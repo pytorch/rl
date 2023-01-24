@@ -9,7 +9,7 @@ import pathlib
 import uuid
 from datetime import datetime
 
-from torchrl.trainers.loggers.common import Logger
+from torchrl.record.loggers.common import Logger
 
 
 def generate_exp_name(model_name: str, experiment_name: str) -> str:
@@ -37,22 +37,22 @@ def get_logger(
         kwargs (dict[str]): might contain either `wandb_kwargs` or `mlflow_kwargs`
     """
     if logger_type == "tensorboard":
-        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
+        from torchrl.record.loggers.tensorboard import TensorboardLogger
 
         logger = TensorboardLogger(log_dir=logger_name, exp_name=experiment_name)
     elif logger_type == "csv":
-        from torchrl.trainers.loggers.csv import CSVLogger
+        from torchrl.record.loggers.csv import CSVLogger
 
         logger = CSVLogger(log_dir=logger_name, exp_name=experiment_name)
     elif logger_type == "wandb":
-        from torchrl.trainers.loggers.wandb import WandbLogger
+        from torchrl.record.loggers.wandb import WandbLogger
 
         wandb_kwargs = kwargs.get("wandb_kwargs", {})
         logger = WandbLogger(
             log_dir=logger_name, exp_name=experiment_name, **wandb_kwargs
         )
     elif logger_type == "mlflow":
-        from torchrl.trainers.loggers.mlflow import MLFlowLogger
+        from torchrl.record.loggers.mlflow import MLFlowLogger
 
         mlflow_kwargs = kwargs.get("mlflow_kwargs", {})
         logger = MLFlowLogger(
