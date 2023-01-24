@@ -1677,6 +1677,10 @@ class TestTransforms:
         td = TensorDict(
             {key: torch.randn(3) for key in ["a", "b", "c"]}, [], device=device
         )
+        if device.type == "cuda":
+            with pytest.raises(RuntimeError, match="test_pin_mem"):
+                pin_mem(td)
+            return
         pin_mem(td)
         for item in td.values():
             assert item.is_pinned
