@@ -2632,19 +2632,17 @@ class RewardSum(Transform):
             )
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key in tensordict.keys():
-                    z = torch.zeros_like(tensordict[out_key])
-                    _reset = _reset.view_as(z)
-                    tensordict[out_key][_reset] = z[_reset]
+                    tensordict[out_key][_reset].fill_(0.0)
                 elif in_key == "reward":
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
-                    z = self.parent.reward_spec.zero(self.parent.batch_size)
+                    z = self.parent.reward_spec.zero()
                     tensordict[out_key] = z
                 else:
                     try:
-                        tensordict[out_key] = self.parent.observation_spec[in_key].zero(
-                            self.parent.batch_size
-                        )
+                        tensordict[out_key] = self.parent.observation_spec[
+                            in_key
+                        ].zero()
                     except KeyError as err:
                         raise KeyError(
                             f"The key {in_key} was not found in the parent "
