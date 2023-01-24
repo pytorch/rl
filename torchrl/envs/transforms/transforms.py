@@ -2632,12 +2632,13 @@ class RewardSum(Transform):
             )
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key in tensordict.keys():
-                    tensordict[out_key][_reset].fill_(0.0)
+                    value = tensordict[out_key]
+                    dtype = value.dtype
+                    tensordict[out_key] = value * (~_reset).to(dtype)
                 elif in_key == "reward":
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
-                    z = self.parent.reward_spec.zero()
-                    tensordict[out_key] = z
+                    tensordict[out_key] = self.parent.reward_spec.zero()
                 else:
                     try:
                         tensordict[out_key] = self.parent.observation_spec[
