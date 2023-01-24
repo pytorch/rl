@@ -1678,7 +1678,7 @@ class TestTransforms:
             {key: torch.randn(3) for key in ["a", "b", "c"]}, [], device=device
         )
         if device.type == "cuda":
-            with pytest.raises(RuntimeError, match="test_pin_mem"):
+            with pytest.raises(RuntimeError, match="cannot pin"):
                 pin_mem(td)
             return
         pin_mem(td)
