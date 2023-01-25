@@ -49,7 +49,9 @@ def split_trajectories(
 
     sep = ".-|-."
     rollout_tensordict = rollout_tensordict.flatten_keys(sep)
-    traj_ids = rollout_tensordict.get(sep.join(["collector", "traj_ids"]))[mask].view(-1)
+    traj_ids = rollout_tensordict.get(sep.join(["collector", "traj_ids"]))[mask].view(
+        -1
+    )
     unique_traj_ids = traj_ids.unique(sorted=sort)
     MAX = max([(traj_ids == i).count_nonzero() for i in unique_traj_ids])
 

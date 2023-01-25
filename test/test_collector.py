@@ -9,6 +9,9 @@ import sys
 import numpy as np
 import pytest
 import torch
+from tensordict.nn import TensorDictModule
+from tensordict.tensordict import assert_allclose_td, TensorDict
+from torch import nn
 
 from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
 from mocking_classes import (
@@ -20,9 +23,6 @@ from mocking_classes import (
     DiscreteActionVecPolicy,
     MockSerialEnv,
 )
-from tensordict.nn import TensorDictModule
-from tensordict.tensordict import assert_allclose_td, TensorDict
-from torch import nn
 from torchrl._utils import prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
@@ -627,7 +627,11 @@ def test_collector_batch_size_with_env_batch_size(
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
         assert b.batch_size == torch.Size(
-            [b["traj_ids"].unique(sorted=False).shape[0], *env_unmasked_dims, max_steps]
+            [
+                b["collector", "traj_ids"].unique(sorted=False).shape[0],
+                *env_unmasked_dims,
+                max_steps,
+            ]
         )
         if i == 1:
             break
@@ -662,7 +666,11 @@ def test_collector_batch_size_with_env_batch_size(
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
         assert b.batch_size == torch.Size(
-            [b["traj_ids"].unique(sorted=False).shape[0], *env_unmasked_dims, max_steps]
+            [
+                b["collector", "traj_ids"].unique(sorted=False).shape[0],
+                *env_unmasked_dims,
+                max_steps,
+            ]
         )
         if i == 1:
             break
