@@ -113,13 +113,6 @@ class Transform(nn.Module):
         """Resets a tranform if it is stateful."""
         return tensordict
 
-    def _check_inplace(self) -> None:
-        if not hasattr(self, "inplace"):
-            raise AttributeError(
-                f"Transform of class {self.__class__.__name__} has no "
-                f"attribute inplace, consider implementing it."
-            )
-
     def init(self, tensordict) -> None:
         pass
 
@@ -134,11 +127,10 @@ class Transform(nn.Module):
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
-        self._check_inplace()
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             if in_key in tensordict.keys(include_nested=True):
                 observation = self._apply_transform(tensordict.get(in_key))
-                tensordict.set(out_key, observation, inplace=self.inplace)
+                tensordict.set(out_key, observation, )
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -160,11 +152,10 @@ class Transform(nn.Module):
             return obs
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        self._check_inplace()
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
             if in_key in tensordict.keys(include_nested=True):
                 observation = self._inv_apply_transform(tensordict.get(in_key))
-                tensordict.set(out_key, observation, inplace=self.inplace)
+                tensordict.set(out_key, observation, )
         return tensordict
 
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -607,8 +598,6 @@ but got an object of type {type(transform)}."""
 class ObservationTransform(Transform):
     """Abstract class for transformations of the observations."""
 
-    inplace = False
-
     def __init__(
         self,
         in_keys: Optional[Sequence[str]] = None,
@@ -633,8 +622,6 @@ class Compose(Transform):
         >>> transformed_env = TransformedEnv(env, transforms)
 
     """
-
-    inplace = False
 
     def __init__(self, *transforms: Transform):
         super().__init__(in_keys=[])
@@ -773,8 +760,6 @@ class ToTensorImage(ObservationTransform):
         torch.Size([1, 1, 3, 10, 11]) torch.float32
     """
 
-    inplace = False
-
     def __init__(
         self,
         unsqueeze: bool = False,
@@ -827,8 +812,6 @@ class RewardClipping(Transform):
 
     """
 
-    inplace = True
-
     def __init__(
         self,
         clamp_min: float = None,
@@ -850,11 +833,11 @@ class RewardClipping(Transform):
 
     def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
         if self.clamp_max is not None and self.clamp_min is not None:
-            reward = reward.clamp_(self.clamp_min, self.clamp_max)
+            reward = reward.clamp(self.clamp_min, self.clamp_max)
         elif self.clamp_min is not None:
-            reward = reward.clamp_min_(self.clamp_min)
+            reward = reward.clamp_min(self.clamp_min)
         elif self.clamp_max is not None:
-            reward = reward.clamp_max_(self.clamp_max)
+            reward = reward.clamp_max(self.clamp_max)
         return reward
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
@@ -883,8 +866,6 @@ class RewardClipping(Transform):
 
 class BinarizeReward(Transform):
     """Maps the reward to a binary value (0 or 1) if the reward is null or non-null, respectively."""
-
-    inplace = True
 
     def __init__(
         self,
@@ -916,8 +897,6 @@ class Resize(ObservationTransform):
         h (int): resulting height
         interpolation (str): interpolation method
     """
-
-    inplace = False
 
     def __init__(
         self,
@@ -986,8 +965,6 @@ class CenterCrop(ObservationTransform):
         h (int, optional): resulting height. If None, then w is used (square crop).
     """
 
-    inplace = False
-
     def __init__(
         self,
         w: int,
@@ -1042,8 +1019,6 @@ class FlattenObservation(ObservationTransform):
         first_dim (int): first dimension of the dimensions to flatten.
         last_dim (int): last dimension of the dimensions to flatten.
     """
-
-    inplace = False
 
     def __init__(
         self,
@@ -1115,7 +1090,6 @@ class UnsqueezeTransform(Transform):
     """
 
     invertible = True
-    inplace = False
 
     @classmethod
     def __new__(cls, *args, **kwargs):
@@ -1232,7 +1206,6 @@ class SqueezeTransform(UnsqueezeTransform):
     """
 
     invertible = True
-    inplace = False
 
     def __init__(
         self,
@@ -1268,8 +1241,6 @@ class SqueezeTransform(UnsqueezeTransform):
 
 class GrayScale(ObservationTransform):
     """Turns a pixel observation to grayscale."""
-
-    inplace = False
 
     def __init__(self, in_keys: Optional[Sequence[str]] = None):
         if in_keys is None:
@@ -1341,8 +1312,6 @@ class ObservationNorm(ObservationTransform):
         tensor([-1.3752e+01, -6.5087e-03,  2.9294e-03], dtype=torch.float32) tensor([14.9636,  2.5608,  0.6408], dtype=torch.float32)
 
     """
-
-    inplace = True
 
     def __init__(
         self,
@@ -1471,7 +1440,6 @@ class ObservationNorm(ObservationTransform):
             raise RuntimeError("Non-finite values found in loc")
         if not torch.isfinite(scale).all():
             raise RuntimeError("Non-finite values found in scale")
-
         self.register_buffer("loc", loc)
         self.register_buffer("scale", scale.clamp_min(self.eps))
 
@@ -1531,7 +1499,6 @@ class CatFrames(ObservationTransform):
 
     """
 
-    inplace = False
     _CAT_DIM_ERR = (
         "cat_dim must be > 0 to accomodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
@@ -1666,8 +1633,6 @@ class RewardScaling(Transform):
             as it is done for standardization. Default is `False`.
     """
 
-    inplace = True
-
     def __init__(
         self,
         loc: Union[float, torch.Tensor],
@@ -1721,8 +1686,6 @@ class RewardScaling(Transform):
 class FiniteTensorDictCheck(Transform):
     """This transform will check that all the items of the tensordict are finite, and raise an exception if they are not."""
 
-    inplace = False
-
     def __init__(self):
         super().__init__(in_keys=[])
 
@@ -1745,7 +1708,6 @@ class DoubleToFloat(Transform):
     """
 
     invertible = True
-    inplace = False
 
     def __init__(
         self,
@@ -1839,7 +1801,6 @@ class CatTensors(Transform):
     """
 
     invertible = False
-    inplace = False
 
     def __init__(
         self,
@@ -1996,8 +1957,6 @@ class DiscreteActionProjection(Transform):
         tensor([1])
     """
 
-    inplace = False
-
     def __init__(self, max_n: int, m: int, action_key: str = "action"):
         super().__init__([action_key])
         self.max_n = max_n
@@ -2039,8 +1998,6 @@ class FrameSkipTransform(Transform):
 
     """
 
-    inplace = False
-
     def __init__(self, frame_skip: int = 1):
         super().__init__([])
         if frame_skip < 1:
@@ -2072,8 +2029,6 @@ class NoopResetEnv(Transform):
             Default is `True`.
 
     """
-
-    inplace = True
 
     def __init__(self, noops: int = 30, random: bool = True):
         """Sample initial states by taking random number of no-ops on reset.
@@ -2172,8 +2127,6 @@ class TensorDictPrimer(Transform):
             device=cpu,
             is_shared=False)
     """
-
-    inplace = False
 
     def __init__(self, random=False, default_value=0.0, **kwargs):
         self.primers = kwargs
@@ -2275,8 +2228,6 @@ class gSDENoise(Transform):
     See the :func:`~torchrl.modules.models.exploration.gSDEModule' for more info.
     """
 
-    inplace = False
-
     def __init__(
         self,
         state_dim=None,
@@ -2355,8 +2306,6 @@ class VecNorm(Transform):
 
     """
 
-    inplace = True
-
     def __init__(
         self,
         in_keys: Optional[Sequence[str]] = None,
@@ -2406,7 +2355,7 @@ class VecNorm(Transform):
                 key, tensordict.get(key), N=max(1, tensordict.numel())
             )
 
-            tensordict.set_(key, new_val)
+            tensordict.set(key, new_val)
 
         if self.lock is not None:
             self.lock.release()
@@ -2586,8 +2535,6 @@ class RewardSum(Transform):
     this transform hos no effect.
     """
 
-    inplace = True
-
     def __init__(
         self,
         in_keys: Optional[Sequence[str]] = None,
@@ -2658,7 +2605,6 @@ class RewardSum(Transform):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Updates the episode rewards with the step rewards."""
         # Sanity checks
-        self._check_inplace()
         for in_key in self.in_keys:
             if in_key not in tensordict.keys():
                 return tensordict
@@ -2731,7 +2677,6 @@ class StepCounter(Transform):
     """
 
     invertible = False
-    inplace = True
 
     def __init__(self, max_steps: Optional[int] = None):
         if max_steps is not None and max_steps < 1:
@@ -2803,8 +2748,6 @@ class ExcludeTransform(Transform):
 
     """
 
-    inplace = False
-
     def __init__(self, *excluded_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
         if not all(isinstance(item, str) for item in excluded_keys):
@@ -2843,8 +2786,6 @@ class SelectTransform(Transform):
             not present, it is simply ignored.
 
     """
-
-    inplace = False
 
     def __init__(self, *selected_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
@@ -2891,7 +2832,6 @@ class TimeMaxPool(Transform):
         T (int, optional): Number of time steps over which to apply max pooling.
     """
 
-    inplace = False
     invertible = False
 
     def __init__(
