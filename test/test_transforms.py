@@ -1677,6 +1677,10 @@ class TestTransforms:
         td = TensorDict(
             {key: torch.randn(3) for key in ["a", "b", "c"]}, [], device=device
         )
+        if device.type == "cuda":
+            with pytest.raises(RuntimeError, match="cannot pin"):
+                pin_mem(td)
+            return
         pin_mem(td)
         for item in td.values():
             assert item.is_pinned
@@ -1828,7 +1832,7 @@ class TestTransforms:
         while max_steps is None or i < max_steps:
             step_counter._step(td)
             i += 1
-            assert torch.all(td.get("step_count") == i)
+            assert torch.all(td.get("step_count") == i), (td.get("step_count"), i)
             if max_steps is None:
                 break
         if max_steps is not None:

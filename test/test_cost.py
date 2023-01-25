@@ -273,7 +273,7 @@ class TestDQN:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
@@ -507,7 +507,7 @@ class TestDDPG:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -735,7 +735,7 @@ class TestTD3:
                 "observation": obs * mask.to(obs.dtype),
                 "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
             },
@@ -915,6 +915,7 @@ class TestTD3:
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 
+@pytest.mark.parametrize("version", [1, 2])
 class TestSAC:
     seed = 0
 
@@ -1011,7 +1012,7 @@ class TestSAC:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -1027,7 +1028,9 @@ class TestSAC:
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_sac(self, delay_value, delay_actor, delay_qvalue, num_qvalue, device):
+    def test_sac(
+        self, delay_value, delay_actor, delay_qvalue, num_qvalue, device, version
+    ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
 
@@ -1036,7 +1039,10 @@ class TestSAC:
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
-        value = self._create_mock_value(device=device)
+        if version == 1:
+            value = self._create_mock_value(device=device)
+        else:
+            value = None
 
         kwargs = {}
         if delay_actor:
@@ -1066,12 +1072,13 @@ class TestSAC:
                 continue
             loss[k].sum().backward(retain_graph=True)
             if k == "loss_actor":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params.values(
-                        include_nested=True, leaves_only=True
+                if version == 1:
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.value_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
                     for p in loss_fn.qvalue_network_params.values(
@@ -1084,7 +1091,7 @@ class TestSAC:
                         include_nested=True, leaves_only=True
                     )
                 )
-            elif k == "loss_value":
+            elif k == "loss_value" and version == 1:
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
                     for p in loss_fn.actor_network_params.values(
@@ -1110,12 +1117,13 @@ class TestSAC:
                         include_nested=True, leaves_only=True
                     )
                 )
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params.values(
-                        include_nested=True, leaves_only=True
+                if version == 1:
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.value_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
                     for p in loss_fn.qvalue_network_params.values(
@@ -1129,12 +1137,13 @@ class TestSAC:
                         include_nested=True, leaves_only=True
                     )
                 )
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params.values(
-                        include_nested=True, leaves_only=True
+                if version == 1:
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.value_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
                     for p in loss_fn.qvalue_network_params.values(
@@ -1165,7 +1174,15 @@ class TestSAC:
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_sac_batcher(
-        self, n, delay_value, delay_actor, delay_qvalue, num_qvalue, device, gamma=0.9
+        self,
+        n,
+        delay_value,
+        delay_actor,
+        delay_qvalue,
+        num_qvalue,
+        device,
+        version,
+        gamma=0.9,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
@@ -1174,7 +1191,10 @@ class TestSAC:
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
-        value = self._create_mock_value(device=device)
+        if version == 1:
+            value = self._create_mock_value(device=device)
+        else:
+            value = None
 
         kwargs = {}
         if delay_actor:
@@ -1237,12 +1257,13 @@ class TestSAC:
                 include_nested=True, leaves_only=True
             )
         ]
-        target_value = [
-            p.clone()
-            for p in loss_fn.target_value_network_params.values(
-                include_nested=True, leaves_only=True
-            )
-        ]
+        if version == 1:
+            target_value = [
+                p.clone()
+                for p in loss_fn.target_value_network_params.values(
+                    include_nested=True, leaves_only=True
+                )
+            ]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
         target_actor2 = [
@@ -1257,12 +1278,13 @@ class TestSAC:
                 include_nested=True, leaves_only=True
             )
         ]
-        target_value2 = [
-            p.clone()
-            for p in loss_fn.target_value_network_params.values(
-                include_nested=True, leaves_only=True
-            )
-        ]
+        if version == 1:
+            target_value2 = [
+                p.clone()
+                for p in loss_fn.target_value_network_params.values(
+                    include_nested=True, leaves_only=True
+                )
+            ]
         if loss_fn.delay_actor:
             assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
         else:
@@ -1277,12 +1299,15 @@ class TestSAC:
             assert not any(
                 (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
             )
-        if loss_fn.delay_value:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
-        else:
-            assert not any(
-                (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
-            )
+        if version == 1:
+            if loss_fn.delay_value:
+                assert all(
+                    (p1 == p2).all() for p1, p2 in zip(target_value, target_value2)
+                )
+            else:
+                assert not any(
+                    (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
+                )
 
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
@@ -1416,7 +1441,7 @@ class TestREDQ:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -1855,7 +1880,7 @@ class TestPPO:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "sample_log_prob": (torch.randn_like(action[..., 1]) / 10).masked_fill_(
@@ -2128,7 +2153,7 @@ class TestA2C:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
