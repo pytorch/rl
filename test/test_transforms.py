@@ -1832,7 +1832,7 @@ class TestTransforms:
         while max_steps is None or i < max_steps:
             step_counter._step(td)
             i += 1
-            assert torch.all(td.get("step_count") == i)
+            assert torch.all(td.get("step_count") == i), (td.get("step_count"), i)
             if max_steps is None:
                 break
         if max_steps is not None:

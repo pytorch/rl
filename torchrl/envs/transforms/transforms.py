@@ -13,6 +13,7 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import expand_as_right
 from torch import nn, Tensor
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -2633,8 +2634,9 @@ class RewardSum(Transform):
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key in tensordict.keys():
                     value = tensordict[out_key]
-                    dtype = value.dtype
-                    tensordict[out_key] = value * (~_reset).to(dtype)
+                    tensordict[out_key] = value.masked_fill(
+                        expand_as_right(_reset, value), 0.0
+                    )
                 elif in_key == "reward":
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
@@ -2744,39 +2746,36 @@ class StepCounter(Transform):
                 tensordict.batch_size, dtype=torch.bool, device=tensordict.device
             ),
         )
+        step_count = tensordict.get(
+            "step_count",
+            torch.zeros(
+                tensordict.batch_size,
+                dtype=torch.int64,
+                device=tensordict.device,
+            ),
+        )
+        step_count[_reset] = 0
         tensordict.set(
             "step_count",
-            (~_reset)
-            * tensordict.get(
-                "step_count",
-                torch.zeros(
-                    tensordict.batch_size,
-                    dtype=torch.int64,
-                    device=tensordict.device,
-                ),
-            ),
+            step_count,
         )
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        next_step_count = (
-            tensordict.get(
-                "step_count",
-                torch.zeros(
-                    tensordict.batch_size,
-                    dtype=torch.int64,
-                    device=tensordict.device,
-                ),
-            )
-            + 1
+        step_count = tensordict.get(
+            "step_count",
+            torch.zeros(
+                tensordict.batch_size,
+                dtype=torch.int64,
+                device=tensordict.device,
+            ),
         )
+        next_step_count = step_count + 1
         tensordict.set("step_count", next_step_count)
         if self.max_steps is not None:
-            tensordict.set(
-                "done",
-                tensordict.get("done")
-                | (next_step_count >= self.max_steps).unsqueeze(-1),
-            )
+            done = tensordict.get("done")
+            done = done | (next_step_count >= self.max_steps).unsqueeze(-1)
+            tensordict.set("done", done)
         return tensordict
 
     def transform_observation_spec(

@@ -7,6 +7,8 @@ import argparse
 import re
 from copy import deepcopy
 
+from packaging import version as pack_version
+
 _has_functorch = True
 try:
     import functorch as ft  # noqa
@@ -273,7 +275,7 @@ class TestDQN:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
@@ -507,7 +509,7 @@ class TestDDPG:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -735,7 +737,7 @@ class TestTD3:
                 "observation": obs * mask.to(obs.dtype),
                 "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
             },
@@ -1012,7 +1014,7 @@ class TestSAC:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -1441,7 +1443,7 @@ class TestREDQ:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -1880,7 +1882,7 @@ class TestPPO:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "sample_log_prob": (torch.randn_like(action[..., 1]) / 10).masked_fill_(
@@ -2035,6 +2037,8 @@ class TestPPO:
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_ppo_diff(self, loss_class, device, gradient_mode, advantage):
+        if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
+            raise pytest.skip("make_functional_with_buffers needs to be changed")
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
 
@@ -2153,7 +2157,7 @@ class TestA2C:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
@@ -2245,6 +2249,8 @@ class TestA2C:
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_a2c_diff(self, device, gradient_mode, advantage):
+        if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
+            raise pytest.skip("make_functional_with_buffers needs to be changed")
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_a2c(device=device)
 
