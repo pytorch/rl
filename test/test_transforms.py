@@ -56,6 +56,7 @@ from torchrl.envs import (
     SqueezeTransform,
     StepCounter,
     TensorDictPrimer,
+    TimeMaxPool,
     ToTensorImage,
     TransformedEnv,
     UnsqueezeTransform,
@@ -106,7 +107,6 @@ class TestVecNorm:
 
     @pytest.mark.parametrize("nprc", [2, 5])
     def test_vecnorm_parallel_auto(self, nprc):
-
         queues = []
         prcs = []
         if _has_gym:
@@ -863,6 +863,34 @@ class TestTransforms:
         assert isinstance(transformed_observation_spec2, CompositeSpec)
         assert "some_extra_observation" in transformed_observation_spec2.keys()
         assert "episode_reward" in transformed_observation_spec2.keys()
+
+    @pytest.mark.parametrize("T", [2, 4])
+    @pytest.mark.parametrize("seq_len", [8])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_time_max_pool(self, T, seq_len, device):
+        batch = 1
+        nodes = 4
+        keys = ["observation"]
+        time_max_pool = TimeMaxPool(keys, T=T)
+
+        tensor_list = []
+        for _ in range(seq_len):
+            tensor_list.append(torch.rand(batch, nodes).to(device))
+        max_vals, _ = torch.max(torch.stack(tensor_list[-T:]), dim=0)
+
+        print(f"max vals: {max_vals}")
+
+        for i in range(seq_len):
+            env_td = TensorDict(
+                {
+                    "observation": tensor_list[i],
+                },
+                device=device,
+                batch_size=[batch],
+            )
+            transformed_td = time_max_pool(env_td)
+
+        assert (max_vals == transformed_td["observation"]).all()
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
@@ -1649,6 +1677,10 @@ class TestTransforms:
         td = TensorDict(
             {key: torch.randn(3) for key in ["a", "b", "c"]}, [], device=device
         )
+        if device.type == "cuda":
+            with pytest.raises(RuntimeError, match="cannot pin"):
+                pin_mem(td)
+            return
         pin_mem(td)
         for item in td.values():
             assert item.is_pinned
@@ -1667,7 +1699,6 @@ class TestTransforms:
         assert obs_spec.shape[-1] == 4 * env.base_env.observation_spec[key].shape[-1]
 
     def test_insert(self):
-
         env = ContinuousActionVecMockEnv()
         obs_spec = env.observation_spec
         (key,) = itertools.islice(obs_spec.keys(), 1)
@@ -1801,7 +1832,7 @@ class TestTransforms:
         while max_steps is None or i < max_steps:
             step_counter._step(td)
             i += 1
-            assert torch.all(td.get("step_count") == i)
+            assert torch.all(td.get("step_count") == i), (td.get("step_count"), i)
             if max_steps is None:
                 break
         if max_steps is not None:

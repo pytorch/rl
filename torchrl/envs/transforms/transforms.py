@@ -13,6 +13,7 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import expand_as_right
 from torch import nn, Tensor
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -2632,19 +2633,19 @@ class RewardSum(Transform):
             )
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key in tensordict.keys():
-                    z = torch.zeros_like(tensordict[out_key])
-                    _reset = _reset.view_as(z)
-                    tensordict[out_key][_reset] = z[_reset]
+                    value = tensordict[out_key]
+                    tensordict[out_key] = value.masked_fill(
+                        expand_as_right(_reset, value), 0.0
+                    )
                 elif in_key == "reward":
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
-                    z = self.parent.reward_spec.zero(self.parent.batch_size)
-                    tensordict[out_key] = z
+                    tensordict[out_key] = self.parent.reward_spec.zero()
                 else:
                     try:
-                        tensordict[out_key] = self.parent.observation_spec[in_key].zero(
-                            self.parent.batch_size
-                        )
+                        tensordict[out_key] = self.parent.observation_spec[
+                            in_key
+                        ].zero()
                     except KeyError as err:
                         raise KeyError(
                             f"The key {in_key} was not found in the parent "
@@ -2682,7 +2683,6 @@ class RewardSum(Transform):
 
         episode_specs = {}
         if isinstance(reward_spec, CompositeSpec):
-
             # If reward_spec is a CompositeSpec, all in_keys should be keys of reward_spec
             if not all(k in reward_spec.keys() for k in self.in_keys):
                 raise KeyError("Not all in_keys are present in ´reward_spec´")
@@ -2697,7 +2697,6 @@ class RewardSum(Transform):
                 episode_specs.update({out_key: episode_spec})
 
         else:
-
             # If reward_spec is not a CompositeSpec, the only in_key should be ´reward´
             if not set(self.in_keys) == {"reward"}:
                 raise KeyError(
@@ -2747,39 +2746,36 @@ class StepCounter(Transform):
                 tensordict.batch_size, dtype=torch.bool, device=tensordict.device
             ),
         )
+        step_count = tensordict.get(
+            "step_count",
+            torch.zeros(
+                tensordict.batch_size,
+                dtype=torch.int64,
+                device=tensordict.device,
+            ),
+        )
+        step_count[_reset] = 0
         tensordict.set(
             "step_count",
-            (~_reset)
-            * tensordict.get(
-                "step_count",
-                torch.zeros(
-                    tensordict.batch_size,
-                    dtype=torch.int64,
-                    device=tensordict.device,
-                ),
-            ),
+            step_count,
         )
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        next_step_count = (
-            tensordict.get(
-                "step_count",
-                torch.zeros(
-                    tensordict.batch_size,
-                    dtype=torch.int64,
-                    device=tensordict.device,
-                ),
-            )
-            + 1
+        step_count = tensordict.get(
+            "step_count",
+            torch.zeros(
+                tensordict.batch_size,
+                dtype=torch.int64,
+                device=tensordict.device,
+            ),
         )
+        next_step_count = step_count + 1
         tensordict.set("step_count", next_step_count)
         if self.max_steps is not None:
-            tensordict.set(
-                "done",
-                tensordict.get("done")
-                | (next_step_count >= self.max_steps).unsqueeze(-1),
-            )
+            done = tensordict.get("done")
+            done = done | (next_step_count >= self.max_steps).unsqueeze(-1)
+            tensordict.set("done", done)
         return tensordict
 
     def transform_observation_spec(
@@ -2882,3 +2878,106 @@ class SelectTransform(Transform):
                 if key in self.selected_keys
             }
         )
+
+
+class TimeMaxPool(Transform):
+    """Take the maximum value in each position over the last T observations.
+
+    This transform take the maximum value in each position for all in_keys tensors over the last T time steps.
+
+    Args:
+        in_keys (sequence of str, optional): input keys on which the max pool will be applied. Defaults to "observation" if left empty.
+        out_keys (sequence of str, optional): output keys where the output will be written. Defaults to `in_keys` if left empty.
+        T (int, optional): Number of time steps over which to apply max pooling.
+    """
+
+    inplace = False
+    invertible = False
+
+    def __init__(
+        self,
+        in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
+        T: int = 1,
+    ):
+        if in_keys is None:
+            in_keys = ["observation"]
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        if T < 1:
+            raise ValueError(
+                "TimeMaxPoolTranform T parameter should have a value greater or equal to one."
+            )
+        if len(self.in_keys) != len(self.out_keys):
+            raise ValueError(
+                "TimeMaxPoolTranform in_keys and out_keys don't have the same number of elements"
+            )
+        self.buffer_size = T
+        for in_key in self.in_keys:
+            buffer_name = f"_maxpool_buffer_{in_key}"
+            setattr(
+                self,
+                buffer_name,
+                torch.nn.parameter.UninitializedBuffer(
+                    device=torch.device("cpu"), dtype=torch.get_default_dtype()
+                ),
+            )
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Resets _buffers."""
+        # Non-batched environments
+        if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
+            for in_key in self.in_keys:
+                buffer_name = f"_maxpool_buffer_{in_key}"
+                buffer = getattr(self, buffer_name)
+                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                    continue
+                buffer.fill_(0.0)
+
+        # Batched environments
+        else:
+            _reset = tensordict.get(
+                "_reset",
+                torch.ones(
+                    tensordict.batch_size,
+                    dtype=torch.bool,
+                    device=tensordict.device,
+                ),
+            )
+            for in_key in self.in_keys:
+                buffer_name = f"_maxpool_buffer_{in_key}"
+                buffer = getattr(self, buffer_name)
+                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                    continue
+                buffer[:, _reset] = 0.0
+
+        return tensordict
+
+    def _make_missing_buffer(self, data, buffer_name):
+        buffer = getattr(self, buffer_name)
+        buffer.materialize((self.buffer_size,) + data.shape)
+        buffer = buffer.to(data.dtype).to(data.device).zero_()
+        setattr(self, buffer_name, buffer)
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Update the episode tensordict with max pooled keys."""
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            # Lazy init of buffers
+            buffer_name = f"_maxpool_buffer_{in_key}"
+            buffer = getattr(self, buffer_name)
+            if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                data = tensordict[in_key]
+                self._make_missing_buffer(data, buffer_name)
+            # shift obs 1 position to the right
+            buffer.copy_(torch.roll(buffer, shifts=1, dims=0))
+            # add new obs
+            buffer[0].copy_(tensordict[in_key])
+            # apply max pooling
+            pooled_tensor, _ = buffer.max(dim=0)
+            # add to tensordict
+            tensordict.set(out_key, pooled_tensor)
+
+        return tensordict
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        return observation_spec

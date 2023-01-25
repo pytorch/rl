@@ -422,7 +422,9 @@ class Trainer:
             batch = self._process_batch_hook(batch)
             self._pre_steps_log_hook(batch)
             current_frames = (
-                batch.get("mask", torch.tensor(batch.numel())).sum().item()
+                batch.get(("collector", "mask"), torch.tensor(batch.numel()))
+                .sum()
+                .item()
                 * self.frame_skip
             )
             self.collected_frames += current_frames
@@ -641,8 +643,8 @@ class ReplayBufferTrainer(TrainerHookBase):
 
     def extend(self, batch: TensorDictBase) -> TensorDictBase:
         if self.flatten_tensordicts:
-            if "mask" in batch.keys():
-                batch = batch[batch.get("mask")]
+            if ("collector", "mask") in batch.keys(True):
+                batch = batch[batch.get(("collector", "mask"))]
             else:
                 batch = batch.reshape(-1)
         else:
@@ -803,9 +805,11 @@ class LogReward(TrainerHookBase):
         self.log_pbar = log_pbar
 
     def __call__(self, batch: TensorDictBase) -> Dict:
-        if "mask" in batch.keys():
+        if ("collector", "mask") in batch.keys(True):
             return {
-                self.logname: batch.get("reward")[batch.get("mask")].mean().item(),
+                self.logname: batch.get("reward")[batch.get(("collector", "mask"))]
+                .mean()
+                .item(),
                 "log_pbar": self.log_pbar,
             }
         return {
@@ -849,8 +853,8 @@ class RewardNormalizer(TrainerHookBase):
     @torch.no_grad()
     def update_reward_stats(self, batch: TensorDictBase) -> None:
         reward = batch.get("reward")
-        if "mask" in batch.keys():
-            reward = reward[batch.get("mask")]
+        if ("collector", "mask") in batch.keys(True):
+            reward = reward[batch.get(("collector", "mask"))]
         if self._update_has_been_called and not self._normalize_has_been_called:
             # We'd like to check that rewards are normalized. Problem is that the trainer can collect data without calling steps...
             # raise RuntimeError(
@@ -926,8 +930,8 @@ def mask_batch(batch: TensorDictBase) -> TensorDictBase:
         >>> trainer.register_op("batch_process", mask_batch)
 
     """
-    if "mask" in batch.keys():
-        mask = batch.get("mask")
+    if ("collector", "mask") in batch.keys(True):
+        mask = batch.get(("collector", "mask"))
         return batch[mask]
     return batch
 
@@ -987,10 +991,10 @@ class BatchSubSampler(TrainerHookBase):
             return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
 
         sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
-        if "mask" in batch.keys():
+        if ("collector", "mask") in batch.keys(True):
             # if a valid mask is present, it's important to sample only
             # valid steps
-            traj_len = batch.get("mask").sum(-1)
+            traj_len = batch.get(("collector", "mask")).sum(-1)
             sub_traj_len = max(
                 self.min_sub_traj_len,
                 min(sub_traj_len, traj_len.min().int().item()),
@@ -1042,7 +1046,9 @@ class BatchSubSampler(TrainerHookBase):
             ),
             batch_size=(batch_size, sub_traj_len),
         )
-        if "mask" in batch.keys() and not td.get("mask").all():
+        if ("collector", "mask") in batch.keys(True) and not td.get(
+            ("collector", "mask")
+        ).all():
             raise RuntimeError("Sampled invalid steps")
         return td
 
@@ -1252,8 +1258,10 @@ class CountFramesLog(TrainerHookBase):
         self.log_pbar = log_pbar
 
     def __call__(self, batch: TensorDictBase) -> Dict:
-        if "mask" in batch.keys():
-            current_frames = batch.get("mask").sum().item() * self.frame_skip
+        if ("collector", "mask") in batch.keys(True):
+            current_frames = (
+                batch.get(("collector", "mask")).sum().item() * self.frame_skip
+            )
         else:
             current_frames = batch.numel() * self.frame_skip
         self.frame_count += current_frames

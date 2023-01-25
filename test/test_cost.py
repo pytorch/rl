@@ -7,6 +7,8 @@ import argparse
 import re
 from copy import deepcopy
 
+from packaging import version as pack_version
+
 _has_functorch = True
 try:
     import functorch as ft  # noqa
@@ -87,6 +89,7 @@ from torchrl.objectives.utils import HardUpdate, hold_out_net, SoftUpdate
 from torchrl.objectives.value.advantages import GAE, TDEstimate, TDLambdaEstimate
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
+    td_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_generalized_advantage_estimate,
     vec_td_lambda_advantage_estimate,
@@ -272,7 +275,7 @@ class TestDQN:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
@@ -506,7 +509,7 @@ class TestDDPG:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -734,7 +737,7 @@ class TestTD3:
                 "observation": obs * mask.to(obs.dtype),
                 "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
             },
@@ -914,6 +917,7 @@ class TestTD3:
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 
+@pytest.mark.parametrize("version", [1, 2])
 class TestSAC:
     seed = 0
 
@@ -1010,7 +1014,7 @@ class TestSAC:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -1026,7 +1030,9 @@ class TestSAC:
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_sac(self, delay_value, delay_actor, delay_qvalue, num_qvalue, device):
+    def test_sac(
+        self, delay_value, delay_actor, delay_qvalue, num_qvalue, device, version
+    ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
 
@@ -1035,7 +1041,10 @@ class TestSAC:
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
-        value = self._create_mock_value(device=device)
+        if version == 1:
+            value = self._create_mock_value(device=device)
+        else:
+            value = None
 
         kwargs = {}
         if delay_actor:
@@ -1065,12 +1074,13 @@ class TestSAC:
                 continue
             loss[k].sum().backward(retain_graph=True)
             if k == "loss_actor":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params.values(
-                        include_nested=True, leaves_only=True
+                if version == 1:
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.value_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
                     for p in loss_fn.qvalue_network_params.values(
@@ -1083,7 +1093,7 @@ class TestSAC:
                         include_nested=True, leaves_only=True
                     )
                 )
-            elif k == "loss_value":
+            elif k == "loss_value" and version == 1:
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
                     for p in loss_fn.actor_network_params.values(
@@ -1109,12 +1119,13 @@ class TestSAC:
                         include_nested=True, leaves_only=True
                     )
                 )
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params.values(
-                        include_nested=True, leaves_only=True
+                if version == 1:
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.value_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
                 assert not any(
                     (p.grad is None) or (p.grad == 0).all()
                     for p in loss_fn.qvalue_network_params.values(
@@ -1128,12 +1139,13 @@ class TestSAC:
                         include_nested=True, leaves_only=True
                     )
                 )
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params.values(
-                        include_nested=True, leaves_only=True
+                if version == 1:
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.value_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
                     for p in loss_fn.qvalue_network_params.values(
@@ -1164,7 +1176,15 @@ class TestSAC:
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_sac_batcher(
-        self, n, delay_value, delay_actor, delay_qvalue, num_qvalue, device, gamma=0.9
+        self,
+        n,
+        delay_value,
+        delay_actor,
+        delay_qvalue,
+        num_qvalue,
+        device,
+        version,
+        gamma=0.9,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
@@ -1173,7 +1193,10 @@ class TestSAC:
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
-        value = self._create_mock_value(device=device)
+        if version == 1:
+            value = self._create_mock_value(device=device)
+        else:
+            value = None
 
         kwargs = {}
         if delay_actor:
@@ -1236,12 +1259,13 @@ class TestSAC:
                 include_nested=True, leaves_only=True
             )
         ]
-        target_value = [
-            p.clone()
-            for p in loss_fn.target_value_network_params.values(
-                include_nested=True, leaves_only=True
-            )
-        ]
+        if version == 1:
+            target_value = [
+                p.clone()
+                for p in loss_fn.target_value_network_params.values(
+                    include_nested=True, leaves_only=True
+                )
+            ]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
         target_actor2 = [
@@ -1256,12 +1280,13 @@ class TestSAC:
                 include_nested=True, leaves_only=True
             )
         ]
-        target_value2 = [
-            p.clone()
-            for p in loss_fn.target_value_network_params.values(
-                include_nested=True, leaves_only=True
-            )
-        ]
+        if version == 1:
+            target_value2 = [
+                p.clone()
+                for p in loss_fn.target_value_network_params.values(
+                    include_nested=True, leaves_only=True
+                )
+            ]
         if loss_fn.delay_actor:
             assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
         else:
@@ -1276,12 +1301,15 @@ class TestSAC:
             assert not any(
                 (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
             )
-        if loss_fn.delay_value:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
-        else:
-            assert not any(
-                (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
-            )
+        if version == 1:
+            if loss_fn.delay_value:
+                assert all(
+                    (p1 == p2).all() for p1, p2 in zip(target_value, target_value2)
+                )
+            else:
+                assert not any(
+                    (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
+                )
 
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
@@ -1415,7 +1443,7 @@ class TestREDQ:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -1854,7 +1882,7 @@ class TestPPO:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "sample_log_prob": (torch.randn_like(action[..., 1]) / 10).masked_fill_(
@@ -2009,6 +2037,8 @@ class TestPPO:
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_ppo_diff(self, loss_class, device, gradient_mode, advantage):
+        if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
+            raise pytest.skip("make_functional_with_buffers needs to be changed")
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
 
@@ -2127,7 +2157,7 @@ class TestA2C:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
@@ -2219,6 +2249,8 @@ class TestA2C:
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_a2c_diff(self, device, gradient_mode, advantage):
+        if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
+            raise pytest.skip("make_functional_with_buffers needs to be changed")
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_a2c(device=device)
 
@@ -2925,208 +2957,473 @@ def test_updater(mode, value_network_update_interval, device, dtype):
     assert d2 < 1e-6
 
 
-@pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
-@pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
-@pytest.mark.parametrize("N", [(3,), (7, 3)])
-@pytest.mark.parametrize("T", [3, 5, 200])
-# @pytest.mark.parametrize("random_gamma,rolling_gamma", [[True, False], [True, True], [False, None]])
-@pytest.mark.parametrize("random_gamma,rolling_gamma", [[False, None]])
-def test_tdlambda(device, gamma, lmbda, N, T, random_gamma, rolling_gamma):
-    torch.manual_seed(0)
+class TestValues:
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
+    @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+    @pytest.mark.parametrize("N", [(3,), (7, 3)])
+    @pytest.mark.parametrize("T", [3, 5, 200])
+    # @pytest.mark.parametrize("random_gamma,rolling_gamma", [[True, False], [True, True], [False, None]])
+    @pytest.mark.parametrize("random_gamma,rolling_gamma", [[False, None]])
+    def test_tdlambda(self, device, gamma, lmbda, N, T, random_gamma, rolling_gamma):
+        torch.manual_seed(0)
 
-    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool).bernoulli_(0.1)
-    reward = torch.randn(*N, T, 1, device=device)
-    state_value = torch.randn(*N, T, 1, device=device)
-    next_state_value = torch.randn(*N, T, 1, device=device)
-    if random_gamma:
-        gamma = torch.rand_like(reward) * gamma
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool).bernoulli_(0.1)
+        reward = torch.randn(*N, T, 1, device=device)
+        state_value = torch.randn(*N, T, 1, device=device)
+        next_state_value = torch.randn(*N, T, 1, device=device)
+        if random_gamma:
+            gamma = torch.rand_like(reward) * gamma
 
-    r1 = vec_td_lambda_advantage_estimate(
-        gamma, lmbda, state_value, next_state_value, reward, done, rolling_gamma
-    )
-    r2 = td_lambda_advantage_estimate(
-        gamma, lmbda, state_value, next_state_value, reward, done, rolling_gamma
-    )
-    torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
+        r1 = vec_td_lambda_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done, rolling_gamma
+        )
+        r2 = td_lambda_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done, rolling_gamma
+        )
+        torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 0.5, 0.1])
+    @pytest.mark.parametrize("lmbda", [0.99, 0.5, 0.1])
+    @pytest.mark.parametrize("N", [(3,), (7, 3)])
+    @pytest.mark.parametrize("T", [200, 5, 3])
+    @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+    @pytest.mark.parametrize("has_done", [True, False])
+    def test_gae(self, device, gamma, lmbda, N, T, dtype, has_done):
+        torch.manual_seed(0)
 
-@pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("gamma", [0.99, 0.5, 0.1])
-@pytest.mark.parametrize("lmbda", [0.99, 0.5, 0.1])
-@pytest.mark.parametrize("N", [(3,), (7, 3)])
-@pytest.mark.parametrize("T", [200, 5, 3])
-@pytest.mark.parametrize("dtype", [torch.float, torch.double])
-@pytest.mark.parametrize("dones", [True, False])
-def test_gae(device, gamma, lmbda, N, T, dtype, dones):
-    torch.manual_seed(0)
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        if has_done:
+            done = done.bernoulli_(0.1)
+        reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
 
-    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
-    if dones:
-        done = done.bernoulli_(0.1).cumsum(-2).to(torch.bool)
-    reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
-    state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
-    next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        r1 = vec_generalized_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done
+        )
+        r2 = generalized_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done
+        )
+        torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
-    r1 = vec_generalized_advantage_estimate(
-        gamma, lmbda, state_value, next_state_value, reward, done
-    )
-    r2 = generalized_advantage_estimate(
-        gamma, lmbda, state_value, next_state_value, reward, done
-    )
-    torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
+    @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+    @pytest.mark.parametrize("N", [(3,), (7, 3)])
+    @pytest.mark.parametrize("T", [3, 5, 200])
+    @pytest.mark.parametrize("has_done", [True, False])
+    def test_tdlambda_tensor_gamma(self, device, gamma, lmbda, N, T, has_done):
+        """Tests vec_td_lambda_advantage_estimate against itself with
+        gamma being a tensor or a scalar
 
+        """
+        torch.manual_seed(0)
 
-@pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
-@pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
-@pytest.mark.parametrize("N", [(3,), (7, 3)])
-@pytest.mark.parametrize("T", [3, 5, 200])
-def test_tdlambda_tensor_gamma(device, gamma, lmbda, N, T):
-    """Tests vec_td_lambda_advantage_estimate against itself with
-    gamma being a tensor or a scalar
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        if has_done:
+            done = done.bernoulli_(0.1)
+        reward = torch.randn(*N, T, 1, device=device)
+        state_value = torch.randn(*N, T, 1, device=device)
+        next_state_value = torch.randn(*N, T, 1, device=device)
 
-    """
-    torch.manual_seed(0)
+        gamma_tensor = torch.full((*N, T, 1), gamma, device=device)
 
-    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
-    reward = torch.randn(*N, T, 1, device=device)
-    state_value = torch.randn(*N, T, 1, device=device)
-    next_state_value = torch.randn(*N, T, 1, device=device)
+        v1 = vec_td_lambda_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done
+        )
+        v2 = vec_td_lambda_advantage_estimate(
+            gamma_tensor, lmbda, state_value, next_state_value, reward, done
+        )
 
-    gamma_tensor = torch.full((*N, T, 1), gamma, device=device)
+        torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
 
-    v1 = vec_td_lambda_advantage_estimate(
-        gamma, lmbda, state_value, next_state_value, reward, done
-    )
-    v2 = vec_td_lambda_advantage_estimate(
-        gamma_tensor, lmbda, state_value, next_state_value, reward, done
-    )
+        # # same with last done being true
+        done[..., -1, :] = True  # terminating trajectory
+        gamma_tensor[..., -1, :] = 0.0
 
-    torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+        v1 = vec_td_lambda_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done
+        )
+        v2 = vec_td_lambda_advantage_estimate(
+            gamma_tensor, lmbda, state_value, next_state_value, reward, done
+        )
 
-    # # same with last done being true
-    done[..., -1, :] = True  # terminating trajectory
-    gamma_tensor[..., -1, :] = 0.0
+        torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
 
-    v1 = vec_td_lambda_advantage_estimate(
-        gamma, lmbda, state_value, next_state_value, reward, done
-    )
-    v2 = vec_td_lambda_advantage_estimate(
-        gamma_tensor, lmbda, state_value, next_state_value, reward, done
-    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
+    @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+    @pytest.mark.parametrize("N", [(3,), (7, 3)])
+    @pytest.mark.parametrize("T", [3, 5, 50])
+    @pytest.mark.parametrize("has_done", [True, False])
+    def test_vectdlambda_tensor_gamma(
+        self, device, gamma, lmbda, N, T, dtype_fixture, has_done  # noqa
+    ):
+        """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+        with gamma being a tensor or a scalar
 
-    torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+        """
 
+        torch.manual_seed(0)
 
-@pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
-@pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
-@pytest.mark.parametrize("N", [(3,), (7, 3)])
-@pytest.mark.parametrize("T", [3, 5, 50])
-def test_vectdlambda_tensor_gamma(device, gamma, lmbda, N, T, dtype_fixture):  # noqa
-    """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
-    with gamma being a tensor or a scalar
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        if has_done:
+            done = done.bernoulli_(0.1)
+        reward = torch.randn(*N, T, 1, device=device)
+        state_value = torch.randn(*N, T, 1, device=device)
+        next_state_value = torch.randn(*N, T, 1, device=device)
 
-    """
+        gamma_tensor = torch.full((*N, T, 1), gamma, device=device)
 
-    torch.manual_seed(0)
+        v1 = td_lambda_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done
+        )
+        v2 = vec_td_lambda_advantage_estimate(
+            gamma_tensor, lmbda, state_value, next_state_value, reward, done
+        )
 
-    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
-    reward = torch.randn(*N, T, 1, device=device)
-    state_value = torch.randn(*N, T, 1, device=device)
-    next_state_value = torch.randn(*N, T, 1, device=device)
+        torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
 
-    gamma_tensor = torch.full((*N, T, 1), gamma, device=device)
+        # same with last done being true
+        done[..., -1, :] = True  # terminating trajectory
+        gamma_tensor[..., -1, :] = 0.0
 
-    v1 = td_lambda_advantage_estimate(
-        gamma, lmbda, state_value, next_state_value, reward, done
-    )
-    v2 = vec_td_lambda_advantage_estimate(
-        gamma_tensor, lmbda, state_value, next_state_value, reward, done
-    )
+        v1 = td_lambda_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done
+        )
+        v2 = vec_td_lambda_advantage_estimate(
+            gamma_tensor, lmbda, state_value, next_state_value, reward, done
+        )
 
-    torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
 
-    # same with last done being true
-    done[..., -1, :] = True  # terminating trajectory
-    gamma_tensor[..., -1, :] = 0.0
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+    @pytest.mark.parametrize("N", [(3,), (7, 3)])
+    @pytest.mark.parametrize("T", [50, 3])
+    @pytest.mark.parametrize("rolling_gamma", [True, False, None])
+    @pytest.mark.parametrize("has_done", [True, False])
+    @pytest.mark.parametrize("seed", range(1))
+    def test_vectdlambda_rand_gamma(
+        self, device, lmbda, N, T, rolling_gamma, dtype_fixture, has_done, seed  # noqa
+    ):
+        """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+        with gamma being a random tensor
 
-    v1 = td_lambda_advantage_estimate(
-        gamma, lmbda, state_value, next_state_value, reward, done
-    )
-    v2 = vec_td_lambda_advantage_estimate(
-        gamma_tensor, lmbda, state_value, next_state_value, reward, done
-    )
+        """
+        torch.manual_seed(seed)
 
-    torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        if has_done:
+            done = done.bernoulli_(0.1)
+        reward = torch.randn(*N, T, 1, device=device)
+        state_value = torch.randn(*N, T, 1, device=device)
+        next_state_value = torch.randn(*N, T, 1, device=device)
 
+        # avoid low values of gamma
+        gamma_tensor = 0.5 + torch.rand_like(next_state_value) / 2
 
-@pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
-@pytest.mark.parametrize("N", [(3,), (7, 3)])
-@pytest.mark.parametrize("T", [50, 3])
-@pytest.mark.parametrize("rolling_gamma", [True, False, None])
-def test_vectdlambda_rand_gamma(
-    device, lmbda, N, T, rolling_gamma, dtype_fixture  # noqa
-):
-    """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
-    with gamma being a random tensor
+        v1 = td_lambda_advantage_estimate(
+            gamma_tensor,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            rolling_gamma,
+        )
+        if rolling_gamma is False and not done[..., 1:, :][done[..., :-1, :]].all():
+            # if a not-done follows a done, then rolling_gamma=False cannot be used
+            with pytest.raises(
+                NotImplementedError, match="When using rolling_gamma=False"
+            ):
+                vec_td_lambda_advantage_estimate(
+                    gamma_tensor,
+                    lmbda,
+                    state_value,
+                    next_state_value,
+                    reward,
+                    done,
+                    rolling_gamma,
+                )
+            return
+        v2 = vec_td_lambda_advantage_estimate(
+            gamma_tensor,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            rolling_gamma,
+        )
+        torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
 
-    """
-    torch.manual_seed(0)
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("gamma", [0.99, "rand"])
+    @pytest.mark.parametrize("N", [(3,), (3, 7)])
+    @pytest.mark.parametrize("T", [3, 5, 200])
+    @pytest.mark.parametrize("rolling_gamma", [True, False])
+    def test_custom_conv1d_tensor(self, device, gamma, N, T, rolling_gamma):
+        """
+        Tests the _custom_conv1d logic against a manual for-loop implementation
+        """
+        torch.manual_seed(0)
 
-    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
-    reward = torch.randn(*N, T, 1, device=device)
-    state_value = torch.randn(*N, T, 1, device=device)
-    next_state_value = torch.randn(*N, T, 1, device=device)
+        if gamma == "rand":
+            gamma = torch.rand(*N, T, 1, device=device)
+            rand_gamma = True
+        else:
+            gamma = torch.full((*N, T, 1), gamma, device=device)
+            rand_gamma = False
 
-    # avoid low values of gamma
-    gamma_tensor = 0.5 + torch.rand_like(next_state_value) / 2
+        values = torch.randn(*N, 1, T, device=device)
+        out = torch.zeros(*N, 1, T, device=device)
+        if rand_gamma and not rolling_gamma:
+            for i in range(T):
+                for j in reversed(range(i, T)):
+                    out[..., i] = out[..., i] * gamma[..., i, :] + values[..., j]
+        else:
+            prev_val = 0.0
+            for i in reversed(range(T)):
+                prev_val = out[..., i] = prev_val * gamma[..., i, :] + values[..., i]
 
-    v1 = td_lambda_advantage_estimate(
-        gamma_tensor, lmbda, state_value, next_state_value, reward, done, rolling_gamma
-    )
-    v2 = vec_td_lambda_advantage_estimate(
-        gamma_tensor, lmbda, state_value, next_state_value, reward, done, rolling_gamma
-    )
-    torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+        gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
+        gammas = gammas.cumprod(-2)
+        out_custom = _custom_conv1d(values.view(-1, 1, T), gammas).reshape(values.shape)
 
+        torch.testing.assert_close(out, out_custom, rtol=1e-4, atol=1e-4)
 
-@pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("gamma", [0.99, "rand"])
-@pytest.mark.parametrize("N", [(3,), (3, 7)])
-@pytest.mark.parametrize("T", [3, 5, 200])
-@pytest.mark.parametrize("rolling_gamma", [True, False])
-def test_custom_conv1d_tensor(device, gamma, N, T, rolling_gamma):
-    """
-    Tests the _custom_conv1d logic against a manual for-loop implementation
-    """
-    torch.manual_seed(0)
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("N", [(3,), (3, 7)])
+    @pytest.mark.parametrize("T", [3, 5, 200])
+    @pytest.mark.parametrize("rolling_gamma", [True, False])
+    def test_successive_traj_tdlambda(self, device, N, T, rolling_gamma):
+        """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+        with gamma being a random tensor
 
-    if gamma == "rand":
-        gamma = torch.rand(*N, T, 1, device=device)
-        rand_gamma = True
-    else:
-        gamma = torch.full((*N, T, 1), gamma, device=device)
-        rand_gamma = False
+        """
+        torch.manual_seed(0)
 
-    values = torch.randn(*N, 1, T, device=device)
-    out = torch.zeros(*N, 1, T, device=device)
-    if rand_gamma and not rolling_gamma:
-        for i in range(T):
-            for j in reversed(range(i, T)):
-                out[..., i] = out[..., i] * gamma[..., i, :] + values[..., j]
-    else:
-        prev_val = 0.0
-        for i in reversed(range(T)):
-            prev_val = out[..., i] = prev_val * gamma[..., i, :] + values[..., i]
+        lmbda = torch.rand([]).item()
 
-    gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
-    gammas = gammas.cumprod(-2)
-    out_custom = _custom_conv1d(values.view(-1, 1, T), gammas).reshape(values.shape)
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        done[..., T // 2 - 1, :] = 1
 
-    torch.testing.assert_close(out, out_custom, rtol=1e-4, atol=1e-4)
+        reward = torch.randn(*N, T, 1, device=device)
+        state_value = torch.randn(*N, T, 1, device=device)
+        next_state_value = torch.randn(*N, T, 1, device=device)
+
+        # avoid low values of gamma
+        gamma_tensor = 0.5 + torch.rand_like(next_state_value) / 2
+
+        v1 = td_lambda_advantage_estimate(
+            gamma_tensor,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            rolling_gamma,
+        )
+        v1a = td_lambda_advantage_estimate(
+            gamma_tensor[..., : T // 2, :],
+            lmbda,
+            state_value[..., : T // 2, :],
+            next_state_value[..., : T // 2, :],
+            reward[..., : T // 2, :],
+            done[..., : T // 2, :],
+            rolling_gamma,
+        )
+        v1b = td_lambda_advantage_estimate(
+            gamma_tensor[..., T // 2 :, :],
+            lmbda,
+            state_value[..., T // 2 :, :],
+            next_state_value[..., T // 2 :, :],
+            reward[..., T // 2 :, :],
+            done[..., T // 2 :, :],
+            rolling_gamma,
+        )
+        torch.testing.assert_close(v1, torch.cat([v1a, v1b], -2), rtol=1e-4, atol=1e-4)
+
+        if not rolling_gamma:
+            with pytest.raises(
+                NotImplementedError, match="When using rolling_gamma=False"
+            ):
+                vec_td_lambda_advantage_estimate(
+                    gamma_tensor,
+                    lmbda,
+                    state_value,
+                    next_state_value,
+                    reward,
+                    done,
+                    rolling_gamma,
+                )
+            return
+        v2 = vec_td_lambda_advantage_estimate(
+            gamma_tensor,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            rolling_gamma,
+        )
+        v2a = vec_td_lambda_advantage_estimate(
+            gamma_tensor[..., : T // 2, :],
+            lmbda,
+            state_value[..., : T // 2, :],
+            next_state_value[..., : T // 2, :],
+            reward[..., : T // 2, :],
+            done[..., : T // 2, :],
+            rolling_gamma,
+        )
+        v2b = vec_td_lambda_advantage_estimate(
+            gamma_tensor[..., T // 2 :, :],
+            lmbda,
+            state_value[..., T // 2 :, :],
+            next_state_value[..., T // 2 :, :],
+            reward[..., T // 2 :, :],
+            done[..., T // 2 :, :],
+            rolling_gamma,
+        )
+
+        torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(v1a, v2a, rtol=1e-4, atol=1e-4)
+
+        torch.testing.assert_close(v1b, v2b, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(v2, torch.cat([v2a, v2b], -2), rtol=1e-4, atol=1e-4)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("N", [(3,), (3, 7)])
+    @pytest.mark.parametrize("T", [3, 5, 200])
+    def test_successive_traj_tdadv(
+        self,
+        device,
+        N,
+        T,
+    ):
+        """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+        with gamma being a random tensor
+
+        """
+        torch.manual_seed(0)
+
+        lmbda = torch.rand([]).item()
+
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        done[..., T // 2 - 1, :] = 1
+
+        reward = torch.randn(*N, T, 1, device=device)
+        state_value = torch.randn(*N, T, 1, device=device)
+        next_state_value = torch.randn(*N, T, 1, device=device)
+
+        # avoid low values of gamma
+        gamma_tensor = 0.5 + torch.rand_like(next_state_value) / 2
+
+        v1 = td_advantage_estimate(
+            gamma_tensor,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+        )
+        v1a = td_advantage_estimate(
+            gamma_tensor[..., : T // 2, :],
+            state_value[..., : T // 2, :],
+            next_state_value[..., : T // 2, :],
+            reward[..., : T // 2, :],
+            done[..., : T // 2, :],
+        )
+        v1b = td_advantage_estimate(
+            gamma_tensor[..., T // 2 :, :],
+            state_value[..., T // 2 :, :],
+            next_state_value[..., T // 2 :, :],
+            reward[..., T // 2 :, :],
+            done[..., T // 2 :, :],
+        )
+        torch.testing.assert_close(v1, torch.cat([v1a, v1b], -2), rtol=1e-4, atol=1e-4)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("N", [(3,), (3, 7)])
+    @pytest.mark.parametrize("T", [3, 5, 200])
+    def test_successive_traj_gae(
+        self,
+        device,
+        N,
+        T,
+    ):
+        """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+        with gamma being a random tensor
+
+        """
+        torch.manual_seed(0)
+
+        lmbda = torch.rand([]).item()
+
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        done[..., T // 2 - 1, :] = 1
+
+        reward = torch.randn(*N, T, 1, device=device)
+        state_value = torch.randn(*N, T, 1, device=device)
+        next_state_value = torch.randn(*N, T, 1, device=device)
+
+        # avoid low values of gamma
+        gamma_tensor = 0.95
+
+        v1 = generalized_advantage_estimate(
+            gamma_tensor,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+        )[0]
+        v1a = generalized_advantage_estimate(
+            gamma_tensor,
+            lmbda,
+            state_value[..., : T // 2, :],
+            next_state_value[..., : T // 2, :],
+            reward[..., : T // 2, :],
+            done[..., : T // 2, :],
+        )[0]
+        v1b = generalized_advantage_estimate(
+            gamma_tensor,
+            lmbda,
+            state_value[..., T // 2 :, :],
+            next_state_value[..., T // 2 :, :],
+            reward[..., T // 2 :, :],
+            done[..., T // 2 :, :],
+        )[0]
+        torch.testing.assert_close(v1, torch.cat([v1a, v1b], -2), rtol=1e-4, atol=1e-4)
+
+        v2 = vec_generalized_advantage_estimate(
+            gamma_tensor,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+        )[0]
+        v2a = vec_generalized_advantage_estimate(
+            gamma_tensor,
+            lmbda,
+            state_value[..., : T // 2, :],
+            next_state_value[..., : T // 2, :],
+            reward[..., : T // 2, :],
+            done[..., : T // 2, :],
+        )[0]
+        v2b = vec_generalized_advantage_estimate(
+            gamma_tensor,
+            lmbda,
+            state_value[..., T // 2 :, :],
+            next_state_value[..., T // 2 :, :],
+            reward[..., T // 2 :, :],
+            done[..., T // 2 :, :],
+        )[0]
+        torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(v2, torch.cat([v2a, v2b], -2), rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.skipif(

@@ -318,9 +318,9 @@ def test_collector_env_reset():
     )
     for _data in collector:
         continue
-    steps = _data["step_count"]
+    steps = _data["collector", "step_count"]
     done = _data["done"].squeeze(-1)
-    traj_ids = _data["traj_ids"]
+    traj_ids = _data["collector", "traj_ids"]
     # we don't want just one done
     assert done.sum() > 3
     for i in traj_ids.unique(sorted=False):
@@ -378,7 +378,7 @@ def test_collector_done_persist(num_env, env_name, seed=5):
     for _, d in enumerate(collector):  # noqa
         break
     assert (d["done"].sum() >= 1).all()
-    assert torch.unique(d["traj_ids"]).shape[0] == num_env
+    assert torch.unique(d["collector", "traj_ids"]).shape[0] == num_env
 
     del collector
 
@@ -429,12 +429,15 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
         break
 
     assert d.ndimension() == 2
-    assert d["mask"].shape == d.shape
-    assert d["step_count"].shape == d.shape
-    assert d["traj_ids"].shape == d.shape
+    assert d["collector", "mask"].shape == d.shape
+    assert d["collector", "step_count"].shape == d.shape
+    assert d["collector", "traj_ids"].shape == d.shape
     for traj in d.unbind(0):
-        assert traj["traj_ids"].unique().numel() == 1
-        assert (traj["step_count"][1:] - traj["step_count"][:-1] == 1).all()
+        assert traj["collector", "traj_ids"].unique().numel() == 1
+        assert (
+            traj["collector", "step_count"][1:] - traj["collector", "step_count"][:-1]
+            == 1
+        ).all()
 
     del collector
 
@@ -1121,17 +1124,18 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     keys = {
         "action",
         "done",
+        "collector",
         "hidden1",
         "hidden2",
-        "mask",
+        ("collector", "mask"),
         ("next", "hidden1"),
         ("next", "hidden2"),
         ("next", "observation"),
         "next",
         "observation",
         "reward",
-        "step_count",
-        "traj_ids",
+        ("collector", "step_count"),
+        ("collector", "traj_ids"),
     }
     b = next(iter(collector))
 
