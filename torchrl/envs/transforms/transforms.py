@@ -130,7 +130,10 @@ class Transform(nn.Module):
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             if in_key in tensordict.keys(include_nested=True):
                 observation = self._apply_transform(tensordict.get(in_key))
-                tensordict.set(out_key, observation, )
+                tensordict.set(
+                    out_key,
+                    observation,
+                )
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -155,7 +158,10 @@ class Transform(nn.Module):
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
             if in_key in tensordict.keys(include_nested=True):
                 observation = self._inv_apply_transform(tensordict.get(in_key))
-                tensordict.set(out_key, observation, )
+                tensordict.set(
+                    out_key,
+                    observation,
+                )
         return tensordict
 
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:

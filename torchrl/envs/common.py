@@ -226,7 +226,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
-        run_type_checks: bool = True,
+        run_type_checks: bool = False,
     ):
         super().__init__()
         if device is not None:
@@ -376,12 +376,19 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # sanity check
         self._assert_tensordict_shape(tensordict)
 
-        tensordict.is_locked = True  # make sure _step does not modify the tensordict
+        tensordict.lock()  # make sure _step does not modify the tensordict
         tensordict_out = self._step(tensordict)
-        tensordict.is_locked = False
+        if tensordict_out is tensordict:
+            raise RuntimeError(
+                "EnvBase._step should return outplace changes to the input "
+                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
+                "tensordict.select()) inside _step before writing new tensors onto this new instance."
+            )
+        tensordict.unlock()
+
         obs_keys = set(self.observation_spec.keys())
         tensordict_out_select = tensordict_out.select(*obs_keys)
-        tensordict_out = tensordict_out.exclude(*obs_keys)
+        tensordict_out = tensordict_out.exclude(*obs_keys, inplace=True)
         tensordict_out.set("next", tensordict_out_select)
 
         reward = tensordict_out.get("reward")
@@ -409,12 +416,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             done = done.view(expected_done_shape)
             tensordict_out.set("done", done)
 
-        if tensordict_out is tensordict:
-            raise RuntimeError(
-                "EnvBase._step should return outplace changes to the input "
-                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
-                "tensordict.select()) inside _step before writing new tensors onto this new instance."
-            )
         if self.run_type_checks:
             for key in self._select_observation_keys(tensordict_out):
                 obs = tensordict_out.get(key)
@@ -432,7 +433,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 )
         tensordict.update(tensordict_out, inplace=self._inplace_update)
 
-        del tensordict_out
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -723,11 +723,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     raise Exception(
                         "dtype must be a numpy-compatible dtype. Got {dtype}"
                     )
-            value = torch.as_tensor(value, device=device)
+            value = torch.tensor(value, device=device)
         else:
             value = value.to(device)
-        # if dtype is not None:
-        #     value = value.to(dtype)
         return value
 
     def close(self):
