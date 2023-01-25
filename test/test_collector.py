@@ -316,7 +316,7 @@ def test_collector_env_reset():
     )
     for _data in collector:
         continue
-    steps = _data["step_count"][..., 1:]
+    steps = _data["collector", "_step_count"][..., 1:]
     done = _data["done"][..., :-1, :].squeeze(-1)
     # we don't want just one done
     assert done.sum() > 3
@@ -375,7 +375,7 @@ def test_collector_done_persist(num_env, env_name, seed=5):
         break
 
     assert (d["done"].sum(-2) >= 1).all()
-    assert torch.unique(d["traj_ids"], dim=-1).shape[-1] == 1
+    assert torch.unique(d["collector", "_traj_ids"], dim=-1).shape[-1] == 1
 
     del collector
 
@@ -427,11 +427,14 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 
     assert d.ndimension() == 2
     assert d["mask"].shape == d.shape
-    assert d["step_count"].shape == d.shape
-    assert d["traj_ids"].shape == d.shape
+    assert d["collector", "_step_count"].shape == d.shape
+    assert d["collector", "_traj_ids"].shape == d.shape
     for traj in d.unbind(0):
-        assert traj["traj_ids"].unique().numel() == 1
-        assert (traj["step_count"][1:] - traj["step_count"][:-1] == 1).all()
+        assert traj["collector", "_traj_ids"].unique().numel() == 1
+        assert (
+            traj["collector", "_step_count"][1:] - traj["collector", "_step_count"][:-1]
+            == 1
+        ).all()
 
     del collector
 
@@ -995,8 +998,8 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "next",
         "observation",
         "reward",
-        "step_count",
-        "traj_ids",
+        ("collector", "_step_count"),
+        ("collector", "_traj_ids"),
     }
     b = next(iter(collector))
 

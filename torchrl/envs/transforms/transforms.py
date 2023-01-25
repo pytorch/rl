@@ -2744,32 +2744,31 @@ class StepCounter(Transform):
                 tensordict.batch_size, dtype=torch.bool, device=tensordict.device
             ),
         )
+        step_count = tensordict.get(
+            "step_count",
+            torch.zeros(
+                tensordict.batch_size,
+                dtype=torch.int64,
+                device=tensordict.device,
+            ),
+        )
+        step_count[_reset] = 0
         tensordict.set(
             "step_count",
-            (~_reset)
-            * tensordict.get(
-                "step_count",
-                torch.zeros(
-                    tensordict.batch_size,
-                    dtype=torch.int64,
-                    device=tensordict.device,
-                ),
-            ),
+            step_count,
         )
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        next_step_count = (
-            tensordict.get(
-                "step_count",
-                torch.zeros(
-                    tensordict.batch_size,
-                    dtype=torch.int64,
-                    device=tensordict.device,
-                ),
-            )
-            + 1
+        step_count = tensordict.get(
+            "step_count",
+            torch.zeros(
+                tensordict.batch_size,
+                dtype=torch.int64,
+                device=tensordict.device,
+            ),
         )
+        next_step_count = step_count + 1
         tensordict.set("step_count", next_step_count)
         if self.max_steps is not None:
             tensordict.set(
