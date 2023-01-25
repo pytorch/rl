@@ -98,28 +98,28 @@ class TestSplits:
         traj_len=200,
     ):
         traj_ids = torch.arange(num_workers)
-        steps_count = torch.zeros(num_workers)
+        step_count = torch.zeros(num_workers)
         workers = torch.arange(num_workers)
 
         out = []
         for _ in range(traj_len):
-            done = steps_count == traj_ids  # traj_id 0 has 0 steps, 1 has 1 step etc.
+            done = step_count == traj_ids  # traj_id 0 has 0 steps, 1 has 1 step etc.
 
             td = TensorDict(
                 source={
-                    "traj_ids": traj_ids,
+                    ("collector", "traj_ids"): traj_ids,
                     "a": traj_ids.clone().unsqueeze(-1),
-                    "steps_count": steps_count,
+                    ("collector", "step_count"): step_count,
                     "workers": workers,
                     "done": done.unsqueeze(-1),
                 },
                 batch_size=[num_workers],
             )
             out.append(td.clone())
-            steps_count += 1
+            step_count += 1
 
             traj_ids[done] = traj_ids.max() + torch.arange(1, done.sum() + 1)
-            steps_count[done] = 0
+            step_count[done] = 0
 
         out = torch.stack(out, 1).contiguous()
         return out
@@ -132,15 +132,20 @@ class TestSplits:
         assert trajs.shape[0] == num_workers
         assert trajs.shape[1] == traj_len
         split_trajs = split_trajectories(trajs)
-        assert split_trajs.shape[0] == split_trajs.get("traj_ids").max() + 1
-        assert split_trajs.shape[1] == split_trajs.get("steps_count").max() + 1
+        assert (
+            split_trajs.shape[0] == split_trajs.get(("collector", "traj_ids")).max() + 1
+        )
+        assert (
+            split_trajs.shape[1]
+            == split_trajs.get(("collector", "step_count")).max() + 1
+        )
 
         assert split_trajs.get(("collector", "mask")).sum() == num_workers * traj_len
 
         assert split_trajs.get("done").sum(1).max() == 1
         out_mask = split_trajs[split_trajs.get(("collector", "mask"))]
         for i in range(split_trajs.shape[0]):
-            traj_id_split = split_trajs[i].get("traj_ids")[
+            traj_id_split = split_trajs[i].get(("collector", "traj_ids"))[
                 split_trajs[i].get(("collector", "mask"))
             ]
             assert 1 == len(traj_id_split.unique())
@@ -148,8 +153,8 @@ class TestSplits:
         for w in range(num_workers):
             assert (out_mask.get("workers") == w).sum() == traj_len
         # Assert that either the chain is not done XOR if it is it must have the desired length (equal to traj id by design)
-        for i in range(split_trajs.get("traj_ids").max()):
-            idx_traj_id = out_mask.get("traj_ids") == i
+        for i in range(split_trajs.get(("collector", "traj_ids")).max()):
+            idx_traj_id = out_mask.get(("collector", "traj_ids")) == i
             # (!=) == (xor)
             c1 = (idx_traj_id.sum() - 1 == i) and (
                 out_mask.get("done")[idx_traj_id].sum() == 1
@@ -164,8 +169,8 @@ class TestSplits:
             )
 
         assert (
-            split_trajs.get("traj_ids").unique().numel()
-            == split_trajs.get("traj_ids").max() + 1
+            split_trajs.get(("collector", "traj_ids")).unique().numel()
+            == split_trajs.get(("collector", "traj_ids")).max() + 1
         )
 
 

@@ -1314,7 +1314,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             if self.split_trajs:
                 out = split_trajectories(out_buffer)
-                frames += out.get("collector", "mask").sum().item()
+                frames += out.get(("collector", "mask")).sum().item()
             else:
                 out = out_buffer.clone()
                 frames += prod(out.shape)
