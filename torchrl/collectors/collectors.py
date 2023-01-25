@@ -479,13 +479,13 @@ class SyncDataCollector(_DataCollector):
         if self.postproc is not None:
             self.postproc.to(self.passing_device)
         self.max_frames_per_traj = max_frames_per_traj
-        self.frames_per_batch = frames_per_batch
         if frames_per_batch % self.n_env != 0:
             warnings.warn(
                 f"frames_per_batch {frames_per_batch} is not exactly divisible by the number of batched environments {self.n_env}, "
                 f" this results in more frames_per_batch per iteration that requested"
             )
-        self.batched_frames_per_batch = -(-self.frames_per_batch // self.n_env)
+        self.batched_frames_per_batch = -(-frames_per_batch // self.n_env)
+        self.frames_per_batch = self.batched_frames_per_batch * self.n_env
         self.pin_memory = pin_memory
         self.exploration_mode = (
             exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
@@ -1350,7 +1350,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 f"frames_per_batch {self.frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers},"
                 f" this results in more frames_per_batch per iteration that requested"
             )
-        return -(-self.frames_per_batch // self.num_workers)
+        frames_per_batch_worker = -(-self.frames_per_batch // self.num_workers)
+        self.frames_per_batch = frames_per_batch_worker * self.num_workers
+        return
 
     @property
     def _queue_len(self) -> int:
