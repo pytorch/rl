@@ -474,6 +474,8 @@ but got an object of type {type(transform)}."""
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         if tensordict is not None:
             tensordict = tensordict.clone(recurse=False)
+            if "_reset" in tensordict.keys():
+                print("transformed env", tensordict['_reset'].sum())
         out_tensordict = self.base_env.reset(tensordict=tensordict, **kwargs)
         out_tensordict = self.transform.reset(out_tensordict)
         out_tensordict = self.transform(out_tensordict)
@@ -2747,6 +2749,7 @@ class StepCounter(Transform):
                 tensordict.batch_size, dtype=torch.bool, device=tensordict.device
             ),
         )
+        print("step count reset", _reset)
         step_count = tensordict.get(
             "step_count",
             torch.zeros(
@@ -2755,11 +2758,10 @@ class StepCounter(Transform):
                 device=tensordict.device,
             ),
         )
+        print("step count sc", step_count)
         step_count[_reset] = 0
-        tensordict.set(
-            "step_count",
-            step_count,
-        )
+        print("step count sc (after)", step_count)
+        tensordict.set("step_count", step_count,)
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:

@@ -617,9 +617,11 @@ class SerialEnv(_BatchedEnv):
             _reset = torch.ones(self.batch_size, dtype=torch.bool)
 
         keys = set()
+        print("serial env, reset=", _reset)
         for i, _env in enumerate(self._envs):
             if not _reset[i].any():
                 continue
+            print(f"resetting {i}")
             _tensordict = tensordict[i] if tensordict is not None else None
             _td = _env._reset(tensordict=_tensordict, **kwargs)
             if "_reset" in _td.keys():
