@@ -320,8 +320,8 @@ class SyncDataCollector(_DataCollector):
                 action: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                 collector: TensorDict(
                     fields={
-                        _step_count: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
-                        _traj_ids: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        step_count: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
+                        "traj_ids: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False)},
                     batch_size=torch.Size([4, 50]),
                     device=cpu,
                     is_shared=False),
@@ -433,7 +433,7 @@ class SyncDataCollector(_DataCollector):
 
         self._tensordict = env.reset()
         self._tensordict.set(
-            ("collector", "_step_count"),
+            ("collector", "step_count"),
             torch.zeros(self.env.batch_size, dtype=torch.int, device=env.device),
         )
 
@@ -468,10 +468,10 @@ class SyncDataCollector(_DataCollector):
                 .to_tensordict()
                 .zero_()
             )
-        # in addition to outputs of the policy, we add _traj_ids and _step_count to
+        # in addition to outputs of the policy, we add traj_ids and step_count to
         # _tensordict_out which will be collected during rollout
         self._tensordict_out.set(
-            ("collector", "_traj_ids"),
+            ("collector", "traj_ids"),
             torch.zeros(
                 *self._tensordict_out.batch_size,
                 dtype=torch.int64,
@@ -479,7 +479,7 @@ class SyncDataCollector(_DataCollector):
             ),
         )
         self._tensordict_out.set(
-            ("collector", "_step_count"),
+            ("collector", "step_count"),
             torch.zeros(
                 *self._tensordict_out.batch_size,
                 dtype=torch.int64,
@@ -600,7 +600,7 @@ class SyncDataCollector(_DataCollector):
         done = self._tensordict.get("done")
         if not self.reset_when_done:
             done = torch.zeros_like(done)
-        steps = self._tensordict.get(("collector", "_step_count"))
+        steps = self._tensordict.get(("collector", "step_count"))
         done_or_terminated = done.squeeze(-1) | (steps == self.max_frames_per_traj)
         if self._has_been_done is None:
             self._has_been_done = done_or_terminated
@@ -613,7 +613,7 @@ class SyncDataCollector(_DataCollector):
             _reset[self._has_been_done] = False
             done_or_terminated = done_or_terminated | _reset
         if done_or_terminated.any():
-            _traj_ids = self._tensordict.get(("collector", "_traj_ids")).clone()
+            traj_ids = self._tensordict.get(("collector", "traj_ids")).clone()
             steps = steps.clone()
             if len(self.env.batch_size):
                 self._tensordict.masked_fill_(done_or_terminated, 0)
@@ -630,14 +630,14 @@ class SyncDataCollector(_DataCollector):
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
                 )
-            _traj_ids[done_or_terminated] = _traj_ids.max() + torch.arange(
-                1, done_or_terminated.sum() + 1, device=_traj_ids.device
+            traj_ids[done_or_terminated] = traj_ids.max() + torch.arange(
+                1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
             steps[done_or_terminated] = 0
             self._tensordict.set_(
-                ("collector", "_traj_ids"), _traj_ids
+                ("collector", "traj_ids"), traj_ids
             )  # no ops if they already match
-            self._tensordict.set_(("collector", "_step_count"), steps)
+            self._tensordict.set_(("collector", "step_count"), steps)
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
@@ -649,11 +649,12 @@ class SyncDataCollector(_DataCollector):
         """
         if self.reset_at_each_iter:
             self._tensordict.update(self.env.reset(), inplace=True)
-            self._tensordict.fill_(("collector", "_step_count"), 0)
+            self._tensordict.fill_(("collector", "step_count"), 0)
 
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
         self._tensordict.set(
-            ("collector", "_traj_ids"), torch.arange(n).view(self.env.batch_size[:1])
+            ("collector", "traj_ids"),
+            torch.arange(n).view(self.env.batch_size[:1], dtype=torch.int64),
         )
 
         with set_exploration_mode(self.exploration_mode):
@@ -666,8 +667,8 @@ class SyncDataCollector(_DataCollector):
                     self._cast_to_env(td_cast, self._tensordict)
                     self._tensordict = self.env.step(self._tensordict)
 
-                _step_count = self._tensordict.get(("collector", "_step_count"))
-                self._tensordict.set_(("collector", "_step_count"), _step_count + 1)
+                step_count = self._tensordict.get(("collector", "step_count"))
+                self._tensordict.set_(("collector", "step_count"), step_count + 1)
                 # we must clone all the values, since the step / traj_id updates are done in-place
                 try:
                     self._tensordict_out[..., j] = self._tensordict
@@ -709,11 +710,11 @@ class SyncDataCollector(_DataCollector):
 
         self._tensordict.update(self.env.reset(**kwargs), inplace=True)
         if _reset is not None:
-            _step_count = self._tensordict[("collector", "_step_count")]
-            _step_count[_reset] = 0
-            self._tensordict.set(("collector", "_step_count"), _step_count)
+            step_count = self._tensordict[("collector", "step_count")]
+            step_count[_reset] = 0
+            self._tensordict.set(("collector", "step_count"), step_count)
         else:
-            self._tensordict.fill_(("collector", "_step_count"), 0)
+            self._tensordict.fill_(("collector", "step_count"), 0)
 
     def shutdown(self) -> None:
         """Shuts down all workers and/or closes the local environment."""
@@ -1215,8 +1216,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 action: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                 collector: TensorDict(
                     fields={
-                        _step_count: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
-                        _traj_ids: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        step_count: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
+                        traj_ids: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False)},
                     batch_size=torch.Size([4, 50]),
                     device=cpu,
                     is_shared=False),
@@ -1284,13 +1285,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 if workers_frames[idx] >= self.total_frames:
                     print(f"{idx} is done!")
                     dones[idx] = True
-            # we have to correct the _traj_ids to make sure that they don't overlap
+            # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
-                _traj_ids = out_tensordicts_shared[idx].get(("collector", "_traj_ids"))
+                traj_ids = out_tensordicts_shared[idx].get(("collector", "traj_ids"))
                 if max_traj_idx is not None:
-                    _traj_ids += max_traj_idx
-                    # out_tensordicts_shared[idx].set("_traj_ids", _traj_ids)
-                max_traj_idx = _traj_ids.max().item() + 1
+                    traj_ids += max_traj_idx
+                    # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
+                max_traj_idx = traj_ids.max().item() + 1
                 # out = out_tensordicts_shared[idx]
             if same_device is None:
                 prev_device = None
@@ -1365,8 +1366,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 action: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                 collector: TensorDict(
                     fields={
-                        _step_count: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
-                        _traj_ids: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        step_count: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
+                        traj_ids: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False)},
                     batch_size=torch.Size([4, 50]),
                     device=cpu,
                     is_shared=False),

@@ -35,7 +35,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     # TODO: incorporate tensordict.split once it's implemented
     sep = ".-|-."
     rollout_tensordict = rollout_tensordict.flatten_keys(sep)
-    traj_ids = rollout_tensordict.get(sep.join(["collector", "_traj_ids"]))
+    traj_ids = rollout_tensordict.get(sep.join(["collector", "traj_ids"]))
     splits = traj_ids.view(-1)
     splits = [(splits == i).sum().item() for i in splits.unique_consecutive()]
     # if all splits are identical then we can skip this function
