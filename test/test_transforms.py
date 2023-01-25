@@ -1827,33 +1827,27 @@ class TestTransforms:
         if reset_workers:
             td.set("_reset", torch.randn(batch) < 0)
         step_counter.reset(td)
-        assert not torch.all(td.get(("collector", "step_count")))
+        assert not torch.all(td.get("step_count"))
         i = 0
         while max_steps is None or i < max_steps:
             step_counter._step(td)
             i += 1
-            assert torch.all(td.get(("collector", "step_count")) == i)
+            assert torch.all(td.get("step_count") == i), (td.get("step_count"), i)
             if max_steps is None:
                 break
         if max_steps is not None:
-            assert torch.all(td.get(("collector", "step_count")) == max_steps)
+            assert torch.all(td.get("step_count") == max_steps)
             assert torch.all(td.get("done"))
         step_counter.reset(td)
         if reset_workers:
             assert torch.all(
-                torch.masked_select(
-                    td.get(("collector", "step_count")), td.get("_reset")
-                )
-                == 0
+                torch.masked_select(td.get("step_count"), td.get("_reset")) == 0
             )
             assert torch.all(
-                torch.masked_select(
-                    td.get(("collector", "step_count")), ~td.get("_reset")
-                )
-                == i
+                torch.masked_select(td.get("step_count"), ~td.get("_reset")) == i
             )
         else:
-            assert torch.all(td.get(("collector", "step_count")) == 0)
+            assert torch.all(td.get("step_count") == 0)
 
     def test_step_counter_observation_spec(self):
         transformed_env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(50))
