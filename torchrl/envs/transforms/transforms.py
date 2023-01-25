@@ -13,6 +13,7 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import expand_as_right
 from torch import nn, Tensor
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -2634,7 +2635,7 @@ class RewardSum(Transform):
                 if out_key in tensordict.keys():
                     value = tensordict[out_key]
                     dtype = value.dtype
-                    tensordict[out_key] = value * (~_reset).to(dtype)
+                    tensordict[out_key] = value.masked_fill(expand_as_right(_reset, value), 0.0)
                 elif in_key == "reward":
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
@@ -2771,11 +2772,9 @@ class StepCounter(Transform):
         next_step_count = step_count + 1
         tensordict.set("step_count", next_step_count)
         if self.max_steps is not None:
-            tensordict.set(
-                "done",
-                tensordict.get("done")
-                | (next_step_count >= self.max_steps).unsqueeze(-1),
-            )
+            done = tensordict.get("done")
+            done = done | (next_step_count >= self.max_steps).unsqueeze(-1)
+            tensordict.set("done", done)
         return tensordict
 
     def transform_observation_spec(
