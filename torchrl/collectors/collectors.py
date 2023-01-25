@@ -1352,7 +1352,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             )
         frames_per_batch_worker = -(-self.frames_per_batch // self.num_workers)
         self.frames_per_batch = frames_per_batch_worker * self.num_workers
-        return
+        return frames_per_batch_worker
 
     @property
     def _queue_len(self) -> int:
