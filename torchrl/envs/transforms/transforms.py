@@ -475,7 +475,7 @@ but got an object of type {type(transform)}."""
         if tensordict is not None:
             tensordict = tensordict.clone(recurse=False)
             if "_reset" in tensordict.keys():
-                print("transformed env", tensordict['_reset'].sum())
+                print("transformed env", tensordict["_reset"].sum())
         out_tensordict = self.base_env.reset(tensordict=tensordict, **kwargs)
         out_tensordict = self.transform.reset(out_tensordict)
         out_tensordict = self.transform(out_tensordict)
@@ -2636,7 +2636,6 @@ class RewardSum(Transform):
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key in tensordict.keys():
                     value = tensordict[out_key]
-                    dtype = value.dtype
                     tensordict[out_key] = value.masked_fill(
                         expand_as_right(_reset, value), 0.0
                     )
@@ -2761,7 +2760,10 @@ class StepCounter(Transform):
         print("step count sc", step_count)
         step_count[_reset] = 0
         print("step count sc (after)", step_count)
-        tensordict.set("step_count", step_count,)
+        tensordict.set(
+            "step_count",
+            step_count,
+        )
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
