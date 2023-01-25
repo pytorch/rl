@@ -2635,7 +2635,9 @@ class RewardSum(Transform):
                 if out_key in tensordict.keys():
                     value = tensordict[out_key]
                     dtype = value.dtype
-                    tensordict[out_key] = value.masked_fill(expand_as_right(_reset, value), 0.0)
+                    tensordict[out_key] = value.masked_fill(
+                        expand_as_right(_reset, value), 0.0
+                    )
                 elif in_key == "reward":
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
