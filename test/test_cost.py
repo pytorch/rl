@@ -7,6 +7,8 @@ import argparse
 import re
 from copy import deepcopy
 
+from packaging import version as pack_version
+
 _has_functorch = True
 try:
     import functorch as ft  # noqa
@@ -2035,6 +2037,8 @@ class TestPPO:
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_ppo_diff(self, loss_class, device, gradient_mode, advantage):
+        if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
+            raise pytest.skip("make_functional_with_buffers needs to be changed")
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
 
@@ -2245,6 +2249,8 @@ class TestA2C:
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_a2c_diff(self, device, gradient_mode, advantage):
+        if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
+            raise pytest.skip("make_functional_with_buffers needs to be changed")
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_a2c(device=device)
 
