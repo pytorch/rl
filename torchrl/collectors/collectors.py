@@ -23,6 +23,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
+
 from torchrl._utils import _check_for_faulty_process
 from torchrl.collectors.utils import (
     bring_forward_and_squash_batch_sizes,
@@ -478,12 +479,13 @@ class SyncDataCollector(_DataCollector):
         if self.postproc is not None:
             self.postproc.to(self.passing_device)
         self.max_frames_per_traj = max_frames_per_traj
+        self.frames_per_batch = frames_per_batch
         if frames_per_batch % self.n_env != 0:
             warnings.warn(
                 f"frames_per_batch {frames_per_batch} is not exactly divisible by the number of batched environments {self.n_env}, "
                 f" this results in more frames_per_batch per iteration that requested"
             )
-        self.frames_per_batch = -(-frames_per_batch // self.n_env)
+        self.batched_frames_per_batch = -(-self.frames_per_batch // self.n_env)
         self.pin_memory = pin_memory
         self.exploration_mode = (
             exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
@@ -511,7 +513,7 @@ class SyncDataCollector(_DataCollector):
                 self._tensordict_out = self._tensordict_out.to(env.device)
             self._tensordict_out = (
                 self._tensordict_out.unsqueeze(-1)
-                .expand(*env.batch_size, self.frames_per_batch)
+                .expand(*env.batch_size, self.batched_frames_per_batch)
                 .to_tensordict()
             )
         else:
@@ -524,7 +526,9 @@ class SyncDataCollector(_DataCollector):
                 self._tensordict_out = self.policy(self._tensordict_out).unsqueeze(-1)
                 self._tensordict_out = self._tensordict_out.to(self.env_device)
             self._tensordict_out = (
-                self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
+                self._tensordict_out.expand(
+                    *env.batch_size, self.batched_frames_per_batch
+                )
                 .to_tensordict()
                 .zero_()
             )
@@ -737,7 +741,7 @@ class SyncDataCollector(_DataCollector):
         )
 
         with set_exploration_mode(self.exploration_mode):
-            for j in range(self.frames_per_batch):
+            for j in range(self.batched_frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
