@@ -273,7 +273,7 @@ class TestDQN:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
@@ -507,7 +507,7 @@ class TestDDPG:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -735,7 +735,7 @@ class TestTD3:
                 "observation": obs * mask.to(obs.dtype),
                 "next": {"observation": next_obs * mask.to(obs.dtype)},
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
             },
@@ -1012,7 +1012,7 @@ class TestSAC:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -1441,7 +1441,7 @@ class TestREDQ:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -1880,7 +1880,7 @@ class TestPPO:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "sample_log_prob": (torch.randn_like(action[..., 1]) / 10).masked_fill_(
@@ -2153,7 +2153,7 @@ class TestA2C:
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
                 },
                 "done": done,
-                "mask": mask,
+                "collector": {"mask": mask},
                 "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(

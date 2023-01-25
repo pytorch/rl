@@ -426,7 +426,7 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
         break
 
     assert d.ndimension() == 2
-    assert d["mask"].shape == d.shape
+    assert d["collector", "mask"].shape == d.shape
     assert d["collector", "step_count"].shape == d.shape
     assert d["collector", "traj_ids"].shape == d.shape
     for traj in d.unbind(0):
@@ -991,7 +991,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "done",
         "hidden1",
         "hidden2",
-        "mask",
+        ("collector", "mask"),
         ("next", "hidden1"),
         ("next", "hidden2"),
         ("next", "observation"),

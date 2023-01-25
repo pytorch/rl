@@ -654,7 +654,7 @@ class SyncDataCollector(_DataCollector):
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
         self._tensordict.set(
             ("collector", "traj_ids"),
-            torch.arange(n).view(self.env.batch_size[:1], dtype=torch.int64),
+            torch.arange(n).view(self.env.batch_size[:1]),
         )
 
         with set_exploration_mode(self.exploration_mode):
@@ -1314,7 +1314,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             if self.split_trajs:
                 out = split_trajectories(out_buffer)
-                frames += out.get("mask").sum().item()
+                frames += out.get("collector", "mask").sum().item()
             else:
                 out = out_buffer.clone()
                 frames += prod(out.shape)

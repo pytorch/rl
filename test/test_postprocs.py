@@ -41,7 +41,7 @@ def test_multistep(n, key, device, T=11):
             "done": done,
             "reward": torch.randn(1, T, 1, device=device).expand(b, T, 1)
             * mask.to(torch.float),
-            "mask": mask,
+            "collector": {"mask": mask},
         },
         batch_size=(b, T),
     ).to(device)
@@ -135,12 +135,14 @@ class TestSplits:
         assert split_trajs.shape[0] == split_trajs.get("traj_ids").max() + 1
         assert split_trajs.shape[1] == split_trajs.get("steps_count").max() + 1
 
-        assert split_trajs.get("mask").sum() == num_workers * traj_len
+        assert split_trajs.get(("collector", "mask")).sum() == num_workers * traj_len
 
         assert split_trajs.get("done").sum(1).max() == 1
-        out_mask = split_trajs[split_trajs.get("mask")]
+        out_mask = split_trajs[split_trajs.get(("collector", "mask"))]
         for i in range(split_trajs.shape[0]):
-            traj_id_split = split_trajs[i].get("traj_ids")[split_trajs[i].get("mask")]
+            traj_id_split = split_trajs[i].get("traj_ids")[
+                split_trajs[i].get(("collector", "mask"))
+            ]
             assert 1 == len(traj_id_split.unique())
 
         for w in range(num_workers):
