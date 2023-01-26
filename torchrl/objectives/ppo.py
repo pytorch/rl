@@ -143,7 +143,7 @@ class PPOLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.advantage_key)
-        if self.normalize_advantage and advantage.numel()>1:
+        if self.normalize_advantage and advantage.numel() > 1:
             loc = advantage.mean().item()
             scale = advantage.std().clamp_min(1e-6).item()
             advantage = (advantage - loc) / scale
@@ -215,7 +215,7 @@ class ClipPPOLoss(PPOLoss):
             critic_coef=critic_coef,
             gamma=gamma,
             loss_critic_type=loss_critic_type,
-            normalize_advantage = normalize_advantage,
+            normalize_advantage=normalize_advantage,
             **kwargs,
         )
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
@@ -248,7 +248,7 @@ class ClipPPOLoss(PPOLoss):
         gain1 = log_weight.exp() * advantage
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
-        if self.normalize_advantage and advantage.numel()>1:
+        if self.normalize_advantage and advantage.numel() > 1:
             loc = advantage.mean().item()
             scale = advantage.std().clamp_min(1e-6).item()
             advantage = (advantage - loc) / scale
@@ -333,7 +333,7 @@ class KLPENPPOLoss(PPOLoss):
             critic_coef=critic_coef,
             gamma=gamma,
             loss_critic_type=loss_critic_type,
-            normalize_advantage = normalize_advantage,
+            normalize_advantage=normalize_advantage,
             **kwargs,
         )
 
@@ -356,7 +356,7 @@ class KLPENPPOLoss(PPOLoss):
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.advantage_key)
-        if self.normalize_advantage and advantage.numel()>1:
+        if self.normalize_advantage and advantage.numel() > 1:
             loc = advantage.mean().item()
             scale = advantage.std().clamp_min(1e-6).item()
             advantage = (advantage - loc) / scale
