@@ -1028,7 +1028,7 @@ def _run_worker_pipe_shared_mem(
             child_pipe.send(data)
 
         elif cmd == "close":
-            del tensordict, _td, data
+            del tensordict, data
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
             env.close()
