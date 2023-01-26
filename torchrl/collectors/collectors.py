@@ -402,7 +402,7 @@ class SyncDataCollector(_DataCollector):
                 passing_device = torch.device("cpu")
 
         self.passing_device = torch.device(passing_device)
-        self.env: EnvBase = env.to(self.passing_device)
+        self.env: EnvBase = env
         self.closed = False
         self.reset_when_done = reset_when_done
         self.n_env = self.env.numel()
@@ -412,8 +412,8 @@ class SyncDataCollector(_DataCollector):
             device=device,
             observation_spec=self.env.observation_spec,
         )
+        self.env: EnvBase = self.env.to(self.device)
 
-        self.env_device = env.device
         if not total_frames > 0:
             total_frames = float("inf")
         self.total_frames = total_frames
@@ -431,11 +431,7 @@ class SyncDataCollector(_DataCollector):
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
         self.return_same_td = return_same_td
 
-        self._tensordict = env.reset()
-        self._tensordict.set(
-            ("collector", "step_count"),
-            torch.zeros(self.env.batch_size, dtype=torch.int, device=env.device),
-        )
+        self._tensordict = None
 
         if (
             hasattr(self.policy, "spec")
@@ -447,8 +443,6 @@ class SyncDataCollector(_DataCollector):
             # match the out_keys we assume the user has given all relevant information
             self._tensordict_out = env.fake_tensordict().to_tensordict()
             self._tensordict_out.update(self.policy.spec.zero())
-            if env.device:
-                self._tensordict_out = self._tensordict_out.to(env.device)
             self._tensordict_out = (
                 self._tensordict_out.unsqueeze(-1)
                 .expand(*env.batch_size, self.frames_per_batch)
@@ -462,7 +456,6 @@ class SyncDataCollector(_DataCollector):
                 self._tensordict_out = env.fake_tensordict()
                 self._tensordict_out = self._tensordict_out.to(self.device)
                 self._tensordict_out = self.policy(self._tensordict_out).unsqueeze(-1)
-                self._tensordict_out = self._tensordict_out.to(self.env_device)
             self._tensordict_out = (
                 self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
                 .to_tensordict()
@@ -470,12 +463,13 @@ class SyncDataCollector(_DataCollector):
             )
         # in addition to outputs of the policy, we add traj_ids and step_count to
         # _tensordict_out which will be collected during rollout
+        self._tensordict_out = self._tensordict_out.to(self.passing_device)
         self._tensordict_out.set(
             ("collector", "traj_ids"),
             torch.zeros(
                 *self._tensordict_out.batch_size,
                 dtype=torch.int64,
-                device=self.env_device,
+                device=self.passing_device,
             ),
         )
         self._tensordict_out.set(
@@ -483,7 +477,7 @@ class SyncDataCollector(_DataCollector):
             torch.zeros(
                 *self._tensordict_out.batch_size,
                 dtype=torch.int64,
-                device=self.env_device,
+                device=self.passing_device,
             ),
         )
 
@@ -497,8 +491,6 @@ class SyncDataCollector(_DataCollector):
                 "Cannot split trajectories when reset_when_done is False."
             )
         self.split_trajs = split_trajs
-        self._td_env = None
-        self._td_policy = None
         self._has_been_done = None
         self._exclude_private_keys = True
 
@@ -566,35 +558,8 @@ class SyncDataCollector(_DataCollector):
                 # >>> assert data0["done"] is not data1["done"]
                 yield tensordict_out.clone()
 
-            del tensordict_out
             if self._frames >= self.total_frames:
                 break
-
-    def _cast_to_policy(self, td: TensorDictBase) -> TensorDictBase:
-        policy_device = self.device
-        if hasattr(self.policy, "in_keys"):
-            # some keys may be absent -- TensorDictModule is resilient to missing keys
-            td = td.select(*self.policy.in_keys, strict=False)
-        if self._td_policy is None:
-            self._td_policy = td.to(policy_device)
-        else:
-            if td.device == torch.device("cpu") and self.pin_memory:
-                td.pin_memory()
-            self._td_policy.update(td, inplace=True)
-        return self._td_policy
-
-    def _cast_to_env(
-        self, td: TensorDictBase, dest: Optional[TensorDictBase] = None
-    ) -> TensorDictBase:
-        env_device = self.env_device
-        if dest is None:
-            if self._td_env is None:
-                self._td_env = td.to(env_device)
-            else:
-                self._td_env.update(td, inplace=True)
-            return self._td_env
-        else:
-            return dest.update(td, inplace=True)
 
     def _reset_if_necessary(self) -> None:
         done = self._tensordict.get("done")
@@ -602,16 +567,20 @@ class SyncDataCollector(_DataCollector):
             done = torch.zeros_like(done)
         steps = self._tensordict.get(("collector", "step_count"))
         done_or_terminated = done.squeeze(-1) | (steps == self.max_frames_per_traj)
+        # keep track of envs that have been done at least once
         if self._has_been_done is None:
             self._has_been_done = done_or_terminated
         else:
             self._has_been_done = self._has_been_done | done_or_terminated
+        # init_with_lag instructs to restart randomly envs after init to dephase them.
+        # Until all envs have been done, we'll reset randomly some envs.
         if not self._has_been_done.all() and self.init_with_lag:
             _reset = torch.zeros_like(done_or_terminated).bernoulli_(
                 1 / self.max_frames_per_traj
             )
             _reset[self._has_been_done] = False
             done_or_terminated = done_or_terminated | _reset
+
         if done_or_terminated.any():
             traj_ids = self._tensordict.get(("collector", "traj_ids")).clone()
             steps = steps.clone()
@@ -634,10 +603,10 @@ class SyncDataCollector(_DataCollector):
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
             steps[done_or_terminated] = 0
-            self._tensordict.set_(
+            self._tensordict.set(
                 ("collector", "traj_ids"), traj_ids
             )  # no ops if they already match
-            self._tensordict.set_(("collector", "step_count"), steps)
+            self._tensordict.set(("collector", "step_count"), steps)
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
@@ -648,24 +617,30 @@ class SyncDataCollector(_DataCollector):
 
         """
         if self.reset_at_each_iter:
-            self._tensordict.update(self.env.reset(), inplace=True)
-            self._tensordict.fill_(("collector", "step_count"), 0)
-
-        n = self.env.batch_size[0] if len(self.env.batch_size) else 1
-        self._tensordict.set(
-            ("collector", "traj_ids"),
-            torch.arange(n).view(self.env.batch_size[:1]),
-        )
+            self._tensordict = self.env.reset()
+            self._tensordict.set(
+                ("collector", "step_count"),
+                torch.zeros(self.env.batch_size, dtype=torch.int, device=self.device),
+            )
+        elif self._tensordict is None:
+            n = self.env.batch_size.numel() if len(self.env.batch_size) else 1
+            traj_ids = torch.arange(n).view(self.env.batch_size)
+            step_count = torch.zeros(
+                self.env.batch_size, dtype=torch.int, device=self.device
+            )
+            self._tensordict = TensorDict(
+                {"collector": {"step_count": step_count, "traj_ids": traj_ids}},
+                self.env.batch_size,
+                device=self.device,
+            )
+            self.env.reset(self._tensordict)
 
         with set_exploration_mode(self.exploration_mode):
             for j in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
-                    td_cast = self._cast_to_policy(self._tensordict)
-                    td_cast = self.policy(td_cast)
-                    self._cast_to_env(td_cast, self._tensordict)
-                    self._tensordict = self.env.step(self._tensordict)
+                    self.env.step(self.policy(self._tensordict))
 
                 step_count = self._tensordict.get(("collector", "step_count"))
                 self._tensordict.set_(("collector", "step_count"), step_count + 1)
@@ -682,12 +657,16 @@ class SyncDataCollector(_DataCollector):
                         self._tensordict_out.share_memory_()
 
                 self._reset_if_necessary()
-                self._tensordict.update(step_mdp(self._tensordict), inplace=True)
+                self._tensordict = step_mdp(self._tensordict)
 
         return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
+        if self._tensordict is None:
+            self._tensordict = TensorDict(
+                {}, batch_size=self.env.batch_size, device=self.device
+            )
         if index is not None:
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
@@ -698,23 +677,19 @@ class SyncDataCollector(_DataCollector):
                 device=self.env.device,
             )
             _reset[index] = 1
-            td_in = TensorDict({"_reset": _reset}, self.env.batch_size)
             self._tensordict[index].zero_()
+            self._tensordict["_reset"] = _reset
         else:
             _reset = None
-            td_in = None
             self._tensordict.zero_()
 
-        if td_in:
-            self._tensordict.update(td_in, inplace=True)
-
-        self._tensordict.update(self.env.reset(**kwargs), inplace=True)
+        self._tensordict.update(self.env.reset(self._tensordict, **kwargs))
         if _reset is not None:
             step_count = self._tensordict[("collector", "step_count")]
             step_count[_reset] = 0
             self._tensordict.set(("collector", "step_count"), step_count)
         else:
-            self._tensordict.fill_(("collector", "step_count"), 0)
+            self._tensordict.set(("collector", "step_count"), torch.ones(self._tensordict.shape, device=self.device, dtype=torch.int64))
 
     def shutdown(self) -> None:
         """Shuts down all workers and/or closes the local environment."""
