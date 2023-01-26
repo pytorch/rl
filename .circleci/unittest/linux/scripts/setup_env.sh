@@ -63,27 +63,27 @@ else
 fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
-echo "MUJOCO_GL: $MUJOCO_GL" 
+echo "MUJOCO_GL: $MUJOCO_GL"
 
 conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
-  DISPLAY=unix:0.0 \
-  MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
-  SDL_VIDEODRIVER=dummy \
+#   DISPLAY=unix:0.0 \
+#   MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
+#   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
+#   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL \
   PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
 
 # Software rendering requires GLX and OSMesa.
-if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
-  yum makecache
-  yum install -y glfw
-  yum install -y glew
-  yum install -y mesa-libGL
-  yum install -y mesa-libGL-devel
-  yum install -y mesa-libOSMesa-devel
-  yum -y install egl-utils
-  yum -y install freeglut
-fi
+# if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
+#   yum makecache
+#   yum install -y glfw
+#   yum install -y glew
+#   yum install -y mesa-libGL
+#   yum install -y mesa-libGL-devel
+#   yum install -y mesa-libOSMesa-devel
+#   yum -y install egl-utils
+#   yum -y install freeglut
+# fi
 
 pip install pip --upgrade
 
