@@ -768,21 +768,16 @@ class ParallelEnv(_BatchedEnv):
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
-        keys = set()
         for i in range(self.num_workers):
             msg, data = self.parent_channels[i].recv()
             if msg != "step_result":
                 raise RuntimeError(
                     f"Expected 'step_result' but received {msg} from worker {i}"
                 )
-            # data is the set of updated keys
-            keys = keys.union(data)
+
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return self.shared_tensordict_parent.select(
-            *keys,
-            strict=False,
-        ).clone()
+        return self.shared_tensordict_parent.clone()
 
     @_check_start
     def _shutdown_workers(self) -> None:
@@ -999,7 +994,7 @@ def _run_worker_pipe_shared_mem(
                 _td.del_("_reset")
             done = _td.get("done", None)
             if done is None:
-                _td["done"] = done = torch.zeros(
+                _td["done"] = torch.zeros(
                     *_td.batch_size, 1, dtype=torch.bool, device=env.device
                 )
             elif done is not None and done.shape != torch.Size([*_td.batch_size, 1]):
@@ -1009,24 +1004,25 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 _td.pin_memory()
             tensordict.update_(_td)
+            del _td
             child_pipe.send(("reset_obs", reset_keys))
 
         elif cmd == "step":
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            _td = tensordict.select(
-                *env_input_keys,
-                strict=False,
-            )
+            # Create a shallow copy (ie just the structure) such that we can
+            # update the values in-place later
+            _td = tensordict.clone(False)
             _td = env._step(_td)
-            if step_keys is None:
-                step_keys = set(env.observation_spec.keys()).union(
-                    {"done", "terminated", "reward"}
-                )
+            # if step_keys is None:
+            #     step_keys = set(env.observation_spec.keys()).union(
+            #         {"done", "terminated", "reward"}
+            #     )
             if pin_memory:
                 _td.pin_memory()
-            tensordict.update_(_td.select(*step_keys, strict=False))
+            tensordict.update_(_td)
+            del _td
             msg = "step_result"
             data = (msg, step_keys)
             child_pipe.send(data)

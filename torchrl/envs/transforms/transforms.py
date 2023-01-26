@@ -1536,31 +1536,20 @@ class CatFrames(ObservationTransform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
-        # Non-batched environments
-        if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
-            for in_key in self.in_keys:
-                buffer_name = f"_cat_buffers_{in_key}"
-                buffer = getattr(self, buffer_name)
-                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
-                    continue
-                buffer.fill_(0.0)
-
-        # Batched environments
-        else:
-            _reset = tensordict.get(
-                "_reset",
-                torch.ones(
-                    tensordict.batch_size,
-                    dtype=torch.bool,
-                    device=tensordict.device,
-                ),
-            )
-            for in_key in self.in_keys:
-                buffer_name = f"_cat_buffers_{in_key}"
-                buffer = getattr(self, buffer_name)
-                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
-                    continue
-                buffer[_reset] = 0.0
+        _reset = tensordict.set_default(
+            "_reset",
+            torch.ones(
+                tensordict.batch_size,
+                dtype=torch.bool,
+                device=tensordict.device,
+            ),
+        )
+        for in_key in self.in_keys:
+            buffer_name = f"_cat_buffers_{in_key}"
+            buffer = getattr(self, buffer_name)
+            if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                continue
+            buffer[_reset] = 0
 
         return tensordict
 
@@ -1576,6 +1565,8 @@ class CatFrames(ObservationTransform):
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
+        _reset = tensordict.get("_reset", None)
+
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             # Lazy init of buffers
             buffer_name = f"_cat_buffers_{in_key}"
@@ -1584,9 +1575,12 @@ class CatFrames(ObservationTransform):
             buffer = getattr(self, buffer_name)
             if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
                 buffer = self._make_missing_buffer(data, buffer_name)
-            else:
-                # shift obs 1 position to the right
-                buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.cat_dim))
+            # shift obs 1 position to the right
+            if _reset is not None:
+                buffer[_reset] = buffer[_reset].copy_(
+                    data[_reset].repeat_interleave(self.N, self.cat_dim)
+                )
+            buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.cat_dim))
             # add new obs
             idx = self.cat_dim
             if idx < 0:

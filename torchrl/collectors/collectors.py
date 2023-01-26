@@ -431,7 +431,7 @@ class SyncDataCollector(_DataCollector):
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
         self.return_same_td = return_same_td
 
-        self._tensordict = None
+        self._current_td = None
 
         if (
             hasattr(self.policy, "spec")
@@ -493,6 +493,43 @@ class SyncDataCollector(_DataCollector):
         self.split_trajs = split_trajs
         self._has_been_done = None
         self._exclude_private_keys = True
+
+    def _make_container(self):
+        shape = self.env.batch_size
+        device = self.device
+        return TensorDict(
+            {
+                "collector": {
+                    "traj_ids": torch.zeros(
+                        shape,
+                        dtype=torch.int64,
+                        device=device,
+                    ),
+                    "step_count": torch.zeros(
+                        shape,
+                        dtype=torch.int64,
+                        device=device,
+                    ),
+                }
+            },
+            batch_size=shape,
+            device=self.device,
+        )
+
+    @property
+    def _tensordict(self):
+        if self._current_td is None:
+            self._current_td = self._make_container()
+        return self._current_td
+
+    @_tensordict.setter
+    def _tensordict(self, value: TensorDictBase):
+        if value is None:
+            self._current_td = None
+            return
+        if self._current_td is None:
+            self._current_td = self._make_container()
+        self._current_td.update(value)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -689,13 +726,19 @@ class SyncDataCollector(_DataCollector):
             step_count[_reset] = 0
             self._tensordict.set(("collector", "step_count"), step_count)
         else:
-            self._tensordict.set(("collector", "step_count"), torch.ones(self._tensordict.shape, device=self.device, dtype=torch.int64))
+            self._tensordict.set(
+                ("collector", "step_count"),
+                torch.ones(
+                    self._tensordict.shape, device=self.device, dtype=torch.int64
+                ),
+            )
 
     def shutdown(self) -> None:
         """Shuts down all workers and/or closes the local environment."""
         if not self.closed:
             self.closed = True
-            del self._tensordict, self._tensordict_out
+            self._tensordict = None
+            del self._tensordict_out
             if not self.env.is_closed:
                 self.env.close()
             del self.env
