@@ -56,6 +56,7 @@ from torchrl.envs import (
     SqueezeTransform,
     StepCounter,
     TensorDictPrimer,
+    TimeMaxPool,
     ToTensorImage,
     TransformedEnv,
     UnsqueezeTransform,
@@ -106,7 +107,6 @@ class TestVecNorm:
 
     @pytest.mark.parametrize("nprc", [2, 5])
     def test_vecnorm_parallel_auto(self, nprc):
-
         queues = []
         prcs = []
         if _has_gym:
@@ -864,6 +864,34 @@ class TestTransforms:
         assert "some_extra_observation" in transformed_observation_spec2.keys()
         assert "episode_reward" in transformed_observation_spec2.keys()
 
+    @pytest.mark.parametrize("T", [2, 4])
+    @pytest.mark.parametrize("seq_len", [8])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_time_max_pool(self, T, seq_len, device):
+        batch = 1
+        nodes = 4
+        keys = ["observation"]
+        time_max_pool = TimeMaxPool(keys, T=T)
+
+        tensor_list = []
+        for _ in range(seq_len):
+            tensor_list.append(torch.rand(batch, nodes).to(device))
+        max_vals, _ = torch.max(torch.stack(tensor_list[-T:]), dim=0)
+
+        print(f"max vals: {max_vals}")
+
+        for i in range(seq_len):
+            env_td = TensorDict(
+                {
+                    "observation": tensor_list[i],
+                },
+                device=device,
+                batch_size=[batch],
+            )
+            transformed_td = time_max_pool(env_td)
+
+        assert (max_vals == transformed_td["observation"]).all()
+
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
         "keys",
@@ -1104,10 +1132,14 @@ class TestTransforms:
             t_env.transform.init_stats(
                 num_iter=11, reduce_dim=reduce_dim, cat_dim=cat_dim
             )
-
-        assert t_env.transform.loc.shape == t_env.observation_spec["observation"].shape
+        batch_dims = len(t_env.batch_size)
         assert (
-            t_env.transform.scale.shape == t_env.observation_spec["observation"].shape
+            t_env.transform.loc.shape
+            == t_env.observation_spec["observation"].shape[batch_dims:]
+        )
+        assert (
+            t_env.transform.scale.shape
+            == t_env.observation_spec["observation"].shape[batch_dims:]
         )
         assert t_env.transform.loc.dtype == t_env.observation_spec["observation"].dtype
         assert (
@@ -1161,10 +1193,10 @@ class TestTransforms:
             )
 
         assert t_env.transform.loc.shape == torch.Size(
-            [t_env.observation_spec["pixels"].shape[0], 1, 1]
+            [t_env.observation_spec["pixels"].shape[-3], 1, 1]
         )
         assert t_env.transform.scale.shape == torch.Size(
-            [t_env.observation_spec["pixels"].shape[0], 1, 1]
+            [t_env.observation_spec["pixels"].shape[-3], 1, 1]
         )
 
     def test_observationnorm_stats_already_initialized_error(self):
@@ -1289,24 +1321,31 @@ class TestTransforms:
                 )
 
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_catframes_buffer_check_latest_frame(self, device):
+    @pytest.mark.parametrize("d", range(1, 4))
+    def test_catframes_buffer_check_latest_frame(self, device, d):
         key1 = "first key"
         key2 = "second key"
         N = 4
         keys = [key1, key2]
-        key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
-        key2_tensor = torch.ones(1, 1, 3, 3, device=device)
+        key1_tensor = torch.ones(1, d, 3, 3, device=device) * 2
+        key2_tensor = torch.ones(1, d, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
         cat_frames = CatFrames(N=N, in_keys=keys)
 
-        cat_frames(td)
-        latest_frame = td.get(key2)
+        tdclone = cat_frames(td.clone())
+        latest_frame = tdclone.get(key2)
 
-        assert latest_frame.shape[1] == N
-        for i in range(0, N - 1):
-            assert torch.equal(latest_frame[0][i], key2_tensor[0][0])
-        assert torch.equal(latest_frame[0][N - 1], key1_tensor[0][0])
+        assert latest_frame.shape[1] == N * d
+        assert (latest_frame[0, :-d] == 0).all()
+        assert (latest_frame[0, -d:] == 1).all()
+
+        tdclone = cat_frames(td.clone())
+        latest_frame = tdclone.get(key2)
+
+        assert latest_frame.shape[1] == N * d
+        assert (latest_frame[0, : -2 * d] == 0).all()
+        assert (latest_frame[0, -2 * d :] == 1).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_catframes_reset(self, device):
@@ -1314,19 +1353,23 @@ class TestTransforms:
         key2 = "second key"
         N = 4
         keys = [key1, key2]
-        key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
-        key2_tensor = torch.ones(1, 1, 3, 3, device=device)
+        key1_tensor = torch.randn(1, 1, 3, 3, device=device)
+        key2_tensor = torch.randn(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
         cat_frames = CatFrames(N=N, in_keys=keys)
 
         cat_frames(td)
-        buffer_length1 = len(cat_frames.buffer)
+        buffer = getattr(cat_frames, f"_cat_buffers_{key1}")
+
         passed_back_td = cat_frames.reset(td)
 
-        assert buffer_length1 == 2
         assert td is passed_back_td
-        assert 0 == len(cat_frames.buffer)
+        assert (0 == buffer).all()
+
+        _ = cat_frames._call(td)
+        assert (0 == buffer[..., :-1, :, :]).all()
+        assert (0 != buffer[..., -1:, :, :]).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_finitetensordictcheck(self, device):
@@ -1634,6 +1677,10 @@ class TestTransforms:
         td = TensorDict(
             {key: torch.randn(3) for key in ["a", "b", "c"]}, [], device=device
         )
+        if device.type == "cuda":
+            with pytest.raises(RuntimeError, match="cannot pin"):
+                pin_mem(td)
+            return
         pin_mem(td)
         for item in td.values():
             assert item.is_pinned
@@ -1652,7 +1699,6 @@ class TestTransforms:
         assert obs_spec.shape[-1] == 4 * env.base_env.observation_spec[key].shape[-1]
 
     def test_insert(self):
-
         env = ContinuousActionVecMockEnv()
         obs_spec = env.observation_spec
         (key,) = itertools.islice(obs_spec.keys(), 1)
@@ -1786,7 +1832,7 @@ class TestTransforms:
         while max_steps is None or i < max_steps:
             step_counter._step(td)
             i += 1
-            assert torch.all(td.get("step_count") == i)
+            assert torch.all(td.get("step_count") == i), (td.get("step_count"), i)
             if max_steps is None:
                 break
         if max_steps is not None:
@@ -2268,7 +2314,7 @@ def test_batch_locked_transformed(device):
     with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
         env.batch_locked = False
     td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
+    td["action"] = env.action_spec.rand()
     td_expanded = td.expand(2).clone()
     env.step(td)
 
@@ -2292,7 +2338,7 @@ def test_batch_unlocked_transformed(device):
     with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
         env.batch_locked = False
     td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
+    td["action"] = env.action_spec.rand()
     td_expanded = td.expand(2).clone()
     env.step(td)
     env.step(td_expanded)
@@ -2311,11 +2357,10 @@ def test_batch_unlocked_with_batch_size_transformed(device):
 
     with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
         env.batch_locked = False
-
     td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
-    td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
+    td["action"] = env.action_spec.rand()
     env.step(td)
+    td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
 
     with pytest.raises(
         RuntimeError, match="Expected a tensordict with shape==env.shape, "

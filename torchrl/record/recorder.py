@@ -16,7 +16,7 @@ except ImportError:
 from tensordict.tensordict import TensorDictBase
 
 from torchrl.envs.transforms import ObservationTransform, Transform
-from torchrl.trainers.loggers import Logger
+from torchrl.record.loggers import Logger
 
 
 class VideoRecorder(ObservationTransform):

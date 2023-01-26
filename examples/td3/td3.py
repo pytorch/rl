@@ -38,7 +38,7 @@ from torchrl.modules.distributions import TanhDelta
 
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.td3 import TD3Loss
-from torchrl.trainers.loggers.utils import generate_exp_name, get_logger
+from torchrl.record.loggers import generate_exp_name, get_logger
 
 
 def env_maker(task, frame_skip=1, device="cpu", from_pixels=False):
@@ -273,10 +273,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(tensordict.numel())
 
         # extend the replay buffer with the new data
-        if "mask" in tensordict.keys():
+        if ("collector", "mask") in tensordict.keys(True):
             # if multi-step, a mask is present to help filter padded values
-            current_frames = tensordict["mask"].sum()
-            tensordict = tensordict[tensordict.get("mask").squeeze(-1)]
+            current_frames = tensordict["collector", "mask"].sum()
+            tensordict = tensordict[tensordict.get(("collector", "mask")).squeeze(-1)]
         else:
             tensordict = tensordict.view(-1)
             current_frames = tensordict.numel()

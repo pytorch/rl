@@ -16,7 +16,7 @@ from torch import nn
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
-    from torchrl.trainers.loggers.tensorboard import TensorboardLogger
+    from torchrl.record.loggers import TensorboardLogger
 
     _has_tb = True
 except ImportError:
@@ -762,14 +762,14 @@ def test_masking():
     batch = 10
     td = TensorDict(
         {
-            "mask": torch.zeros(batch, dtype=torch.bool).bernoulli_(),
+            ("collector", "mask"): torch.zeros(batch, dtype=torch.bool).bernoulli_(),
             "tensor": torch.randn(batch, 51),
         },
         [batch],
     )
     td_out = trainer._process_batch_hook(td)
-    assert td_out.shape[0] == td.get("mask").sum()
-    assert (td["tensor"][td["mask"]] == td_out["tensor"]).all()
+    assert td_out.shape[0] == td.get(("collector", "mask")).sum()
+    assert (td["tensor"][td[("collector", "mask")]] == td_out["tensor"]).all()
 
 
 class TestSubSampler:
@@ -989,10 +989,13 @@ class TestCountFrames:
         count_frames = CountFramesLog(frame_skip=frame_skip)
         count_frames.register(trainer)
         td = TensorDict(
-            {"mask": torch.zeros(batch, dtype=torch.bool).bernoulli_()}, [batch]
+            {("collector", "mask"): torch.zeros(batch, dtype=torch.bool).bernoulli_()},
+            [batch],
         )
         trainer._pre_steps_log_hook(td)
-        assert count_frames.frame_count == td.get("mask").sum() * frame_skip
+        assert (
+            count_frames.frame_count == td.get(("collector", "mask")).sum() * frame_skip
+        )
 
     @pytest.mark.parametrize(
         "backend",
@@ -1037,13 +1040,21 @@ class TestCountFrames:
         with tempfile.TemporaryDirectory() as tmpdirname, tempfile.TemporaryDirectory() as tmpdirname2:
             trainer, count_frames, file = _make_countframe_and_trainer(tmpdirname)
             td = TensorDict(
-                {"mask": torch.zeros(batch, dtype=torch.bool).bernoulli_()}, [batch]
+                {
+                    ("collector", "mask"): torch.zeros(
+                        batch, dtype=torch.bool
+                    ).bernoulli_()
+                },
+                [batch],
             )
             trainer._pre_steps_log_hook(td)
             trainer.save_trainer(True)
             trainer2, count_frames2, _ = _make_countframe_and_trainer(tmpdirname2)
             trainer2.load_from_file(file)
-            assert count_frames2.frame_count == td.get("mask").sum() * frame_skip
+            assert (
+                count_frames2.frame_count
+                == td.get(("collector", "mask")).sum() * frame_skip
+            )
             assert state_dict_has_been_called[0]
             assert load_state_dict_has_been_called[0]
         CountFramesLog.state_dict = CountFramesLog_state_dict

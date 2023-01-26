@@ -18,7 +18,7 @@ from torchrl.envs.common import EnvBase
 from torchrl.modules import reset_noise, SafeModule
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
-from torchrl.trainers.loggers import Logger
+from torchrl.record.loggers import Logger
 from torchrl.trainers.trainers import (
     BatchSubSampler,
     ClearCudaCache,

@@ -34,6 +34,20 @@ try:
 except ImportError:
     _has_tv = False
 
+try:
+    from torchvision.models import ResNet50_Weights
+    from torchvision.models._api import WeightsEnum
+except ImportError:
+
+    class WeightsEnum:  # noqa: D101
+        # placeholder
+        pass
+
+
+VIP_MODEL_MAP = {
+    "resnet50": "vip_50",
+}
+
 
 class _VIPNet(Transform):
 
@@ -45,8 +59,8 @@ class _VIPNet(Transform):
                 "Tried to instantiate VIP without torchvision. Make sure you have "
                 "torchvision installed in your environment."
             )
+        self.model_name = model_name
         if model_name == "resnet50":
-            self.model_name = "vip_50"
             self.outdim = 2048
             convnet = models.resnet50(pretrained=False)
             convnet.fc = torch.nn.Linear(self.outdim, 1024)
@@ -98,8 +112,8 @@ class _VIPNet(Transform):
 
     @staticmethod
     def _load_weights(model_name, vip_instance, dir_prefix):
-        if model_name not in ("vip_50"):
-            raise ValueError("model_name should be 'vip_50'")
+        if model_name not in ("vip_50",):
+            raise ValueError(f"model_name should be 'vip_50', got {model_name}")
         url = "https://pytorch.s3.amazonaws.com/models/rl/vip/model.pt"
         d = load_state_dict_from_url(
             url,
@@ -112,8 +126,27 @@ class _VIPNet(Transform):
         state_dict = td_flatten.to_dict()
         vip_instance.convnet.load_state_dict(state_dict)
 
-    def load_weights(self, dir_prefix=None):
-        self._load_weights(self.model_name, self, dir_prefix)
+    def load_weights(self, dir_prefix=None, tv_weights=None):
+        if dir_prefix is not None and tv_weights is not None:
+            raise RuntimeError(
+                "torchvision weights API does not allow for custom download path."
+            )
+        elif tv_weights is not None:
+            model_name = self.model_name
+            if model_name == "resnet50":
+                if isinstance(tv_weights, str):
+                    tv_weights = getattr(ResNet50_Weights, tv_weights)
+                convnet = models.resnet50(weights=tv_weights)
+            else:
+                raise NotImplementedError(
+                    f"model {model_name} is currently not supported by R3M"
+                )
+            convnet.fc = torch.nn.Linear(self.outdim, 1024)
+            self.convnet.load_state_dict(convnet.state_dict())
+
+        else:
+            model_name = VIP_MODEL_MAP[self.model_name]
+            self._load_weights(model_name, self, dir_prefix)
 
 
 def _init_first(fun):
@@ -145,8 +178,13 @@ class VIPTransform(Compose):
         stack_images (bool, optional): if False, the images given in the :obj:`in_keys`
              argument will be treaded separetely and each will be given a single,
              separated entry in the output tensordict. Defaults to :obj:`True`.
-        download (bool, optional): if True, the weights will be downloaded using
-            the torch.hub download API (i.e. weights will be cached for future use).
+        download (bool, torchvision Weights config or corresponding string):
+            if True, the weights will be downloaded using the torch.hub download
+            API (i.e. weights will be cached for future use).
+            These weights are the original weights from the VIP publication.
+            If the torchvision weights are needed, there are two ways they can be
+            obtained: :obj:`download=ResNet50_Weights.IMAGENET1K_V1` or :obj:`download="IMAGENET1K_V1"`
+            where :obj:`ResNet50_Weights` can be imported via :obj:`from torchvision.models import resnet50, ResNet50_Weights`.
             Defaults to False.
         download_path (str, optional): path where to download the models.
             Default is None (cache path determined by torch.hub utils).
@@ -169,7 +207,7 @@ class VIPTransform(Compose):
         out_keys: List[str] = None,
         size: int = 244,
         stack_images: bool = True,
-        download: bool = False,
+        download: Union[bool, WeightsEnum, str] = False,
         download_path: Optional[str] = None,
         tensor_pixels_keys: List[str] = None,
     ):
@@ -275,33 +313,17 @@ class VIPTransform(Compose):
 
         for transform in transforms:
             self.append(transform)
-        if self.download:
-            self[-1].load_weights(dir_prefix=self.download_path)
+        if self.download is True:
+            self[-1].load_weights(dir_prefix=self.download_path, tv_weights=None)
+        elif self.download:
+            self[-1].load_weights(
+                dir_prefix=self.download_path, tv_weights=self.download
+            )
 
         if self._device is not None:
             self.to(self._device)
         if self._dtype is not None:
             self.to(self._dtype)
-
-    @property
-    def is_3d(self):
-        """Whether the input image has 3 dims (no-batched) or more.
-
-        If no parent environment exists, it defaults to True.
-
-        The main usage is this: if there are more than one image and they need to be
-        stacked, we must know if the input image has dim 3 or 4. If 3, we need to unsqueeze
-        before stacking. If 4, we can cat along the first dimension.
-
-        """
-        if self._is_3d is None:
-            parent = self.parent
-            if parent is None:
-                return True
-            for key in parent.observation_spec.keys():
-                self._is_3d = len(parent.observation_spec[key].shape) == 3
-                break
-        return self._is_3d
 
     def to(self, dest: Union[DEVICE_TYPING, torch.dtype]):
         if isinstance(dest, torch.dtype):

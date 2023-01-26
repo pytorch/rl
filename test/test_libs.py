@@ -9,7 +9,6 @@ from typing import Optional, Union
 import numpy as np
 import pytest
 import torch
-
 from _utils_internal import (
     _make_multithreaded_env,
     CARTPOLE_VERSIONED,
@@ -20,7 +19,6 @@ from _utils_internal import (
 )
 from packaging import version
 from tensordict.tensordict import assert_allclose_td, TensorDict
-from torch import nn
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
@@ -303,7 +301,6 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
 
 
 @pytest.mark.skipif(IS_OSX, reason="rendering unstable on osx, skipping")
-@pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
 @pytest.mark.parametrize(
     "env_lib,env_args,env_kwargs",
     [
@@ -317,6 +314,11 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
 @pytest.mark.parametrize("device", get_available_devices())
 class TestCollectorLib:
     def test_collector_run(self, env_lib, env_args, env_kwargs, device):
+        if not _has_dmc and env_lib is DMControlEnv:
+            raise pytest.skip("no dmc")
+        if not _has_gym and env_lib is GymEnv:
+            raise pytest.skip("no gym")
+
         from_pixels = env_kwargs.get("from_pixels", False)
         if from_pixels and (not torch.has_cuda or not torch.cuda.device_count()):
             raise pytest.skip("no cuda device")
@@ -325,7 +327,7 @@ class TestCollectorLib:
         env = ParallelEnv(3, env_fn)
         collector = MultiaSyncDataCollector(
             create_env_fn=[env, env],
-            policy=RandomPolicy(env.action_spec),
+            policy=RandomPolicy(action_spec=env.action_spec),
             total_frames=-1,
             max_frames_per_traj=100,
             frames_per_batch=21,
@@ -352,7 +354,7 @@ class TestCollectorLib:
 class TestHabitat:
     def test_habitat(self, envname):
         env = HabitatEnv(envname)
-        rollout = env.rollout(3)
+        _ = env.rollout(3)
         check_env_specs(env)
 
     @pytest.mark.parametrize("from_pixels", [True, False])
@@ -557,7 +559,7 @@ class TestEnvPool:
 
             def __init__(self, out_dim: int, dtype: Optional[Union[torch.dtype, str]]):
                 super().__init__()
-                self.lin = nn.LazyLinear(out_dim, dtype=dtype)
+                self.lin = torch.nn.LazyLinear(out_dim, dtype=dtype)
 
             def forward(self, x):
                 res = torch.argmax(self.lin(x), axis=-1, keepdim=True)
@@ -578,7 +580,7 @@ class TestEnvPool:
             dtype = torch.float32
 
         if env_multithreaded.action_spec.shape:
-            module = nn.LazyLinear(env_multithreaded.action_spec.shape[-1], dtype=dtype)
+            module = torch.nn.LazyLinear(env_multithreaded.action_spec.shape[-1], dtype=dtype)
         else:
             # Action space is discrete
             module = DiscreteChoice(env_multithreaded.action_spec.space.n, dtype=dtype)
@@ -586,7 +588,7 @@ class TestEnvPool:
         policy = ActorCriticOperator(
             SafeModule(
                 spec=None,
-                module=nn.LazyLinear(12, dtype=dtype),
+                module=torch.nn.LazyLinear(12, dtype=dtype),
                 in_keys=in_keys,
                 out_keys=["hidden"],
             ),
@@ -845,7 +847,7 @@ class TestBrax:
         env = BraxEnv(envname, batch_size=batch_size, requires_grad=True)
         env.set_seed(0)
         td1 = env.reset()
-        action = torch.randn(batch_size + env.action_spec.shape)
+        action = torch.randn(env.action_spec.shape)
         action.requires_grad_(True)
         td1["action"] = action
         td2 = env.step(td1)
@@ -899,7 +901,7 @@ class TestVmas:
                 TypeError,
                 match="Batch size used in constructor is not compatible with vmas.",
             ):
-                env = VmasEnv(
+                _ = VmasEnv(
                     scenario_name=scenario_name,
                     num_envs=num_envs,
                     n_agents=n_agents,
@@ -910,14 +912,14 @@ class TestVmas:
                 TypeError,
                 match="Batch size used in constructor does not match vmas batch size.",
             ):
-                env = VmasEnv(
+                _ = VmasEnv(
                     scenario_name=scenario_name,
                     num_envs=num_envs,
                     n_agents=n_agents,
                     batch_size=batch_size,
                 )
         else:
-            env = VmasEnv(
+            _ = VmasEnv(
                 scenario_name=scenario_name,
                 num_envs=num_envs,
                 n_agents=n_agents,
@@ -1007,6 +1009,67 @@ class TestVmas:
         assert tensordict.shape == torch.Size(
             [n_workers, list(env.n_agents)[0], list(env.num_envs)[0], n_rollout_samples]
         )
+
+    @pytest.mark.parametrize("num_envs", [1, 10])
+    @pytest.mark.parametrize("n_workers", [1, 3])
+    def test_vmas_reset(
+        self,
+        scenario_name,
+        num_envs,
+        n_workers,
+        n_agents=5,
+        n_rollout_samples=3,
+        max_steps=3,
+    ):
+        def make_vmas():
+            env = VmasEnv(
+                scenario_name=scenario_name,
+                num_envs=num_envs,
+                n_agents=n_agents,
+                max_steps=max_steps,
+            )
+            env.set_seed(0)
+            return env
+
+        env = ParallelEnv(n_workers, make_vmas)
+        tensordict = env.rollout(max_steps=n_rollout_samples)
+
+        assert tensordict["done"].squeeze(-1)[..., -1].all()
+
+        _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+        while not _reset.any():
+            _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+
+        tensordict = env.reset(
+            TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
+        )
+        assert tensordict["done"][_reset].all().item() is False
+        # vmas resets all the agent dimension if only one of the agents needs resetting
+        # thus, here we check that where we did not reset any agent, all agents are still done
+        assert tensordict["done"].all(dim=1)[~_reset.any(dim=1)].all().item() is True
+
+    @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
+    @pytest.mark.parametrize("first", [0, 1])
+    def test_to_device(self, scenario_name: str, first: int):
+        devices = get_available_devices()
+
+        def make_vmas():
+            env = VmasEnv(
+                scenario_name=scenario_name,
+                num_envs=7,
+                n_agents=3,
+                seed=0,
+                device=devices[first],
+            )
+            return env
+
+        env = ParallelEnv(3, make_vmas)
+
+        assert env.rollout(max_steps=3).device == devices[first]
+
+        env.to(devices[1 - first])
+
+        assert env.rollout(max_steps=3).device == devices[1 - first]
 
 
 if __name__ == "__main__":
