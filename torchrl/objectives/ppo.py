@@ -47,6 +47,8 @@ class PPOLoss(LossModule):
             default: 1.0
         gamma (scalar): a discount factor for return computation.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+        normalize_advantage (bool): if True, the advantage will be normalized before being used.
+            Defaults to True.
 
     """
 
@@ -62,6 +64,7 @@ class PPOLoss(LossModule):
         critic_coef: float = 1.0,
         gamma: float = 0.99,
         loss_critic_type: str = "smooth_l1",
+        normalize_advantage: bool = True,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -82,6 +85,7 @@ class PPOLoss(LossModule):
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self.device))
         self.loss_critic_type = loss_critic_type
+        self.normalize_advantage = normalize_advantage
 
     def reset(self) -> None:
         pass
@@ -137,8 +141,13 @@ class PPOLoss(LossModule):
         return self.critic_coef * loss_value
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = tensordict.clone()
+        tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.advantage_key)
+        if self.normalize_advantage and advantage.numel() > 1:
+            loc = advantage.mean().item()
+            scale = advantage.std().clamp_min(1e-6).item()
+            advantage = (advantage - loc) / scale
+
         log_weight, dist = self._log_weight(tensordict)
         neg_loss = (log_weight.exp() * advantage).mean()
         td_out = TensorDict({"loss_objective": -neg_loss.mean()}, [])
@@ -176,6 +185,8 @@ class ClipPPOLoss(PPOLoss):
             default: 1.0
         gamma (scalar): a discount factor for return computation.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+        normalize_advantage (bool): if True, the advantage will be normalized before being used.
+            Defaults to True.
 
     """
 
@@ -190,7 +201,8 @@ class ClipPPOLoss(PPOLoss):
         entropy_coef: float = 0.01,
         critic_coef: float = 1.0,
         gamma: float = 0.99,
-        loss_critic_type: str = "l2",
+        loss_critic_type: str = "smooth_l1",
+        normalize_advantage: bool = True,
         **kwargs,
     ):
         super(ClipPPOLoss, self).__init__(
@@ -203,6 +215,7 @@ class ClipPPOLoss(PPOLoss):
             critic_coef=critic_coef,
             gamma=gamma,
             loss_critic_type=loss_critic_type,
+            normalize_advantage=normalize_advantage,
             **kwargs,
         )
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
@@ -215,7 +228,7 @@ class ClipPPOLoss(PPOLoss):
         )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = tensordict.clone()
+        tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.advantage_key)
         log_weight, dist = self._log_weight(tensordict)
         # ESS for logging
@@ -235,6 +248,10 @@ class ClipPPOLoss(PPOLoss):
         gain1 = log_weight.exp() * advantage
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
+        if self.normalize_advantage and advantage.numel() > 1:
+            loc = advantage.mean().item()
+            scale = advantage.std().clamp_min(1e-6).item()
+            advantage = (advantage - loc) / scale
         gain2 = log_weight_clip.exp() * advantage
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
@@ -282,6 +299,8 @@ class KLPENPPOLoss(PPOLoss):
             default: 1.0
         gamma (scalar): a discount factor for return computation.
         loss_critic_type (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+        normalize_advantage (bool): if True, the advantage will be normalized before being used.
+            Defaults to True.
 
     """
 
@@ -300,7 +319,8 @@ class KLPENPPOLoss(PPOLoss):
         entropy_coef: float = 0.01,
         critic_coef: float = 1.0,
         gamma: float = 0.99,
-        loss_critic_type: str = "l2",
+        loss_critic_type: str = "smooth_l1",
+        normalize_advantage: bool = True,
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
@@ -313,6 +333,7 @@ class KLPENPPOLoss(PPOLoss):
             critic_coef=critic_coef,
             gamma=gamma,
             loss_critic_type=loss_critic_type,
+            normalize_advantage=normalize_advantage,
             **kwargs,
         )
 
@@ -333,8 +354,12 @@ class KLPENPPOLoss(PPOLoss):
         self.samples_mc_kl = samples_mc_kl
 
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
-        tensordict = tensordict.clone()
+        tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.advantage_key)
+        if self.normalize_advantage and advantage.numel() > 1:
+            loc = advantage.mean().item()
+            scale = advantage.std().clamp_min(1e-6).item()
+            advantage = (advantage - loc) / scale
         log_weight, dist = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
 
