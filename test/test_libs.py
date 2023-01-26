@@ -580,7 +580,9 @@ class TestEnvPool:
             dtype = torch.float32
 
         if env_multithreaded.action_spec.shape:
-            module = torch.nn.LazyLinear(env_multithreaded.action_spec.shape[-1], dtype=dtype)
+            module = torch.nn.LazyLinear(
+                env_multithreaded.action_spec.shape[-1], dtype=dtype
+            )
         else:
             # Action space is discrete
             module = DiscreteChoice(env_multithreaded.action_spec.space.n, dtype=dtype)
