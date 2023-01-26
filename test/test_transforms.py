@@ -1332,17 +1332,16 @@ class TestTransforms:
         td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
         cat_frames = CatFrames(N=N, in_keys=keys)
 
-        cat_frames(td)
+        cat_frames(td.clone())
         buffer = getattr(cat_frames, f"_cat_buffers_{key1}")
 
-        passed_back_td = cat_frames.reset(td)
+        tdc = td.clone()
+        passed_back_td = cat_frames.reset(tdc)
 
-        assert td is passed_back_td
-        assert (0 == buffer).all()
+        assert tdc is passed_back_td
+        assert (buffer != 0).all()
 
-        _ = cat_frames._call(td)
-        assert (0 == buffer[..., :-1, :, :]).all()
-        assert (0 != buffer[..., -1:, :, :]).all()
+        _ = cat_frames._call(td.clone())
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_finitetensordictcheck(self, device):

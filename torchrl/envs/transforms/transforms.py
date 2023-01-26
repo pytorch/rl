@@ -1541,7 +1541,7 @@ class CatFrames(ObservationTransform):
             torch.ones(
                 tensordict.batch_size,
                 dtype=torch.bool,
-                device=tensordict.device,
+                device=self.parent.device,
             ),
         )
         for in_key in self.in_keys:
