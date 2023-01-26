@@ -659,7 +659,7 @@ class SyncDataCollector(_DataCollector):
                 ("collector", "step_count"),
                 torch.zeros(self.env.batch_size, dtype=torch.int, device=self.device),
             )
-        elif self._tensordict is None:
+        elif self._current_td is None:
             n = self.env.batch_size.numel() if len(self.env.batch_size) else 1
             traj_ids = torch.arange(n).view(self.env.batch_size)
             step_count = torch.zeros(
