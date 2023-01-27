@@ -1533,7 +1533,7 @@ class CatFrames(ObservationTransform):
 
     inplace = False
     _CAT_DIM_ERR = (
-        "cat_dim must be > 0 to accomodate for tensordict of "
+        "dim must be > 0 to accomodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
 
@@ -1550,7 +1550,7 @@ class CatFrames(ObservationTransform):
         self.N = N
         if dim > 0:
             raise ValueError(self._CAT_DIM_ERR)
-        self.cat_dim = dim
+        self.dim = dim
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
             setattr(
@@ -1584,8 +1584,8 @@ class CatFrames(ObservationTransform):
 
     def _make_missing_buffer(self, data, buffer_name):
         shape = list(data.shape)
-        d = shape[self.cat_dim]
-        shape[self.cat_dim] = d * self.N
+        d = shape[self.dim]
+        shape[self.dim] = d * self.N
         shape = torch.Size(shape)
         getattr(self, buffer_name).materialize(shape)
         buffer = getattr(self, buffer_name).to(data.dtype).to(data.device).zero_()
@@ -1600,18 +1600,18 @@ class CatFrames(ObservationTransform):
             # Lazy init of buffers
             buffer_name = f"_cat_buffers_{in_key}"
             data = tensordict[in_key]
-            d = data.size(self.cat_dim)
+            d = data.size(self.dim)
             buffer = getattr(self, buffer_name)
             if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
                 buffer = self._make_missing_buffer(data, buffer_name)
             # shift obs 1 position to the right
             if _reset is not None:
                 buffer[_reset] = buffer[_reset].copy_(
-                    data[_reset].repeat_interleave(self.N, self.cat_dim)
+                    data[_reset].repeat_interleave(self.N, self.dim)
                 )
-            buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.cat_dim))
+            buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.dim))
             # add new obs
-            idx = self.cat_dim
+            idx = self.dim
             if idx < 0:
                 idx = buffer.ndimension() + idx
             else:
@@ -1627,19 +1627,19 @@ class CatFrames(ObservationTransform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
-            space.minimum = torch.cat([space.minimum] * self.N, self.cat_dim)
-            space.maximum = torch.cat([space.maximum] * self.N, self.cat_dim)
+            space.minimum = torch.cat([space.minimum] * self.N, self.dim)
+            space.maximum = torch.cat([space.maximum] * self.N, self.dim)
             observation_spec.shape = space.minimum.shape
         else:
             shape = list(observation_spec.shape)
-            shape[self.cat_dim] = self.N * shape[self.cat_dim]
+            shape[self.dim] = self.N * shape[self.dim]
             observation_spec.shape = torch.Size(shape)
         return observation_spec
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(N={self.N}, cat_dim"
-            f"={self.cat_dim}, keys={self.in_keys})"
+            f"{self.__class__.__name__}(N={self.N}, dim"
+            f"={self.dim}, keys={self.in_keys})"
         )
 
 

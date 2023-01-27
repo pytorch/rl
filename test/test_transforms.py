@@ -1327,31 +1327,50 @@ class TestTransforms:
                 )
 
     @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("batch_size", [(), (1,), (1, 2)])
     @pytest.mark.parametrize("d", range(1, 4))
-    def test_catframes_buffer_check_latest_frame(self, device, d):
+    @pytest.mark.parametrize("dim", [-3, -2, 1])
+    @pytest.mark.parametrize("N", [2, 4])
+    def test_catframes_buffer_check_latest_frame(self, device, d, batch_size, dim, N):
         key1 = "first key"
         key2 = "second key"
-        N = 4
         keys = [key1, key2]
-        key1_tensor = torch.ones(1, d, 3, 3, device=device) * 2
-        key2_tensor = torch.ones(1, d, 3, 3, device=device)
+        extra_d = (3,) * (-dim - 1)
+        key1_tensor = torch.ones(*batch_size, d, *extra_d, device=device) * 2
+        key2_tensor = torch.ones(*batch_size, d, *extra_d, device=device)
         key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
-        cat_frames = CatFrames(N=N, in_keys=keys, dim=-3)
+        td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
+        if dim > 0:
+            with pytest.raises(
+                ValueError, match="dim must be > 0 to accomodate for tensordict"
+            ):
+                cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
+            return
+        cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
 
         tdclone = cat_frames(td.clone())
         latest_frame = tdclone.get(key2)
 
-        assert latest_frame.shape[1] == N * d
-        assert (latest_frame[0, :-d] == 0).all()
-        assert (latest_frame[0, -d:] == 1).all()
+        assert latest_frame.shape[dim] == N * d
+        slices = (slice(None),) * (-dim - 1)
+        index1 = (Ellipsis, slice(None, -d), *slices)
+        index2 = (Ellipsis, slice(-d, None), *slices)
+        assert (latest_frame[index1] == 0).all()
+        assert (latest_frame[index2] == 1).all()
+        v1 = latest_frame[index1]
 
         tdclone = cat_frames(td.clone())
         latest_frame = tdclone.get(key2)
 
-        assert latest_frame.shape[1] == N * d
-        assert (latest_frame[0, : -2 * d] == 0).all()
-        assert (latest_frame[0, -2 * d :] == 1).all()
+        assert latest_frame.shape[dim] == N * d
+        index1 = (Ellipsis, slice(None, -2 * d), *slices)
+        index2 = (Ellipsis, slice(-2 * d, None), *slices)
+        assert (latest_frame[index1] == 0).all()
+        assert (latest_frame[index2] == 1).all()
+        v2 = latest_frame[index1]
+
+        # we don't want the same tensor to be returned twice, but they're all copies of the same buffer
+        assert v1 is not v2
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_catframes_reset(self, device):

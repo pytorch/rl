@@ -124,7 +124,7 @@ def make_env_transforms(
         if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(0, -3))
-        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]), dim=-3)
+        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"], dim=-3))
         if stats is None:
             obs_stats = {
                 "loc": torch.zeros(env.observation_spec["pixels"].shape),
