@@ -944,7 +944,11 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_compose(self, keys, batch, device, nchannels=1, N=4):
         torch.manual_seed(0)
-        t1 = CatFrames(in_keys=keys, N=4)
+        t1 = CatFrames(
+            in_keys=keys,
+            N=4,
+            dim=-3,
+        )
         t2 = FiniteTensorDictCheck()
         compose = Compose(t1, t2)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
@@ -1285,7 +1289,11 @@ class TestTransforms:
         key1 = "first key"
         key2 = "second key"
         keys = [key1, key2]
-        cat_frames = CatFrames(N=N, in_keys=keys)
+        cat_frames = CatFrames(
+            N=N,
+            in_keys=keys,
+            dim=-3,
+        )
         mins = [0, 0.5]
         maxes = [0.5, 1]
         observation_spec = CompositeSpec(
@@ -1329,7 +1337,7 @@ class TestTransforms:
         key2_tensor = torch.ones(1, d, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
-        cat_frames = CatFrames(N=N, in_keys=keys)
+        cat_frames = CatFrames(N=N, in_keys=keys, dim=-3)
 
         tdclone = cat_frames(td.clone())
         latest_frame = tdclone.get(key2)
@@ -1355,7 +1363,7 @@ class TestTransforms:
         key2_tensor = torch.randn(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
-        cat_frames = CatFrames(N=N, in_keys=keys)
+        cat_frames = CatFrames(N=N, in_keys=keys, dim=-3)
 
         cat_frames(td.clone())
         buffer = getattr(cat_frames, f"_cat_buffers_{key1}")
@@ -1688,7 +1696,7 @@ class TestTransforms:
         (key,) = itertools.islice(obs_spec.keys(), 1)
 
         env = TransformedEnv(env)
-        env.append_transform(CatFrames(N=4, cat_dim=-1, in_keys=[key]))
+        env.append_transform(CatFrames(N=4, dim=-1, in_keys=[key]))
         assert isinstance(env.transform, Compose)
         assert len(env.transform) == 1
         obs_spec = env.observation_spec
@@ -1712,7 +1720,7 @@ class TestTransforms:
         assert env._observation_spec is not None
         assert env._reward_spec is not None
 
-        env.insert_transform(0, CatFrames(N=4, cat_dim=-1, in_keys=[key]))
+        env.insert_transform(0, CatFrames(N=4, dim=-1, in_keys=[key]))
 
         # transformed envs do not have spec after insert -- they need to be computed
         assert env._input_spec is None
@@ -1759,7 +1767,7 @@ class TestTransforms:
         assert env._observation_spec is None
         assert env._reward_spec is None
 
-        env.insert_transform(-5, CatFrames(N=4, cat_dim=-1, in_keys=[key]))
+        env.insert_transform(-5, CatFrames(N=4, dim=-1, in_keys=[key]))
         assert isinstance(env.transform, Compose)
         assert len(env.transform) == 6
 
@@ -2438,7 +2446,7 @@ transforms = [
     pytest.param(partial(SqueezeTransform, squeeze_dim=-1), id="SqueezeTransform"),
     GrayScale,
     ObservationNorm,
-    CatFrames,
+    pytest.param(partial(CatFrames, dim=-3, N=4), id="CatFrames"),
     pytest.param(partial(RewardScaling, loc=1, scale=2), id="RewardScaling"),
     FiniteTensorDictCheck,
     DoubleToFloat,

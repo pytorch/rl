@@ -1520,10 +1520,10 @@ class CatFrames(ObservationTransform):
     calling the `reset()` method.
 
     Args:
-        N (int, optional): number of observation to concatenate.
-            Default is `4`.
-        cat_dim (int, optional): dimension along which concatenate the
-            observations. Default is `cat_dim=-3`.
+        N (int): number of observation to concatenate.
+        dim (int): dimension along which concatenate the
+            observations. Should be negative, to ensure that it is compatible
+            with environments of different batch_size.
         in_keys (list of int, optional): keys pointing to the frames that have
             to be concatenated. Defaults to ["pixels"].
         out_keys (list of int, optional): keys pointing to where the output
@@ -1539,8 +1539,8 @@ class CatFrames(ObservationTransform):
 
     def __init__(
         self,
-        N: int = 4,
-        cat_dim: int = -3,
+        N: int,
+        dim: int,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
     ):
@@ -1548,9 +1548,9 @@ class CatFrames(ObservationTransform):
             in_keys = IMAGE_KEYS
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.N = N
-        if cat_dim > 0:
+        if dim > 0:
             raise ValueError(self._CAT_DIM_ERR)
-        self.cat_dim = cat_dim
+        self.cat_dim = dim
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
             setattr(
