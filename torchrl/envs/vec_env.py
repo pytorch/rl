@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import os
 from collections import OrderedDict
 from copy import deepcopy
@@ -30,6 +32,7 @@ from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 try:
     # Libraries necessary for MultiThreadedEnv
     import envpool
+    import gym
     import treevalue
 
     _has_envpool = True
@@ -1103,7 +1106,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     ):
         if not _has_envpool:
             raise ImportError(
-                f"""envpool python package was not found. Please install this dependency.
+                f"""envpool python package or one of its dependencies (gym, treevalue) were not found. Please install these dependencies.
 (Got the error message: {IMPORT_ERR_ENVPOOL}).
 """
             )
@@ -1112,7 +1115,6 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             self.num_workers = env.config["num_envs"]
             # For synchronous mode batch size is equal to the number of workers
             self.batch_size = torch.Size([self.num_workers])
-        print(f"in MultiThreadedEnvWrapper.__init__: env={env}")
         super().__init__(**kwargs)
 
         # Buffer to keep the latest observation for each worker
@@ -1159,28 +1161,68 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _get_input_spec(self) -> TensorSpec:
         # Envpool provides Gym-compatible specs as env.spec.action_space and
         # DM_Control-compatible specs as env.spec.action_spec(). We use the Gym ones.
-        action_spec = self._env.spec.action_space
-        input_spec = CompositeSpec(
-            action=_gym_to_torchrl_spec_transform(
-                action_spec,
-                device=self.device,
-                categorical_action_encoding=True,
-            )
+
+        # Gym specs produced by EnvPool don't contain batch_size, we add it to satisfy checks in EnvBase
+        action_spec = self._add_shape_to_spec(self._env.spec.action_space)
+        transformed_spec = _gym_to_torchrl_spec_transform(
+            action_spec,
+            device=self.device,
+            categorical_action_encoding=True,
         )
-        return input_spec
+        if not transformed_spec.shape:
+            transformed_spec.shape = (self.num_workers,)
+        return CompositeSpec(
+            action=transformed_spec,
+            shape=transformed_spec.shape,
+        )
 
     def _get_observation_spec(self) -> TensorSpec:
-        obs_spec = self._env.spec.observation_space
+        # Gym specs produced by EnvPool don't contain batch_size, we add it to satisfy checks in EnvBase
+        obs_spec = self._add_shape_to_spec(self._env.spec.observation_space)
         observation_spec = _gym_to_torchrl_spec_transform(
             obs_spec,
             device=self.device,
             categorical_action_encoding=True,
         )
-        return CompositeSpec(observation=observation_spec)
+        if isinstance(observation_spec, CompositeSpec):
+            observation_spec.shape = (self.num_workers,)
+        return CompositeSpec(
+            observation=observation_spec,
+            shape=observation_spec.shape,
+        )
+
+    def _add_shape_to_spec(
+        self, spec: gym.spaces.space.Space
+    ) -> gym.spaces.space.Space:
+        if isinstance(spec, gym.spaces.Box):
+            return gym.spaces.Box(
+                low=np.stack([spec.low] * self.num_workers),
+                high=np.stack([spec.high] * self.num_workers),
+                dtype=spec.dtype,
+                shape=(self.num_workers, *spec.shape),
+            )
+        if isinstance(spec, gym.spaces.dict.Dict):
+            spec_dict = {}
+            for key in spec.keys():
+                if isinstance(spec[key], gym.spaces.Box):
+                    spec_dict[key] = gym.spaces.Box(
+                        low=np.stack([spec[key].low] * self.num_workers),
+                        high=np.stack([spec[key].high] * self.num_workers),
+                        dtype=spec[key].dtype,
+                        shape=(self.num_workers, *spec[key].shape),
+                    )
+                elif isinstance(spec[key], gym.spaces.dict.Dict):
+                    # If needed, we could add support by applying this function recursively
+                    raise TypeError("Nested specs with depth > 1 are not supported.")
+            return spec_dict
+        if isinstance(spec, gym.spaces.discrete.Discrete):
+            # Discrete spec in Gym doesn't have shape, so nothing to change
+            return spec
+        raise TypeError(f"Unsupported spec type {spec.__class__}.")
 
     def _get_reward_spec(self) -> TensorSpec:
         return UnboundedContinuousTensorSpec(
-            device=self.device,
+            device=self.device, shape=(self.num_workers,)
         )
 
     def __repr__(self) -> str:
@@ -1327,8 +1369,9 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         return super()._build_env(env)
 
     def _set_seed(self, seed: Optional[int]):
-        """Library EnvPool only support setting a seed by recreating the environment."""
+        """Library EnvPool only supports setting a seed by recreating the environment."""
         if seed is not None:
+            logging.debug("Recreating EnvPool environment to set seed.")
             self.create_env_kwargs["seed"] = seed
             self._env = self._build_env(
                 env_name=self.env_name,

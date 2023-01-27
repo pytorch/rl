@@ -497,7 +497,7 @@ class TestEnvPool:
             N=N,
         )
         td = TensorDict(
-            source={"action": env_multithreaded.action_spec.rand((N,))},
+            source={"action": env_multithreaded.action_spec.rand()},
             batch_size=[
                 N,
             ],
@@ -510,7 +510,7 @@ class TestEnvPool:
         with pytest.raises(RuntimeError):
             # number of actions does not match number of workers
             td = TensorDict(
-                source={"action": env_multithreaded.action_spec.rand((N - 1,))},
+                source={"action": env_multithreaded.action_spec.rand()},
                 batch_size=[N - 1],
             )
             td1 = env_multithreaded.step(td)
@@ -607,7 +607,7 @@ class TestEnvPool:
         )
 
         td = TensorDict(
-            source={"action": env_multithreaded.action_spec.rand((N,))},
+            source={"action": env_multithreaded.action_spec.rand()},
             batch_size=[
                 N,
             ],
@@ -621,7 +621,7 @@ class TestEnvPool:
         with pytest.raises(RuntimeError):
             # number of actions does not match number of workers
             td = TensorDict(
-                source={"action": env_multithreaded.action_spec.rand((N - 1,))},
+                source={"action": env_multithreaded.action_spec.rand()},
                 batch_size=[N - 1],
             )
             td1 = env_multithreaded.step(td)
@@ -656,7 +656,7 @@ class TestEnvPool:
             transformed_out=True,
             N=N,
         )
-        action = env.action_spec.rand((N,))
+        action = env.action_spec.rand()
         env.set_seed(seed)
         td0a = env.reset()
         td1a = env.step(td0a.clone().set("action", action))
