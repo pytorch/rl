@@ -1494,10 +1494,10 @@ class CatFrames(ObservationTransform):
     calling the `reset()` method.
 
     Args:
-        N (int, optional): number of observation to concatenate.
-            Default is `4`.
-        cat_dim (int, optional): dimension along which concatenate the
-            observations. Default is `cat_dim=-3`.
+        N (int): number of observation to concatenate.
+        dim (int): dimension along which concatenate the
+            observations. Should be negative, to ensure that it is compatible
+            with environments of different batch_size.
         in_keys (list of int, optional): keys pointing to the frames that have
             to be concatenated. Defaults to ["pixels"].
         out_keys (list of int, optional): keys pointing to where the output
@@ -1505,15 +1505,16 @@ class CatFrames(ObservationTransform):
 
     """
 
+    inplace = False
     _CAT_DIM_ERR = (
-        "cat_dim must be > 0 to accomodate for tensordict of "
+        "dim must be > 0 to accomodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
 
     def __init__(
         self,
-        N: int = 4,
-        cat_dim: int = -3,
+        N: int,
+        dim: int,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
     ):
@@ -1521,9 +1522,9 @@ class CatFrames(ObservationTransform):
             in_keys = IMAGE_KEYS
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.N = N
-        if cat_dim > 0:
+        if dim > 0:
             raise ValueError(self._CAT_DIM_ERR)
-        self.cat_dim = cat_dim
+        self.dim = dim
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
             setattr(
@@ -1541,7 +1542,9 @@ class CatFrames(ObservationTransform):
             torch.ones(
                 tensordict.batch_size,
                 dtype=torch.bool,
-                device=self.parent.device,
+                device=tensordict.device
+                if tensordict.device is not None
+                else torch.device("cpu"),
             ),
         )
         for in_key in self.in_keys:
@@ -1555,8 +1558,8 @@ class CatFrames(ObservationTransform):
 
     def _make_missing_buffer(self, data, buffer_name):
         shape = list(data.shape)
-        d = shape[self.cat_dim]
-        shape[self.cat_dim] = d * self.N
+        d = shape[self.dim]
+        shape[self.dim] = d * self.N
         shape = torch.Size(shape)
         getattr(self, buffer_name).materialize(shape)
         buffer = getattr(self, buffer_name).to(data.dtype).to(data.device).zero_()
@@ -1571,18 +1574,18 @@ class CatFrames(ObservationTransform):
             # Lazy init of buffers
             buffer_name = f"_cat_buffers_{in_key}"
             data = tensordict[in_key]
-            d = data.size(self.cat_dim)
+            d = data.size(self.dim)
             buffer = getattr(self, buffer_name)
             if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
                 buffer = self._make_missing_buffer(data, buffer_name)
             # shift obs 1 position to the right
             if _reset is not None:
                 buffer[_reset] = buffer[_reset].copy_(
-                    data[_reset].repeat_interleave(self.N, self.cat_dim)
+                    data[_reset].repeat_interleave(self.N, self.dim)
                 )
-            buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.cat_dim))
+            buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.dim))
             # add new obs
-            idx = self.cat_dim
+            idx = self.dim
             if idx < 0:
                 idx = buffer.ndimension() + idx
             else:
@@ -1598,19 +1601,19 @@ class CatFrames(ObservationTransform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
-            space.minimum = torch.cat([space.minimum] * self.N, self.cat_dim)
-            space.maximum = torch.cat([space.maximum] * self.N, self.cat_dim)
+            space.minimum = torch.cat([space.minimum] * self.N, self.dim)
+            space.maximum = torch.cat([space.maximum] * self.N, self.dim)
             observation_spec.shape = space.minimum.shape
         else:
             shape = list(observation_spec.shape)
-            shape[self.cat_dim] = self.N * shape[self.cat_dim]
+            shape[self.dim] = self.N * shape[self.dim]
             observation_spec.shape = torch.Size(shape)
         return observation_spec
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(N={self.N}, cat_dim"
-            f"={self.cat_dim}, keys={self.in_keys})"
+            f"{self.__class__.__name__}(N={self.N}, dim"
+            f"={self.dim}, keys={self.in_keys})"
         )
 
 

@@ -175,7 +175,7 @@ def make_env(parallel=False, m=0, s=1):
             GrayScale(),
             Resize(64, 64),
             ObservationNorm(in_keys=["pixels"], loc=m, scale=s, standard_normal=True),
-            CatFrames(4, in_keys=["pixels"]),
+            CatFrames(4, in_keys=["pixels"], dim=-3),
         ),
     )
     return env
