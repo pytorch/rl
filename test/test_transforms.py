@@ -1370,11 +1370,13 @@ class TestTransforms:
 
         tdc = td.clone()
         passed_back_td = cat_frames.reset(tdc)
+        assert "_reset" in tdc.keys()
 
         assert tdc is passed_back_td
-        assert (buffer != 0).all()
+        assert (buffer == 0).all()
 
-        _ = cat_frames._call(td.clone())
+        _ = cat_frames._call(tdc)
+        assert (buffer != 0).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_finitetensordictcheck(self, device):

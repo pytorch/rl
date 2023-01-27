@@ -1568,7 +1568,9 @@ class CatFrames(ObservationTransform):
             torch.ones(
                 tensordict.batch_size,
                 dtype=torch.bool,
-                device=self.parent.device,
+                device=tensordict.device
+                if tensordict.device is not None
+                else torch.device("cpu"),
             ),
         )
         for in_key in self.in_keys:
