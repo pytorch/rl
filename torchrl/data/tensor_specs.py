@@ -1066,6 +1066,8 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         device (str, int or torch.device, optional): device of
             the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
+        mask (torch.Tensor, optional): mask that defines elements that can be sampled by rand().
+            The expected mask shape is the spec shape and mask dtype is torch.bool.
 
     Examples:
         >>> ts = MultiOneHotDiscreteTensorSpec((3,2,3))
@@ -1087,6 +1089,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         device=None,
         dtype=torch.long,
         use_register=False,
+        mask: Optional[torch.Tensor] = None
     ):
         self.nvec = nvec
         dtype, device = _default_dtype_and_device(dtype, device)
@@ -1101,6 +1104,23 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
                 )
         space = BoxList([DiscreteBox(n) for n in nvec])
         self.use_register = use_register
+
+        if mask is not None:
+            if mask.shape != shape:
+                raise ValueError(
+                    f"Expected a mask with the shape of the spec. "
+                    f"Got {mask.shape} but expected {self.shape}."
+                )
+            if mask.dtype is not torch.bool:
+                raise ValueError(
+                    f"Expected a mask with dtype torch.bool but got {mask.dtype}"
+                )
+            if (mask.sum(-1) == 0).any():
+                raise ValueError("Got an empty mask for some dimension.")
+            if mask.device != self.device:
+                raise ValueError(f"Expected a mask with the same device {self.device} but got {mask.device}.")
+        self.mask = mask
+
         super(OneHotDiscreteTensorSpec, self).__init__(
             shape, space, device, dtype, domain="discrete"
         )
@@ -1112,11 +1132,14 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
+        mask = self.mask.to(dest_device, copy=True) if self.mask else None
         return self.__class__(
             nvec=deepcopy(self.nvec),
             shape=self.shape,
             device=dest_device,
             dtype=dest_dtype,
+            # TODO: is it a bug that use_register is not copied?
+            mask=mask
         )
 
     def clone(self) -> CompositeSpec:
@@ -1125,6 +1148,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             shape=self.shape,
             device=self.device,
             dtype=self.dtype,
+            mask=self.mask.clone()
         )
 
     def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
@@ -1133,23 +1157,27 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         else:
             shape = torch.Size([*shape, *self.shape[:-1]])
 
-        x = torch.cat(
-            [
-                torch.nn.functional.one_hot(
-                    torch.randint(
-                        space.n,
-                        (
-                            *shape,
-                            1,
+        if self.mask is not None:
+            r = torch.rand(self.mask.shape, device=self.device).masked_fill_(~self.mask, 0.0)
+            x = (r == r.max(-1, keepdim=True)[0]).to(torch.long)
+        else:
+            x = torch.cat(
+                [
+                    torch.nn.functional.one_hot(
+                        torch.randint(
+                            space.n,
+                            (
+                                *shape,
+                                1,
+                            ),
+                            device=self.device,
                         ),
-                        device=self.device,
-                    ),
-                    space.n,
-                ).to(torch.long)
-                for space in self.space
-            ],
-            -1,
-        ).squeeze(-2)
+                        space.n,
+                    ).to(torch.long)
+                    for space in self.space
+                ],
+                -1,
+            ).squeeze(-2)
         return x
 
     def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:

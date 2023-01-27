@@ -115,11 +115,13 @@ class SC2Wrapper(GymLikeEnv):
         )
 
     def _make_input_spec(self, env: smac.env.StarCraft2Env) -> TensorSpec:
-        # TODO: add mask from env.get_avail_actions()
+        mask = torch.tensor(env.get_avail_actions(), dtype=torch.bool, device=self.device)
+
         action_spec = MultiOneHotDiscreteTensorSpec(
             [env.n_actions],
             shape=torch.Size([env.n_agents, env.n_actions]),
             device=self.device,
+            mask=mask
         )
         return CompositeSpec(action=action_spec, shape=self.batch_size)
 
@@ -177,7 +179,7 @@ class SC2Wrapper(GymLikeEnv):
         # collect outputs
         # state_dict = self.read_state(state)
         obs_dict = self.read_obs(env.get_obs())
-        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
+        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype).expand(self.batch_size)
         done = self._to_tensor(done, dtype=torch.bool).expand(self.batch_size)
 
         # build results
