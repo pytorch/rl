@@ -626,7 +626,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 Default is :obj:`True`.
             auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
                 policy device before the policy is used. Default is :obj:`False`.
-            break_when_any_done (bool): breaks if any of the done state is True. Default is True.
+            break_when_any_done (bool): breaks if any of the done state is True. If False, a reset() is
+                called on the sub-envs that are done. Default is True.
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if auto_reset is False, an initial
                 tensordict must be provided.
@@ -664,6 +665,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device)
             tensordict = self.step(tensordict)
+
             tensordicts.append(tensordict.clone())
             if (
                 break_when_any_done and tensordict.get("done").any()
@@ -674,7 +676,19 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 keep_other=True,
                 exclude_reward=False,
                 exclude_action=False,
+                exclude_done=False,
             )
+            if not break_when_any_done and tensordict.get("done").any():
+                tensordict["_reset"] = tensordict.get(
+                    "done",
+                    torch.ones(
+                        *tensordict.shape,
+                        1,
+                        dtype=torch.bool,
+                    ),
+                ).squeeze(-1)
+                print(tensordict["_reset"], tensordict["step_count"])
+                self.reset(tensordict)
 
             if callback is not None:
                 callback(self, tensordict)
@@ -774,7 +788,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             },
             batch_size=self.batch_size,
             device=self.device,
-            _run_checks=False,
+            _run_checks=True,  # this method should not be run very often. This facilitates debugging
         )
         return fake_td
 

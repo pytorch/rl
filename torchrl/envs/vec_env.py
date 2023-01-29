@@ -579,18 +579,18 @@ class SerialEnv(_BatchedEnv):
         tensordict: TensorDict,
     ) -> TensorDict:
         self._assert_tensordict_shape(tensordict)
-
-        tensordict_in = tensordict.select(
-            *self.env_input_keys,
-            strict=False,
-        )
+        tensordict_in = tensordict.clone(False)
         tensordict_out = []
         for i in range(self.num_workers):
             _tensordict_out = self._envs[i]._step(tensordict_in[i])
             tensordict_out.append(_tensordict_out)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return torch.stack(tensordict_out, 0).clone()
+        out = torch.stack(tensordict_out, 0)
+        self.shared_tensordict_parent.update_(
+            out.select(*self.shared_tensordict_parent.keys(), strict=False)
+        )
+        return self.shared_tensordict_parent.to_tensordict()
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
@@ -760,10 +760,7 @@ class ParallelEnv(_BatchedEnv):
         self._assert_tensordict_shape(tensordict)
 
         self.shared_tensordict_parent.update_(
-            tensordict.select(
-                *self.env_input_keys,
-                strict=False,
-            )
+            tensordict.select(*self.shared_tensordict_parent.keys(), strict=False)
         )
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
@@ -1015,9 +1012,12 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            _td = tensordict.select(
-                *env_input_keys,
-                strict=False,
+            _td = _td.update(
+                tensordict.select(
+                    *env_input_keys,
+                    strict=False,
+                ),
+                inplace=True,
             )
             _td = env._step(_td)
             if step_keys is None:

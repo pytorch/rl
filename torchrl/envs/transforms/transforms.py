@@ -449,7 +449,7 @@ but got an object of type {type(transform)}."""
         tensordict_out = (
             tensordict_out.update(  # update the output with the original tensordict
                 tensordict.exclude(
-                    *tensordict_out.keys()
+                    *tensordict_out.keys(True, True)
                 )  # exclude the newly written keys
             )
         )
