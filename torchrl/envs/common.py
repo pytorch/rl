@@ -774,7 +774,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             },
             batch_size=self.batch_size,
             device=self.device,
-            _run_checks=False,
+            _run_checks=True,  # this method should not be run very often. This facilitates debugging
         )
         return fake_td
 
