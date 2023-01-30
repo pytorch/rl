@@ -162,7 +162,7 @@ class TransformBase:
         raise NotImplementedError
 
 
-class BinarizeReward(TransformBase):
+class TestBinarizeReward(TransformBase):
     def test_single_trans_env_check(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), BinarizeReward())
         check_env_specs(env)
