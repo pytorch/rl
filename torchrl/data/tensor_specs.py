@@ -108,8 +108,27 @@ class Box:
 class ContinuousBox(Box):
     """A continuous box of values, in between a minimum and a maximum."""
 
-    minimum: torch.Tensor
-    maximum: torch.Tensor
+    _minimum: torch.Tensor
+    _maximum: torch.Tensor
+    device: torch.device = None
+
+    @property
+    def minimum(self):
+        return self._minimum.to(self.device)
+
+    @property
+    def maximum(self):
+        return self._maximum.to(self.device)
+
+    @minimum.setter
+    def minimum(self, value):
+        self.device = value.device
+        self._minimum = value.cpu()
+
+    @maximum.setter
+    def maximum(self, value):
+        self.device = value.device
+        self._maximum = value.cpu()
 
     def __post_init__(self):
         self.minimum = self.minimum.clone()
