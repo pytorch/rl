@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import pkg_resources
 import torch
@@ -287,3 +288,9 @@ class classproperty:
 
     def __get__(self, owner_self, owner_cls):
         return self.fget(owner_cls)
+
+
+def _sort_keys(element):
+    if isinstance(element, tuple):
+        return "_-|-_".join(element)
+    return element

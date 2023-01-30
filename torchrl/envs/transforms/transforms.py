@@ -28,7 +28,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
-from torchrl.envs.utils import step_mdp
+from torchrl.envs.utils import step_mdp, _sort_keys
 
 try:
     from torchvision.transforms.functional import center_crop
@@ -974,6 +974,11 @@ class CenterCrop(ObservationTransform):
     Args:
         w (int): resulting width
         h (int, optional): resulting height. If None, then w is used (square crop).
+        in_keys (sequence of str, optional): the entries to crop. If none is provided,
+            :obj:`["pixels"]` is assumed.
+        out_keys (sequence of str, optional): the cropped images keys. If none is
+            provided, :obj:`in_keys` is assumed.
+
     """
 
     def __init__(
@@ -981,10 +986,11 @@ class CenterCrop(ObservationTransform):
         w: int,
         h: int = None,
         in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
-        super().__init__(in_keys=in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.w = w
         self.h = h if h else w
 
@@ -1843,7 +1849,7 @@ class CatTensors(Transform):
                     "Lazy call to CatTensors is only supported when `dim=-1`."
                 )
         else:
-            in_keys = sorted(in_keys)
+            in_keys = sorted(in_keys, key=_sort_keys)
         if type(out_key) != str:
             raise Exception("CatTensors requires out_key to be of type string")
         # super().__init__(in_keys=in_keys)
@@ -1868,7 +1874,7 @@ class CatTensors(Transform):
         for key, value in obs_spec.items():
             if len(value.shape) == 1:
                 in_keys.append(key)
-        return sorted(in_keys)
+        return sorted(in_keys, key=_sort_keys)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self._initialized:
@@ -1896,8 +1902,8 @@ class CatTensors(Transform):
         else:
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
-                f" {sorted(self.in_keys)} but got a TensorDict with keys"
-                f" {sorted(tensordict.keys(include_nested=True))}"
+                f" {sorted(self.in_keys, key=_sort_keys)} but got a TensorDict with keys"
+                f" {sorted(tensordict.keys(include_nested=True), key=_sort_keys)}"
             )
         return tensordict
 

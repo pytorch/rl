@@ -23,6 +23,7 @@ from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
+from torchrl.envs.utils import _sort_keys
 
 
 def _check_start(fun):
@@ -36,12 +37,6 @@ def _check_start(fun):
         return fun(self, *args, **kwargs)
 
     return decorated_fun
-
-
-def _sort_keys(element):
-    if isinstance(element, tuple):
-        return "_-|-_".join(element)
-    return element
 
 
 class _dispatch_caller_parallel:
@@ -419,7 +414,7 @@ class _BatchedEnv(EnvBase):
                 self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
             if not len(self.env_input_keys):
                 raise RuntimeError(
-                    f"found 0 action keys in {sorted(self.selected_keys,key=_sort_keys)}"
+                    f"found 0 action keys in {sorted(self.selected_keys, key=_sort_keys)}"
                 )
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(

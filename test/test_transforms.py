@@ -1063,6 +1063,370 @@ class TestStepCounter(TransformBase):
         check_env_specs(transformed_env)
         transformed_env.close()
 
+class TestCatTensors(TransformBase):
+
+    @pytest.mark.parametrize("append", [True, False])
+    def test_cattensors_empty(self, append):
+        ct = CatTensors(out_key="observation_out", dim=-1, del_keys=False)
+        if append:
+            mock_env = TransformedEnv(ContinuousActionVecMockEnv())
+            mock_env.append_transform(ct)
+        else:
+            mock_env = TransformedEnv(ContinuousActionVecMockEnv(), ct)
+        tensordict = mock_env.rollout(3)
+        assert all(key in tensordict.keys() for key in ["observation_out"])
+        # assert not any(key in tensordict.keys() for key in mock_env.base_env.observation_spec)
+
+    def test_single_trans_env_check(self):
+        ct = CatTensors(in_keys=["observation", "observation_orig"], out_key="observation_out", dim=-1, del_keys=False)
+        env = TransformedEnv(ContinuousActionVecMockEnv(), ct)
+        check_env_specs(env)
+
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            ct = CatTensors(in_keys=["observation", "observation_orig"], out_key="observation_out", dim=-1, del_keys=False)
+            return TransformedEnv(ContinuousActionVecMockEnv(), ct)
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            ct = CatTensors(in_keys=["observation", "observation_orig"],
+                            out_key="observation_out", dim=-1, del_keys=False)
+            return TransformedEnv(ContinuousActionVecMockEnv(), ct)
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        ct = CatTensors(in_keys=["observation", "observation_orig"],
+                            out_key="observation_out", dim=-1, del_keys=False)
+
+        env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), ct)
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        ct = CatTensors(in_keys=["observation", "observation_orig"],
+                            out_key="observation_out", dim=-1, del_keys=False)
+
+        env = TransformedEnv(ParallelEnv(2, ContinuousActionVecMockEnv), ct)
+        check_env_specs(env)
+
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "keys",
+        [
+            ["observation", "observation_other"],
+            ["observation_pixels"],
+        ],
+    )
+    def test_transform_no_env(self, keys, device):
+        cattensors = CatTensors(in_keys=keys, out_key="observation_out", dim=-2)
+
+        dont_touch = torch.randn(1, 3, 3, dtype=torch.double, device=device)
+        td = TensorDict(
+            {
+                key: torch.full(
+                    (
+                        1,
+                        4,
+                        32,
+                    ),
+                    value,
+                    dtype=torch.float,
+                    device=device,
+                )
+                for value, key in enumerate(keys)
+            },
+            [1],
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+
+        tdc = cattensors(td.clone())
+        assert tdc.get("observation_out").shape[-2] == len(keys) * 4
+        assert tdc.get("dont touch").shape == dont_touch.shape
+
+        tdc = cattensors._call(td.clone())
+        assert tdc.get("observation_out").shape[-2] == len(keys) * 4
+        assert tdc.get("dont touch").shape == dont_touch.shape
+
+        if len(keys) == 1:
+            observation_spec = BoundedTensorSpec(0, 1, (1, 4, 32))
+            observation_spec = cattensors.transform_observation_spec(observation_spec)
+            assert observation_spec.shape == torch.Size([1, len(keys) * 4, 32])
+        else:
+            observation_spec = CompositeSpec(
+                {key: BoundedTensorSpec(0, 1, (1, 4, 32)) for key in keys}
+            )
+            observation_spec = cattensors.transform_observation_spec(observation_spec)
+            assert observation_spec["observation_out"].shape == torch.Size(
+                [1, len(keys) * 4, 32]
+            )
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "keys",
+        [
+            ["observation", "observation_other"],
+            ["observation_pixels"],
+        ],
+    )
+    def test_transform_compose(self, keys, device):
+        cattensors = Compose(CatTensors(in_keys=keys, out_key="observation_out", dim=-2))
+
+        dont_touch = torch.randn(1, 3, 3, dtype=torch.double, device=device)
+        td = TensorDict(
+            {
+                key: torch.full(
+                    (
+                        1,
+                        4,
+                        32,
+                    ),
+                    value,
+                    dtype=torch.float,
+                    device=device,
+                )
+                for value, key in enumerate(keys)
+            },
+            [1],
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+
+        tdc = cattensors(td.clone())
+        assert tdc.get("observation_out").shape[-2] == len(keys) * 4
+        assert tdc.get("dont touch").shape == dont_touch.shape
+
+        tdc = cattensors._call(td.clone())
+        assert tdc.get("observation_out").shape[-2] == len(keys) * 4
+        assert tdc.get("dont touch").shape == dont_touch.shape
+
+    @pytest.mark.parametrize("del_keys", [True, False])
+    @pytest.mark.skipif(not _has_gym, reason="Gym not found")
+    def test_transform_env(self, del_keys):
+        ct = CatTensors(in_keys=["observation", ], out_key="observation_out", dim=-1, del_keys=del_keys)
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), ct)
+        assert env.observation_spec["observation_out"]
+        if del_keys:
+            assert "observation" not in env.observation_spec
+        else:
+            assert "observation" in env.observation_spec
+
+        assert "observation" in env.base_env.observation_spec
+        check_env_specs(env)
+
+    def test_transform_model(self):
+        ct = CatTensors(in_keys=[("next", "observation"), "action"], out_key="observation_out", dim=-1, del_keys=True)
+        model = nn.Sequential(ct, nn.Identity())
+        td = TensorDict({("next", "observation"): torch.randn(3), "action": torch.randn(2)}, [])
+        td = model(td)
+        assert "observation_out" in td.keys()
+        assert "action" not in td.keys()
+        assert ("next", "observation") not in td.keys(True)
+
+    def test_transform_rb(self):
+        ct = CatTensors(in_keys=[("next", "observation"), "action"], out_key="observation_out", dim=-1, del_keys=True)
+        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb.append_transform(ct)
+        td = TensorDict({("next", "observation"): torch.randn(3), "action": torch.randn(2)}, []).expand(10).contiguous()
+        rb.extend(td)
+        td = rb.sample(10)
+        assert "observation_out" in td.keys()
+        assert "action" not in td.keys()
+        assert ("next", "observation") not in td.keys(True)
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse for CatTensors")
+
+class TestCenterCrop(TransformBase):
+
+    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("h", [None, 21])
+    @pytest.mark.parametrize(
+        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_no_env(self, keys, h, nchannels, batch, device):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
+        cc = CenterCrop(w=20, h=h, in_keys=keys)
+        if h is None:
+            h = 20
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, nchannels, 16, 16, device=device)
+                for key in keys
+            },
+            batch,
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        cc(td)
+        for key in keys:
+            assert td.get(key).shape[-2:] == torch.Size([20, h])
+        assert (td.get("dont touch") == dont_touch).all()
+
+        if len(keys) == 1:
+            observation_spec = BoundedTensorSpec(-1, 1, (nchannels, 16, 16))
+            observation_spec = cc.transform_observation_spec(observation_spec)
+            assert observation_spec.shape == torch.Size([nchannels, 20, h])
+        else:
+            observation_spec = CompositeSpec(
+                {key: BoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
+            )
+            observation_spec = cc.transform_observation_spec(observation_spec)
+            for key in keys:
+                assert observation_spec[key].shape == torch.Size([nchannels, 20, h])
+
+    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
+    @pytest.mark.parametrize("nchannels", [3])
+    @pytest.mark.parametrize("batch", [[2],])
+    @pytest.mark.parametrize("h", [None, ])
+    @pytest.mark.parametrize(
+        "keys", [["observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_model(self, keys, h, nchannels, batch, device):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
+        cc = CenterCrop(w=20, h=h, in_keys=keys)
+        if h is None:
+            h = 20
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, nchannels, 16, 16, device=device)
+                for key in keys
+            },
+            batch,
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        model = nn.Sequential(cc, nn.Identity())
+        model(td)
+        for key in keys:
+            assert td.get(key).shape[-2:] == torch.Size([20, h])
+        assert (td.get("dont touch") == dont_touch).all()
+
+    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
+    @pytest.mark.parametrize("nchannels", [3])
+    @pytest.mark.parametrize("batch", [[2],])
+    @pytest.mark.parametrize("h", [None, ])
+    @pytest.mark.parametrize(
+        "keys", [["observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_compose(self, keys, h, nchannels, batch, device):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
+        cc = CenterCrop(w=20, h=h, in_keys=keys)
+        if h is None:
+            h = 20
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, nchannels, 16, 16, device=device)
+                for key in keys
+            },
+            batch,
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        model = Compose(cc)
+        tdc = model(td.clone())
+        for key in keys:
+            assert tdc.get(key).shape[-2:] == torch.Size([20, h])
+        assert (tdc.get("dont touch") == dont_touch).all()
+        tdc = model._call(td.clone())
+        for key in keys:
+            assert tdc.get(key).shape[-2:] == torch.Size([20, h])
+        assert (tdc.get("dont touch") == dont_touch).all()
+
+    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
+    @pytest.mark.parametrize("nchannels", [3])
+    @pytest.mark.parametrize("batch", [[2],])
+    @pytest.mark.parametrize("h", [None, ])
+    @pytest.mark.parametrize(
+        "keys", [["observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_rb(self, keys, h, nchannels, batch, device):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
+        cc = CenterCrop(w=20, h=h, in_keys=keys)
+        if h is None:
+            h = 20
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, nchannels, 16, 16, device=device)
+                for key in keys
+            },
+            batch,
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb.append_transform(cc)
+        rb.extend(td)
+        td = rb.sample(10)
+        for key in keys:
+            assert td.get(key).shape[-2:] == torch.Size([20, h])
+
+    def test_single_trans_env_check(self):
+        keys = ["pixels"]
+        ct = Compose(ToTensorImage(), CenterCrop(w=20, h=20, in_keys=keys))
+        env = TransformedEnv(DiscreteActionConvMockEnvNumpy(), ct)
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        keys = ["pixels"]
+        def make_env():
+            ct = Compose(ToTensorImage(), CenterCrop(w=20, h=20, in_keys=keys))
+            return TransformedEnv(DiscreteActionConvMockEnvNumpy(), ct)
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        keys = ["pixels"]
+        def make_env():
+            ct = Compose(ToTensorImage(), CenterCrop(w=20, h=20, in_keys=keys))
+            return TransformedEnv(DiscreteActionConvMockEnvNumpy(), ct)
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        keys = ["pixels"]
+        ct = Compose(ToTensorImage(), CenterCrop(w=20, h=20, in_keys=keys))
+        env = TransformedEnv(SerialEnv(2, DiscreteActionConvMockEnvNumpy), ct)
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        keys = ["pixels"]
+        ct = Compose(ToTensorImage(), CenterCrop(w=20, h=20, in_keys=keys))
+        env = TransformedEnv(ParallelEnv(2, DiscreteActionConvMockEnvNumpy), ct)
+        check_env_specs(env)
+
+    @pytest.mark.skipif(not _has_gym, reason="No Gym detected")
+    @pytest.mark.parametrize("out_key", [None, ["outkey"]])
+    def test_transform_env(self, out_key):
+        keys = ["pixels"]
+        ct = Compose(ToTensorImage(), CenterCrop(out_keys=out_key, w=20, h=20, in_keys=keys))
+        env = TransformedEnv(GymEnv("ALE/Pong-v5"), ct)
+        td = env.reset()
+        if out_key is None:
+            assert td["pixels"].shape == torch.Size([3, 20, 20])
+        else:
+            assert td[out_key].shape == torch.Size([3, 20, 20])
+        check_env_specs(env)
+
+    def test_transform_inverse(self):
+        raise pytest.skip("CenterCrop does not have an inverse method.")
 
 class TestVecNorm:
     SEED = -1
@@ -1456,46 +1820,6 @@ class TestTransforms:
             observation_spec = resize.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, 21])
-
-    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
-    @pytest.mark.parametrize("nchannels", [1, 3])
-    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
-    @pytest.mark.parametrize("h", [None, 21])
-    @pytest.mark.parametrize(
-        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
-    )
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_centercrop(self, keys, h, nchannels, batch, device):
-        torch.manual_seed(0)
-        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
-        cc = CenterCrop(w=20, h=h, in_keys=keys)
-        if h is None:
-            h = 20
-        td = TensorDict(
-            {
-                key: torch.randn(*batch, nchannels, 16, 16, device=device)
-                for key in keys
-            },
-            batch,
-            device=device,
-        )
-        td.set("dont touch", dont_touch.clone())
-        cc(td)
-        for key in keys:
-            assert td.get(key).shape[-2:] == torch.Size([20, h])
-        assert (td.get("dont touch") == dont_touch).all()
-
-        if len(keys) == 1:
-            observation_spec = BoundedTensorSpec(-1, 1, (nchannels, 16, 16))
-            observation_spec = cc.transform_observation_spec(observation_spec)
-            assert observation_spec.shape == torch.Size([nchannels, 20, h])
-        else:
-            observation_spec = CompositeSpec(
-                {key: BoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
-            )
-            observation_spec = cc.transform_observation_spec(observation_spec)
-            for key in keys:
-                assert observation_spec[key].shape == torch.Size([nchannels, 20, h])
 
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize("nchannels", [1, 3])
@@ -2328,66 +2652,6 @@ class TestTransforms:
             observation_spec = double2float.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].dtype == torch.float
-
-    @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize(
-        "keys",
-        [
-            ["observation", "observation_other"],
-            ["observation_pixels"],
-        ],
-    )
-    def test_cattensors(self, keys, device):
-        cattensors = CatTensors(in_keys=keys, out_key="observation_out", dim=-2)
-
-        dont_touch = torch.randn(1, 3, 3, dtype=torch.double, device=device)
-        td = TensorDict(
-            {
-                key: torch.full(
-                    (
-                        1,
-                        4,
-                        32,
-                    ),
-                    value,
-                    dtype=torch.float,
-                    device=device,
-                )
-                for value, key in enumerate(keys)
-            },
-            [1],
-            device=device,
-        )
-        td.set("dont touch", dont_touch.clone())
-
-        cattensors(td)
-        assert td.get("observation_out").shape[-2] == len(keys) * 4
-        assert td.get("dont touch").shape == dont_touch.shape
-
-        if len(keys) == 1:
-            observation_spec = BoundedTensorSpec(0, 1, (1, 4, 32))
-            observation_spec = cattensors.transform_observation_spec(observation_spec)
-            assert observation_spec.shape == torch.Size([1, len(keys) * 4, 32])
-        else:
-            observation_spec = CompositeSpec(
-                {key: BoundedTensorSpec(0, 1, (1, 4, 32)) for key in keys}
-            )
-            observation_spec = cattensors.transform_observation_spec(observation_spec)
-            assert observation_spec["observation_out"].shape == torch.Size(
-                [1, len(keys) * 4, 32]
-            )
-
-    @pytest.mark.parametrize("append", [True, False])
-    def test_cattensors_empty(self, append):
-        ct = CatTensors(out_key="observation_out", dim=-1, del_keys=False)
-        if append:
-            mock_env = TransformedEnv(ContinuousActionVecMockEnv())
-            mock_env.append_transform(ct)
-        else:
-            mock_env = TransformedEnv(ContinuousActionVecMockEnv(), ct)
-        tensordict = mock_env.rollout(3)
-        assert all(key in tensordict.keys() for key in ["observation_out"])
-        # assert not any(key in tensordict.keys() for key in mock_env.base_env.observation_spec)
 
     @pytest.mark.parametrize("random", [True, False])
     @pytest.mark.parametrize("compose", [True, False])
