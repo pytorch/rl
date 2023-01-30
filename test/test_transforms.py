@@ -287,10 +287,11 @@ class TestBinarizeReward(TransformBase):
 
 
 class TestCatFrames(TransformBase):
-    def test_single_trans_env_check(self):
+    @pytest.mark.parametrize("out_keys", [None, ["obs2"]])
+    def test_single_trans_env_check(self, out_keys):
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
-            CatFrames(dim=-1, N=3, in_keys=["observation"]),
+            CatFrames(dim=-1, N=3, in_keys=["observation"], out_keys=out_keys),
         )
         check_env_specs(env)
 
