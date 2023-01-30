@@ -115,10 +115,17 @@ class ContinuousBox(Box):
     # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
     @property
     def minimum(self):
+        import traceback
+        import sys
+
+        print("calling min")
+        traceback.print_stack()
         return self._minimum.to(self.device)
 
     @property
     def maximum(self):
+        print("calling max")
+        traceback.print_stack()
         return self._maximum.to(self.device)
 
     @minimum.setter
