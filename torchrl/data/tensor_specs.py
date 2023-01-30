@@ -286,7 +286,7 @@ class TensorSpec:
                         f"Shape mismatch: the value has shape {val.shape} which "
                         f"is incompatible with the spec shape {self.shape}."
                     )
-        if not _CHECK_SPEC_ENCODE:
+        if _CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val
 
