@@ -112,6 +112,7 @@ class ContinuousBox(Box):
     _maximum: torch.Tensor
     device: torch.device = None
 
+    # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
     @property
     def minimum(self):
         return self._minimum.to(self.device)
