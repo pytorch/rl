@@ -79,7 +79,7 @@ from torchrl.envs.utils import check_env_specs
 TIMEOUT = 10.0
 
 
-class TestTransformBase:
+class TransformBase:
     """A base class for transform test.
 
     We ask for every new transform tests to be coded following this minimum requirement class.
@@ -162,7 +162,7 @@ class TestTransformBase:
         raise NotImplementedError
 
 
-class TestBinarizeReward(TestTransformBase):
+class BinarizeReward(TransformBase):
     def test_single_trans_env_check(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), BinarizeReward())
         check_env_specs(env)
@@ -281,7 +281,7 @@ class TestBinarizeReward(TestTransformBase):
         raise pytest.skip("No inverse for BinerizedReward")
 
 
-class TestCatFrames(TestTransformBase):
+class CatFrames(TransformBase):
     def test_single_trans_env_check(self):
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
@@ -552,7 +552,7 @@ class TestCatFrames(TestTransformBase):
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("model", ["resnet18", "resnet34", "resnet50"])
-class TestR3M(TestTransformBase):
+class R3M(TransformBase):
     def test_transform_inverse(self, model, device):
         raise pytest.skip("no inverse for R3MTransform")
 
@@ -929,7 +929,7 @@ class TestR3M(TestTransformBase):
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 
 
-class TestStepCounter(TestTransformBase):
+class StepCounter(TransformBase):
     def test_parallel_trans_env_check(self):
         def make_env():
             return TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(10))
