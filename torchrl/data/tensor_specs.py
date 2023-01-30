@@ -38,6 +38,7 @@ INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 # By default, we do not check that an obs is in the domain. THis should be done when validating the env beforehand
 _CHECK_SPEC_ENCODE = get_binary_env_var("CHECK_SPEC_ENCODE")
 
+
 _DEFAULT_SHAPE = torch.Size((1,))
 
 DEVICE_ERR_MSG = "device of empty CompositeSpec is not defined."
