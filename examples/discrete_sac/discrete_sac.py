@@ -19,7 +19,7 @@ from torchrl.data import (
 )
 
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.envs import EnvCreator, ParallelEnv, RewardSum, TransformedEnv
+from torchrl.envs import EnvCreator, ParallelEnv
 
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.utils import set_exploration_mode
@@ -48,7 +48,6 @@ def make_replay_buffer(
 ):
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
-            buffer_size,
             alpha=0.7,
             beta=0.5,
             pin_memory=False,
@@ -61,7 +60,6 @@ def make_replay_buffer(
         )
     else:
         replay_buffer = TensorDictReplayBuffer(
-            buffer_size,
             pin_memory=False,
             prefetch=make_replay_buffer,
             storage=LazyMemmapStorage(
@@ -97,15 +95,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # 1.2 Create env vector
         vec_env = ParallelEnv(
-            create_env_fn=EnvCreator(lambda: env_maker(task=cfg.env_name)),
+            create_env_fn=EnvCreator(lambda: env_maker(env_name=cfg.env_name)),
             num_workers=num_workers,
         )
 
-        # 1.3 Apply transformations to vec env - standard DeepMind Atari - Order of transforms is important!
-        transformed_vec_env = TransformedEnv(vec_env)
-        transformed_vec_env.append_transform(RewardSum())
-
-        return transformed_vec_env
+        return vec_env
 
     # Sanity check
     test_env = env_factory(num_workers=5)
@@ -201,7 +195,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Optimizers
-    params = list(loss_module.parameters()) + list(loss_module.log_alpha)
+    params = list(loss_module.parameters())
     optimizer_actor = optim.Adam(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
 
     rewards = []
@@ -247,7 +241,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 alphas,
                 entropies,
             ) = ([], [], [], [], [], [])
-            for _ in range(cfg.frames_per_batch * cfg.utd_ratio):
+            for _ in range(cfg.frames_per_batch * int(cfg.utd_ratio)):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size).clone()
 

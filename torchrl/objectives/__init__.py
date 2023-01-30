@@ -6,6 +6,7 @@
 from .a2c import A2CLoss
 from .common import LossModule
 from .ddpg import DDPGLoss
+from .discrete_sac import DiscreteSACLoss
 from .dqn import DistributionalDQNLoss, DQNLoss
 from .dreamer import DreamerActorLoss, DreamerModelLoss, DreamerValueLoss
 from .ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
