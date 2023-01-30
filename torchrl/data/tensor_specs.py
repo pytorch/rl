@@ -1089,7 +1089,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         device=None,
         dtype=torch.long,
         use_register=False,
-        mask: Optional[torch.Tensor] = None
+        mask: Optional[torch.Tensor] = None,
     ):
         self.nvec = nvec
         dtype, device = _default_dtype_and_device(dtype, device)
@@ -1118,7 +1118,9 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             if (mask.sum(-1) == 0).any():
                 raise ValueError("Got an empty mask for some dimension.")
             if mask.device != self.device:
-                raise ValueError(f"Expected a mask with the same device {self.device} but got {mask.device}.")
+                raise ValueError(
+                    f"Expected a mask with the same device {self.device} but got {mask.device}."
+                )
         self.mask = mask
 
         super(OneHotDiscreteTensorSpec, self).__init__(
@@ -1139,7 +1141,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             device=dest_device,
             dtype=dest_dtype,
             # TODO: is it a bug that use_register is not copied?
-            mask=mask
+            mask=mask,
         )
 
     def clone(self) -> CompositeSpec:
@@ -1148,7 +1150,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             shape=self.shape,
             device=self.device,
             dtype=self.dtype,
-            mask=self.mask.clone()
+            mask=self.mask.clone(),
         )
 
     def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
@@ -1158,7 +1160,9 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             shape = torch.Size([*shape, *self.shape[:-1]])
 
         if self.mask is not None:
-            r = torch.rand(self.mask.shape, device=self.device).masked_fill_(~self.mask, 0.0)
+            r = torch.rand(self.mask.shape, device=self.device).masked_fill_(
+                ~self.mask, 0.0
+            )
             x = (r == r.max(-1, keepdim=True)[0]).to(torch.long)
         else:
             x = torch.cat(

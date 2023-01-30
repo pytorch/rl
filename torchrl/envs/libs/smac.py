@@ -1,5 +1,6 @@
 from typing import Dict, Optional
 
+import numpy as np
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
@@ -91,17 +92,13 @@ class SC2Wrapper(GymLikeEnv):
 
         # Specs that require initialized environment are built in _init_env.
 
-        # TODO: add support for the state.
-        # self.state_spec = self._make_state_spec(env)
-        # self.input_spec["state"] = self._state_spec
-        # self._state_example = self._make_state_example(env)
-
     def _init_env(self) -> None:
         self._env.reset()
 
         # Before extracting environment specific specs, env.reset() must be executed.
         self.input_spec = self._make_input_spec(self._env)
         self.observation_spec = self._make_observation_spec(self._env)
+        self.state_spec = self._make_state_spec(self._env)
 
     def _make_reward_spec(self) -> TensorSpec:
         return UnboundedContinuousTensorSpec(
@@ -115,13 +112,15 @@ class SC2Wrapper(GymLikeEnv):
         )
 
     def _make_input_spec(self, env: smac.env.StarCraft2Env) -> TensorSpec:
-        mask = torch.tensor(env.get_avail_actions(), dtype=torch.bool, device=self.device)
+        mask = torch.tensor(
+            env.get_avail_actions(), dtype=torch.bool, device=self.device
+        )
 
         action_spec = MultiOneHotDiscreteTensorSpec(
             [env.n_actions],
             shape=torch.Size([env.n_agents, env.n_actions]),
             device=self.device,
-            mask=mask
+            mask=mask,
         )
         return CompositeSpec(action=action_spec, shape=self.batch_size)
 
@@ -130,6 +129,20 @@ class SC2Wrapper(GymLikeEnv):
             torch.Size([env.n_agents, env.get_obs_size()]), device=self.device
         )
         return CompositeSpec(observation=obs_spec, shape=self.batch_size)
+
+    def _make_state_spec(self, env: smac.env.StarCraft2Env) -> TensorSpec:
+        return UnboundedContinuousTensorSpec(
+            torch.Size([env.n_agents, env.get_state_size()]), device=self.device
+        )
+
+    def _action_transform(self, action: torch.Tensor):
+        action_np = self.action_spec.to_numpy(action)
+        return action_np
+
+    def _read_state(self, state: np.ndarray) -> torch.Tensor:
+        return self.state_spec.encode(
+            torch.Tensor(state, device=self.device).expand(*self.state_spec.shape)
+        )
 
     def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError(
@@ -143,9 +156,8 @@ class SC2Wrapper(GymLikeEnv):
         obs, state = env.reset()
 
         # collect outputs
-        # TODO: add support for the state.
-        # state_dict = self.read_state(state)
         obs_dict = self.read_obs(obs)
+        state = self._read_state(state)
         self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
 
         # build results
@@ -155,16 +167,11 @@ class SC2Wrapper(GymLikeEnv):
             device=self.device,
         )
         tensordict_out.set("done", self._is_done)
-        # TODO: add support for the state.
-        # tensordict_out["state"] = state_dict
+        tensordict_out["state"] = state
 
         self.input_spec = self._make_input_spec(env)
 
         return tensordict_out
-
-    def _action_transform(self, action):
-        action_np = self.action_spec.to_numpy(action)
-        return action_np
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         env: smac.env.StarCraft2Env = self._env
@@ -177,9 +184,13 @@ class SC2Wrapper(GymLikeEnv):
         reward, done, info = env.step(action_np)
 
         # collect outputs
-        # state_dict = self.read_state(state)
         obs_dict = self.read_obs(env.get_obs())
-        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype).expand(self.batch_size)
+        # TODO: add centralized flag?
+        state = self._read_state(env.get_state())
+
+        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype).expand(
+            self.batch_size
+        )
         done = self._to_tensor(done, dtype=torch.bool).expand(self.batch_size)
 
         # build results
@@ -190,8 +201,7 @@ class SC2Wrapper(GymLikeEnv):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        # TODO: support state.
-        # tensordict_out["state"] = state_dict
+        tensordict_out["state"] = state
 
         # Update available actions mask.
         self.input_spec = self._make_input_spec(env)
