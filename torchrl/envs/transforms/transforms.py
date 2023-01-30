@@ -28,7 +28,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
-from torchrl.envs.utils import step_mdp, _sort_keys
+from torchrl.envs.utils import _sort_keys, step_mdp
 
 try:
     from torchvision.transforms.functional import center_crop
@@ -50,8 +50,10 @@ def _apply_to_composite(function):
             d = observation_spec._specs
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if in_key in observation_spec.keys():
-                    d[out_key] = function(self, observation_spec[in_key])
-            return CompositeSpec(d, shape=observation_spec.shape)
+                    d[out_key] = function(self, observation_spec[in_key].clone())
+            return CompositeSpec(
+                d, shape=observation_spec.shape, device=observation_spec.device
+            )
         else:
             return function(self, observation_spec)
 
@@ -998,18 +1000,8 @@ class CenterCrop(ObservationTransform):
         observation = center_crop(observation, [self.w, self.h])
         return observation
 
+    @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        if isinstance(observation_spec, CompositeSpec):
-            return CompositeSpec(
-                **{
-                    key: self.transform_observation_spec(_obs_spec)
-                    if key in self.in_keys
-                    else _obs_spec
-                    for key, _obs_spec in observation_spec._specs.items()
-                },
-                shape=observation_spec.shape,
-            )
-
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1019,7 +1011,6 @@ class CenterCrop(ObservationTransform):
             observation_spec.shape = self._apply_transform(
                 torch.zeros(observation_spec.shape)
             ).shape
-
         return observation_spec
 
     def __repr__(self) -> str:
