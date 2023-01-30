@@ -2776,7 +2776,9 @@ class StepCounter(Transform):
             dtype=torch.int64,
             device=input_spec.device,
         )
-        input_spec["step_count"].space.minimum = 0
+        input_spec["step_count"].space.minimum = (
+            input_spec["step_count"].space.minimum * 0
+        )
         return input_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
