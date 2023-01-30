@@ -51,6 +51,7 @@ from torchrl.envs.transforms.transforms import (
     Resize,
     RewardClipping,
     RewardScaling,
+    StepCounter,
     SqueezeTransform,
     ToTensorImage,
     UnsqueezeTransform,
@@ -813,12 +814,16 @@ def test_smoke_replay_buffer_transform(transform):
 
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
     rb.add(td)
-    rb.sample(1)
+    if not isinstance(rb._transform[0], (CatFrames, StepCounter)):
+        rb.sample(1)
+    else:
+        with pytest.raises(NotImplementedError):
+            rb.sample(1)
+        return
 
     rb._transform = mock.MagicMock()
     rb.sample(1)
     assert rb._transform.called
-
 
 transforms = [
     partial(DiscreteActionProjection, max_n=1, m=1),
