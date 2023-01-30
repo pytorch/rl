@@ -52,7 +52,6 @@ from torchrl.envs.transforms.transforms import (
     RewardClipping,
     RewardScaling,
     SqueezeTransform,
-    StepCounter,
     ToTensorImage,
     UnsqueezeTransform,
     VecNorm,
