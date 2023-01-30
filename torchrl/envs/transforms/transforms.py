@@ -406,7 +406,6 @@ but got an object of type {type(transform)}."""
                 self.base_env.observation_spec.clone()
             )
             import traceback
-            import sys
 
             traceback.print_stack()
 

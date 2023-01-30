@@ -51,8 +51,8 @@ from torchrl.envs.transforms.transforms import (
     Resize,
     RewardClipping,
     RewardScaling,
-    StepCounter,
     SqueezeTransform,
+    StepCounter,
     ToTensorImage,
     UnsqueezeTransform,
     VecNorm,
@@ -824,6 +824,7 @@ def test_smoke_replay_buffer_transform(transform):
     rb._transform = mock.MagicMock()
     rb.sample(1)
     assert rb._transform.called
+
 
 transforms = [
     partial(DiscreteActionProjection, max_n=1, m=1),

@@ -35,7 +35,8 @@ DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
-_NO_CHECK_SPEC_ENCODE = get_binary_env_var("NO_CHECK_SPEC_ENCODE")
+# By default, we do not check that an obs is in the domain. THis should be done when validating the env beforehand
+_CHECK_SPEC_ENCODE = get_binary_env_var("CHECK_SPEC_ENCODE")
 
 _DEFAULT_SHAPE = torch.Size((1,))
 
@@ -117,6 +118,7 @@ class ContinuousBox(Box):
     def minimum(self):
         print("calling min")
         import traceback
+
         traceback.print_stack()
         return self._minimum.to(self.device)
 
@@ -124,6 +126,7 @@ class ContinuousBox(Box):
     def maximum(self):
         print("calling max")
         import traceback
+
         traceback.print_stack()
         return self._maximum.to(self.device)
 
@@ -283,7 +286,7 @@ class TensorSpec:
                         f"Shape mismatch: the value has shape {val.shape} which "
                         f"is incompatible with the spec shape {self.shape}."
                     )
-        if not _NO_CHECK_SPEC_ENCODE:
+        if not _CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val
 
