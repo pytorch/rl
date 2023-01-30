@@ -813,7 +813,7 @@ def test_smoke_replay_buffer_transform(transform):
 
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
     rb.add(td)
-    if not isinstance(rb._transform[0], (CatFrames, StepCounter)):
+    if not isinstance(rb._transform[0], (CatFrames, )):
         rb.sample(1)
     else:
         with pytest.raises(NotImplementedError):
