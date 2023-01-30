@@ -1953,7 +1953,9 @@ class TestTransforms:
             device=device,
         )
         td.set("dont touch", dont_touch.clone())
-        compose(td)
+        with pytest.raises(NotImplementedError, match="CatFrames cannot be called independently"):
+            compose(td.clone(False))
+        compose._call(td)
         for key in keys:
             assert td.get(key).shape[-3] == nchannels * N
         assert (td.get("dont touch") == dont_touch).all()
