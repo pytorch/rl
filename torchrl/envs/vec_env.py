@@ -581,11 +581,17 @@ class SerialEnv(_BatchedEnv):
         self._assert_tensordict_shape(tensordict)
         tensordict_in = tensordict.clone(False)
         # update the shared tensordict to keep the input entries up-to-date
-        self.shared_tensordict_parent.update_(tensordict_in.select(*self.input_spec.keys(), strict=False))
+        self.shared_tensordict_parent.update_(
+            tensordict_in.select(*self.input_spec.keys(), strict=False)
+        )
         for i in range(self.num_workers):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
-            self.shared_tensordicts[i].update_(self._envs[i]._step(tensordict_in[i]).select(*self.shared_tensordicts[i].keys(), strict=False))
+            self.shared_tensordicts[i].update_(
+                self._envs[i]
+                ._step(tensordict_in[i])
+                .select(*self.shared_tensordicts[i].keys(), strict=False)
+            )
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         return self.shared_tensordict_parent.clone()
@@ -1012,11 +1018,10 @@ def _run_worker_pipe_shared_mem(
             i += 1
             if _td is not None:
                 _td = _td.update(
-                tensordict.select(
-                    *env_input_keys,
-                    strict=False,
-                ),
-                inplace=True,
+                    tensordict.select(
+                        *env_input_keys,
+                        strict=False,
+                    ),
                 )
             else:
                 _td = tensordict.clone(recurse=False)

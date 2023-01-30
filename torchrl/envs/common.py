@@ -377,6 +377,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self._assert_tensordict_shape(tensordict)
 
         tensordict.lock()  # make sure _step does not modify the tensordict
+        if "_reset" in tensordict.keys():
+            # Avoid having reset set to True when calling step
+            tensordict.fill_("_reset", 0)
         tensordict_out = self._step(tensordict)
         if tensordict_out is tensordict:
             raise RuntimeError(

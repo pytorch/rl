@@ -65,15 +65,15 @@ class _R3MNet(Transform):
         if model_name == "resnet18":
             # self.model_name = "r3m_18"
             self.outdim = 512
-            convnet = models.resnet18(None)
+            convnet = models.resnet18()
         elif model_name == "resnet34":
             # self.model_name = "r3m_34"
             self.outdim = 512
-            convnet = models.resnet34(None)
+            convnet = models.resnet34()
         elif model_name == "resnet50":
             # self.model_name = "r3m_50"
             self.outdim = 2048
-            convnet = models.resnet50(None)
+            convnet = models.resnet50()
         else:
             raise NotImplementedError(
                 f"model {model_name} is currently not supported by R3M"

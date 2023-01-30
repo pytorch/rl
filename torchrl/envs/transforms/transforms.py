@@ -473,7 +473,7 @@ but got an object of type {type(transform)}."""
             tensordict = tensordict.clone(recurse=False)
         out_tensordict = self.base_env.reset(tensordict=tensordict, **kwargs)
         out_tensordict = self.transform.reset(out_tensordict)
-        out_tensordict = self.transform(out_tensordict)
+        out_tensordict = self.transform._call(out_tensordict)
         return out_tensordict
 
     def state_dict(self) -> OrderedDict:
@@ -634,6 +634,11 @@ class Compose(Transform):
         self.transforms = nn.ModuleList(transforms)
         for t in self.transforms:
             t.set_container(self)
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for t in self.transforms:
+            tensordict = t._call(tensordict)
+        return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
@@ -1534,19 +1539,23 @@ class CatFrames(ObservationTransform):
                     device=torch.device("cpu"), dtype=torch.get_default_dtype()
                 ),
             )
+        # keeps track of calls to _reset since it's only _call that will populate the buffer
+        self._just_reset = False
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
-        _reset = tensordict.set_default(
+        _reset = tensordict.get(
             "_reset",
-            torch.ones(
+            None,
+        )
+        if _reset is None:
+            _reset = torch.ones(
                 tensordict.batch_size,
                 dtype=torch.bool,
                 device=tensordict.device
                 if tensordict.device is not None
                 else torch.device("cpu"),
-            ),
-        )
+            )
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
             buffer = getattr(self, buffer_name)
@@ -1554,6 +1563,7 @@ class CatFrames(ObservationTransform):
                 continue
             buffer[_reset] = 0
 
+        self._just_reset = True
         return tensordict
 
     def _make_missing_buffer(self, data, buffer_name):
@@ -1579,9 +1589,12 @@ class CatFrames(ObservationTransform):
             if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
                 buffer = self._make_missing_buffer(data, buffer_name)
             # shift obs 1 position to the right
-            if _reset is not None:
+            if self._just_reset or (_reset is not None and _reset.any()):
+                data_in = buffer[_reset]
+                shape = [1 for _ in data_in.shape]
+                shape[self.dim] = self.N
                 buffer[_reset] = buffer[_reset].copy_(
-                    data[_reset].repeat_interleave(self.N, self.dim)
+                    data[_reset].repeat(shape).clone()
                 )
             buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.dim))
             # add new obs
@@ -1594,7 +1607,7 @@ class CatFrames(ObservationTransform):
             buffer[idx].copy_(data)
             # add to tensordict
             tensordict.set(out_key, buffer.clone())
-
+        self._just_reset = False
         return tensordict
 
     @_apply_to_composite
@@ -1609,6 +1622,16 @@ class CatFrames(ObservationTransform):
             shape[self.dim] = self.N * shape[self.dim]
             observation_spec.shape = torch.Size(shape)
         return observation_spec
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError(
+            "CatFrames cannot be called independently, only its step and reset methods "
+            "are functional. The reason for this is that it is hard to consider using "
+            "CatFrames with non-sequential data, such as those collected by a replay buffer "
+            "or a dataset. If you need CatFrames to work on a batch of sequential data "
+            "(ie as LSTM would work over a whole sequence of data), file an issue on "
+            "TorchRL requesting that feature."
+        )
 
     def __repr__(self) -> str:
         return (
