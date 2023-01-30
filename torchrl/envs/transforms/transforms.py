@@ -2764,6 +2764,29 @@ class StepCounter(Transform):
         observation_spec["step_count"].space.minimum = 0
         return observation_spec
 
+    def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
+        if not isinstance(input_spec, CompositeSpec):
+            raise ValueError(
+                f"input_spec was expected to be of type CompositeSpec. Got {type(input_spec)} instead."
+            )
+        input_spec["step_count"] = UnboundedDiscreteTensorSpec(
+            shape=self.parent.batch_size,
+            dtype=torch.int64,
+            device=input_spec.device,
+        )
+        input_spec["step_count"].space.minimum = 0
+        return input_spec
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError(
+            "StepCounter cannot be called independently, only its step and reset methods "
+            "are functional. The reason for this is that it is hard to consider using "
+            "StepCounter with non-sequential data, such as those collected by a replay buffer "
+            "or a dataset. If you need StepCounter to work on a batch of sequential data "
+            "(ie as LSTM would work over a whole sequence of data), file an issue on "
+            "TorchRL requesting that feature."
+        )
+
 
 class ExcludeTransform(Transform):
     """Excludes keys from the input tensordict.

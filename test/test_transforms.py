@@ -326,7 +326,7 @@ class TestCatFrames(TestTransformBase):
     @pytest.mark.skipif(not _has_gym, reason="Gym not available")
     def test_transform_env(self):
         env = TransformedEnv(
-            GymEnv("Pendulum-v1", frame_skip=4),
+            GymEnv(PENDULUM_VERSIONED, frame_skip=4),
             CatFrames(dim=-1, N=3, in_keys=["observation"]),
         )
         td = env.reset()
@@ -618,7 +618,7 @@ class TestR3M(TestTransformBase):
         rb.extend(td)
         sample = rb.sample(10)
         assert "vec" in sample.keys()
-        assert not "pixels" in sample.keys()
+        assert "pixels" not in sample.keys()
         assert sample["vec"].shape[-1] == 512
 
     def test_transform_model(self, model, device):
@@ -639,7 +639,7 @@ class TestR3M(TestTransformBase):
         module = nn.Sequential(r3m, nn.Identity())
         sample = module(td)
         assert "vec" in sample.keys()
-        assert not "pixels" in sample.keys()
+        assert "pixels" not in sample.keys()
         assert sample["vec"].shape[-1] == 512
 
     def test_parallel_trans_env_check(self, model, device):
@@ -927,6 +927,141 @@ class TestR3M(TestTransformBase):
             + ["reward", "done", "next"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
+
+
+class TestStepCounter(TestTransformBase):
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(10))
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(10))
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(
+            ParallelEnv(2, ContinuousActionVecMockEnv), StepCounter(10)
+        )
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), StepCounter(10))
+        check_env_specs(env)
+
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(10))
+        check_env_specs(env)
+
+    @pytest.mark.skipif(not _has_gym, reason="Gym not found")
+    def test_transform_env(self):
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), StepCounter(10))
+        td = env.rollout(100, break_when_any_done=False)
+        assert td["step_count"].max() == 9
+        assert td.shape[-1] == 100
+
+    def test_transform_rb(self):
+        transform = StepCounter(10)
+        rb = ReplayBuffer(LazyTensorStorage(20))
+        td = TensorDict({"a": torch.randn(10)}, [10])
+        rb.extend(td)
+        rb.append_transform(transform)
+        with pytest.raises(
+            NotImplementedError, match="StepCounter cannot be called independently"
+        ):
+            rb.sample(5)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
+    @pytest.mark.parametrize("max_steps", [None, 1, 5, 50])
+    @pytest.mark.parametrize("reset_workers", [True, False])
+    def test_transform_compose(self, max_steps, device, batch, reset_workers):
+        torch.manual_seed(0)
+        step_counter = Compose(StepCounter(max_steps))
+        td = TensorDict(
+            {"done": torch.zeros(*batch, 1, dtype=torch.bool)}, batch, device=device
+        )
+        if reset_workers:
+            td.set("_reset", torch.randn(batch) < 0)
+        step_counter.reset(td)
+        assert not torch.all(td.get("step_count"))
+        i = 0
+        while max_steps is None or i < max_steps:
+            step_counter._step(td)
+            i += 1
+            assert torch.all(td.get("step_count") == i), (td.get("step_count"), i)
+            if max_steps is None:
+                break
+        if max_steps is not None:
+            assert torch.all(td.get("step_count") == max_steps)
+            assert torch.all(td.get("done"))
+        step_counter.reset(td)
+        if reset_workers:
+            assert torch.all(
+                torch.masked_select(td.get("step_count"), td.get("_reset")) == 0
+            )
+            assert torch.all(
+                torch.masked_select(td.get("step_count"), ~td.get("_reset")) == i
+            )
+        else:
+            assert torch.all(td.get("step_count") == 0)
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse for StepCounter")
+
+    def test_transform_model(self):
+        transform = StepCounter(10)
+        td = TensorDict({"a": torch.randn(10)}, [10])
+        model = nn.Sequential(transform, nn.Identity())
+        with pytest.raises(
+            NotImplementedError, match="StepCounter cannot be called independently"
+        ):
+            model(5)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
+    @pytest.mark.parametrize("max_steps", [None, 1, 5, 50])
+    @pytest.mark.parametrize("reset_workers", [True, False])
+    def test_transform_no_env(self, max_steps, device, batch, reset_workers):
+        torch.manual_seed(0)
+        step_counter = StepCounter(max_steps)
+        td = TensorDict(
+            {"done": torch.zeros(*batch, 1, dtype=torch.bool)}, batch, device=device
+        )
+        if reset_workers:
+            td.set("_reset", torch.randn(batch) < 0)
+        step_counter.reset(td)
+        assert not torch.all(td.get("step_count"))
+        i = 0
+        while max_steps is None or i < max_steps:
+            step_counter._step(td)
+            i += 1
+            assert torch.all(td.get("step_count") == i), (td.get("step_count"), i)
+            if max_steps is None:
+                break
+        if max_steps is not None:
+            assert torch.all(td.get("step_count") == max_steps)
+            assert torch.all(td.get("done"))
+        step_counter.reset(td)
+        if reset_workers:
+            assert torch.all(
+                torch.masked_select(td.get("step_count"), td.get("_reset")) == 0
+            )
+            assert torch.all(
+                torch.masked_select(td.get("step_count"), ~td.get("_reset")) == i
+            )
+        else:
+            assert torch.all(td.get("step_count") == 0)
+
+    def test_step_counter_observation_spec(self):
+        transformed_env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(50))
+        check_env_specs(transformed_env)
+        transformed_env.close()
 
 
 class TestVecNorm:
@@ -2537,46 +2672,6 @@ class TestTransforms:
             assert env._input_spec["action"] is not None
             assert env._observation_spec is not None
             assert env._reward_spec is not None
-
-    @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
-    @pytest.mark.parametrize("max_steps", [None, 1, 5, 50])
-    @pytest.mark.parametrize("reset_workers", [True, False])
-    def test_step_counter(self, max_steps, device, batch, reset_workers):
-        torch.manual_seed(0)
-        step_counter = StepCounter(max_steps)
-        td = TensorDict(
-            {"done": torch.zeros(*batch, 1, dtype=torch.bool)}, batch, device=device
-        )
-        if reset_workers:
-            td.set("_reset", torch.randn(batch) < 0)
-        step_counter.reset(td)
-        assert not torch.all(td.get("step_count"))
-        i = 0
-        while max_steps is None or i < max_steps:
-            step_counter._step(td)
-            i += 1
-            assert torch.all(td.get("step_count") == i), (td.get("step_count"), i)
-            if max_steps is None:
-                break
-        if max_steps is not None:
-            assert torch.all(td.get("step_count") == max_steps)
-            assert torch.all(td.get("done"))
-        step_counter.reset(td)
-        if reset_workers:
-            assert torch.all(
-                torch.masked_select(td.get("step_count"), td.get("_reset")) == 0
-            )
-            assert torch.all(
-                torch.masked_select(td.get("step_count"), ~td.get("_reset")) == i
-            )
-        else:
-            assert torch.all(td.get("step_count") == 0)
-
-    def test_step_counter_observation_spec(self):
-        transformed_env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(50))
-        check_env_specs(transformed_env)
-        transformed_env.close()
 
 
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
