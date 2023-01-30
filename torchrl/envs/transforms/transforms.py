@@ -407,7 +407,7 @@ but got an object of type {type(transform)}."""
             raise Exception
         except Exception:
             print("Calling TransformedEnv.observation_spec")
-            print(traceback.format_exc())
+            print(exc_info = sys.exc_info())
 
         """Observation spec of the transformed environment."""
         if self._observation_spec is None or not self.cache_specs:
