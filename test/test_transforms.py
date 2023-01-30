@@ -281,7 +281,7 @@ class BinarizeReward(TransformBase):
         raise pytest.skip("No inverse for BinerizedReward")
 
 
-class CatFrames(TransformBase):
+class TestCatFrames(TransformBase):
     def test_single_trans_env_check(self):
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
@@ -552,7 +552,7 @@ class CatFrames(TransformBase):
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("model", ["resnet18", "resnet34", "resnet50"])
-class R3M(TransformBase):
+class TestR3M(TransformBase):
     def test_transform_inverse(self, model, device):
         raise pytest.skip("no inverse for R3MTransform")
 
@@ -929,7 +929,7 @@ class R3M(TransformBase):
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 
 
-class StepCounter(TransformBase):
+class TestStepCounter(TransformBase):
     def test_parallel_trans_env_check(self):
         def make_env():
             return TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(10))
