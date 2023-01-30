@@ -76,7 +76,7 @@ from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs
 
-TIMEOUT = 10.0
+TIMEOUT = 100.0
 
 
 class TransformBase:

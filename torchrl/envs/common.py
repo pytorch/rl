@@ -691,7 +691,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         dtype=torch.bool,
                     ),
                 ).squeeze(-1)
-                print(tensordict["_reset"], tensordict["step_count"])
                 self.reset(tensordict)
 
             if callback is not None:
