@@ -580,17 +580,15 @@ class SerialEnv(_BatchedEnv):
     ) -> TensorDict:
         self._assert_tensordict_shape(tensordict)
         tensordict_in = tensordict.clone(False)
-        tensordict_out = []
+        # update the shared tensordict to keep the input entries up-to-date
+        self.shared_tensordict_parent.update_(tensordict_in.select(*self.input_spec.keys(), strict=False))
         for i in range(self.num_workers):
-            _tensordict_out = self._envs[i]._step(tensordict_in[i])
-            tensordict_out.append(_tensordict_out)
+            # shared_tensordicts are locked, and we need to select the keys since we update in-place.
+            # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
+            self.shared_tensordicts[i].update_(self._envs[i]._step(tensordict_in[i]).select(*self.shared_tensordicts[i].keys(), strict=False))
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        out = torch.stack(tensordict_out, 0)
-        self.shared_tensordict_parent.update_(
-            out.select(*self.shared_tensordict_parent.keys(), strict=False)
-        )
-        return self.shared_tensordict_parent.to_tensordict()
+        return self.shared_tensordict_parent.clone()
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
@@ -760,7 +758,7 @@ class ParallelEnv(_BatchedEnv):
         self._assert_tensordict_shape(tensordict)
 
         self.shared_tensordict_parent.update_(
-            tensordict.select(*self.shared_tensordict_parent.keys(), strict=False)
+            tensordict.select(*self.input_spec.keys(), strict=False)
         )
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
@@ -1012,13 +1010,16 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            _td = _td.update(
+            if _td is not None:
+                _td = _td.update(
                 tensordict.select(
                     *env_input_keys,
                     strict=False,
                 ),
                 inplace=True,
-            )
+                )
+            else:
+                _td = tensordict.clone(recurse=False)
             _td = env._step(_td)
             if step_keys is None:
                 step_keys = set(env.observation_spec.keys()).union(
