@@ -405,10 +405,6 @@ but got an object of type {type(transform)}."""
             observation_spec = self.transform.transform_observation_spec(
                 self.base_env.observation_spec.clone()
             )
-            import traceback
-
-            traceback.print_stack()
-
             if self.cache_specs:
                 self.__dict__["_observation_spec"] = observation_spec
         else:
