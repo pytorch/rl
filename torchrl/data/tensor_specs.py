@@ -35,7 +35,9 @@ DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
-_NO_CHECK_SPEC_ENCODE = get_binary_env_var("NO_CHECK_SPEC_ENCODE")
+# By default, we do not check that an obs is in the domain. THis should be done when validating the env beforehand
+_CHECK_SPEC_ENCODE = get_binary_env_var("CHECK_SPEC_ENCODE")
+
 
 _DEFAULT_SHAPE = torch.Size((1,))
 
@@ -108,8 +110,28 @@ class Box:
 class ContinuousBox(Box):
     """A continuous box of values, in between a minimum and a maximum."""
 
-    minimum: torch.Tensor
-    maximum: torch.Tensor
+    _minimum: torch.Tensor
+    _maximum: torch.Tensor
+    device: torch.device = None
+
+    # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
+    @property
+    def minimum(self):
+        return self._minimum.to(self.device)
+
+    @property
+    def maximum(self):
+        return self._maximum.to(self.device)
+
+    @minimum.setter
+    def minimum(self, value):
+        self.device = value.device
+        self._minimum = value.cpu()
+
+    @maximum.setter
+    def maximum(self, value):
+        self.device = value.device
+        self._maximum = value.cpu()
 
     def __post_init__(self):
         self.minimum = self.minimum.clone()
@@ -257,7 +279,7 @@ class TensorSpec:
                         f"Shape mismatch: the value has shape {val.shape} which "
                         f"is incompatible with the spec shape {self.shape}."
                     )
-        if not _NO_CHECK_SPEC_ENCODE:
+        if _CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val
 

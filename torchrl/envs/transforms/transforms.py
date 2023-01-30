@@ -2738,7 +2738,9 @@ class StepCounter(Transform):
             dtype=torch.int64,
             device=observation_spec.device,
         )
-        observation_spec["step_count"].space.minimum = 0
+        observation_spec["step_count"].space.minimum = (
+            observation_spec["step_count"].space.minimum * 0
+        )
         return observation_spec
 
 
