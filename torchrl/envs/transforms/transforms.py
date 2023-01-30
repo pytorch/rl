@@ -400,16 +400,16 @@ but got an object of type {type(transform)}."""
 
     @property
     def observation_spec(self) -> TensorSpec:
-        import traceback
-        import sys
-
-        traceback.print_stack()
-
         """Observation spec of the transformed environment."""
         if self._observation_spec is None or not self.cache_specs:
             observation_spec = self.transform.transform_observation_spec(
                 self.base_env.observation_spec.clone()
             )
+            import traceback
+            import sys
+
+            traceback.print_stack()
+
             if self.cache_specs:
                 self.__dict__["_observation_spec"] = observation_spec
         else:
