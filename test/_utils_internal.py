@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import contextlib
 import os
 import time
 from functools import wraps
@@ -104,3 +105,13 @@ def dtype_fixture():
     torch.set_default_dtype(torch.double)
     yield dtype
     torch.set_default_dtype(dtype)
+
+
+@contextlib.contextmanager
+def set_global_var(module, var_name, value):
+    old_value = getattr(module, var_name)
+    setattr(module, var_name, value)
+    try:
+        yield
+    finally:
+        setattr(module, var_name, old_value)

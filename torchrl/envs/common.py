@@ -210,6 +210,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         - run_type_checks (bool): if True, the observation and reward dtypes
             will be compared against their respective spec and an exception
             will be raised if they don't match.
+            Defaults to False.
 
     Methods:
         step (TensorDictBase -> TensorDictBase): step in the environment
@@ -226,7 +227,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
-        run_type_checks: bool = True,
+        run_type_checks: bool = False,
     ):
         super().__init__()
         if device is not None:
