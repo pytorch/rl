@@ -1,6 +1,6 @@
-#Things to consider when debugging RL
+# Things to consider when debugging RL
 
-##General
+## General
 
 ### Have you validated your algorithm implementation on a few small, toy problems with known optimal returns e.g. gridworlds, mountaincar?
 * Reason: This will reveal any extreme bugs in your implementation.
@@ -9,13 +9,13 @@
 ### Be very careful with any data augmentation.
 * Reason: Data augmentation cannot be applied to RL in the same ways as CV since an agent needs to act based on the observation. As an example, flipping an image may correspondingly “flip” the appropriate action.
 
-##Policy
+## Policy
 
 ### Does the entropy of your policy converge too quickly, too slowly or change drastically?
 * Reason: This can be algorithm dependent, but the entropy of the policy is roughly inversely related to the expected value of actions either. 
 * Prescription: Tuning the coefficient of an entropy bonus (i.e., beta in PPO) can help entropies that converge too quickly/slowly. Alternatively, reducing/increasing the magnitude of rewards may also help if converging too quickly/slowly. Entropy curves that step-change dramatically are usually downstream of an issue with the problem formulation (i.e., obs or action space), learning rate, gradient norms or a bug in the implementation. 
 
-##Rewards (beyond “going up”)
+## Rewards (beyond “going up”)
 
 ### Is the agent favoring a single component of the reward function (i.e. velocity vs L2 action magnitude)? 
 * Reason: It may be the case that one of the components of the reward function is “easier” to optimize and so an agent will find the behavior as a local optima. 
