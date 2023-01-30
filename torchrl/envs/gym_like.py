@@ -177,7 +177,7 @@ class GymLikeEnv(_EnvWrapper):
         action = tensordict.get("action")
         action_np = self.read_action(action)
 
-        reward = self.reward_spec.zero(self.batch_size)
+        reward = self.reward_spec.zero()
         for _ in range(self.wrapper_frame_skip):
             obs, _reward, done, *info = self._output_transform(
                 self._env.step(action_np)
@@ -200,7 +200,7 @@ class GymLikeEnv(_EnvWrapper):
                 )
 
             if _reward is None:
-                _reward = self.reward_spec.zero(self.batch_size)
+                _reward = self.reward_spec.zero()
 
             reward = self.read_reward(reward, _reward)
 
