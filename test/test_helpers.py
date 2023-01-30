@@ -149,7 +149,10 @@ def test_dqn_maker(
             "action_value",
         ]
         if from_pixels:
-            expected_keys += ["pixels", "pixels_orig", "_reset"]
+            expected_keys += [
+                "pixels",
+                "pixels_orig",
+            ]
         else:
             expected_keys += ["observation_orig", "observation_vector"]
 
@@ -212,7 +215,11 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
                 actor(td)
         expected_keys = ["done", "action", "param"]
         if from_pixels:
-            expected_keys += ["pixels", "hidden", "pixels_orig", "_reset"]
+            expected_keys += [
+                "pixels",
+                "hidden",
+                "pixels_orig",
+            ]
         else:
             expected_keys += ["observation_vector", "observation_orig"]
 
@@ -354,10 +361,6 @@ def test_ppo_maker(
             else:
                 actor(td_clone)
 
-        if from_pixels:
-            # for CatFrames
-            expected_keys += ["_reset"]
-
         try:
             assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
@@ -385,9 +388,6 @@ def test_ppo_maker(
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
         ]
-        if from_pixels:
-            # for CatFrames
-            expected_keys += ["_reset"]
         if shared_mapping:
             expected_keys += ["hidden"]
         if len(gsde):
@@ -497,9 +497,6 @@ def test_a2c_maker(
             "action",
             "sample_log_prob",
         ]
-        if from_pixels:
-            # for CatFrames
-            expected_keys += ["_reset"]
         if action_space == "continuous":
             expected_keys += ["loc", "scale"]
         else:
@@ -545,9 +542,6 @@ def test_a2c_maker(
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
         ]
-        if from_pixels:
-            # for CatFrames
-            expected_keys += ["_reset"]
         if shared_mapping:
             expected_keys += ["hidden"]
         if len(gsde):
@@ -639,9 +633,6 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             "loc",
             "scale",
         ]
-        if from_pixels:
-            # for CatFrames
-            expected_keys += ["_reset"]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
 
@@ -767,7 +758,11 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
         if from_pixels:
-            expected_keys += ["hidden", "pixels", "pixels_orig", "_reset"]
+            expected_keys += [
+                "hidden",
+                "pixels",
+                "pixels_orig",
+            ]
         else:
             expected_keys += ["observation_vector", "observation_orig"]
 
@@ -797,7 +792,11 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
         if from_pixels:
-            expected_keys += ["hidden", "pixels", "pixels_orig", "_reset"]
+            expected_keys += [
+                "hidden",
+                "pixels",
+                "pixels_orig",
+            ]
         else:
             expected_keys += ["observation_vector", "observation_orig"]
         try:
@@ -872,7 +871,6 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "state",
             ("next", "reco_pixels"),
             "next",
-            "_reset",
         }
         assert set(out.keys(True)) == expected_keys
 
