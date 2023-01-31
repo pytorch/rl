@@ -1055,7 +1055,7 @@ class FlattenObservation(ObservationTransform):
             :obj:`["pixels"]` is assumed.
         out_keys (sequence of str, optional): the flatten observation keys. If none is
             provided, :obj:`in_keys` is assumed.
-        accept_positive (bool, optional): if True, positive dimensions are accepted.
+        accept_positive_dim (bool, optional): if True, positive dimensions are accepted.
             :obj:`FlattenObservation` will map these to the n^th feature dimension
             (ie n^th dimension after batch size of parent env) of the input tensor.
             Defaults to False, ie. non-negative dimensions are not permitted.
@@ -1067,17 +1067,17 @@ class FlattenObservation(ObservationTransform):
         last_dim: int,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
-        accept_positive: bool = False,
+        accept_positive_dim: bool = False,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
         super().__init__(in_keys=in_keys, out_keys=out_keys)
-        if not accept_positive and first_dim >= 0:
+        if not accept_positive_dim and first_dim >= 0:
             raise ValueError(
                 "first_dim should be smaller than 0 to accomodate for "
                 "envs of different batch_sizes."
             )
-        if not accept_positive and last_dim >= 0:
+        if not accept_positive_dim and last_dim >= 0:
             raise ValueError(
                 "last_dim should be smaller than 0 to accomodate for "
                 "envs of different batch_sizes."
