@@ -2513,7 +2513,7 @@ class TestGrayScale(TransformBase):
         td = TensorDict({"pixels": torch.rand(3, 12, 12)}, []).expand(3)
         rb = ReplayBuffer(LazyTensorStorage(10))
         rb.append_transform(GrayScale(out_keys=out_keys))
-        r.extend(td)
+        rb.extend(td)
         r = rb.sample(3)
         if out_keys:
             assert "pixels" in r.keys()
