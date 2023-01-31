@@ -2265,6 +2265,7 @@ class TestFrameSkipTransform:
         def make_env():
             env = TransformedEnv(ContinuousActionVecMockEnv(), FrameSkipTransform(2))
             return env
+
         env = SerialEnv(2, make_env)
         check_env_specs(env)
 
@@ -2272,29 +2273,37 @@ class TestFrameSkipTransform:
         def make_env():
             env = TransformedEnv(ContinuousActionVecMockEnv(), FrameSkipTransform(2))
             return env
+
         env = ParallelEnv(2, make_env)
         check_env_specs(env)
 
     def test_trans_serial_env_check(self):
-        env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), FrameSkipTransform(2))
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv), FrameSkipTransform(2)
+        )
         check_env_specs(env)
 
     def test_trans_parallel_env_check(self):
-        env = TransformedEnv(ParallelEnv(2, ContinuousActionVecMockEnv), FrameSkipTransform(2))
+        env = TransformedEnv(
+            ParallelEnv(2, ContinuousActionVecMockEnv), FrameSkipTransform(2)
+        )
         check_env_specs(env)
 
     def test_transform_no_env(self):
         t = FrameSkipTransform(2)
         tensordict = TensorDict({}, [])
-        with pytest.raises(RuntimeError, match="parent not found for FrameSkipTransform"):
+        with pytest.raises(
+            RuntimeError, match="parent not found for FrameSkipTransform"
+        ):
             t._step(tensordict)
 
     def test_transform_compose(self):
         t = Compose(FrameSkipTransform(2))
         tensordict = TensorDict({}, [])
-        with pytest.raises(RuntimeError, match="parent not found for FrameSkipTransform"):
+        with pytest.raises(
+            RuntimeError, match="parent not found for FrameSkipTransform"
+        ):
             t._step(tensordict)
-
 
     @pytest.mark.skipif(not _has_gym, reason="gym not installed")
     @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
@@ -2329,7 +2338,10 @@ class TestFrameSkipTransform:
         t = FrameSkipTransform(2)
         t = nn.Sequential(t, nn.Identity())
         tensordict = TensorDict({}, [])
-        with pytest.raises(RuntimeError, match="FrameSkipTransform can only be used when appended to a transformed env"):
+        with pytest.raises(
+            RuntimeError,
+            match="FrameSkipTransform can only be used when appended to a transformed env",
+        ):
             t(tensordict)
 
     def test_transform_rb(self):
@@ -2338,9 +2350,11 @@ class TestFrameSkipTransform:
         rb.append_transform(t)
         tensordict = TensorDict({"a": torch.zeros(10)}, [10])
         rb.extend(tensordict)
-        with pytest.raises(RuntimeError, match="FrameSkipTransform can only be used when appended to a transformed env"):
+        with pytest.raises(
+            RuntimeError,
+            match="FrameSkipTransform can only be used when appended to a transformed env",
+        ):
             rb.sample(10)
-
 
     @pytest.mark.skipif(not _has_gym, reason="gym not installed")
     @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
@@ -2379,7 +2393,6 @@ class TestFrameSkipTransform:
 
 
 class TestGrayScale(TransformBase):
-
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize(
         "keys",
@@ -2450,36 +2463,58 @@ class TestGrayScale(TransformBase):
 
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
     def test_single_trans_env_check(self, out_keys):
-        env = TransformedEnv(DiscreteActionConvMockEnvNumpy(), Compose(ToTensorImage(), GrayScale(out_keys=out_keys)))
+        env = TransformedEnv(
+            DiscreteActionConvMockEnvNumpy(),
+            Compose(ToTensorImage(), GrayScale(out_keys=out_keys)),
+        )
         check_env_specs(env)
 
     def test_serial_trans_env_check(self):
         out_keys = None
+
         def make_env():
-            return TransformedEnv(DiscreteActionConvMockEnvNumpy(), Compose(ToTensorImage(), GrayScale(out_keys=out_keys)))
+            return TransformedEnv(
+                DiscreteActionConvMockEnvNumpy(),
+                Compose(ToTensorImage(), GrayScale(out_keys=out_keys)),
+            )
+
         env = SerialEnv(2, make_env)
         check_env_specs(env)
 
     def test_parallel_trans_env_check(self):
         out_keys = None
+
         def make_env():
-            return TransformedEnv(DiscreteActionConvMockEnvNumpy(), Compose(ToTensorImage(), GrayScale(out_keys=out_keys)))
+            return TransformedEnv(
+                DiscreteActionConvMockEnvNumpy(),
+                Compose(ToTensorImage(), GrayScale(out_keys=out_keys)),
+            )
+
         env = ParallelEnv(2, make_env)
         check_env_specs(env)
 
     def test_trans_serial_env_check(self):
         out_keys = None
-        env = TransformedEnv(SerialEnv(2, DiscreteActionConvMockEnvNumpy), Compose(ToTensorImage(), GrayScale(out_keys=out_keys)))
+        env = TransformedEnv(
+            SerialEnv(2, DiscreteActionConvMockEnvNumpy),
+            Compose(ToTensorImage(), GrayScale(out_keys=out_keys)),
+        )
         check_env_specs(env)
 
     def test_trans_parallel_env_check(self):
         out_keys = None
-        env = TransformedEnv(ParallelEnv(2, DiscreteActionConvMockEnvNumpy), Compose(ToTensorImage(), GrayScale(out_keys=out_keys)))
+        env = TransformedEnv(
+            ParallelEnv(2, DiscreteActionConvMockEnvNumpy),
+            Compose(ToTensorImage(), GrayScale(out_keys=out_keys)),
+        )
         check_env_specs(env)
 
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
     def test_transform_env(self, out_keys):
-        env = TransformedEnv(DiscreteActionConvMockEnvNumpy(), Compose(ToTensorImage(), GrayScale(out_keys=out_keys)))
+        env = TransformedEnv(
+            DiscreteActionConvMockEnvNumpy(),
+            Compose(ToTensorImage(), GrayScale(out_keys=out_keys)),
+        )
         r = env.rollout(3)
         if out_keys:
             assert "pixels" in r.keys()
@@ -2506,8 +2541,6 @@ class TestGrayScale(TransformBase):
             assert "stuff" not in r.keys()
             assert r["pixels"].shape[-3] == 1
 
-
-
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
     def test_transform_rb(self, out_keys):
         td = TensorDict({"pixels": torch.rand(3, 12, 12)}, []).expand(3)
@@ -2525,7 +2558,6 @@ class TestGrayScale(TransformBase):
             assert "stuff" not in r.keys()
             assert r["pixels"].shape[-3] == 1
 
-
     def test_transform_inverse(self):
         raise pytest.skip("No inversee for grayscale")
 
@@ -2538,18 +2570,23 @@ class TestNoop(TransformBase):
     def test_serial_trans_env_check(self):
         def make_env():
             return TransformedEnv(ContinuousActionVecMockEnv(), NoopResetEnv())
+
         env = SerialEnv(2, make_env)
         check_env_specs(env)
 
     def test_parallel_trans_env_check(self):
         def make_env():
             return TransformedEnv(ContinuousActionVecMockEnv(), NoopResetEnv())
+
         env = ParallelEnv(2, make_env)
         check_env_specs(env)
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), NoopResetEnv())
-        with pytest.raises(ValueError, match="there is more than one done state in the parent environment"):
+        with pytest.raises(
+            ValueError,
+            match="there is more than one done state in the parent environment",
+        ):
             check_env_specs(env)
 
     def test_trans_parallel_env_check(self):
@@ -2557,13 +2594,19 @@ class TestNoop(TransformBase):
 
     def test_transform_no_env(self):
         t = NoopResetEnv()
-        with pytest.raises(RuntimeError, match="NoopResetEnv.parent not found. Make sure that the parent is set."):
+        with pytest.raises(
+            RuntimeError,
+            match="NoopResetEnv.parent not found. Make sure that the parent is set.",
+        ):
             t.reset(TensorDict({}, []))
         t._step(TensorDict({}, []))
 
     def test_transform_compose(self):
         t = Compose(NoopResetEnv())
-        with pytest.raises(RuntimeError, match="NoopResetEnv.parent not found. Make sure that the parent is set."):
+        with pytest.raises(
+            RuntimeError,
+            match="NoopResetEnv.parent not found. Make sure that the parent is set.",
+        ):
             t.reset(TensorDict({}, []))
         t._step(TensorDict({}, []))
 
@@ -2618,6 +2661,7 @@ class TestNoop(TransformBase):
             match="there is more than one done state in the parent environment",
         ):
             transformed_env.reset()
+
 
 class TestVecNorm:
     SEED = -1

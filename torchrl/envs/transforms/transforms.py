@@ -1296,7 +1296,11 @@ class SqueezeTransform(UnsqueezeTransform):
 class GrayScale(ObservationTransform):
     """Turns a pixel observation to grayscale."""
 
-    def __init__(self, in_keys: Optional[Sequence[str]] = None, out_keys: Optional[Sequence[str]] = None):
+    def __init__(
+        self,
+        in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
+    ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
         super(GrayScale, self).__init__(in_keys=in_keys, out_keys=out_keys)
@@ -2131,9 +2135,7 @@ class FrameSkipTransform(Transform):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         parent = self.parent
         if parent is None:
-            raise RuntimeError(
-                "parent not found for FrameSkipTransform"
-            )
+            raise RuntimeError("parent not found for FrameSkipTransform")
         reward = tensordict.get("reward")
         for _ in range(self.frame_skip - 1):
             tensordict = parent._step(tensordict)
