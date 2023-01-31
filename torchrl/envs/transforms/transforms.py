@@ -134,7 +134,13 @@ class Transform(nn.Module):
         )
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Reads the input tensordict, and for the selected keys, applies the transform."""
+        """Reads the input tensordict, and for the selected keys, applies the transform.
+
+        For any operation that relates exclusively to the parent env (e.g. FrameSkip),
+        modify the _step method instead. _call should only be overwritten
+        if a modification of the input tensordict is needed.
+
+        """
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             if in_key in tensordict.keys(include_nested=True):
                 observation = self._apply_transform(tensordict.get(in_key))
@@ -156,10 +162,14 @@ class Transform(nn.Module):
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # placeholder when we'll move to tensordict['next']
-        # tensordict["next"] = self._call(tensordict.get("next"))
+        """The parent method of a transform during the env.step execution.
+
+        This method should be overwritten whenever the _step needs to be
+        adapted. Unlike _call, it is assumed that _step will execute some operation
+        with the parent env.
+
+        """
         out = self._call(tensordict)
-        # print(out, tensordict, out is tensordict, (out==tensordict).all())
         return out
 
     def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
@@ -2120,12 +2130,21 @@ class FrameSkipTransform(Transform):
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         parent = self.parent
+        if parent is None:
+            raise RuntimeError(
+                "parent not found for FrameSkipTransform"
+            )
         reward = tensordict.get("reward")
         for _ in range(self.frame_skip - 1):
             tensordict = parent._step(tensordict)
             reward = reward + tensordict.get("reward")
         tensordict.set("reward", reward)
         return tensordict
+
+    def forward(self, tensordict):
+        raise RuntimeError(
+            "FrameSkipTransform can only be used when appended to a transformed env."
+        )
 
 
 class NoopResetEnv(Transform):

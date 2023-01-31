@@ -2256,6 +2256,94 @@ class TestFlattenObservation(TransformBase):
         raise pytest.skip("No inverse method for FlattenObservation (yet).")
 
 
+class TestFrameSkipTransform:
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), FrameSkipTransform(2))
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            env = TransformedEnv(ContinuousActionVecMockEnv(), FrameSkipTransform(2))
+            return env
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            env = TransformedEnv(ContinuousActionVecMockEnv(), FrameSkipTransform(2))
+            return env
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), FrameSkipTransform(2))
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(ParallelEnv(2, ContinuousActionVecMockEnv), FrameSkipTransform(2))
+        check_env_specs(env)
+
+    def test_transform_no_env(self):
+        t = FrameSkipTransform(2)
+        tensordict = TensorDict({}, [])
+        with pytest.raises(RuntimeError, match="parent not found for FrameSkipTransform"):
+            t._step(tensordict)
+
+    def test_transform_compose(self):
+        t = Compose(FrameSkipTransform(2))
+        tensordict = TensorDict({}, [])
+        with pytest.raises(RuntimeError, match="parent not found for FrameSkipTransform"):
+            t._step(tensordict)
+
+
+    @pytest.mark.skipif(not _has_gym, reason="gym not installed")
+    @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
+    def test_transform_env(self, skip):
+        """Tests that the built-in frame_skip and the transform lead to the same results."""
+        torch.manual_seed(0)
+        if skip < 0:
+            with pytest.raises(
+                ValueError,
+                match="frame_skip should have a value greater or equal to one",
+            ):
+                FrameSkipTransform(skip)
+            return
+        else:
+            fs = FrameSkipTransform(skip)
+        base_env = GymEnv(PENDULUM_VERSIONED, frame_skip=skip)
+        tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), fs)
+        base_env.set_seed(0)
+        env.base_env.set_seed(0)
+        td1 = base_env.reset()
+        td2 = env.reset()
+        for key in td1.keys():
+            torch.testing.assert_close(td1[key], td2[key])
+        for i in range(10):
+            td1 = base_env.step(tensordicts[i].clone()).flatten_keys()
+            td2 = env.step(tensordicts[i].clone()).flatten_keys()
+            for key in td1.keys():
+                torch.testing.assert_close(td1[key], td2[key])
+
+    def test_transform_model(self):
+        t = FrameSkipTransform(2)
+        t = nn.Sequential(t, nn.Identity())
+        tensordict = TensorDict({}, [])
+        with pytest.raises(RuntimeError, match="FrameSkipTransform can only be used when appended to a transformed env"):
+            t(tensordict)
+
+    def test_transform_rb(self):
+        t = FrameSkipTransform(2)
+        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb.append_transform(t)
+        tensordict = TensorDict({"a": torch.zeros(10)}, [10])
+        rb.extend(tensordict)
+        with pytest.raises(RuntimeError, match="FrameSkipTransform can only be used when appended to a transformed env"):
+            rb.sample(10)
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse for FrameSkipTransform")
+
 class TestVecNorm:
     SEED = -1
 
@@ -2648,34 +2736,6 @@ class TestTransforms:
             observation_spec = resize.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, 21])
-
-    @pytest.mark.skipif(not _has_gym, reason="gym not installed")
-    @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
-    def test_frame_skip_transform_builtin(self, skip):
-        torch.manual_seed(0)
-        if skip < 0:
-            with pytest.raises(
-                ValueError,
-                match="frame_skip should have a value greater or equal to one",
-            ):
-                FrameSkipTransform(skip)
-            return
-        else:
-            fs = FrameSkipTransform(skip)
-        base_env = GymEnv(PENDULUM_VERSIONED, frame_skip=skip)
-        tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), fs)
-        base_env.set_seed(0)
-        env.base_env.set_seed(0)
-        td1 = base_env.reset()
-        td2 = env.reset()
-        for key in td1.keys():
-            torch.testing.assert_close(td1[key], td2[key])
-        for i in range(10):
-            td1 = base_env.step(tensordicts[i].clone()).flatten_keys()
-            td2 = env.step(tensordicts[i].clone()).flatten_keys()
-            for key in td1.keys():
-                torch.testing.assert_close(td1[key], td2[key])
 
     @pytest.mark.skipif(not _has_gym, reason="gym not installed")
     @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
