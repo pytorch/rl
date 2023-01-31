@@ -127,7 +127,7 @@ class Transform(nn.Module):
 
         """
         raise NotImplementedError(
-            "_apply_transform is not coded. If the transform is coded in "
+            f"{self.__class__.__name__}_apply_transform is not coded. If the transform is coded in "
             "transform._call, make sure that this method is called instead of"
             "transform.forward, which is reserved for usage inside nn.Modules"
             "or appended to a replay buffer."
@@ -1041,6 +1041,14 @@ class FlattenObservation(ObservationTransform):
     Args:
         first_dim (int): first dimension of the dimensions to flatten.
         last_dim (int): last dimension of the dimensions to flatten.
+        in_keys (sequence of str, optional): the entries to flatten. If none is provided,
+            :obj:`["pixels"]` is assumed.
+        out_keys (sequence of str, optional): the flatten observation keys. If none is
+            provided, :obj:`in_keys` is assumed.
+        accept_positive (bool, optional): if True, positive dimensions are accepted.
+            :obj:`FlattenObservation` will map these to the n^th feature dimension
+            (ie n^th dimension after batch size of parent env) of the input tensor.
+            Defaults to False, ie. non-negative dimensions are not permitted.
     """
 
     def __init__(
@@ -1049,16 +1057,29 @@ class FlattenObservation(ObservationTransform):
         last_dim: int,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
+        accept_positive: bool = False,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
         super().__init__(in_keys=in_keys, out_keys=out_keys)
+        if not accept_positive and first_dim >= 0:
+            raise ValueError(
+                "first_dim should be smaller than 0 to accomodate for "
+                "envs of different batch_sizes."
+            )
+        if not accept_positive and last_dim >= 0:
+            raise ValueError(
+                "last_dim should be smaller than 0 to accomodate for "
+                "envs of different batch_sizes."
+            )
         self.first_dim = first_dim
         self.last_dim = last_dim
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = torch.flatten(observation, self.first_dim, self.last_dim)
         return observation
+
+    forward = ObservationTransform._call
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:
         out = super().set_container(container)
@@ -1101,7 +1122,7 @@ class FlattenObservation(ObservationTransform):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"first_dim={int(self.first_dim)}, last_dim={int(self.last_dim)})"
+            f"first_dim={int(self.first_dim)}, last_dim={int(self.last_dim)}, in_keys={self.in_keys}, out_keys={self.out_keys})"
         )
 
 
@@ -2454,6 +2475,8 @@ class VecNorm(Transform):
             self.lock.release()
 
         return tensordict
+
+    forward = _call
 
     def _init(self, tensordict: TensorDictBase, key: str) -> None:
         if self._td is None or key + "_sum" not in self._td.keys():

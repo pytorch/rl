@@ -826,7 +826,7 @@ def test_smoke_replay_buffer_transform(transform):
 
 
 transforms = [
-    partial(DiscreteActionProjection, max_n=1, m=1),
+    partial(DiscreteActionProjection, num_actions_effective=1, max_actions=1),
     FiniteTensorDictCheck,
     gSDENoise,
     PinMemoryTransform,

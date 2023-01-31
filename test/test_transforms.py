@@ -1627,14 +1627,14 @@ class TestDiscreteActionProjection(TransformBase):
 
 
 class TestDoubleToFloat(TransformBase):
-    def test_single_trans_env_check(self, dtype_fixture):
+    def test_single_trans_env_check(self, dtype_fixture):  # noqa: F811
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
             DoubleToFloat(in_keys=["observation"], in_keys_inv=["action"]),
         )
         check_env_specs(env)
 
-    def test_serial_trans_env_check(self, dtype_fixture):
+    def test_serial_trans_env_check(self, dtype_fixture):  # noqa: F811
         def make_env():
             return TransformedEnv(
                 ContinuousActionVecMockEnv(),
@@ -1644,7 +1644,7 @@ class TestDoubleToFloat(TransformBase):
         env = SerialEnv(2, make_env)
         check_env_specs(env)
 
-    def test_parallel_trans_env_check(self, dtype_fixture):
+    def test_parallel_trans_env_check(self, dtype_fixture):  # noqa: F811
         def make_env():
             return TransformedEnv(
                 ContinuousActionVecMockEnv(),
@@ -1654,21 +1654,21 @@ class TestDoubleToFloat(TransformBase):
         env = ParallelEnv(2, make_env)
         check_env_specs(env)
 
-    def test_trans_serial_env_check(self, dtype_fixture):
+    def test_trans_serial_env_check(self, dtype_fixture):  # noqa: F811
         env = TransformedEnv(
             SerialEnv(2, ContinuousActionVecMockEnv),
             DoubleToFloat(in_keys=["observation"], in_keys_inv=["action"]),
         )
         check_env_specs(env)
 
-    def test_trans_parallel_env_check(self, dtype_fixture):
+    def test_trans_parallel_env_check(self, dtype_fixture):  # noqa: F811
         env = TransformedEnv(
             ParallelEnv(2, ContinuousActionVecMockEnv),
             DoubleToFloat(in_keys=["observation"], in_keys_inv=["action"]),
         )
         check_env_specs(env)
 
-    def test_transform_no_env(self, dtype_fixture):
+    def test_transform_no_env(self, dtype_fixture):  # noqa: F811
         t = DoubleToFloat(in_keys=["observation"], in_keys_inv=["action"])
         td = TensorDict(
             {"observation": torch.randn(10, 4, 5)},
@@ -1690,7 +1690,7 @@ class TestDoubleToFloat(TransformBase):
         out = t.inv(td)
         assert out["action"].dtype is torch.double
 
-    def test_transform_compose(self, dtype_fixture):
+    def test_transform_compose(self, dtype_fixture):  # noqa: F811
         t = Compose(DoubleToFloat(in_keys=["observation"], in_keys_inv=["action"]))
         td = TensorDict(
             {"observation": torch.randn(10, 4, 5)},
@@ -1712,10 +1712,10 @@ class TestDoubleToFloat(TransformBase):
         out = t.inv(td)
         assert out["action"].dtype is torch.double
 
-    def test_transform_env(self, dtype_fixture):
+    def test_transform_env(self, dtype_fixture):  # noqa: F811
         raise pytest.skip("Tested in test_transform_inverse")
 
-    def test_transform_model(self, dtype_fixture):
+    def test_transform_model(self, dtype_fixture):  # noqa: F811
         t = DoubleToFloat(in_keys=["observation"], in_keys_inv=["action"])
         model = nn.Sequential(t, nn.Identity())
         td = TensorDict(
@@ -1783,33 +1783,60 @@ class TestExcludeTransform(TransformBase):
             return seed + 1
 
     def test_single_trans_env_check(self):
-        t = Compose(CatTensors(in_keys=["observation"], out_key="observation_copy", del_keys=False), ExcludeTransform("observation_copy"))
+        t = Compose(
+            CatTensors(
+                in_keys=["observation"], out_key="observation_copy", del_keys=False
+            ),
+            ExcludeTransform("observation_copy"),
+        )
         env = TransformedEnv(ContinuousActionVecMockEnv(), t)
         check_env_specs(env)
 
     def test_serial_trans_env_check(self):
         def make_env():
-            t = Compose(CatTensors(in_keys=["observation"], out_key="observation_copy", del_keys=False), ExcludeTransform("observation_copy"))
+            t = Compose(
+                CatTensors(
+                    in_keys=["observation"], out_key="observation_copy", del_keys=False
+                ),
+                ExcludeTransform("observation_copy"),
+            )
             env = TransformedEnv(ContinuousActionVecMockEnv(), t)
             return env
+
         env = SerialEnv(2, make_env)
         check_env_specs(env)
 
     def test_parallel_trans_env_check(self):
         def make_env():
-            t = Compose(CatTensors(in_keys=["observation"], out_key="observation_copy", del_keys=False), ExcludeTransform("observation_copy"))
+            t = Compose(
+                CatTensors(
+                    in_keys=["observation"], out_key="observation_copy", del_keys=False
+                ),
+                ExcludeTransform("observation_copy"),
+            )
             env = TransformedEnv(ContinuousActionVecMockEnv(), t)
             return env
+
         env = ParallelEnv(2, make_env)
         check_env_specs(env)
 
     def test_trans_serial_env_check(self):
-        t = Compose(CatTensors(in_keys=["observation"], out_key="observation_copy", del_keys=False), ExcludeTransform("observation_copy"))
+        t = Compose(
+            CatTensors(
+                in_keys=["observation"], out_key="observation_copy", del_keys=False
+            ),
+            ExcludeTransform("observation_copy"),
+        )
         env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), t)
         check_env_specs(env)
 
     def test_trans_parallel_env_check(self):
-        t = Compose(CatTensors(in_keys=["observation"], out_key="observation_copy", del_keys=False), ExcludeTransform("observation_copy"))
+        t = Compose(
+            CatTensors(
+                in_keys=["observation"], out_key="observation_copy", del_keys=False
+            ),
+            ExcludeTransform("observation_copy"),
+        )
         env = TransformedEnv(ParallelEnv(2, ContinuousActionVecMockEnv), t)
         check_env_specs(env)
 
@@ -1822,11 +1849,14 @@ class TestExcludeTransform(TransformBase):
 
     def test_transform_no_env(self):
         t = ExcludeTransform("a")
-        td = TensorDict({
-            "a": torch.randn(1),
-            "b": torch.randn(1),
-            "c": torch.randn(1),
-        }, [])
+        td = TensorDict(
+            {
+                "a": torch.randn(1),
+                "b": torch.randn(1),
+                "c": torch.randn(1),
+            },
+            [],
+        )
         td = t._call(td)
         assert "a" not in td.keys()
         assert "b" in td.keys()
@@ -1834,11 +1864,14 @@ class TestExcludeTransform(TransformBase):
 
     def test_transform_compose(self):
         t = Compose(ExcludeTransform("a"))
-        td = TensorDict({
-            "a": torch.randn(1),
-            "b": torch.randn(1),
-            "c": torch.randn(1),
-        }, [])
+        td = TensorDict(
+            {
+                "a": torch.randn(1),
+                "b": torch.randn(1),
+                "c": torch.randn(1),
+            },
+            [],
+        )
         td = t._call(td)
         assert "a" not in td.keys()
         assert "b" in td.keys()
@@ -1847,11 +1880,14 @@ class TestExcludeTransform(TransformBase):
     def test_transform_model(self):
         t = ExcludeTransform("a")
         t = nn.Sequential(t, nn.Identity())
-        td = TensorDict({
-            "a": torch.randn(1),
-            "b": torch.randn(1),
-            "c": torch.randn(1),
-        }, [])
+        td = TensorDict(
+            {
+                "a": torch.randn(1),
+                "b": torch.randn(1),
+                "c": torch.randn(1),
+            },
+            [],
+        )
         td = t(td)
         assert "a" not in td.keys()
         assert "b" in td.keys()
@@ -1861,11 +1897,14 @@ class TestExcludeTransform(TransformBase):
         t = ExcludeTransform("a")
         rb = ReplayBuffer(LazyTensorStorage(10))
         rb.append_transform(t)
-        td = TensorDict({
-            "a": torch.randn(1),
-            "b": torch.randn(1),
-            "c": torch.randn(1),
-        }, []).expand(3)
+        td = TensorDict(
+            {
+                "a": torch.randn(1),
+                "b": torch.randn(1),
+                "c": torch.randn(1),
+            },
+            [],
+        ).expand(3)
         rb.extend(td)
         td = rb.sample(4)
         assert "a" not in td.keys()
@@ -1874,129 +1913,348 @@ class TestExcludeTransform(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("no inverse for ExcludeTransform")
-# class TestSelectTransform(TransformBase):
-#     class EnvWithManyKeys(EnvBase):
-#         def __init__(self):
-#             super().__init__()
-#             self.observation_spec = CompositeSpec(
-#                 a=UnboundedContinuousTensorSpec(3),
-#                 b=UnboundedContinuousTensorSpec(3),
-#                 c=UnboundedContinuousTensorSpec(3),
-#             )
-#             self.reward_spec = UnboundedContinuousTensorSpec(1)
-#             self.input_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(2))
-#
-#         def _step(
-#             self,
-#             tensordict: TensorDictBase,
-#         ) -> TensorDictBase:
-#             return self.observation_spec.rand().update(
-#                 {
-#                     "reward": self.reward_spec.rand(),
-#                     "done": torch.zeros(1, dtype=torch.bool),
-#                 }
-#             )
-#
-#         def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-#             return self.observation_spec.rand().update(
-#                 {"done": torch.zeros(1, dtype=torch.bool)}
-#             )
-#
-#         def _set_seed(self, seed):
-#             return seed + 1
-#
-#     def test_single_trans_env_check(self):
-#         t = Compose(CatTensors(in_keys=["observation"], out_key="observation_copy", del_keys=False), ExcludeTransform("observation_copy"))
-#         env = TransformedEnv(ContinuousActionVecMockEnv(), t)
-#         check_env_specs(env)
-#
-#     def test_serial_trans_env_check(self):
-#         def make_env():
-#             t = Compose(CatTensors(in_keys=["observation"], out_key="observation_copy", del_keys=False), ExcludeTransform("observation_copy"))
-#             env = TransformedEnv(ContinuousActionVecMockEnv(), t)
-#             return env
-#         env = SerialEnv(2, make_env)
-#         check_env_specs(env)
-#
-#     def test_parallel_trans_env_check(self):
-#         def make_env():
-#             t = Compose(CatTensors(in_keys=["observation"], out_key="observation_copy", del_keys=False), ExcludeTransform("observation_copy"))
-#             env = TransformedEnv(ContinuousActionVecMockEnv(), t)
-#             return env
-#         env = ParallelEnv(2, make_env)
-#         check_env_specs(env)
-#
-#     def test_trans_serial_env_check(self):
-#         t = Compose(CatTensors(in_keys=["observation"], out_key="observation_copy", del_keys=False), ExcludeTransform("observation_copy"))
-#         env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), t)
-#         check_env_specs(env)
-#
-#     def test_trans_parallel_env_check(self):
-#         t = Compose(CatTensors(in_keys=["observation"], out_key="observation_copy", del_keys=False), ExcludeTransform("observation_copy"))
-#         env = TransformedEnv(ParallelEnv(2, ContinuousActionVecMockEnv), t)
-#         check_env_specs(env)
-#
-#     def test_transform_env(self):
-#         base_env = TestExcludeTransform.EnvWithManyKeys()
-#         env = TransformedEnv(base_env, ExcludeTransform("a"))
-#         assert "a" not in env.reset().keys()
-#         assert "b" in env.reset().keys()
-#         assert "c" in env.reset().keys()
-#
-#     def test_transform_no_env(self):
-#         t = ExcludeTransform("a")
-#         td = TensorDict({
-#             "a": torch.randn(1),
-#             "b": torch.randn(1),
-#             "c": torch.randn(1),
-#         }, [])
-#         td = t._call(td)
-#         assert "a" not in td.keys()
-#         assert "b" in td.keys()
-#         assert "c" in td.keys()
-#
-#     def test_transform_compose(self):
-#         t = Compose(ExcludeTransform("a"))
-#         td = TensorDict({
-#             "a": torch.randn(1),
-#             "b": torch.randn(1),
-#             "c": torch.randn(1),
-#         }, [])
-#         td = t._call(td)
-#         assert "a" not in td.keys()
-#         assert "b" in td.keys()
-#         assert "c" in td.keys()
-#
-#     def test_transform_model(self):
-#         t = ExcludeTransform("a")
-#         t = nn.Sequential(t, nn.Identity())
-#         td = TensorDict({
-#             "a": torch.randn(1),
-#             "b": torch.randn(1),
-#             "c": torch.randn(1),
-#         }, [])
-#         td = t(td)
-#         assert "a" not in td.keys()
-#         assert "b" in td.keys()
-#         assert "c" in td.keys()
-#
-#     def test_transform_rb(self):
-#         t = ExcludeTransform("a")
-#         rb = ReplayBuffer(LazyTensorStorage(10))
-#         rb.append_transform(t)
-#         td = TensorDict({
-#             "a": torch.randn(1),
-#             "b": torch.randn(1),
-#             "c": torch.randn(1),
-#         }, []).expand(3)
-#         rb.extend(td)
-#         td = rb.sample(4)
-#         assert "a" not in td.keys()
-#         assert "b" in td.keys()
-#         assert "c" in td.keys()
-#
-#     def test_transform_inverse(self):
-#         raise pytest.skip("no inverse for ExcludeTransform")
+
+
+class TestSelectTransform(TransformBase):
+    class EnvWithManyKeys(EnvBase):
+        def __init__(self):
+            super().__init__()
+            self.observation_spec = CompositeSpec(
+                a=UnboundedContinuousTensorSpec(3),
+                b=UnboundedContinuousTensorSpec(3),
+                c=UnboundedContinuousTensorSpec(3),
+            )
+            self.reward_spec = UnboundedContinuousTensorSpec(1)
+            self.input_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(2))
+
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            return self.observation_spec.rand().update(
+                {
+                    "reward": self.reward_spec.rand(),
+                    "done": torch.zeros(1, dtype=torch.bool),
+                }
+            )
+
+        def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+            return self.observation_spec.rand().update(
+                {"done": torch.zeros(1, dtype=torch.bool)}
+            )
+
+        def _set_seed(self, seed):
+            return seed + 1
+
+    def test_single_trans_env_check(self):
+        t = Compose(
+            CatTensors(
+                in_keys=["observation"], out_key="observation_copy", del_keys=False
+            ),
+            SelectTransform("observation", "observation_orig"),
+        )
+        env = TransformedEnv(ContinuousActionVecMockEnv(), t)
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            t = Compose(
+                CatTensors(
+                    in_keys=["observation"], out_key="observation_copy", del_keys=False
+                ),
+                SelectTransform("observation", "observation_orig"),
+            )
+            env = TransformedEnv(ContinuousActionVecMockEnv(), t)
+            return env
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            t = Compose(
+                CatTensors(
+                    in_keys=["observation"], out_key="observation_copy", del_keys=False
+                ),
+                SelectTransform("observation", "observation_orig"),
+            )
+            env = TransformedEnv(ContinuousActionVecMockEnv(), t)
+            return env
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        t = Compose(
+            CatTensors(
+                in_keys=["observation"], out_key="observation_copy", del_keys=False
+            ),
+            SelectTransform("observation", "observation_orig"),
+        )
+        env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), t)
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        t = Compose(
+            CatTensors(
+                in_keys=["observation"], out_key="observation_copy", del_keys=False
+            ),
+            SelectTransform("observation", "observation_orig"),
+        )
+        env = TransformedEnv(ParallelEnv(2, ContinuousActionVecMockEnv), t)
+        check_env_specs(env)
+
+    def test_transform_env(self):
+        base_env = TestExcludeTransform.EnvWithManyKeys()
+        env = TransformedEnv(base_env, SelectTransform("b", "c"))
+        assert "a" not in env.reset().keys()
+        assert "b" in env.reset().keys()
+        assert "c" in env.reset().keys()
+
+    def test_transform_no_env(self):
+        t = SelectTransform("b", "c")
+        td = TensorDict(
+            {
+                "a": torch.randn(1),
+                "b": torch.randn(1),
+                "c": torch.randn(1),
+            },
+            [],
+        )
+        td = t._call(td)
+        assert "a" not in td.keys()
+        assert "b" in td.keys()
+        assert "c" in td.keys()
+
+    def test_transform_compose(self):
+        t = Compose(SelectTransform("b", "c"))
+        td = TensorDict(
+            {
+                "a": torch.randn(1),
+                "b": torch.randn(1),
+                "c": torch.randn(1),
+            },
+            [],
+        )
+        td = t._call(td)
+        assert "a" not in td.keys()
+        assert "b" in td.keys()
+        assert "c" in td.keys()
+
+    def test_transform_model(self):
+        t = SelectTransform("b", "c")
+        t = nn.Sequential(t, nn.Identity())
+        td = TensorDict(
+            {
+                "a": torch.randn(1),
+                "b": torch.randn(1),
+                "c": torch.randn(1),
+            },
+            [],
+        )
+        td = t(td)
+        assert "a" not in td.keys()
+        assert "b" in td.keys()
+        assert "c" in td.keys()
+
+    def test_transform_rb(self):
+        t = SelectTransform("b", "c")
+        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb.append_transform(t)
+        td = TensorDict(
+            {
+                "a": torch.randn(1),
+                "b": torch.randn(1),
+                "c": torch.randn(1),
+            },
+            [],
+        ).expand(3)
+        rb.extend(td)
+        td = rb.sample(4)
+        assert "a" not in td.keys()
+        assert "b" in td.keys()
+        assert "c" in td.keys()
+
+    def test_transform_inverse(self):
+        raise pytest.skip("no inverse for SelectTransform")
+
+
+class TestFlattenObservation(TransformBase):
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    def test_single_trans_env_check(self, out_keys):
+        env = TransformedEnv(
+            DiscreteActionConvMockEnvNumpy(),
+            FlattenObservation(-3, -1, out_keys=out_keys),
+        )
+        check_env_specs(env)
+        if out_keys:
+            assert out_keys[0] in env.reset().keys()
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            env = TransformedEnv(
+                DiscreteActionConvMockEnvNumpy(), FlattenObservation(-3, -1)
+            )
+            return env
+
+        env = SerialEnv(2, make_env)
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            env = TransformedEnv(
+                DiscreteActionConvMockEnvNumpy(), FlattenObservation(-3, -1)
+            )
+            return env
+
+        env = ParallelEnv(2, make_env)
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, DiscreteActionConvMockEnvNumpy),
+            FlattenObservation(
+                -3,
+                -1,
+            ),
+        )
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(
+            ParallelEnv(2, DiscreteActionConvMockEnvNumpy),
+            FlattenObservation(
+                -3,
+                -1,
+            ),
+        )
+        check_env_specs(env)
+
+    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("size", [[], [4]])
+    @pytest.mark.parametrize(
+        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_no_env(self, keys, size, nchannels, batch, device):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(*batch, *size, nchannels, 16, 16, device=device)
+        start_dim = -3 - len(size)
+        flatten = FlattenObservation(start_dim, -3, in_keys=keys)
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
+                for key in keys
+            },
+            batch,
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        flatten(td)
+        expected_size = prod(size + [nchannels])
+        for key in keys:
+            assert td.get(key).shape[-3] == expected_size
+        assert (td.get("dont touch") == dont_touch).all()
+
+        if len(keys) == 1:
+            observation_spec = BoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
+            observation_spec = flatten.transform_observation_spec(observation_spec)
+            assert observation_spec.shape[-3] == expected_size
+        else:
+            observation_spec = CompositeSpec(
+                {
+                    key: BoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
+                    for key in keys
+                }
+            )
+            observation_spec = flatten.transform_observation_spec(observation_spec)
+            for key in keys:
+                assert observation_spec[key].shape[-3] == expected_size
+
+    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("size", [[], [4]])
+    @pytest.mark.parametrize(
+        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_compose(self, keys, size, nchannels, batch, device):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(*batch, *size, nchannels, 16, 16, device=device)
+        start_dim = -3 - len(size)
+        flatten = Compose(FlattenObservation(start_dim, -3, in_keys=keys))
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
+                for key in keys
+            },
+            batch,
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        flatten(td)
+        expected_size = prod(size + [nchannels])
+        for key in keys:
+            assert td.get(key).shape[-3] == expected_size
+        assert (td.get("dont touch") == dont_touch).all()
+
+        if len(keys) == 1:
+            observation_spec = BoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
+            observation_spec = flatten.transform_observation_spec(observation_spec)
+            assert observation_spec.shape[-3] == expected_size
+        else:
+            observation_spec = CompositeSpec(
+                {
+                    key: BoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
+                    for key in keys
+                }
+            )
+            observation_spec = flatten.transform_observation_spec(observation_spec)
+            for key in keys:
+                assert observation_spec[key].shape[-3] == expected_size
+
+    @pytest.mark.skipif(not _has_gym, reason="No gym")
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    def test_transform_env(self, out_keys):
+        env = TransformedEnv(
+            GymEnv("ALE/Pong-v5"), FlattenObservation(-3, -1, out_keys=out_keys)
+        )
+        check_env_specs(env)
+        if out_keys:
+            assert out_keys[0] in env.reset().keys()
+            assert env.rollout(3)[out_keys[0]].ndimension() == 2
+        else:
+            assert env.rollout(3)["pixels"].ndimension() == 2
+
+    @pytest.mark.skipif(not _has_gym, reason="No gym")
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    def test_transform_model(self, out_keys):
+        t = FlattenObservation(-3, -1, out_keys=out_keys)
+        td = TensorDict({"pixels": torch.randint(255, (10, 10, 3))}, [])
+        module = nn.Sequential(t, nn.Identity())
+        if out_keys:
+            assert module(td)[out_keys[0]].ndimension() == 1
+        else:
+            assert module(td)["pixels"].ndimension() == 1
+
+    @pytest.mark.skipif(not _has_gym, reason="No gym")
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    def test_transform_rb(self, out_keys):
+        t = FlattenObservation(-3, -1, out_keys=out_keys)
+        td = TensorDict({"pixels": torch.randint(255, (10, 10, 3))}, []).expand(10)
+        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb.append_transform(t)
+        rb.extend(td)
+        td = rb.sample(2)
+        if out_keys:
+            assert td[out_keys[0]].ndimension() == 2
+        else:
+            assert td["pixels"].ndimension() == 2
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse method for FlattenObservation (yet).")
+
 
 class TestVecNorm:
     SEED = -1
@@ -2390,49 +2648,6 @@ class TestTransforms:
             observation_spec = resize.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, 21])
-
-    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
-    @pytest.mark.parametrize("nchannels", [1, 3])
-    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
-    @pytest.mark.parametrize("size", [[], [4]])
-    @pytest.mark.parametrize(
-        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
-    )
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_flatten(self, keys, size, nchannels, batch, device):
-        torch.manual_seed(0)
-        dont_touch = torch.randn(*batch, *size, nchannels, 16, 16, device=device)
-        start_dim = -3 - len(size)
-        flatten = FlattenObservation(start_dim, -3, in_keys=keys)
-        td = TensorDict(
-            {
-                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
-                for key in keys
-            },
-            batch,
-            device=device,
-        )
-        td.set("dont touch", dont_touch.clone())
-        flatten(td)
-        expected_size = prod(size + [nchannels])
-        for key in keys:
-            assert td.get(key).shape[-3] == expected_size
-        assert (td.get("dont touch") == dont_touch).all()
-
-        if len(keys) == 1:
-            observation_spec = BoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
-            observation_spec = flatten.transform_observation_spec(observation_spec)
-            assert observation_spec.shape[-3] == expected_size
-        else:
-            observation_spec = CompositeSpec(
-                {
-                    key: BoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
-                    for key in keys
-                }
-            )
-            observation_spec = flatten.transform_observation_spec(observation_spec)
-            for key in keys:
-                assert observation_spec[key].shape[-3] == expected_size
 
     @pytest.mark.skipif(not _has_gym, reason="gym not installed")
     @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
@@ -3835,16 +4050,6 @@ def test_batch_unlocked_with_batch_size_transformed(device):
         RuntimeError, match="Expected a tensordict with shape==env.shape, "
     ):
         env.step(td_expanded)
-
-
-class TestExcludeSelect:
-    def test_select(self):
-        base_env = TestExcludeSelect.EnvWithManyKeys()
-        env = TransformedEnv(base_env, SelectTransform("b", "c"))
-        check_env_specs(env)
-        assert "a" not in env.reset().keys()
-        assert "b" in env.reset().keys()
-        assert "c" in env.reset().keys()
 
 
 transforms = [
