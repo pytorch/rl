@@ -21,6 +21,7 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     ContinuousBox,
     DEVICE_TYPING,
+    OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
@@ -125,7 +126,12 @@ class Transform(nn.Module):
         tensordict match the keys of the transform).
 
         """
-        raise NotImplementedError
+        raise NotImplementedError(
+            "_apply_transform is not coded. If the transform is coded in "
+            "transform._call, make sure that this method is called instead of"
+            "transform.forward, which is reserved for usage inside nn.Modules"
+            "or appended to a replay buffer."
+        )
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
@@ -139,9 +145,15 @@ class Transform(nn.Module):
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = self._call(tensordict)
+        """Reads the input tensordict, and for the selected keys, applies the transform."""
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if in_key in tensordict.keys(include_nested=True):
+                observation = self._apply_transform(tensordict.get(in_key))
+                tensordict.set(
+                    out_key,
+                    observation,
+                )
         return tensordict
-        # raise NotImplementedError("""`Transform.forward` is currently not implemented (reserved for usage beyond envs). Use `Transform._step` instead.""")
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # placeholder when we'll move to tensordict['next']
@@ -157,18 +169,21 @@ class Transform(nn.Module):
             return obs
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # # We create a shallow copy of the tensordict to avoid that changes are
+        # # exposed to the user: we'd like that the input keys remain unchanged
+        # # in the originating script if they're being transformed.
+        # tensordict = tensordict.clone(False)
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-            if in_key in tensordict.keys(include_nested=True):
-                observation = self._inv_apply_transform(tensordict.get(in_key))
+            if in_key in tensordict.keys(include_nested=isinstance(in_key, tuple)):
+                item = self._inv_apply_transform(tensordict.get(in_key))
                 tensordict.set(
                     out_key,
-                    observation,
+                    item,
                 )
         return tensordict
 
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
-        self._inv_call(tensordict)
-        return tensordict
+        return self._inv_call(tensordict)
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         """Transforms the input spec such that the resulting spec matches transform mapping.
@@ -653,8 +668,8 @@ class Compose(Transform):
         return tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for t in self.transforms[::-1]:
-            tensordict = t.inv(tensordict)
+        for t in reversed(self.transforms):
+            tensordict = t._inv_call(tensordict)
         return tensordict
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
@@ -1159,10 +1174,10 @@ class UnsqueezeTransform(Transform):
         observation = observation.unsqueeze(self.unsqueeze_dim)
         return observation
 
-    def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self._unsqueeze_dim_orig >= 0:
             self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
-        return super().inv(tensordict)
+        return super()._inv_call(tensordict)
 
     def _inv_apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = observation.squeeze(self.unsqueeze_dim)
@@ -1720,6 +1735,12 @@ class FiniteTensorDictCheck(Transform):
 class DoubleToFloat(Transform):
     """Maps actions float to double before they are called on the environment.
 
+    Args:
+        in_keys (list of str, optional): list of double keys to be converted to
+            float before being exposed to external objects and functions.
+        in_keys_inv (list of str, optional): list of float keys to be converted to
+            double before being passed to the contained base_env or storage.
+
     Examples:
         >>> td = TensorDict(
         ...     {'obs': torch.ones(1, dtype=torch.double)}, [])
@@ -1898,6 +1919,8 @@ class CatTensors(Transform):
             )
         return tensordict
 
+    forward = _call
+
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         # check that all keys are in observation_spec
         if len(self.in_keys) > 1 and not isinstance(observation_spec, CompositeSpec):
@@ -1955,57 +1978,104 @@ class DiscreteActionProjection(Transform):
     """Projects discrete actions from a high dimensional space to a low dimensional space.
 
     Given a discrete action (from 1 to N) encoded as a one-hot vector and a
-    maximum action index M (with M < N), transforms the action such that
-    action_out is at most M.
+    maximum action index num_actions (with num_actions < N), transforms the action such that
+    action_out is at most num_actions.
 
-    If the input action is > M, it is being replaced by a random value
-    between N and M. Otherwise the same action is kept.
+    If the input action is > num_actions, it is being replaced by a random value
+    between 0 and num_actions-1. Otherwise the same action is kept.
     This is intended to be used with policies applied over multiple discrete
     control environments with different action space.
 
+    A call to DiscreteActionProjection.forward (eg from a replay buffer or in a
+    sequence of nn.Modules) will call the transform num_actions_effective -> max_actions
+    on the :obj:`"in_keys"`, whereas a call to _call will be ignored. Indeed,
+    transformed envs are instructed to update the input keys only for the inner
+    base_env, but the original input keys will remain unchanged.
+
     Args:
-        max_n (int): max number of action considered.
-        m (int): resulting number of actions.
+        num_actions_effective (int): max number of action considered.
+        max_actions (int): maximum number of actions that this module can read.
+        action_key (str, optional): key name of the action. Defaults to "action".
+        include_forward (bool, optional): if True, a call to forward will also
+            map the action from one domain to the other when the module is called
+            by a replay buffer or an nn.Module chain. Defaults to True.
 
     Examples:
         >>> torch.manual_seed(0)
-        >>> N = 2
-        >>> M = 1
+        >>> N = 3
+        >>> M = 2
         >>> action = torch.zeros(N, dtype=torch.long)
         >>> action[-1] = 1
         >>> td = TensorDict({"action": action}, [])
-        >>> transform = DiscreteActionProjection(N, M)
+        >>> transform = DiscreteActionProjection(num_actions_effective=M, max_actions=N)
         >>> _ = transform.inv(td)
         >>> print(td.get("action"))
         tensor([1])
     """
 
-    def __init__(self, max_n: int, m: int, action_key: str = "action"):
-        super().__init__([action_key])
-        self.max_n = max_n
-        self.m = m
-
-    def _inv_apply_transform(self, action: torch.Tensor) -> torch.Tensor:
-        if action.shape[-1] < self.m:
+    def __init__(
+        self,
+        num_actions_effective: int,
+        max_actions: int,
+        action_key: str = "action",
+        include_forward: bool = True,
+    ):
+        in_keys_inv = [action_key]
+        if include_forward:
+            in_keys = in_keys_inv
+        else:
+            in_keys = []
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=in_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=in_keys_inv,
+        )
+        self.num_actions_effective = num_actions_effective
+        self.max_actions = max_actions
+        if max_actions < num_actions_effective:
             raise RuntimeError(
-                f"action.shape[-1]={action.shape[-1]} is smaller than "
-                f"DiscreteActionProjection.M={self.m}"
+                "The `max_actions` int must be greater or equal to `num_actions_effective`."
             )
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # We don't do anything here because the action is modified by the inv
+        # method but we don't need to map it back as it won't be updated in the original
+        # tensordict
+        return tensordict
+
+    def _apply_transform(self, action: torch.Tensor) -> None:
+        # We still need to code the forward transform for replay buffers and models
         action = action.argmax(-1)  # bool to int
-        idx = action >= self.m
-        if idx.any():
-            action[idx] = torch.randint(self.m, (idx.sum(),))
-        action = nn.functional.one_hot(action, self.m)
+        action = nn.functional.one_hot(action, self.max_actions)
         return action
 
-    def tranform_input_spec(self, input_spec: CompositeSpec):
-        input_spec["action"] = self.transform_action_spec(input_spec["action"])
+    def _inv_apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        if action.shape[-1] != self.max_actions:
+            raise RuntimeError(
+                f"action.shape[-1]={action.shape[-1]} must match self.max_actions={self.max_actions}."
+            )
+        action = action.argmax(-1)  # bool to int
+        idx = action >= self.num_actions_effective
+        if idx.any():
+            action[idx] = torch.randint(self.num_actions_effective, (idx.sum(),))
+        action = nn.functional.one_hot(action, self.num_actions_effective)
+        return action
+
+    def transform_input_spec(self, input_spec: CompositeSpec):
+        input_spec = input_spec.clone()
+        input_spec["action"] = OneHotDiscreteTensorSpec(
+            self.max_actions,
+            shape=(*input_spec["action"].shape[:-1], self.max_actions),
+            device=input_spec.device,
+            dtype=input_spec["action"].dtype,
+        )
         return input_spec
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(max_N={self.max_n}, M={self.m}, "
-            f"keys={self.in_keys})"
+            f"{self.__class__.__name__}(num_actions_effective={self.num_actions_effective}, max_actions={self.max_actions}, "
+            f"in_keys_inv={self.in_keys_inv})"
         )
 
 
@@ -2809,6 +2879,8 @@ class ExcludeTransform(Transform):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         return tensordict.exclude(*self.excluded_keys)
 
+    forward = _call
+
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         return tensordict.exclude(*self.excluded_keys)
 
@@ -2851,6 +2923,8 @@ class SelectTransform(Transform):
         return tensordict.select(
             *self.selected_keys, "reward", "done", *input_keys, strict=False
         )
+
+    forward = _call
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.parent:

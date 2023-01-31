@@ -155,7 +155,7 @@ SUPPORTED_LIBRARIES = {
 }
 
 
-def check_env_specs(env, return_contiguous=True, check_dtype=True):
+def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
@@ -172,7 +172,16 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True):
             of inputs/outputs). Defaults to True.
         check_dtype (bool, optional): if False, dtype checks will be skipped.
             Defaults to True.
+        seed (int, optional): for reproducibility, a seed is set.
+
+    Caution: this function resets the env seed. It should be used "offline" to
+    check that an env is adequately constructed, but it may affect the seeding
+    of an experiment and as such should be kept out of training scripts.
+
     """
+    torch.manual_seed(0)
+    env.set_seed(0)
+
     fake_tensordict = env.fake_tensordict().flatten_keys(".")
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
     # remove private keys

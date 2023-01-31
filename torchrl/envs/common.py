@@ -390,9 +390,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
         tensordict.unlock()
 
-        obs_keys = set(self.observation_spec.keys())
+        obs_keys = self.observation_spec.keys()
+        in_keys = self.input_spec.keys()
         tensordict_out_select = tensordict_out.select(*obs_keys)
-        tensordict_out = tensordict_out.exclude(*obs_keys)
+        tensordict_out = tensordict_out.exclude(*obs_keys, *in_keys)
         tensordict_out.set("next", tensordict_out_select)
 
         reward = tensordict_out.get("reward")

@@ -582,11 +582,10 @@ class SerialEnv(_BatchedEnv):
         for i in range(self.num_workers):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
-            self.shared_tensordicts[i].update_(
-                self._envs[i]
-                ._step(tensordict_in[i])
-                .select(*self.shared_tensordicts[i].keys(), strict=False)
-            )
+            out_td = self._envs[i]._step(tensordict_in[i])
+            out_td = out_td.exclude(*self.input_spec.keys())
+            out_td = out_td.select(*self.shared_tensordicts[i].keys(), strict=False)
+            self.shared_tensordicts[i].update_(out_td)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         return self.shared_tensordict_parent.clone()

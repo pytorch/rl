@@ -196,6 +196,7 @@ class ReplayBuffer:
         Returns:
             Indices of the data aded to the replay buffer.
         """
+        data = self._transform.inv(data)
         with self._replay_lock:
             index = self._writer.extend(data)
             self._sampler.extend(index)

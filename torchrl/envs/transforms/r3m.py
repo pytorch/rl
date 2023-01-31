@@ -90,6 +90,8 @@ class _R3MNet(Transform):
             tensordict.exclude(*self.in_keys, inplace=True)
         return tensordict
 
+    forward = _call
+
     @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
         shape = None
