@@ -4,19 +4,21 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 from sys import platform
+from typing import Optional, Union
 
 import numpy as np
 import pytest
 import torch
-
 from _utils_internal import (
+    _make_multithreaded_env,
+    CARTPOLE_VERSIONED,
     get_available_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
 )
 from packaging import version
-from tensordict.tensordict import assert_allclose_td
+from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
@@ -29,6 +31,9 @@ from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.smac import _has_smac, SC2Env
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs
+
+from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper
+from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
 if _has_gym:
     import gym
@@ -47,6 +52,9 @@ if _has_dmc:
 
 if _has_vmas:
     import vmas
+
+if _has_envpool:
+    import envpool
 
 IS_OSX = platform == "darwin"
 
@@ -451,6 +459,340 @@ class TestJumanji:
                 )
 
 
+ENVPOOL_CLASSIC_CONTROL_ENVS = [
+    PENDULUM_VERSIONED,
+    "MountainCar-v0",
+    "MountainCarContinuous-v0",
+    "Acrobot-v1",
+    CARTPOLE_VERSIONED,
+]
+ENVPOOL_ATARI_ENVS = [PONG_VERSIONED]
+ENVPOOL_GYM_ENVS = ENVPOOL_CLASSIC_CONTROL_ENVS + ENVPOOL_ATARI_ENVS
+ENVPOOL_DM_ENVS = ["CheetahRun-v1"]
+ENVPOOL_ALL_ENVS = ENVPOOL_GYM_ENVS + ENVPOOL_DM_ENVS
+
+
+@pytest.mark.skipif(not _has_envpool, reason="No envpool library found")
+class TestEnvPool:
+    @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
+    def test_env_wrapper_creation(self, env_name):
+        env_name = env_name.replace("ALE/", "")  # EnvPool naming convention
+        envpool_env = envpool.make(
+            task_id=env_name, env_type="gym", num_envs=4, gym_reset_return_info=True
+        )
+        env = MultiThreadedEnvWrapper(envpool_env)
+        env.reset()
+        env.rand_step()
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.parametrize(
+        "env_name", ENVPOOL_GYM_ENVS
+    )  # Not working for CheetahRun-v1 yet
+    @pytest.mark.parametrize("frame_skip", [4, 1])
+    @pytest.mark.parametrize("transformed_out", [False, True])
+    def test_specs(self, env_name, frame_skip, transformed_out, T=10, N=3):
+        env_multithreaded = _make_multithreaded_env(
+            env_name,
+            frame_skip,
+            transformed_out=transformed_out,
+            N=N,
+        )
+        check_env_specs(env_multithreaded)
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
+    @pytest.mark.parametrize("frame_skip", [4, 1])
+    @pytest.mark.parametrize("transformed_out", [False, True])
+    def test_env_basic_operation(
+        self, env_name, frame_skip, transformed_out, T=10, N=3
+    ):
+        env_multithreaded = _make_multithreaded_env(
+            env_name,
+            frame_skip,
+            transformed_out=transformed_out,
+            N=N,
+        )
+        td = TensorDict(
+            source={"action": env_multithreaded.action_spec.rand()},
+            batch_size=[
+                N,
+            ],
+        )
+        td1 = env_multithreaded.step(td)
+        assert not td1.is_shared()
+        assert "done" in td1.keys()
+        assert "reward" in td1.keys()
+
+        with pytest.raises(RuntimeError):
+            # number of actions does not match number of workers
+            td = TensorDict(
+                source={"action": env_multithreaded.action_spec.rand()},
+                batch_size=[N - 1],
+            )
+            td1 = env_multithreaded.step(td)
+
+        td_reset = TensorDict(
+            source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
+            batch_size=[
+                N,
+            ],
+        )
+        env_multithreaded.reset(tensordict=td_reset)
+
+        td = env_multithreaded.rollout(
+            policy=None, max_steps=T, break_when_any_done=False
+        )
+        assert (
+            td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
+        ), f"{td.shape}, {td.get('done').sum(1)}"
+
+        env_multithreaded.close()
+
+    # Don't run on Atari envs because output is uint8
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.parametrize("env_name", ENVPOOL_CLASSIC_CONTROL_ENVS + ENVPOOL_DM_ENVS)
+    @pytest.mark.parametrize("frame_skip", [4, 1])
+    @pytest.mark.parametrize("transformed_out", [True, False])
+    @pytest.mark.parametrize(
+        "selected_keys",
+        [
+            ["action", "observation", "next_observation", "done", "reward"],
+            ["hidden", "action", "observation", "next_observation", "done", "reward"],
+            None,
+        ],
+    )
+    def test_env_with_policy(
+        self,
+        env_name,
+        frame_skip,
+        transformed_out,
+        selected_keys,
+        T=10,
+        N=3,
+    ):
+        class DiscreteChoice(torch.nn.Module):
+            """Dummy module producing discrete output. Necessary when the action space is discrete."""
+
+            def __init__(self, out_dim: int, dtype: Optional[Union[torch.dtype, str]]):
+                super().__init__()
+                self.lin = torch.nn.LazyLinear(out_dim, dtype=dtype)
+
+            def forward(self, x):
+                res = torch.argmax(self.lin(x), axis=-1, keepdim=True)
+                return res
+
+        env_multithreaded = _make_multithreaded_env(
+            env_name,
+            frame_skip,
+            transformed_out=transformed_out,
+            N=N,
+            selected_keys=selected_keys,
+        )
+        if env_name == "CheetahRun-v1":
+            in_keys = [("observation", "velocity")]
+            dtype = torch.float64
+        else:
+            in_keys = ["observation"]
+            dtype = torch.float32
+
+        if env_multithreaded.action_spec.shape:
+            module = torch.nn.LazyLinear(
+                env_multithreaded.action_spec.shape[-1], dtype=dtype
+            )
+        else:
+            # Action space is discrete
+            module = DiscreteChoice(env_multithreaded.action_spec.space.n, dtype=dtype)
+
+        policy = ActorCriticOperator(
+            SafeModule(
+                spec=None,
+                module=torch.nn.LazyLinear(12, dtype=dtype),
+                in_keys=in_keys,
+                out_keys=["hidden"],
+            ),
+            SafeModule(
+                spec=None,
+                module=module,
+                in_keys=["hidden"],
+                out_keys=["action"],
+            ),
+            ValueOperator(
+                module=MLP(out_features=1, num_cells=[], layer_kwargs={"dtype": dtype}),
+                in_keys=["hidden", "action"],
+            ),
+        )
+
+        td = TensorDict(
+            source={"action": env_multithreaded.action_spec.rand()},
+            batch_size=[
+                N,
+            ],
+        )
+
+        td1 = env_multithreaded.step(td)
+        assert not td1.is_shared()
+        assert "done" in td1.keys()
+        assert "reward" in td1.keys()
+
+        with pytest.raises(RuntimeError):
+            # number of actions does not match number of workers
+            td = TensorDict(
+                source={"action": env_multithreaded.action_spec.rand()},
+                batch_size=[N - 1],
+            )
+            td1 = env_multithreaded.step(td)
+
+        td_reset = TensorDict(
+            source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
+            batch_size=[
+                N,
+            ],
+        )
+        env_multithreaded.reset(tensordict=td_reset)
+        td = env_multithreaded.rollout(
+            policy=policy, max_steps=T, break_when_any_done=False
+        )
+        assert (
+            td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
+        ), f"{td.shape}, {td.get('done').sum(1)}"
+
+        env_multithreaded.close()
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
+    @pytest.mark.parametrize("frame_skip", [4, 1])
+    @pytest.mark.parametrize("transformed_out", [True, False])
+    def test_multithreaded_env_seed(
+        self, env_name, frame_skip, transformed_out, seed=100, N=4
+    ):
+        # Create the first env, set the seed, and perform a sequence of operations
+        env = _make_multithreaded_env(
+            env_name,
+            frame_skip,
+            transformed_out=True,
+            N=N,
+        )
+        action = env.action_spec.rand()
+        env.set_seed(seed)
+        td0a = env.reset()
+        td1a = env.step(td0a.clone().set("action", action))
+        td2a = env.rollout(max_steps=10)
+
+        # Create a new env, set the seed, and repeat same operations
+        env = _make_multithreaded_env(
+            env_name,
+            frame_skip,
+            transformed_out=True,
+            N=N,
+        )
+        env.set_seed(seed)
+        td0b = env.reset()
+        td1b = env.step(td0b.clone().set("action", action))
+        td2b = env.rollout(max_steps=10)
+
+        # Check that results on two envs are identical
+        assert_allclose_td(td0a, td0b.select(*td0a.keys()))
+        assert_allclose_td(td1a, td1b)
+        assert_allclose_td(td2a, td2b)
+
+        # Check that results are different if seed is different
+        # Skip Pong, since there different actions can lead to the same result
+        if env_name != "ALE/Pong-v5":
+            env.set_seed(
+                seed=seed + 10,
+            )
+            td0c = env.reset()
+            td1c = env.step(td0c.clone().set("action", action))
+            with pytest.raises(AssertionError):
+                assert_allclose_td(td0a, td0c.select(*td0a.keys()))
+            with pytest.raises(AssertionError):
+                assert_allclose_td(td1a, td1c)
+        env.close()
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    def test_multithread_env_shutdown(self):
+        env = _make_multithreaded_env(
+            PENDULUM_VERSIONED,
+            1,
+            transformed_out=False,
+            N=3,
+        )
+        env.reset()
+        assert not env.is_closed
+        env.rand_step()
+        assert not env.is_closed
+        env.close()
+        assert env.is_closed
+        env.reset()
+        assert not env.is_closed
+        env.close()
+
+    @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda to test on")
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.parametrize("frame_skip", [4])
+    @pytest.mark.parametrize("device", [0])
+    @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
+    @pytest.mark.parametrize("transformed_out", [False, True])
+    @pytest.mark.parametrize("open_before", [False, True])
+    def test_multithreaded_env_cast(
+        self,
+        env_name,
+        frame_skip,
+        transformed_out,
+        device,
+        open_before,
+        T=10,
+        N=3,
+    ):
+        # tests casting to device
+        env_multithread = _make_multithreaded_env(
+            env_name,
+            frame_skip,
+            transformed_out=transformed_out,
+            N=N,
+        )
+        if open_before:
+            td_cpu = env_multithread.rollout(max_steps=10)
+            assert td_cpu.device == torch.device("cpu")
+        env_multithread = env_multithread.to(device)
+        assert env_multithread.observation_spec.device == torch.device(device)
+        assert env_multithread.action_spec.device == torch.device(device)
+        assert env_multithread.reward_spec.device == torch.device(device)
+        assert env_multithread.device == torch.device(device)
+        td_device = env_multithread.reset()
+        assert td_device.device == torch.device(device), env_multithread
+        td_device = env_multithread.rand_step()
+        assert td_device.device == torch.device(device), env_multithread
+        td_device = env_multithread.rollout(max_steps=10)
+        assert td_device.device == torch.device(device), env_multithread
+        env_multithread.close()
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
+    @pytest.mark.parametrize("frame_skip", [4])
+    @pytest.mark.parametrize("device", [0])
+    @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
+    @pytest.mark.parametrize("transformed_out", [True, False])
+    def test_env_device(self, env_name, frame_skip, transformed_out, device):
+        # tests creation on device
+        torch.manual_seed(0)
+        N = 3
+
+        env_multithreaded = _make_multithreaded_env(
+            env_name,
+            frame_skip,
+            transformed_out=transformed_out,
+            device=device,
+            N=N,
+        )
+
+        assert env_multithreaded.device == torch.device(device)
+        out = env_multithreaded.rollout(max_steps=20)
+        assert out.device == torch.device(device)
+
+        env_multithreaded.close()
+
+
 @pytest.mark.skipif(not _has_brax, reason="brax not installed")
 @pytest.mark.parametrize("envname", ["fast"])
 class TestBrax:
@@ -685,6 +1027,67 @@ class TestVmas:
         assert tensordict.shape == torch.Size(
             [n_workers, list(env.n_agents)[0], list(env.num_envs)[0], n_rollout_samples]
         )
+
+    @pytest.mark.parametrize("num_envs", [1, 10])
+    @pytest.mark.parametrize("n_workers", [1, 3])
+    def test_vmas_reset(
+        self,
+        scenario_name,
+        num_envs,
+        n_workers,
+        n_agents=5,
+        n_rollout_samples=3,
+        max_steps=3,
+    ):
+        def make_vmas():
+            env = VmasEnv(
+                scenario_name=scenario_name,
+                num_envs=num_envs,
+                n_agents=n_agents,
+                max_steps=max_steps,
+            )
+            env.set_seed(0)
+            return env
+
+        env = ParallelEnv(n_workers, make_vmas)
+        tensordict = env.rollout(max_steps=n_rollout_samples)
+
+        assert tensordict["done"].squeeze(-1)[..., -1].all()
+
+        _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+        while not _reset.any():
+            _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+
+        tensordict = env.reset(
+            TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
+        )
+        assert tensordict["done"][_reset].all().item() is False
+        # vmas resets all the agent dimension if only one of the agents needs resetting
+        # thus, here we check that where we did not reset any agent, all agents are still done
+        assert tensordict["done"].all(dim=1)[~_reset.any(dim=1)].all().item() is True
+
+    @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
+    @pytest.mark.parametrize("first", [0, 1])
+    def test_to_device(self, scenario_name: str, first: int):
+        devices = get_available_devices()
+
+        def make_vmas():
+            env = VmasEnv(
+                scenario_name=scenario_name,
+                num_envs=7,
+                n_agents=3,
+                seed=0,
+                device=devices[first],
+            )
+            return env
+
+        env = ParallelEnv(3, make_vmas)
+
+        assert env.rollout(max_steps=3).device == devices[first]
+
+        env.to(devices[1 - first])
+
+        assert env.rollout(max_steps=3).device == devices[1 - first]
 
 
 @pytest.mark.skipif(not _has_smac, reason="smac not installed")

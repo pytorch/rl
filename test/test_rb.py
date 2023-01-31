@@ -798,7 +798,7 @@ transforms = [
     pytest.param(partial(SqueezeTransform, squeeze_dim=-1), id="SqueezeTransform"),
     GrayScale,
     pytest.param(partial(ObservationNorm, loc=1, scale=2), id="ObservationNorm"),
-    CatFrames,
+    pytest.param(partial(CatFrames, dim=-3, N=4), id="CatFrames"),
     pytest.param(partial(RewardScaling, loc=1, scale=2), id="RewardScaling"),
     DoubleToFloat,
     VecNorm,
@@ -830,6 +830,8 @@ transforms = [
 
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform_no_inkeys(transform):
+    if PinMemoryTransform is PinMemoryTransform and not torch.cuda.is_available():
+        raise pytest.skip("No CUDA device detected, skipping PinMemory")
     rb = ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0), transform=transform())
 
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])

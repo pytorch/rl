@@ -5,7 +5,7 @@
 
 import math
 from numbers import Number
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -17,7 +17,7 @@ from torchrl.modules import ProbabilisticActor, SafeModule
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.utils import distance_loss, next_state_value
 
-from ..envs.utils import set_exploration_mode
+from ..envs.utils import set_exploration_mode, step_mdp
 from .common import LossModule
 
 try:
@@ -34,12 +34,14 @@ class SACLoss(LossModule):
     """TorchRL implementation of the SAC loss.
 
     Presented in "Soft Actor-Critic: Off-Policy Maximum Entropy Deep
-    Reinforcement Learning with a Stochastic Actor" https://arxiv.org/pdf/1801.01290.pdf
+    Reinforcement Learning with a Stochastic Actor" https://arxiv.org/abs/1801.01290
+    and "Soft Actor-Critic Algorithms and Applications" https://arxiv.org/abs/1812.05905
 
     Args:
         actor_network (ProbabilisticActor): stochastic actor
         qvalue_network (SafeModule): Q(s, a) parametric model
-        value_network (SafeModule): V(s) parametric model\
+        value_network (SafeModule, optional): V(s) parametric model. If not
+            provided, the second version of SAC is assumed.
         qvalue_network_bis (ProbabilisticTDModule, optional): if required, the
             Q-value can be computed twice independently using two separate
             networks. The minimum predicted value will then be used for
@@ -79,7 +81,7 @@ class SACLoss(LossModule):
         self,
         actor_network: ProbabilisticActor,
         qvalue_network: SafeModule,
-        value_network: SafeModule,
+        value_network: Optional[SafeModule] = None,
         num_qvalue_nets: int = 2,
         gamma: Number = 0.99,
         priotity_key: str = "td_error",
@@ -107,24 +109,31 @@ class SACLoss(LossModule):
         )
 
         # Value
-        self.delay_value = delay_value
-        self.convert_to_functional(
-            value_network,
-            "value_network",
-            create_target_params=self.delay_value,
-            compare_against=list(actor_network.parameters()),
-        )
+        if value_network is not None:
+            self._version = 1
+            self.delay_value = delay_value
+            self.convert_to_functional(
+                value_network,
+                "value_network",
+                create_target_params=self.delay_value,
+                compare_against=list(actor_network.parameters()),
+            )
+        else:
+            self._version = 2
 
         # Q value
         self.delay_qvalue = delay_qvalue
         self.num_qvalue_nets = num_qvalue_nets
+        if self._version == 1:
+            value_params = list(value_network.parameters())
+        else:
+            value_params = []
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=self.delay_qvalue,
-            compare_against=list(actor_network.parameters())
-            + list(value_network.parameters()),
+            compare_against=list(actor_network.parameters()) + value_params,
         )
 
         self.register_buffer("gamma", torch.tensor(gamma))
@@ -163,8 +172,11 @@ class SACLoss(LossModule):
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
-        self.actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
-        make_functional(self.actor_critic)
+        if self._version == 1:
+            self.actor_critic = ActorCriticWrapper(
+                self.actor_network, self.value_network
+            )
+            make_functional(self.actor_critic)
 
     @property
     def device(self) -> torch.device:
@@ -186,27 +198,33 @@ class SACLoss(LossModule):
         td_device = tensordict_reshape.to(device)
 
         loss_actor = self._loss_actor(td_device)
-        loss_qvalue, priority = self._loss_qvalue(td_device)
-        loss_value = self._loss_value(td_device)
+        if self._version == 1:
+            loss_qvalue, priority = self._loss_qvalue_v1(td_device)
+            loss_value = self._loss_value(td_device)
+        else:
+            loss_qvalue, priority = self._loss_qvalue_v2(td_device)
+            loss_value = None
         loss_alpha = self._loss_alpha(td_device)
         tensordict_reshape.set(self.priority_key, priority)
         if (loss_actor.shape != loss_qvalue.shape) or (
-            loss_actor.shape != loss_value.shape
+            loss_value is not None and loss_actor.shape != loss_value.shape
         ):
             raise RuntimeError(
                 f"Losses shape mismatch: {loss_actor.shape}, {loss_qvalue.shape} and {loss_value.shape}"
             )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
+        out = {
+            "loss_actor": loss_actor.mean(),
+            "loss_qvalue": loss_qvalue.mean(),
+            "loss_alpha": loss_alpha.mean(),
+            "alpha": self._alpha,
+            "entropy": -td_device.get("_log_prob").mean().detach(),
+        }
+        if self._version == 1:
+            out["loss_value"] = loss_value.mean()
         return TensorDict(
-            {
-                "loss_actor": loss_actor.mean(),
-                "loss_qvalue": loss_qvalue.mean(),
-                "loss_value": loss_value.mean(),
-                "loss_alpha": loss_alpha.mean(),
-                "alpha": self._alpha,
-                "entropy": -td_device.get("_log_prob").mean().detach(),
-            },
+            out,
             [],
         )
 
@@ -238,7 +256,7 @@ class SACLoss(LossModule):
         tensordict.set("_log_prob", log_prob.detach())
         return self._alpha * log_prob - min_q_logprob
 
-    def _loss_qvalue(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def _loss_qvalue_v1(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         actor_critic = self.actor_critic
         params = TensorDict(
             {
@@ -286,6 +304,59 @@ class SACLoss(LossModule):
         priority_value = torch.cat((pred_val - target_chunks).pow(2).unbind(0), 0)
 
         return loss_value, priority_value
+
+    def _loss_qvalue_v2(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+        obs_keys = self.actor_network.in_keys
+        tensordict = tensordict.select("reward", "done", "next", *obs_keys, "action")
+
+        with torch.no_grad():
+            next_td = step_mdp(tensordict).select(
+                *self.actor_network.in_keys
+            )  # next_observation ->
+            # observation
+            # select pseudo-action
+            with set_exploration_mode("random"):
+                dist = self.actor_network.get_dist(
+                    next_td,
+                    params=self.target_actor_network_params,
+                )
+                next_td["action"] = dist.rsample()
+                next_td["sample_log_prob"] = dist.log_prob(next_td["action"])
+            sample_log_prob = next_td.get("sample_log_prob")
+            # get q-values
+            next_td = vmap(self.qvalue_network, (None, 0))(
+                next_td,
+                self.target_qvalue_network_params,
+            )
+            state_action_value = next_td.get("state_action_value")
+            if (
+                state_action_value.shape[-len(sample_log_prob.shape) :]
+                != sample_log_prob.shape
+            ):
+                sample_log_prob = sample_log_prob.unsqueeze(-1)
+            state_value = (
+                next_td.get("state_action_value") - self._alpha * sample_log_prob
+            )
+            state_value = state_value.min(0)[0]
+
+        tensordict.set("next.state_value", state_value)
+        target_value = next_state_value(
+            tensordict,
+            gamma=self.gamma,
+            pred_next_val=state_value,
+        )
+        tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+            tensordict.select(*self.qvalue_network.in_keys),
+            self.qvalue_network_params,
+        )
+        pred_val = tensordict_expand.get("state_action_value").squeeze(-1)
+        td_error = abs(pred_val - target_value)
+        loss_qval = distance_loss(
+            pred_val,
+            target_value.expand_as(pred_val),
+            loss_function=self.loss_function,
+        ).mean(0)
+        return loss_qval, td_error.detach().max(0)[0]
 
     def _loss_value(self, tensordict: TensorDictBase) -> Tensor:
         # value loss

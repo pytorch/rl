@@ -562,8 +562,10 @@ class GAE(nn.Module):
         )
 
         if self.average_gae:
-            adv = adv - adv.mean()
-            adv = adv / adv.std().clamp_min(1e-4)
+            loc = adv.mean()
+            scale = adv.std().clamp_min(1e-4)
+            adv = adv - loc
+            adv = adv / scale
 
         tensordict.set(self.advantage_key, adv)
         tensordict.set(self.value_target_key, value_target)

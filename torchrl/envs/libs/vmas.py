@@ -2,9 +2,8 @@ from typing import Dict, List, Optional
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-
-from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.envs.common import _EnvWrapper
+from torchrl.data import CompositeSpec, DEVICE_TYPING, UnboundedContinuousTensorSpec
+from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 from torchrl.envs.utils import _selective_unsqueeze
 
@@ -210,17 +209,23 @@ class VmasWrapper(_EnvWrapper):
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
         if tensordict is not None and "_reset" in tensordict.keys():
-            envs_to_reset = tensordict.get("_reset").any(dim=0)
+            _reset = tensordict.get("_reset")
+            envs_to_reset = _reset.any(dim=0)
             for env_index, to_reset in enumerate(envs_to_reset):
                 if to_reset:
                     self._env.reset_at(env_index)
+            done = _selective_unsqueeze(self._env.done(), batch_size=(self.num_envs,))
             obs = []
             infos = []
+            dones = []
             for agent in self.agents:
                 obs.append(self.scenario.observation(agent))
                 infos.append(self.scenario.info(agent))
+                dones.append(done.clone())
+
         else:
             obs, infos = self._env.reset(return_info=True)
+            dones = None
 
         agent_tds = []
         for i in range(self.n_agents):
@@ -237,6 +242,8 @@ class VmasWrapper(_EnvWrapper):
 
             if infos is not None:
                 agent_td.set("info", agent_info)
+            if dones is not None:
+                agent_td.set("done", dones[i])
             agent_tds.append(agent_td)
 
         tensordict_out = torch.stack(agent_tds, dim=0)
@@ -323,6 +330,10 @@ class VmasWrapper(_EnvWrapper):
             f"{self.__class__.__name__}(env={self._env}, num_envs={self.num_envs}, n_agents={self.n_agents},"
             f" batch_size={self.batch_size}, device={self.device})"
         )
+
+    def to(self, device: DEVICE_TYPING) -> EnvBase:
+        self._env.to(device)
+        return super().to(device)
 
 
 class VmasEnv(VmasWrapper):
