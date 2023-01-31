@@ -257,10 +257,13 @@ class TensorSpec:
                 stride > 0 for stride in val.strides
             ):
                 val = val.copy()
-            val = torch.from_numpy(val)
-            if self.device.type != "cpu":
-                val = val.to(self.device)
-            val = val.to(self.dtype)
+            if isinstance(val, np.ndarray):
+                val = torch.from_numpy(val)
+                if self.device.type != "cpu":
+                    val = val.to(self.device)
+                val = val.to(self.dtype)
+            else:
+                val = torch.tensor(val, device=self.device, dtype=self.dtype)
             if val.shape[-len(self.shape) :] != self.shape:
                 # option 1: add a singleton dim at the end
                 if (
