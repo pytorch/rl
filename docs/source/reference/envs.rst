@@ -136,12 +136,20 @@ We also offer the :obj:`SerialEnv` class that enjoys the exact same API but is e
 serially. This is mostly useful for testing purposes, when one wants to assess the
 behaviour of a :obj:`ParallelEnv` without launching the subprocesses.
 
+In addition to :obj:`ParallelEnv`, which offers process-based parallelism, we also provide a way to create
+multithreaded environments with :obj:`MultiThreadedEnv`. This class uses `EnvPool <https://github.com/sail-sg/envpool>`_
+library underneath, which allows for higher performance, but at the same time restricts flexibility - one can only
+create environments implemented in `EnvPool`. This covers many popular RL environments types (Atari, Classic Control,
+etc.), but one can not use an arbitrary TorchRL environment, as it is possible with :obj:`ParallelEnv`. Run
+`benchmarks/benchmark_batched_envs.py` to compare performance of different ways to parallelize batched environments.
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst
 
     SerialEnv
     ParallelEnv
+    MultiThreadedEnv
     EnvCreator
 
 
