@@ -173,12 +173,23 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True):
             Defaults to True.
     """
     fake_tensordict = env.fake_tensordict().flatten_keys(".")
-    real_tensordict = env.rollout(3, return_contiguous=return_contiguous).flatten_keys(
-        "."
+    real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
+    # remove private keys
+    real_tensordict = real_tensordict.exclude(
+        *[
+            key
+            for key in real_tensordict.keys(True)
+            if (isinstance(key, str) and key.startswith("_"))
+            or (
+                isinstance(key, tuple) and any(subkey.startswith("_") for subkey in key)
+            )
+        ]
     )
+    real_tensordict = real_tensordict.flatten_keys(".")
 
-    keys1 = set(fake_tensordict.keys())
-    keys2 = set(real_tensordict.keys())
+    keys1 = set(fake_tensordict.keys(True))
+    keys2 = set(real_tensordict.keys(True))
+
     if keys1 != keys2:
         raise AssertionError(
             "The keys of the fake tensordict and the one collected during rollout do not match:"
@@ -209,6 +220,16 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True):
 
     # test dtypes
     real_tensordict = env.rollout(3)  # keep empty structures, for example dict()
+    real_tensordict = real_tensordict.exclude(
+        *[
+            key
+            for key in real_tensordict.keys(True)
+            if (isinstance(key, str) and key.startswith("_"))
+            or (
+                isinstance(key, tuple) and any(subkey.startswith("_") for subkey in key)
+            )
+        ]
+    )
     for key, value in real_tensordict[..., -1].items():
         _check_isin(key, value, env.observation_spec, env.input_spec)
 

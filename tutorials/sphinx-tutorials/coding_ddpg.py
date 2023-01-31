@@ -631,10 +631,10 @@ for i, tensordict in enumerate(collector):
     pbar.update(tensordict.numel())
 
     # extend the replay buffer with the new data
-    if "mask" in tensordict.keys():
+    if ("collector", "mask") in tensordict.keys(True):
         # if multi-step, a mask is present to help filter padded values
-        current_frames = tensordict["mask"].sum()
-        tensordict = tensordict[tensordict.get("mask")]
+        current_frames = tensordict["collector", "mask"].sum()
+        tensordict = tensordict[tensordict.get(("collector", "mask"))]
     else:
         tensordict = tensordict.view(-1)
         current_frames = tensordict.numel()
@@ -882,7 +882,7 @@ for i, tensordict in enumerate(collector):
         :1
     ]  # this is necessary for prioritized replay buffers: we will assign one priority value to each element, hence the batch_size must comply with the number of priority values
     current_frames = tensordict.numel()
-    collected_frames += tensordict["mask"].sum()
+    collected_frames += tensordict["collector", "mask"].sum()
     replay_buffer.extend(tensordict.cpu())
 
     # optimization steps

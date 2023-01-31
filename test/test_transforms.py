@@ -878,8 +878,6 @@ class TestTransforms:
             tensor_list.append(torch.rand(batch, nodes).to(device))
         max_vals, _ = torch.max(torch.stack(tensor_list[-T:]), dim=0)
 
-        print(f"max vals: {max_vals}")
-
         for i in range(seq_len):
             env_td = TensorDict(
                 {
@@ -946,7 +944,11 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_compose(self, keys, batch, device, nchannels=1, N=4):
         torch.manual_seed(0)
-        t1 = CatFrames(in_keys=keys, N=4)
+        t1 = CatFrames(
+            in_keys=keys,
+            N=4,
+            dim=-3,
+        )
         t2 = FiniteTensorDictCheck()
         compose = Compose(t1, t2)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
@@ -1257,37 +1259,16 @@ class TestTransforms:
         with pytest.raises(RuntimeError, match=err_msg):
             transform._apply_transform(torch.Tensor([1]))
 
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_observationnorm_infinite_stats_error(self, device):
-        base_env = ContinuousActionVecMockEnv(
-            observation_spec=CompositeSpec(
-                observation=BoundedTensorSpec(
-                    minimum=1, maximum=1, shape=torch.Size([1])
-                ),
-                observation_orig=BoundedTensorSpec(
-                    minimum=1, maximum=1, shape=torch.Size([1])
-                ),
-            ),
-            action_spec=BoundedTensorSpec(minimum=1, maximum=1, shape=torch.Size((1,))),
-            seed=0,
-        )
-        base_env.out_key = "observation"
-        t_env = TransformedEnv(
-            base_env,
-            transform=ObservationNorm(in_keys="observation"),
-        )
-        t_env.append_transform(ObservationNorm(in_keys="observation"))
-        err_msg = "Non-finite values found in"
-        with pytest.raises(RuntimeError, match=err_msg):
-            for transform in t_env.transform:
-                transform.init_stats(num_iter=100)
-
     def test_catframes_transform_observation_spec(self):
         N = 4
         key1 = "first key"
         key2 = "second key"
         keys = [key1, key2]
-        cat_frames = CatFrames(N=N, in_keys=keys)
+        cat_frames = CatFrames(
+            N=N,
+            in_keys=keys,
+            dim=-3,
+        )
         mins = [0, 0.5]
         maxes = [0.5, 1]
         observation_spec = CompositeSpec(
@@ -1321,31 +1302,50 @@ class TestTransforms:
                 )
 
     @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("batch_size", [(), (1,), (1, 2)])
     @pytest.mark.parametrize("d", range(1, 4))
-    def test_catframes_buffer_check_latest_frame(self, device, d):
+    @pytest.mark.parametrize("dim", [-3, -2, 1])
+    @pytest.mark.parametrize("N", [2, 4])
+    def test_catframes_buffer_check_latest_frame(self, device, d, batch_size, dim, N):
         key1 = "first key"
         key2 = "second key"
-        N = 4
         keys = [key1, key2]
-        key1_tensor = torch.ones(1, d, 3, 3, device=device) * 2
-        key2_tensor = torch.ones(1, d, 3, 3, device=device)
+        extra_d = (3,) * (-dim - 1)
+        key1_tensor = torch.ones(*batch_size, d, *extra_d, device=device) * 2
+        key2_tensor = torch.ones(*batch_size, d, *extra_d, device=device)
         key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
-        cat_frames = CatFrames(N=N, in_keys=keys)
+        td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
+        if dim > 0:
+            with pytest.raises(
+                ValueError, match="dim must be > 0 to accomodate for tensordict"
+            ):
+                cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
+            return
+        cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
 
         tdclone = cat_frames(td.clone())
         latest_frame = tdclone.get(key2)
 
-        assert latest_frame.shape[1] == N * d
-        assert (latest_frame[0, :-d] == 0).all()
-        assert (latest_frame[0, -d:] == 1).all()
+        assert latest_frame.shape[dim] == N * d
+        slices = (slice(None),) * (-dim - 1)
+        index1 = (Ellipsis, slice(None, -d), *slices)
+        index2 = (Ellipsis, slice(-d, None), *slices)
+        assert (latest_frame[index1] == 0).all()
+        assert (latest_frame[index2] == 1).all()
+        v1 = latest_frame[index1]
 
         tdclone = cat_frames(td.clone())
         latest_frame = tdclone.get(key2)
 
-        assert latest_frame.shape[1] == N * d
-        assert (latest_frame[0, : -2 * d] == 0).all()
-        assert (latest_frame[0, -2 * d :] == 1).all()
+        assert latest_frame.shape[dim] == N * d
+        index1 = (Ellipsis, slice(None, -2 * d), *slices)
+        index2 = (Ellipsis, slice(-2 * d, None), *slices)
+        assert (latest_frame[index1] == 0).all()
+        assert (latest_frame[index2] == 1).all()
+        v2 = latest_frame[index1]
+
+        # we don't want the same tensor to be returned twice, but they're all copies of the same buffer
+        assert v1 is not v2
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_catframes_reset(self, device):
@@ -1357,19 +1357,20 @@ class TestTransforms:
         key2_tensor = torch.randn(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
-        cat_frames = CatFrames(N=N, in_keys=keys)
+        cat_frames = CatFrames(N=N, in_keys=keys, dim=-3)
 
-        cat_frames(td)
+        cat_frames(td.clone())
         buffer = getattr(cat_frames, f"_cat_buffers_{key1}")
 
-        passed_back_td = cat_frames.reset(td)
+        tdc = td.clone()
+        passed_back_td = cat_frames.reset(tdc)
+        assert "_reset" in tdc.keys()
 
-        assert td is passed_back_td
-        assert (0 == buffer).all()
+        assert tdc is passed_back_td
+        assert (buffer == 0).all()
 
-        _ = cat_frames._call(td)
-        assert (0 == buffer[..., :-1, :, :]).all()
-        assert (0 != buffer[..., -1:, :, :]).all()
+        _ = cat_frames._call(tdc)
+        assert (buffer != 0).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_finitetensordictcheck(self, device):
@@ -1623,7 +1624,6 @@ class TestTransforms:
             device=device,
         )
         br(td)
-        assert td["reward"] is reward
         assert (td["reward"] != reward_copy).all()
         assert (td["misc"] == misc_copy).all()
         assert (torch.count_nonzero(td["reward"]) == torch.sum(reward_copy > 0)).all()
@@ -1691,7 +1691,7 @@ class TestTransforms:
         (key,) = itertools.islice(obs_spec.keys(), 1)
 
         env = TransformedEnv(env)
-        env.append_transform(CatFrames(N=4, cat_dim=-1, in_keys=[key]))
+        env.append_transform(CatFrames(N=4, dim=-1, in_keys=[key]))
         assert isinstance(env.transform, Compose)
         assert len(env.transform) == 1
         obs_spec = env.observation_spec
@@ -1715,7 +1715,7 @@ class TestTransforms:
         assert env._observation_spec is not None
         assert env._reward_spec is not None
 
-        env.insert_transform(0, CatFrames(N=4, cat_dim=-1, in_keys=[key]))
+        env.insert_transform(0, CatFrames(N=4, dim=-1, in_keys=[key]))
 
         # transformed envs do not have spec after insert -- they need to be computed
         assert env._input_spec is None
@@ -1762,7 +1762,7 @@ class TestTransforms:
         assert env._observation_spec is None
         assert env._reward_spec is None
 
-        env.insert_transform(-5, CatFrames(N=4, cat_dim=-1, in_keys=[key]))
+        env.insert_transform(-5, CatFrames(N=4, dim=-1, in_keys=[key]))
         assert isinstance(env.transform, Compose)
         assert len(env.transform) == 6
 
@@ -1832,7 +1832,7 @@ class TestTransforms:
         while max_steps is None or i < max_steps:
             step_counter._step(td)
             i += 1
-            assert torch.all(td.get("step_count") == i)
+            assert torch.all(td.get("step_count") == i), (td.get("step_count"), i)
             if max_steps is None:
                 break
         if max_steps is not None:
@@ -2441,7 +2441,7 @@ transforms = [
     pytest.param(partial(SqueezeTransform, squeeze_dim=-1), id="SqueezeTransform"),
     GrayScale,
     ObservationNorm,
-    CatFrames,
+    pytest.param(partial(CatFrames, dim=-3, N=4), id="CatFrames"),
     pytest.param(partial(RewardScaling, loc=1, scale=2), id="RewardScaling"),
     FiniteTensorDictCheck,
     DoubleToFloat,

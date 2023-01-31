@@ -175,7 +175,7 @@ def make_env(parallel=False, m=0, s=1):
             GrayScale(),
             Resize(64, 64),
             ObservationNorm(in_keys=["pixels"], loc=m, scale=s, standard_normal=True),
-            CatFrames(4, in_keys=["pixels"]),
+            CatFrames(4, in_keys=["pixels"], dim=-3),
         ),
     )
     return env
@@ -364,7 +364,7 @@ prev_traj_count = 0
 pbar = tqdm.tqdm(total=total_frames)
 for j, data in enumerate(data_collector):
     # trajectories are padded to be stored in the same tensordict: since we do not care about consecutive step, we'll just mask the tensordict and get the flattened representation instead.
-    mask = data["mask"]
+    mask = data["collector", "mask"]
     current_frames = mask.sum().cpu().item()
     pbar.update(current_frames)
 
@@ -601,7 +601,7 @@ prev_traj_count = 0
 
 pbar = tqdm.tqdm(total=total_frames)
 for j, data in enumerate(data_collector):
-    mask = data["mask"]
+    mask = data["collector", "mask"]
     data = pad(data, [0, 0, 0, max_size - data.shape[1]])
     current_frames = mask.sum().cpu().item()
     pbar.update(current_frames)
@@ -644,7 +644,7 @@ for j, data in enumerate(data_collector):
                 done,
             ).pow(2)
             # reward + gamma * next_value * (1 - done)
-            mask = sampled_data["mask"]
+            mask = sampled_data["collector", "mask"]
             error = error[mask].mean()
             # assert exp_value.shape == action_value.shape
             # error = nn.functional.smooth_l1_loss(exp_value, action_value).mean()
