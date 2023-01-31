@@ -64,7 +64,7 @@ class SC2Wrapper(GymLikeEnv):
 
     def __init__(
         self,
-        env: smac.env.StarCraft2Env = None,
+        env: "smac.env.StarCraft2Env" = None,
         batch_size: Optional[torch.Size] = None,
         **kwargs,
     ):
@@ -86,7 +86,7 @@ class SC2Wrapper(GymLikeEnv):
     def _build_env(self, env, **kwargs) -> smac.env.StarCraft2Env:
         return env
 
-    def _make_specs(self, env: smac.env.StarCraft2Env) -> None:
+    def _make_specs(self, env: "smac.env.StarCraft2Env") -> None:
         # Extract specs from definition.
         self.reward_spec = self._make_reward_spec()
 
@@ -111,7 +111,7 @@ class SC2Wrapper(GymLikeEnv):
             device=self.device,
         )
 
-    def _make_input_spec(self, env: smac.env.StarCraft2Env) -> TensorSpec:
+    def _make_input_spec(self, env: "smac.env.StarCraft2Env") -> TensorSpec:
         mask = torch.tensor(
             env.get_avail_actions(), dtype=torch.bool, device=self.device
         )
@@ -124,13 +124,13 @@ class SC2Wrapper(GymLikeEnv):
         )
         return CompositeSpec(action=action_spec, shape=self.batch_size)
 
-    def _make_observation_spec(self, env: smac.env.StarCraft2Env) -> TensorSpec:
+    def _make_observation_spec(self, env: "smac.env.StarCraft2Env") -> TensorSpec:
         obs_spec = UnboundedContinuousTensorSpec(
             torch.Size([env.n_agents, env.get_obs_size()]), device=self.device
         )
         return CompositeSpec(observation=obs_spec, shape=self.batch_size)
 
-    def _make_state_spec(self, env: smac.env.StarCraft2Env) -> TensorSpec:
+    def _make_state_spec(self, env: "smac.env.StarCraft2Env") -> TensorSpec:
         return UnboundedContinuousTensorSpec(
             torch.Size([env.n_agents, env.get_state_size()]), device=self.device
         )

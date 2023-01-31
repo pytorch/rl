@@ -51,7 +51,7 @@ if _has_vmas:
 IS_OSX = platform == "darwin"
 
 
-@pytest.mark.skipif(_has_gym, reason="no gym library found")
+@pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize(
     "env_name",
     [
@@ -156,7 +156,7 @@ def _make_gym_environment(env_name):  # noqa: F811
     return gym.make(env_name, render_mode="rgb_array")
 
 
-@pytest.mark.skipif(_has_dmc, reason="no dm_control library found")
+@pytest.mark.skipif(not _has_dmc, reason="no dm_control library found")
 @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
 @pytest.mark.parametrize("frame_skip", [1, 3])
 @pytest.mark.parametrize(
