@@ -265,7 +265,7 @@ class SC2Env(SC2Wrapper):
         map_name: str,
         seed: Optional[int] = None,
         **kwargs,
-    ) -> smac.env.StarCraft2Env:
+    ) -> "smac.env.StarCraft2Env":
         if not _has_smac:
             raise RuntimeError(
                 f"smac not found, unable to create smac.env.StarCraft2Env. "
