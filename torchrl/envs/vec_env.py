@@ -1148,13 +1148,13 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         self.is_closed = False
         return tensordict_out
 
+    @torch.no_grad()
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        with torch.no_grad():
-            action = tensordict.get("action")
-            # Action needs to be moved to CPU and converted to numpy before being passed to envpool
-            action = action.to(torch.device("cpu"))
-            step_output = self._env.step(action.numpy())
-            tensordict_out = self._transform_step_output(step_output)
+        action = tensordict.get("action")
+        # Action needs to be moved to CPU and converted to numpy before being passed to envpool
+        action = action.to(torch.device("cpu"))
+        step_output = self._env.step(action.numpy())
+        tensordict_out = self._transform_step_output(step_output)
         return tensordict_out
 
     def _get_input_spec(self) -> TensorSpec:
