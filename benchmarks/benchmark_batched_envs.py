@@ -27,27 +27,34 @@ from torchrl.envs.libs.gym import GymEnv
 N_STEPS = 1000
 
 
-def run_multithreaded(num_workers, device):
+def create_multithreaded(num_workers, device):
     env = MultiThreadedEnv(num_workers=num_workers, env_name="Pendulum-v1")
     # GPU doesn't lead to any speedup for MultiThreadedEnv, as the underlying library (envpool) works only on CPU
     env = env.to(device=torch.device(device))
-    env.rollout(max_steps=N_STEPS)
+    env.rollout(policy=None, max_steps=5)  # Warm-up
+    return env
 
 
 def factory():
     return GymEnv("Pendulum-v1")
 
 
-def run_serial(num_workers, device):
+def create_serial(num_workers, device):
     env = SerialEnv(num_workers=num_workers, create_env_fn=factory)
     env = env.to(device=torch.device(device))
-    env.rollout(policy=None, max_steps=N_STEPS)
+    env.rollout(policy=None, max_steps=5)  # Warm-up
+    return env
 
 
-def run_parallel(num_workers, device):
+def create_parallel(num_workers, device):
     env = ParallelEnv(num_workers=num_workers, create_env_fn=factory)
     env = env.to(device=torch.device(device))
-    env.rollout(N_STEPS)
+    env.rollout(policy=None, max_steps=5)  # Warm-up
+    return env
+
+
+def run_env(env):
+    env.rollout(policy=None, max_steps=N_STEPS)
 
 
 if __name__ == "__main__":
@@ -59,26 +66,29 @@ if __name__ == "__main__":
         for num_workers in [1, 4, 16]:
             print(f"With num_workers={num_workers}, {device}")
             print("Multithreaded...")
+            env_multithreaded = create_multithreaded(num_workers, device)
             res_multithreaded = Timer(
-                stmt="run_multithreaded(num_workers, device)",
-                setup="from __main__ import run_multithreaded",
-                globals={"num_workers": num_workers, "device": device},
+                stmt="run_env(env)",
+                setup="from __main__ import run_env",
+                globals={"env": env_multithreaded},
             )
             time_multithreaded = res_multithreaded.blocked_autorange().mean
 
             print("Serial...")
+            env_serial = create_serial(num_workers, device)
             res_serial = Timer(
-                stmt="run_serial(num_workers, device)",
-                setup="from __main__ import run_serial",
-                globals={"num_workers": num_workers, "device": device},
+                stmt="run_env(env)",
+                setup="from __main__ import run_env",
+                globals={"env": env_serial},
             )
             time_serial = res_serial.blocked_autorange().mean
 
             print("Parallel...")
+            env_parallel = create_parallel(num_workers, device)
             res_parallel = Timer(
-                stmt="run_parallel(num_workers, device)",
-                setup="from __main__ import run_parallel",
-                globals={"num_workers": num_workers, "device": device},
+                stmt="run_env(env)",
+                setup="from __main__ import run_env",
+                globals={"env": env_parallel},
             )
             time_parallel = res_parallel.blocked_autorange().mean
 
@@ -89,7 +99,7 @@ if __name__ == "__main__":
                 "Multithreaded, s": time_multithreaded,
             }
     df = pd.DataFrame(res).round(3)
-    gain = 1 - df.loc["Multithreaded, s"] / df.loc["Serial, s"]
+    gain = 1 - df.loc["Multithreaded, s"] / df.loc["Parallel, s"]
     df.loc["Gain, %", :] = (gain * 100).round(1)
     print(df)
     df.to_csv("multithreaded_benchmark.csv")
