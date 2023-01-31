@@ -392,7 +392,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         obs_keys = set(self.observation_spec.keys())
         tensordict_out_select = tensordict_out.select(*obs_keys)
-        tensordict_out = tensordict_out.exclude(*obs_keys, inplace=True)
+        tensordict_out = tensordict_out.exclude(*obs_keys)
         tensordict_out.set("next", tensordict_out_select)
 
         reward = tensordict_out.get("reward")

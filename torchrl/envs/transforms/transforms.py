@@ -787,10 +787,10 @@ class ToTensorImage(ObservationTransform):
         self.dtype = dtype if dtype is not None else torch.get_default_dtype()
 
     def _apply_transform(self, observation: torch.FloatTensor) -> torch.Tensor:
-        observation = observation.div(255).to(self.dtype)
         observation = observation.permute(
             *list(range(observation.ndimension() - 3)), -1, -3, -2
         )
+        observation = observation.div(255).to(self.dtype)
         if observation.ndimension() == 3 and self.unsqueeze:
             observation = observation.unsqueeze(0)
         return observation
