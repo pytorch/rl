@@ -1296,10 +1296,10 @@ class SqueezeTransform(UnsqueezeTransform):
 class GrayScale(ObservationTransform):
     """Turns a pixel observation to grayscale."""
 
-    def __init__(self, in_keys: Optional[Sequence[str]] = None):
+    def __init__(self, in_keys: Optional[Sequence[str]] = None, out_keys: Optional[Sequence[str]] = None):
         if in_keys is None:
             in_keys = IMAGE_KEYS
-        super(GrayScale, self).__init__(in_keys=in_keys)
+        super(GrayScale, self).__init__(in_keys=in_keys, out_keys=out_keys)
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = F.rgb_to_grayscale(observation)

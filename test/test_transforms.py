@@ -2341,8 +2341,193 @@ class TestFrameSkipTransform:
         with pytest.raises(RuntimeError, match="FrameSkipTransform can only be used when appended to a transformed env"):
             rb.sample(10)
 
+
+    @pytest.mark.skipif(not _has_gym, reason="gym not installed")
+    @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
+    def test_frame_skip_transform_unroll(self, skip):
+        torch.manual_seed(0)
+        if skip < 0:
+            with pytest.raises(
+                ValueError,
+                match="frame_skip should have a value greater or equal to one",
+            ):
+                FrameSkipTransform(skip)
+            return
+        else:
+            fs = FrameSkipTransform(skip)
+        base_env = GymEnv(PENDULUM_VERSIONED)
+        tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), fs)
+        base_env.set_seed(0)
+        env.base_env.set_seed(0)
+        td1 = base_env.reset()
+        td2 = env.reset()
+        for key in td1.keys():
+            torch.testing.assert_close(td1[key], td2[key])
+        for i in range(10):
+            r = 0.0
+            for _ in range(skip):
+                td1 = base_env.step(tensordicts[i].clone()).flatten_keys()
+                r = td1.get("reward") + r
+            td1.set("reward", r)
+            td2 = env.step(tensordicts[i].clone()).flatten_keys()
+            for key in td1.keys():
+                torch.testing.assert_close(td1[key], td2[key])
+
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for FrameSkipTransform")
+
+
+class TestGrayScale(TransformBase):
+
+    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
+    @pytest.mark.parametrize(
+        "keys",
+        [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_no_env(self, keys, device):
+        torch.manual_seed(0)
+        nchannels = 3
+        gs = GrayScale(in_keys=keys)
+        dont_touch = torch.randn(1, nchannels, 16, 16, device=device)
+        td = TensorDict(
+            {key: torch.randn(1, nchannels, 16, 16, device=device) for key in keys},
+            [1],
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        gs(td)
+        for key in keys:
+            assert td.get(key).shape[-3] == 1
+        assert (td.get("dont touch") == dont_touch).all()
+
+        if len(keys) == 1:
+            observation_spec = BoundedTensorSpec(-1, 1, (nchannels, 16, 16))
+            observation_spec = gs.transform_observation_spec(observation_spec)
+            assert observation_spec.shape == torch.Size([1, 16, 16])
+        else:
+            observation_spec = CompositeSpec(
+                {key: BoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
+            )
+            observation_spec = gs.transform_observation_spec(observation_spec)
+            for key in keys:
+                assert observation_spec[key].shape == torch.Size([1, 16, 16])
+
+    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
+    @pytest.mark.parametrize(
+        "keys",
+        [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_compose(self, keys, device):
+        torch.manual_seed(0)
+        nchannels = 3
+        gs = Compose(GrayScale(in_keys=keys))
+        dont_touch = torch.randn(1, nchannels, 16, 16, device=device)
+        td = TensorDict(
+            {key: torch.randn(1, nchannels, 16, 16, device=device) for key in keys},
+            [1],
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        gs(td)
+        for key in keys:
+            assert td.get(key).shape[-3] == 1
+        assert (td.get("dont touch") == dont_touch).all()
+
+        if len(keys) == 1:
+            observation_spec = BoundedTensorSpec(-1, 1, (nchannels, 16, 16))
+            observation_spec = gs.transform_observation_spec(observation_spec)
+            assert observation_spec.shape == torch.Size([1, 16, 16])
+        else:
+            observation_spec = CompositeSpec(
+                {key: BoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
+            )
+            observation_spec = gs.transform_observation_spec(observation_spec)
+            for key in keys:
+                assert observation_spec[key].shape == torch.Size([1, 16, 16])
+
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    def test_single_trans_env_check(self, out_keys):
+        env = TransformedEnv(DiscreteActionConvMockEnvNumpy(), Compose(ToTensorImage(), GrayScale(out_keys=out_keys)))
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        out_keys = None
+        def make_env():
+            return TransformedEnv(DiscreteActionConvMockEnvNumpy(), Compose(ToTensorImage(), GrayScale(out_keys=out_keys)))
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        out_keys = None
+        def make_env():
+            return TransformedEnv(DiscreteActionConvMockEnvNumpy(), Compose(ToTensorImage(), GrayScale(out_keys=out_keys)))
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        out_keys = None
+        env = TransformedEnv(SerialEnv(2, DiscreteActionConvMockEnvNumpy), Compose(ToTensorImage(), GrayScale(out_keys=out_keys)))
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        out_keys = None
+        env = TransformedEnv(ParallelEnv(2, DiscreteActionConvMockEnvNumpy), Compose(ToTensorImage(), GrayScale(out_keys=out_keys)))
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    def test_transform_env(self, out_keys):
+        env = TransformedEnv(DiscreteActionConvMockEnvNumpy(), Compose(ToTensorImage(), GrayScale(out_keys=out_keys)))
+        r = env.rollout(3)
+        if out_keys:
+            assert "pixels" in r.keys()
+            assert "stuff" in r.keys()
+            assert r["pixels"].shape[-3] == 3
+            assert r["stuff"].shape[-3] == 1
+        else:
+            assert "pixels" in r.keys()
+            assert "stuff" not in r.keys()
+            assert r["pixels"].shape[-3] == 1
+
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    def test_transform_model(self, out_keys):
+        td = TensorDict({"pixels": torch.rand(3, 12, 12)}, []).expand(3)
+        model = nn.Sequential(GrayScale(out_keys=out_keys), nn.Identity())
+        r = model(td)
+        if out_keys:
+            assert "pixels" in r.keys()
+            assert "stuff" in r.keys()
+            assert r["pixels"].shape[-3] == 3
+            assert r["stuff"].shape[-3] == 1
+        else:
+            assert "pixels" in r.keys()
+            assert "stuff" not in r.keys()
+            assert r["pixels"].shape[-3] == 1
+
+
+
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    def test_transform_rb(self, out_keys):
+        td = TensorDict({"pixels": torch.rand(3, 12, 12)}, []).expand(3)
+        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb.append_transform(GrayScale(out_keys=out_keys))
+        r.extend(td)
+        r = rb.sample(3)
+        if out_keys:
+            assert "pixels" in r.keys()
+            assert "stuff" in r.keys()
+            assert r["pixels"].shape[-3] == 3
+            assert r["stuff"].shape[-3] == 1
+        else:
+            assert "pixels" in r.keys()
+            assert "stuff" not in r.keys()
+            assert r["pixels"].shape[-3] == 1
+
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inversee for grayscale")
 
 class TestVecNorm:
     SEED = -1
@@ -2737,38 +2922,6 @@ class TestTransforms:
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, 21])
 
-    @pytest.mark.skipif(not _has_gym, reason="gym not installed")
-    @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
-    def test_frame_skip_transform_unroll(self, skip):
-        torch.manual_seed(0)
-        if skip < 0:
-            with pytest.raises(
-                ValueError,
-                match="frame_skip should have a value greater or equal to one",
-            ):
-                FrameSkipTransform(skip)
-            return
-        else:
-            fs = FrameSkipTransform(skip)
-        base_env = GymEnv(PENDULUM_VERSIONED)
-        tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), fs)
-        base_env.set_seed(0)
-        env.base_env.set_seed(0)
-        td1 = base_env.reset()
-        td2 = env.reset()
-        for key in td1.keys():
-            torch.testing.assert_close(td1[key], td2[key])
-        for i in range(10):
-            r = 0.0
-            for _ in range(skip):
-                td1 = base_env.step(tensordicts[i].clone()).flatten_keys()
-                r = td1.get("reward") + r
-            td1.set("reward", r)
-            td2 = env.step(tensordicts[i].clone()).flatten_keys()
-            for key in td1.keys():
-                torch.testing.assert_close(td1[key], td2[key])
-
     @pytest.mark.parametrize("unsqueeze_dim", [1, -2])
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
@@ -2932,40 +3085,6 @@ class TestTransforms:
 
         for key in keys_inv:
             assert td.get(key).shape[len(batch) :] == torch.Size(expected_size)
-
-    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
-    @pytest.mark.parametrize(
-        "keys",
-        [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
-    )
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_grayscale(self, keys, device):
-        torch.manual_seed(0)
-        nchannels = 3
-        gs = GrayScale(in_keys=keys)
-        dont_touch = torch.randn(1, nchannels, 16, 16, device=device)
-        td = TensorDict(
-            {key: torch.randn(1, nchannels, 16, 16, device=device) for key in keys},
-            [1],
-            device=device,
-        )
-        td.set("dont touch", dont_touch.clone())
-        gs(td)
-        for key in keys:
-            assert td.get(key).shape[-3] == 1
-        assert (td.get("dont touch") == dont_touch).all()
-
-        if len(keys) == 1:
-            observation_spec = BoundedTensorSpec(-1, 1, (nchannels, 16, 16))
-            observation_spec = gs.transform_observation_spec(observation_spec)
-            assert observation_spec.shape == torch.Size([1, 16, 16])
-        else:
-            observation_spec = CompositeSpec(
-                {key: BoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
-            )
-            observation_spec = gs.transform_observation_spec(observation_spec)
-            for key in keys:
-                assert observation_spec[key].shape == torch.Size([1, 16, 16])
 
     @pytest.mark.parametrize(
         "keys",
