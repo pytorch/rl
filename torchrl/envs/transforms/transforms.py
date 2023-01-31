@@ -2182,6 +2182,10 @@ class NoopResetEnv(Transform):
         tensordict = tensordict.clone(False)
         # check that there is a single done state -- behaviour is undefined for multiple dones
         parent = self.parent
+        if parent is None:
+            raise RuntimeError(
+                "NoopResetEnv.parent not found. Make sure that the parent is set."
+            )
         if tensordict.get("done").numel() > 1:
             raise ValueError(
                 "there is more than one done state in the parent environment. "

@@ -2529,6 +2529,96 @@ class TestGrayScale(TransformBase):
     def test_transform_inverse(self):
         raise pytest.skip("No inversee for grayscale")
 
+
+class TestNoop(TransformBase):
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), NoopResetEnv())
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), NoopResetEnv())
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), NoopResetEnv())
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), NoopResetEnv())
+        with pytest.raises(ValueError, match="there is more than one done state in the parent environment"):
+            check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        raise pytest.skip("Skipped as error tested by test_trans_serial_env_check.")
+
+    def test_transform_no_env(self):
+        t = NoopResetEnv()
+        with pytest.raises(RuntimeError, match="NoopResetEnv.parent not found. Make sure that the parent is set."):
+            t.reset(TensorDict({}, []))
+        t._step(TensorDict({}, []))
+
+    def test_transform_compose(self):
+        t = Compose(NoopResetEnv())
+        with pytest.raises(RuntimeError, match="NoopResetEnv.parent not found. Make sure that the parent is set."):
+            t.reset(TensorDict({}, []))
+        t._step(TensorDict({}, []))
+
+    def test_transform_model(self):
+        t = nn.Sequential(NoopResetEnv(), nn.Identity())
+        td = TensorDict({}, [])
+        t(td)
+
+    def test_transform_rb(self):
+        t = NoopResetEnv()
+        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb.append_transform(t)
+        td = TensorDict({}, [10])
+        rb.extend(td)
+        rb.sample(1)
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inversee for NoopResetEnv")
+
+    @pytest.mark.parametrize("random", [True, False])
+    @pytest.mark.parametrize("compose", [True, False])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_env(self, random, device, compose):
+        torch.manual_seed(0)
+        env = ContinuousActionVecMockEnv()
+        env.set_seed(100)
+        noop_reset_env = NoopResetEnv(random=random)
+        if compose:
+            transformed_env = TransformedEnv(env)
+            transformed_env.append_transform(noop_reset_env)
+        else:
+            transformed_env = TransformedEnv(env, noop_reset_env)
+        transformed_env = transformed_env.to(device)
+        transformed_env.reset()
+        if random:
+            assert transformed_env.step_count > 0
+        else:
+            assert transformed_env.step_count == 30
+
+    @pytest.mark.parametrize("random", [True, False])
+    @pytest.mark.parametrize("compose", [True, False])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_noop_reset_env_error(self, random, device, compose):
+        torch.manual_seed(0)
+        env = SerialEnv(3, lambda: ContinuousActionVecMockEnv())
+        env.set_seed(100)
+        noop_reset_env = NoopResetEnv(random=random)
+        transformed_env = TransformedEnv(env)
+        transformed_env.append_transform(noop_reset_env)
+        with pytest.raises(
+            ValueError,
+            match="there is more than one done state in the parent environment",
+        ):
+            transformed_env.reset()
+
 class TestVecNorm:
     SEED = -1
 
@@ -3616,42 +3706,6 @@ class TestTransforms:
             observation_spec = double2float.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].dtype == torch.float
-
-    @pytest.mark.parametrize("random", [True, False])
-    @pytest.mark.parametrize("compose", [True, False])
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_noop_reset_env(self, random, device, compose):
-        torch.manual_seed(0)
-        env = ContinuousActionVecMockEnv()
-        env.set_seed(100)
-        noop_reset_env = NoopResetEnv(random=random)
-        if compose:
-            transformed_env = TransformedEnv(env)
-            transformed_env.append_transform(noop_reset_env)
-        else:
-            transformed_env = TransformedEnv(env, noop_reset_env)
-        transformed_env = transformed_env.to(device)
-        transformed_env.reset()
-        if random:
-            assert transformed_env.step_count > 0
-        else:
-            assert transformed_env.step_count == 30
-
-    @pytest.mark.parametrize("random", [True, False])
-    @pytest.mark.parametrize("compose", [True, False])
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_noop_reset_env_error(self, random, device, compose):
-        torch.manual_seed(0)
-        env = SerialEnv(3, lambda: ContinuousActionVecMockEnv())
-        env.set_seed(100)
-        noop_reset_env = NoopResetEnv(random=random)
-        transformed_env = TransformedEnv(env)
-        transformed_env.append_transform(noop_reset_env)
-        with pytest.raises(
-            ValueError,
-            match="there is more than one done state in the parent environment",
-        ):
-            transformed_env.reset()
 
     @pytest.mark.parametrize(
         "default_keys", [["action"], ["action", "monkeys jumping on the bed"]]
