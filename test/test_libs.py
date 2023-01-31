@@ -484,6 +484,21 @@ class TestEnvPool:
         env.rand_step()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.parametrize(
+        "env_name", ENVPOOL_GYM_ENVS
+    )  # Not working for CheetahRun-v1 yet
+    @pytest.mark.parametrize("frame_skip", [4, 1])
+    @pytest.mark.parametrize("transformed_out", [False, True])
+    def test_specs(self, env_name, frame_skip, transformed_out, T=10, N=3):
+        env_multithreaded = _make_multithreaded_env(
+            env_name,
+            frame_skip,
+            transformed_out=transformed_out,
+            N=N,
+        )
+        check_env_specs(env_multithreaded)
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_out", [False, True])

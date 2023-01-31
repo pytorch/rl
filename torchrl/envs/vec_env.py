@@ -38,7 +38,7 @@ try:
     _has_envpool = True
 except ImportError as err:
     _has_envpool = False
-    IMPORT_ERR_ENVPOOL = str(err)
+    IMPORT_ERR_ENVPOOL = err
 
 
 def _check_start(fun):
@@ -1106,10 +1106,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     ):
         if not _has_envpool:
             raise ImportError(
-                f"""envpool python package or one of its dependencies (gym, treevalue) were not found. Please install these dependencies.
-(Got the error message: {IMPORT_ERR_ENVPOOL}).
-"""
-            )
+                "envpool python package or one of its dependencies (gym, treevalue) were not found. Please install these dependencies."
+            ) from IMPORT_ERR_ENVPOOL
         if env is not None:
             kwargs["env"] = env
             self.num_workers = env.config["num_envs"]
@@ -1151,11 +1149,12 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return tensordict_out
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        action = tensordict.get("action")
-        # Action needs to be moved to CPU and converted to numpy before being passed to envpool
-        action = action.to(torch.device("cpu"))
-        step_output = self._env.step(action.detach().numpy())
-        tensordict_out = self._transform_step_output(step_output)
+        with torch.no_grad():
+            action = tensordict.get("action")
+            # Action needs to be moved to CPU and converted to numpy before being passed to envpool
+            action = action.to(torch.device("cpu"))
+            step_output = self._env.step(action.numpy())
+            tensordict_out = self._transform_step_output(step_output)
         return tensordict_out
 
     def _get_input_spec(self) -> TensorSpec:
