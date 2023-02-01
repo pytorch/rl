@@ -55,4 +55,4 @@ conda run python -m pip install git+https://github.com/facebookresearch/habitat-
 conda run python -m pip install "gym[atari,accept-rom-license]" pygame
 
 # smoke test
-python -c "import habitat;import habitat.utils.gym_definitions"
+python -c "import habitat;import habitat.gym"
