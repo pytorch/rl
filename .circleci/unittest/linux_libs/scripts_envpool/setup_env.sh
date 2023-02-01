@@ -9,12 +9,11 @@ set -e
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y git wget gcc g++
-
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
+lib_dir="${env_dir}/lib"
 
 cd "${root_dir}"
 
@@ -39,7 +38,6 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
-
 # 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
@@ -48,11 +46,3 @@ cat "${this_dir}/environment.yml"
 pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
-
-conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
-conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
-#conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-baselines
-conda run python -m pip install "gym[atari,accept-rom-license]" pygame
-
-# smoke test
-python -c "import habitat;import habitat.gym"

@@ -386,8 +386,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
         tensordict.unlock()
-
-        obs_keys = set(self.observation_spec.keys())
+        # Keys need to be non-nested for tensordict_out.exclude below
+        obs_keys = set(self.observation_spec.keys(nested_keys=False))
         tensordict_out_select = tensordict_out.select(*obs_keys)
         tensordict_out = tensordict_out.exclude(*obs_keys, inplace=True)
         tensordict_out.set("next", tensordict_out_select)
