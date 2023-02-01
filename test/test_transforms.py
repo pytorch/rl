@@ -3919,6 +3919,72 @@ class TestUnsqueezeTransform(TransformBase):
         assert env.action_spec.shape[-1] == 1
 
 
+class TestSqueezeTransform(TransformBase):
+    def test_single_trans_env_check(self):
+        """tests that a transformed env passes the check_env_specs test.
+
+        If your transform can overwrite a key or create a new entry in the tensordict,
+        it is worth trying both options here.
+
+        """
+        raise NotImplementedError
+
+    def test_serial_trans_env_check(self):
+        """tests that a serial transformed env (SerialEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
+        raise NotImplementedError
+
+    def test_parallel_trans_env_check(self):
+        """tests that a parallel transformed env (ParallelEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
+        raise NotImplementedError
+
+    def test_trans_serial_env_check(self):
+        """tests that a transformed serial env (TransformedEnv(SerialEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
+        raise NotImplementedError
+
+    def test_trans_parallel_env_check(self):
+        """tests that a transformed paprallel env (TransformedEnv(ParallelEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
+        raise NotImplementedError
+
+    def test_transform_no_env(self):
+        """tests the transform on dummy data, without an env."""
+        raise NotImplementedError
+
+    def test_transform_compose(self):
+        """tests the transform on dummy data, without an env but inside a Compose."""
+        raise NotImplementedError
+
+    def test_transform_env(self):
+        """tests the transform on a real env.
+
+        If possible, do not use a mock env, as bugs may go unnoticed if the dynamic is too
+        simplistic. A call to reset() and step() should be tested independently, ie
+        a check that reset produces the desired output and that step() does too.
+
+        """
+        raise NotImplementedError
+
+    def test_transform_model(self):
+        """tests the transform before an nn.Module that reads the output."""
+        raise NotImplementedError
+
+    def test_transform_rb(self):
+        """tests the transform when used with a replay buffer.
+
+        If your transform is not supposed to work with a replay buffer, test that
+        an error will be raised when called or appended to a RB.
+
+        """
+        raise NotImplementedError
+
+    def test_transform_inverse(self):
+        """tests the inverse transform. If not applicable, simply skip this test.
+
+        If your transform is not supposed to work offline, test that
+        an error will be raised when called in a nn.Module.
+        """
+        raise NotImplementedError
+
+
 class TestVecNorm:
     SEED = -1
 

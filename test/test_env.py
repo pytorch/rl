@@ -40,14 +40,7 @@ from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
-from torchrl.envs.transforms import (
-    Compose,
-    RewardClipping,
-    StepCounter,
-    ToTensorImage,
-    TransformedEnv,
-)
-from torchrl.envs.transforms import Compose, TransformedEnv
+from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
 from torchrl.envs.utils import step_mdp
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
@@ -232,7 +225,6 @@ def test_rollout_reset(env_name, frame_skip, parallel, seed=0):
     out = env.rollout(100, break_when_any_done=False)
     assert out.shape == torch.Size([3, 100])
     assert (out["done"].squeeze().sum(-1) == torch.tensor([5, 3, 2])).all()
-
 
 
 class TestModelBasedEnvBase:
