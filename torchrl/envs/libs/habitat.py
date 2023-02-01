@@ -15,7 +15,7 @@ from torchrl.envs.utils import classproperty
 IMPORT_ERR = None
 try:
     import habitat
-    import habitat.utils.gym_definitions  # noqa
+    import habitat.gym  # noqa
 
     _has_habitat = True
 except ImportError as err:

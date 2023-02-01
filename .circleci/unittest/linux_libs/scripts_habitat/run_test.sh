@@ -19,7 +19,7 @@ env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
 
 # smoke test
-python -c "import habitat;import habitat.utils.gym_definitions"
+python -c "import habitat;import habitat.gym"
 
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
@@ -35,7 +35,7 @@ conda env config vars set LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
 conda deactivate && conda activate ./env
 
 # this workflow only tests the libs
-python -c "import habitat;import habitat.utils.gym_definitions"
+python -c "import habitat;import habitat.gym"
 python -c """from torchrl.envs.libs.habitat import HabitatEnv
 env = HabitatEnv('HabitatRenderPick-v0')
 env.reset()
