@@ -110,7 +110,7 @@ binary_common: &binary_common
     wheel_docker_image:
       description: "Wheel only: what docker image to use"
       type: string
-      default: "pytorch/manylinux-cuda113"
+      default: "pytorch/manylinux-cuda116"
     conda_docker_image:
       description: "Conda only: what docker image to use"
       type: string
@@ -262,7 +262,7 @@ jobs:
     <<: *binary_common
 
     docker:
-      - image: "pytorch/manylinux-cuda113"
+      - image: "pytorch/manylinux-cuda117"
     resource_class: 2xlarge+
 
     environment:
@@ -315,7 +315,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda113"
+      image_name: "pytorch/manylinux-cuda117"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -375,7 +375,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda113"
+      image_name: "pytorch/manylinux-cuda117"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -480,7 +480,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda113"
+      image_name: "pytorch/manylinux-cuda117"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -525,7 +525,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda113"
+      image_name: "pytorch/manylinux-cuda117"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -570,7 +570,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda113"
+      image_name: "pytorch/manylinux-cuda117"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -615,7 +615,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda113"
+      image_name: "pytorch/manylinux-cuda117"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -660,7 +660,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda113"
+      image_name: "pytorch/manylinux-cuda117"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -703,7 +703,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda113"
+      image_name: "pytorch/manylinux-cuda117"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -760,7 +760,7 @@ jobs:
     <<: *binary_common
 
     docker:
-      - image: "pytorch/manylinux-cuda113"
+      - image: "pytorch/manylinux-cuda116"
     resource_class: 2xlarge+
 
     environment:
@@ -813,7 +813,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda113"
+      image_name: "pytorch/manylinux-cuda116"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -872,7 +872,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda113"
+      image_name: "pytorch/manylinux-cuda116"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -1178,11 +1178,11 @@ workflows:
           name: unittest_linux_cpu_py3.7
           python_version: '3.7'
       - unittest_linux_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_gpu_py3.7
           python_version: '3.7'
       - unittest_linux_optdeps_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_optdeps_gpu_py3.7
           python_version: '3.7'
       - unittest_linux_stable_cpu:
@@ -1190,7 +1190,7 @@ workflows:
           name: unittest_linux_stable_cpu_py3.7
           python_version: '3.7'
       - unittest_linux_stable_gpu:
-          cu_version: cu113
+          cu_version: cu116
           name: unittest_linux_stable_gpu_py3.7
           python_version: '3.7'
 
@@ -1203,11 +1203,11 @@ workflows:
           name: unittest_linux_cpu_py3.8
           python_version: '3.8'
       - unittest_linux_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_gpu_py3.8
           python_version: '3.8'
       - unittest_linux_optdeps_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_optdeps_gpu_py3.8
           python_version: '3.8'
       - unittest_linux_stable_cpu:
@@ -1215,32 +1215,32 @@ workflows:
           name: unittest_linux_stable_cpu_py3.8
           python_version: '3.8'
       - unittest_linux_stable_gpu:
-          cu_version: cu113
+          cu_version: cu116
           name: unittest_linux_stable_gpu_py3.8
           python_version: '3.8'
       # we test supported libs for 3.8 only
       - unittest_linux_habitat_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_habitat_gpu_py3.8
           python_version: '3.8'
       - unittest_linux_jumanji_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_jumanji_gpu_py3.8
           python_version: '3.8'
       - unittest_linux_envpool_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_envpool_gpu_py3.8
           python_version: '3.8'
       - unittest_linux_brax_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_brax_gpu_py3.8
           python_version: '3.8'
       - unittest_linux_vmas_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_vmas_gpu_py3.8
           python_version: '3.8'
       - unittest_linux_gym_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_gym_gpu_py3.8
           python_version: '3.8'
 
@@ -1254,11 +1254,11 @@ workflows:
           name: unittest_linux_cpu_py3.9
           python_version: '3.9'
       - unittest_linux_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_gpu_py3.9
           python_version: '3.9'
       - unittest_linux_optdeps_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_optdeps_gpu_py3.9
           python_version: '3.9'
       - unittest_linux_stable_cpu:
@@ -1266,7 +1266,7 @@ workflows:
           name: unittest_linux_stable_cpu_py3.9
           python_version: '3.9'
       - unittest_linux_stable_gpu:
-          cu_version: cu113
+          cu_version: cu116
           name: unittest_linux_stable_gpu_py3.9
           python_version: '3.9'
 
@@ -1279,11 +1279,11 @@ workflows:
           name: unittest_linux_cpu_py3.10
           python_version: '3.10'
       - unittest_linux_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_gpu_py3.10
           python_version: '3.10'
       - unittest_linux_optdeps_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_optdeps_gpu_py3.10
           python_version: '3.10'
       - unittest_linux_stable_cpu:
@@ -1291,17 +1291,17 @@ workflows:
           name: unittest_linux_stable_cpu_py3.10
           python_version: '3.10'
       - unittest_linux_stable_gpu:
-          cu_version: cu113
+          cu_version: cu116
           name: unittest_linux_stable_gpu_py3.10
           python_version: '3.10'
 
       - unittest_linux_olddeps_gpu:
-          cu_version: cu113
+          cu_version: cu116
           name: unittest_linux_olddeps_gpu_py3.9
           python_version: '3.9'
 
       - unittest_linux_examples_gpu:
-          cu_version: cu113
+          cu_version: cu117
           name: unittest_linux_examples_gpu_py3.9
           python_version: '3.9'
 
