@@ -256,6 +256,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         cls._inplace_update = _inplace_update
         cls._batch_locked = _batch_locked
         cls._device = None
+        # cached in_keys to be excluded from update when calling step
+        cls._cache_in_keys = None
         return super().__new__(cls)
 
     def __setattr__(self, key, value):
@@ -391,7 +393,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict.unlock()
 
         obs_keys = self.observation_spec.keys()
-        in_keys = self.input_spec.keys()
+        # we deliberately do not update the input values, but we want to keep track of
+        # new keys considered as "input" by inverse transforms.
+        in_keys = self._get_in_keys_to_exclude(tensordict)
         tensordict_out_select = tensordict_out.select(*obs_keys)
         tensordict_out = tensordict_out.exclude(*obs_keys, *in_keys)
         tensordict_out.set("next", tensordict_out_select)
@@ -439,6 +443,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict.update(tensordict_out, inplace=self._inplace_update)
 
         return tensordict
+
+    def _get_in_keys_to_exclude(self, tensordict):
+        if self._cache_in_keys is None:
+            self._cache_in_keys = set(self.input_spec.keys(True)).intersection(
+                tensordict.keys(True, True)
+            )
+        return self._cache_in_keys
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise NotImplementedError("EnvBase.forward is not implemented")

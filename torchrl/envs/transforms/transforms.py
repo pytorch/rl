@@ -61,6 +61,20 @@ def _apply_to_composite(function):
     return new_fun
 
 
+def _apply_to_composite_inv(function):
+    def new_fun(self, input_spec):
+        if isinstance(input_spec, CompositeSpec):
+            d = input_spec._specs
+            for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+                if in_key in input_spec.keys():
+                    d[out_key] = function(self, input_spec[in_key].clone())
+            return CompositeSpec(d, shape=input_spec.shape, device=input_spec.device)
+        else:
+            return function(self, input_spec)
+
+    return new_fun
+
+
 class Transform(nn.Module):
     """Environment transform parent class.
 
@@ -537,6 +551,7 @@ but got an object of type {type(transform)}."""
         self.__dict__["_observation_spec"] = None
         self.__dict__["_input_spec"] = None
         self.__dict__["_reward_spec"] = None
+        self.__dict__["_cache_in_keys"] = None
 
     def append_transform(self, transform: Transform) -> None:
         self._erase_metadata()
@@ -597,6 +612,7 @@ but got an object of type {type(transform)}."""
             self.__dict__["_input_spec"] = None
             self.__dict__["_observation_spec"] = None
             self.__dict__["_reward_spec"] = None
+            self.__dict__["_cache_in_keys"] = None
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.base_env.to(device)
@@ -635,14 +651,20 @@ class ObservationTransform(Transform):
         self,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
+        in_keys_inv: Optional[Sequence[str]] = None,
+        out_keys_inv: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = [
                 "observation",
                 "pixels",
-                "observation_state",
             ]
-        super(ObservationTransform, self).__init__(in_keys=in_keys, out_keys=out_keys)
+        super(ObservationTransform, self).__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+        )
 
 
 class Compose(Transform):
@@ -1334,6 +1356,16 @@ class ObservationNorm(ObservationTransform):
     Args:
         loc (number or tensor): location of the affine transform
         scale (number or tensor): scale of the affine transform
+        in_keys (list of int, optional): entries to be normalized. Defaults to ["observation", "pixels"].
+            All entries will be normalized with the same values: if a different behaviour is desired
+            (e.g. a different normalization for pixels and states) different :obj:`ObservationNorm`
+            objects should be used.
+        out_keys (list of int, optional): output entries. Defaults to the value of `in_keys`.
+        in_keys_inv (list of int, optional): ObservationNorm also supports inverse transforms. This will
+            only occur if a list of keys is provided to :obj:`in_keys_inv`. If none is provided,
+            only the forward transform will be called.
+        out_keys_inv (list of int, optional): output entries for the inverse transform.
+            Defaults to the value of `in_keys_inv`.
         standard_normal (bool, optional): if True, the transform will be
 
             .. math::
@@ -1371,30 +1403,47 @@ class ObservationNorm(ObservationTransform):
 
     """
 
+    _ERR_INIT_MSG = "Cannot have an mixed initialized and uninitialized loc and scale"
+
     def __init__(
         self,
         loc: Optional[float, torch.Tensor] = None,
         scale: Optional[float, torch.Tensor] = None,
         in_keys: Optional[Sequence[str]] = None,
-        # observation_spec_key: =None,
+        out_keys: Optional[Sequence[str]] = None,
+        in_keys_inv: Optional[Sequence[str]] = None,
+        out_keys_inv: Optional[Sequence[str]] = None,
         standard_normal: bool = False,
     ):
         if in_keys is None:
             in_keys = [
                 "observation",
                 "pixels",
-                "observation_state",
             ]
-        super().__init__(in_keys=in_keys)
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+        )
         self.standard_normal = standard_normal
         self.eps = 1e-6
 
         if loc is not None and not isinstance(loc, torch.Tensor):
-            loc = torch.tensor(loc, dtype=torch.float)
+            loc = torch.tensor(loc, dtype=torch.get_default_dtype())
+        elif loc is None:
+            if scale is not None:
+                raise ValueError(self._ERR_INIT_MSG)
+            loc = nn.UninitializedBuffer()
 
         if scale is not None and not isinstance(scale, torch.Tensor):
-            scale = torch.tensor(scale, dtype=torch.float)
+            scale = torch.tensor(scale, dtype=torch.get_default_dtype())
             scale = scale.clamp_min(self.eps)
+        elif scale is None:
+            # check that loc is None too
+            if not isinstance(loc, nn.UninitializedBuffer):
+                raise ValueError(self._ERR_INIT_MSG)
+            scale = nn.UninitializedBuffer()
 
         # self.observation_spec_key = observation_spec_key
         self.register_buffer("loc", loc)
@@ -1442,7 +1491,9 @@ class ObservationNorm(ObservationTransform):
             isinstance(reduce_dim, int) and cat_dim != reduce_dim
         ):
             raise ValueError("cat_dim must be part of or equal to reduce_dim.")
-        if self.loc is not None or self.scale is not None:
+        if not isinstance(self.loc, nn.UninitializedBuffer) or not isinstance(
+            self.scale, nn.UninitializedBuffer
+        ):
             raise RuntimeError(
                 f"Loc/Scale are already initialized: ({self.loc}, {self.scale})"
             )
@@ -1466,6 +1517,10 @@ class ObservationNorm(ObservationTransform):
                 )
 
         parent = self.parent
+        if parent is None:
+            raise RuntimeError(
+                "Cannot initialize the transform if parent env is not defined."
+            )
         parent.apply(raise_initialization_exception)
 
         collected_frames = 0
@@ -1498,8 +1553,10 @@ class ObservationNorm(ObservationTransform):
             raise RuntimeError("Non-finite values found in loc")
         if not torch.isfinite(scale).all():
             raise RuntimeError("Non-finite values found in scale")
-        self.register_buffer("loc", loc)
-        self.register_buffer("scale", scale.clamp_min(self.eps))
+        self.loc.materialize(shape=loc.shape, dtype=loc.dtype)
+        self.loc.copy_(loc)
+        self.scale.materialize(shape=scale.shape, dtype=scale.dtype)
+        self.scale.copy_(scale.clamp_min(self.eps))
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         if self.loc is None or self.scale is None:
@@ -1516,6 +1573,21 @@ class ObservationNorm(ObservationTransform):
             loc = self.loc
             return obs * scale + loc
 
+    def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+        if self.loc is None or self.scale is None:
+            raise RuntimeError(
+                "Loc/Scale have not been initialized. Either pass in values in the constructor "
+                "or call the init_stats method"
+            )
+        if not self.standard_normal:
+            loc = self.loc
+            scale = self.scale
+            return (obs - loc) / scale
+        else:
+            scale = self.scale
+            loc = self.loc
+            return obs * scale + loc
+
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         space = observation_spec.space
@@ -1523,6 +1595,14 @@ class ObservationNorm(ObservationTransform):
             space.minimum = self._apply_transform(space.minimum)
             space.maximum = self._apply_transform(space.maximum)
         return observation_spec
+
+    @_apply_to_composite_inv
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        space = input_spec.space
+        if isinstance(space, ContinuousBox):
+            space.minimum = self._apply_transform(space.minimum)
+            space.maximum = self._apply_transform(space.maximum)
+        return input_spec
 
     def __repr__(self) -> str:
         if self.loc.numel() == 1 and self.scale.numel() == 1:
