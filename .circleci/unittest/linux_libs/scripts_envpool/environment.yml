@@ -1,0 +1,24 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - protobuf
+  - pip:
+    - hypothesis
+    - future
+    - cloudpickle
+    - gym
+    - pygame
+    - gym[accept-rom-license]
+    - gym[atari]
+    - moviepy
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - expecttest
+    - pyyaml
+    - scipy
+    - dm_control
+    - coverage
+    - envpool
