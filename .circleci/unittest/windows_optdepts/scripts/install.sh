@@ -38,7 +38,7 @@ fi
 git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
-conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}"
+conda install -y -c "pytorch-${UPLOAD_CHANNEL}" -c nvidia pytorch "${cudatoolkit}"
 
 torch_cuda=$(python -c "import torch; print(torch.cuda.is_available())")
 echo torch.cuda.is_available is $torch_cuda
@@ -50,7 +50,7 @@ if [ ! -z "${CUDA_VERSION:-}" ] ; then
     fi
 fi
 
-pip install pip --upgrade
+#python -m pip install pip --upgrade
 
 # install tensordict
 pip3 install git+https://github.com/pytorch-labs/tensordict
