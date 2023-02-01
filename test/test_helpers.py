@@ -1044,7 +1044,7 @@ def test_initialize_stats_from_non_obs_transform(device):
 
     t_env = TransformedEnv(env)
     t_env.transform = FlattenObservation(
-        first_dim=0, last_dim=-3, accept_positive_dim=True
+        first_dim=0, last_dim=-3, allow_positive_dim=True
     )
     pre_init_state_dict = t_env.transform.state_dict()
     initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)

@@ -1077,7 +1077,7 @@ class FlattenObservation(ObservationTransform):
             :obj:`["pixels"]` is assumed.
         out_keys (sequence of str, optional): the flatten observation keys. If none is
             provided, :obj:`in_keys` is assumed.
-        accept_positive_dim (bool, optional): if True, positive dimensions are accepted.
+        allow_positive_dim (bool, optional): if True, positive dimensions are accepted.
             :obj:`FlattenObservation` will map these to the n^th feature dimension
             (ie n^th dimension after batch size of parent env) of the input tensor.
             Defaults to False, ie. non-negative dimensions are not permitted.
@@ -1089,53 +1089,41 @@ class FlattenObservation(ObservationTransform):
         last_dim: int,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
-        accept_positive_dim: bool = False,
+        allow_positive_dim: bool = False,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
         super().__init__(in_keys=in_keys, out_keys=out_keys)
-        if not accept_positive_dim and first_dim >= 0:
+        if not allow_positive_dim and first_dim >= 0:
             raise ValueError(
                 "first_dim should be smaller than 0 to accomodate for "
                 "envs of different batch_sizes."
             )
-        if not accept_positive_dim and last_dim >= 0:
+        if not allow_positive_dim and last_dim >= 0:
             raise ValueError(
                 "last_dim should be smaller than 0 to accomodate for "
                 "envs of different batch_sizes."
             )
-        self.first_dim = first_dim
-        self.last_dim = last_dim
+        self._first_dim = first_dim
+        self._last_dim = last_dim
+
+    @property
+    def first_dim(self):
+        if self._first_dim >= 0 and self.parent is not None:
+            return len(self.parent.batch_size) + self._first_dim
+        return self._first_dim
+
+    @property
+    def last_dim(self):
+        if self._last_dim >= 0 and self.parent is not None:
+            return len(self.parent.batch_size) + self._last_dim
+        return self._last_dim
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = torch.flatten(observation, self.first_dim, self.last_dim)
         return observation
 
     forward = ObservationTransform._call
-
-    def set_container(self, container: Union[Transform, EnvBase]) -> None:
-        out = super().set_container(container)
-        try:
-            observation_spec = self.parent.observation_spec
-            for key in self.in_keys:
-                if key in observation_spec:
-                    observation_spec = observation_spec[key]
-                    if self.first_dim >= 0:
-                        self.first_dim = self.first_dim - len(observation_spec.shape)
-                    if self.last_dim >= 0:
-                        self.last_dim = self.last_dim - len(observation_spec.shape)
-                    break
-        except AttributeError:
-            if self.first_dim >= 0 or self.last_dim >= 0:
-                raise ValueError(
-                    f"FlattenObservation got first and last dim {self.first_dim} amd {self.last_dim}. "
-                    f"Those values assume that the observation spec is known, which requires the "
-                    f"parent environment to be set. "
-                    f"Consider setting the parent environment beforehand (ie passing the transform "
-                    f"to `TransformedEnv.append_transform()`) or setting strictly negative "
-                    f"flatten dimensions to the transform."
-                )
-        return out
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -1162,7 +1150,15 @@ class UnsqueezeTransform(Transform):
     """Inserts a dimension of size one at the specified position.
 
     Args:
-        unsqueeze_dim (int): dimension to unsqueeze.
+        unsqueeze_dim (int): dimension to unsqueeze. Must be negative (or allow_positive_dim
+            must be turned on).
+        allow_positive_dim (bool, optional): if True, positive dimensions are accepted.
+            :obj:`UnsqueezeTransform` will map these to the n^th feature dimension
+            (ie n^th dimension after batch size of parent env) of the input tensor,
+            independently from the tensordict batch size (ie positive dims may be
+            dangerous in contexts where tensordict of different batch dimension
+            are passed).
+            Defaults to False, ie. non-negative dimensions are not permitted.
     """
 
     invertible = True
@@ -1175,6 +1171,7 @@ class UnsqueezeTransform(Transform):
     def __init__(
         self,
         unsqueeze_dim: int,
+        allow_positive_dim: bool = False,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
         in_keys_inv: Optional[Sequence[str]] = None,
@@ -1188,73 +1185,42 @@ class UnsqueezeTransform(Transform):
             in_keys_inv=in_keys_inv,
             out_keys_inv=out_keys_inv,
         )
-        self._unsqueeze_dim_orig = unsqueeze_dim
-
-    def set_container(self, container: Union[Transform, EnvBase]) -> None:
-        if self._unsqueeze_dim_orig < 0:
-            self._unsqueeze_dim = self._unsqueeze_dim_orig
-        else:
-            container = self.parent
-            try:
-                batch_size = container.batch_size
-            except AttributeError:
-                raise ValueError(
-                    f"Got the unsqueeze dimension {self._unsqueeze_dim_orig} which is greater or equal to zero. "
-                    f"However this requires to know what the parent environment is, but it has not been provided. "
-                    f"Consider providing a negative dimension or setting the transform using the "
-                    f"`TransformedEnv.append_transform()` method."
-                )
-            self._unsqueeze_dim = self._unsqueeze_dim_orig + len(batch_size)
-        return super().set_container(container)
+        self.allow_positive_dim = allow_positive_dim
+        if unsqueeze_dim >= 0 and not allow_positive_dim:
+            raise RuntimeError(
+                "unsqueeze_dim should be smaller than 0 to accomodate for "
+                "envs of different batch_sizes. Turn allow_positive_dim to accomodate "
+                "for positive unsqueeze_dim."
+            )
+        self._unsqueeze_dim = unsqueeze_dim
 
     @property
     def unsqueeze_dim(self):
-        if self._unsqueeze_dim is None:
-            return self._unsqueeze_dim_orig
+        if self._unsqueeze_dim >= 0 and self.parent is not None:
+            return len(self.parent.batch_size) + self._unsqueeze_dim
         return self._unsqueeze_dim
-
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self._unsqueeze_dim_orig >= 0:
-            self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
-        return super().forward(tensordict)
-
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self._unsqueeze_dim_orig >= 0:
-            self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
-        return super()._step(tensordict)
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = observation.unsqueeze(self.unsqueeze_dim)
         return observation
-
-    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self._unsqueeze_dim_orig >= 0:
-            self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
-        return super()._inv_call(tensordict)
 
     def _inv_apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = observation.squeeze(self.unsqueeze_dim)
         return observation
 
     def _transform_spec(self, spec: TensorSpec) -> None:
-        if isinstance(spec, CompositeSpec):
-            for key in spec:
-                self._transform_spec(spec[key])
+        space = spec.space
+        if isinstance(space, ContinuousBox):
+            space.minimum = self._apply_transform(space.minimum)
+            space.maximum = self._apply_transform(space.maximum)
+            spec.shape = space.minimum.shape
         else:
-            self._unsqueeze_dim = self._unsqueeze_dim_orig
-            space = spec.space
-            if isinstance(space, ContinuousBox):
-                space.minimum = self._apply_transform(space.minimum)
-                space.maximum = self._apply_transform(space.maximum)
-                spec.shape = space.minimum.shape
-            else:
-                spec.shape = self._apply_transform(torch.zeros(spec.shape)).shape
+            spec.shape = self._apply_transform(torch.zeros(spec.shape)).shape
         return spec
 
+    @_apply_to_composite_inv
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        for key in self.in_keys_inv:
-            input_spec = self._transform_spec(input_spec[key])
-        return input_spec
+        return self._transform_spec(input_spec)
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if "reward" in self.in_keys:
@@ -1263,12 +1229,11 @@ class UnsqueezeTransform(Transform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = self._transform_spec(observation_spec)
-        return observation_spec
+        return self._transform_spec(observation_spec)
 
     def __repr__(self) -> str:
         s = (
-            f"{self.__class__.__name__}(in_keys={self.in_keys}, out_keys={self.out_keys},"
+            f"{self.__class__.__name__}(unsqueeze_dim={self.unsqueeze_dim}, in_keys={self.in_keys}, out_keys={self.out_keys},"
             f" in_keys_inv={self.in_keys_inv}, out_keys_inv={self.out_keys_inv})"
         )
         return s
@@ -2771,34 +2736,15 @@ class RewardSum(Transform):
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets episode rewards."""
         # Non-batched environments
-        if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
-            for in_key, out_key in zip(self.in_keys, self.out_keys):
-                if out_key in tensordict.keys():
-                    tensordict[out_key] = torch.zeros_like(tensordict[out_key])
-                elif in_key == "reward":
-                    tensordict[out_key] = self.parent.reward_spec.zero()
-                else:
-                    try:
-                        tensordict[out_key] = self.parent.observation_spec[
-                            in_key
-                        ].zero()
-                    except KeyError as err:
-                        raise KeyError(
-                            f"The key {in_key} was not found in the parent "
-                            f"observation_spec with keys "
-                            f"{list(self.parent.observation_spec.keys())}. "
-                        ) from err
-
-        # Batched environments
-        else:
-            _reset = tensordict.get(
-                "_reset",
-                torch.ones(
-                    tensordict.batch_size,
-                    dtype=torch.bool,
-                    device=tensordict.device,
-                ),
-            )
+        _reset = tensordict.get(
+            "_reset",
+            torch.ones(
+                tensordict.batch_size,
+                dtype=torch.bool,
+                device=tensordict.device,
+            ),
+        )
+        if _reset.any():
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key in tensordict.keys():
                     value = tensordict[out_key]
@@ -2827,20 +2773,18 @@ class RewardSum(Transform):
         """Updates the episode rewards with the step rewards."""
         # Sanity checks
         for in_key in self.in_keys:
-            if in_key not in tensordict.keys():
-                return tensordict
+            if in_key in tensordict.keys():
+                break
+        else:
+            return tensordict
 
         # Update episode rewards
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            reward = tensordict.get(in_key)
-            if out_key not in tensordict.keys():
-                tensordict.set(
-                    out_key,
-                    torch.zeros(
-                        *tensordict.shape, 1, dtype=reward.dtype, device=reward.device
-                    ),
-                )
-            tensordict[out_key] = tensordict[out_key] + reward
+            if in_key in tensordict.keys():
+                reward = tensordict.get(in_key)
+                if out_key not in tensordict.keys():
+                    tensordict.set(out_key, torch.zeros_like(reward))
+                tensordict[out_key] = tensordict[out_key] + reward
         return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
