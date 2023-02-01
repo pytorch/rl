@@ -1218,9 +1218,19 @@ class UnsqueezeTransform(Transform):
             spec.shape = self._apply_transform(torch.zeros(spec.shape)).shape
         return spec
 
+    def _inv_transform_spec(self, spec: TensorSpec) -> None:
+        space = spec.space
+        if isinstance(space, ContinuousBox):
+            space.minimum = self._inv_apply_transform(space.minimum)
+            space.maximum = self._inv_apply_transform(space.maximum)
+            spec.shape = space.minimum.shape
+        else:
+            spec.shape = self._inv_apply_transform(torch.zeros(spec.shape)).shape
+        return spec
+
     @_apply_to_composite_inv
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        return self._transform_spec(input_spec)
+        return self._inv_transform_spec(input_spec)
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if "reward" in self.in_keys:
@@ -1251,33 +1261,29 @@ class SqueezeTransform(UnsqueezeTransform):
     def __init__(
         self,
         squeeze_dim: int,
+        *args,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
         in_keys_inv: Optional[Sequence[str]] = None,
         out_keys_inv: Optional[Sequence[str]] = None,
+        **kwargs,
     ):
         super().__init__(
-            unsqueeze_dim=squeeze_dim,
-            in_keys=in_keys_inv,
+            squeeze_dim,
+            *args,
+            in_keys=in_keys,
             out_keys=out_keys,
-            in_keys_inv=in_keys,
+            in_keys_inv=in_keys_inv,
             out_keys_inv=out_keys_inv,
+            **kwargs,
         )
 
     @property
     def squeeze_dim(self):
         return super().unsqueeze_dim
 
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return super().inv(tensordict)
-
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # placeholder for when we'll move to 'next' indexing for steps
-        # return super().inv(tensordict["next"])
-        return super().inv(tensordict)
-
-    def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return super().forward(tensordict)
+    _apply_transform = UnsqueezeTransform._inv_apply_transform
+    _inv_apply_transform = UnsqueezeTransform._apply_transform
 
 
 class GrayScale(ObservationTransform):

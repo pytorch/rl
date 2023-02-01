@@ -3920,69 +3920,237 @@ class TestUnsqueezeTransform(TransformBase):
 
 
 class TestSqueezeTransform(TransformBase):
+    @pytest.mark.parametrize("squeeze_dim", [1, -2])
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("size", [[], [4]])
+    @pytest.mark.parametrize(
+        "keys",
+        [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "keys_inv", [[], ["action", "some_other_key"], [("next", "observation_pixels")]]
+    )
+    def test_transform_no_env(
+        self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim
+    ):
+        torch.manual_seed(0)
+        keys_total = set(keys + keys_inv)
+        squeeze = SqueezeTransform(
+            squeeze_dim, in_keys=keys, in_keys_inv=keys_inv, allow_positive_dim=True
+        )
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
+                for key in keys_total
+            },
+            batch,
+        )
+        squeeze(td)
+
+        expected_size = [*batch, *size, nchannels, 16, 16]
+        for key in keys_total.difference(keys):
+            assert td.get(key).shape == torch.Size(expected_size)
+
+        if expected_size[squeeze_dim] == 1:
+            del expected_size[squeeze_dim]
+        for key in keys:
+            assert td.get(key).shape == torch.Size(expected_size)
+
+    @pytest.mark.parametrize("squeeze_dim", [1, -2])
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("size", [[], [4]])
+    @pytest.mark.parametrize(
+        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "keys_inv", [[], ["action", "some_other_key"], ["observation_pixels"]]
+    )
+    def test_squeeze_inv(
+        self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim
+    ):
+        torch.manual_seed(0)
+        if squeeze_dim >= 0:
+            squeeze_dim = squeeze_dim + len(batch)
+        keys_total = set(keys + keys_inv)
+        squeeze = SqueezeTransform(
+            squeeze_dim, in_keys=keys, in_keys_inv=keys_inv, allow_positive_dim=True
+        )
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
+                for key in keys_total
+            },
+            batch,
+        )
+        squeeze.inv(td)
+
+        expected_size = [*batch, *size, nchannels, 16, 16]
+        for key in keys_total.difference(keys_inv):
+            assert td.get(key).shape == torch.Size(expected_size)
+
+        if squeeze_dim < 0:
+            expected_size.insert(len(expected_size) + squeeze_dim + 1, 1)
+        else:
+            expected_size.insert(squeeze_dim, 1)
+        expected_size = torch.Size(expected_size)
+
+        for key in keys_inv:
+            assert td.get(key).shape == torch.Size(expected_size), squeeze_dim
+
+    @property
+    def _circular_transform(self):
+        return Compose(
+            UnsqueezeTransform(
+                -1, in_keys=["observation"], out_keys=["observation_un"]
+            ),
+            SqueezeTransform(
+                -1, in_keys=["observation_un"], out_keys=["observation_sq"]
+            ),
+        )
+
+    @property
+    def _inv_circular_transform(self):
+        return Compose(
+            SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
+            UnsqueezeTransform(-1, in_keys_inv=["action_un"], out_keys_inv=["action"]),
+        )
+
     def test_single_trans_env_check(self):
-        """tests that a transformed env passes the check_env_specs test.
-
-        If your transform can overwrite a key or create a new entry in the tensordict,
-        it is worth trying both options here.
-
-        """
-        raise NotImplementedError
+        env = TransformedEnv(ContinuousActionVecMockEnv(), self._circular_transform)
+        check_env_specs(env)
 
     def test_serial_trans_env_check(self):
-        """tests that a serial transformed env (SerialEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
-        raise NotImplementedError
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(), self._circular_transform
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
 
     def test_parallel_trans_env_check(self):
-        """tests that a parallel transformed env (ParallelEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
-        raise NotImplementedError
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(), self._circular_transform
+            )
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
 
     def test_trans_serial_env_check(self):
-        """tests that a transformed serial env (TransformedEnv(SerialEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
-        raise NotImplementedError
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv), self._circular_transform
+        )
+        check_env_specs(env)
 
     def test_trans_parallel_env_check(self):
-        """tests that a transformed paprallel env (TransformedEnv(ParallelEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
-        raise NotImplementedError
+        env = TransformedEnv(
+            ParallelEnv(2, ContinuousActionVecMockEnv), self._circular_transform
+        )
+        check_env_specs(env)
 
-    def test_transform_no_env(self):
-        """tests the transform on dummy data, without an env."""
-        raise NotImplementedError
+    @pytest.mark.parametrize("squeeze_dim", [1, -2])
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("size", [[], [4]])
+    @pytest.mark.parametrize(
+        "keys",
+        [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "keys_inv", [[], ["action", "some_other_key"], [("next", "observation_pixels")]]
+    )
+    def test_transform_compose(
+        self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim
+    ):
+        torch.manual_seed(0)
+        keys_total = set(keys + keys_inv)
+        squeeze = Compose(
+            SqueezeTransform(
+                squeeze_dim, in_keys=keys, in_keys_inv=keys_inv, allow_positive_dim=True
+            )
+        )
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
+                for key in keys_total
+            },
+            batch,
+        )
+        squeeze(td)
 
-    def test_transform_compose(self):
-        """tests the transform on dummy data, without an env but inside a Compose."""
-        raise NotImplementedError
+        expected_size = [*batch, *size, nchannels, 16, 16]
+        for key in keys_total.difference(keys):
+            assert td.get(key).shape == torch.Size(expected_size)
+
+        if expected_size[squeeze_dim] == 1:
+            del expected_size[squeeze_dim]
+        for key in keys:
+            assert td.get(key).shape == torch.Size(expected_size)
 
     def test_transform_env(self):
-        """tests the transform on a real env.
+        env = TransformedEnv(ContinuousActionVecMockEnv(), self._circular_transform)
+        r = env.rollout(3)
+        assert "observation" in r.keys()
+        assert "observation_un" in r.keys()
+        assert "observation_sq" in r.keys()
+        assert (r["observation_sq"] == r["observation"]).all()
 
-        If possible, do not use a mock env, as bugs may go unnoticed if the dynamic is too
-        simplistic. A call to reset() and step() should be tested independently, ie
-        a check that reset produces the desired output and that step() does too.
+    @pytest.mark.parametrize("out_keys", [None, ["obs_sq"]])
+    def test_transform_model(self, out_keys):
+        squeeze_dim = 1
+        t = SqueezeTransform(
+            squeeze_dim,
+            in_keys=["observation"],
+            out_keys=out_keys,
+            allow_positive_dim=True,
+        )
+        model = nn.Sequential(t, nn.Identity())
+        td = TensorDict(
+            {"observation": TensorDict({"stuff": torch.randn(3, 1, 4)}, [3, 1, 4])}, []
+        )
+        model(td)
+        expected_shape = [3, 4]
+        if out_keys is None:
+            assert td["observation"].shape == torch.Size(expected_shape)
+        else:
+            assert td[out_keys[0]].shape == torch.Size(expected_shape)
 
-        """
-        raise NotImplementedError
+    @pytest.mark.parametrize("out_keys", [None, ["obs_sq"]])
+    def test_transform_rb(self, out_keys):
+        squeeze_dim = -2
+        t = SqueezeTransform(
+            squeeze_dim,
+            in_keys=["observation"],
+            out_keys=out_keys,
+            allow_positive_dim=True,
+        )
+        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb.append_transform(t)
+        td = TensorDict(
+            {"observation": TensorDict({"stuff": torch.randn(3, 1, 4)}, [3, 1, 4])}, []
+        ).expand(10)
+        rb.extend(td)
+        td = rb.sample(2)
+        expected_shape = [2, 3, 4]
+        if out_keys is None:
+            assert td["observation"].shape == torch.Size(expected_shape)
+        else:
+            assert td[out_keys[0]].shape == torch.Size(expected_shape)
 
-    def test_transform_model(self):
-        """tests the transform before an nn.Module that reads the output."""
-        raise NotImplementedError
-
-    def test_transform_rb(self):
-        """tests the transform when used with a replay buffer.
-
-        If your transform is not supposed to work with a replay buffer, test that
-        an error will be raised when called or appended to a RB.
-
-        """
-        raise NotImplementedError
-
+    @pytest.mark.skipif(not _has_gym, reason="No Gym")
     def test_transform_inverse(self):
-        """tests the inverse transform. If not applicable, simply skip this test.
-
-        If your transform is not supposed to work offline, test that
-        an error will be raised when called in a nn.Module.
-        """
-        raise NotImplementedError
+        env = TransformedEnv(
+            GymEnv(HALFCHEETAH_VERSIONED), self._inv_circular_transform
+        )
+        check_env_specs(env)
+        r = env.rollout(3)
+        assert "action_un" in r.keys()
 
 
 class TestVecNorm:
@@ -4340,79 +4508,6 @@ def test_transform_parent_cache():
 
 
 class TestTransforms:
-    @pytest.mark.parametrize("squeeze_dim", [1, -2])
-    @pytest.mark.parametrize("nchannels", [1, 3])
-    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
-    @pytest.mark.parametrize("size", [[], [4]])
-    @pytest.mark.parametrize(
-        "keys",
-        [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
-    )
-    @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize(
-        "keys_inv", [[], ["action", "some_other_key"], [("next", "observation_pixels")]]
-    )
-    def test_squeeze(self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim):
-        torch.manual_seed(0)
-        keys_total = set(keys + keys_inv)
-        squeeze = SqueezeTransform(squeeze_dim, in_keys=keys, in_keys_inv=keys_inv)
-        td = TensorDict(
-            {
-                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
-                for key in keys_total
-            },
-            batch,
-        )
-        squeeze(td)
-
-        expected_size = [*size, nchannels, 16, 16]
-        for key in keys_total.difference(keys):
-            assert td.get(key).shape[len(batch) :] == torch.Size(expected_size)
-
-        if expected_size[squeeze_dim] == 1:
-            del expected_size[squeeze_dim]
-        for key in keys:
-            assert td.get(key).shape[len(batch) :] == torch.Size(expected_size)
-
-    @pytest.mark.parametrize("squeeze_dim", [1, -2])
-    @pytest.mark.parametrize("nchannels", [1, 3])
-    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
-    @pytest.mark.parametrize("size", [[], [4]])
-    @pytest.mark.parametrize(
-        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
-    )
-    @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize(
-        "keys_inv", [[], ["action", "some_other_key"], ["observation_pixels"]]
-    )
-    def test_squeeze_inv(
-        self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim
-    ):
-        torch.manual_seed(0)
-        keys_total = set(keys + keys_inv)
-        squeeze = SqueezeTransform(squeeze_dim, in_keys=keys, in_keys_inv=keys_inv)
-        td = TensorDict(
-            {
-                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
-                for key in keys_total
-            },
-            batch,
-        )
-        squeeze.inv(td)
-
-        expected_size = [*size, nchannels, 16, 16]
-        for key in keys_total.difference(keys_inv):
-            assert td.get(key).shape[len(batch) :] == torch.Size(expected_size)
-
-        if squeeze_dim < 0:
-            expected_size.insert(len(expected_size) + squeeze_dim + 1, 1)
-        else:
-            expected_size.insert(squeeze_dim, 1)
-        expected_size = torch.Size(expected_size)
-
-        for key in keys_inv:
-            assert td.get(key).shape[len(batch) :] == torch.Size(expected_size)
-
     @pytest.mark.parametrize("T", [2, 4])
     @pytest.mark.parametrize("seq_len", [8])
     @pytest.mark.parametrize("device", get_available_devices())
