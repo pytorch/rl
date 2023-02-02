@@ -1818,6 +1818,8 @@ class FiniteTensorDictCheck(Transform):
         tensordict.apply(check_finite)
         return tensordict
 
+    forward = _call
+
 
 class DoubleToFloat(Transform):
     """Maps actions float to double before they are called on the environment.
