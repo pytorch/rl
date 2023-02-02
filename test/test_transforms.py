@@ -4018,10 +4018,18 @@ class TestUnsqueezeTransform(TransformBase):
     def test_transform_inverse(self):
         env = TransformedEnv(
             GymEnv(HALFCHEETAH_VERSIONED),
-            UnsqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action"]),
+            Compose(
+                SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_t"]),
+                UnsqueezeTransform(
+                    -1, in_keys_inv=["action_t"], out_keys_inv=["action"]
+                ),
+            ),
         )
         td = env.rollout(3)
-        assert env.action_spec.shape[-1] == 1
+        assert env.action_spec.shape[-1] == 6
+        assert env.input_spec["action_t"].shape[-1] == 1
+        assert td["action"].shape[-1] == 6
+        assert td["action_t"].shape[-1] == 1
 
 
 class TestSqueezeTransform(TransformBase):
