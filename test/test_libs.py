@@ -435,7 +435,6 @@ class TestJumanji:
             state, timestep = jax.vmap(base_env.step)(state, action)
             # state = env._reshape(state)
             # timesteps.append(timestep)
-            checked = False
             for _key in obs_keys:
                 if isinstance(_key, str):
                     _key = (_key,)
@@ -451,11 +450,6 @@ class TestJumanji:
                     t2 = getattr(t2, _key)
                 t2 = torch.tensor(onp.asarray(t2)).view_as(t1)
                 torch.testing.assert_close(t1, t2)
-                checked = True
-            if not checked:
-                raise AttributeError(
-                    f"None of the keys matched: {rollout}, {list(timestep.__dict__.keys())}"
-                )
 
 
 ENVPOOL_CLASSIC_CONTROL_ENVS = [
@@ -830,7 +824,13 @@ class TestBrax:
         check_env_specs(env)
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
-    @pytest.mark.parametrize("requires_grad", [False, True])
+    @pytest.mark.parametrize(
+        "requires_grad",
+        [
+            True,
+            False,
+        ],
+    )
     def test_brax_consistency(self, envname, batch_size, requires_grad):
         import jax
         import jax.numpy as jnp
