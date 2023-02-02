@@ -4502,6 +4502,204 @@ class TestTensorDictPrimer(TransformBase):
                 assert tensordict[key, "b"] is not None
 
 
+class TestTimeMaxPool(TransformBase):
+    @pytest.mark.parametrize("T", [2, 4])
+    @pytest.mark.parametrize("seq_len", [8])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_no_env(self, T, seq_len, device):
+        batch = 1
+        nodes = 4
+        keys = ["observation"]
+        time_max_pool = TimeMaxPool(keys, T=T)
+
+        tensor_list = []
+        for _ in range(seq_len):
+            tensor_list.append(torch.rand(batch, nodes).to(device))
+        max_vals, _ = torch.max(torch.stack(tensor_list[-T:]), dim=0)
+
+        for i in range(seq_len):
+            env_td = TensorDict(
+                {
+                    "observation": tensor_list[i],
+                },
+                device=device,
+                batch_size=[batch],
+            )
+            transformed_td = time_max_pool._call(env_td)
+
+        assert (max_vals == transformed_td["observation"]).all()
+
+    @pytest.mark.parametrize("T", [2, 4])
+    @pytest.mark.parametrize("seq_len", [8])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_compose(self, T, seq_len, device):
+        batch = 1
+        nodes = 4
+        keys = ["observation"]
+        time_max_pool = Compose(TimeMaxPool(keys, T=T))
+
+        tensor_list = []
+        for _ in range(seq_len):
+            tensor_list.append(torch.rand(batch, nodes).to(device))
+        max_vals, _ = torch.max(torch.stack(tensor_list[-T:]), dim=0)
+
+        for i in range(seq_len):
+            env_td = TensorDict(
+                {
+                    "observation": tensor_list[i],
+                },
+                device=device,
+                batch_size=[batch],
+            )
+            transformed_td = time_max_pool._call(env_td)
+
+        assert (max_vals == transformed_td["observation"]).all()
+
+    @pytest.mark.parametrize("out_keys", [None, ["obs2"]])
+    def test_single_trans_env_check(self, out_keys):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            TimeMaxPool(in_keys=["observation"], T=3, out_keys=out_keys),
+        )
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(
+            2,
+            lambda: TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                TimeMaxPool(
+                    in_keys=["observation"],
+                    T=3,
+                ),
+            ),
+        )
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        env = ParallelEnv(
+            2,
+            lambda: TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                TimeMaxPool(
+                    in_keys=["observation"],
+                    T=3,
+                ),
+            ),
+        )
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, lambda: ContinuousActionVecMockEnv()),
+            TimeMaxPool(
+                in_keys=["observation"],
+                T=3,
+            ),
+        )
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(
+            ParallelEnv(2, lambda: ContinuousActionVecMockEnv()),
+            CatFrames(dim=-1, N=3, in_keys=["observation"]),
+        )
+        check_env_specs(env)
+
+    @pytest.mark.skipif(not _has_gym, reason="Gym not available")
+    def test_transform_env(self):
+        env = TransformedEnv(
+            GymEnv(PENDULUM_VERSIONED, frame_skip=4),
+            TimeMaxPool(
+                in_keys=["observation"],
+                T=3,
+            ),
+        )
+        td = env.reset()
+        assert td["observation"].shape[-1] == 3
+
+    def test_transform_model(self):
+        key1 = "first key"
+        key2 = "second key"
+        keys = [key1, key2]
+        dim = -2
+        d = 4
+        N = 3
+        batch_size = (5,)
+        extra_d = (3,) * (-dim - 1)
+        device = "cpu"
+        key1_tensor = torch.ones(*batch_size, d, *extra_d, device=device) * 2
+        key2_tensor = torch.ones(*batch_size, d, *extra_d, device=device)
+        key_tensors = [key1_tensor, key2_tensor]
+        td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
+        t = TimeMaxPool(
+            in_keys=["observation"],
+            T=3,
+        )
+
+        model = nn.Sequential(t, nn.Identity())
+        with pytest.raises(
+            NotImplementedError, match="TimeMaxPool cannot be called independently"
+        ):
+            model(td)
+
+    def test_transform_rb(self):
+        key1 = "first key"
+        key2 = "second key"
+        keys = [key1, key2]
+        dim = -2
+        d = 4
+        N = 3
+        batch_size = (5,)
+        extra_d = (3,) * (-dim - 1)
+        device = "cpu"
+        key1_tensor = torch.ones(*batch_size, d, *extra_d, device=device) * 2
+        key2_tensor = torch.ones(*batch_size, d, *extra_d, device=device)
+        key_tensors = [key1_tensor, key2_tensor]
+        td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
+        t = TimeMaxPool(
+            in_keys=["observation"],
+            T=3,
+        )
+        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb.append_transform(t)
+        rb.extend(td)
+        with pytest.raises(
+            NotImplementedError, match="TimeMaxPool cannot be called independently"
+        ):
+            _ = rb.sample(10)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_tmp_reset(self, device):
+        key1 = "first key"
+        key2 = "second key"
+        N = 4
+        keys = [key1, key2]
+        key1_tensor = torch.randn(1, 1, 3, 3, device=device)
+        key2_tensor = torch.randn(1, 1, 3, 3, device=device)
+        key_tensors = [key1_tensor, key2_tensor]
+        td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
+        t = TimeMaxPool(
+            in_keys=key1,
+            T=3,
+        )
+
+        t._call(td.clone())
+        buffer = getattr(t, f"_maxpool_buffer_{key1}")
+
+        tdc = td.clone()
+        passed_back_td = t.reset(tdc)
+
+        assert tdc is passed_back_td
+        assert (buffer == 0).all()
+
+        _ = t._call(tdc)
+        assert (buffer != 0).any()
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse for TimeMaxPool")
+
+
 class TestVecNorm:
     SEED = -1
 
@@ -4857,32 +5055,6 @@ def test_transform_parent_cache():
 
 
 class TestTransforms:
-    @pytest.mark.parametrize("T", [2, 4])
-    @pytest.mark.parametrize("seq_len", [8])
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_time_max_pool(self, T, seq_len, device):
-        batch = 1
-        nodes = 4
-        keys = ["observation"]
-        time_max_pool = TimeMaxPool(keys, T=T)
-
-        tensor_list = []
-        for _ in range(seq_len):
-            tensor_list.append(torch.rand(batch, nodes).to(device))
-        max_vals, _ = torch.max(torch.stack(tensor_list[-T:]), dim=0)
-
-        for i in range(seq_len):
-            env_td = TensorDict(
-                {
-                    "observation": tensor_list[i],
-                },
-                device=device,
-                batch_size=[batch],
-            )
-            transformed_td = time_max_pool._call(env_td)
-
-        assert (max_vals == transformed_td["observation"]).all()
-
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
         "keys",

@@ -3132,3 +3132,13 @@ class TimeMaxPool(Transform):
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         return observation_spec
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError(
+            "TimeMaxPool cannot be called independently, only its step and reset methods "
+            "are functional. The reason for this is that it is hard to consider using "
+            "TimeMaxPool with non-sequential data, such as those collected by a replay buffer "
+            "or a dataset. If you need TimeMaxPool to work on a batch of sequential data "
+            "(ie as LSTM would work over a whole sequence of data), file an issue on "
+            "TorchRL requesting that feature."
+        )

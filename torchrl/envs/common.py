@@ -380,9 +380,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self._assert_tensordict_shape(tensordict)
 
         tensordict.lock()  # make sure _step does not modify the tensordict
-        if "_reset" in tensordict.keys():
-            # Avoid having reset set to True when calling step
-            tensordict.fill_("_reset", 0)
         tensordict_out = self._step(tensordict)
         if tensordict_out is tensordict:
             raise RuntimeError(
@@ -392,7 +389,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
         tensordict.unlock()
 
-        obs_keys = self.observation_spec.keys()
+        obs_keys = self.observation_spec.keys(nested_keys=False)
         # we deliberately do not update the input values, but we want to keep track of
         # new keys considered as "input" by inverse transforms.
         in_keys = self._get_in_keys_to_exclude(tensordict)
