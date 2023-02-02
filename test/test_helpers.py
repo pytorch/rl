@@ -1075,9 +1075,11 @@ def test_retrieve_observation_norms_state_dict(device, composed):
     env.set_seed(1)
 
     t_env = TransformedEnv(env)
-    t_env.transform = ObservationNorm(standard_normal=True)
+    t_env.transform = ObservationNorm(standard_normal=True, loc=0.5, scale=0.2)
     if composed:
-        t_env.append_transform(ObservationNorm(standard_normal=True))
+        t_env.append_transform(
+            ObservationNorm(standard_normal=True, loc=1.0, scale=0.3)
+        )
     initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
     state_dicts = retrieve_observation_norms_state_dict(t_env)
     expected_state_count = 2 if composed else 1

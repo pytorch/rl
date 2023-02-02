@@ -1476,10 +1476,9 @@ class ObservationNorm(ObservationTransform):
         key = self.in_keys[0] if key is None else key
 
         def raise_initialization_exception(module):
-            if (
-                isinstance(module, ObservationNorm)
-                and module.scale is None
-                and module.loc is None
+            if isinstance(module, ObservationNorm) and (
+                isinstance(module.scale, nn.UninitializedBuffer)
+                or isinstance(module.loc, nn.UninitializedBuffer)
             ):
                 raise RuntimeError(
                     "ObservationNorms need to be initialized in the right order."
@@ -1530,7 +1529,9 @@ class ObservationNorm(ObservationTransform):
         self.scale.copy_(scale.clamp_min(self.eps))
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
-        if self.loc is None or self.scale is None:
+        if isinstance(self.loc, nn.UninitializedBuffer) or isinstance(
+            self.scale, nn.UninitializedBuffer
+        ):
             raise RuntimeError(
                 "Loc/Scale have not been initialized. Either pass in values in the constructor "
                 "or call the init_stats method"
