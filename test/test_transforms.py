@@ -4153,6 +4153,194 @@ class TestSqueezeTransform(TransformBase):
         assert "action_un" in r.keys()
 
 
+class TestToTensorImage(TransformBase):
+    @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
+    @pytest.mark.parametrize(
+        "keys",
+        [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_no_env(self, keys, batch, device):
+        torch.manual_seed(0)
+        nchannels = 3
+        totensorimage = ToTensorImage(in_keys=keys)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
+        td = TensorDict(
+            {
+                key: torch.randint(255, (*batch, 16, 16, 3), device=device)
+                for key in keys
+            },
+            batch,
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        totensorimage(td)
+        for key in keys:
+            assert td.get(key).shape[-3:] == torch.Size([3, 16, 16])
+            assert td.get(key).device == device
+        assert (td.get("dont touch") == dont_touch).all()
+
+        if len(keys) == 1:
+            observation_spec = BoundedTensorSpec(0, 255, (16, 16, 3))
+            observation_spec = totensorimage.transform_observation_spec(
+                observation_spec
+            )
+            assert observation_spec.shape == torch.Size([3, 16, 16])
+            assert (observation_spec.space.minimum == 0).all()
+            assert (observation_spec.space.maximum == 1).all()
+        else:
+            observation_spec = CompositeSpec(
+                {key: BoundedTensorSpec(0, 255, (16, 16, 3)) for key in keys}
+            )
+            observation_spec = totensorimage.transform_observation_spec(
+                observation_spec
+            )
+            for key in keys:
+                assert observation_spec[key].shape == torch.Size([3, 16, 16])
+                assert (observation_spec[key].space.minimum == 0).all()
+                assert (observation_spec[key].space.maximum == 1).all()
+
+    @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
+    @pytest.mark.parametrize(
+        "keys",
+        [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_compose(self, keys, batch, device):
+        torch.manual_seed(0)
+        nchannels = 3
+        totensorimage = Compose(ToTensorImage(in_keys=keys))
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
+        td = TensorDict(
+            {
+                key: torch.randint(255, (*batch, 16, 16, 3), device=device)
+                for key in keys
+            },
+            batch,
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        totensorimage(td)
+        for key in keys:
+            assert td.get(key).shape[-3:] == torch.Size([3, 16, 16])
+            assert td.get(key).device == device
+        assert (td.get("dont touch") == dont_touch).all()
+
+        if len(keys) == 1:
+            observation_spec = BoundedTensorSpec(0, 255, (16, 16, 3))
+            observation_spec = totensorimage.transform_observation_spec(
+                observation_spec
+            )
+            assert observation_spec.shape == torch.Size([3, 16, 16])
+            assert (observation_spec.space.minimum == 0).all()
+            assert (observation_spec.space.maximum == 1).all()
+        else:
+            observation_spec = CompositeSpec(
+                {key: BoundedTensorSpec(0, 255, (16, 16, 3)) for key in keys}
+            )
+            observation_spec = totensorimage.transform_observation_spec(
+                observation_spec
+            )
+            for key in keys:
+                assert observation_spec[key].shape == torch.Size([3, 16, 16])
+                assert (observation_spec[key].space.minimum == 0).all()
+                assert (observation_spec[key].space.maximum == 1).all()
+
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    def test_single_trans_env_check(self, out_keys):
+        env = TransformedEnv(
+            DiscreteActionConvMockEnvNumpy(),
+            ToTensorImage(in_keys=["pixels"], out_keys=out_keys),
+        )
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            return TransformedEnv(
+                DiscreteActionConvMockEnvNumpy(),
+                ToTensorImage(in_keys=["pixels"], out_keys=None),
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            return TransformedEnv(
+                DiscreteActionConvMockEnvNumpy(),
+                ToTensorImage(in_keys=["pixels"], out_keys=None),
+            )
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, DiscreteActionConvMockEnvNumpy),
+            ToTensorImage(in_keys=["pixels"], out_keys=None),
+        )
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(
+            ParallelEnv(2, DiscreteActionConvMockEnvNumpy),
+            ToTensorImage(in_keys=["pixels"], out_keys=None),
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    @pytest.mark.parametrize("default_dtype", [torch.float32, torch.float64])
+    def test_transform_env(self, out_keys, default_dtype):
+        prev_dtype = torch.get_default_dtype()
+        torch.set_default_dtype(default_dtype)
+        env = TransformedEnv(
+            DiscreteActionConvMockEnvNumpy(),
+            ToTensorImage(in_keys=["pixels"], out_keys=out_keys),
+        )
+        r = env.rollout(3)
+        if out_keys is not None:
+            assert out_keys[0] in r.keys()
+            obs = r[out_keys[0]]
+        else:
+            obs = r["pixels"]
+        assert obs.shape[-3] == 3
+        assert obs.dtype is default_dtype
+        torch.set_default_dtype(prev_dtype)
+
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    def test_transform_model(self, out_keys):
+        t = ToTensorImage(in_keys=["pixels"], out_keys=out_keys)
+        model = nn.Sequential(t, nn.Identity())
+        td = TensorDict({"pixels": torch.randint(255, (21, 22, 3))}, [])
+        model(td)
+        if out_keys is not None:
+            assert out_keys[0] in td.keys()
+            obs = td[out_keys[0]]
+        else:
+            obs = td["pixels"]
+        assert obs.shape[-3] == 3
+        assert obs.dtype is torch.float32
+
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    def test_transform_rb(self, out_keys):
+        t = ToTensorImage(in_keys=["pixels"], out_keys=out_keys)
+        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb.append_transform(t)
+        td = TensorDict({"pixels": torch.randint(255, (21, 22, 3))}, [])
+        rb.extend(td.expand(10))
+        td = rb.sample(2)
+        if out_keys is not None:
+            assert out_keys[0] in td.keys()
+            obs = td[out_keys[0]]
+        else:
+            obs = td["pixels"]
+        assert obs.shape[-3] == 3
+        assert obs.dtype is torch.float32
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse for ToTensorImage")
+
+
 class TestVecNorm:
     SEED = -1
 
@@ -4533,52 +4721,6 @@ class TestTransforms:
             transformed_td = time_max_pool._call(env_td)
 
         assert (max_vals == transformed_td["observation"]).all()
-
-    @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
-    @pytest.mark.parametrize(
-        "keys",
-        [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
-    )
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_totensorimage(self, keys, batch, device):
-        torch.manual_seed(0)
-        nchannels = 3
-        totensorimage = ToTensorImage(in_keys=keys)
-        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
-        td = TensorDict(
-            {
-                key: torch.randint(255, (*batch, 16, 16, 3), device=device)
-                for key in keys
-            },
-            batch,
-            device=device,
-        )
-        td.set("dont touch", dont_touch.clone())
-        totensorimage(td)
-        for key in keys:
-            assert td.get(key).shape[-3:] == torch.Size([3, 16, 16])
-            assert td.get(key).device == device
-        assert (td.get("dont touch") == dont_touch).all()
-
-        if len(keys) == 1:
-            observation_spec = BoundedTensorSpec(0, 255, (16, 16, 3))
-            observation_spec = totensorimage.transform_observation_spec(
-                observation_spec
-            )
-            assert observation_spec.shape == torch.Size([3, 16, 16])
-            assert (observation_spec.space.minimum == 0).all()
-            assert (observation_spec.space.maximum == 1).all()
-        else:
-            observation_spec = CompositeSpec(
-                {key: BoundedTensorSpec(0, 255, (16, 16, 3)) for key in keys}
-            )
-            observation_spec = totensorimage.transform_observation_spec(
-                observation_spec
-            )
-            for key in keys:
-                assert observation_spec[key].shape == torch.Size([3, 16, 16])
-                assert (observation_spec[key].space.minimum == 0).all()
-                assert (observation_spec[key].space.maximum == 1).all()
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
