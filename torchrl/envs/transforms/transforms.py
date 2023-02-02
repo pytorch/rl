@@ -2291,6 +2291,9 @@ class TensorDictPrimer(Transform):
 
     This transform will populate the tensordict at reset with values drawn from
     the relative tensorspecs provided at initialization.
+    If the transform is used out of the env context (e.g. as an nn.Module or
+    appended to a replay buffer), a call to `forward` will also populate the
+    tensordict with the desired features.
 
     Args:
         random (bool, optional): if True, the values will be drawn randomly from
@@ -2353,19 +2356,13 @@ class TensorDictPrimer(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         for key, spec in self.primers.items():
-            # deprecating this with the new "next_" logic where we expect keys to collide
-            # if key in observation_spec:
-            #     raise RuntimeError(
-            #         f"The key {key} is already in the observation_spec. This means "
-            #         f"that the value reset by TensorDictPrimer will confict with the "
-            #         f"value obtained through the call to `env.reset()`. Consider renaming "
-            #         f"the {key} key."
-            #     )
+            if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
+                raise RuntimeError(
+                    "The leading shape of the primer specs should match the one of the parent env. "
+                    f"Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's shape is {spec.shape}."
+                )
             observation_spec[key] = spec.to(self.device)
         return observation_spec
-
-    def set_container(self, container: Union[Transform, EnvBase]) -> None:
-        super().set_container(container)
 
     @property
     def _batch_size(self):
@@ -2379,13 +2376,25 @@ class TensorDictPrimer(Transform):
     def device(self, value):
         self._device = value
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         for key, spec in self.primers.items():
             if self.random:
                 value = spec.rand(tensordict.batch_size)
             else:
                 value = torch.full_like(
                     spec.rand(tensordict.batch_size),
+                    self.default_value,
+                )
+            tensordict.set(key, value)
+        return tensordict
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for key, spec in self.primers.items():
+            if self.random:
+                value = spec.rand()
+            else:
+                value = torch.full_like(
+                    spec.rand(),
                     self.default_value,
                 )
             tensordict.set(key, value)

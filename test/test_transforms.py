@@ -4341,6 +4341,167 @@ class TestToTensorImage(TransformBase):
         raise pytest.skip("No inverse for ToTensorImage")
 
 
+class TestTensorDictPrimer(TransformBase):
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([3])),
+        )
+        check_env_specs(env)
+        assert "mykey" in env.reset().keys()
+        assert ("next", "mykey") in env.rollout(3).keys(True)
+
+    def test_transform_no_env(self):
+        t = TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([3]))
+        td = TensorDict({"a": torch.zeros(())}, [])
+        t(td)
+        assert "mykey" in td.keys()
+
+    def test_transform_model(self):
+        t = TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([3]))
+        model = nn.Sequential(t, nn.Identity())
+        td = TensorDict({}, [])
+        model(td)
+        assert "mykey" in td.keys()
+
+    def test_transform_rb(self):
+        t = TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([3]))
+        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb.append_transform(t)
+        td = TensorDict({"a": torch.zeros(())}, [])
+        rb.extend(td.expand(10))
+        td = rb.sample(2)
+        assert "mykey" in td.keys()
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse method for TensorDictPrimer")
+
+    def test_transform_compose(self):
+        t = Compose(TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([3])))
+        td = TensorDict({"a": torch.zeros(())}, [])
+        t(td)
+        assert "mykey" in td.keys()
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([3])),
+            )
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+        assert "mykey" in env.reset().keys()
+        assert ("next", "mykey") in env.rollout(3).keys(True)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([3])),
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+        assert "mykey" in env.reset().keys()
+        assert ("next", "mykey") in env.rollout(3).keys(True)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(
+            ParallelEnv(2, ContinuousActionVecMockEnv),
+            TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([2, 4])),
+        )
+        check_env_specs(env)
+        assert "mykey" in env.reset().keys()
+        r = env.rollout(3)
+        assert ("next", "mykey") in r.keys(True)
+        assert r["next", "mykey"].shape == torch.Size([2, 3, 4])
+
+    def test_trans_serial_env_check(self):
+        with pytest.raises(RuntimeError, match="The leading shape of the primer specs"):
+            env = TransformedEnv(
+                SerialEnv(2, ContinuousActionVecMockEnv),
+                TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([4])),
+            )
+            _ = env.observation_spec
+
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv),
+            TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([2, 4])),
+        )
+        check_env_specs(env)
+        assert "mykey" in env.reset().keys()
+        r = env.rollout(3)
+        assert ("next", "mykey") in r.keys(True)
+        assert r["next", "mykey"].shape == torch.Size([2, 3, 4])
+
+    @pytest.mark.parametrize(
+        "default_keys", [["action"], ["action", "monkeys jumping on the bed"]]
+    )
+    @pytest.mark.parametrize(
+        "spec",
+        [
+            CompositeSpec(b=BoundedTensorSpec(-3, 3, [4])),
+            BoundedTensorSpec(-3, 3, [4]),
+        ],
+    )
+    @pytest.mark.parametrize("random", [True, False])
+    @pytest.mark.parametrize("value", [0.0, 1.0])
+    @pytest.mark.parametrize("serial", [True, False])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_env(
+        self,
+        default_keys,
+        spec,
+        random,
+        value,
+        serial,
+        device,
+    ):
+        if random and value != 0.0:
+            return pytest.skip("no need to check random=True with more than one value")
+        torch.manual_seed(0)
+        num_defaults = len(default_keys)
+
+        def make_env():
+            env = ContinuousActionVecMockEnv()
+            env.set_seed(100)
+            kwargs = {
+                key: deepcopy(spec) if key != "action" else deepcopy(env.action_spec)
+                # copy to avoid having the same spec for all keys
+                for key in default_keys
+            }
+            reset_transform = TensorDictPrimer(
+                random=random, default_value=value, **kwargs
+            )
+            transformed_env = TransformedEnv(env, reset_transform).to(device)
+            return transformed_env
+
+        if serial:
+            env = SerialEnv(3, make_env)
+        else:
+            env = make_env()
+
+        tensordict = env.reset()
+        tensordict_select = tensordict.select(
+            *[key for key in tensordict.keys() if key in default_keys]
+        )
+        assert len(list(tensordict_select.keys())) == num_defaults
+        if random:
+            assert (tensordict_select != value).any()
+        else:
+            assert (tensordict_select == value).all()
+
+        if isinstance(spec, CompositeSpec) and any(
+            key != "action" for key in default_keys
+        ):
+            for key in default_keys:
+                if key in ("action",):
+                    continue
+                assert key in tensordict.keys()
+                assert tensordict[key, "b"] is not None
+
+
 class TestVecNorm:
     SEED = -1
 
@@ -4880,72 +5041,6 @@ class TestTransforms:
             observation_spec = double2float.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].dtype == torch.float
-
-    @pytest.mark.parametrize(
-        "default_keys", [["action"], ["action", "monkeys jumping on the bed"]]
-    )
-    @pytest.mark.parametrize(
-        "spec",
-        [
-            CompositeSpec(b=BoundedTensorSpec(-3, 3, [4])),
-            BoundedTensorSpec(-3, 3, [4]),
-        ],
-    )
-    @pytest.mark.parametrize("random", [True, False])
-    @pytest.mark.parametrize("value", [0.0, 1.0])
-    @pytest.mark.parametrize("serial", [True, False])
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_tensordict_primer(
-        self,
-        default_keys,
-        spec,
-        random,
-        value,
-        serial,
-        device,
-    ):
-        if random and value != 0.0:
-            return pytest.skip("no need to check random=True with more than one value")
-        torch.manual_seed(0)
-        num_defaults = len(default_keys)
-
-        def make_env():
-            env = ContinuousActionVecMockEnv()
-            env.set_seed(100)
-            kwargs = {
-                key: deepcopy(spec) if key != "action" else deepcopy(env.action_spec)
-                # copy to avoid having the same spec for all keys
-                for key in default_keys
-            }
-            reset_transform = TensorDictPrimer(
-                random=random, default_value=value, **kwargs
-            )
-            transformed_env = TransformedEnv(env, reset_transform).to(device)
-            return transformed_env
-
-        if serial:
-            env = SerialEnv(3, make_env)
-        else:
-            env = make_env()
-
-        tensordict = env.reset()
-        tensordict_select = tensordict.select(
-            *[key for key in tensordict.keys() if key in default_keys]
-        )
-        assert len(list(tensordict_select.keys())) == num_defaults
-        if random:
-            assert (tensordict_select != value).any()
-        else:
-            assert (tensordict_select == value).all()
-
-        if isinstance(spec, CompositeSpec) and any(
-            key != "action" for key in default_keys
-        ):
-            for key in default_keys:
-                if key in ("action",):
-                    continue
-                assert key in tensordict.keys()
-                assert tensordict[key, "b"] is not None
 
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("scale", [0.1, 10])
