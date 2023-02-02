@@ -57,4 +57,4 @@ wget https://blzdistsc2-a.akamaihd.net/Linux/SC2.4.10.zip
 # The archive contains StarCraftII folder. Password comes from the documentation.
 unzip -qo -P iagreetotheeula SC2.4.10.zip
 wget https://github.com/oxwhirl/smac/releases/download/v0.1-beta1/SMAC_Maps.zip
-tar -xf SMAC_Maps.zip --directory ./StarCraftII/Maps
+unzip -qo SMAC_Maps.zip -d ./StarCraftII/Maps

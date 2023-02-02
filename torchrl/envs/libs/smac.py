@@ -83,7 +83,7 @@ class SC2Wrapper(GymLikeEnv):
         if not isinstance(env, (smac.env.StarCraft2Env,)):
             raise TypeError("env is not of type 'smac.env.StarCraft2Env'.")
 
-    def _build_env(self, env, **kwargs) -> smac.env.StarCraft2Env:
+    def _build_env(self, env, **kwargs) -> "smac.env.StarCraft2Env":
         return env
 
     def _make_specs(self, env: "smac.env.StarCraft2Env") -> None:
