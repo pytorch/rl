@@ -2297,7 +2297,7 @@ class TensorDictPrimer(Transform):
 
     Args:
         random (bool, optional): if True, the values will be drawn randomly from
-            the TensorSpec domain. Otherwise a fixed value will be assumed.
+            the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
         default_value (float, optional): if non-random filling is chosen, this
             value will be used to populate the tensors. Defaults to `0.0`.
@@ -2321,11 +2321,19 @@ class TensorDictPrimer(Transform):
             is_shared=False)
     """
 
-    def __init__(self, random=False, default_value=0.0, **kwargs):
+    def __init__(self, primers: dict = None, random=False, default_value=0.0, **kwargs):
+        self.device = kwargs.pop("device", torch.device("cpu"))
+        if primers is not None:
+            if kwargs:
+                raise RuntimeError(
+                    "providing the primers as a dictionary is incompatible with extra keys provided "
+                    "as kwargs."
+                )
+            kwargs = primers
         self.primers = kwargs
         self.random = random
         self.default_value = default_value
-        self.device = kwargs.get("device", torch.device("cpu"))
+
         # sanity check
         for spec in self.primers.values():
             if not isinstance(spec, TensorSpec):
@@ -2378,11 +2386,18 @@ class TensorDictPrimer(Transform):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         for key, spec in self.primers.items():
+            if spec.shape[: len(tensordict.shape)] != tensordict.shape:
+                raise RuntimeError(
+                    "The leading shape of the spec must match the tensordict's, "
+                    "but it does not: got "
+                    f"tensordict.shape={tensordict.shape} whereas {key} spec's shape is "
+                    f"{spec.shape}."
+                )
             if self.random:
-                value = spec.rand(tensordict.batch_size)
+                value = spec.rand()
             else:
                 value = torch.full_like(
-                    spec.rand(tensordict.batch_size),
+                    spec.zero(),
                     self.default_value,
                 )
             tensordict.set(key, value)
@@ -2421,7 +2436,7 @@ def _sum_left(val, dest):
     return val
 
 
-class gSDENoise(Transform):
+class gSDENoise(TensorDictPrimer):
     """A gSDE noise initializer.
 
     See the :func:`~torchrl.modules.models.exploration.gSDEModule' for more info.
@@ -2431,34 +2446,19 @@ class gSDENoise(Transform):
         self,
         state_dim=None,
         action_dim=None,
+        shape=None,
     ) -> None:
-        super().__init__(in_keys=[])
         self.state_dim = state_dim
         self.action_dim = action_dim
-
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = super().reset(tensordict=tensordict)
-        if self.state_dim is None or self.action_dim is None:
-            tensordict.set(
-                "_eps_gSDE",
-                torch.zeros(
-                    *tensordict.batch_size,
-                    1,
-                    device=tensordict.device,
-                ),
-            )
-        else:
-            tensordict.set(
-                "_eps_gSDE",
-                torch.randn(
-                    *tensordict.batch_size,
-                    self.action_dim,
-                    self.state_dim,
-                    device=tensordict.device,
-                ),
-            )
-
-        return tensordict
+        if shape is None:
+            shape = ()
+        tail_dim = (
+            (1,) if state_dim is None or action_dim is None else (action_dim, state_dim)
+        )
+        random = state_dim is not None and action_dim is not None
+        shape = tuple(shape) + tail_dim
+        primers = {"_eps_gSDE": UnboundedContinuousTensorSpec(shape=shape)}
+        super().__init__(primers=primers, random=random)
 
 
 class VecNorm(Transform):

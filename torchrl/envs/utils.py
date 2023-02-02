@@ -184,17 +184,17 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
 
     fake_tensordict = env.fake_tensordict().flatten_keys(".")
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
-    # remove private keys
-    real_tensordict = real_tensordict.exclude(
-        *[
-            key
-            for key in real_tensordict.keys(True)
-            if (isinstance(key, str) and key.startswith("_"))
-            or (
-                isinstance(key, tuple) and any(subkey.startswith("_") for subkey in key)
-            )
-        ]
-    )
+    # # remove private keys
+    # real_tensordict = real_tensordict.exclude(
+    #     *[
+    #         key
+    #         for key in real_tensordict.keys(True)
+    #         if (isinstance(key, str) and key.startswith("_"))
+    #         or (
+    #             isinstance(key, tuple) and any(subkey.startswith("_") for subkey in key)
+    #         )
+    #     ]
+    # )
     real_tensordict = real_tensordict.flatten_keys(".")
 
     keys1 = set(fake_tensordict.keys(True))
@@ -230,16 +230,16 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
 
     # test dtypes
     real_tensordict = env.rollout(3)  # keep empty structures, for example dict()
-    real_tensordict = real_tensordict.exclude(
-        *[
-            key
-            for key in real_tensordict.keys(True)
-            if (isinstance(key, str) and key.startswith("_"))
-            or (
-                isinstance(key, tuple) and any(subkey.startswith("_") for subkey in key)
-            )
-        ]
-    )
+    # real_tensordict = real_tensordict.exclude(
+    #     *[
+    #         key
+    #         for key in real_tensordict.keys(True)
+    #         if (isinstance(key, str) and key.startswith("_"))
+    #         or (
+    #             isinstance(key, tuple) and any(subkey.startswith("_") for subkey in key)
+    #         )
+    #     ]
+    # )
     for key, value in real_tensordict[..., -1].items():
         _check_isin(key, value, env.observation_spec, env.input_spec)
 

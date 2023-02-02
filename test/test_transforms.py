@@ -1628,6 +1628,69 @@ class TestDiscreteActionProjection(TransformBase):
 
 
 class TestDoubleToFloat(TransformBase):
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "keys",
+        [
+            ["observation", "some_other_key"],
+            ["observation_pixels"],
+            ["action"],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "keys_inv",
+        [
+            ["action", "some_other_key"],
+            ["action"],
+            [],
+        ],
+    )
+    def test_double2float(self, keys, keys_inv, device):
+        torch.manual_seed(0)
+        keys_total = set(keys + keys_inv)
+        double2float = DoubleToFloat(in_keys=keys, in_keys_inv=keys_inv)
+        dont_touch = torch.randn(1, 3, 3, dtype=torch.double, device=device)
+        td = TensorDict(
+            {
+                key: torch.zeros(1, 3, 3, dtype=torch.double, device=device)
+                for key in keys_total
+            },
+            [1],
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        double2float(td)
+        for key in keys:
+            assert td.get(key).dtype == torch.float
+        assert td.get("dont touch").dtype == torch.double
+
+        double2float.inv(td)
+        for key in keys_inv:
+            assert td.get(key).dtype == torch.double
+        assert td.get("dont touch").dtype == torch.double
+
+        if len(keys_total) == 1 and len(keys_inv) and keys[0] == "action":
+            action_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
+            input_spec = CompositeSpec(action=action_spec)
+            action_spec = double2float.transform_input_spec(input_spec)
+            assert action_spec.dtype == torch.float
+
+        elif len(keys) == 1:
+            observation_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
+            observation_spec = double2float.transform_observation_spec(observation_spec)
+            assert observation_spec.dtype == torch.float
+
+        else:
+            observation_spec = CompositeSpec(
+                {
+                    key: BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
+                    for key in keys
+                }
+            )
+            observation_spec = double2float.transform_observation_spec(observation_spec)
+            for key in keys:
+                assert observation_spec[key].dtype == torch.float
+
     def test_single_trans_env_check(self, dtype_fixture):  # noqa: F811
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
@@ -3379,6 +3442,48 @@ class TestRewardClipping(TransformBase):
 
 
 class TestRewardScaling(TransformBase):
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("scale", [0.1, 10])
+    @pytest.mark.parametrize("loc", [1, 5])
+    @pytest.mark.parametrize("keys", [None, ["reward_1"]])
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    def test_reward_scaling(self, batch, scale, loc, keys, device, standard_normal):
+        torch.manual_seed(0)
+        if keys is None:
+            keys_total = set()
+        else:
+            keys_total = set(keys)
+        reward_scaling = RewardScaling(
+            in_keys=keys, scale=scale, loc=loc, standard_normal=standard_normal
+        )
+        td = TensorDict(
+            {
+                **{key: torch.randn(*batch, 1, device=device) for key in keys_total},
+                "reward": torch.randn(*batch, 1, device=device),
+            },
+            batch,
+            device=device,
+        )
+        td.set("dont touch", torch.randn(*batch, 1, device=device))
+        td_copy = td.clone()
+        reward_scaling(td)
+        for key in keys_total:
+            if standard_normal:
+                original_key = td.get(key)
+                scaled_key = (td_copy.get(key) - loc) / scale
+                torch.testing.assert_close(original_key, scaled_key)
+            else:
+                original_key = td.get(key)
+                scaled_key = td_copy.get(key) * scale + loc
+                torch.testing.assert_close(original_key, scaled_key)
+        assert (td.get("dont touch") == td_copy.get("dont touch")).all()
+
+        if len(keys_total) == 1:
+            reward_spec = UnboundedContinuousTensorSpec(device=device)
+            reward_spec = reward_scaling.transform_reward_spec(reward_spec)
+            assert reward_spec.shape == torch.Size([1])
+
     def test_single_trans_env_check(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), RewardScaling(0.5, 1.5))
         check_env_specs(env)
@@ -4700,6 +4805,125 @@ class TestTimeMaxPool(TransformBase):
         raise pytest.skip("No inverse for TimeMaxPool")
 
 
+class TestgSDE(TransformBase):
+    @pytest.mark.parametrize("action_dim,state_dim", [(None, None), (7, 7)])
+    def test_single_trans_env_check(self, action_dim, state_dim):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            gSDENoise(state_dim=state_dim, action_dim=action_dim),
+        )
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            state_dim = 7
+            action_dim = 7
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                gSDENoise(state_dim=state_dim, action_dim=action_dim),
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            state_dim = 7
+            action_dim = 7
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                gSDENoise(state_dim=state_dim, action_dim=action_dim),
+            )
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        state_dim = 7
+        action_dim = 7
+        with pytest.raises(RuntimeError, match="The leading shape of the primer"):
+            env = TransformedEnv(
+                SerialEnv(2, ContinuousActionVecMockEnv),
+                gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=()),
+            )
+            check_env_specs(env)
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv),
+            gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=(2,)),
+        )
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        state_dim = 7
+        action_dim = 7
+        env = TransformedEnv(
+            ParallelEnv(2, ContinuousActionVecMockEnv),
+            gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=(2,)),
+        )
+        check_env_specs(env)
+
+    def test_transform_no_env(self):
+        state_dim = 7
+        action_dim = 5
+        t = gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=(2,))
+        td = TensorDict({"a": torch.zeros(())}, [])
+        t(td)
+        assert "_eps_gSDE" in td.keys()
+        assert (td["_eps_gSDE"] != 0.0).all()
+        assert td["_eps_gSDE"].shape == torch.Size(
+            [
+                2,
+                action_dim,
+                state_dim,
+            ]
+        )
+
+    def test_transform_model(self):
+        state_dim = 7
+        action_dim = 5
+        t = gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=(2,))
+        model = nn.Sequential(t, nn.Identity())
+        td = TensorDict({}, [])
+        model(td)
+        assert "_eps_gSDE" in td.keys()
+        assert (td["_eps_gSDE"] != 0.0).all()
+        assert td["_eps_gSDE"].shape == torch.Size([2, action_dim, state_dim])
+
+    def test_transform_rb(self):
+        state_dim = 7
+        action_dim = 5
+        t = gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=(2,))
+        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb.append_transform(t)
+        td = TensorDict({"a": torch.zeros(())}, [])
+        rb.extend(td.expand(10))
+        td = rb.sample(2)
+        assert "_eps_gSDE" in td.keys()
+        assert (td["_eps_gSDE"] != 0.0).all()
+        assert td["_eps_gSDE"].shape == torch.Size([2, action_dim, state_dim])
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse method for TensorDictPrimer")
+
+    def test_transform_compose(self):
+        state_dim = 7
+        action_dim = 5
+        t = Compose(gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=(2,)))
+        td = TensorDict({"a": torch.zeros(())}, [])
+        t(td)
+        assert "_eps_gSDE" in td.keys()
+        assert (td["_eps_gSDE"] != 0.0).all()
+        assert td["_eps_gSDE"].shape == torch.Size([2, action_dim, state_dim])
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    def test_transform_env(self):
+        env = TransformedEnv(
+            GymEnv(PENDULUM_VERSIONED), gSDENoise(state_dim=3, action_dim=1)
+        )
+        check_env_specs(env)
+        assert (env.reset()["_eps_gSDE"] != 0.0).all()
+
+
 class TestVecNorm:
     SEED = -1
 
@@ -5151,111 +5375,6 @@ class TestTransforms:
         with pytest.raises(ValueError, match="Encountered a non-finite tensor"):
             ftd(td)
 
-    @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize(
-        "keys",
-        [
-            ["observation", "some_other_key"],
-            ["observation_pixels"],
-            ["action"],
-        ],
-    )
-    @pytest.mark.parametrize(
-        "keys_inv",
-        [
-            ["action", "some_other_key"],
-            ["action"],
-            [],
-        ],
-    )
-    def test_double2float(self, keys, keys_inv, device):
-        torch.manual_seed(0)
-        keys_total = set(keys + keys_inv)
-        double2float = DoubleToFloat(in_keys=keys, in_keys_inv=keys_inv)
-        dont_touch = torch.randn(1, 3, 3, dtype=torch.double, device=device)
-        td = TensorDict(
-            {
-                key: torch.zeros(1, 3, 3, dtype=torch.double, device=device)
-                for key in keys_total
-            },
-            [1],
-            device=device,
-        )
-        td.set("dont touch", dont_touch.clone())
-        double2float(td)
-        for key in keys:
-            assert td.get(key).dtype == torch.float
-        assert td.get("dont touch").dtype == torch.double
-
-        double2float.inv(td)
-        for key in keys_inv:
-            assert td.get(key).dtype == torch.double
-        assert td.get("dont touch").dtype == torch.double
-
-        if len(keys_total) == 1 and len(keys_inv) and keys[0] == "action":
-            action_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
-            input_spec = CompositeSpec(action=action_spec)
-            action_spec = double2float.transform_input_spec(input_spec)
-            assert action_spec.dtype == torch.float
-
-        elif len(keys) == 1:
-            observation_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
-            observation_spec = double2float.transform_observation_spec(observation_spec)
-            assert observation_spec.dtype == torch.float
-
-        else:
-            observation_spec = CompositeSpec(
-                {
-                    key: BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
-                    for key in keys
-                }
-            )
-            observation_spec = double2float.transform_observation_spec(observation_spec)
-            for key in keys:
-                assert observation_spec[key].dtype == torch.float
-
-    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
-    @pytest.mark.parametrize("scale", [0.1, 10])
-    @pytest.mark.parametrize("loc", [1, 5])
-    @pytest.mark.parametrize("keys", [None, ["reward_1"]])
-    @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("standard_normal", [True, False])
-    def test_reward_scaling(self, batch, scale, loc, keys, device, standard_normal):
-        torch.manual_seed(0)
-        if keys is None:
-            keys_total = set()
-        else:
-            keys_total = set(keys)
-        reward_scaling = RewardScaling(
-            in_keys=keys, scale=scale, loc=loc, standard_normal=standard_normal
-        )
-        td = TensorDict(
-            {
-                **{key: torch.randn(*batch, 1, device=device) for key in keys_total},
-                "reward": torch.randn(*batch, 1, device=device),
-            },
-            batch,
-            device=device,
-        )
-        td.set("dont touch", torch.randn(*batch, 1, device=device))
-        td_copy = td.clone()
-        reward_scaling(td)
-        for key in keys_total:
-            if standard_normal:
-                original_key = td.get(key)
-                scaled_key = (td_copy.get(key) - loc) / scale
-                torch.testing.assert_close(original_key, scaled_key)
-            else:
-                original_key = td.get(key)
-                scaled_key = td_copy.get(key) * scale + loc
-                torch.testing.assert_close(original_key, scaled_key)
-        assert (td.get("dont touch") == td_copy.get("dont touch")).all()
-
-        if len(keys_total) == 1:
-            reward_spec = UnboundedContinuousTensorSpec(device=device)
-            reward_spec = reward_scaling.transform_reward_spec(reward_spec)
-            assert reward_spec.shape == torch.Size([1])
-
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device found")
     @pytest.mark.parametrize("device", get_available_devices())
     def test_pin_mem(self, device):
@@ -5404,7 +5523,163 @@ class TestTransforms:
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("model", ["resnet50"])
-class TestVIP:
+class TestVIP(TransformBase):
+    def test_transform_inverse(self, model, device):
+        raise pytest.skip("no inverse for VIPTransform")
+
+    def test_single_trans_env_check(self, model, device):
+        tensor_pixels_key = None
+        in_keys = ["pixels"]
+        out_keys = ["vec"]
+        vip = VIPTransform(
+            model,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            tensor_pixels_keys=tensor_pixels_key,
+        )
+        transformed_env = TransformedEnv(
+            DiscreteActionConvMockEnvNumpy().to(device), vip
+        )
+        check_env_specs(transformed_env)
+
+    def test_trans_serial_env_check(self, model, device):
+        in_keys = ["pixels"]
+        tensor_pixels_key = None
+        out_keys = ["vec"]
+        vip = VIPTransform(
+            model,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            tensor_pixels_keys=tensor_pixels_key,
+        )
+        transformed_env = TransformedEnv(
+            SerialEnv(2, lambda: DiscreteActionConvMockEnvNumpy().to(device)), vip
+        )
+        check_env_specs(transformed_env)
+
+    def test_trans_parallel_env_check(self, model, device):
+        in_keys = ["pixels"]
+        tensor_pixels_key = None
+        out_keys = ["vec"]
+        r3m = VIPTransform(
+            model,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            tensor_pixels_keys=tensor_pixels_key,
+        )
+        transformed_env = TransformedEnv(
+            ParallelEnv(2, lambda: DiscreteActionConvMockEnvNumpy().to(device)), r3m
+        )
+        check_env_specs(transformed_env)
+
+    def test_serial_trans_env_check(self, model, device):
+        in_keys = ["pixels"]
+        tensor_pixels_key = None
+        out_keys = ["vec"]
+
+        def make_env():
+            return TransformedEnv(
+                DiscreteActionConvMockEnvNumpy().to(device),
+                VIPTransform(
+                    model,
+                    in_keys=in_keys,
+                    out_keys=out_keys,
+                    tensor_pixels_keys=tensor_pixels_key,
+                ),
+            )
+
+        transformed_env = SerialEnv(2, make_env)
+        check_env_specs(transformed_env)
+
+    def test_parallel_trans_env_check(self, model, device):
+        in_keys = ["pixels"]
+        tensor_pixels_key = None
+        out_keys = ["vec"]
+
+        def make_env():
+            return TransformedEnv(
+                DiscreteActionConvMockEnvNumpy().to(device),
+                VIPTransform(
+                    model,
+                    in_keys=in_keys,
+                    out_keys=out_keys,
+                    tensor_pixels_keys=tensor_pixels_key,
+                ),
+            )
+
+        transformed_env = ParallelEnv(2, make_env)
+        check_env_specs(transformed_env)
+
+    def test_transform_model(self, model, device):
+        in_keys = ["pixels"]
+        tensor_pixels_key = None
+        out_keys = ["vec"]
+        vip = VIPTransform(
+            model,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            tensor_pixels_keys=tensor_pixels_key,
+        )
+        td = TensorDict({"pixels": torch.randint(255, (10, 244, 244, 3))}, [10])
+        module = nn.Sequential(vip, nn.Identity())
+        sample = module(td)
+        assert "vec" in sample.keys()
+        assert "pixels" not in sample.keys()
+        assert sample["vec"].shape[-1] == 1024
+
+    def test_transform_rb(self, model, device):
+        in_keys = ["pixels"]
+        tensor_pixels_key = None
+        out_keys = ["vec"]
+        vip = VIPTransform(
+            model,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            tensor_pixels_keys=tensor_pixels_key,
+        )
+        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb.append_transform(vip)
+        td = TensorDict({"pixels": torch.randint(255, (10, 244, 244, 3))}, [10])
+        rb.extend(td)
+        sample = rb.sample(10)
+        assert "vec" in sample.keys()
+        assert "pixels" not in sample.keys()
+        assert sample["vec"].shape[-1] == 1024
+
+    def test_transform_no_env(self, model, device):
+        in_keys = ["pixels"]
+        tensor_pixels_key = None
+        out_keys = ["vec"]
+        vip = VIPTransform(
+            model,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            tensor_pixels_keys=tensor_pixels_key,
+        )
+        td = TensorDict({"pixels": torch.randint(255, (244, 244, 3))}, [])
+        vip(td)
+        assert "vec" in td.keys()
+        assert "pixels" not in td.keys()
+        assert td["vec"].shape[-1] == 1024
+
+    def test_transform_compose(self, model, device):
+        in_keys = ["pixels"]
+        tensor_pixels_key = None
+        out_keys = ["vec"]
+        vip = Compose(
+            VIPTransform(
+                model,
+                in_keys=in_keys,
+                out_keys=out_keys,
+                tensor_pixels_keys=tensor_pixels_key,
+            )
+        )
+        td = TensorDict({"pixels": torch.randint(255, (244, 244, 3))}, [])
+        vip(td)
+        assert "vec" in td.keys()
+        assert "pixels" not in td.keys()
+        assert td["vec"].shape[-1] == 1024
+
     @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
     def test_vip_instantiation(self, model, tensor_pixels_key, device):
         in_keys = ["pixels"]
@@ -5486,7 +5761,7 @@ class TestVIP:
         assert set(td.keys(True)) == exp_keys, set(td.keys(True)) - exp_keys
         transformed_env.close()
 
-    def test_vip_parallel(self, model, device):
+    def test_transform_env(self, model, device):
         in_keys = ["pixels"]
         out_keys = ["vec"]
         tensor_pixels_key = None
@@ -5608,10 +5883,7 @@ class TestVIP:
         )
         if del_keys:
             exp_ts = CompositeSpec(
-                {
-                    key: UnboundedContinuousTensorSpec(vip_net.outdim, device)
-                    for key in out_keys
-                }
+                {key: UnboundedContinuousTensorSpec(1024, device) for key in out_keys}
             )
 
             observation_spec_out = vip_net.transform_observation_spec(observation_spec)
@@ -5627,7 +5899,7 @@ class TestVIP:
             for key in in_keys:
                 ts_dict[key] = observation_spec[key]
             for key in out_keys:
-                ts_dict[key] = UnboundedContinuousTensorSpec(vip_net.outdim, device)
+                ts_dict[key] = UnboundedContinuousTensorSpec(1024, device)
             exp_ts = CompositeSpec(ts_dict)
 
             observation_spec_out = vip_net.transform_observation_spec(observation_spec)

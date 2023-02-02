@@ -129,7 +129,6 @@ class _R3MNet(Transform):
             raise ValueError(
                 "model_name should be one of 'r3m_50', 'r3m_34' or 'r3m_18'"
             )
-        # url = "https://download.pytorch.org/models/rl/r3m/" + model_name
         url = "https://pytorch.s3.amazonaws.com/models/rl/r3m/" + model_name + ".pt"
         d = load_state_dict_from_url(
             url,
