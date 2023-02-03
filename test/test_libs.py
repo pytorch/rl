@@ -335,7 +335,7 @@ class TestCollectorLib:
             reset_at_each_iter=False,
             split_trajs=True,
             devices=[device, device],
-            passing_devices=[device, device],
+            storing_devices=[device, device],
             update_at_each_batch=False,
             init_with_lag=False,
             exploration_mode="random",

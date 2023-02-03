@@ -279,10 +279,10 @@ class SyncDataCollector(_DataCollector):
             default = None (i.e. policy is kept on its original device)
         seed (int, optional): seed to be used for torch and numpy.
         pin_memory (bool): whether pin_memory() should be called on the outputs.
-        passing_device (int, str or torch.device, optional): The device on which the output TensorDict will be stored.
+        storing_device (int, str or torch.device, optional): The device on which the output TensorDict will be stored.
             For long trajectories, it may be necessary to store the data on a different device than the one where
-            the policy is stored.
-            default = None
+            the policy and env are executed.
+            default = None (ie cpu)
         exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
             "mode" or "mean".
             default = "random"
@@ -309,7 +309,7 @@ class SyncDataCollector(_DataCollector):
         ...     init_random_frames=-1,
         ...     reset_at_each_iter=False,
         ...     device="cpu",
-        ...     passing_device="cpu",
+        ...     storing_device="cpu",
         ... )
         >>> for i, data in enumerate(collector):
         ...     if i == 2:
@@ -362,7 +362,7 @@ class SyncDataCollector(_DataCollector):
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: Optional[bool] = None,
         device: DEVICE_TYPING = None,
-        passing_device: DEVICE_TYPING = None,
+        storing_device: DEVICE_TYPING = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
@@ -389,19 +389,19 @@ class SyncDataCollector(_DataCollector):
                     )
                 env.update_kwargs(create_env_kwargs)
 
-        if passing_device is None:
+        if storing_device is None:
             if device is not None:
-                passing_device = device
+                storing_device = device
             elif policy is not None:
                 try:
                     policy_device = next(policy.parameters()).device
                 except (AttributeError, StopIteration):
                     policy_device = torch.device("cpu")
-                passing_device = policy_device
+                storing_device = policy_device
             else:
-                passing_device = torch.device("cpu")
+                storing_device = torch.device("cpu")
 
-        self.passing_device = torch.device(passing_device)
+        self.storing_device = torch.device(storing_device)
         self.env: EnvBase = env
         self.closed = False
         self.reset_when_done = reset_when_done
@@ -421,7 +421,7 @@ class SyncDataCollector(_DataCollector):
         self.init_random_frames = init_random_frames
         self.postproc = postproc
         if self.postproc is not None:
-            self.postproc.to(self.passing_device)
+            self.postproc.to(self.storing_device)
         self.max_frames_per_traj = max_frames_per_traj
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.pin_memory = pin_memory
@@ -473,13 +473,13 @@ class SyncDataCollector(_DataCollector):
             )
         # in addition to outputs of the policy, we add traj_ids and step_count to
         # _tensordict_out which will be collected during rollout
-        self._tensordict_out = self._tensordict_out.to(self.passing_device)
+        self._tensordict_out = self._tensordict_out.to(self.storing_device)
         self._tensordict_out.set(
             ("collector", "traj_ids"),
             torch.zeros(
                 *self._tensordict_out.batch_size,
                 dtype=torch.int64,
-                device=self.passing_device,
+                device=self.storing_device,
             ),
         )
         self._tensordict_out.set(
@@ -487,7 +487,7 @@ class SyncDataCollector(_DataCollector):
             torch.zeros(
                 *self._tensordict_out.batch_size,
                 dtype=torch.int64,
-                device=self.passing_device,
+                device=self.storing_device,
             ),
         )
 
@@ -791,10 +791,10 @@ class _MultiDataCollector(_DataCollector):
             at appropriate times during the training loop to accommodate for the lag between parameter configuration
             at various times.
             default = None (i.e. policy is kept on its original device)
-        passing_devices (int, str, torch.device or sequence of such, optional): The devices on which the output
-            TensorDict will be stored. For long trajectories, it may be necessary to store the data on a different
-            device than the one where the policy is stored.
-            default = None
+        storing_devices (int, str, torch.device or sequence of such, optional): The devices on which the output TensorDict will be stored.
+            For long trajectories, it may be necessary to store the data on a different device than the one where
+            the policy and env are executed.
+            default = None (ie cpu)
         update_at_each_batch (bool): if True, the policy weights will be updated every time a batch of trajectories
             is collected.
             default=False
@@ -834,7 +834,7 @@ class _MultiDataCollector(_DataCollector):
         devices: DEVICE_TYPING = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
-        passing_devices: Optional[Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]]] = None,
+        storing_devices: Optional[Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]]] = None,
         update_at_each_batch: bool = False,
         init_with_lag: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
@@ -865,7 +865,7 @@ class _MultiDataCollector(_DataCollector):
                 f"The length of the {device_name} argument should match the "
                 f"number of workers of the collector. Got len("
                 f"create_env_fn)={self.num_workers} and len("
-                f"passing_devices)={len(devices_list)}"
+                f"storing_devices)={len(devices_list)}"
             )
 
         if isinstance(devices, (str, int, torch.device)):
@@ -908,25 +908,25 @@ class _MultiDataCollector(_DataCollector):
             devices[i] = _device
         self.devices = devices
 
-        if passing_devices is None:
-            self.passing_devices = self.devices
+        if storing_devices is None:
+            self.storing_devices = self.devices
         else:
-            if isinstance(passing_devices, (str, int, torch.device)):
-                self.passing_devices = [
-                    torch.device(passing_devices) for _ in range(self.num_workers)
+            if isinstance(storing_devices, (str, int, torch.device)):
+                self.storing_devices = [
+                    torch.device(storing_devices) for _ in range(self.num_workers)
                 ]
-            elif isinstance(passing_devices, Sequence):
-                if len(passing_devices) != self.num_workers:
+            elif isinstance(storing_devices, Sequence):
+                if len(storing_devices) != self.num_workers:
                     raise RuntimeError(
-                        device_err_msg("passing_devices", passing_devices)
+                        device_err_msg("storing_devices", storing_devices)
                     )
-                self.passing_devices = [
-                    torch.device(_passing_device) for _passing_device in passing_devices
+                self.storing_devices = [
+                    torch.device(_storing_device) for _storing_device in storing_devices
                 ]
             else:
                 raise ValueError(
-                    "passing_devices should be either a torch.device or equivalent or an iterable of devices. "
-                    f"Found {type(passing_devices)} instead."
+                    "storing_devices should be either a torch.device or equivalent or an iterable of devices. "
+                    f"Found {type(storing_devices)} instead."
                 )
 
         self.total_frames = total_frames if total_frames > 0 else float("inf")
@@ -978,7 +978,7 @@ class _MultiDataCollector(_DataCollector):
             zip(self.create_env_fn, self.create_env_kwargs)
         ):
             _device = self.devices[i]
-            _passing_device = self.passing_devices[i]
+            _storing_device = self.storing_devices[i]
             pipe_parent, pipe_child = mp.Pipe()  # send messages to procs
             if env_fun.__class__.__name__ != "EnvCreator" and not isinstance(
                 env_fun, EnvBase
@@ -997,7 +997,7 @@ class _MultiDataCollector(_DataCollector):
                 "frames_per_batch": self.frames_per_batch_worker,
                 "reset_at_each_iter": self.reset_at_each_iter,
                 "device": _device,
-                "passing_device": _passing_device,
+                "storing_device": _storing_device,
                 "seed": self.seed,
                 "pin_memory": self.pin_memory,
                 "init_with_lag": self.init_with_lag,
@@ -1171,7 +1171,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         ...     init_random_frames=-1,
         ...     reset_at_each_iter=False,
         ...     devices="cpu",
-        ...     passing_devices="cpu",
+        ...     storing_devices="cpu",
         ... )
         >>> for i, data in enumerate(collector):
         ...     if i == 2:
@@ -1321,7 +1321,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         ...     init_random_frames=-1,
         ...     reset_at_each_iter=False,
         ...     devices="cpu",
-        ...     passing_devices="cpu",
+        ...     storing_devices="cpu",
         ... )
         >>> for i, data in enumerate(collector):
         ...     if i == 2:
@@ -1365,7 +1365,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         if self.postprocs is not None:
             postproc = self.postprocs
             self.postprocs = {}
-            for _device in self.passing_devices:
+            for _device in self.storing_devices:
                 if _device not in self.postprocs:
                     self.postprocs[_device] = deepcopy(postproc).to(_device)
 
@@ -1504,7 +1504,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             at appropriate times during the training loop to accommodate for
             the lag between parameter configuration at various times.
             Default is `None` (i.e. policy is kept on its original device)
-        passing_device (int, str, torch.device, optional): The device on which
+        storing_device (int, str, torch.device, optional): The device on which
             the output TensorDict will be stored. For long trajectories,
             it may be necessary to store the data on a different.
             device than the one where the policy is stored. Default is None.
@@ -1535,7 +1535,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: Optional[bool] = None,
         device: Optional[Union[int, str, torch.device]] = None,
-        passing_device: Optional[Union[int, str, torch.device]] = None,
+        storing_device: Optional[Union[int, str, torch.device]] = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
         **kwargs,
@@ -1552,7 +1552,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             postproc=postproc,
             split_trajs=split_trajs,
             devices=[device] if device is not None else None,
-            passing_devices=[passing_device] if passing_device is not None else None,
+            storing_devices=[storing_device] if storing_device is not None else None,
             seed=seed,
             pin_memory=pin_memory,
             **kwargs,
@@ -1571,7 +1571,7 @@ def _main_async_collector(
     frames_per_batch: int,
     reset_at_each_iter: bool,
     device: Optional[Union[torch.device, str, int]],
-    passing_device: Optional[Union[torch.device, str, int]],
+    storing_device: Optional[Union[torch.device, str, int]],
     seed: Union[int, Sequence],
     pin_memory: bool,
     idx: int = 0,
@@ -1597,7 +1597,7 @@ def _main_async_collector(
         device=device,
         seed=seed,
         pin_memory=pin_memory,
-        passing_device=passing_device,
+        storing_device=storing_device,
         init_with_lag=init_with_lag,
         exploration_mode=exploration_mode,
         reset_when_done=reset_when_done,
@@ -1662,9 +1662,9 @@ def _main_async_collector(
                 continue
             if j == 0:
                 tensordict = d
-                if passing_device is not None and tensordict.device != passing_device:
+                if storing_device is not None and tensordict.device != storing_device:
                     raise RuntimeError(
-                        f"expected device to be {passing_device} but got {tensordict.device}"
+                        f"expected device to be {storing_device} but got {tensordict.device}"
                     )
                 tensordict.share_memory_()
                 data = (tensordict, idx)
