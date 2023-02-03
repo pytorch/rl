@@ -1420,6 +1420,10 @@ class ObservationNorm(ObservationTransform):
         self.register_buffer("loc", loc)
         self.register_buffer("scale", scale)
 
+    @property
+    def initialized(self):
+        return not isinstance(self.loc, nn.UninitializedBuffer)
+
     def init_stats(
         self,
         num_iter: int,
@@ -1462,9 +1466,7 @@ class ObservationNorm(ObservationTransform):
             isinstance(reduce_dim, int) and cat_dim != reduce_dim
         ):
             raise ValueError("cat_dim must be part of or equal to reduce_dim.")
-        if not isinstance(self.loc, nn.UninitializedBuffer) or not isinstance(
-            self.scale, nn.UninitializedBuffer
-        ):
+        if self.initialized:
             raise RuntimeError(
                 f"Loc/Scale are already initialized: ({self.loc}, {self.scale})"
             )
@@ -1476,10 +1478,7 @@ class ObservationNorm(ObservationTransform):
         key = self.in_keys[0] if key is None else key
 
         def raise_initialization_exception(module):
-            if isinstance(module, ObservationNorm) and (
-                isinstance(module.scale, nn.UninitializedBuffer)
-                or isinstance(module.loc, nn.UninitializedBuffer)
-            ):
+            if isinstance(module, ObservationNorm) and not module.initialized:
                 raise RuntimeError(
                     "ObservationNorms need to be initialized in the right order."
                     "Trying to initialize an ObservationNorm "
@@ -1529,9 +1528,7 @@ class ObservationNorm(ObservationTransform):
         self.scale.copy_(scale.clamp_min(self.eps))
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
-        if isinstance(self.loc, nn.UninitializedBuffer) or isinstance(
-            self.scale, nn.UninitializedBuffer
-        ):
+        if not self.initialized:
             raise RuntimeError(
                 "Loc/Scale have not been initialized. Either pass in values in the constructor "
                 "or call the init_stats method"

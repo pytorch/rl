@@ -481,16 +481,9 @@ def initialize_observation_norm_transforms(
 
     if isinstance(proof_environment.transform, Compose):
         for transform in proof_environment.transform:
-            if (
-                isinstance(transform, ObservationNorm)
-                and transform.loc is None
-                and transform.scale is None
-            ):
+            if isinstance(transform, ObservationNorm) and not transform.initialized:
                 transform.init_stats(num_iter=num_iter, key=key)
-    elif (
-        proof_environment.transform.loc is None
-        and proof_environment.transform.scale is None
-    ):
+    elif not proof_environment.transform.initialized:
         proof_environment.transform.init_stats(num_iter=num_iter, key=key)
 
 
