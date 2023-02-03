@@ -3214,8 +3214,8 @@ class TestObservationNorm(TransformBase):
             transform._apply_transform(torch.Tensor([1]))
 
 
+@pytest.mark.skipif(not _has_tv, reason="no torchvision")
 class TestResize(TransformBase):
-    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize("interpolation", ["bilinear", "bicubic"])
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
@@ -3253,7 +3253,6 @@ class TestResize(TransformBase):
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, 21])
 
-    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize("interpolation", ["bilinear", "bicubic"])
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
