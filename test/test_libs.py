@@ -300,7 +300,7 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
         assert fake_td.get(key).device == td0.get(key).device
 
 
-@pytest.mark.skipif(IS_OSX, reason="rendering unstable on osx, skipping")
+# @pytest.mark.skipif(IS_OSX, reason="rendering unstable on osx, skipping")
 @pytest.mark.parametrize(
     "env_lib,env_args,env_kwargs",
     [
@@ -324,13 +324,15 @@ class TestCollectorLib:
             raise pytest.skip("no cuda device")
 
         env_fn = EnvCreator(lambda: env_lib(*env_args, **env_kwargs, device=device))
-        env = ParallelEnv(2, env_fn)
+        # env = SerialEnv(3, env_fn)
+        env = ParallelEnv(3, env_fn)
+        frames_per_batch = 21
         collector = MultiaSyncDataCollector(
             create_env_fn=[env, env],
             policy=RandomPolicy(action_spec=env.action_spec),
             total_frames=-1,
             max_frames_per_traj=100,
-            frames_per_batch=21,
+            frames_per_batch=frames_per_batch,
             init_random_frames=-1,
             reset_at_each_iter=False,
             split_trajs=True,
@@ -340,12 +342,12 @@ class TestCollectorLib:
             init_with_lag=False,
             exploration_mode="random",
         )
-        for i, data in enumerate(collector):
+        for i, _data in enumerate(collector):
             if i == 3:
-                assert data.shape[0] == 2
-                assert data.shape[1] == 7
                 break
         collector.shutdown()
+        assert _data.shape[1] == -(frames_per_batch // -env.num_workers)
+        assert _data.shape[0] == frames_per_batch // _data.shape[1]
         del env
 
 

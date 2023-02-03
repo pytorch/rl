@@ -2412,7 +2412,18 @@ class TensorDictPrimer(Transform):
         return tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        shape = () if not self.parent.batch_locked else self.parent.batch_size
+        """Sets the default values in the input tensordict.
+
+        If the parent is batch-locked, we assume that the specs have the appropriate leading
+        shape. We allow for execution when the parent is missing, in which case the
+        spec shape is assumed to match the tensordict's.
+
+        """
+        shape = (
+            ()
+            if (not self.parent or self.parent.batch_locked)
+            else tensordict.batch_size
+        )
         for key, spec in self.primers.items():
             if self.random:
                 value = spec.rand(shape)
