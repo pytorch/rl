@@ -1960,9 +1960,172 @@ class CompositeSpec(TensorSpec):
 
 
 class LazyStackedCompositeSpec(CompositeSpec):
-    def __init__(self, *composite_specs, dim):
-        self.composite_spec = composite_specs
+    """A lazy representation of a stack of composite specs.
+
+    Stacks composite specs together along one dimension.
+    When random samples are drawn, a LazyStackedTensorDict is returned.
+
+    Indexing is allowed but only along the stack dimension.
+
+    This class is aimed to be used in multi-task and multi-agent settings, where
+    heterogeneous specs may occur (same semantic but different shape).
+
+    """
+
+    def __init__(self, *composite_specs: CompositeSpec, dim):
+        self.composite_specs = composite_specs
         self.dim = dim
+        if self.dim < 0:
+            self.dim = len(self.shape) + self.dim
+
+    def __getitem__(self, item):
+        is_key = isinstance(item, str) or (
+            isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
+        )
+        if is_key:
+            return torch.stack(
+                [composite_spec[item] for composite_spec in self.composite_specs]
+            )
+        elif isinstance(item, tuple):
+            # quick check that the index is along the stacked dim
+            # case 1: index is a tuple, and the first arg is an ellipsis. Then dim must be the last dim of all composite_specs
+            if item[0] is Ellipsis:
+                if len(item) == 0:
+                    return self
+                elif self.dim == len(self.shape) - 1:
+                    # we can return
+                    return self.composite_specs[item[1]]
+                else:
+                    raise IndexError(
+                        "Indexing a LazyStackedCompositeSpec with [..., idx] is only permitted if the stack dimension is the last dimension. "
+                        f"Got self.dim={self.dim} and self.shape={self.shape}."
+                    )
+            elif len(item) == 2 and item[1] is Ellipsis:
+                return self[item[0]]
+            elif any(_item is Ellipsis for _item in item):
+                raise IndexError("Cannot index along multiple dimensions.")
+            # Ellipsis is now ruled out
+            elif any(_item is None for _item in item):
+                raise IndexError(
+                    "Cannot index a LazyStackedCompositeSpec with None values"
+                )
+            # Must be an index with slices then
+            else:
+                for i, _item in enumerate(item):
+                    if i == self.dim:
+                        return torch.stack(list(self.composite_specs)[_item], self.dim)
+                    elif isinstance(_item, slice):
+                        # then the slice must be trivial
+                        if not (_item.step is _item.start is _item.stop is None):
+                            raise IndexError(
+                                f"Got a non-trivial index at dim {i} when only the dim {self.dim} could be indexed."
+                            )
+                else:
+                    return self
+        else:
+            if not self.dim == 0:
+                raise IndexError(
+                    f"Trying to index a LazyStackedCompositeSpec along dimension 0 when the stack dimension is {self.dim}."
+                )
+            return torch.stack(list(self.composite_specs)[item], 0)
+
+    @property
+    def shape(self):
+        shape = list(self.composite_specs[0].shape)
+        dim = self.dim
+        if dim < 0:
+            dim = len(shape) + dim + 1
+        shape.insert(dim, len(self.composite_specs))
+        return torch.Size(shape)
+
+    def clone(self) -> CompositeSpec:
+        pass
+
+    def expand(self, *shape):
+        pass
+
+    def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
+        pass
+
+    def __eq__(self, other):
+        pass
+
+    def zero(self, shape=None) -> TensorDictBase:
+        pass
+
+    def rand(self, shape=None) -> TensorDictBase:
+        pass
+
+    def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
+        pass
+
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        pass
+
+    def __len__(self):
+        pass
+
+    def values(self) -> ValuesView:
+        pass
+
+    def items(self) -> ItemsView:
+        pass
+
+    def keys(
+        self, yield_nesting_keys: bool = False, nested_keys: bool = True
+    ) -> KeysView:
+        pass
+
+    def project(self, val: TensorDictBase) -> TensorDictBase:
+        pass
+
+    def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
+        pass
+
+    def type_check(
+        self,
+        value: Union[torch.Tensor, TensorDictBase],
+        selected_keys: Union[str, Optional[Sequence[str]]] = None,
+    ):
+        pass
+
+    def __repr__(self):
+        pass
+
+    def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+        pass
+
+    def __delitem__(self, key):
+        pass
+
+    def __iter__(self):
+        pass
+
+    def __setitem__(self, key, value):
+        pass
+
+    @property
+    def device(self) -> DEVICE_TYPING:
+        pass
+
+    @property
+    def ndim(self):
+        return self.ndimension()
+
+    def ndimension(self):
+        return len(self.shape)
+
+    def set(self, name, spec):
+        if spec is not None:
+            shape = spec.shape
+            if shape[: self.ndim] != self.shape:
+                raise ValueError(
+                    "The shape of the spec and the CompositeSpec mismatch: the first "
+                    f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
+                    f"CompositeSpec.shape={self.shape}."
+                )
+        self._specs[name] = spec
+
 
 def _keys_to_empty_composite_spec(keys):
     if not len(keys):
