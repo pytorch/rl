@@ -23,7 +23,7 @@ for GYM_VERSION in '0.13'
 do
   # Create a copy of the conda env and work with this
   conda deactivate
-  conda create --name ./cloned_env --clone ./env
+  conda create --name ./cloned_env --clone ./env -y
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install 'gym[atari]'==$GYM_VERSION
@@ -39,7 +39,7 @@ for GYM_VERSION in '0.19'
 do
   # Create a copy of the conda env and work with this
   conda deactivate
-  conda create --name ./cloned_env --clone ./env
+  conda create --prefix ./cloned_env --clone ./env -y
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install gym==$GYM_VERSION
@@ -55,7 +55,7 @@ for GYM_VERSION in '0.20'
 do
   # Create a copy of the conda env and work with this
   conda deactivate
-  conda create --name ./cloned_env --clone ./env
+  conda create --prefix ./cloned_env --clone ./env -y
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install 'gym[atari]'==$GYM_VERSION
@@ -71,7 +71,7 @@ for GYM_VERSION in '0.25'
 do
   # Create a copy of the conda env and work with this
   conda deactivate
-  conda create --name ./cloned_env --clone ./env
+  conda create --prefix ./cloned_env --clone ./env -y
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install 'gym[atari]'==$GYM_VERSION
@@ -87,7 +87,7 @@ for GYM_VERSION in '0.26'
 do
   # Create a copy of the conda env and work with this
   conda deactivate
-  conda create --name ./cloned_env --clone ./env
+  conda create --prefix ./cloned_env --clone ./env -y
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install 'gym[accept-rom-license]'==$GYM_VERSION
