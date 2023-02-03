@@ -95,7 +95,7 @@ wget http://www.atarimania.com/roms/Roms.rar
 python -m atari_py.import_roms Roms
 
 #yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL glfw mesa-libOSMesa-devel glew egl-utils freeglut -y
-yum makecache && yum install glew -y
+yum makecache && yum install libglvnd-devel glew zlib-devel -y
 
 # install mujoco-py locally
 cd ${root_dir}/.mujoco/mujoco-py
