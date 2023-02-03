@@ -65,15 +65,15 @@ class _R3MNet(Transform):
         if model_name == "resnet18":
             # self.model_name = "r3m_18"
             self.outdim = 512
-            convnet = models.resnet18(None)
+            convnet = models.resnet18()
         elif model_name == "resnet34":
             # self.model_name = "r3m_34"
             self.outdim = 512
-            convnet = models.resnet34(None)
+            convnet = models.resnet34()
         elif model_name == "resnet50":
             # self.model_name = "r3m_50"
             self.outdim = 2048
-            convnet = models.resnet50(None)
+            convnet = models.resnet50()
         else:
             raise NotImplementedError(
                 f"model {model_name} is currently not supported by R3M"
@@ -89,6 +89,8 @@ class _R3MNet(Transform):
         if self.del_keys:
             tensordict.exclude(*self.in_keys, inplace=True)
         return tensordict
+
+    forward = _call
 
     @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
@@ -127,7 +129,6 @@ class _R3MNet(Transform):
             raise ValueError(
                 "model_name should be one of 'r3m_50', 'r3m_34' or 'r3m_18'"
             )
-        # url = "https://download.pytorch.org/models/rl/r3m/" + model_name
         url = "https://pytorch.s3.amazonaws.com/models/rl/r3m/" + model_name + ".pt"
         d = load_state_dict_from_url(
             url,

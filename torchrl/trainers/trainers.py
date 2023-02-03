@@ -1148,6 +1148,7 @@ class Recorder(TrainerHookBase):
                     max_steps=self.record_frames,
                     auto_reset=True,
                     auto_cast_to_device=True,
+                    break_when_any_done=False,
                 ).clone()
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.train()
