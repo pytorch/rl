@@ -2296,6 +2296,8 @@ class TensorDictPrimer(Transform):
     tensordict with the desired features.
 
     Args:
+        primers (dict, optional): a dictionary containing key-spec pairs which will
+            be used to populate the input tensordict.
         random (bool, optional): if True, the values will be drawn randomly from
             the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
@@ -2305,11 +2307,17 @@ class TensorDictPrimer(Transform):
             The corresponding value has to be a TensorSpec instance indicating
             what the value must be.
 
+    When used in a TransfomedEnv, the spec shapes must match the envs shape if
+    the parent env is batch-locked (:obj:`env.batch_locked=True`).
+    If the env is not batch-locked (e.g. model-based envs), it is assumed that the batch is
+    given by the input tensordict instead.
+
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
-        >>> base_env = GymEnv("Pendulum-v1")
+        >>> base_env = SerialEnv(2, GymEnv("Pendulum-v1"))
         >>> env = TransformedEnv(base_env)
-        >>> env.append_transform(TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([3])))
+        >>> # the env is batch-locked, so the leading dims of the spec must match those of the env
+        >>> env.append_transform(TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([2, 3])))
         >>> print(env.reset())
         TensorDict(
             fields={
@@ -2404,12 +2412,13 @@ class TensorDictPrimer(Transform):
         return tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        shape = () if not self.parent.batch_locked else self.parent.batch_size
         for key, spec in self.primers.items():
             if self.random:
-                value = spec.rand()
+                value = spec.rand(shape)
             else:
                 value = torch.full_like(
-                    spec.rand(),
+                    spec.zero(shape),
                     self.default_value,
                 )
             tensordict.set(key, value)

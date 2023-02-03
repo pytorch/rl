@@ -16,6 +16,7 @@ from _utils_internal import (  # noqa
     get_available_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
+    PONG_VERSIONED,
     retry,
 )
 from mocking_classes import (
@@ -1511,7 +1512,7 @@ class TestCenterCrop(TransformBase):
         ct = Compose(
             ToTensorImage(), CenterCrop(out_keys=out_key, w=20, h=20, in_keys=keys)
         )
-        env = TransformedEnv(GymEnv("ALE/Pong-v5"), ct)
+        env = TransformedEnv(GymEnv(PONG_VERSIONED), ct)
         td = env.reset()
         if out_key is None:
             assert td["pixels"].shape == torch.Size([3, 20, 20])
@@ -2282,7 +2283,7 @@ class TestFlattenObservation(TransformBase):
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
     def test_transform_env(self, out_keys):
         env = TransformedEnv(
-            GymEnv("ALE/Pong-v5"), FlattenObservation(-3, -1, out_keys=out_keys)
+            GymEnv(PONG_VERSIONED), FlattenObservation(-3, -1, out_keys=out_keys)
         )
         check_env_specs(env)
         if out_keys:
@@ -3335,7 +3336,7 @@ class TestResize(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="No gym")
     def test_transform_env(self):
         env = TransformedEnv(
-            GymEnv("ALE/Pong-v5"),
+            GymEnv(PONG_VERSIONED),
             Compose(ToTensorImage(), Resize(20, 21, in_keys=["pixels"])),
         )
         check_env_specs(env)
