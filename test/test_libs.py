@@ -324,7 +324,7 @@ class TestCollectorLib:
             raise pytest.skip("no cuda device")
 
         env_fn = EnvCreator(lambda: env_lib(*env_args, **env_kwargs, device=device))
-        env = ParallelEnv(3, env_fn)
+        env = ParallelEnv(2, env_fn)
         collector = MultiaSyncDataCollector(
             create_env_fn=[env, env],
             policy=RandomPolicy(action_spec=env.action_spec),
@@ -342,7 +342,7 @@ class TestCollectorLib:
         )
         for i, data in enumerate(collector):
             if i == 3:
-                assert data.shape[0] == 3
+                assert data.shape[0] == 2
                 assert data.shape[1] == 7
                 break
         collector.shutdown()
@@ -1080,7 +1080,7 @@ class TestVmas:
             )
             return env
 
-        env = ParallelEnv(3, make_vmas)
+        env = ParallelEnv(2, make_vmas)
 
         assert env.rollout(max_steps=3).device == devices[first]
 

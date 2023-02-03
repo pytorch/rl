@@ -218,9 +218,9 @@ def test_rollout_reset(env_name, frame_skip, parallel, seed=0):
             )
         )
     if parallel:
-        env = ParallelEnv(3, envs)
+        env = ParallelEnv(2, envs)
     else:
-        env = SerialEnv(3, envs)
+        env = SerialEnv(2, envs)
     env.set_seed(100)
     out = env.rollout(100, break_when_any_done=False)
     assert out.shape == torch.Size([3, 100])
@@ -335,17 +335,17 @@ class TestParallel:
             with pytest.raises(
                 ValueError, match="share_individual_td must be set to None"
             ):
-                SerialEnv(3, env_make, share_individual_td=share_individual_td)
+                SerialEnv(2, env_make, share_individual_td=share_individual_td)
             with pytest.raises(
                 ValueError, match="share_individual_td must be set to None"
             ):
-                ParallelEnv(3, env_make, share_individual_td=share_individual_td)
+                ParallelEnv(2, env_make, share_individual_td=share_individual_td)
             return
 
-        env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
+        env_serial = SerialEnv(2, env_make, share_individual_td=share_individual_td)
         env_serial.start()
         assert env_serial._single_task is single_task
-        env_parallel = ParallelEnv(3, env_make, share_individual_td=share_individual_td)
+        env_parallel = ParallelEnv(2, env_make, share_individual_td=share_individual_td)
         env_parallel.start()
         assert env_parallel._single_task is single_task
 
@@ -617,9 +617,9 @@ class TestParallel:
         # define env
 
         if parallel:
-            env = ParallelEnv(3, lambda: DiscreteActionVecMockEnv())
+            env = ParallelEnv(2, lambda: DiscreteActionVecMockEnv())
         else:
-            env = SerialEnv(3, lambda: DiscreteActionVecMockEnv())
+            env = SerialEnv(2, lambda: DiscreteActionVecMockEnv())
 
         # we must start the environment first
         env.reset()

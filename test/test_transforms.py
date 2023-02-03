@@ -807,7 +807,7 @@ class TestR3M(TransformBase):
 
         assert base_env_constructor().device == device
         if parallel:
-            base_env = ParallelEnv(3, base_env_constructor)
+            base_env = ParallelEnv(2, base_env_constructor)
         else:
             base_env = base_env_constructor()
         assert base_env.device == device
@@ -2716,7 +2716,7 @@ class TestNoop(TransformBase):
     @pytest.mark.parametrize("device", get_available_devices())
     def test_noop_reset_env_error(self, random, device, compose):
         torch.manual_seed(0)
-        env = SerialEnv(3, lambda: ContinuousActionVecMockEnv())
+        env = SerialEnv(2, lambda: ContinuousActionVecMockEnv())
         env.set_seed(100)
         noop_reset_env = NoopResetEnv(random=random)
         transformed_env = TransformedEnv(env)
@@ -3069,7 +3069,7 @@ class TestObservationNorm(TransformBase):
             return base_env
 
         if parallel:
-            base_env = SerialEnv(3, make_env)
+            base_env = SerialEnv(2, make_env)
             reduce_dim = (0, 1)
             cat_dim = 1
         else:
@@ -3119,7 +3119,7 @@ class TestObservationNorm(TransformBase):
             return base_env
 
         if parallel:
-            base_env = SerialEnv(3, make_env)
+            base_env = SerialEnv(2, make_env)
             reduce_dim = (0, 1, 3, 4)
             keep_dim = (3, 4)
             cat_dim = 1
@@ -4592,7 +4592,7 @@ class TestTensorDictPrimer(TransformBase):
             return transformed_env
 
         if serial:
-            env = SerialEnv(3, make_env)
+            env = SerialEnv(2, make_env)
         else:
             env = make_env()
 
@@ -5142,7 +5142,7 @@ class TestVIP(TransformBase):
 
         assert base_env_constructor().device == device
         if parallel:
-            base_env = ParallelEnv(3, base_env_constructor)
+            base_env = ParallelEnv(2, base_env_constructor)
         else:
             base_env = base_env_constructor()
         assert base_env.device == device
@@ -5485,7 +5485,7 @@ class TestVecNorm:
                 lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
             )
             env_input_keys = ["action", ContinuousActionVecMockEnv._out_key]
-        parallel_env = ParallelEnv(3, make_env, env_input_keys=env_input_keys)
+        parallel_env = ParallelEnv(2, make_env, env_input_keys=env_input_keys)
         queue_out = mp.Queue(1)
         queue_in = mp.Queue(1)
         proc = mp.Process(

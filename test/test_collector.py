@@ -309,7 +309,7 @@ def test_collector_env_reset():
         return GymEnv(PONG_VERSIONED, frame_skip=4)
 
     env = SerialEnv(2, make_env)
-    # env = SerialEnv(3, lambda: GymEnv("CartPole-v1", frame_skip=4))
+    # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
     env.set_seed(0)
     collector = SyncDataCollector(
         env, total_frames=10000, frames_per_batch=10000, split_trajs=False
