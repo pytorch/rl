@@ -171,6 +171,7 @@ class _BatchedEnv(EnvBase):
 
         super().__init__(device=None)
         self.is_closed = True
+        self._cache_in_keys = None
 
         self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
@@ -251,6 +252,15 @@ class _BatchedEnv(EnvBase):
         else:
             for _kwargs, _new_kwargs in zip(self.create_env_kwargs, kwargs):
                 _kwargs.update(_new_kwargs)
+
+    def _get_in_keys_to_exclude(self, tensordict):
+        if self._cache_in_keys is None:
+            self._cache_in_keys = list(
+                set(self.input_spec.keys(True)).intersection(
+                    tensordict.keys(True, True)
+                )
+            )
+        return self._cache_in_keys
 
     def _set_properties(self):
         meta_data = self.meta_data
