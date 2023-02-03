@@ -89,15 +89,6 @@ def dreamer_constructor_fixture():
     sys.path.pop()
 
 
-def _assert_keys_match(td, expeceted_keys):
-    td_keys = list(td.keys())
-    d = set(td_keys) - set(expeceted_keys)
-    assert len(d) == 0, f"{d} is in tensordict but unexpected: {td.keys()}"
-    d = set(expeceted_keys) - set(td_keys)
-    assert len(d) == 0, f"{d} is expected but not in tensordict: {td.keys()}"
-    assert len(td_keys) == len(expeceted_keys)
-
-
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.skipif(not _has_tv, reason="No torchvision library found")
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
@@ -152,16 +143,20 @@ def test_dqn_maker(
         else:
             actor(td)
 
-        expected_keys = ["done", "action", "action_value"]
+        expected_keys = [
+            "done",
+            "action",
+            "action_value",
+        ]
         if from_pixels:
-            expected_keys += ["pixels", "pixels_orig"]
+            expected_keys += ["pixels", "pixels_orig", "_reset"]
         else:
             expected_keys += ["observation_orig", "observation_vector"]
 
         if not distributional:
             expected_keys += ["chosen_action_value"]
         try:
-            _assert_keys_match(td, expected_keys)
+            assert set(td.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -217,7 +212,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
                 actor(td)
         expected_keys = ["done", "action", "param"]
         if from_pixels:
-            expected_keys += ["pixels", "hidden", "pixels_orig"]
+            expected_keys += ["pixels", "hidden", "pixels_orig", "_reset"]
         else:
             expected_keys += ["observation_vector", "observation_orig"]
 
@@ -225,7 +220,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
             expected_keys += ["scale", "loc", "_eps_gSDE"]
 
         try:
-            _assert_keys_match(td, expected_keys)
+            assert set(td.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -245,7 +240,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
             value(td)
         expected_keys += ["state_action_value"]
         try:
-            _assert_keys_match(td, expected_keys)
+            assert set(td.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -359,8 +354,12 @@ def test_ppo_maker(
             else:
                 actor(td_clone)
 
+        if from_pixels:
+            # for CatFrames
+            expected_keys += ["_reset"]
+
         try:
-            _assert_keys_match(td_clone, expected_keys)
+            assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -386,6 +385,9 @@ def test_ppo_maker(
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
         ]
+        if from_pixels:
+            # for CatFrames
+            expected_keys += ["_reset"]
         if shared_mapping:
             expected_keys += ["hidden"]
         if len(gsde):
@@ -398,7 +400,7 @@ def test_ppo_maker(
         else:
             value(td_clone)
         try:
-            _assert_keys_match(td_clone, expected_keys)
+            assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -495,6 +497,9 @@ def test_a2c_maker(
             "action",
             "sample_log_prob",
         ]
+        if from_pixels:
+            # for CatFrames
+            expected_keys += ["_reset"]
         if action_space == "continuous":
             expected_keys += ["loc", "scale"]
         else:
@@ -514,7 +519,7 @@ def test_a2c_maker(
                 actor(td_clone)
 
         try:
-            _assert_keys_match(td_clone, expected_keys)
+            assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -540,6 +545,9 @@ def test_a2c_maker(
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
         ]
+        if from_pixels:
+            # for CatFrames
+            expected_keys += ["_reset"]
         if shared_mapping:
             expected_keys += ["hidden"]
         if len(gsde):
@@ -552,7 +560,7 @@ def test_a2c_maker(
         else:
             value(td_clone)
         try:
-            _assert_keys_match(td_clone, expected_keys)
+            assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -631,6 +639,9 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             "loc",
             "scale",
         ]
+        if from_pixels:
+            # for CatFrames
+            expected_keys += ["_reset"]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
 
@@ -643,7 +654,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
                 torch.testing.assert_close(td_clone.get("action"), tsf_loc)
 
         try:
-            _assert_keys_match(td_clone, expected_keys)
+            assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -667,7 +678,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             expected_keys += ["_eps_gSDE"]
 
         try:
-            _assert_keys_match(td_clone, expected_keys)
+            assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -687,7 +698,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             expected_keys += ["_eps_gSDE"]
 
         try:
-            _assert_keys_match(td, expected_keys)
+            assert set(td.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -756,12 +767,12 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
         if from_pixels:
-            expected_keys += ["hidden", "pixels", "pixels_orig"]
+            expected_keys += ["hidden", "pixels", "pixels_orig", "_reset"]
         else:
             expected_keys += ["observation_vector", "observation_orig"]
 
         try:
-            _assert_keys_match(td, expected_keys)
+            assert set(td.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -786,11 +797,11 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
         if from_pixels:
-            expected_keys += ["hidden", "pixels", "pixels_orig"]
+            expected_keys += ["hidden", "pixels", "pixels_orig", "_reset"]
         else:
             expected_keys += ["observation_vector", "observation_orig"]
         try:
-            _assert_keys_match(td, expected_keys)
+            assert set(td.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -861,6 +872,7 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "state",
             ("next", "reco_pixels"),
             "next",
+            "_reset",
         }
         assert set(out.keys(True)) == expected_keys
 
