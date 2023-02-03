@@ -150,6 +150,7 @@ class BraxWrapper(_EnvWrapper):
         # extract state spec from instance
         self.state_spec = self._make_state_spec(env)
         self.input_spec["state"] = self.state_spec
+        self.observation_spec["state"] = self.state_spec.clone()
 
     def _make_state_example(self):
         key = jax.random.PRNGKey(0)
@@ -182,8 +183,9 @@ class BraxWrapper(_EnvWrapper):
         state = _object_to_tensordict(state, self.device, self.batch_size)
 
         # build result
-        reward = state.get("reward").view(*self.reward_spec.shape)
-        done = state.get("done").bool().view(*self.reward_spec.shape)
+        state["reward"] = reward = state.get("reward").view(*self.reward_spec.shape)
+        state["done"] = state.get("done").view(*self.reward_spec.shape)
+        done = state["done"].bool()
         tensordict_out = TensorDict(
             source={
                 "observation": state.get("obs"),
@@ -215,8 +217,10 @@ class BraxWrapper(_EnvWrapper):
         next_state = _object_to_tensordict(next_state, self.device, self.batch_size)
 
         # build result
-        reward = next_state.get("reward").view(self.reward_spec.shape)
-        done = next_state.get("done").bool().view(self.reward_spec.shape)
+        next_state.set("reward", next_state.get("reward").view(self.reward_spec.shape))
+        next_state.set("done", next_state.get("done").view(self.reward_spec.shape))
+        done = next_state["done"].bool()
+        reward = next_state["reward"]
         tensordict_out = TensorDict(
             source={
                 "observation": next_state.get("obs"),
@@ -244,12 +248,15 @@ class BraxWrapper(_EnvWrapper):
         )
 
         # extract done values: we assume a shape identical to reward
-        next_done = next_state_nograd.get("done").bool().view(*self.reward_spec.shape)
+        next_done = next_state_nograd.get("done").view(*self.reward_spec.shape)
+        next_reward = next_reward.view(*self.reward_spec.shape)
 
         # merge with tensors with grad function
         next_state = next_state_nograd
         next_state["obs"] = next_obs
-        next_state["reward"] = next_reward.view(*self.reward_spec.shape)
+        next_state.set("reward", next_reward)
+        next_state.set("done", next_done)
+        next_done = next_done.bool()
         next_state["qp"].update(dict(zip(qp_keys, next_qp_values)))
 
         # build result

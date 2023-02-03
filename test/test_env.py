@@ -40,7 +40,7 @@ from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
-from torchrl.envs.transforms import Compose, TransformedEnv
+from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
 from torchrl.envs.utils import step_mdp
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
@@ -193,6 +193,38 @@ def test_rollout_predictability(device):
         torch.arange(first, first + 100, device=device)
         == td_out.get("action").squeeze()
     ).all()
+
+
+@pytest.mark.skipif(not _has_gym, reason="no gym")
+@pytest.mark.parametrize(
+    "env_name",
+    [
+        PENDULUM_VERSIONED,
+    ],
+)
+@pytest.mark.parametrize(
+    "frame_skip",
+    [
+        1,
+    ],
+)
+@pytest.mark.parametrize("parallel", [False, True])
+def test_rollout_reset(env_name, frame_skip, parallel, seed=0):
+    envs = []
+    for horizon in [20, 30, 40]:
+        envs.append(
+            lambda horizon=horizon: TransformedEnv(
+                GymEnv(env_name, frame_skip=frame_skip), StepCounter(horizon)
+            )
+        )
+    if parallel:
+        env = ParallelEnv(3, envs)
+    else:
+        env = SerialEnv(3, envs)
+    env.set_seed(100)
+    out = env.rollout(100, break_when_any_done=False)
+    assert out.shape == torch.Size([3, 100])
+    assert (out["done"].squeeze().sum(-1) == torch.tensor([5, 3, 2])).all()
 
 
 class TestModelBasedEnvBase:
@@ -585,9 +617,9 @@ class TestParallel:
         # define env
 
         if parallel:
-            env = ParallelEnv(3, lambda: DiscreteActionVecMockEnv())
+            env = ParallelEnv(2, lambda: DiscreteActionVecMockEnv())
         else:
-            env = SerialEnv(3, lambda: DiscreteActionVecMockEnv())
+            env = SerialEnv(2, lambda: DiscreteActionVecMockEnv())
 
         # we must start the environment first
         env.reset()
