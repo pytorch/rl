@@ -1959,6 +1959,11 @@ class CompositeSpec(TensorSpec):
         return out
 
 
+class LazyStackedCompositeSpec(CompositeSpec):
+    def __init__(self, *composite_specs, dim):
+        self.composite_spec = composite_specs
+        self.dim = dim
+
 def _keys_to_empty_composite_spec(keys):
     if not len(keys):
         return
