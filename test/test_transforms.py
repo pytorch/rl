@@ -5807,6 +5807,8 @@ class TestTransforms:
         if device.type == "cuda":
             with pytest.raises(RuntimeError, match="cannot pin"):
                 pin_mem(td)
+            with pytest.raises(RuntimeError, match="cannot pin"):
+                pin_mem._call(td)
             return
         pin_mem(td)
         for item in td.values():

@@ -2432,6 +2432,7 @@ class PinMemoryTransform(Transform):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         return tensordict.pin_memory()
 
+    forward = _call
 
 def _sum_left(val, dest):
     while val.ndimension() > dest.ndimension():
