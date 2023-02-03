@@ -443,8 +443,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def _get_in_keys_to_exclude(self, tensordict):
         if self._cache_in_keys is None:
-            self._cache_in_keys = set(self.input_spec.keys(True)).intersection(
-                tensordict.keys(True, True)
+            self._cache_in_keys = list(
+                set(self.input_spec.keys(True)).intersection(
+                    tensordict.keys(True, True)
+                )
             )
         return self._cache_in_keys
 
