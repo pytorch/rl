@@ -123,7 +123,7 @@ def make_env_transforms(
         env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
-        env.append_transform(FlattenObservation(0, -3))
+        env.append_transform(FlattenObservation(0, -3, allow_positive_dim=True))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"], dim=-3))
         if stats is None:
             obs_stats = {
@@ -481,16 +481,9 @@ def initialize_observation_norm_transforms(
 
     if isinstance(proof_environment.transform, Compose):
         for transform in proof_environment.transform:
-            if (
-                isinstance(transform, ObservationNorm)
-                and transform.loc is None
-                and transform.scale is None
-            ):
+            if isinstance(transform, ObservationNorm) and not transform.initialized:
                 transform.init_stats(num_iter=num_iter, key=key)
-    elif (
-        proof_environment.transform.loc is None
-        and proof_environment.transform.scale is None
-    ):
+    elif not proof_environment.transform.initialized:
         proof_environment.transform.init_stats(num_iter=num_iter, key=key)
 
 

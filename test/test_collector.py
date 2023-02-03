@@ -149,7 +149,7 @@ def _is_consistent_device_type(
     _os_is_windows and _python_is_3_10,
     reason="Windows Access Violation in torch.multiprocessing / BrokenPipeError in multiprocessing.connection",
 )
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("device", ["cuda", "cpu", None])
 @pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
 @pytest.mark.parametrize("storing_device", ["cuda", "cpu", None])
@@ -233,7 +233,7 @@ def test_output_device_consistency(
     ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     if num_env == 1:
@@ -309,7 +309,7 @@ def test_collector_env_reset():
         return GymEnv(PONG_VERSIONED, frame_skip=4)
 
     env = SerialEnv(2, make_env)
-    # env = SerialEnv(3, lambda: GymEnv("CartPole-v1", frame_skip=4))
+    # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
     env.set_seed(0)
     collector = SyncDataCollector(
         env, total_frames=10000, frames_per_batch=10000, split_trajs=False
@@ -331,7 +331,7 @@ def test_collector_env_reset():
     assert _data["reward"].sum(-2).min() == -21
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["vec"])
 def test_collector_done_persist(num_env, env_name, seed=5):
     if num_env == 1:
@@ -381,7 +381,7 @@ def test_collector_done_persist(num_env, env_name, seed=5):
 
 
 @pytest.mark.parametrize("frames_per_batch", [200, 10])
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["vec"])
 def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
     if num_env == 1:
@@ -475,7 +475,7 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 #         ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_collector_batch_size(num_env, env_name, seed=100):
     if num_env == 3 and _os_is_windows:
@@ -498,7 +498,7 @@ def test_collector_batch_size(num_env, env_name, seed=100):
 
     torch.manual_seed(0)
     np.random.seed(0)
-    num_workers = 4
+    num_workers = 2
     frames_per_batch = 20
     ccollector = MultiaSyncDataCollector(
         create_env_fn=[env_fn for _ in range(num_workers)],
@@ -534,7 +534,7 @@ def test_collector_batch_size(num_env, env_name, seed=100):
     ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_concurrent_collector_seed(num_env, env_name, seed=100):
     if num_env == 1:
@@ -581,7 +581,7 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
     ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
     if num_env == 1:
@@ -644,7 +644,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
     collector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("collector_class", [SyncDataCollector, aSyncDataCollector])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
@@ -1100,7 +1100,7 @@ def test_collector_device_combinations(device, storing_device):
     ],
 )
 class TestAutoWrap:
-    num_envs = 3
+    num_envs = 2
 
     @pytest.fixture
     def env_maker(self):

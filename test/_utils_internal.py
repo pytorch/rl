@@ -120,6 +120,16 @@ def dtype_fixture():
     torch.set_default_dtype(dtype)
 
 
+@contextlib.contextmanager
+def set_global_var(module, var_name, value):
+    old_value = getattr(module, var_name)
+    setattr(module, var_name, value)
+    try:
+        yield
+    finally:
+        setattr(module, var_name, old_value)
+
+
 def _make_envs(
     env_name,
     frame_skip,
@@ -263,13 +273,3 @@ def get_transform_out(env_name, transformed_in):
             )
 
     return t_out
-
-
-@contextlib.contextmanager
-def set_global_var(module, var_name, value):
-    old_value = getattr(module, var_name)
-    setattr(module, var_name, value)
-    try:
-        yield
-    finally:
-        setattr(module, var_name, old_value)

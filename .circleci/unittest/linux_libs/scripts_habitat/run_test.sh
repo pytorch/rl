@@ -41,5 +41,6 @@ env = HabitatEnv('HabitatRenderPick-v0')
 env.reset()
 """
 
-coverage run -m pytest test/test_libs.py --instafail -v --durations 20 --capture no -k TestHabitat
+python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 --capture no -k TestHabitat
+coverage combine
 coverage xml -i
