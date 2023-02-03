@@ -2434,6 +2434,7 @@ class PinMemoryTransform(Transform):
 
     forward = _call
 
+
 def _sum_left(val, dest):
     while val.ndimension() > dest.ndimension():
         val = val.sum(0)
