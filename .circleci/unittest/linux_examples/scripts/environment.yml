@@ -18,6 +18,7 @@ dependencies:
     - pytest-cov
     - pytest-mock
     - pytest-instafail
+    - pytest-retry
     - expecttest
     - pyyaml
     - scipy
