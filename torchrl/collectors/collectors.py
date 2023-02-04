@@ -674,7 +674,8 @@ class SyncDataCollector(_DataCollector):
             _reset = None
             self._tensordict.zero_()
 
-        self.env.reset(self._tensordict, **kwargs)
+        self._tensordict.update(self.env.reset(**kwargs), inplace=True)
+        # self.env.reset(self._tensordict, **kwargs)
         if _reset is not None:
             step_count = self._tensordict[("collector", "step_count")]
             step_count[_reset] = 0
