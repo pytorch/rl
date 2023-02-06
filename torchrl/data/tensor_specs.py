@@ -9,6 +9,7 @@ import abc
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
+from functools import wraps
 from textwrap import indent
 from typing import (
     Any,
@@ -233,6 +234,19 @@ class TensorSpec:
     dtype: torch.dtype = torch.float
     domain: str = ""
 
+    SPEC_HANDLED_FUNCTIONS = {}
+
+    @classmethod
+    def implements_for_spec(cls, torch_function: Callable) -> Callable:
+        """Register a torch function override for TensorSpec."""
+
+        @wraps(torch_function)
+        def decorator(func):
+            cls.SPEC_HANDLED_FUNCTIONS[torch_function] = func
+            return func
+
+        return decorator
+
     def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
         """Encodes a value given the specified spec, and return the corresponding tensor.
 
@@ -436,6 +450,259 @@ class TensorSpec:
         string = f"{self.__class__.__name__}(\n     {sub_string})"
         return string
 
+    @classmethod
+    def __torch_function__(
+        cls,
+        func: Callable,
+        types,
+        args: Tuple = (),
+        kwargs: Optional[dict] = None,
+    ) -> Callable:
+        if kwargs is None:
+            kwargs = {}
+        if func not in cls.SPEC_HANDLED_FUNCTIONS or not all(
+            issubclass(t, (TensorSpec,)) for t in types
+        ):
+            return NotImplemented(
+                f"func {func} for spec {cls} with handles {cls.SPEC_HANDLED_FUNCTIONS}"
+            )
+        return cls.SPEC_HANDLED_FUNCTIONS[func](*args, **kwargs)
+
+
+class LazyStackedTensorSpec(TensorSpec):
+    """A lazy representation of a stack of tensor specs.
+
+    Stacks tensor-specs together along one dimension.
+    When random samples are drawn, a stack of samples is returned if possible.
+    If not, an error is thrown.
+
+    Indexing is allowed but only along the stack dimension.
+
+    This class is aimed to be used in multi-task and multi-agent settings, where
+    heterogeneous specs may occur (same semantic but different shape).
+
+    """
+
+    def __init__(self, *specs: TensorSpec, dim):
+        self._specs = specs
+        self.dim = dim
+        if self.dim < 0:
+            self.dim = len(self.shape) + self.dim
+
+    def __getitem__(self, item):
+        is_key = isinstance(item, str) or (
+            isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
+        )
+        if is_key:
+            return torch.stack([spec[item] for spec in self._specs])
+        elif isinstance(item, tuple):
+            # quick check that the index is along the stacked dim
+            # case 1: index is a tuple, and the first arg is an ellipsis. Then dim must be the last dim of all composite_specs
+            if item[0] is Ellipsis:
+                if len(item) == 1:
+                    return self
+                elif self.dim == len(self.shape) - 1 and len(item) == 2:
+                    # we can return
+                    return self._specs[item[1]]
+                elif len(item) > 2:
+                    # check that there is only one non-slice index
+                    assigned = False
+                    dim_idx = self.dim
+                    for i, _item in enumerate(item[1:]):
+                        if (
+                            isinstance(_item, slice)
+                            and not (
+                                _item.start is None
+                                and _item.stop is None
+                                and _item.step is None
+                            )
+                        ) or not isinstance(_item, slice):
+                            if assigned:
+                                raise RuntimeError(
+                                    "Found more than one meaningful index in a stacked composite spec."
+                                )
+                            item = _item
+                            dim_idx = i + 1
+                            assigned = True
+                        if not assigned:
+                            return self
+                        if dim_idx != self.dim:
+                            raise RuntimeError(
+                                f"Indexing occured along dimension {dim_idx} but stacking was done along dim {self.dim}."
+                            )
+                        out = self._specs[item]
+                        if isinstance(out, TensorSpec):
+                            return out
+                        return torch.stack(list(out), 0)
+                else:
+                    raise IndexError(
+                        f"Indexing a {self.__class__.__name__} with [..., idx] is only permitted if the stack dimension is the last dimension. "
+                        f"Got self.dim={self.dim} and self.shape={self.shape}."
+                    )
+            elif len(item) >= 2 and item[-1] is Ellipsis:
+                return self[item[:-1]]
+            elif any(_item is Ellipsis for _item in item):
+                raise IndexError("Cannot index along multiple dimensions.")
+            # Ellipsis is now ruled out
+            elif any(_item is None for _item in item):
+                raise IndexError(
+                    f"Cannot index a {self.__class__.__name__} with None values"
+                )
+            # Must be an index with slices then
+            else:
+                for i, _item in enumerate(item):
+                    if i == self.dim:
+                        out = self._specs[_item]
+                        if isinstance(out, TensorSpec):
+                            return out
+                        return torch.stack(list(out), 0)
+                    elif isinstance(_item, slice):
+                        # then the slice must be trivial
+                        if not (_item.step is _item.start is _item.stop is None):
+                            raise IndexError(
+                                f"Got a non-trivial index at dim {i} when only the dim {self.dim} could be indexed."
+                            )
+                else:
+                    return self
+        else:
+            if not self.dim == 0:
+                raise IndexError(
+                    f"Trying to index a {self.__class__.__name__} along dimension 0 when the stack dimension is {self.dim}."
+                )
+            out = self._specs[item]
+            if isinstance(out, TensorSpec):
+                return out
+            return torch.stack(list(out), 0)
+
+    @property
+    def shape(self):
+        shape = list(self._specs[0].shape)
+        dim = self.dim
+        if dim < 0:
+            dim = len(shape) + dim + 1
+        shape.insert(dim, len(self._specs))
+        return torch.Size(shape)
+
+    def clone(self) -> CompositeSpec:
+        return torch.stack([spec.clone() for spec in self._specs], 0)
+
+    def expand(self, *shape):
+        if len(shape) == 1 and not isinstance(shape[0], (int,)):
+            return self.expand(*shape[0])
+        expand_shape = shape[: -len(self.shape)]
+        existing_shape = self.shape
+        shape_check = shape[-len(self.shape) :]
+        for _i, (size1, size2) in enumerate(zip(existing_shape, shape_check)):
+            if size1 != size2 and size1 != 1:
+                raise RuntimeError(
+                    f"Expanding a non-singletom dimension: existing shape={size1} vs expand={size2}"
+                )
+            elif size1 != size2 and size1 == 1 and _i == self.dim:
+                # if we're expanding along the stack dim we just need to clone the existing spec
+                return torch.stack(
+                    [self._specs[0].clone() for _ in range(size2)], self.dim
+                ).expand(*shape)
+        if _i != len(self.shape) - 1:
+            raise RuntimeError(
+                f"Trying to expand non-congruent shapes: received {shape} when the shape is {self.shape}."
+            )
+        # remove the stack dim from the expanded shape, which we know to match
+        unstack_shape = list(expand_shape) + [
+            s for i, s in enumerate(shape_check) if i != self.dim
+        ]
+        return torch.stack(
+            [spec.expand(unstack_shape) for spec in self._specs],
+            self.dim + len(expand_shape),
+        )
+
+    def zero(self, shape=None) -> TensorDictBase:
+        if shape is not None:
+            dim = self.dim + len(shape)
+        else:
+            dim = self.dim
+        return torch.stack([spec.zero(shape) for spec in self._specs], dim)
+
+    def rand(self, shape=None) -> TensorDictBase:
+        if shape is not None:
+            dim = self.dim + len(shape)
+        else:
+            dim = self.dim
+        return torch.stack([spec.rand(shape) for spec in self._specs], dim)
+
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        return torch.stack([spec.to(dest) for spec in self._specs], self.dim)
+
+    def __eq__(self, other):
+        # requires unbind to be implemented
+        pass
+
+    def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
+        pass
+
+    def __len__(self):
+        pass
+
+    def values(self) -> ValuesView:
+        pass
+
+    def items(self) -> ItemsView:
+        pass
+
+    def keys(
+        self, yield_nesting_keys: bool = False, nested_keys: bool = True
+    ) -> KeysView:
+        pass
+
+    def project(self, val: TensorDictBase) -> TensorDictBase:
+        pass
+
+    def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
+        pass
+
+    def type_check(
+        self,
+        value: Union[torch.Tensor, TensorDictBase],
+        selected_keys: Union[str, Optional[Sequence[str]]] = None,
+    ):
+        pass
+
+    def __repr__(self):
+        pass
+
+    def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+        pass
+
+    def __delitem__(self, key):
+        pass
+
+    def __iter__(self):
+        pass
+
+    def __setitem__(self, key, value):
+        pass
+
+    @property
+    def device(self) -> DEVICE_TYPING:
+        pass
+
+    @property
+    def ndim(self):
+        return self.ndimension()
+
+    def ndimension(self):
+        return len(self.shape)
+
+    def set(self, name, spec):
+        if spec is not None:
+            shape = spec.shape
+            if shape[: self.ndim] != self.shape:
+                raise ValueError(
+                    "The shape of the spec and the CompositeSpec mismatch: the first "
+                    f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
+                    f"CompositeSpec.shape={self.shape}."
+                )
+        self._specs[name] = spec
+
 
 @dataclass(repr=False)
 class OneHotDiscreteTensorSpec(TensorSpec):
@@ -475,6 +742,8 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     device: torch.device = torch.device("cpu")
     dtype: torch.dtype = torch.float
     domain: str = ""
+
+    # SPEC_HANDLED_FUNCTIONS = {}
 
     def __init__(
         self,
@@ -636,6 +905,8 @@ class BoundedTensorSpec(TensorSpec):
 
     """
 
+    # SPEC_HANDLED_FUNCTIONS = {}
+
     def __init__(
         self,
         minimum: Union[float, torch.Tensor, np.ndarray],
@@ -679,17 +950,17 @@ class BoundedTensorSpec(TensorSpec):
             if shape is not None and shape != maximum.shape:
                 raise RuntimeError(err_msg)
             shape = maximum.shape
-            minimum = minimum.expand(*shape).clone()
+            minimum = minimum.expand(shape).clone()
         elif minimum.ndimension():
             if shape is not None and shape != minimum.shape:
                 raise RuntimeError(err_msg)
             shape = minimum.shape
-            maximum = maximum.expand(*shape).clone()
+            maximum = maximum.expand(shape).clone()
         elif shape is None:
             raise RuntimeError(err_msg)
         else:
-            minimum = minimum.expand(*shape).clone()
-            maximum = maximum.expand(*shape).clone()
+            minimum = minimum.expand(shape).clone()
+            maximum = maximum.expand(shape).clone()
 
         if minimum.numel() > maximum.numel():
             maximum = maximum.expand_as(minimum).clone()
@@ -830,6 +1101,8 @@ class UnboundedContinuousTensorSpec(TensorSpec):
             (should be an floating point dtype such as float, double etc.)
     """
 
+    # SPEC_HANDLED_FUNCTIONS = {}
+
     def __init__(
         self,
         shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
@@ -898,6 +1171,8 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         dtype (str or torch.dtype, optional): dtype of the tensors
             (should be an integer dtype such as long, uint8 etc.)
     """
+
+    # SPEC_HANDLED_FUNCTIONS = {}
 
     def __init__(
         self,
@@ -994,6 +1269,8 @@ class BinaryDiscreteTensorSpec(TensorSpec):
     dtype: torch.dtype = torch.float
     domain: str = ""
 
+    # SPEC_HANDLED_FUNCTIONS = {}
+
     def __init__(
         self,
         n: int,
@@ -1003,7 +1280,7 @@ class BinaryDiscreteTensorSpec(TensorSpec):
     ):
         dtype, device = _default_dtype_and_device(dtype, device)
         box = BinaryBox(n)
-        if shape is None:
+        if shape is None or not len(shape):
             shape = torch.Size((n,))
         else:
             shape = torch.Size(shape)
@@ -1092,6 +1369,8 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         False
 
     """
+
+    # SPEC_HANDLED_FUNCTIONS = {}
 
     def __init__(
         self,
@@ -1276,6 +1555,8 @@ class DiscreteTensorSpec(TensorSpec):
     dtype: torch.dtype = torch.float
     domain: str = ""
 
+    # SPEC_HANDLED_FUNCTIONS = {}
+
     def __init__(
         self,
         n: int,
@@ -1388,6 +1669,8 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         >>> ts.is_in(torch.tensor([2, 2, 1]))
         False
     """
+
+    # SPEC_HANDLED_FUNCTIONS = {}
 
     def __init__(
         self,
@@ -1590,6 +1873,8 @@ class CompositeSpec(TensorSpec):
 
     shape: torch.Size
     domain: str = "composite"
+
+    SPEC_HANDLED_FUNCTIONS = {}
 
     @classmethod
     def __new__(cls, *args, **kwargs):
@@ -1826,7 +2111,7 @@ class CompositeSpec(TensorSpec):
         }
         return TensorDict(
             _dict,
-            batch_size=shape,
+            batch_size=[*shape, *self.shape],
             device=self._device,
         )
 
@@ -1950,7 +2235,7 @@ class CompositeSpec(TensorSpec):
         return out
 
 
-class LazyStackedCompositeSpec(CompositeSpec):
+class LazyStackedCompositeSpec(LazyStackedTensorSpec):
     """A lazy representation of a stack of composite specs.
 
     Stacks composite specs together along one dimension.
@@ -1963,77 +2248,154 @@ class LazyStackedCompositeSpec(CompositeSpec):
 
     """
 
-    def __init__(self, *composite_specs: CompositeSpec, dim):
-        self.composite_specs = composite_specs
-        self.dim = dim
-        if self.dim < 0:
-            self.dim = len(self.shape) + self.dim
-
-    def __getitem__(self, item):
-        is_key = isinstance(item, str) or (
-            isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
-        )
-        if is_key:
-            return torch.stack(
-                [composite_spec[item] for composite_spec in self.composite_specs]
-            )
-        elif isinstance(item, tuple):
-            # quick check that the index is along the stacked dim
-            # case 1: index is a tuple, and the first arg is an ellipsis. Then dim must be the last dim of all composite_specs
-            if item[0] is Ellipsis:
-                if len(item) == 0:
-                    return self
-                elif self.dim == len(self.shape) - 1:
-                    # we can return
-                    return self.composite_specs[item[1]]
-                else:
-                    raise IndexError(
-                        "Indexing a LazyStackedCompositeSpec with [..., idx] is only permitted if the stack dimension is the last dimension. "
-                        f"Got self.dim={self.dim} and self.shape={self.shape}."
-                    )
-            elif len(item) == 2 and item[1] is Ellipsis:
-                return self[item[0]]
-            elif any(_item is Ellipsis for _item in item):
-                raise IndexError("Cannot index along multiple dimensions.")
-            # Ellipsis is now ruled out
-            elif any(_item is None for _item in item):
-                raise IndexError(
-                    "Cannot index a LazyStackedCompositeSpec with None values"
-                )
-            # Must be an index with slices then
-            else:
-                for i, _item in enumerate(item):
-                    if i == self.dim:
-                        return torch.stack(list(self.composite_specs)[_item], self.dim)
-                    elif isinstance(_item, slice):
-                        # then the slice must be trivial
-                        if not (_item.step is _item.start is _item.stop is None):
-                            raise IndexError(
-                                f"Got a non-trivial index at dim {i} when only the dim {self.dim} could be indexed."
-                            )
-                else:
-                    return self
-        else:
-            if not self.dim == 0:
-                raise IndexError(
-                    f"Trying to index a LazyStackedCompositeSpec along dimension 0 when the stack dimension is {self.dim}."
-                )
-            return torch.stack(list(self.composite_specs)[item], 0)
-
-    @property
-    def shape(self):
-        shape = list(self.composite_specs[0].shape)
-        dim = self.dim
-        if dim < 0:
-            dim = len(shape) + dim + 1
-        shape.insert(dim, len(self.composite_specs))
-        return torch.Size(shape)
-
-    def clone(self) -> CompositeSpec:
-        pass
-
-    def expand(self, *shape):
-        pass
+    # def __init__(self, *composite_specs: CompositeSpec, dim):
+    #     self._specs = composite_specs
+    #     self.dim = dim
+    #     if self.dim < 0:
+    #         self.dim = len(self.shape) + self.dim
+    #
+    # def __getitem__(self, item):
+    #     is_key = isinstance(item, str) or (
+    #         isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
+    #     )
+    #     if is_key:
+    #         return torch.stack([composite_spec[item] for composite_spec in self._specs])
+    #     elif isinstance(item, tuple):
+    #         # quick check that the index is along the stacked dim
+    #         # case 1: index is a tuple, and the first arg is an ellipsis. Then dim must be the last dim of all composite_specs
+    #         if item[0] is Ellipsis:
+    #             if len(item) == 1:
+    #                 return self
+    #             elif self.dim == len(self.shape) - 1 and len(item) == 2:
+    #                 # we can return
+    #                 return self._specs[item[1]]
+    #             elif len(item) > 2:
+    #                 # check that there is only one non-slice index
+    #                 assigned = False
+    #                 dim_idx = self.dim
+    #                 for i, _item in enumerate(item[1:]):
+    #                     if (
+    #                         isinstance(_item, slice)
+    #                         and not (
+    #                             _item.start is None
+    #                             and _item.stop is None
+    #                             and _item.step is None
+    #                         )
+    #                     ) or not isinstance(_item, slice):
+    #                         if assigned:
+    #                             raise RuntimeError(
+    #                                 "Found more than one meaningful index in a stacked composite spec."
+    #                             )
+    #                         item = _item
+    #                         dim_idx = i + 1
+    #                         assigned = True
+    #                     if not assigned:
+    #                         return self
+    #                     if dim_idx != self.dim:
+    #                         raise RuntimeError(
+    #                             f"Indexing occured along dimension {dim_idx} but stacking was done along dim {self.dim}."
+    #                         )
+    #                     out = self._specs[item]
+    #                     if isinstance(out, TensorSpec):
+    #                         return out
+    #                     return torch.stack(list(out), 0)
+    #             else:
+    #                 raise IndexError(
+    #                     f"Indexing a {self.__class__.__name__} with [..., idx] is only permitted if the stack dimension is the last dimension. "
+    #                     f"Got self.dim={self.dim} and self.shape={self.shape}."
+    #                 )
+    #         elif len(item) >= 2 and item[-1] is Ellipsis:
+    #             return self[item[:-1]]
+    #         elif any(_item is Ellipsis for _item in item):
+    #             raise IndexError("Cannot index along multiple dimensions.")
+    #         # Ellipsis is now ruled out
+    #         elif any(_item is None for _item in item):
+    #             raise IndexError(
+    #                 f"Cannot index a {self.__class__.__name__} with None values"
+    #             )
+    #         # Must be an index with slices then
+    #         else:
+    #             for i, _item in enumerate(item):
+    #                 if i == self.dim:
+    #                     out = self._specs[_item]
+    #                     if isinstance(out, TensorSpec):
+    #                         return out
+    #                     return torch.stack(list(out), 0)
+    #                 elif isinstance(_item, slice):
+    #                     # then the slice must be trivial
+    #                     if not (_item.step is _item.start is _item.stop is None):
+    #                         raise IndexError(
+    #                             f"Got a non-trivial index at dim {i} when only the dim {self.dim} could be indexed."
+    #                         )
+    #             else:
+    #                 return self
+    #     else:
+    #         if not self.dim == 0:
+    #             raise IndexError(
+    #                 f"Trying to index a {self.__class__.__name__} along dimension 0 when the stack dimension is {self.dim}."
+    #             )
+    #         out = self._specs[item]
+    #         if isinstance(out, TensorSpec):
+    #             return out
+    #         return torch.stack(list(out), 0)
+    #
+    # @property
+    # def shape(self):
+    #     shape = list(self._specs[0].shape)
+    #     dim = self.dim
+    #     if dim < 0:
+    #         dim = len(shape) + dim + 1
+    #     shape.insert(dim, len(self._specs))
+    #     return torch.Size(shape)
+    #
+    # def clone(self) -> CompositeSpec:
+    #     return torch.stack([spec.clone() for spec in self._specs], 0)
+    #
+    # def expand(self, *shape):
+    #     if len(shape) == 1 and not isinstance(shape[0], (int,)):
+    #         return self.expand(*shape[0])
+    #     expand_shape = shape[: -len(self.shape)]
+    #     existing_shape = self.shape
+    #     shape_check = shape[-len(self.shape) :]
+    #     for _i, (size1, size2) in enumerate(zip(existing_shape, shape_check)):
+    #         if size1 != size2 and size1 != 1:
+    #             raise RuntimeError(
+    #                 f"Expanding a non-singletom dimension: existing shape={size1} vs expand={size2}"
+    #             )
+    #         elif size1 != size2 and size1 == 1 and _i == self.dim:
+    #             # if we're expanding along the stack dim we just need to clone the existing spec
+    #             return torch.stack(
+    #                 [self._specs[0].clone() for _ in range(size2)], self.dim
+    #             ).expand(*shape)
+    #     if _i != len(self.shape) - 1:
+    #         raise RuntimeError(
+    #             f"Trying to expand non-congruent shapes: received {shape} when the shape is {self.shape}."
+    #         )
+    #     # remove the stack dim from the expanded shape, which we know to match
+    #     unstack_shape = list(expand_shape) + [
+    #         s for i, s in enumerate(shape_check) if i != self.dim
+    #     ]
+    #     return torch.stack(
+    #         [spec.expand(unstack_shape) for spec in self._specs],
+    #         self.dim + len(expand_shape),
+    #     )
+    #
+    # def zero(self, shape=None) -> TensorDictBase:
+    #     if shape is not None:
+    #         dim = self.dim + len(shape)
+    #     else:
+    #         dim = self.dim
+    #     return torch.stack([spec.zero(shape) for spec in self._specs], dim)
+    #
+    # def rand(self, shape=None) -> TensorDictBase:
+    #     if shape is not None:
+    #         dim = self.dim + len(shape)
+    #     else:
+    #         dim = self.dim
+    #     return torch.stack([spec.rand(shape) for spec in self._specs], dim)
+    #
+    # def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+    #     return torch.stack([spec.to(dest) for spec in self._specs], self.dim)
 
     def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
         pass
@@ -2041,16 +2403,7 @@ class LazyStackedCompositeSpec(CompositeSpec):
     def __eq__(self, other):
         pass
 
-    def zero(self, shape=None) -> TensorDictBase:
-        pass
-
-    def rand(self, shape=None) -> TensorDictBase:
-        pass
-
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
-        pass
-
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
         pass
 
     def __len__(self):
@@ -2116,6 +2469,45 @@ class LazyStackedCompositeSpec(CompositeSpec):
                     f"CompositeSpec.shape={self.shape}."
                 )
         self._specs[name] = spec
+
+
+# for SPEC_CLASS in [BinaryDiscreteTensorSpec, BoundedTensorSpec, DiscreteTensorSpec, MultiDiscreteTensorSpec, MultiOneHotDiscreteTensorSpec, OneHotDiscreteTensorSpec, UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec]:
+@TensorSpec.implements_for_spec(torch.stack)
+def _stack_specs(list_of_spec, dim, out=None):
+    if out is not None:
+        raise NotImplementedError(
+            "In-place spec modification is not a feature of torchrl, hence "
+            "torch.stack(list_of_specs, dim, out=spec) is not implemented."
+        )
+    if not len(list_of_spec):
+        raise ValueError("Cannot stack an empty list of specs.")
+    if isinstance(list_of_spec[0], TensorSpec):
+        if not all(isinstance(spec, TensorSpec) for spec in list_of_spec):
+            raise RuntimeError(
+                "Stacking specs cannot occur: Found more than one type of specs in the list."
+            )
+        return LazyStackedTensorSpec(*list_of_spec, dim=dim)
+    else:
+        raise NotImplementedError
+
+
+@CompositeSpec.implements_for_spec(torch.stack)
+def _stack_composite_specs(list_of_spec, dim, out=None):
+    if out is not None:
+        raise NotImplementedError(
+            "In-place spec modification is not a feature of torchrl, hence "
+            "torch.stack(list_of_specs, dim, out=spec) is not implemented."
+        )
+    if not len(list_of_spec):
+        raise ValueError("Cannot stack an empty list of specs.")
+    if isinstance(list_of_spec[0], CompositeSpec):
+        if not all(isinstance(spec, CompositeSpec) for spec in list_of_spec):
+            raise RuntimeError(
+                "Stacking specs cannot occur: Found more than one type of specs in the list."
+            )
+        return LazyStackedCompositeSpec(*list_of_spec, dim=dim)
+    else:
+        raise NotImplementedError
 
 
 def _keys_to_empty_composite_spec(keys):
