@@ -29,8 +29,6 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import get_binary_env_var
 
-_CHECK_IMAGES = get_binary_env_var("CHECK_IMAGES")
-
 DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
@@ -255,18 +253,11 @@ class TensorSpec:
                     val = val[0]
                 else:
                     val = np.array(val)
-            if _CHECK_IMAGES and val.dtype is np.dtype("uint8"):
-                # images can become noisy during training. if the CHECK_IMAGES
-                # env variable is True, we check that no more than half of the
-                # pixels are black or white.
-                v = (val == 0) | (val == 255)
-                v = v.sum() / v.size
-                assert v < 0.5, f"numpy: {val.shape}"
             if isinstance(val, np.ndarray) and not all(
                 stride > 0 for stride in val.strides
             ):
                 val = val.copy()
-            val = torch.tensor(val, dtype=self.dtype, device=self.device)
+            val = torch.tensor(val, device=self.device, dtype=self.dtype)
             if val.shape[-len(self.shape) :] != self.shape:
                 # option 1: add a singleton dim at the end
                 if (
