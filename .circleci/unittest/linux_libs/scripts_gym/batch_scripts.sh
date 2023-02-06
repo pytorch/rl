@@ -32,7 +32,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove -n ./cloned_env
+  conda env remove --prefix ./cloned_env
 done
 
 # gym[atari]==0.19 is broken, so we install only gym without dependencies.
@@ -49,7 +49,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove -n ./cloned_env
+  conda env remove --prefix ./cloned_env
 done
 
 # gym[atari]==0.20 installs ale-py==0.8, but this version is not compatible with gym<0.26, so we downgrade it.
@@ -67,7 +67,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove -n ./cloned_env
+  conda env remove --prefix ./cloned_env
 done
 
 for GYM_VERSION in '0.25'
@@ -83,7 +83,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove -n ./cloned_env
+  conda env remove --prefix ./cloned_env
 done
 
 # For this version "gym[accept-rom-license]" is required.
@@ -101,5 +101,5 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove -n ./cloned_env
+  conda env remove --prefix ./cloned_env
 done
