@@ -62,7 +62,7 @@ class _VIPNet(Transform):
         self.model_name = model_name
         if model_name == "resnet50":
             self.outdim = 2048
-            convnet = models.resnet50(pretrained=False)
+            convnet = models.resnet50()
             convnet.fc = torch.nn.Linear(self.outdim, 1024)
         else:
             raise NotImplementedError(
@@ -78,6 +78,8 @@ class _VIPNet(Transform):
         if self.del_keys:
             tensordict.exclude(*self.in_keys, inplace=True)
         return tensordict
+
+    forward = _call
 
     @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
@@ -105,7 +107,7 @@ class _VIPNet(Transform):
 
         for out_key in self.out_keys:
             observation_spec[out_key] = UnboundedContinuousTensorSpec(
-                shape=torch.Size([*dim, self.outdim]), device=device
+                shape=torch.Size([*dim, 1024]), device=device
             )
 
         return observation_spec
