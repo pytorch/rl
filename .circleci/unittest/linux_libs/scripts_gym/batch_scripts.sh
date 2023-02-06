@@ -14,8 +14,8 @@ conda activate ./env
 $DIR/install.sh
 
 # Extracted from run_test.sh to run once.
-#yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL mesa-libEGL-devel glfw mesa-libOSMesa-devel glew glew-devel egl-utils freeglut xorg-x11-server-Xvfb -y
-yum makecache && yum install libglvnd-devel glew xorg-x11-server-Xvfb zlib-devel egl-utils mesa-libEGL -y
+yum makecache && yum install libglvnd-devel zlib-devel mesa-libGL mesa-libGL-devel mesa-libEGL mesa-libEGL-devel glfw mesa-libOSMesa-devel glew glew-devel egl-utils freeglut xorg-x11-server-Xvfb -y
+#yum makecache && yum install libglvnd-devel glew xorg-x11-server-Xvfb zlib-devel egl-utils freeglut mesa-libEGL -y
 
 
 # This version is installed initially (see environment.yml)
