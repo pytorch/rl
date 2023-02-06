@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
 
-# this code is supposed to run on CPU
-# rendering with the combination of packages we have here in headless mode
-# is hard to nail.
-# IMPORTANT: As a consequence, we can't guarantee TorchRL compatibility with
-# rendering with this version of gym / mujoco-py.
-
 set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
