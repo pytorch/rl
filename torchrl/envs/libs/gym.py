@@ -383,7 +383,6 @@ class GymEnv(GymWrapper):
             del kwargs["pixels_only"]
         made_env = False
         kwargs["frameskip"] = self.frame_skip
-        self.wrapper_frame_skip = 1
         while not made_env:
             # env.__init__ may not be compatible with all the kwargs that
             # have been preset. We iterate through the various solutions
