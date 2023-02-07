@@ -188,6 +188,9 @@ class implement_for:
     will lead to the explicit error.
     In case of intersected ranges, first fitting implementation is used.
 
+    This wrapper also works to implement different backends for a same function (eg. gym vs gymnasium,
+    numpy vs jax-numpy etc).
+
     Args:
         module_name: version is checked for the module with this name (e.g. "gym").
         from_version: version from which implementation is compatible. Can be open (None).
