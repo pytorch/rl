@@ -6059,6 +6059,42 @@ def test_smoke_compose_transform(transform):
     Compose(transform())
 
 
+@pytest.mark.parametrize("transform", transforms)
+def test_clone_parent(transform):
+    base_env1 = ContinuousActionVecMockEnv()
+    base_env2 = ContinuousActionVecMockEnv()
+    env = TransformedEnv(base_env1, transform())
+    env_clone = TransformedEnv(base_env2, env.transform.clone())
+
+    assert env_clone.transform.parent.base_env is not base_env1
+    assert env_clone.transform.parent.base_env is base_env2
+    assert env.transform.parent.base_env is not base_env2
+    assert env.transform.parent.base_env is base_env1
+
+
+@pytest.mark.parametrize("transform", transforms)
+def test_clone_parent_compose(transform):
+    base_env1 = ContinuousActionVecMockEnv()
+    base_env2 = ContinuousActionVecMockEnv()
+    env = TransformedEnv(base_env1, Compose(ToTensorImage(), transform()))
+    t = env.transform.clone()
+
+    assert t.parent is None
+    assert t[0].parent is None
+    assert t[1].parent is None
+
+    env_clone = TransformedEnv(base_env2, Compose(ToTensorImage(), *t))
+
+    assert env_clone.transform[0].parent.base_env is not base_env1
+    assert env_clone.transform[0].parent.base_env is base_env2
+    assert env.transform[0].parent.base_env is not base_env2
+    assert env.transform[0].parent.base_env is base_env1
+    assert env_clone.transform[1].parent.base_env is not base_env1
+    assert env_clone.transform[1].parent.base_env is base_env2
+    assert env.transform[1].parent.base_env is not base_env2
+    assert env.transform[1].parent.base_env is base_env1
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
