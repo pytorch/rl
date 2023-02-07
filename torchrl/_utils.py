@@ -199,6 +199,19 @@ class implement_for:
     Examples:
         >>> @implement_for(“gym”, “0.13”, “0.14”)
         >>> def fun(self, x):
+        ...     # Older gym versions will return x + 1
+        ...     return x + 1
+        ...
+        >>> @implement_for(“gym”, “0.14”, None)
+        >>> def fun(self, x):
+        ...     # More recent gym versions will return x + 2
+        ...     return x + 2
+        ...
+        >>> @implement_for(“gymnasium”, “0.27”, None)
+        >>> def fun(self, x):
+        ...     # If gymnasium is to be used instead of gym, x+3 will be returned
+        ...     return x + 3
+        ...
 
         This indicates that the function is compatible with gym 0.13+, but doesn't with gym 0.14+.
     """
@@ -235,13 +248,10 @@ class implement_for:
             if (self.from_version is None or version >= self.from_version) and (
                 self.to_version is None or version < self.to_version
             ):
-                print(f"Found implementation {version} for {func_name}")
                 implementations[func_name] = fn
                 return fn
 
         except ModuleNotFoundError:
-            print(f"not found 0 for {func_name}")
             return unsupported
 
-        print(f"not found 1 for {func_name}")
         return unsupported
