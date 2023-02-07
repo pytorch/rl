@@ -146,7 +146,7 @@ def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.env_specs.keys()
 
 
-@implement_for("gym", "0.26.0", "0.26.2")
+@implement_for("gym", "0.26.0", None)
 def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.keys()
 

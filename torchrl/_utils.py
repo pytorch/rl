@@ -212,17 +212,12 @@ class implement_for:
 
     def __call__(self, fn):
         @wraps(fn)
-        def unsupported():
+        def unsupported(*args, **kwargs):
             raise ModuleNotFoundError(
                 f"Supported version of '{self.module_name}' has not been found."
             )
 
         # If the module is missing replace the function with the mock.
-        try:
-            module = import_module(self.module_name)
-        except ModuleNotFoundError:
-            return unsupported
-
         func_name = f"{fn.__module__}.{fn.__name__}"
         implementations = implement_for._implementations
 
@@ -230,12 +225,20 @@ class implement_for:
         if func_name in implementations:
             return implementations[func_name]
 
-        version = module.__version__
+        try:
+            module = import_module(self.module_name)
+            version = module.__version__
 
-        if (self.from_version is None or version >= self.from_version) and (
-            self.to_version is None or version < self.to_version
-        ):
-            implementations[func_name] = fn
-            return fn
+            if (self.from_version is None or version >= self.from_version) and (
+                self.to_version is None or version < self.to_version
+            ):
+                print(f"Found implementation {version} for {func_name}")
+                implementations[func_name] = fn
+                return fn
 
+        except ModuleNotFoundError:
+            print(f"not found 0 for {func_name}")
+            return unsupported
+
+        print(f"not found 1 for {func_name}")
         return unsupported
