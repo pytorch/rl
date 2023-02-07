@@ -9,10 +9,10 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
-    - gym
+    - gymnasium
     - pygame
-    - gym[accept-rom-license]
-    - gym[atari]
+    - gymnasium[accept-rom-license]
+    - gymnasium[atari]
     - moviepy
     - tqdm
     - pytest

@@ -26,13 +26,20 @@ from ...data.utils import numpy_to_torch_dtype_dict
 from ..gym_like import default_info_dict_reader, GymLikeEnv
 from ..utils import _classproperty
 
+IMPORT_ERROR = None
+_has_gym = False
 try:
-    import gym
+    import gymnasium as gym
 
     _has_gym = True
-except ImportError:
-    _has_gym = False
+except ImportError as err:
+    IMPORT_ERROR = err
+    try:
+        import gym
 
+        _has_gym = True
+    except ImportError as err:
+        IMPORT_ERROR = err
 
 if _has_gym:
     try:

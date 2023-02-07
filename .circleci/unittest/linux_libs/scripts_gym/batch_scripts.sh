@@ -103,3 +103,21 @@ do
   conda deactivate
   conda env remove --prefix ./cloned_env
 done
+
+# For this version "gym[accept-rom-license]" is required.
+for GYM_VERSION in '0.27'
+do
+  # Create a copy of the conda env and work with this
+  conda deactivate
+  conda create --prefix ./cloned_env --clone ./env -y
+  conda activate ./cloned_env
+
+  echo "Testing gym version: ${GYM_VERSION}"
+  pip3 install 'gymnasium[accept-rom-license]'==$GYM_VERSION
+  pip3 install 'gymnasium[atari]'==$GYM_VERSION
+  $DIR/run_test.sh
+
+  # delete the conda copy
+  conda deactivate
+  conda env remove --prefix ./cloned_env
+done
