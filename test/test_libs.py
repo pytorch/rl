@@ -163,6 +163,11 @@ def _make_gym_environment(env_name):  # noqa: F811
     return gym.make(env_name, render_mode="rgb_array")
 
 
+@implement_for("gymnasium", "0.27", None)
+def _make_gym_environment(env_name):  # noqa: F811
+    return gym.make(env_name, render_mode="rgb_array")
+
+
 @pytest.mark.skipif(not _has_dmc, reason="no dm_control library found")
 @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
 @pytest.mark.parametrize("frame_skip", [1, 3])

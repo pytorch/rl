@@ -794,6 +794,11 @@ class Compose(Transform):
             t.empty_cache()
         super().empty_cache()
 
+    def reset_parent(self):
+        for t in self.transforms:
+            t.reset_parent()
+        super().reset_parent()
+
 
 class ToTensorImage(ObservationTransform):
     """Transforms a numpy-like image (3 x W x H) to a pytorch image (3 x W x H).

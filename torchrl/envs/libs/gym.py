@@ -146,7 +146,12 @@ def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.env_specs.keys()
 
 
-@implement_for("gym", "0.26.0", None)
+@implement_for("gym", "0.26.0", "0.26.2")
+def _get_gym_envs():  # noqa: F811
+    return gym.envs.registration.registry.keys()
+
+
+@implement_for("gymnasium", "0.27.0", None)
 def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.keys()
 
@@ -241,6 +246,23 @@ class GymWrapper(GymLikeEnv):
         env.reset()
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
+    @implement_for("gymnasium", "0.27.0", None)
+    def _build_gym_env(self, env, pixels_only):  # noqa: F811
+        from gym.wrappers.compatibility import EnvCompatibility
+
+        if env.render_mode:
+            return PixelObservationWrapper(env, pixels_only=pixels_only)
+
+        warnings.warn(
+            "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
+            "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
+            'where mode is either "rgb_array" or any other supported mode.'
+        )
+        # resetting as 0.26 comes with a very 'nice' OrderEnforcing wrapper
+        env = EnvCompatibility(env)
+        env.reset()
+        return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
+
     @_classproperty
     def available_envs(cls) -> List[str]:
         return _get_envs()
@@ -269,6 +291,19 @@ class GymWrapper(GymLikeEnv):
         self._env.seed(seed=seed)
 
     @implement_for("gym", "0.19.0", None)
+    def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
+        try:
+            self.reset(seed=seed)
+            self._seed_calls_reset = True
+        except TypeError as err:
+            warnings.warn(
+                f"reset with seed kwarg returned an exception: {err}.\n"
+                f"Calling env.seed from now on."
+            )
+            self._seed_calls_reset = False
+            self._env.seed(seed=seed)
+
+    @implement_for("gymnasium", "0.27.0", None)
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
         try:
             self.reset(seed=seed)
@@ -366,6 +401,14 @@ class GymEnv(GymWrapper):
             disable_env_checker if disable_env_checker is not None else True
         )
 
+    @implement_for("gymnasium", "0.27.0", None)
+    def _set_gym_args(  # noqa: F811
+        self, kwargs, disable_env_checker: bool = None
+    ) -> None:
+        kwargs["disable_env_checker"] = (
+            disable_env_checker if disable_env_checker is not None else True
+        )
+
     def _build_env(
         self,
         env_name: str,
@@ -417,6 +460,11 @@ class GymEnv(GymWrapper):
         pass
 
     @implement_for("gym", "0.25.1", None)
+    def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
+        if from_pixels:
+            kwargs.setdefault("render_mode", "rgb_array")
+
+    @implement_for("gymnasium", "0.27.0", None)
     def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
         if from_pixels:
             kwargs.setdefault("render_mode", "rgb_array")
