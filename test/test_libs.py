@@ -37,16 +37,21 @@ from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 if _has_gym:
     try:
         import gymnasium as gym
+        from gymnasium import __version__ as gym_version
+
+        gym_version = version.parse(gym_version)
+        from gymnasium.wrappers.pixel_observation import PixelObservationWrapper
     except ModuleNotFoundError:
         import gym
 
-    gym_version = version.parse(gym.__version__)
-    if gym_version > version.parse("0.19"):
-        from gym.wrappers.pixel_observation import PixelObservationWrapper
-    else:
-        from torchrl.envs.libs.utils import (
-            GymPixelObservationWrapper as PixelObservationWrapper,
-        )
+        gym_version = version.parse(gym.__version__)
+        if gym_version > version.parse("0.19"):
+            from gym.wrappers.pixel_observation import PixelObservationWrapper
+        else:
+            from torchrl.envs.libs.utils import (
+                GymPixelObservationWrapper as PixelObservationWrapper,
+            )
+
 
 if _has_dmc:
     from dm_control import suite
