@@ -14,8 +14,8 @@ conda activate ./env
 $DIR/install.sh
 
 # Extracted from run_test.sh to run once.
-#yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL mesa-libEGL-devel glfw mesa-libOSMesa-devel glew glew-devel egl-utils freeglut xorg-x11-server-Xvfb -y
-yum makecache && yum install libglvnd-devel glew xorg-x11-server-Xvfb zlib-devel egl-utils mesa-libEGL -y
+yum makecache && yum install libglvnd-devel zlib-devel mesa-libGL mesa-libGL-devel mesa-libEGL mesa-libEGL-devel glfw mesa-libOSMesa-devel glew glew-devel egl-utils freeglut xorg-x11-server-Xvfb -y
+#yum makecache && yum install libglvnd-devel glew xorg-x11-server-Xvfb zlib-devel egl-utils freeglut mesa-libEGL -y
 
 
 # This version is installed initially (see environment.yml)
@@ -24,6 +24,7 @@ do
   # Create a copy of the conda env and work with this
   conda deactivate
   conda create --prefix ./cloned_env --clone ./env -y
+  conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install 'gym[atari]'==$GYM_VERSION
@@ -31,7 +32,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove -n ./cloned_env
+  conda env remove --prefix ./cloned_env
 done
 
 # gym[atari]==0.19 is broken, so we install only gym without dependencies.
@@ -40,6 +41,7 @@ do
   # Create a copy of the conda env and work with this
   conda deactivate
   conda create --prefix ./cloned_env --clone ./env -y
+  conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install gym==$GYM_VERSION
@@ -47,7 +49,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove -n ./cloned_env
+  conda env remove --prefix ./cloned_env
 done
 
 # gym[atari]==0.20 installs ale-py==0.8, but this version is not compatible with gym<0.26, so we downgrade it.
@@ -56,6 +58,7 @@ do
   # Create a copy of the conda env and work with this
   conda deactivate
   conda create --prefix ./cloned_env --clone ./env -y
+  conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install 'gym[atari]'==$GYM_VERSION
@@ -64,7 +67,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove -n ./cloned_env
+  conda env remove --prefix ./cloned_env
 done
 
 for GYM_VERSION in '0.25'
@@ -72,6 +75,7 @@ do
   # Create a copy of the conda env and work with this
   conda deactivate
   conda create --prefix ./cloned_env --clone ./env -y
+  conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install 'gym[atari]'==$GYM_VERSION
@@ -79,7 +83,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove -n ./cloned_env
+  conda env remove --prefix ./cloned_env
 done
 
 # For this version "gym[accept-rom-license]" is required.
@@ -88,6 +92,7 @@ do
   # Create a copy of the conda env and work with this
   conda deactivate
   conda create --prefix ./cloned_env --clone ./env -y
+  conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install 'gym[accept-rom-license]'==$GYM_VERSION
@@ -96,5 +101,5 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove -n ./cloned_env
+  conda env remove --prefix ./cloned_env
 done
