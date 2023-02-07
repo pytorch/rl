@@ -151,13 +151,6 @@ def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.keys()
 
 
-def _get_gym():
-    if _has_gym:
-        return gym
-    else:
-        return None
-
-
 def _is_from_pixels(env):
     observation_spec = env.observation_space
     if isinstance(observation_spec, (Dict,)):
@@ -254,7 +247,10 @@ class GymWrapper(GymLikeEnv):
 
     @property
     def lib(self) -> ModuleType:
-        return gym
+        if _has_gym:
+            return gym
+        else:
+            raise ImportError("Gym not found, check installation") from IMPORT_ERROR
 
     def _set_seed(self, seed: int) -> int:  # noqa: F811
         if self._seed_calls_reset is None:
