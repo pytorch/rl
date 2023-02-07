@@ -248,7 +248,7 @@ class GymWrapper(GymLikeEnv):
 
     @implement_for("gymnasium", "0.27.0", None)
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
-        from gym.wrappers.compatibility import EnvCompatibility
+        from gymnasium.wrappers.compatibility import EnvCompatibility
 
         if env.render_mode:
             return PixelObservationWrapper(env, pixels_only=pixels_only)

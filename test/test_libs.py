@@ -294,7 +294,7 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
         and env_kwargs.get("from_pixels", False)
         and torch.cuda.device_count() == 0
     ):
-        pytest.skip(
+        raise pytest.skip(
             "Skipping test as rendering is not supported in tests before gym 0.26."
         )
     env = env_lib(*env_args, **env_kwargs)
