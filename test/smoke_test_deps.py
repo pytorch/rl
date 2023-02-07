@@ -37,7 +37,10 @@ def test_dm_control_pixels():
 
 
 def test_gym():
-    import gym  # noqa: F401
+    try:
+        import gymnasium as gym
+    except ImportError:
+        import gym  # noqa: F401
 
     assert _has_gym
     env = GymEnv(PONG_VERSIONED)
