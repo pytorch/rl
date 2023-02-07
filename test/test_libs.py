@@ -35,7 +35,10 @@ from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
 if _has_gym:
-    import gym
+    try:
+        import gymnasium as gym
+    except ModuleNotFoundError:
+        import gym
 
     gym_version = version.parse(gym.__version__)
     if gym_version > version.parse("0.19"):

@@ -32,7 +32,10 @@ from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 try:
     # Libraries necessary for MultiThreadedEnv
     import envpool
-    import gym
+    try:
+        import gymnasium as gym
+    except ModuleNotFoundError:
+        import gym
     import treevalue
 
     _has_envpool = True

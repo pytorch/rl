@@ -2938,7 +2938,7 @@ class StepCounter(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=self.parent.batch_size,
+            shape=observation_spec.shape,
             dtype=torch.int64,
             device=observation_spec.device,
         )
@@ -2953,7 +2953,7 @@ class StepCounter(Transform):
                 f"input_spec was expected to be of type CompositeSpec. Got {type(input_spec)} instead."
             )
         input_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=self.parent.batch_size,
+            shape=input_spec.shape,
             dtype=torch.int64,
             device=input_spec.device,
         )
