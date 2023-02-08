@@ -659,7 +659,7 @@ collector = MultiSyncDataCollector(
     total_frames=240,
     max_frames_per_traj=-1,  # envs are terminating, we don't need to stop them early
     frames_per_batch=60,  # we want 60 frames at a time (we have 3 envs per sub-collector)
-    passing_devices=devices,  # len must match len of env created
+    storing_devices=devices,  # len must match len of env created
     devices=devices,
 )
 
@@ -682,7 +682,7 @@ collector = MultiaSyncDataCollector(
     total_frames=240,
     max_frames_per_traj=-1,  # envs are terminating, we don't need to stop them early
     frames_per_batch=60,  # we want 60 frames at a time (we have 3 envs per sub-collector)
-    passing_devices=devices,  # len must match len of env created
+    storing_devices=devices,  # len must match len of env created
     devices=devices,
 )
 

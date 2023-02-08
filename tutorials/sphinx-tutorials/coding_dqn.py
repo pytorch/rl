@@ -175,7 +175,7 @@ def make_env(parallel=False, m=0, s=1):
             GrayScale(),
             Resize(64, 64),
             ObservationNorm(in_keys=["pixels"], loc=m, scale=s, standard_normal=True),
-            CatFrames(4, in_keys=["pixels"]),
+            CatFrames(4, in_keys=["pixels"], dim=-3),
         ),
     )
     return env
@@ -333,7 +333,7 @@ data_collector = MultiaSyncDataCollector(
     total_frames=total_frames,
     exploration_mode="random",  # this is the default behaviour: the collector runs in `"random"` (or explorative) mode
     devices=[device, device],  # each collector can sit on a different device
-    passing_devices=[device, device],
+    storing_devices=[device, device],
 )
 
 ###############################################################################
@@ -567,7 +567,7 @@ data_collector = MultiaSyncDataCollector(
     total_frames=total_frames,
     exploration_mode="random",
     devices=[device, device],
-    passing_devices=[device, device],
+    storing_devices=[device, device],
 )
 
 ###############################################################################

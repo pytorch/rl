@@ -210,6 +210,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         - run_type_checks (bool): if True, the observation and reward dtypes
             will be compared against their respective spec and an exception
             will be raised if they don't match.
+            Defaults to False.
 
     Methods:
         step (TensorDictBase -> TensorDictBase): step in the environment
@@ -226,7 +227,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
-        run_type_checks: bool = True,
+        run_type_checks: bool = False,
     ):
         super().__init__()
         if device is not None:
@@ -255,6 +256,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         cls._inplace_update = _inplace_update
         cls._batch_locked = _batch_locked
         cls._device = None
+        # cached in_keys to be excluded from update when calling step
+        cls._cache_in_keys = None
         return super().__new__(cls)
 
     def __setattr__(self, key, value):
@@ -376,12 +379,22 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # sanity check
         self._assert_tensordict_shape(tensordict)
 
-        tensordict.is_locked = True  # make sure _step does not modify the tensordict
+        tensordict.lock()  # make sure _step does not modify the tensordict
         tensordict_out = self._step(tensordict)
-        tensordict.is_locked = False
-        obs_keys = set(self.observation_spec.keys())
+        if tensordict_out is tensordict:
+            raise RuntimeError(
+                "EnvBase._step should return outplace changes to the input "
+                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
+                "tensordict.select()) inside _step before writing new tensors onto this new instance."
+            )
+        tensordict.unlock()
+
+        obs_keys = self.observation_spec.keys(nested_keys=False)
+        # we deliberately do not update the input values, but we want to keep track of
+        # new keys considered as "input" by inverse transforms.
+        in_keys = self._get_in_keys_to_exclude(tensordict)
         tensordict_out_select = tensordict_out.select(*obs_keys)
-        tensordict_out = tensordict_out.exclude(*obs_keys)
+        tensordict_out = tensordict_out.exclude(*obs_keys, *in_keys)
         tensordict_out.set("next", tensordict_out_select)
 
         reward = tensordict_out.get("reward")
@@ -409,12 +422,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             done = done.view(expected_done_shape)
             tensordict_out.set("done", done)
 
-        if tensordict_out is tensordict:
-            raise RuntimeError(
-                "EnvBase._step should return outplace changes to the input "
-                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
-                "tensordict.select()) inside _step before writing new tensors onto this new instance."
-            )
         if self.run_type_checks:
             for key in self._select_observation_keys(tensordict_out):
                 obs = tensordict_out.get(key)
@@ -432,8 +439,16 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 )
         tensordict.update(tensordict_out, inplace=self._inplace_update)
 
-        del tensordict_out
         return tensordict
+
+    def _get_in_keys_to_exclude(self, tensordict):
+        if self._cache_in_keys is None:
+            self._cache_in_keys = list(
+                set(self.input_spec.keys(True)).intersection(
+                    tensordict.keys(True, True)
+                )
+            )
+        return self._cache_in_keys
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise NotImplementedError("EnvBase.forward is not implemented")
@@ -626,7 +641,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 Default is :obj:`True`.
             auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
                 policy device before the policy is used. Default is :obj:`False`.
-            break_when_any_done (bool): breaks if any of the done state is True. Default is True.
+            break_when_any_done (bool): breaks if any of the done state is True. If False, a reset() is
+                called on the sub-envs that are done. Default is True.
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if auto_reset is False, an initial
                 tensordict must be provided.
@@ -664,6 +680,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device)
             tensordict = self.step(tensordict)
+
             tensordicts.append(tensordict.clone())
             if (
                 break_when_any_done and tensordict.get("done").any()
@@ -674,7 +691,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 keep_other=True,
                 exclude_reward=False,
                 exclude_action=False,
+                exclude_done=False,
             )
+            if not break_when_any_done and tensordict.get("done").any():
+                tensordict["_reset"] = tensordict.get(
+                    "done",
+                    torch.ones(
+                        *tensordict.shape,
+                        1,
+                        dtype=torch.bool,
+                    ),
+                ).squeeze(-1)
+                self.reset(tensordict)
 
             if callback is not None:
                 callback(self, tensordict)
@@ -726,8 +754,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             value = torch.as_tensor(value, device=device)
         else:
             value = value.to(device)
-        # if dtype is not None:
-        #     value = value.to(dtype)
         return value
 
     def close(self):
@@ -776,7 +802,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             },
             batch_size=self.batch_size,
             device=self.device,
-            _run_checks=False,
+            _run_checks=True,  # this method should not be run very often. This facilitates debugging
         )
         return fake_td
 

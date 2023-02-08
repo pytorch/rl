@@ -141,7 +141,7 @@ Trainer and hooks
     LogReward
     OptimizerHook
     Recorder
-    ReplayBuffer
+    ReplayBufferTrainer
     RewardNormalizer
     SelectKeys
     Trainer

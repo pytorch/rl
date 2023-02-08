@@ -48,7 +48,7 @@ class PPOLoss(LossModule):
         gamma (scalar): a discount factor for return computation.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
         normalize_advantage (bool): if True, the advantage will be normalized before being used.
-            Defaults to True.
+            Defaults to False.
 
     """
 
@@ -64,7 +64,7 @@ class PPOLoss(LossModule):
         critic_coef: float = 1.0,
         gamma: float = 0.99,
         loss_critic_type: str = "smooth_l1",
-        normalize_advantage: bool = True,
+        normalize_advantage: bool = False,
     ):
         super().__init__()
         self.convert_to_functional(

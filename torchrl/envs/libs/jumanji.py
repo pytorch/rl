@@ -216,6 +216,7 @@ class JumanjiWrapper(GymLikeEnv):
         # extract state spec from instance
         self.state_spec = self._make_state_spec(env).expand(self.batch_size)
         self.input_spec["state"] = self.state_spec
+        self.observation_spec["state"] = self.state_spec
 
         # build state example for data conversion
         self._state_example = self._make_state_example(env)

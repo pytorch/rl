@@ -7,7 +7,8 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices
+import torchrl.data.tensor_specs
+from _utils_internal import get_available_devices, set_global_var
 from scipy.stats import chisquare
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import (
@@ -57,8 +58,11 @@ def test_discrete(cls):
         ts.encode(torch.tensor([5]))
         ts.encode(torch.tensor(5).numpy())
         ts.encode(9)
-        with pytest.raises(AssertionError):
+        with pytest.raises(AssertionError), set_global_var(
+            torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
+        ):
             ts.encode(torch.tensor([11]))  # out of bounds
+        assert not torchrl.data.tensor_specs._CHECK_SPEC_ENCODE
         assert ts.is_in(r)
         assert (ts.encode(ts.to_numpy(r)) == r).all()
 
@@ -114,10 +118,15 @@ def test_ndbounded(dtype, shape):
         ts.encode(lb + torch.rand(10) * (ub - lb))
         ts.encode((lb + torch.rand(10) * (ub - lb)).numpy())
         assert (ts.encode(ts.to_numpy(r)) == r).all()
-        with pytest.raises(AssertionError):
+        with pytest.raises(AssertionError), set_global_var(
+            torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
+        ):
             ts.encode(torch.rand(10) + 3)  # out of bounds
-        with pytest.raises(AssertionError):
+        with pytest.raises(AssertionError), set_global_var(
+            torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
+        ):
             ts.to_numpy(torch.rand(10) + 3)  # out of bounds
+        assert not torchrl.data.tensor_specs._CHECK_SPEC_ENCODE
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])

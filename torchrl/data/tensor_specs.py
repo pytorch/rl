@@ -29,13 +29,13 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import get_binary_env_var
 
-_CHECK_IMAGES = get_binary_env_var("CHECK_IMAGES")
-
 DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
-_NO_CHECK_SPEC_ENCODE = get_binary_env_var("NO_CHECK_SPEC_ENCODE")
+# By default, we do not check that an obs is in the domain. THis should be done when validating the env beforehand
+_CHECK_SPEC_ENCODE = get_binary_env_var("CHECK_SPEC_ENCODE")
+
 
 _DEFAULT_SHAPE = torch.Size((1,))
 
@@ -108,8 +108,28 @@ class Box:
 class ContinuousBox(Box):
     """A continuous box of values, in between a minimum and a maximum."""
 
-    minimum: torch.Tensor
-    maximum: torch.Tensor
+    _minimum: torch.Tensor
+    _maximum: torch.Tensor
+    device: torch.device = None
+
+    # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
+    @property
+    def minimum(self):
+        return self._minimum.to(self.device)
+
+    @property
+    def maximum(self):
+        return self._maximum.to(self.device)
+
+    @minimum.setter
+    def minimum(self, value):
+        self.device = value.device
+        self._minimum = value.cpu()
+
+    @maximum.setter
+    def maximum(self, value):
+        self.device = value.device
+        self._maximum = value.cpu()
 
     def __post_init__(self):
         self.minimum = self.minimum.clone()
@@ -233,18 +253,11 @@ class TensorSpec:
                     val = val[0]
                 else:
                     val = np.array(val)
-            if _CHECK_IMAGES and val.dtype is np.dtype("uint8"):
-                # images can become noisy during training. if the CHECK_IMAGES
-                # env variable is True, we check that no more than half of the
-                # pixels are black or white.
-                v = (val == 0) | (val == 255)
-                v = v.sum() / v.size
-                assert v < 0.5, f"numpy: {val.shape}"
             if isinstance(val, np.ndarray) and not all(
                 stride > 0 for stride in val.strides
             ):
                 val = val.copy()
-            val = torch.tensor(val, dtype=self.dtype, device=self.device)
+            val = torch.tensor(val, device=self.device, dtype=self.dtype)
             if val.shape[-len(self.shape) :] != self.shape:
                 # option 1: add a singleton dim at the end
                 if (
@@ -257,7 +270,7 @@ class TensorSpec:
                         f"Shape mismatch: the value has shape {val.shape} which "
                         f"is incompatible with the spec shape {self.shape}."
                     )
-        if not _NO_CHECK_SPEC_ENCODE:
+        if _CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val
 
@@ -1817,7 +1830,9 @@ class CompositeSpec(TensorSpec):
             device=self._device,
         )
 
-    def keys(self, yield_nesting_keys: bool = False) -> KeysView:
+    def keys(
+        self, yield_nesting_keys: bool = False, nested_keys: bool = True
+    ) -> KeysView:
         """Keys of the CompositeSpec.
 
         Args:
@@ -1825,8 +1840,14 @@ class CompositeSpec(TensorSpec):
                 will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
                 will lead to the keys :obj:`["next", ("next", "obs")]`. Default is :obj:`False`, i.e.
                 only nested keys will be returned.
+            nested_keys (bool, optional): if :obj:`False`, the returned keys will not be nested. They will
+                represent only the immediate children of the root, and not the whole nested sequence, i.e. a
+                :obj:`CompositeSpec(next=CompositeSpec(obs=None))` will lead to the keys
+                :obj:`["next"]. Default is :obj:`True`, i.e. nested keys will be returned.
         """
-        return _CompositeSpecKeysView(self, _yield_nesting_keys=yield_nesting_keys)
+        return _CompositeSpecKeysView(
+            self, _yield_nesting_keys=yield_nesting_keys, nested_keys=nested_keys
+        )
 
     def items(self) -> ItemsView:
         return self._specs.items()
@@ -1975,7 +1996,8 @@ class _CompositeSpecKeysView:
                 if self._yield_nesting_keys:
                     yield key
             else:
-                yield key
+                if not isinstance(item, CompositeSpec) or len(item):
+                    yield key
 
     def __len__(self):
         i = 0

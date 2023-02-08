@@ -13,8 +13,6 @@ dependencies:
     - gym[accept-rom-license]
     - gym[atari]
     - moviepy
-    - tqdm
-    - pytest
     - pytest-cov
     - pytest-mock
     - pytest-instafail
@@ -22,10 +20,6 @@ dependencies:
     - expecttest
     - pyyaml
     - scipy
-    - hydra-core
-    - tensorboard
-    - wandb
     - dm_control
-    - mlflow
-    - av
     - coverage
+    - envpool

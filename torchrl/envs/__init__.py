@@ -43,4 +43,4 @@ from .transforms import (
     VIPRewardTransform,
     VIPTransform,
 )
-from .vec_env import ParallelEnv, SerialEnv
+from .vec_env import MultiThreadedEnv, ParallelEnv, SerialEnv

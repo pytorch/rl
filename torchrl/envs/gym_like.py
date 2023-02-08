@@ -177,7 +177,7 @@ class GymLikeEnv(_EnvWrapper):
         action = tensordict.get("action")
         action_np = self.read_action(action)
 
-        reward = self.reward_spec.zero(self.batch_size)
+        reward = self.reward_spec.zero()
         for _ in range(self.wrapper_frame_skip):
             obs, _reward, done, *info = self._output_transform(
                 self._env.step(action_np)
@@ -200,7 +200,7 @@ class GymLikeEnv(_EnvWrapper):
                 )
 
             if _reward is None:
-                _reward = self.reward_spec.zero(self.batch_size)
+                _reward = self.reward_spec.zero()
 
             reward = self.read_reward(reward, _reward)
 
@@ -254,7 +254,10 @@ class GymLikeEnv(_EnvWrapper):
             for key, item in self.observation_spec.items():
                 if key not in tensordict_out.keys():
                     tensordict_out[key] = item.zero()
-        tensordict_out.set("done", torch.zeros(*self.batch_size, 1, dtype=torch.bool))
+        tensordict_out.set_default(
+            "done",
+            torch.zeros(*self.batch_size, 1, dtype=torch.bool, device=self.device),
+        )
         return tensordict_out
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
