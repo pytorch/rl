@@ -8,9 +8,7 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
-    - gymnasium
     - pygame
-    - gymnasium[accept-rom-license]
     - moviepy
     - tqdm
     - pytest

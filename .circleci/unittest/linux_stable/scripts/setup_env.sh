@@ -94,6 +94,7 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   # install ale-py: manylinux names are broken for CentOS so we need to manually download and
   # rename them
   PY_VERSION=$(python --version)
+  echo "installing ale-py for ${PY_PY_VERSION}"
   if [[ $PY_VERSION == *"3.7"* ]]; then
     wget https://files.pythonhosted.org/packages/ab/fd/6615982d9460df7f476cad265af1378057eee9daaa8e0026de4cedbaffbd/ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
     pip install ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
@@ -112,7 +113,8 @@ if [[ $OSTYPE != 'darwin'* ]]; then
     pip install ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
     rm ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
   fi
-  pip install gymnasium[atari]
+  echo "installing gymnasium"
+  pip install "gymnasium[atari,accept-rom-license]"
 else
   pip install gymnasium[atari]
 fi

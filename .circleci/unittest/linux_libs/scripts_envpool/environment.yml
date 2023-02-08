@@ -8,9 +8,7 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
-    - gymnasium
     - pygame
-    - gymnasium[accept-rom-license]
     - moviepy
     - pytest-cov
     - pytest-mock
@@ -21,4 +19,3 @@ dependencies:
     - scipy
     - dm_control
     - coverage
-    - envpool
