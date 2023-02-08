@@ -2,6 +2,7 @@ import collections
 import math
 import os
 import time
+import warnings
 from functools import wraps
 from importlib import import_module
 
@@ -248,11 +249,15 @@ class implement_for:
                 if (self.from_version is None or version >= self.from_version) and (
                     self.to_version is None or version < self.to_version
                 ):
-                    raise RuntimeError(f"Got multiple backends for {func_name}.")
+                    warnings.warn(
+                        f"Got multiple backends for {func_name}. "
+                        f"Using the last queried ({module} with version {version})."
+                    )
+                else:
+                    return implementations[func_name]
             except ModuleNotFoundError:
                 # then it's ok, there is no conflict
-                pass
-            return implementations[func_name]
+                return implementations[func_name]
         try:
             module = import_module(self.module_name)
             version = module.__version__
