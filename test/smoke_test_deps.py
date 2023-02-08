@@ -39,8 +39,14 @@ def test_dm_control_pixels():
 def test_gym():
     try:
         import gymnasium as gym
-    except ImportError:
-        import gym  # noqa: F401
+    except ImportError as err:
+        ERROR = err
+        try:
+            import gym  # noqa: F401
+        except ImportError as err:
+            raise ImportError(
+                f"gym and gymnasium load failed. Gym got error {err}."
+            ) from ERROR
 
     assert _has_gym
     env = GymEnv(PONG_VERSIONED)
