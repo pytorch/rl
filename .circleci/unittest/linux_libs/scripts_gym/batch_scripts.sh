@@ -114,7 +114,6 @@ do
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install 'gymnasium[accept-rom-license]'==$GYM_VERSION
-  # pip3 install 'gymnasium[atari]'==$GYM_VERSION
 
 
   # install ale-py: manylinux names are broken for CentOS so we need to manually download and
