@@ -333,7 +333,7 @@ data_collector = MultiaSyncDataCollector(
     total_frames=total_frames,
     exploration_mode="random",  # this is the default behaviour: the collector runs in `"random"` (or explorative) mode
     devices=[device, device],  # each collector can sit on a different device
-    passing_devices=[device, device],
+    storing_devices=[device, device],
 )
 
 ###############################################################################
@@ -567,7 +567,7 @@ data_collector = MultiaSyncDataCollector(
     total_frames=total_frames,
     exploration_mode="random",
     devices=[device, device],
-    passing_devices=[device, device],
+    storing_devices=[device, device],
 )
 
 ###############################################################################

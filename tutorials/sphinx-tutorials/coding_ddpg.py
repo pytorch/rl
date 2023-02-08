@@ -535,7 +535,7 @@ collector = MultiaSyncDataCollector(
     else None,
     split_trajs=True,
     devices=[device, device],  # device for execution
-    passing_devices=[device, device],  # device where data will be stored and passed
+    storing_devices=[device, device],  # device where data will be stored and passed
     seed=None,
     pin_memory=False,
     update_at_each_batch=False,
@@ -795,7 +795,7 @@ collector = MultiaSyncDataCollector(
     else None,
     split_trajs=True,
     devices=[device, device],  # device for execution
-    passing_devices=[device, device],  # device where data will be stored and passed
+    storing_devices=[device, device],  # device where data will be stored and passed
     seed=None,
     pin_memory=False,
     update_at_each_batch=False,

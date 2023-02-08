@@ -1033,7 +1033,7 @@ def _run_worker_pipe_shared_mem(
                 reset_keys = set(_td.keys())
             if pin_memory:
                 _td.pin_memory()
-            tensordict.update_(_td)
+            tensordict.update_(_td.select(*tensordict.keys(), strict=False))
             child_pipe.send(("reset_obs", reset_keys))
 
         elif cmd == "step":

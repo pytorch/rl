@@ -143,8 +143,8 @@ def sync_sync_collector(
     if num_collectors == 1:
         if "devices" in kwargs:
             kwargs["device"] = kwargs.pop("devices")
-        if "passing_devices" in kwargs:
-            kwargs["passing_device"] = kwargs.pop("passing_devices")
+        if "storing_devices" in kwargs:
+            kwargs["storing_device"] = kwargs.pop("storing_devices")
         return _make_collector(
             SyncDataCollector,
             env_fns=env_fns,
@@ -297,7 +297,7 @@ def make_collector_offpolicy(
         # we already took care of building the make_parallel_env function
         "num_collectors": -cfg.num_workers // -cfg.env_per_collector,
         "devices": cfg.collector_devices,
-        "passing_devices": cfg.collector_devices,
+        "storing_devices": cfg.collector_devices,
         "init_random_frames": cfg.init_random_frames,
         "pin_memory": cfg.pin_memory,
         "split_trajs": True,
@@ -352,7 +352,7 @@ def make_collector_onpolicy(
         # we already took care of building the make_parallel_env function
         "num_collectors": -cfg.num_workers // -cfg.env_per_collector,
         "devices": cfg.collector_devices,
-        "passing_devices": cfg.collector_devices,
+        "storing_devices": cfg.collector_devices,
         "pin_memory": cfg.pin_memory,
         "split_trajs": True,
         # trajectories must be separated in online settings
