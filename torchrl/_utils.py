@@ -250,7 +250,7 @@ class implement_for:
                 ):
                     raise RuntimeError(f"Got multiple backends for {func_name}.")
             except ModuleNotFoundError:
-                # then it's ok, there is not conflict
+                # then it's ok, there is no conflict
                 pass
             return implementations[func_name]
         try:
