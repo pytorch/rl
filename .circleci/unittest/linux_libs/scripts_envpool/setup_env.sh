@@ -48,7 +48,7 @@ pip install pip --upgrade
 conda env update --file "${this_dir}/environment.yml" --prune
 
 conda deactivate
-conda activate ./env
+conda activate "${env_dir}"
 
 if [[ $OSTYPE != 'darwin'* ]]; then
   # install ale-py: manylinux names are broken for CentOS so we need to manually download and
@@ -74,8 +74,9 @@ if [[ $OSTYPE != 'darwin'* ]]; then
     rm ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
   fi
   echo "installing gymnasium"
-  pip install "gymnasium[atari,accept-rom-license]"
+  # envpool does not currently work with gymnasium
+  pip install "gym[atari,accept-rom-license]"
 else
-  pip install gymnasium[atari]
+  pip install "gym[atari,accept-rom-license]"
 fi
 pip install envpool

@@ -88,7 +88,7 @@ pip install pip --upgrade
 conda env update --file "${this_dir}/environment.yml" --prune
 
 conda deactivate
-conda activate ./env
+conda activate "${env_dir}"
 
 if [[ $OSTYPE != 'darwin'* ]]; then
   # install ale-py: manylinux names are broken for CentOS so we need to manually download and
@@ -116,5 +116,5 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   echo "installing gymnasium"
   pip install "gymnasium[atari,accept-rom-license]"
 else
-  pip install gymnasium[atari]
+  pip install "gymnasium[atari,accept-rom-license]"
 fi
