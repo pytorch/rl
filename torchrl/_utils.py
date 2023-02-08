@@ -240,14 +240,18 @@ class implement_for:
 
         # Return fitting implementation if it was encountered before.
         if func_name in implementations:
-            # check that backends don't conflict
-            module = import_module(self.module_name)
-            version = module.__version__
+            try:
+                # check that backends don't conflict
+                module = import_module(self.module_name)
+                version = module.__version__
 
-            if (self.from_version is None or version >= self.from_version) and (
-                self.to_version is None or version < self.to_version
-            ):
-                raise RuntimeError(f"Got multiple backends for {func_name}.")
+                if (self.from_version is None or version >= self.from_version) and (
+                    self.to_version is None or version < self.to_version
+                ):
+                    raise RuntimeError(f"Got multiple backends for {func_name}.")
+            except ModuleNotFoundError:
+                # then it's ok, there is not conflict
+                pass
             return implementations[func_name]
         try:
             module = import_module(self.module_name)
