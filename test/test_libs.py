@@ -273,10 +273,10 @@ class TestDMControl:
         check_env_specs(env)
 
 
-@pytest.mark.skipif(
-    IS_OSX,
-    reason="rendering unstable on osx, skipping (mujoco.FatalError: gladLoadGL error)",
-)
+# @pytest.mark.skipif(
+#     IS_OSX,
+#     reason="rendering unstable on osx, skipping (mujoco.FatalError: gladLoadGL error)",
+# )
 @pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
 @pytest.mark.parametrize(
     "env_lib,env_args,env_kwargs",

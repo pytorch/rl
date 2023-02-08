@@ -43,7 +43,10 @@ except ImportError as err:
 
 if _has_gym:
     try:
-        from gym.wrappers.pixel_observation import PixelObservationWrapper
+        try:
+            from gymnasium.wrappers.pixel_observation import PixelObservationWrapper
+        except ModuleNotFoundError:
+            from gym.wrappers.pixel_observation import PixelObservationWrapper
 
         from torchrl.envs.libs.utils import (
             GymPixelObservationWrapper as LegacyPixelObservationWrapper,

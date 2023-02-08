@@ -248,7 +248,7 @@ class implement_for:
                 self.to_version is None or version < self.to_version
             ):
                 raise RuntimeError(f"Got multiple backends for {func_name}.")
-
+            return implementations[func_name]
         try:
             module = import_module(self.module_name)
             version = module.__version__
