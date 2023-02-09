@@ -28,8 +28,7 @@ from torchrl.modules.distributions import OneHotCategorical
 
 from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
 
-from torchrl.objectives import SoftUpdate
-from torchrl.objectives.discrete_sac import DiscreteSACLoss
+from torchrl.objectives import DiscreteSACLoss, SoftUpdate
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 

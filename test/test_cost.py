@@ -1541,7 +1541,6 @@ class TestDiscreteSAC:
         delay_qvalue,
         num_qvalue,
         device,
-        version,
         target_entropy_weight,
         target_entropy,
         gamma=0.9,
