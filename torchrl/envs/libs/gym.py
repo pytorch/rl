@@ -68,6 +68,12 @@ __all__ = ["GymWrapper", "GymEnv"]
 def _gym_to_torchrl_spec_transform(
     spec, dtype=None, device="cpu", categorical_action_encoding=False
 ) -> TensorSpec:
+    """Maps the gym specs to the TorchRL specs.
+
+    By convention, 'state' keys of Dict specs will be renamed "observation" to match the
+    default TorchRL keys.
+
+    """
     if isinstance(spec, gym.spaces.tuple.Tuple):
         raise NotImplementedError("gym.spaces.tuple.Tuple mapping not yet implemented")
     if isinstance(spec, gym.spaces.discrete.Discrete):
@@ -120,7 +126,14 @@ def _gym_to_torchrl_spec_transform(
     elif isinstance(spec, (Dict,)):
         spec_out = {}
         for k in spec.keys():
-            spec_out[k] = _gym_to_torchrl_spec_transform(
+            key = k
+            if k == "state" and "observation" not in spec.keys():
+                # we rename "state" in "observation" as "observation" is the conventional name
+                # for single observation in torchrl.
+                # naming it 'state' will result in envs that have a different name for the state vector
+                # when queried with and without pixels
+                key = "observation"
+            spec_out[key] = _gym_to_torchrl_spec_transform(
                 spec[k],
                 device=device,
                 categorical_action_encoding=categorical_action_encoding,

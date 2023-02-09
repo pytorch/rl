@@ -132,23 +132,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger=logger,
         use_env_creator=False,
     )()
-
-    # remove video recorder from recorder to have matching state_dict keys
-    if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env)
-        for transform in recorder.transform:
-            if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform.clone())
-    else:
-        recorder_rm = recorder
-
     if isinstance(create_env_fn, ParallelEnv):
-        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-        create_env_fn.close()
+        raise NotImplementedError("This behaviour is deprecated")
     elif isinstance(create_env_fn, EnvCreator):
-        recorder_rm.load_state_dict(create_env_fn().state_dict())
+        recorder.load_state_dict(create_env_fn().state_dict())
+    elif isinstance(create_env_fn, TransformedEnv):
+        recorder.transform = create_env_fn.transform.clone()
     else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
+        raise NotImplementedError(f"Unsupported env type {type(create_env_fn)}")
+    if logger is not None and video_tag:
+        recorder.insert_transform(0, VideoRecorder(logger=logger, tag=video_tag))
 
     # reset reward scaling
     for t in recorder.transform:
