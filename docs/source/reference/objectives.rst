@@ -30,6 +30,7 @@ SAC
     :template: rl_template_noinherit.rst
 
     SACLoss
+    DiscreteSACLoss
 
 REDQ
 ----
@@ -39,6 +40,15 @@ REDQ
     :template: rl_template_noinherit.rst
 
     REDQLoss
+
+TD3
+----
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    TD3Loss
 
 PPO
 ---
