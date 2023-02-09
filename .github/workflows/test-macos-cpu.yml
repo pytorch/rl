@@ -1,0 +1,43 @@
+name: Unit-tests on MacOS CPU
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+  workflow_dispatch:
+
+env:
+  CHANNEL: "nightly"
+
+jobs:
+  tests:
+    strategy:
+      matrix:
+        python_version: ["3.8", "3.9", "3.10"]
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/macos_job.yml@main
+    with:
+      repository: pytorch/rl
+      timeout: 120
+      script: |
+        # Set env vars from matrix
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        export CU_VERSION="cpu"
+
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
+
+        ## setup_env.sh
+        ./.circleci/unittest/linux/scripts/setup_env.sh
+
+        ## install.sh
+        ./.circleci/unittest/linux/scripts/install.sh
+
+        ## run_test.sh
+        ./.circleci/unittest/linux/scripts/run_test.sh
+
+        ## post_process.sh
+        ./.circleci/unittest/linux/scripts/post_process.sh

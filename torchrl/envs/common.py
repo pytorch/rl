@@ -256,6 +256,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         cls._inplace_update = _inplace_update
         cls._batch_locked = _batch_locked
         cls._device = None
+        # cached in_keys to be excluded from update when calling step
+        cls._cache_in_keys = None
         return super().__new__(cls)
 
     def __setattr__(self, key, value):
@@ -387,9 +389,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
         tensordict.unlock()
 
-        obs_keys = set(self.observation_spec.keys())
+        obs_keys = self.observation_spec.keys(nested_keys=False)
+        # we deliberately do not update the input values, but we want to keep track of
+        # new keys considered as "input" by inverse transforms.
+        in_keys = self._get_in_keys_to_exclude(tensordict)
         tensordict_out_select = tensordict_out.select(*obs_keys)
-        tensordict_out = tensordict_out.exclude(*obs_keys, inplace=True)
+        tensordict_out = tensordict_out.exclude(*obs_keys, *in_keys)
         tensordict_out.set("next", tensordict_out_select)
 
         reward = tensordict_out.get("reward")
@@ -435,6 +440,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict.update(tensordict_out, inplace=self._inplace_update)
 
         return tensordict
+
+    def _get_in_keys_to_exclude(self, tensordict):
+        if self._cache_in_keys is None:
+            self._cache_in_keys = list(
+                set(self.input_spec.keys(True)).intersection(
+                    tensordict.keys(True, True)
+                )
+            )
+        return self._cache_in_keys
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise NotImplementedError("EnvBase.forward is not implemented")
@@ -627,7 +641,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 Default is :obj:`True`.
             auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
                 policy device before the policy is used. Default is :obj:`False`.
-            break_when_any_done (bool): breaks if any of the done state is True. Default is True.
+            break_when_any_done (bool): breaks if any of the done state is True. If False, a reset() is
+                called on the sub-envs that are done. Default is True.
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if auto_reset is False, an initial
                 tensordict must be provided.
@@ -665,6 +680,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device)
             tensordict = self.step(tensordict)
+
             tensordicts.append(tensordict.clone())
             if (
                 break_when_any_done and tensordict.get("done").any()
@@ -675,7 +691,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 keep_other=True,
                 exclude_reward=False,
                 exclude_action=False,
+                exclude_done=False,
             )
+            if not break_when_any_done and tensordict.get("done").any():
+                tensordict["_reset"] = tensordict.get(
+                    "done",
+                    torch.ones(
+                        *tensordict.shape,
+                        1,
+                        dtype=torch.bool,
+                    ),
+                ).squeeze(-1)
+                self.reset(tensordict)
 
             if callback is not None:
                 callback(self, tensordict)

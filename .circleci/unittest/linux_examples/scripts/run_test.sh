@@ -24,9 +24,9 @@ lib_dir="${env_dir}/lib"
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 
-coverage run -m pytest test/smoke_test.py -v --durations 20
-coverage run -m pytest test/smoke_test_deps.py -v --durations 20
-coverage run examples/ddpg/ddpg.py \
+python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 20
+python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 20
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   total_frames=48 \
   init_random_frames=10 \
   batch_size=10 \
@@ -38,7 +38,7 @@ coverage run examples/ddpg/ddpg.py \
   record_video=True \
   record_frames=4 \
   buffer_size=120
-coverage run examples/a2c/a2c.py \
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c.py \
   total_frames=48 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -49,7 +49,7 @@ coverage run examples/a2c/a2c.py \
   record_video=True \
   record_frames=4 \
   logger=csv
-coverage run examples/dqn/dqn.py \
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   total_frames=48 \
   init_random_frames=10 \
   batch_size=10 \
@@ -61,7 +61,7 @@ coverage run examples/dqn/dqn.py \
   record_video=True \
   record_frames=4 \
   buffer_size=120
-coverage run examples/redq/redq.py \
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
   total_frames=48 \
   init_random_frames=10 \
   batch_size=10 \
@@ -73,7 +73,7 @@ coverage run examples/redq/redq.py \
   record_video=True \
   record_frames=4 \
   buffer_size=120
-coverage run examples/sac/sac.py \
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   total_frames=48 \
   init_random_frames=10 \
   batch_size=10 \
@@ -85,7 +85,7 @@ coverage run examples/sac/sac.py \
   record_video=True \
   record_frames=4 \
   buffer_size=120
-coverage run examples/ppo/ppo.py \
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   total_frames=48 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -96,7 +96,7 @@ coverage run examples/ppo/ppo.py \
   record_video=True \
   record_frames=4 \
   lr_scheduler=
-coverage run examples/dreamer/dreamer.py \
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
   total_frames=48 \
   init_random_frames=10 \
   batch_size=10 \
@@ -109,4 +109,5 @@ coverage run examples/dreamer/dreamer.py \
   record_frames=4 \
   buffer_size=120 \
   rssm_hidden_dim=17
+coverage combine
 coverage xml -i

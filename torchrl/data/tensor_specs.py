@@ -29,8 +29,6 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import get_binary_env_var
 
-_CHECK_IMAGES = get_binary_env_var("CHECK_IMAGES")
-
 DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
@@ -255,18 +253,11 @@ class TensorSpec:
                     val = val[0]
                 else:
                     val = np.array(val)
-            if _CHECK_IMAGES and val.dtype is np.dtype("uint8"):
-                # images can become noisy during training. if the CHECK_IMAGES
-                # env variable is True, we check that no more than half of the
-                # pixels are black or white.
-                v = (val == 0) | (val == 255)
-                v = v.sum() / v.size
-                assert v < 0.5, f"numpy: {val.shape}"
             if isinstance(val, np.ndarray) and not all(
                 stride > 0 for stride in val.strides
             ):
                 val = val.copy()
-            val = torch.tensor(val, dtype=self.dtype, device=self.device)
+            val = torch.tensor(val, device=self.device, dtype=self.dtype)
             if val.shape[-len(self.shape) :] != self.shape:
                 # option 1: add a singleton dim at the end
                 if (
@@ -1839,7 +1830,9 @@ class CompositeSpec(TensorSpec):
             device=self._device,
         )
 
-    def keys(self, yield_nesting_keys: bool = False) -> KeysView:
+    def keys(
+        self, yield_nesting_keys: bool = False, nested_keys: bool = True
+    ) -> KeysView:
         """Keys of the CompositeSpec.
 
         Args:
@@ -1847,8 +1840,14 @@ class CompositeSpec(TensorSpec):
                 will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
                 will lead to the keys :obj:`["next", ("next", "obs")]`. Default is :obj:`False`, i.e.
                 only nested keys will be returned.
+            nested_keys (bool, optional): if :obj:`False`, the returned keys will not be nested. They will
+                represent only the immediate children of the root, and not the whole nested sequence, i.e. a
+                :obj:`CompositeSpec(next=CompositeSpec(obs=None))` will lead to the keys
+                :obj:`["next"]. Default is :obj:`True`, i.e. nested keys will be returned.
         """
-        return _CompositeSpecKeysView(self, _yield_nesting_keys=yield_nesting_keys)
+        return _CompositeSpecKeysView(
+            self, _yield_nesting_keys=yield_nesting_keys, nested_keys=nested_keys
+        )
 
     def items(self) -> ItemsView:
         return self._specs.items()
@@ -1997,7 +1996,8 @@ class _CompositeSpecKeysView:
                 if self._yield_nesting_keys:
                     yield key
             else:
-                yield key
+                if not isinstance(item, CompositeSpec) or len(item):
+                    yield key
 
     def __len__(self):
         i = 0
