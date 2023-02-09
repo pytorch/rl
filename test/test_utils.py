@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import argparse
 import os
 
 import pytest
@@ -112,12 +112,17 @@ def test_implement_for():
 
 
 def test_implement_for_missing_module():
-    msg = "Supported version of 'missing_module' has not been found."
+    msg = "Supported version of 'test_utils.missing_module' has not been found."
     with pytest.raises(ModuleNotFoundError, match=msg):
         implement_for_test_functions.missing_module()
 
 
 def test_implement_for_missing_version():
-    msg = "Supported version of '_utils_internal' has not been found."
+    msg = "Supported version of 'test_utils.missing_version' has not been found."
     with pytest.raises(ModuleNotFoundError, match=msg):
         implement_for_test_functions.missing_version()
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

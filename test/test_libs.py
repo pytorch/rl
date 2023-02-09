@@ -35,15 +35,23 @@ from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
 if _has_gym:
-    import gym
+    try:
+        import gymnasium as gym
+        from gymnasium import __version__ as gym_version
 
-    gym_version = version.parse(gym.__version__)
-    if gym_version > version.parse("0.19"):
-        from gym.wrappers.pixel_observation import PixelObservationWrapper
-    else:
-        from torchrl.envs.libs.utils import (
-            GymPixelObservationWrapper as PixelObservationWrapper,
-        )
+        gym_version = version.parse(gym_version)
+        from gymnasium.wrappers.pixel_observation import PixelObservationWrapper
+    except ModuleNotFoundError:
+        import gym
+
+        gym_version = version.parse(gym.__version__)
+        if gym_version > version.parse("0.19"):
+            from gym.wrappers.pixel_observation import PixelObservationWrapper
+        else:
+            from torchrl.envs.libs.utils import (
+                GymPixelObservationWrapper as PixelObservationWrapper,
+            )
+
 
 if _has_dmc:
     from dm_control import suite
@@ -159,6 +167,11 @@ def _make_gym_environment(env_name):  # noqa: F811
 
 
 @implement_for("gym", "0.26", None)
+def _make_gym_environment(env_name):  # noqa: F811
+    return gym.make(env_name, render_mode="rgb_array")
+
+
+@implement_for("gymnasium", "0.27", None)
 def _make_gym_environment(env_name):  # noqa: F811
     return gym.make(env_name, render_mode="rgb_array")
 
@@ -281,7 +294,7 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
         and env_kwargs.get("from_pixels", False)
         and torch.cuda.device_count() == 0
     ):
-        pytest.skip(
+        raise pytest.skip(
             "Skipping test as rendering is not supported in tests before gym 0.26."
         )
     env = env_lib(*env_args, **env_kwargs)
