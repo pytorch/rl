@@ -108,9 +108,6 @@ def make_env_transforms(
             ),
         )
 
-    if cfg.noops:
-        env.append_transform(NoopResetEnv(cfg.noops))
-
     if from_pixels:
         if not cfg.catframes:
             raise RuntimeError(
@@ -306,6 +303,8 @@ def transformed_env_constructor(
         else:
             raise RuntimeError("cannot provive both custom_env and custom_env_maker")
 
+        if cfg.noops:
+            env = TransformedEnv(env, NoopResetEnv(cfg.noops))
         if not return_transformed_envs:
             return env
 

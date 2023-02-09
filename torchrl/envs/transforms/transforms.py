@@ -359,13 +359,15 @@ class TransformedEnv(EnvBase):
             if type(transform) is not Compose:
                 # we don't use isinstance as some transforms may be subclassed from
                 # Compose but with other features that we don't want to loose.
-                transform = [transform]
+                if transform is not None:
+                    transform = [transform]
+                else:
+                    transform = []
             else:
                 for t in transform:
                     t.reset_parent()
-            env_transform = env.transform
+            env_transform = env.transform.clone()
             if type(env_transform) is not Compose:
-                env_transform.reset_parent()
                 env_transform = [env_transform]
             else:
                 for t in env_transform:
@@ -684,7 +686,7 @@ class Compose(Transform):
     def __init__(self, *transforms: Transform):
         super().__init__(in_keys=[])
         self.transforms = nn.ModuleList(transforms)
-        for t in self.transforms:
+        for t in transforms:
             t.set_container(self)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
