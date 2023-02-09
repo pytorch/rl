@@ -125,17 +125,17 @@ def make_env_transforms(
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(0, -3, allow_positive_dim=True))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"], dim=-3))
-        if stats is None:
+        if stats is None and obs_norm_state_dict is None:
             obs_stats = {
-                "loc": torch.zeros(env.observation_spec["pixels"].shape),
-                "scale": torch.ones(env.observation_spec["pixels"].shape),
+                "loc": torch.zeros(()),
+                "scale": torch.ones(()),
             }
+        elif stats is None:
+            obs_stats = obs_norm_state_dict
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
         obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
-        if obs_norm_state_dict:
-            obs_norm.load_state_dict(obs_norm_state_dict)
         env.append_transform(obs_norm)
     if norm_rewards:
         reward_scaling = 1.0
