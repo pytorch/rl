@@ -206,3 +206,16 @@ Loggers
     WandbLogger
     get_logger
     generate_exp_name
+
+
+Recording utils
+---------------
+
+.. currentmodule:: torchrl.record
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    VideoRecorder
+    TensorDictRecorder
