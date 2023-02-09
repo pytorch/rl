@@ -984,6 +984,9 @@ def test_transformed_env_constructor_with_state_dict(from_pixels):
             use_env_creator=False,
             custom_env_maker=env_maker,
         )()
+        for t in t_env.transform:
+            if isinstance(t, ObservationNorm):
+                t.init_stats(4)
         idx, state_dict = retrieve_observation_norms_state_dict(t_env)[0]
 
         obs_transform = transformed_env_constructor(

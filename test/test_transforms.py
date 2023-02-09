@@ -5637,8 +5637,8 @@ def test_nested_transformed_env():
     assert isinstance(env.transform, Compose)
     children = list(env.transform.transforms.children())
     assert len(children) == 2
-    assert children[0] == t1
-    assert children[1] == t2
+    assert children[0].scale == 1
+    assert children[1].scale == 2
 
 
 def test_transform_parent():

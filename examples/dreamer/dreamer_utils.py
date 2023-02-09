@@ -421,6 +421,6 @@ class EnvConfig:
     # Disables grayscale transform.
     max_frames_per_traj: int = 1000
     # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
-    batch_transform: bool = False
+    batch_transform: bool = True
     # if True, the transforms will be applied to the parallel env, and not to each individual env.\
     image_size: int = 84

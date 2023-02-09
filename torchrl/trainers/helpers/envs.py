@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+from copy import copy
 from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
@@ -125,9 +125,9 @@ def make_env_transforms(
         if stats is None and obs_norm_state_dict is None:
             obs_stats = {}
         elif stats is None:
-            obs_stats = obs_norm_state_dict
+            obs_stats = copy(obs_norm_state_dict)
         else:
-            obs_stats = stats
+            obs_stats = copy(stats)
         obs_stats["standard_normal"] = True
         obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
         env.append_transform(obs_norm)
@@ -165,9 +165,9 @@ def make_env_transforms(
             if stats is None and obs_norm_state_dict is None:
                 _stats = {}
             elif stats is None:
-                _stats = obs_norm_state_dict
+                _stats = copy(obs_norm_state_dict)
             else:
-                _stats = stats
+                _stats = copy(stats)
             obs_norm = ObservationNorm(
                 **_stats, in_keys=[out_key], standard_normal=True
             )
