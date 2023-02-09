@@ -34,16 +34,9 @@ try:
     import envpool
 
     try:
-        from gymnasium import spaces as gymnasium_spaces
-    except ModuleNotFoundError:
-        gymnasium_spaces = None
-    try:
         from gym import spaces as gym_spaces
-
-        if gymnasium_spaces is None:
-            gymnasium_spaces = gym_spaces
     except ModuleNotFoundError:
-        gym_spaces = gymnasium_spaces
+        from gymnasium import spaces as gym_spaces
 
     import treevalue
 
@@ -1219,32 +1212,28 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _add_shape_to_spec(
         self, spec: gym_spaces.space.Space
     ) -> gym_spaces.space.Space:
-        if isinstance(spec, (gymnasium_spaces.Box, gym_spaces.Box)):
+        if isinstance(spec, gym_spaces.Box):
             return gym_spaces.Box(
                 low=np.stack([spec.low] * self.num_workers),
                 high=np.stack([spec.high] * self.num_workers),
                 dtype=spec.dtype,
                 shape=(self.num_workers, *spec.shape),
             )
-        if isinstance(spec, (gymnasium_spaces.dict.Dict, gym_spaces.dict.Dict)):
+        if isinstance(spec, gym_spaces.dict.Dict):
             spec_dict = {}
             for key in spec.keys():
-                if isinstance(spec[key], (gymnasium_spaces.Box, gym_spaces.Box)):
+                if isinstance(spec[key], gym_spaces.Box):
                     spec_dict[key] = gym_spaces.Box(
                         low=np.stack([spec[key].low] * self.num_workers),
                         high=np.stack([spec[key].high] * self.num_workers),
                         dtype=spec[key].dtype,
                         shape=(self.num_workers, *spec[key].shape),
                     )
-                elif isinstance(
-                    spec[key], (gymnasium_spaces.dict.Dict, gym_spaces.dict.Dict)
-                ):
+                elif isinstance(spec[key], gym_spaces.Box):
                     # If needed, we could add support by applying this function recursively
                     raise TypeError("Nested specs with depth > 1 are not supported.")
             return spec_dict
-        if isinstance(
-            spec, (gymnasium_spaces.discrete.Discrete, gym_spaces.discrete.Discrete)
-        ):
+        if isinstance(spec, gym_spaces.Box):
             # Discrete spec in Gym doesn't have shape, so nothing to change
             return spec
         raise TypeError(f"Unsupported spec type {spec.__class__}.")

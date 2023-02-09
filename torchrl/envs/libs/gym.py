@@ -29,13 +29,14 @@ from ..utils import _classproperty
 IMPORT_ERROR = None
 _has_gym = False
 try:
-    import gymnasium as gym
+    # rule of thumbs: gym precedes
+    import gym
 
     _has_gym = True
 except ImportError as err:
     IMPORT_ERROR = err
     try:
-        import gym
+        import gymnasium as gym
 
         _has_gym = True
     except ImportError as err:

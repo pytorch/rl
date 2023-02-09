@@ -14,13 +14,14 @@ import numpy as np
 IMPORT_ERROR = None
 _has_gym = False
 try:
-    from gymnasium import ObservationWrapper, spaces
+    # rule of thumbs: gym precedes
+    from gym import ObservationWrapper, spaces
 
     _has_gym = True
 except ImportError as err:
     IMPORT_ERROR = err
     try:
-        from gym import ObservationWrapper, spaces
+        from gymnasium import ObservationWrapper, spaces
 
         _has_gym = True
     except ImportError as err:
