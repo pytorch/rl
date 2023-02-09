@@ -168,18 +168,18 @@ def make_env_transforms(
         env.append_transform(CatTensors(in_keys=selected_keys, out_key=out_key))
 
         if not vecnorm:
-            if stats is None:
+            if stats is None and obs_norm_state_dict is None:
                 _stats = {
                     "loc": torch.zeros(env.observation_spec[out_key].shape),
                     "scale": torch.ones(env.observation_spec[out_key].shape),
                 }
+            elif stats is None:
+                _stats = obs_norm_state_dict
             else:
                 _stats = stats
             obs_norm = ObservationNorm(
                 **_stats, in_keys=[out_key], standard_normal=True
             )
-            if obs_norm_state_dict:
-                obs_norm.load_state_dict(obs_norm_state_dict)
             env.append_transform(obs_norm)
         else:
             env.append_transform(

@@ -447,9 +447,10 @@ class GymEnv(GymWrapper):
                 made_env = True
             except TypeError as err:
                 if ACCEPTED_TYPE_ERRORS["frame_skip"] in str(err):
-                    warn(
-                        "Discarding frameskip arg. This will be taken care of by TorchRL env wrapper."
-                    )
+                    # we can disable this, not strictly indispensable to know
+                    # warn(
+                    #     "Discarding frameskip arg. This will be taken care of by TorchRL env wrapper."
+                    # )
                     self.wrapper_frame_skip = kwargs.pop("frameskip")
                 elif ACCEPTED_TYPE_ERRORS["render_mode"] in str(err):
                     warn("Discarding render_mode from the env constructor.")

@@ -252,7 +252,7 @@ class Transform(nn.Module):
         return f"{self.__class__.__name__}(keys={self.in_keys})"
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:
-        if self.__dict__["_container"] is not None:
+        if self.parent is not None:
             raise AttributeError(
                 f"parent of transform {type(self)} already set. "
                 "Call `transform.clone()` to get a similar transform with no parent set."
@@ -781,11 +781,7 @@ class Compose(Transform):
         return super().to(dest)
 
     def __iter__(self):
-        # We clone the transforms to be able to do
-        # env2 = TransformedEnv(base_env, *env1.transform.clone())
-        # which will otherwise result in an error because all the transforms
-        # from the Compose already have a container.
-        yield from (t.clone() for t in self.transforms)
+        yield from self.transforms
 
     def __len__(self):
         return len(self.transforms)
