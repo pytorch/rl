@@ -279,7 +279,10 @@ for i, val in enumerate(rb._sampler._sum_tree):
     if i == len(rb):
         break
 
-import gym
+try:
+    import gymnasium as gym
+except ModuleNotFoundError:
+    import gym
 
 ###############################################################################
 # Envs

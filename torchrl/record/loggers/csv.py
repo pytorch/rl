@@ -91,7 +91,7 @@ class CSVLogger(Logger):
         self.experiment.add_scalar(name, value, global_step=step)
 
     def log_video(self, name: str, video: Tensor, step: int = None, **kwargs) -> None:
-        """Log videos inputs to the tensorboard.
+        """Log videos inputs to a .pt file.
 
         Args:
             name (str): The name of the video.
