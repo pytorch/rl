@@ -994,11 +994,6 @@ class TestEquality:
         assert ts != ts_other
 
 
-if __name__ == "__main__":
-    args, unknown = argparse.ArgumentParser().parse_known_args()
-    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
-
-
 class TestSpec:
     @pytest.mark.parametrize(
         "action_spec_cls", [OneHotDiscreteTensorSpec, DiscreteTensorSpec]
@@ -1672,3 +1667,8 @@ class TestClone:
         spec = UnboundedDiscreteTensorSpec(shape=shape1, device="cpu", dtype=torch.long)
         assert spec == spec.clone()
         assert spec is not spec.clone()
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

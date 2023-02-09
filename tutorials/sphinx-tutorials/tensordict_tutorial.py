@@ -95,8 +95,10 @@ def collate_dict_fn(dict_list):
     final_dict = {}
     for key in dict_list[0].keys():
         final_dict[key] = []
+
         for single_dict in dict_list:
             final_dict[key].append(single_dict[key])
+
         final_dict[key] = torch.stack(final_dict[key], dim=0)
     return final_dict
 
@@ -491,3 +493,4 @@ assert unsqueezed_tensordict.squeeze(0) is tensordict
 
 ###############################################################################
 # Have fun with TensorDict!
+#

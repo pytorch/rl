@@ -10,7 +10,22 @@ import copy
 from collections.abc import MutableMapping
 
 import numpy as np
-from gym import ObservationWrapper, spaces
+
+IMPORT_ERROR = None
+_has_gym = False
+try:
+    # rule of thumbs: gym precedes
+    from gym import ObservationWrapper, spaces
+
+    _has_gym = True
+except ImportError as err:
+    IMPORT_ERROR = err
+    try:
+        from gymnasium import ObservationWrapper, spaces
+
+        _has_gym = True
+    except ImportError as err:
+        IMPORT_ERROR = err
 
 STATE_KEY = "state"
 
@@ -42,6 +57,8 @@ class GymPixelObservationWrapper(ObservationWrapper):
     def __init__(
         self, env, pixels_only=True, render_kwargs=None, pixel_keys=("pixels",)
     ):
+        if not _has_gym:
+            raise IMPORT_ERROR
         env.reset()
         super().__init__(env)
 

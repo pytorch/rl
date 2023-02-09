@@ -265,7 +265,10 @@ class Transform(nn.Module):
 
     def clone(self):
         self_copy = copy(self)
-        self_copy.reset_parent()
+        state = copy(self.__dict__)
+        state["_container"] = None
+        state["_parent"] = None
+        self_copy.__dict__.update(state)
         return self_copy
 
     @property
@@ -778,7 +781,11 @@ class Compose(Transform):
         return super().to(dest)
 
     def __iter__(self):
-        return iter(self.transforms)
+        # We clone the transforms to be able to do
+        # env2 = TransformedEnv(base_env, *env1.transform.clone())
+        # which will otherwise result in an error because all the transforms
+        # from the Compose already have a container.
+        yield from (t.clone() for t in self.transforms)
 
     def __len__(self):
         return len(self.transforms)
@@ -793,6 +800,17 @@ class Compose(Transform):
         for t in self.transforms:
             t.empty_cache()
         super().empty_cache()
+
+    def reset_parent(self):
+        for t in self.transforms:
+            t.reset_parent()
+        super().reset_parent()
+
+    def clone(self):
+        transforms = []
+        for t in self.transforms:
+            transforms.append(t.clone())
+        return Compose(*transforms)
 
 
 class ToTensorImage(ObservationTransform):
@@ -2933,7 +2951,7 @@ class StepCounter(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=self.parent.batch_size,
+            shape=observation_spec.shape,
             dtype=torch.int64,
             device=observation_spec.device,
         )
@@ -2948,7 +2966,7 @@ class StepCounter(Transform):
                 f"input_spec was expected to be of type CompositeSpec. Got {type(input_spec)} instead."
             )
         input_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=self.parent.batch_size,
+            shape=input_spec.shape,
             dtype=torch.int64,
             device=input_spec.device,
         )

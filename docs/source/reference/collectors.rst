@@ -41,7 +41,7 @@ avoid OOM errors. Finally, the choice of the batch size and passing device (ie t
 device where the data will be stored while waiting to be passed to the collection
 worker) may also impact the memory management. The key parameters to control are
 :obj:`devices` which controls the execution devices (ie the device of the policy)
-and :obj:`passing_devices` which will control the device where the environment and
+and :obj:`storing_devices` which will control the device where the environment and
 data are stored during a rollout. A good heuristic is usually to use the same device
 for storage and compute, which is the default behaviour when only the `devices` argument
 is being passed.

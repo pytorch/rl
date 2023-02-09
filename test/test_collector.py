@@ -131,9 +131,9 @@ def make_policy(env):
 
 
 def _is_consistent_device_type(
-    device_type, policy_device_type, passing_device_type, tensordict_device_type
+    device_type, policy_device_type, storing_device_type, tensordict_device_type
 ):
-    if passing_device_type is None:
+    if storing_device_type is None:
         if device_type is None:
             if policy_device_type is None:
                 return tensordict_device_type == "cpu"
@@ -142,7 +142,7 @@ def _is_consistent_device_type(
 
         return tensordict_device_type == device_type
 
-    return tensordict_device_type == passing_device_type
+    return tensordict_device_type == storing_device_type
 
 
 @pytest.mark.skipif(
@@ -152,12 +152,12 @@ def _is_consistent_device_type(
 @pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("device", ["cuda", "cpu", None])
 @pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
-@pytest.mark.parametrize("passing_device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("storing_device", ["cuda", "cpu", None])
 def test_output_device_consistency(
-    num_env, device, policy_device, passing_device, seed=40
+    num_env, device, policy_device, storing_device, seed=40
 ):
     if (
-        device == "cuda" or policy_device == "cuda" or passing_device == "cuda"
+        device == "cuda" or policy_device == "cuda" or storing_device == "cuda"
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
 
@@ -169,7 +169,7 @@ def test_output_device_consistency(
 
     _device = "cuda:0" if device == "cuda" else device
     _policy_device = "cuda:0" if policy_device == "cuda" else policy_device
-    _passing_device = "cuda:0" if passing_device == "cuda" else passing_device
+    _storing_device = "cuda:0" if storing_device == "cuda" else storing_device
 
     if num_env == 1:
 
@@ -201,12 +201,12 @@ def test_output_device_consistency(
         max_frames_per_traj=2000,
         total_frames=20000,
         device=_device,
-        passing_device=_passing_device,
+        storing_device=_storing_device,
         pin_memory=False,
     )
     for _, d in enumerate(collector):
         assert _is_consistent_device_type(
-            device, policy_device, passing_device, d.device.type
+            device, policy_device, storing_device, d.device.type
         )
         break
 
@@ -220,13 +220,13 @@ def test_output_device_consistency(
         max_frames_per_traj=2000,
         total_frames=20000,
         device=_device,
-        passing_device=_passing_device,
+        storing_device=_storing_device,
         pin_memory=False,
     )
 
     for _, d in enumerate(ccollector):
         assert _is_consistent_device_type(
-            device, policy_device, passing_device, d.device.type
+            device, policy_device, storing_device, d.device.type
         )
         break
 
@@ -833,7 +833,7 @@ def test_update_weights(use_async):
         [create_env] * 3,
         policy=policy,
         devices=[torch.device("cuda:0")] * 3,
-        passing_devices=[torch.device("cuda:0")] * 3,
+        storing_devices=[torch.device("cuda:0")] * 3,
     )
     # collect state_dict
     state_dict = collector.state_dict()
@@ -1010,13 +1010,13 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
 
 
 @pytest.mark.parametrize("device", ["cuda", "cpu"])
-@pytest.mark.parametrize("passing_device", ["cuda", "cpu"])
+@pytest.mark.parametrize("storing_device", ["cuda", "cpu"])
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
-def test_collector_device_combinations(device, passing_device):
+def test_collector_device_combinations(device, storing_device):
     if (
         _os_is_windows
         and _python_is_3_10
-        and passing_device == "cuda"
+        and storing_device == "cuda"
         and device == "cuda"
     ):
         pytest.skip("Windows fatal exception: access violation in torch.storage")
@@ -1036,11 +1036,11 @@ def test_collector_device_combinations(device, passing_device):
         max_frames_per_traj=2000,
         total_frames=20000,
         device=device,
-        passing_device=passing_device,
+        storing_device=storing_device,
         pin_memory=False,
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(passing_device)
+    assert batch.device == torch.device(storing_device)
     collector.shutdown()
 
     collector = MultiSyncDataCollector(
@@ -1057,13 +1057,13 @@ def test_collector_device_combinations(device, passing_device):
         devices=[
             device,
         ],
-        passing_devices=[
-            passing_device,
+        storing_devices=[
+            storing_device,
         ],
         pin_memory=False,
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(passing_device)
+    assert batch.device == torch.device(storing_device)
     collector.shutdown()
 
     collector = MultiaSyncDataCollector(
@@ -1080,13 +1080,13 @@ def test_collector_device_combinations(device, passing_device):
         devices=[
             device,
         ],
-        passing_devices=[
-            passing_device,
+        storing_devices=[
+            storing_device,
         ],
         pin_memory=False,
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(passing_device)
+    assert batch.device == torch.device(storing_device)
     collector.shutdown()
 
 
