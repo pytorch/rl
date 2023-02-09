@@ -128,7 +128,9 @@ def make_env_transforms(
 
     default_dict = {
         "state": UnboundedContinuousTensorSpec(shape=(*env.batch_size, cfg.state_dim)),
-        "belief": UnboundedContinuousTensorSpec(shape=(*env.batch_size, cfg.rssm_hidden_dim)),
+        "belief": UnboundedContinuousTensorSpec(
+            shape=(*env.batch_size, cfg.rssm_hidden_dim)
+        ),
     }
     env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
