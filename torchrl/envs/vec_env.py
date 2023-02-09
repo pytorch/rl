@@ -34,9 +34,9 @@ try:
     import envpool
 
     try:
-        from gym import spaces as gym_spaces
+        import gym
     except ModuleNotFoundError:
-        from gymnasium import spaces as gym_spaces
+        import gymnasium as gym
 
     import treevalue
 
@@ -1210,30 +1210,30 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         )
 
     def _add_shape_to_spec(
-        self, spec: gym_spaces.space.Space
-    ) -> gym_spaces.space.Space:
-        if isinstance(spec, gym_spaces.Box):
-            return gym_spaces.Box(
+        self, spec: gym.spaces.space.Space
+    ) -> gym.spaces.space.Space:
+        if isinstance(spec, gym.spaces.Box):
+            return gym.spaces.Box(
                 low=np.stack([spec.low] * self.num_workers),
                 high=np.stack([spec.high] * self.num_workers),
                 dtype=spec.dtype,
                 shape=(self.num_workers, *spec.shape),
             )
-        if isinstance(spec, gym_spaces.dict.Dict):
+        if isinstance(spec, gym.spaces.dict.Dict):
             spec_dict = {}
             for key in spec.keys():
-                if isinstance(spec[key], gym_spaces.Box):
-                    spec_dict[key] = gym_spaces.Box(
+                if isinstance(spec[key], gym.spaces.Box):
+                    spec_dict[key] = gym.spaces.Box(
                         low=np.stack([spec[key].low] * self.num_workers),
                         high=np.stack([spec[key].high] * self.num_workers),
                         dtype=spec[key].dtype,
                         shape=(self.num_workers, *spec[key].shape),
                     )
-                elif isinstance(spec[key], gym_spaces.Box):
+                elif isinstance(spec[key], gym.spaces.dict.Dict):
                     # If needed, we could add support by applying this function recursively
                     raise TypeError("Nested specs with depth > 1 are not supported.")
             return spec_dict
-        if isinstance(spec, gym_spaces.Box):
+        if isinstance(spec, gym.spaces.discrete.Discrete):
             # Discrete spec in Gym doesn't have shape, so nothing to change
             return spec
         raise TypeError(f"Unsupported spec type {spec.__class__}.")
