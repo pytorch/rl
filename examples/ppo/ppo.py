@@ -135,7 +135,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if isinstance(create_env_fn, ParallelEnv):
         raise NotImplementedError("This behaviour is deprecated")
     elif isinstance(create_env_fn, EnvCreator):
-        recorder.load_state_dict(create_env_fn().state_dict())
+        recorder.transform[1:].load_state_dict(create_env_fn().transform.state_dict())
     elif isinstance(create_env_fn, TransformedEnv):
         recorder.transform = create_env_fn.transform.clone()
     else:

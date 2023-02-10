@@ -728,7 +728,7 @@ class Compose(Transform):
         transform = self.transforms
         transform = transform[item]
         if not isinstance(transform, Transform):
-            out = Compose(*self.transforms[item])
+            out = Compose(*(t.clone() for t in self.transforms[item]))
             out.set_container(self.parent)
             return out
         return transform
@@ -1413,7 +1413,7 @@ class ObservationNorm(ObservationTransform):
             in_keys_inv=in_keys_inv,
             out_keys_inv=out_keys_inv,
         )
-        self.standard_normal = standard_normal
+        self.register_buffer("standard_normal", torch.tensor(standard_normal))
         self.eps = 1e-6
 
         if loc is not None and not isinstance(loc, torch.Tensor):
@@ -1781,7 +1781,7 @@ class RewardScaling(Transform):
         if in_keys is None:
             in_keys = ["reward"]
         super().__init__(in_keys=in_keys)
-        self.standard_normal = standard_normal
+        self.register_buffer("standard_normal", torch.tensor(standard_normal))
 
         if not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc)
