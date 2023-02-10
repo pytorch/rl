@@ -574,7 +574,7 @@ class InPlaceSampler:
 
 
 def _reduce(tensor: torch.Tensor, reduction: str):
-    """Reduces a tensor given the reduction method"""
+    """Reduces a tensor given the reduction method."""
     if reduction == "max":
         return tensor.max().item()
     elif reduction == "min":
