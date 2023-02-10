@@ -1090,7 +1090,7 @@ def test_retrieve_observation_norms_state_dict(device, composed):
 
     assert len(state_dicts) == expected_state_count
     for idx, state_dict in enumerate(state_dicts):
-        assert len(state_dict[1]) == 2
+        assert len(state_dict[1]) == 3
         assert state_dict[0] == expected_idx[idx]
 
 

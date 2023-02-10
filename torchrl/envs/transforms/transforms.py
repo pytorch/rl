@@ -1377,7 +1377,7 @@ class ObservationNorm(ObservationTransform):
         ...     torch.ones(3)).all())
         tensor(True)
 
-    The normalisation stats can be automatically computed:
+    The normalization stats can be automatically computed:
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> torch.manual_seed(0)
@@ -1413,7 +1413,9 @@ class ObservationNorm(ObservationTransform):
             in_keys_inv=in_keys_inv,
             out_keys_inv=out_keys_inv,
         )
-        self.register_buffer("standard_normal", torch.tensor(standard_normal))
+        if not isinstance(standard_normal, torch.Tensor):
+            standard_normal = torch.tensor(standard_normal)
+        self.register_buffer("standard_normal", standard_normal)
         self.eps = 1e-6
 
         if loc is not None and not isinstance(loc, torch.Tensor):
@@ -1781,7 +1783,9 @@ class RewardScaling(Transform):
         if in_keys is None:
             in_keys = ["reward"]
         super().__init__(in_keys=in_keys)
-        self.register_buffer("standard_normal", torch.tensor(standard_normal))
+        if not isinstance(standard_normal, torch.Tensor):
+            standard_normal = torch.tensor(standard_normal)
+        self.register_buffer("standard_normal", standard_normal)
 
         if not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc)

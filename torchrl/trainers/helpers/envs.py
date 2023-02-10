@@ -168,8 +168,9 @@ def make_env_transforms(
                 _stats = copy(obs_norm_state_dict)
             else:
                 _stats = copy(stats)
+            _stats.update({"standard_normal": True})
             obs_norm = ObservationNorm(
-                **_stats, in_keys=[out_key], standard_normal=True
+                **_stats, in_keys=[out_key],
             )
             env.append_transform(obs_norm)
         else:
