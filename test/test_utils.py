@@ -112,13 +112,13 @@ def test_implement_for():
 
 
 def test_implement_for_missing_module():
-    msg = "Supported version of 'test_utils.missing_module' has not been found."
+    msg = r"Supported version of .*test_utils.missing_module' has not been found."
     with pytest.raises(ModuleNotFoundError, match=msg):
         implement_for_test_functions.missing_module()
 
 
 def test_implement_for_missing_version():
-    msg = "Supported version of 'test_utils.missing_version' has not been found."
+    msg = r"Supported version of .*test_utils.missing_version' has not been found."
     with pytest.raises(ModuleNotFoundError, match=msg):
         implement_for_test_functions.missing_version()
 
