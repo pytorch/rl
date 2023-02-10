@@ -229,6 +229,7 @@ in the environment. The keys to be included in this inverse transform are passed
     ObservationTransform
     PinMemoryTransform
     R3MTransform
+    RandomCropTensorDict
     Resize
     RewardClipping
     RewardScaling

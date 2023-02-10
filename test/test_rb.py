@@ -382,7 +382,8 @@ def test_prototype_prb(priority_key, contiguous, device):
 
 
 @pytest.mark.parametrize("stack", [False, True])
-def test_replay_buffer_trajectories(stack):
+@pytest.mark.parametrize("reduction", ["min", "max", "median", "mean"])
+def test_replay_buffer_trajectories(stack, reduction):
     traj_td = TensorDict(
         {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
         batch_size=[3, 4],
@@ -395,22 +396,23 @@ def test_replay_buffer_trajectories(stack):
             5,
             alpha=0.7,
             beta=0.9,
+            reduction=reduction,
         ),
         priority_key="td_error",
     )
     rb.extend(traj_td)
     sampled_td = rb.sample(3)
-    sampled_td.set("td_error", torch.rand(3))
+    sampled_td.set("td_error", torch.rand(sampled_td.shape))
     rb.update_tensordict_priority(sampled_td)
     sampled_td = rb.sample(3, include_info=True)
     assert (sampled_td.get("_weight") > 0).all()
-    assert sampled_td.batch_size == torch.Size([3])
+    assert sampled_td.batch_size == torch.Size([3, 4])
 
-    # set back the trajectory length
-    sampled_td_filtered = sampled_td.to_tensordict().exclude(
-        "_weight", "index", "td_error"
-    )
-    sampled_td_filtered.batch_size = [3, 4]
+    # # set back the trajectory length
+    # sampled_td_filtered = sampled_td.to_tensordict().exclude(
+    #     "_weight", "index", "td_error"
+    # )
+    # sampled_td_filtered.batch_size = [3, 4]
 
 
 @pytest.mark.parametrize(

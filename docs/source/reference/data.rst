@@ -55,6 +55,22 @@ The following mean sampling latency improvements over using ListStorage were fou
 | :class:`LazyMemmapStorage`    | 3.44x     |
 +-------------------------------+-----------+
 
+Sotring trajectories
+~~~~~~~~~~~~~~~~~~~~
+
+It is not too difficult to store trajecotries in the replay buffer.
+One element to pay attention to is that the size of the replay buffer is always
+the size of the leading dimension of the storage: in other words, creating a
+replay buffer with a storage of size 1M when storing multidimensional data
+does not mean storing 1M frames but 1M trajectories.
+
+When sampling trajectories, it may be desirable to sample sub-trajectories
+to diversify learning or make the sampling more efficient.
+To do this, we provide a custom :class:`torchrl.envs.Transform` class named
+:class:`torchrl.envs.RandomCropTensorDict`. Here is an example of how this class
+can be used:
+
+    >>>
 
 TensorSpec
 ----------

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import collections
 import multiprocessing as mp
+import warnings
 from copy import copy
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
@@ -3183,6 +3184,7 @@ class TimeMaxPool(Transform):
             "TorchRL requesting that feature."
         )
 
+
 class RandomCropTensorDict(Transform):
     """A trajectory sub-sampler for ReplayBuffer and modules.
 
@@ -3192,13 +3194,88 @@ class RandomCropTensorDict(Transform):
     from a ReplayBuffer.
 
     This transform is primarily designed to be used with replay buffers and modules.
+    Currently, it cannot be used as an environment transform.
+    Do not hesitate to request for this behaviour through an issue if this is
+    desired.
 
+    Args:
+        sub_seq_len (int): the length of the sub-trajectory to sample
+        sample_dim (int, optional): the dimension along which the cropping
+            should occur. Negative dimensions should be preferred to make
+            the transform robust to tensordicts of varying batch dimensions.
+            Defaults to -1 (the default time dimension in TorchRL).
+        mask_key (str): If provided, this represents the mask key to be looked
+            for when doing the sampling. If provided, it only valid elements will
+            be returned. It is assumed that the mask is a boolean tensor with
+            first True values and then False values, not mixed together.
+            :class:`RandomCropTensorDict` will NOT check that this is respected
+            hence any error caused by an improper mask risks to go unnoticed.
+            Defaults: None (no mask key).
     """
-    def __init__(self, sub_seq_len):
+
+    def __init__(
+        self, sub_seq_len: int, sample_dim: int = -1, mask_key: Optional[str] = None
+    ):
         self.sub_seq_len = sub_seq_len
+        if sample_dim > 0:
+            warnings.warn(
+                "A positive shape has been passed to the RandomCropTensorDict "
+                "constructor. This may have unexpected behaviours when the "
+                "passed tensordicts have inconsistent batch dimensions. "
+                "For context, by convention, TorchRL concatenates time steps "
+                "along the last dimension of the tensordict."
+            )
+        self.sample_dim = sample_dim
+        self.mask_key = mask_key
+        super().__init__([])
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         shape = tensordict.shape
+        dim = self.sample_dim
         # shape must have at least one dimension
         if not len(shape):
-            raise RuntimeError("Cannot sub-sample from a tensordict with an empty shape.")
+            raise RuntimeError(
+                "Cannot sub-sample from a tensordict with an empty shape."
+            )
+        if shape[dim] < self.sub_seq_len:
+            raise RuntimeError(
+                f"Cannot sample trajectories of length {self.sub_seq_len} along"
+                f" dimension {dim} given a tensordict of shape "
+                f"{tensordict.shape}. Consider reducing the sub_seq_len "
+                f"parameter or increase sample length."
+            )
+        max_idx_0 = shape[dim] - self.sub_seq_len
+        idx_shape = list(tensordict.shape)
+        idx_shape[dim] = 1
+        device = tensordict.device
+        if device is None:
+            device = torch.device("cpu")
+        if self.mask_key is None or self.mask_key not in tensordict.keys(
+            isinstance(self.mask_key, tuple)
+        ):
+            idx_0 = torch.randint(max_idx_0, idx_shape, device=device)
+        else:
+            # get the traj length for each entry
+            mask = tensordict.get(self.mask_key)
+            if mask.shape != tensordict.shape:
+                raise ValueError(
+                    "Expected a mask of the same shape as the tensordict. Got "
+                    f"mask.shape={mask.shape} and tensordict.shape="
+                    f"{tensordict.shape} instead."
+                )
+            traj_lengths = mask.cumsum(self.sample_dim).max(self.sample_dim, True)[0]
+            if (traj_lengths < self.sub_seq_len).any():
+                raise RuntimeError(
+                    f"Cannot sample trajectories of length {self.sub_seq_len} when the minimum "
+                    f"trajectory length is {traj_lengths.min()}."
+                )
+            # take a random number between 0 and traj_lengths - self.sub_seq_len
+            idx_0 = (
+                torch.rand(idx_shape, device=device) * (traj_lengths - self.sub_seq_len)
+            ).to(torch.long)
+        arange = torch.arange(self.sub_seq_len, device=idx_0.device)
+        arange_shape = [1 for _ in range(tensordict.ndimension())]
+        arange_shape[dim] = len(arange)
+        arange = arange.view(arange_shape)
+        idx = idx_0 + arange
+        return tensordict.gather(dim=self.sample_dim, index=idx)

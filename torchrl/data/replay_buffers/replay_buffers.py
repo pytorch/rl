@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
+from tensordict.utils import expand_right
 
 from torchrl.data.utils import DEVICE_TYPING
 
@@ -351,7 +352,11 @@ class TensorDictReplayBuffer(ReplayBuffer):
             tensordict = tensordict.clone(recurse=False)
             tensordict.batch_size = []
         try:
-            priority = tensordict.get(self.priority_key).item()
+            priority = tensordict.get(self.priority_key)
+            if priority.numel() > 1:
+                priority = _reduce(priority, self._sampler.reduction)
+            else:
+                priority = priority.item()
         except ValueError:
             raise ValueError(
                 f"Found a priority key of size"
@@ -378,7 +383,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
                     tensordicts = tensordicts.clone(recurse=False)
                 else:
                     tensordicts = tensordicts.contiguous()
+                # we keep track of the batch size to reinstantiate it when sampling
+                if "_batch_size" in tensordicts.keys():
+                    raise KeyError("conflicting key '_batch_size'. Consider removing from data.")
+                shape = torch.tensor(tensordicts.batch_size[1:]).expand(tensordicts.batch_size[0], tensordicts.batch_dims-1)
                 tensordicts.batch_size = tensordicts.batch_size[:1]
+                tensordicts.set("_batch_size", shape)
             tensordicts.set(
                 "index",
                 torch.zeros(
@@ -406,7 +416,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
             dtype=torch.float,
             device=data.device,
         )
-        self.update_priority(data.get("index"), priority)
+        # if the index shape does not match the priority shape, we have expanded it.
+        # we just take the first value
+        index = data.get("index")
+        while index.shape != priority.shape:
+            # reduce index
+            index = index[..., 0]
+        self.update_priority(index, priority)
 
     def sample(
         self, batch_size: int, include_info: bool = False, return_info: bool = False
@@ -429,6 +445,18 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if include_info:
             for k, v in info.items():
                 data.set(k, torch.tensor(v, device=data.device), inplace=True)
+        if "_batch_size" in data.keys():
+            # we need to reset the batch-size
+            shape = data.pop("_batch_size")
+            shape = shape[0]
+            shape = torch.Size([data.shape[0], *shape])
+            # we may need to update some values in the data
+            for key, value in data.items():
+                if value.ndim >= len(shape):
+                    continue
+                value = expand_right(value, shape)
+                data.set(key, value)
+            data.batch_size = shape
         if return_info:
             return data, info
         return data
@@ -539,3 +567,17 @@ class InPlaceSampler:
         else:
             torch.stack(list_of_tds, 0, out=self.out)
         return self.out
+
+def _reduce(tensor: torch.Tensor, reduction: str):
+    """Reduces a tensor given the reduction method"""
+    if reduction == "max":
+        return tensor.max().item()
+    elif reduction == "min":
+        return tensor.min().item()
+    elif reduction == "mean":
+        return tensor.mean().item()
+    elif reduction == "median":
+        return tensor.median().item()
+    raise NotImplementedError(
+        f"Unknown reduction method {reduction}"
+    )
