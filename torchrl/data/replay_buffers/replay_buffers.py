@@ -385,8 +385,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
                     tensordicts = tensordicts.contiguous()
                 # we keep track of the batch size to reinstantiate it when sampling
                 if "_batch_size" in tensordicts.keys():
-                    raise KeyError("conflicting key '_batch_size'. Consider removing from data.")
-                shape = torch.tensor(tensordicts.batch_size[1:]).expand(tensordicts.batch_size[0], tensordicts.batch_dims-1)
+                    raise KeyError(
+                        "conflicting key '_batch_size'. Consider removing from data."
+                    )
+                shape = torch.tensor(tensordicts.batch_size[1:]).expand(
+                    tensordicts.batch_size[0], tensordicts.batch_dims - 1
+                )
                 tensordicts.batch_size = tensordicts.batch_size[:1]
                 tensordicts.set("_batch_size", shape)
             tensordicts.set(
@@ -568,6 +572,7 @@ class InPlaceSampler:
             torch.stack(list_of_tds, 0, out=self.out)
         return self.out
 
+
 def _reduce(tensor: torch.Tensor, reduction: str):
     """Reduces a tensor given the reduction method"""
     if reduction == "max":
@@ -578,6 +583,4 @@ def _reduce(tensor: torch.Tensor, reduction: str):
         return tensor.mean().item()
     elif reduction == "median":
         return tensor.median().item()
-    raise NotImplementedError(
-        f"Unknown reduction method {reduction}"
-    )
+    raise NotImplementedError(f"Unknown reduction method {reduction}")

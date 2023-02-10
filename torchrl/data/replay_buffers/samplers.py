@@ -147,7 +147,7 @@ class PrioritizedSampler(Sampler):
         beta: float,
         eps: float = 1e-8,
         dtype: torch.dtype = torch.float,
-        reduction: str="max",
+        reduction: str = "max",
     ) -> None:
         if alpha <= 0:
             raise ValueError(
