@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+from copy import copy
 from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
@@ -108,9 +108,6 @@ def make_env_transforms(
             ),
         )
 
-    if cfg.noops:
-        env.append_transform(NoopResetEnv(cfg.noops))
-
     if from_pixels:
         if not cfg.catframes:
             raise RuntimeError(
@@ -125,17 +122,14 @@ def make_env_transforms(
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(0, -3, allow_positive_dim=True))
         env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"], dim=-3))
-        if stats is None:
-            obs_stats = {
-                "loc": torch.zeros(env.observation_spec["pixels"].shape),
-                "scale": torch.ones(env.observation_spec["pixels"].shape),
-            }
+        if stats is None and obs_norm_state_dict is None:
+            obs_stats = {}
+        elif stats is None:
+            obs_stats = copy(obs_norm_state_dict)
         else:
-            obs_stats = stats
+            obs_stats = copy(stats)
         obs_stats["standard_normal"] = True
         obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
-        if obs_norm_state_dict:
-            obs_norm.load_state_dict(obs_norm_state_dict)
         env.append_transform(obs_norm)
     if norm_rewards:
         reward_scaling = 1.0
@@ -168,18 +162,17 @@ def make_env_transforms(
         env.append_transform(CatTensors(in_keys=selected_keys, out_key=out_key))
 
         if not vecnorm:
-            if stats is None:
-                _stats = {
-                    "loc": torch.zeros(env.observation_spec[out_key].shape),
-                    "scale": torch.ones(env.observation_spec[out_key].shape),
-                }
+            if stats is None and obs_norm_state_dict is None:
+                _stats = {}
+            elif stats is None:
+                _stats = copy(obs_norm_state_dict)
             else:
-                _stats = stats
+                _stats = copy(stats)
+            _stats.update({"standard_normal": True})
             obs_norm = ObservationNorm(
-                **_stats, in_keys=[out_key], standard_normal=True
+                **_stats,
+                in_keys=[out_key],
             )
-            if obs_norm_state_dict:
-                obs_norm.load_state_dict(obs_norm_state_dict)
             env.append_transform(obs_norm)
         else:
             env.append_transform(
@@ -306,6 +299,11 @@ def transformed_env_constructor(
         else:
             raise RuntimeError("cannot provive both custom_env and custom_env_maker")
 
+        if cfg.noops and custom_env is None:
+            # this is a bit hacky: if custom_env is not None, it is probably a ParallelEnv
+            # that already has its NoopResetEnv set for the contained envs.
+            # There is a risk however that we're just skipping the NoopsReset instantiation
+            env = TransformedEnv(env, NoopResetEnv(cfg.noops))
         if not return_transformed_envs:
             return env
 
@@ -339,6 +337,11 @@ def parallel_env_constructor(
         kwargs: keyword arguments for the `transformed_env_constructor` method.
     """
     batch_transform = cfg.batch_transform
+    if not batch_transform:
+        raise NotImplementedError(
+            "batch_transform must be set to True for the recorder to be synced "
+            "with the collection envs."
+        )
     if cfg.env_per_collector == 1:
         kwargs.update({"cfg": cfg, "use_env_creator": True})
         make_transformed_env = transformed_env_constructor(**kwargs)

@@ -253,7 +253,7 @@ class Transform(nn.Module):
         return f"{self.__class__.__name__}(keys={self.in_keys})"
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:
-        if self.__dict__["_container"] is not None:
+        if self.parent is not None:
             raise AttributeError(
                 f"parent of transform {type(self)} already set. "
                 "Call `transform.clone()` to get a similar transform with no parent set."
@@ -360,13 +360,15 @@ class TransformedEnv(EnvBase):
             if type(transform) is not Compose:
                 # we don't use isinstance as some transforms may be subclassed from
                 # Compose but with other features that we don't want to loose.
-                transform = [transform]
+                if transform is not None:
+                    transform = [transform]
+                else:
+                    transform = []
             else:
                 for t in transform:
                     t.reset_parent()
-            env_transform = env.transform
+            env_transform = env.transform.clone()
             if type(env_transform) is not Compose:
-                env_transform.reset_parent()
                 env_transform = [env_transform]
             else:
                 for t in env_transform:
@@ -685,7 +687,7 @@ class Compose(Transform):
     def __init__(self, *transforms: Transform):
         super().__init__(in_keys=[])
         self.transforms = nn.ModuleList(transforms)
-        for t in self.transforms:
+        for t in transforms:
             t.set_container(self)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -727,7 +729,7 @@ class Compose(Transform):
         transform = self.transforms
         transform = transform[item]
         if not isinstance(transform, Transform):
-            out = Compose(*self.transforms[item])
+            out = Compose(*(t.clone() for t in self.transforms[item]))
             out.set_container(self.parent)
             return out
         return transform
@@ -782,11 +784,7 @@ class Compose(Transform):
         return super().to(dest)
 
     def __iter__(self):
-        # We clone the transforms to be able to do
-        # env2 = TransformedEnv(base_env, *env1.transform.clone())
-        # which will otherwise result in an error because all the transforms
-        # from the Compose already have a container.
-        yield from (t.clone() for t in self.transforms)
+        yield from self.transforms
 
     def __len__(self):
         return len(self.transforms)
@@ -1380,7 +1378,7 @@ class ObservationNorm(ObservationTransform):
         ...     torch.ones(3)).all())
         tensor(True)
 
-    The normalisation stats can be automatically computed:
+    The normalization stats can be automatically computed:
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> torch.manual_seed(0)
@@ -1416,7 +1414,9 @@ class ObservationNorm(ObservationTransform):
             in_keys_inv=in_keys_inv,
             out_keys_inv=out_keys_inv,
         )
-        self.standard_normal = standard_normal
+        if not isinstance(standard_normal, torch.Tensor):
+            standard_normal = torch.tensor(standard_normal)
+        self.register_buffer("standard_normal", standard_normal)
         self.eps = 1e-6
 
         if loc is not None and not isinstance(loc, torch.Tensor):
@@ -1784,7 +1784,9 @@ class RewardScaling(Transform):
         if in_keys is None:
             in_keys = ["reward"]
         super().__init__(in_keys=in_keys)
-        self.standard_normal = standard_normal
+        if not isinstance(standard_normal, torch.Tensor):
+            standard_normal = torch.tensor(standard_normal)
+        self.register_buffer("standard_normal", standard_normal)
 
         if not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc)
@@ -2393,7 +2395,7 @@ class TensorDictPrimer(Transform):
         for key, spec in self.primers.items():
             if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
                 raise RuntimeError(
-                    "The leading shape of the primer specs should match the one of the parent env. "
+                    f"The leading shape of the primer specs ({self.__class__}) should match the one of the parent env. "
                     f"Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's shape is {spec.shape}."
                 )
             observation_spec[key] = spec.to(self.device)

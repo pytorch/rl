@@ -984,6 +984,9 @@ def test_transformed_env_constructor_with_state_dict(from_pixels):
             use_env_creator=False,
             custom_env_maker=env_maker,
         )()
+        for t in t_env.transform:
+            if isinstance(t, ObservationNorm):
+                t.init_stats(4)
         idx, state_dict = retrieve_observation_norms_state_dict(t_env)[0]
 
         obs_transform = transformed_env_constructor(
@@ -1087,7 +1090,7 @@ def test_retrieve_observation_norms_state_dict(device, composed):
 
     assert len(state_dicts) == expected_state_count
     for idx, state_dict in enumerate(state_dicts):
-        assert len(state_dict[1]) == 2
+        assert len(state_dict[1]) == 3
         assert state_dict[0] == expected_idx[idx]
 
 

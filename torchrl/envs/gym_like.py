@@ -167,6 +167,12 @@ class GymLikeEnv(_EnvWrapper):
         """
         if isinstance(observations, dict):
             observations = {key: value for key, value in observations.items()}
+            if "state" in observations and "observation" not in observations:
+                # we rename "state" in "observation" as "observation" is the conventional name
+                # for single observation in torchrl.
+                # naming it 'state' will result in envs that have a different name for the state vector
+                # when queried with and without pixels
+                observations["observation"] = observations.pop("state")
         if not isinstance(observations, (TensorDict, dict)):
             (key,) = itertools.islice(self.observation_spec.keys(), 1)
             observations = {key: observations}
