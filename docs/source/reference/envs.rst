@@ -72,14 +72,14 @@ Some libraries such as `gym3 <https://github.com/openai/gym3>`_ or `EnvPool <htt
 offer interfaces to execute batches of environments simultaneously.
 While they often offer a very competitive computational advantage, they do not
 necessarily scale to the wide variety of environment libraries supported by TorchRL.
-Therefore, TorchRL offers its own, generic :obj:`ParallelEnv` class to run multiple
+Therefore, TorchRL offers its own, generic :class:`ParallelEnv` class to run multiple
 environments in parallel.
-As this class inherits from :obj:`EnvBase`, it enjoys the exact same API as other environment.
-Of course, a :obj:`ParallelEnv` will have a batch size that corresponds to its environment count:
+As this class inherits from :class:`SerialEnv`, it enjoys the exact same API as other environment.
+Of course, a :class:`ParallelEnv` will have a batch size that corresponds to its environment count:
 
 It is important that your environment specs match the input and output that it sends and receives, as
-:obj:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
-Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
+:class:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
+Check the :func:`torchrl.envs.utils.check_env_specs` method for a sanity check.
 
 .. code-block::
    :caption: Parallel environment
@@ -91,7 +91,7 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
         >>> print(env.batch_size)
         torch.Size([4])
 
-:obj:`ParallelEnv` allows to retrieve the attributes from its contained environments:
+:class:`ParallelEnv` allows to retrieve the attributes from its contained environments:
 one can simply call:
 
 .. code-block::
@@ -118,29 +118,29 @@ It is also possible to reset some but not all of the environments:
             is_shared=True)
 
 
-*A note on performance*: launching a :obj:`ParallelEnv` can take quite some time
+*A note on performance*: launching a :class:`ParallelEnv` can take quite some time
 as it requires to launch as many python instances as there are processes. Due to
-the time that it takes to run :obj:`import torch` (and other imports), starting the
+the time that it takes to run ``import torch`` (and other imports), starting the
 parallel env can be a bottleneck. This is why, for instance, TorchRL tests are so slow.
 Once the environment is launched, a great speedup should be observed.
 
-Another thing to take in consideration is that :obj:`ParallelEnv`s (as well as data collectors)
+Another thing to take in consideration is that :class:`ParallelEnv`s (as well as data collectors)
 will create data buffers based on the environment specs to pass data from one process
 to another. This means that a misspecified spec (input, observation or reward) will
 cause a breakage at runtime as the data can't be written on the preallocated buffer.
 In general, an environment should be tested using the :obj:`check_env_specs`
-test function before being used in a :obj:`ParallelEnv`. This function will raise
+test function before being used in a :class:`ParallelEnv`. This function will raise
 an assertion error whenever the preallocated buffer and the collected data mismatch.
 
-We also offer the :obj:`SerialEnv` class that enjoys the exact same API but is executed
+We also offer the :class:`SerialEnv` class that enjoys the exact same API but is executed
 serially. This is mostly useful for testing purposes, when one wants to assess the
-behaviour of a :obj:`ParallelEnv` without launching the subprocesses.
+behaviour of a :class:`ParallelEnv` without launching the subprocesses.
 
-In addition to :obj:`ParallelEnv`, which offers process-based parallelism, we also provide a way to create
+In addition to :class:`ParallelEnv`, which offers process-based parallelism, we also provide a way to create
 multithreaded environments with :obj:`MultiThreadedEnv`. This class uses `EnvPool <https://github.com/sail-sg/envpool>`_
 library underneath, which allows for higher performance, but at the same time restricts flexibility - one can only
 create environments implemented in `EnvPool`. This covers many popular RL environments types (Atari, Classic Control,
-etc.), but one can not use an arbitrary TorchRL environment, as it is possible with :obj:`ParallelEnv`. Run
+etc.), but one can not use an arbitrary TorchRL environment, as it is possible with :class:`ParallelEnv`. Run
 `benchmarks/benchmark_batched_envs.py` to compare performance of different ways to parallelize batched environments.
 
 .. autosummary::
@@ -161,8 +161,8 @@ In most cases, the raw output of an environment must be treated before being pas
 policy or a value operator). To do this, TorchRL provides a set of transforms that aim at reproducing the transform
 logic of `torch.distributions.Transform` and `torchvision.transforms`.
 
-Transformed environments are build using the :doc:`TransformedEnv` primitive.
-Composed transforms are built using the :doc:`Compose` class:
+Transformed environments are build using the :class:`TransformedEnv` primitive.
+Composed transforms are built using the :class:`Compose` class:
 
 .. code-block::
    :caption: Transformed environment
@@ -179,7 +179,7 @@ operations that is to be computed.
 
 A great advantage of environment wrappers is that one can consult the environment up to that wrapper.
 The same can be achieved with TorchRL transformed environments: the :doc:`parent` attribute will
-return a new :obj:`TransformedEnv` with all the transforms up to the transform of interest.
+return a new :class:`TransformedEnv` with all the transforms up to the transform of interest.
 Re-using the example above:
 
 .. code-block::
@@ -213,8 +213,8 @@ in mind that the parent may come and go following what is being done with the tr
 Here are some examples: if we get a single transform from a :class:`Compose` object,
 this transform will keep its parent:
 
-  >>> third_transform = env.transform[2]
-  >>> assert third_transform.parent is not None
+    >>> third_transform = env.transform[2]
+    >>> assert third_transform.parent is not None
 
 This means that using this transform for another environment is prohibited, as
 the other environment would replace the parent and this may lead to unexpected
@@ -222,8 +222,8 @@ behviours. Fortunately, the :class:`Transform` class comes with a :func:`clone`
 method that will erase the parent while keeping the identity of all the
 registered buffers:
 
-  >>> TransformedEnv(base_env, third_transform)  # raises an Exception as third_transform already has a parent
-  >>> TransformedEnv(base_env, third_transform.clone())  # works
+    >>> TransformedEnv(base_env, third_transform)  # raises an Exception as third_transform already has a parent
+    >>> TransformedEnv(base_env, third_transform.clone())  # works
 
 On a single process or if the buffers are placed in shared memory, this will
 result in all the clone transforms to keep the same behaviour even if the
@@ -237,14 +237,14 @@ indexing a :class:`Compose` transform results in another :class:`Compose` transf
 that does not have a parent environment. Hence, we have to clone the sub-transforms
 to be able to create this other composition:
 
-  >>> env = TransformedEnv(base_env, Compose(transform1, transform2, transform3))
-  >>> last_two = env.transform[-2:]
-  >>> assert isinstance(last_two, Compose)
-  >>> assert last_two.parent is None
-  >>> assert last_two[0] is not transform2
-  >>> assert isinstance(last_two[0], transform2)  # and the buffers will match
-  >>> assert last_two[1] is not transform3
-  >>> assert isinstance(last_two[1], transform3)  # and the buffers will match
+    >>> env = TransformedEnv(base_env, Compose(transform1, transform2, transform3))
+    >>> last_two = env.transform[-2:]
+    >>> assert isinstance(last_two, Compose)
+    >>> assert last_two.parent is None
+    >>> assert last_two[0] is not transform2
+    >>> assert isinstance(last_two[0], type(transform2))  # and the buffers will match
+    >>> assert last_two[1] is not transform3
+    >>> assert isinstance(last_two[1], type(transform3))  # and the buffers will match
 
 .. autosummary::
     :toctree: generated/
