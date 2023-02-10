@@ -3182,3 +3182,23 @@ class TimeMaxPool(Transform):
             "(ie as LSTM would work over a whole sequence of data), file an issue on "
             "TorchRL requesting that feature."
         )
+
+class RandomCropTensorDict(Transform):
+    """A trajectory sub-sampler for ReplayBuffer and modules.
+
+    Gathers a sub-sequence of a defined length along the last dimension of the input
+    tensordict.
+    This can be used to get cropped trajectories from trajectories sampled
+    from a ReplayBuffer.
+
+    This transform is primarily designed to be used with replay buffers and modules.
+
+    """
+    def __init__(self, sub_seq_len):
+        self.sub_seq_len = sub_seq_len
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        shape = tensordict.shape
+        # shape must have at least one dimension
+        if not len(shape):
+            raise RuntimeError("Cannot sub-sample from a tensordict with an empty shape.")
