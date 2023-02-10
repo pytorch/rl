@@ -132,8 +132,11 @@ class PrioritizedSampler(Sampler):
         alpha (float): exponent α determines how much prioritization is used,
             with α = 0 corresponding to the uniform case.
         beta (float): importance sampling negative exponent.
-        eps (float): delta added to the priorities to ensure that the buffer
-            does not contain null priorities.
+        eps (float, optional): delta added to the priorities to ensure that the buffer
+            does not contain null priorities. Defaults to 1e-8.
+        reduction (str, optional): the reduction method for multidimensional
+            tensordicts (ie stored trajectories). Can be one of "max", "min",
+            "median" or "mean".
 
     """
 
@@ -144,6 +147,7 @@ class PrioritizedSampler(Sampler):
         beta: float,
         eps: float = 1e-8,
         dtype: torch.dtype = torch.float,
+        reduction: str = "max",
     ) -> None:
         if alpha <= 0:
             raise ValueError(
@@ -156,6 +160,7 @@ class PrioritizedSampler(Sampler):
         self._alpha = alpha
         self._beta = beta
         self._eps = eps
+        self.reduction = reduction
         if dtype in (torch.float, torch.FloatType, torch.float32):
             self._sum_tree = SumSegmentTreeFp32(self._max_capacity)
             self._min_tree = MinSegmentTreeFp32(self._max_capacity)
