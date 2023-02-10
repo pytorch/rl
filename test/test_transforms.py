@@ -351,6 +351,27 @@ class TestCatFrames(TransformBase):
             td["next", "observation"][..., 3:6] != td["next", "observation"][..., 6:9]
         ).any()
 
+    @pytest.mark.skipif(not _has_gym, reason="Gym not available")
+    def test_transform_env_clone(self):
+        env = TransformedEnv(
+            GymEnv(PENDULUM_VERSIONED, frame_skip=4),
+            CatFrames(dim=-1, N=3, in_keys=["observation"]),
+        )
+        td = env.reset()
+        td = env.rand_step(td)
+        cloned = env.transform.clone()
+        value_at_clone = td["next", "observation"].clone()
+        for _ in range(10):
+            td = env.rand_step(td)
+        assert (td["next", "observation"] != value_at_clone).any()
+        assert (
+            td["next", "observation"] == env.transform._cat_buffers_observation
+        ).all()
+        assert (
+            cloned._cat_buffers_observation == env.transform._cat_buffers_observation
+        ).all()
+        assert cloned is not env.transform
+
     def test_transform_model(self):
         key1 = "first key"
         key2 = "second key"
@@ -2885,6 +2906,35 @@ class TestObservationNorm(TransformBase):
             obs = env.rollout(3)["observation"]
 
         assert (abs(obs) < 1e-2).all()
+
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    def test_transform_env_clone(self, standard_normal):
+        out_keys = ["stuff"]
+        if standard_normal:
+            scale = 1_000_000
+        else:
+            scale = 0.0
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            ObservationNorm(
+                loc=0.0,
+                scale=scale,
+                in_keys=["observation"],
+                out_keys=out_keys,
+                standard_normal=standard_normal,
+            ),
+        )
+        cloned = env.transform.clone()
+        env.transform.loc += 1
+        env.transform.scale += 1
+        torch.testing.assert_close(
+            env.transform.loc, torch.ones_like(env.transform.loc)
+        )
+        torch.testing.assert_close(
+            env.transform.scale, scale + torch.ones_like(env.transform.scale)
+        )
+        assert env.transform.loc == cloned.loc
+        assert env.transform.scale == cloned.scale
 
     def test_transform_model(self):
         standard_normal = True
@@ -5637,8 +5687,8 @@ def test_nested_transformed_env():
     assert isinstance(env.transform, Compose)
     children = list(env.transform.transforms.children())
     assert len(children) == 2
-    assert children[0] == t1
-    assert children[1] == t2
+    assert children[0].scale == 1
+    assert children[1].scale == 2
 
 
 def test_transform_parent():
@@ -5783,6 +5833,29 @@ class TestTransforms:
             assert td.get(key).dtype == torch.double
         for key in keys_total - keys_to_transform:
             assert td.get(key).dtype == torch.float32
+
+    def test_compose_indexing(self):
+        c = Compose(
+            ObservationNorm(loc=1.0, scale=1.0, in_keys=["observation"]),
+            RewardScaling(loc=0, scale=1),
+            ObservationNorm(loc=2.0, scale=2.0, in_keys=["observation"]),
+        )
+        base_env = ContinuousActionVecMockEnv()
+        env = TransformedEnv(base_env, c)
+        last_t = env.transform[-1]
+        assert last_t.scale == 2
+        env.transform[-1].scale += 1
+        assert last_t.scale == 3
+        # indexing a sequence of transforms involves re-creating a Compose, which requires a clone
+        # because we need to deparent the transforms
+        sub_compose = env.transform[1:]
+        assert isinstance(sub_compose, Compose)
+        last_t2 = sub_compose[-1]
+        assert last_t2.scale == 3
+        # this involves clone, but the value of the registered buffer should still match
+        env.transform[1:][-1].scale += 1
+        assert last_t.scale == 4
+        assert last_t2.scale == 4
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_finitetensordictcheck(self, device):

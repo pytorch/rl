@@ -9,8 +9,8 @@ The goal is to be able to swap environments in an experiment with little or no e
 even if these environments are simulated using different libraries.
 TorchRL offers some out-of-the-box environment wrappers under :obj:`torchrl.envs.libs`,
 which we hope can be easily imitated for other libraries.
-The parent class :obj:`EnvBase` is a :obj:`torch.nn.Module` subclass that implements
-some typical environment methods using :obj:`TensorDict` as a data organiser. This allows this
+The parent class :class:`torchrl.envs.EnvBase` is a :class:`torch.nn.Module` subclass that implements
+some typical environment methods using :class:`tensordict.TensorDict` as a data organiser. This allows this
 class to be generic and to handle an arbitrary number of input and outputs, as well as
 nested or batched data structures.
 
@@ -25,10 +25,10 @@ Each env will have the following attributes:
   This is especially useful for transforms (see below). For parametric environments (e.g.
   model-based environments), the device does represent the hardware that will be used to
   compute the operations.
-- :obj:`env.observation_spec`: a :obj:`CompositeSpec` object containing all the observation key-spec pairs.
-- :obj:`env.input_spec`: a :obj:`CompositeSpec` object containing all the input keys (:obj:`"action"` and others).
-- :obj:`env.action_spec`: a :obj:`TensorSpec` object representing the action spec.
-- :obj:`env.reward_spec`: a :obj:`TensorSpec` object representing the reward spec.
+- :obj:`env.observation_spec`: a :class:`torchrl.data.CompositeSpec` object containing all the observation key-spec pairs.
+- :obj:`env.input_spec`: a :class:`torchrl.data.CompositeSpec` object containing all the input keys (:obj:`"action"` and others).
+- :obj:`env.action_spec`: a :class:`torchrl.data.TensorSpec` object representing the action spec.
+- :obj:`env.reward_spec`: a :class:`torchrl.data.TensorSpec` object representing the reward spec.
 
 Importantly, the environment spec shapes should *not* contain the batch size, e.g.
 an environment with :obj:`env.batch_size == torch.Size([4])` should not have
@@ -38,9 +38,9 @@ an :obj:`env.action_spec` with shape :obj:`torch.Size([4, action_size])` but sim
 With these, the following methods are implemented:
 
 - :obj:`env.reset(tensordict)`: a reset method that may (but not necessarily requires to) take
-  a :obj:`TensorDict` input. It return the first tensordict of a rollout, usually
+  a :class:`tensordict.TensorDict` input. It return the first tensordict of a rollout, usually
   containing a :obj:`"done"` state and a set of observations.
-- :obj:`env.step(tensordict)`: a step method that takes a :obj:`TensorDict` input
+- :obj:`env.step(tensordict)`: a step method that takes a :class:`tensordict.TensorDict` input
   containing an input action as well as other inputs (for model-based or stateless
   environments, for instance).
 - :obj:`env.set_seed(integer)`: a seeding method that will return the next seed
@@ -51,7 +51,7 @@ With these, the following methods are implemented:
 - :obj:`env.rollout(max_steps, policy)`: executes a rollout in the environment for
   a maximum number of steps :obj:`max_steps` and using a policy :obj:`policy`.
   The policy should be coded using a :obj:`SafeModule` (or any other
-  :obj:`TensorDict`-compatible module).
+  :class:`tensordict.TensorDict`-compatible module).
 
 
 .. autosummary::
@@ -204,6 +204,47 @@ in the environment. The keys to be included in this inverse transform are passed
 
         >>> env.append_transform(DoubleToFloat(in_keys_inv=["action"]))  # will map the action from float32 to float64 before calling the base_env.step
 
+Cloning transforms
+~~~~~~~~~~~~~~~~~~
+
+Because transforms appended to an environment are "registered" to this environment
+through the ``transform.parent`` property, when manipulating transforms we should keep
+in mind that the parent may come and go following what is being done with the transform.
+Here are some examples: if we get a single transform from a :class:`Compose` object,
+this transform will keep its parent:
+
+  >>> third_transform = env.transform[2]
+  >>> assert third_transform.parent is not None
+
+This means that using this transform for another environment is prohibited, as
+the other environment would replace the parent and this may lead to unexpected
+behviours. Fortunately, the :class:`Transform` class comes with a :func:`clone`
+method that will erase the parent while keeping the identity of all the
+registered buffers:
+
+  >>> TransformedEnv(base_env, third_transform)  # raises an Exception as third_transform already has a parent
+  >>> TransformedEnv(base_env, third_transform.clone())  # works
+
+On a single process or if the buffers are placed in shared memory, this will
+result in all the clone transforms to keep the same behaviour even if the
+buffers are changed in place (which is what will happen with the :class:`CatFrames`
+transform, for instance). In distributed settings, this may not hold and one
+should be careful about the expected behaviour of the cloned transforms in this
+context.
+Finally, notice that indexing multiple transforms from a :class:`Compose` transform
+may also result in loss of parenthood for these transforms: the reason is that
+indexing a :class:`Compose` transform results in another :class:`Compose` transform
+that does not have a parent environment. Hence, we have to clone the sub-transforms
+to be able to create this other composition:
+
+  >>> env = TransformedEnv(base_env, Compose(transform1, transform2, transform3))
+  >>> last_two = env.transform[-2:]
+  >>> assert isinstance(last_two, Compose)
+  >>> assert last_two.parent is None
+  >>> assert last_two[0] is not transform2
+  >>> assert isinstance(last_two[0], transform2)  # and the buffers will match
+  >>> assert last_two[1] is not transform3
+  >>> assert isinstance(last_two[1], transform3)  # and the buffers will match
 
 .. autosummary::
     :toctree: generated/
