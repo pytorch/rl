@@ -494,6 +494,9 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
             To chain transforms use the :obj:`Compose` class.
+        reduction (str, optional): the reduction method for multidimensional
+            tensordicts (ie stored trajectories). Can be one of "max", "min",
+            "median" or "mean".
     """
 
     def __init__(
@@ -507,10 +510,13 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
         transform: Optional["Transform"] = None,  # noqa-F821
+        reduction: Optional[str] = "max",
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
-        sampler = PrioritizedSampler(storage.max_size, alpha, beta, eps)
+        sampler = PrioritizedSampler(
+            storage.max_size, alpha, beta, eps, reduction=reduction
+        )
         super(TensorDictPrioritizedReplayBuffer, self).__init__(
             priority_key=priority_key,
             storage=storage,

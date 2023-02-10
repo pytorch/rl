@@ -662,7 +662,8 @@ def test_prb(priority_key, contiguous, device):
 
 
 @pytest.mark.parametrize("stack", [False, True])
-def test_rb_trajectories(stack):
+@pytest.mark.parametrize("reduction", ["min", "max", "mean", "median"])
+def test_rb_trajectories(stack, reduction):
     traj_td = TensorDict(
         {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
         batch_size=[3, 4],
@@ -678,11 +679,11 @@ def test_rb_trajectories(stack):
     )
     rb.extend(traj_td)
     sampled_td = rb.sample(3)
-    sampled_td.set("td_error", torch.rand(3))
+    sampled_td.set("td_error", torch.rand(3, 4))
     rb.update_tensordict_priority(sampled_td)
     sampled_td = rb.sample(3, include_info=True)
     assert (sampled_td.get("_weight") > 0).all()
-    assert sampled_td.batch_size == torch.Size([3])
+    assert sampled_td.batch_size == torch.Size([3, 4])
 
     # set back the trajectory length
     sampled_td_filtered = sampled_td.to_tensordict().exclude(
