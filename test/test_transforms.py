@@ -56,6 +56,7 @@ from torchrl.envs import (
     ParallelEnv,
     PinMemoryTransform,
     R3MTransform,
+    RandomCropTensorDict,
     Resize,
     RewardClipping,
     RewardScaling,
@@ -6166,6 +6167,67 @@ def test_clone_parent_compose(transform):
     assert env_clone.transform[1].parent.base_env is base_env2
     assert env.transform[1].parent.base_env is not base_env2
     assert env.transform[1].parent.base_env is base_env1
+
+
+class TestCroSeq:
+    def test_crop_dim1(self):
+        tensordict = TensorDict(
+            {
+                "a": torch.arange(20).view(1, 1, 1, 20).expand(3, 4, 2, 20),
+                "b": TensorDict(
+                    {"c": torch.arange(20).view(1, 1, 1, 20, 1).expand(3, 4, 2, 20, 1)},
+                    [3, 4, 2, 20, 1],
+                ),
+            },
+            [3, 4, 2, 20],
+        )
+        t = RandomCropTensorDict(11, -1)
+        tensordict_crop = t(tensordict)
+        assert tensordict_crop.shape == torch.Size([3, 4, 2, 11])
+        assert tensordict_crop["b"].shape == torch.Size([3, 4, 2, 11, 1])
+        assert (
+            tensordict_crop["a"][:, :, :, :-1] + 1 == tensordict_crop["a"][:, :, :, 1:]
+        ).all()
+
+    def test_crop_dim2(self):
+        tensordict = TensorDict(
+            {"a": torch.arange(20).view(1, 1, 20, 1).expand(3, 4, 20, 2)},
+            [3, 4, 20, 2],
+        )
+        t = RandomCropTensorDict(11, -2)
+        tensordict_crop = t(tensordict)
+        assert tensordict_crop.shape == torch.Size([3, 4, 11, 2])
+        assert (
+            tensordict_crop["a"][:, :, :-1] + 1 == tensordict_crop["a"][:, :, 1:]
+        ).all()
+
+    def test_crop_error(self):
+        tensordict = TensorDict(
+            {"a": torch.arange(20).view(1, 1, 20, 1).expand(3, 4, 20, 2)},
+            [3, 4, 20, 2],
+        )
+        t = RandomCropTensorDict(21, -2)
+        with pytest.raises(RuntimeError, match="Cannot sample trajectories of length"):
+            _ = t(tensordict)
+
+    @pytest.mark.parametrize("mask_key", ("mask", ("collector", "mask")))
+    def test_crop_mask(self, mask_key):
+        a = torch.arange(20).view(1, 1, 20, 1).expand(3, 4, 20, 2).clone()
+        mask = a < 21
+        mask[0] = a[0] < 15
+        mask[1] = a[1] < 16
+        mask[1] = a[2] < 14
+        tensordict = TensorDict(
+            {"a": a, mask_key: mask},
+            [3, 4, 20, 2],
+        )
+        t = RandomCropTensorDict(15, -2, mask_key=mask_key)
+        with pytest.raises(RuntimeError, match="Cannot sample trajectories of length"):
+            _ = t(tensordict)
+        t = RandomCropTensorDict(13, -2, mask_key=mask_key)
+        tensordict_crop = t(tensordict)
+        assert tensordict_crop.shape == torch.Size([3, 4, 13, 2])
+        assert tensordict_crop[mask_key].all()
 
 
 if __name__ == "__main__":

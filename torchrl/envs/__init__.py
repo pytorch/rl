@@ -26,6 +26,7 @@ from .transforms import (
     ObservationTransform,
     PinMemoryTransform,
     R3MTransform,
+    RandomCropTensorDict,
     Resize,
     RewardClipping,
     RewardScaling,

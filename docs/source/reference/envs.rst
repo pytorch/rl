@@ -270,6 +270,7 @@ to be able to create this other composition:
     ObservationTransform
     PinMemoryTransform
     R3MTransform
+    RandomCropTensorDict
     Resize
     RewardClipping
     RewardScaling
