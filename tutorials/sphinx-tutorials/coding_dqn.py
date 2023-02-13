@@ -484,6 +484,8 @@ for j, data in enumerate(data_collector):
     # update policy weights
     data_collector.update_policy_weights_()
 
+data_collector.shutdown()
+
 if is_notebook():
     display.clear_output(wait=True)
     display.display(plt.gcf())
