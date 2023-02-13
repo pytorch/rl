@@ -965,6 +965,7 @@ for i, tensordict in enumerate(collector):
         scheduler2.step()
 
 collector.shutdown()
+del create_env_fn
 
 ###############################################################################
 # We can observe that using TD(lambda) made our results considerably more

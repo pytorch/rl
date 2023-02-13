@@ -853,7 +853,8 @@ if len(traj_lengths):
 
 dummy_env.transform.insert(0, CatTensors(["pixels"], "pixels_save", del_keys=False))
 eval_rollout = dummy_env.rollout(max_steps=10000, policy=actor, auto_reset=True).cpu()
-eval_rollout
+print(eval_rollout)
+del dummy_env
 
 ###############################################################################
 
