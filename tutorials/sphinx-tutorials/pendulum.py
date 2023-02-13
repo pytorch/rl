@@ -604,7 +604,7 @@ policy = TensorDictModule(
 # and our optimizer:
 #
 
-optim = torch.optim.Adam(policy.parameters(), lr=2e-4)
+optim = torch.optim.Adam(policy.parameters(), lr=2e-3)
 
 ######################################################################
 # Finally, let us re-create our environment:
