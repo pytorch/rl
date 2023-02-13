@@ -793,7 +793,7 @@ collector = MultiaSyncDataCollector(
     postproc=MultiStep(n_steps_max=n_steps_forward, gamma=gamma)
     if n_steps_forward > 0
     else None,
-    split_trajs=True,
+    split_trajs=False,
     devices=[device, device],  # device for execution
     storing_devices=[device, device],  # device where data will be stored and passed
     seed=None,
@@ -875,14 +875,13 @@ for i, tensordict in enumerate(collector):
 
     if r0 is None:
         r0 = tensordict["reward"].mean().item()
-    #     pbar.update(tensordict.numel())
 
     # extend the replay buffer with the new data
     tensordict.batch_size = tensordict.batch_size[
         :1
     ]  # this is necessary for prioritized replay buffers: we will assign one priority value to each element, hence the batch_size must comply with the number of priority values
     current_frames = tensordict.numel()
-    collected_frames += tensordict["collector", "mask"].sum()
+    collected_frames += current_frames
     replay_buffer.extend(tensordict.cpu())
 
     # optimization steps
@@ -893,7 +892,6 @@ for i, tensordict in enumerate(collector):
             # reset the batch size temporarily, and exclude index whose shape is incompatible with the new size
             index = sampled_tensordict.get("index")
             sampled_tensordict.exclude("index", inplace=True)
-            sampled_tensordict.batch_size = [batch_size_traj, 250]
 
             # compute loss for qnet and backprop
             with hold_out_net(actor):

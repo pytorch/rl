@@ -641,6 +641,7 @@ env = TransformedEnv(
 #
 batch_size = 32
 pbar = tqdm.tqdm(range(20_000 // batch_size))
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, 20_000)
 logs = defaultdict(list)
 
 for _ in pbar:
@@ -657,6 +658,7 @@ for _ in pbar:
     )
     logs["return"].append(traj_return.item())
     logs["last_reward"].append(rollout[..., -1]["reward"].mean().item())
+    scheduler.step()
 
 from matplotlib import pyplot as plt
 
@@ -670,3 +672,19 @@ plt.plot(logs["last_reward"])
 plt.title("last reward")
 plt.xlabel("iteration")
 plt.show()
+
+######################################################################
+# Conclusion
+# ----------
+#
+# In this tutorial, we have learned how to code a stateless environment from
+# scratch. We touched the subjects of:
+#
+# * the four essential components that need to be taken care of when coding
+#   an environment (step, reset, seeding and building specs). We saw how these
+#   methods and classes interact with the :class:`tensordict.TensorDict` class;
+# * how to test that an environment is properly coded using
+#   :func:`torchrl.envs.utils.check_env_specs`;
+# * How to code transforms in the context of stateless environments;
+# * How to train a policy on a fully differentiable simulator.
+#
