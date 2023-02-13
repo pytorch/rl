@@ -582,6 +582,8 @@ print("rollout of len 3 (batch size of 10):", rollout)
 #
 # Let us first write the policy network:
 #
+torch.manual_seed(0)
+env.set_seed(0)
 
 net = nn.Sequential(
     nn.LazyLinear(64),
@@ -602,7 +604,7 @@ policy = TensorDictModule(
 # and our optimizer:
 #
 
-optim = torch.optim.Adam(policy.parameters(), lr=1e-3)
+optim = torch.optim.Adam(policy.parameters(), lr=2e-4)
 
 ######################################################################
 # Finally, let us re-create our environment:
@@ -660,7 +662,7 @@ from matplotlib import pyplot as plt
 
 plt.figure(figsize=(10, 5))
 plt.subplot(1, 2, 1)
-plt.plot(logs["returns"])
+plt.plot(logs["return"])
 plt.title("returns")
 plt.xlabel("iteration")
 plt.subplot(1, 2, 2)
