@@ -94,7 +94,7 @@ jobs:
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
-      if: ${{ github.ref == 'refs/heads/main' }}
+      if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       uses: JamesIves/github-pages-deploy-action@releases/v4
       with:
           token: ${{ secrets.GITHUB_TOKEN }}
