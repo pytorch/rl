@@ -303,7 +303,7 @@ def _reset(self, tensordict):
 #
 
 
-def _make_specs(self, td_params):
+def _make_spec(self, td_params):
     self.observation_spec = CompositeSpec(
         sin=BoundedTensorSpec(minimum=-1.0, maximum=1.0, shape=(), dtype=torch.float32),
         cos=BoundedTensorSpec(minimum=-1.0, maximum=1.0, shape=(), dtype=torch.float32),
@@ -378,7 +378,7 @@ def _set_seed(self, seed: Optional[int]):
 #
 # We can finally put together the pieces and design our environment class.
 # The specs initialization needs to be performed during the environment
-# construction so we must take care of calling the :func:`_make_specs` method
+# construction so we must take care of calling the :func:`_make_spec` method
 # within :func:`PendulumEnv.__init__`.
 #
 # We add a class method :func:`PendulumEnv.gen_params` which deterministically
@@ -431,7 +431,7 @@ class PendulumEnv(EnvBase):
             seed = torch.empty((), dtype=torch.int64).random_().item()
         self.set_seed(seed)
 
-    _make_specs = _make_specs
+    _make_spec = _make_spec
     _reset = _reset
     _step = staticmethod(_step)
     _set_seed = _set_seed
@@ -522,7 +522,7 @@ env = TransformedEnv(
 
 def simple_rollout(steps=100):
     # preallocate:
-    data = TensorDict({}, [])
+    data = TensorDict({}, [steps])
     # reset
     _data = env.reset()
     for i in range(steps):
@@ -558,9 +558,11 @@ print("rand step (batch size of 10)", td)
 #
 
 rollout = env.rollout(
-    auto_reset=False, tensordict=env.gen_params(batch_size=[batch_size])
+    3,
+    auto_reset=False,
+    tensordict=env.reset(env.gen_params(batch_size=[batch_size])),
 )
-print("rollout (batch size of 10):", rollout)
+print("rollout of len 3 (batch size of 10):", rollout)
 
 
 ######################################################################
@@ -635,8 +637,8 @@ env = TransformedEnv(
 # At the end of the training loop, we should have a final reward close to 0
 # which demonstrates that the pendulum is upward and still as desired.
 #
-batch_size = 64
-pbar = tqdm.tqdm(range(10_000 // batch_size))
+batch_size = 32
+pbar = tqdm.tqdm(range(20_000 // batch_size))
 logs = defaultdict(list)
 
 for _ in pbar:
@@ -656,7 +658,7 @@ for _ in pbar:
 
 from matplotlib import pyplot as plt
 
-plt.figure(10, 5)
+plt.figure(figsize=(10, 5))
 plt.subplot(1, 2, 1)
 plt.plot(logs["returns"])
 plt.title("returns")
@@ -665,3 +667,4 @@ plt.subplot(1, 2, 2)
 plt.plot(logs["last_reward"])
 plt.title("last reward")
 plt.xlabel("iteration")
+plt.show()
