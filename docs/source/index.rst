@@ -34,9 +34,10 @@ Tutorials
    :maxdepth: 2
 
    tutorials/torchrl_demo
-   tutorials/pretrained_models
+   tutorials/pendulum
    tutorials/tensordict_tutorial
    tutorials/tensordict_module
+   tutorials/pretrained_models
    tutorials/torch_envs
    tutorials/multi_task
    tutorials/coding_ddpg

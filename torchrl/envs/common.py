@@ -595,11 +595,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             be stored with the "action" key.
 
         """
+        shape = torch.Size([])
         if tensordict is None:
             tensordict = TensorDict(
                 {}, device=self.device, batch_size=self.batch_size, _run_checks=False
             )
-        action = self.action_spec.rand()
+        elif not self.batch_locked:
+            shape = tensordict.shape
+        action = self.action_spec.rand(shape)
         tensordict.set("action", action)
         return self.step(tensordict)
 
