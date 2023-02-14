@@ -496,6 +496,7 @@ assert unsqueezed_tensordict.squeeze(0) is tensordict
 #
 
 # sphinx_gallery_start_ignore
-import sys
-sys.exit()
+import gc
+
+gc.collect()
 # sphinx_gallery_end_ignore

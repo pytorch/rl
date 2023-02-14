@@ -772,6 +772,7 @@ print(tensordict)
 # The library is on PyPI: *pip install torchrl*
 
 # sphinx_gallery_start_ignore
-import sys
-sys.exit()
+import gc
+
+gc.collect()
 # sphinx_gallery_end_ignore

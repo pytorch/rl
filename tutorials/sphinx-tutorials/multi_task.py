@@ -196,6 +196,7 @@ td_rollout[:, 0]  # tensordict of the first step: only the common keys are shown
 td_rollout[0]  # tensordict of the first env: the stand obs is present
 
 # sphinx_gallery_start_ignore
-import sys
-sys.exit()
+import gc
+
+gc.collect()
 # sphinx_gallery_end_ignore

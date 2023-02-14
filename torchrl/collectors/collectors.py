@@ -691,6 +691,7 @@ class SyncDataCollector(_DataCollector):
             if not self.env.is_closed:
                 self.env.close()
             del self.env
+        return
 
     def __del__(self):
         try:
@@ -1052,7 +1053,6 @@ also that the state dict is synchronised across processes if needed."""
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "close"))
 
-        for idx in range(self.num_workers):
             msg = self.pipes[idx].recv()
             if msg != "closed":
                 raise RuntimeError(f"got {msg} but expected 'close'")
@@ -1621,7 +1621,7 @@ def _main_async_collector(
                 print(f"worker {idx} received {msg}")
         else:
             if verbose:
-                print(f"poll failed, j={j}")
+                print(f"poll failed, j={j}, worker={idx}")
             # default is "continue" (after first iteration)
             # this is expected to happen if queue_out reached the timeout, but no new msg was waiting in the pipe
             # in that case, the main process probably expects the worker to continue collect data
@@ -1638,7 +1638,10 @@ def _main_async_collector(
                 # this means that our process has been waiting for a command from main in vain, while main was not
                 # receiving data.
                 # This will occur if main is busy doing something else (e.g. computing loss etc).
+
                 counter += _timeout
+                if verbose:
+                    print(f"worker {idx} has counter {counter}")
                 if counter >= (_MAX_IDLE_COUNT * _TIMEOUT):
                     raise RuntimeError(
                         f"This process waited for {counter} seconds "
@@ -1725,9 +1728,12 @@ def _main_async_collector(
             continue
 
         elif msg == "close":
+            print("closing")
             del tensordict, data, d, data_in
+            print("\tshutting down")
             dc.shutdown()
             del dc, dc_iter
+            print("\tshot down!")
             pipe_child.send("closed")
             if verbose:
                 print(f"collector {idx} closed")
