@@ -1593,7 +1593,7 @@ class ObservationNorm(ObservationTransform):
         return input_spec
 
     def __repr__(self) -> str:
-        if self.loc.numel() == 1 and self.scale.numel() == 1:
+        if self.initialized and (self.loc.numel() == 1 and self.scale.numel() == 1):
             return (
                 f"{self.__class__.__name__}("
                 f"loc={float(self.loc):4.4f}, scale"
