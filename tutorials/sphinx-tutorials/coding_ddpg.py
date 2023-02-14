@@ -273,7 +273,10 @@ def parallel_env_constructor(
 #
 # To compute the normalizing statistics, we run an arbitrary number of random
 # steps in the environment and compute the mean and standard deviation of the
-# collected observations:
+# collected observations. The :func:`ObservationNorm.init_stats()` method can
+# be used for this purpose. To get the summary statistics, we create a dummy
+# environment and run it for a given number of steps, collect data over a given
+# number of steps and compute its summary statistics.
 #
 
 def get_env_stats():
@@ -289,7 +292,19 @@ def get_env_stats():
 ###############################################################################
 # Building the model
 # ^^^^^^^^^^^^^^^^^^
-# Let us now build the DDPG actor and QValue network.
+#
+# We now turn to the setup of the model and loss function. DDPG requires a
+# value network, trained to estimate the value of a state-action pair, and a
+# parametric actor that learns how to select actions that maximize this value.
+# In this tutorial, we will be using two independent networks for these
+# components.
+#
+# Recall that building a torchrl module requires two steps:
+#
+# - writing the network
+# - wrapping the network in a :class:`tensordict.nn.TensorDictModule`
+#
+#
 
 def make_ddpg_actor(
     transform_state_dict,
