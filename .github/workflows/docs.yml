@@ -45,7 +45,6 @@ jobs:
     # Update references
     - name: Update pip
       run: |
-        apt-get install python3.8 python3-pip -y
         pip3 install --upgrade pip
     - name: check python version
       run: |
