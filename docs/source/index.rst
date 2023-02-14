@@ -37,7 +37,6 @@ Tutorials
    tutorials/tensordict_tutorial
    tutorials/tensordict_module
    tutorials/pretrained_models
-   tutorials/torch_envs
    tutorials/multi_task
    tutorials/coding_ddpg
    tutorials/coding_dqn
