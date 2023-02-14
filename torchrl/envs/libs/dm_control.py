@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import numpy as np
 import torch
 
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     TensorSpec,
@@ -19,13 +19,12 @@ from torchrl.data import (
     UnboundedDiscreteTensorSpec,
 )
 
-from ...data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
-from ..gym_like import GymLikeEnv
+from torchrl.data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
+from torchrl.envs.gym_like import GymLikeEnv
 
 if torch.has_cuda and torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
     os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
-    print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
 
 try:
 
@@ -38,7 +37,7 @@ try:
 
 except ImportError as err:
     _has_dmc = False
-    IMPORT_ERR = str(err)
+    IMPORT_ERR = err
 
 __all__ = ["DMControlEnv", "DMControlWrapper"]
 
@@ -299,10 +298,8 @@ class DMControlEnv(DMControlWrapper):
     def __init__(self, env_name, task_name, **kwargs):
         if not _has_dmc:
             raise ImportError(
-                f"""dm_control python package was not found. Please install this dependency.
-(Got the error message: {IMPORT_ERR}).
-"""
-            )
+                """dm_control python package was not found. Please install this dependency."""
+            ) from IMPORT_ERR
         kwargs["env_name"] = env_name
         kwargs["task_name"] = task_name
         super().__init__(**kwargs)
