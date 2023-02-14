@@ -25,9 +25,8 @@ jobs:
       with:
         miniconda-version: "latest"
         activate-environment: build_doc
-        with:
-          auto-update-conda: true
-          python-version: ${{ matrix.python-version }}
+        auto-update-conda: true
+        python-version: ${{ matrix.python-version }}
     - name: Install deps
       run: |
         apt-get update -y
