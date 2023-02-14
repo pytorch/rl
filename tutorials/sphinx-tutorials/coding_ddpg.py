@@ -209,7 +209,7 @@ def make_transformed_env(
 
     #  we normalize the states
     if stats is None:
-        _stats = {"loc": 0.0, "scale": 1.0}
+        _stats = {"loc": None, "scale": None}
     else:
         _stats = stats
     env.append_transform(
@@ -318,23 +318,19 @@ def get_stats_random_rollout(proof_environment, key: Optional[str] = None):
 
 
 def get_env_stats():
-    """
-    Gets the stats of an environment
-    """
+    """Gets the stats of an environment."""
     proof_env = make_transformed_env(make_env(), None)
     proof_env.set_seed(seed)
-    stats = get_stats_random_rollout(
-        proof_env,
-        key="observation_vector",
-    )
-    # make sure proof_env is closed
+    for t in proof_env.transform:
+        if isinstance(t, ObservationNorm):
+            t.init_stats(init_env_steps)
     proof_env.close()
     return stats
 
 
 ###############################################################################
 # Building the model
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^
 # Let us now build the DDPG actor and QValue network.
 
 
@@ -396,7 +392,7 @@ def make_ddpg_actor(
 
 ###############################################################################
 # Evaluator: building your recorder object
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # As the training data is obtained using some exploration strategy, the true
 # performance of our algorithm needs to be assessed in deterministic mode. We
 # do this using a dedicated class, ``Recorder``, which executes the policy in
@@ -421,7 +417,7 @@ def make_recorder(actor_model_explore, stats):
 
 ###############################################################################
 # Replay buffer
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^
 # Replay buffers come in two flavours: prioritized (where some error signal
 # is used to give a higher likelihood of sampling to some items than others)
 # and regular, circular experience replay.
@@ -624,7 +620,7 @@ scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(
 
 ###############################################################################
 # Time to train the policy!
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^^^^
 # Some notes about the following cell:
 #
 # - ``hold_out_net`` is a TorchRL context manager that temporarily sets
@@ -765,7 +761,7 @@ del collector
 
 ###############################################################################
 # Experiment results
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^
 # We make a simple plot of the average rewards during training. We can observe
 # that our policy learned quite well to solve the task.
 #
@@ -1038,3 +1034,9 @@ plt.xlabel("iter")
 plt.ylabel("reward")
 plt.tight_layout()
 plt.title("TD-labmda DDPG results")
+
+# sphinx_gallery_start_ignore
+import time
+
+time.sleep(10)
+# sphinx_gallery_end_ignore

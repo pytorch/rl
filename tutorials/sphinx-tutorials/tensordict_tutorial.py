@@ -494,3 +494,9 @@ assert unsqueezed_tensordict.squeeze(0) is tensordict
 ###############################################################################
 # Have fun with TensorDict!
 #
+
+# sphinx_gallery_start_ignore
+import time
+
+time.sleep(10)
+# sphinx_gallery_end_ignore
