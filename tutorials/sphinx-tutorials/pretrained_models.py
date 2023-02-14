@@ -106,9 +106,3 @@ print("stored data:", storage._storage)
 #
 batch = rb.sample(32)
 print("data after sampling:", batch)
-
-# sphinx_gallery_start_ignore
-import gc
-
-gc.collect()
-# sphinx_gallery_end_ignore

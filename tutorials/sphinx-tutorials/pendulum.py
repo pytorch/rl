@@ -697,9 +697,3 @@ with plt.ion():
 # * How to code transforms in the context of stateless environments;
 # * How to train a policy on a fully differentiable simulator.
 #
-
-# sphinx_gallery_start_ignore
-import gc
-
-gc.collect()
-# sphinx_gallery_end_ignore

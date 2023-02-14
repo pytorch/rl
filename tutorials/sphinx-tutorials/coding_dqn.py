@@ -893,9 +893,3 @@ del dummy_env
 # - More fancy exploration techniques, such as NoisyLinear layers and such
 #   (check ``torchrl.modules.NoisyLinear``, which is fully compatible with the
 #   ``MLP`` class used in our Dueling DQN).
-
-# sphinx_gallery_start_ignore
-import gc
-
-gc.collect()
-# sphinx_gallery_end_ignore
