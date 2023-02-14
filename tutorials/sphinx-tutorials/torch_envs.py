@@ -96,7 +96,7 @@ print(tensordict)
 # we can just generate a random action:
 
 
-def policy(tensordict):
+def policy(tensordict, env=env):
     tensordict.set("action", env.action_spec.rand())
     return tensordict
 
