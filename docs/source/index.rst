@@ -33,7 +33,6 @@ Tutorials
 .. toctree::
    :maxdepth: 2
 
-   tutorials/torchrl_demo
    tutorials/pendulum
    tutorials/tensordict_tutorial
    tutorials/tensordict_module
@@ -42,6 +41,7 @@ Tutorials
    tutorials/multi_task
    tutorials/coding_ddpg
    tutorials/coding_dqn
+   tutorials/torchrl_demo
 
 References
 ==========

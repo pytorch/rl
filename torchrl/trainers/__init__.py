@@ -15,5 +15,6 @@ from .trainers import (
     RewardNormalizer,
     SelectKeys,
     Trainer,
+    TrainerHookBase,
     UpdateWeights,
 )

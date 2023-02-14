@@ -14,6 +14,10 @@ Coding DDPG using TorchRL
 # then learning a policy that outputs actions that maximise this value
 # function given a certain observation.
 #
+# This tutorial is a more elaborated version than the PPO tutorial: it covers
+# multiple topics that were left aside. We strongly advise the reader to go
+# through the PPO tutorial first before trying out this one.
+#
 # Key learnings:
 #
 # - how to build an environment in TorchRL, including transforms
@@ -86,28 +90,38 @@ from torchrl.trainers import Recorder
 #
 # Let us start by building the environment.
 #
-# For this example, we will be using the cheetah task. The goal is to make
+# For this example, we will be using the ``"cheetah"`` task. The goal is to make
 # a half-cheetah run as fast as possible.
 #
 # In TorchRL, one can create such a task by relying on dm_control or gym:
 #
-#   env = GymEnv("HalfCheetah-v4")
+# .. code-block:: python
+#
+#    env = GymEnv("HalfCheetah-v4")
 #
 # or
 #
-#   env = DMControlEnv("cheetah", "run")
+# .. code-block:: python
 #
-# We only consider the state-based environment, but if one wishes to use a
-# pixel-based environment, this can be done via the keyword argument
-# ``from_pixels=True`` which is passed when calling ``GymEnv`` or
-# ``DMControlEnv``.
+#    env = DMControlEnv("cheetah", "run")
+#
+# By default, these environment disable rendering. Training from states is
+# usually easier than training from images. To keep things simple, we focus
+# on learning from states only. To pass the pixels to the tensordicts that
+# are collected by :func:`env.step()`, simply pass the ``from_pixels=True``
+# argument to the constructor:
+#
+# .. code-block:: python
+#
+#    env = GymEnv("HalfCheetah-v4", from_pixels=True, pixels_only=True)
+#
+# We write a :func:`make_env` helper funciton that will create an environment
+# with either one of the two backends considered above (dm-control or gym).
 #
 
 
 def make_env():
-    """
-    Create a base env
-    """
+    """Create a base env."""
     global env_library
     global env_name
 
@@ -135,31 +149,44 @@ def make_env():
 
 ###############################################################################
 # Transforms
-# ------------------------------
+# ----------
+#
 # Now that we have a base environment, we may want to modify its representation
 # to make it more policy-friendly.
 #
-# It is common in DDPG to rescale the reward using some heuristic value. We
-# will multiply the reward by 5 in this example.
+# - It is common in DDPG to rescale the reward using some heuristic value. We
+#   will multiply the reward by 5 in this example.
 #
-# If we are using dm_control, it is important also to transform the actions
-# to double precision numbers as this is the dtype expected by the library.
+# - If we are using :mod:`dm_control`, it is also important to build an interface
+#   between the simulator which works with double precision numbers, and our
+#   script which presumably uses single precision ones. This transformation goes
+#   both ways: when calling :func:`env.step`, our actions will need to be
+#   represented in double precision, and the output will need to be transformed
+#   to single precision.
+#   The :class:`torchrl.envs.DoubleToFloat` transform does exactly this: the
+#   ``in_keys`` list refers to the keys that will need to be transformed from
+#   double to float, while the ``in_keys_inv`` refers to those that need to
+#   be transformed to double before being passed to the environment.
 #
-# We also leave the possibility to normalize the states: we will take care of
-# computing the normalizing constants later on.
+# - We concatenate the state keys together using the :class:`torchrl.envs.CatTensors`
+#   transform.
+#
+# - Finally, we also leave the possibility of normalizing the states: we will
+#   take care of computing the normalizing constants later on.
+#
 
 
 def make_transformed_env(
     env,
     stats=None,
 ):
-    """
-    Apply transforms to the env (such as reward scaling and state normalization)
-    """
+    """Apply transforms to the env (such as reward scaling and state normalization)."""
 
     env = TransformedEnv(env)
 
-    # we append transforms one by one, although we might as well create the transformed environment using the `env = TransformedEnv(base_env, transforms)` syntax.
+    # we append transforms one by one, although we might as well create the
+    # transformed environment using the `env = TransformedEnv(base_env, transforms)`
+    # syntax.
     env.append_transform(RewardScaling(loc=0.0, scale=reward_scaling))
 
     double_to_float_list = []
@@ -201,12 +228,29 @@ def make_transformed_env(
 
 ###############################################################################
 # Parallel execution
-# ------------------------------
+# ------------------
+#
 # The following helper function allows us to run environments in parallel.
-# One can choose between running each base env in a separate process and
-# execute the transform in the main process, or execute the transforms in
-# parallel. To leverage the vectorization capabilities of PyTorch, we adopt
+# Running environments in parallel can significantly speed up the collection
+# throughput. When using transformed environment, we need to choose whether we
+# want to execute the transform individually for each environment, or
+# centralize the data and transform it in batch. Both approaches are easy to
+# code:
+#
+# .. code-block:: python
+#
+#    env = ParallelEnv(
+#        lambda: TransformedEnv(GymEnv("HalfCheetah-v4"), transforms),
+#        num_workers=4
+#    )
+#    env = TransformedEnv(
+#        ParallelEnv(lambda: GymEnv("HalfCheetah-v4"), num_workers=4),
+#        transforms
+#    )
+#
+# To leverage the vectorization capabilities of PyTorch, we adopt
 # the first method:
+#
 
 
 def parallel_env_constructor(
@@ -231,10 +275,12 @@ def parallel_env_constructor(
 
 ###############################################################################
 # Normalization of the observations
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ---------------------------------
+#
 # To compute the normalizing statistics, we run an arbitrary number of random
 # steps in the environment and compute the mean and standard deviation of the
 # collected observations:
+#
 
 
 def get_stats_random_rollout(proof_environment, key: Optional[str] = None):
