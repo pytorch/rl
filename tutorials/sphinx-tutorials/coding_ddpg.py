@@ -301,9 +301,29 @@ def get_env_stats():
 #
 # Recall that building a torchrl module requires two steps:
 #
-# - writing the network
-# - wrapping the network in a :class:`tensordict.nn.TensorDictModule`
+# - writing the :class:`torch.nn.Module` that will be used as network
+# - wrapping the network in a :class:`tensordict.nn.TensorDictModule` where the
+#   data flow is handled by specifying the input and output keys.
 #
+# In more complex scenarios, :class:`tensordict.nn.TensorDictSequential` can
+# also be used.
+#
+# In :func:`make_ddpg_actor`, we use a :class:`torchrl.modules.ProbabilisticActor`
+# object to wrap our policy network. Since DDPG is a deterministic algorithm,
+# this is not strictly necessary. We rely on this class to map the output
+# action to the appropriate domain. Alternatively, one could perfectly use a
+# non-linearity such as :class:`torch.tanh` to map the output to the right
+# domain.
+#
+# The Q-Value network is wrapped in a :class:`torchrl.modules.ValueOperator`
+# that automatically sets the ``out_keys`` to ``"state_action_value`` for q-value
+# networks and ``state_value`` for other value networks.
+#
+# Since we use lazy modules, it is necessary to materialize the lazy modules
+# before being able to move the policy from device to device and achieve other
+# operations. Hence, it is good practice to run the modules with a small
+# sample of data. For this purpose, we generate fake data from the
+# environment specs.
 #
 
 def make_ddpg_actor(
@@ -356,7 +376,8 @@ def make_ddpg_actor(
     # init: since we have lazy layers, we should run the network
     # once to initialize them
     with torch.no_grad(), set_exploration_mode("random"):
-        td = proof_environment.rollout(max_steps=4)
+        td = proof_environment.fake_tensordict()
+        td = td.expand((*td.shape, 2))
         td = td.to(device)
         actor(td)
         qnet(td)
