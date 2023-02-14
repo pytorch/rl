@@ -27,6 +27,12 @@ jobs:
         activate-environment: build_doc
         auto-update-conda: true
         python-version: ${{ matrix.python-version }}
+    - name: Conda info
+      shell: bash -el {0}
+      run: conda info
+    - name: Conda list
+      shell: pwsh
+      run: conda list
     - name: Install deps
       run: |
         apt-get update -y
