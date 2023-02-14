@@ -667,3 +667,8 @@ print(
 )
 
 env.close()
+
+# sphinx_gallery_start_ignore
+import sys
+sys.exit()
+# sphinx_gallery_end_ignore

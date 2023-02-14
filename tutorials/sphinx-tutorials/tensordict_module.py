@@ -833,3 +833,8 @@ print("Execution time:", t4 - t3, "seconds")
 # ``TensorDictModule`` is marginal.
 #
 # Have fun with TensorDictModule!
+
+# sphinx_gallery_start_ignore
+import sys
+sys.exit()
+# sphinx_gallery_end_ignore
