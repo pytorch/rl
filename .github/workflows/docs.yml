@@ -48,20 +48,6 @@ jobs:
       run: |
         apt-get install python3.8 python3-pip -y
         pip3 install --upgrade pip
-#    - name: Setup conda
-#      run: |
-#        rm -rf $HOME/miniconda
-#        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-#        bash ~/miniconda.sh -b -p $HOME/miniconda
-#    - name: setup Path
-#      run: |
-#        echo "$HOME/miniconda/bin" >> $GITHUB_PATH
-#        echo "CONDA=$HOME/miniconda" >> $GITHUB_PATH
-#    - name: create and activate conda env
-#      run: |
-#        $HOME/miniconda/bin/conda create --name build_binary python=3.8
-#        $HOME/miniconda/bin/conda info
-#        $HOME/miniconda/bin/conda activate build_binary
     - name: check python version
       run: |
         python3 --version
