@@ -1728,12 +1728,9 @@ def _main_async_collector(
             continue
 
         elif msg == "close":
-            print("closing")
             del tensordict, data, d, data_in
-            print("\tshutting down")
             dc.shutdown()
             del dc, dc_iter
-            print("\tshot down!")
             pipe_child.send("closed")
             if verbose:
                 print(f"collector {idx} closed")

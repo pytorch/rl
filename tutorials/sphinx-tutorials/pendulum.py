@@ -660,18 +660,27 @@ for _ in pbar:
     logs["last_reward"].append(rollout[..., -1]["reward"].mean().item())
     scheduler.step()
 
+import matplotlib
 from matplotlib import pyplot as plt
 
-plt.figure(figsize=(10, 5))
-plt.subplot(1, 2, 1)
-plt.plot(logs["return"])
-plt.title("returns")
-plt.xlabel("iteration")
-plt.subplot(1, 2, 2)
-plt.plot(logs["last_reward"])
-plt.title("last reward")
-plt.xlabel("iteration")
-plt.show()
+is_ipython = "inline" in matplotlib.get_backend()
+if is_ipython:
+    from IPython import display
+
+with plt.ion():
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    plt.plot(logs["return"])
+    plt.title("returns")
+    plt.xlabel("iteration")
+    plt.subplot(1, 2, 2)
+    plt.plot(logs["last_reward"])
+    plt.title("last reward")
+    plt.xlabel("iteration")
+    if is_ipython:
+        display.display(plt.gcf())
+        display.clear_output(wait=True)
+    plt.show()
 
 ######################################################################
 # Conclusion

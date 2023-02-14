@@ -369,7 +369,10 @@ env.reset()
 
 ###############################################################################
 
-env.action_spec
+print(env.action_spec)
+
+env.close()
+del env
 
 ###############################################################################
 # Modules
@@ -570,7 +573,7 @@ with set_exploration_mode("mean"):
 
 ###############################################################################
 # Using Environments and Modules
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 from torchrl.envs.utils import step_mdp
 
@@ -637,7 +640,7 @@ tensordict_rollout
 from tensordict.nn import TensorDictModule
 
 # Collectors
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^
 
 from torchrl.collectors import MultiaSyncDataCollector, MultiSyncDataCollector
 
@@ -696,10 +699,12 @@ for i, d in enumerate(collector):
 print(i)
 collector.shutdown()
 del collector
+del create_env_fn
+del parallel_env
 
 ###############################################################################
 # Objectives
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^
 
 # TorchRL delivers meta-RL compatible loss functions
 # Disclaimer: This APi may change in the future

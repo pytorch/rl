@@ -485,6 +485,7 @@ for j, data in enumerate(data_collector):
 
 print("shutting down")
 data_collector.shutdown()
+del data_collector
 
 if is_notebook():
     display.clear_output(wait=True)
@@ -730,6 +731,7 @@ for j, data in enumerate(data_collector):
 
 print("shutting down")
 data_collector.shutdown()
+del data_collector
 
 if is_notebook():
     display.clear_output(wait=True)

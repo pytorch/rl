@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
 """
 Coding DDPG using TorchRL
-============================
+=========================
+**Author**: `Vincent Moens <https://github.com/vmoens>`_
+
 """
 ##############################################################################
 # This tutorial will guide you through the steps to code DDPG from scratch.
-# DDPG (`Deep Deterministic Policy Gradient <https://arxiv.org/abs/1509.02971>`_)
-# is a simple continuous control algorithm. It essentially consists in
-# learning a parametric value function for an action-observation pair, and
+#
+# DDPG (`Deep Deterministic Policy Gradient <https://arxiv.org/abs/1509.02971>_`_)
+# is a simple continuous control algorithm. It consists in learning a
+# parametric value function for an action-observation pair, and
 # then learning a policy that outputs actions that maximise this value
 # function given a certain observation.
 #
-# In this tutorial, you will learn:
+# Key learnings:
 #
 # - how to build an environment in TorchRL, including transforms
 #   (e.g. data normalization) and parallel execution;
@@ -22,15 +25,18 @@ Coding DDPG using TorchRL
 # - and finally how to evaluate your model.
 #
 # This tutorial assumes the reader is familiar with some of TorchRL primitives,
-# such as ``TensorDict`` and ``TensorDictModules``, although it should be
+# such as :class:`tensordict.TensorDict` and
+# :class:`tensordict.nn.TensorDictModules`, although it should be
 # sufficiently transparent to be understood without a deep understanding of
 # these classes.
 #
 # We do not aim at giving a SOTA implementation of the algorithm, but rather
 # to provide a high-level illustration of TorchRL features in the context of
 # this algorithm.
-
-# Make all the necessary imports for training
+#
+# Imports
+# ^^^^^^^
+#
 
 # sphinx_gallery_start_ignore
 import warnings
@@ -76,7 +82,8 @@ from torchrl.trainers import Recorder
 
 ###############################################################################
 # Environment
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^
+#
 # Let us start by building the environment.
 #
 # For this example, we will be using the cheetah task. The goal is to make
@@ -94,6 +101,7 @@ from torchrl.trainers import Recorder
 # pixel-based environment, this can be done via the keyword argument
 # ``from_pixels=True`` which is passed when calling ``GymEnv`` or
 # ``DMControlEnv``.
+#
 
 
 def make_env():
@@ -707,6 +715,7 @@ for i, tensordict in enumerate(collector):
         scheduler2.step()
 
 collector.shutdown()
+del collector
 
 ###############################################################################
 # Experiment results
@@ -966,6 +975,7 @@ for i, tensordict in enumerate(collector):
 
 collector.shutdown()
 del create_env_fn
+del collector
 
 ###############################################################################
 # We can observe that using TD(lambda) made our results considerably more
