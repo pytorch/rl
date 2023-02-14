@@ -14,7 +14,7 @@ Coding DDPG using TorchRL
 # then learning a policy that outputs actions that maximise this value
 # function given a certain observation.
 #
-# This tutorial is a more elaborated version than the PPO tutorial: it covers
+# This tutorial is more  than the PPO tutorial: it covers
 # multiple topics that were left aside. We strongly advise the reader to go
 # through the PPO tutorial first before trying out this one.
 #
@@ -387,6 +387,7 @@ def make_ddpg_actor(
 ###############################################################################
 # Evaluator: building your recorder object
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
 # As the training data is obtained using some exploration strategy, the true
 # performance of our algorithm needs to be assessed in deterministic mode. We
 # do this using a dedicated class, ``Recorder``, which executes the policy in
@@ -412,14 +413,17 @@ def make_recorder(actor_model_explore, transform_state_dict):
 ###############################################################################
 # Replay buffer
 # ^^^^^^^^^^^^^
-# Replay buffers come in two flavours: prioritized (where some error signal
+#
+# Replay buffers come in two flavors: prioritized (where some error signal
 # is used to give a higher likelihood of sampling to some items than others)
 # and regular, circular experience replay.
 #
-# We also provide a special storage, names LazyMemmapStorage, that will
+# We also provide a special storage, named
+# :class:`torchrl.data.replay_buffers.storages.LazyMemmapStorage`, that will
 # store tensors on physical memory using a memory-mapped array. The following
 # function takes care of creating the replay buffer with the desired
 # hyperparameters:
+#
 
 def make_replay_buffer(make_replay_buffer=3):
     if prb:
