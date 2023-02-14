@@ -47,28 +47,27 @@ jobs:
       run: ldd --version
     - name: Checkout
       uses: actions/checkout@v3
-    # Update references
-    - name: Update pip
-      run: |
-        pip3 install --upgrade pip
-    - name: check python version
-      run: |
-        python3 --version
-    - name: Check git version
-      run: git version
     - name: setup Path
       run: |
         echo /usr/local/bin >> $GITHUB_PATH
+    - name: Update pip
+      run: |
+        python -m pip install --upgrade pip
+    - name: check python version
+      run: |
+        python --version
+    - name: Check git version
+      run: git version
     - name: Install PyTorch
       shell: bash
       run: |
-        python3 -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
+        python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
     - name: Install tensordict
       run: |
-        python3 -m pip install git+https://github.com/pytorch-labs/tensordict.git
+        python -m pip install git+https://github.com/pytorch-labs/tensordict.git
     - name: Install TorchRL
       run: |
-        python3 -m pip install -e .
+        python -m pip install -e .
     - name: Test torchrl installation
       shell: bash
       run: |
@@ -79,7 +78,7 @@ jobs:
     - name: Build the docset
       id: build_doc
       run: |
-        python3 -m pip install -r docs/requirements.txt
+        python -m pip install -r docs/requirements.txt
         cd ./docs
         timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build SPHINXOPTS=-v ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         cd ..
