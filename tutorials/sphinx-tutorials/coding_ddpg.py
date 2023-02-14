@@ -49,7 +49,6 @@ warnings.filterwarnings("ignore")
 # sphinx_gallery_end_ignore
 
 from copy import deepcopy
-from typing import Optional
 
 import numpy as np
 import torch
