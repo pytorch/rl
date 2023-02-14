@@ -18,7 +18,7 @@ jobs:
            python-version: 3.8
     defaults:
       run:
-        shell: bash -l {0}
+        shell: bash -el {0}
     container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu18.04
     steps:
     - uses: conda-incubator/setup-miniconda@v2
