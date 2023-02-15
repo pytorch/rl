@@ -25,19 +25,19 @@ conda activate "${env_dir}"
 
 conda install -c conda-forge zlib -y
 
-pip3 install --upgrade pip --quiet
+pip3 install --upgrade pip --quiet --root-user-action=ignore
 
-printf "python version"
+printf "python version\n"
 python --version
 
-pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet
+pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
 
-printf "Installing tensordict"
-python -m pip install git+https://github.com/pytorch-labs/tensordict.git --quiet
+printf "Installing tensordict\n"
+pip3 install git+https://github.com/pytorch-labs/tensordict.git --quiet --root-user-action=ignore
 
-printf "Installing torchrl"
-python -m pip install -e . --quiet
+printf "Installing torchrl\n"
+pip3 install -e . --quiet --root-user-action=ignore
 
-printf "Installing requirements"
-python -m pip install -r docs/requirements.txt --quiet
-printf "Installed all dependencies"
+printf "Installing requirements\n"
+pip3 install -r docs/requirements.txt --quiet --root-user-action=ignore
+printf "Installed all dependencies\n"
