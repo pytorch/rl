@@ -3,7 +3,9 @@ apt-get install software-properties-common -y
 add-apt-repository ppa:git-core/candidate -y
 apt-get update -y
 apt-get upgrade -y
-apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev zlib1g-dev python3.8 python3-pip ninja
+apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip \
+  wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev \
+  zlib1g-dev python3.8 python3-pip ninja
 
 
 root_dir="$(pwd)"
@@ -43,7 +45,7 @@ pip3 install -r docs/requirements.txt --quiet --root-user-action=ignore
 printf "Installed all dependencies\n"
 
 printf "smoke test\n"
-python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
+MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
 print(DMControlEnv('cheetah', 'run').reset())
 """
 
