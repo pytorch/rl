@@ -27,6 +27,7 @@ conda install -c conda-forge zlib -y
 
 pip3 install --upgrade pip
 
+printf "python version"
 python --version
 
 pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118
