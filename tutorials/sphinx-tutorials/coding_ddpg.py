@@ -547,10 +547,10 @@ num_layers = 2
 # Replay buffer
 # ^^^^^^^^^^^^^
 
-prb = True  # If True, a Prioritized replay buffer will be used
-buffer_size = min(
-    total_frames, 1000000 // frame_skip
-)  # Number of frames stored in the buffer
+# If True, a Prioritized replay buffer will be used
+prb = True
+# Number of frames stored in the buffer
+buffer_size = min(total_frames, 1000000 // frame_skip)
 buffer_scratch_dir = "/tmp/"
 
 seed = 0
@@ -564,13 +564,21 @@ seed = 0
 # seminal DDPG paper, we used an Ornstein-Uhlenbeck process to add noise to the
 # sampled actions).
 
+
+# Seeding
 torch.manual_seed(seed)
 np.random.seed(seed)
 
-# get stats for normalization
+###############################################################################
+# Normalization stats
+# ^^^^^^^^^^^^^^^^^^^
+
 transform_state_dict = get_env_stats()
 
-# Actor and qnet instantiation
+###############################################################################
+# Models: policy and q-value network
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 actor, qnet = make_ddpg_actor(
     transform_state_dict=transform_state_dict,
     device=device,
@@ -578,10 +586,15 @@ actor, qnet = make_ddpg_actor(
 if device == torch.device("cpu"):
     actor.share_memory()
 
-# Target network
+###############################################################################
+# We create a copy of the q-value network to be used as target network
+
 qnet_target = deepcopy(qnet).requires_grad_(False)
 
-# Exploration wrappers:
+###############################################################################
+# The policy is wrapped in a :class:`torchrl.modules.OrnsteinUhlenbeckProcessWrapper`
+# exploration module:
+
 actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
     actor,
     annealing_num_steps=annealing_frames,
@@ -589,7 +602,13 @@ actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
 if device == torch.device("cpu"):
     actor_model_explore.share_memory()
 
-# Environment setting:
+###############################################################################
+# Parallel environment creation
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# We pass the stats computed earlier to normalize the output of our
+# environment:
+
 create_env_fn = parallel_env_constructor(
     transform_state_dict=transform_state_dict,
 )
@@ -599,10 +618,20 @@ create_env_fn = parallel_env_constructor(
 # ^^^^^^^^^^^^^^
 #
 # TorchRL provides specialized classes to help you collect data by executing
-# the policy in the environment.
+# the policy in the environment. These "data collectors" iteratively compute
+# the action to be executed at a given time, then execute a step in the
+# environment and reset it when required.
+# Data collectors are designed to help developers have a tight control
+# on the number of frames per batch of data, on the (a)sync nature of this
+# collection and on the resources allocated to the data collection (e.g. GPU,
+# number of workers etc).
+#
 # Here we will use
-# ``MultiaSyncDataCollector``, a data collector that will be executed in an
-# async manner (i.e. data will be collected while the policy is being optimized).
+# :class:`torchrl.collectors.MultiaSyncDataCollector`, a data collector that
+# will be executed in an async manner (i.e. data will be collected while
+# the policy is being optimized). With the :class:`MultiaSyncDataCollector`,
+# multiple workers are running rollouts separately. When a batch is asked, it
+# is gathered from the first worker that can provide it.
 #
 # The parameters to specify are:
 #
@@ -640,11 +669,12 @@ collector = MultiaSyncDataCollector(
     split_trajs=True,
     devices=[device, device],  # device for execution
     storing_devices=[device, device],  # device where data will be stored and passed
-    seed=None,
     pin_memory=False,
     update_at_each_batch=False,
     exploration_mode="random",
 )
+
+
 collector.set_seed(seed)
 
 ###############################################################################
