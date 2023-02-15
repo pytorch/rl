@@ -645,18 +645,24 @@ create_env_fn = parallel_env_constructor(
 #
 # - the number of frames in each batch collected,
 # - the number of random steps executed independently from the policy,
-# - the devices used for policy execution, and
-# - data transmission.
+# - the devices used for policy execution
+# - the devices used to store data before the data is passed to the main
+#   process.
 #
-# The ``MultiStep`` object passed as postproc makes it so that the rewards
-# of the n upcoming steps are added (with some discount factor) and the next
-# observation is changed to be the n-step forward observation.
+# Collectors also accept post-processing hooks.
+# For instance, the :class:`torchrl.data.postprocs.MultiStep` class passed as
+# ``postproc`` makes it so that the rewards of the ``n`` upcoming steps are
+# summed (with some discount factor) and the next observation is changed to
+# be the n-step forward observation. One could pass other transforms too:
+# using :class:`tensordict.nn.TensorDictModule` and
+# :class:`tensordict.nn.TensorDictSequential` we can seamlessly append a
+# wide range of transforms to our collector.
 
-# Batch collector:
 if n_steps_forward > 0:
     multistep = MultiStep(n_steps_max=n_steps_forward, gamma=gamma)
 else:
     multistep = None
+
 collector = MultiaSyncDataCollector(
     create_env_fn=[create_env_fn, create_env_fn],
     policy=actor_model_explore,
@@ -674,23 +680,28 @@ collector = MultiaSyncDataCollector(
     exploration_mode="random",
 )
 
-
 collector.set_seed(seed)
 
 ###############################################################################
-# We can now create the replay buffer as part of the initialization.
+# Replay buffer
+# ^^^^^^^^^^^^^
+#
 
-# Replay buffer:
 replay_buffer = make_replay_buffer()
 
-# Trajectory recorder
+###############################################################################
+# Recorder
+# ^^^^^^^^
+
 recorder = make_recorder(actor_model_explore, transform_state_dict)
 
 ###############################################################################
+# Optimizer
+# ^^^^^^^^^
+#
 # Finally, we will use the Adam optimizer for the policy and value network,
 # with the same learning rate for both.
 
-# Optimizers
 optimizer_actor = optim.Adam(actor.parameters(), lr=lr, weight_decay=weight_decay)
 optimizer_qnet = optim.Adam(qnet.parameters(), lr=lr, weight_decay=weight_decay)
 total_collection_steps = total_frames // frames_per_batch
@@ -703,9 +714,10 @@ scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(
 )
 
 ###############################################################################
-# Time to train the policy!
-# ^^^^^^^^^^^^^^^^^^^^^^^^^
-# Some notes about the following cell:
+# Time to train the policy
+# ------------------------
+#
+# Some notes about the following training loop:
 #
 # - ``hold_out_net`` is a TorchRL context manager that temporarily sets
 #   ``requires_grad`` to False for a set of network parameters. This is used to
