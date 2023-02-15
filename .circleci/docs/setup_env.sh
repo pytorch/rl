@@ -35,18 +35,5 @@ python -m pip install git+https://github.com/pytorch-labs/tensordict.git
 
 python -m pip install -e .
 
-mkdir _tmp
-cd _tmp
-python3 -c "import torchrl;from torchrl.data import ReplayBuffer"
-cd ..
-rm -rf _tmp
-
 python -m pip install -r docs/requirements.txt
-cd ./docs
-timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build SPHINXOPTS=-v ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
-cd ..
-
-git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/_local_build/tensordict
-rm -rf docs/_local_build/tensordict/.git
-
-
+printf "Installed all dependencied"

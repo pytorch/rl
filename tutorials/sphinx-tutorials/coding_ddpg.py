@@ -125,6 +125,7 @@ from torchrl.trainers import Recorder
 env_library = None
 env_name = None
 
+
 def make_env():
     """Create a base env."""
     global env_library
@@ -150,6 +151,7 @@ def make_env():
     }
     env = env_library(*env_args, **env_kwargs)
     return env
+
 
 ###############################################################################
 # Transforms
@@ -179,6 +181,7 @@ def make_env():
 # - Finally, we also leave the possibility of normalizing the states: we will
 #   take care of computing the normalizing constants later on.
 #
+
 
 def make_transformed_env(
     env,
@@ -226,6 +229,7 @@ def make_transformed_env(
 
     return env
 
+
 ###############################################################################
 # Normalization of the observations
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -238,6 +242,7 @@ def make_transformed_env(
 # number of steps and compute its summary statistics.
 #
 
+
 def get_env_stats():
     """Gets the stats of an environment."""
     proof_env = make_transformed_env(make_env())
@@ -247,6 +252,7 @@ def get_env_stats():
     transform_state_dict = t.state_dict()
     proof_env.close()
     return transform_state_dict
+
 
 ###############################################################################
 # Parallel execution
@@ -273,6 +279,7 @@ def get_env_stats():
 # To leverage the vectorization capabilities of PyTorch, we adopt
 # the first method:
 #
+
 
 def parallel_env_constructor(
     transform_state_dict,
@@ -301,6 +308,7 @@ def parallel_env_constructor(
     env.transform[2].init_stats(3, cat_dim=1, reduce_dim=[0, 1])
     env.transform[2].load_state_dict(transform_state_dict)
     return env
+
 
 ###############################################################################
 # Building the model
@@ -338,6 +346,7 @@ def parallel_env_constructor(
 # sample of data. For this purpose, we generate fake data from the
 # environment specs.
 #
+
 
 def make_ddpg_actor(
     transform_state_dict,
@@ -397,6 +406,7 @@ def make_ddpg_actor(
 
     return actor, qnet
 
+
 ###############################################################################
 # Evaluator: building your recorder object
 # ----------------------------------------
@@ -408,6 +418,7 @@ def make_ddpg_actor(
 # from these simulations.
 #
 # The following helper function builds this object:
+
 
 def make_recorder(actor_model_explore, transform_state_dict):
     base_env = make_env()
@@ -425,6 +436,7 @@ def make_recorder(actor_model_explore, transform_state_dict):
     )
     return recorder_obj
 
+
 ###############################################################################
 # Replay buffer
 # -------------
@@ -439,6 +451,7 @@ def make_recorder(actor_model_explore, transform_state_dict):
 # function takes care of creating the replay buffer with the desired
 # hyperparameters:
 #
+
 
 def make_replay_buffer(make_replay_buffer=3):
     if prb:
@@ -460,6 +473,7 @@ def make_replay_buffer(make_replay_buffer=3):
         prefetch=make_replay_buffer,
     )
     return replay_buffer
+
 
 ###############################################################################
 # Hyperparameters
@@ -491,9 +505,7 @@ reward_scaling = 5.0
 init_env_steps = 1000
 
 # Exploration: Number of frames before OU noise becomes null
-annealing_frames = (
-    1000000 // frame_skip
-)
+annealing_frames = 1000000 // frame_skip
 
 ###############################################################################
 # Collection
@@ -501,9 +513,7 @@ annealing_frames = (
 
 # We will execute the policy on cuda if available
 device = (
-    torch.device("cpu")
-    if torch.cuda.device_count() == 0
-    else torch.device("cuda:0")
+    torch.device("cpu") if torch.cuda.device_count() == 0 else torch.device("cuda:0")
 )
 
 # Number of environments in each data collector
@@ -719,21 +729,24 @@ scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(
 #
 # Some notes about the following training loop:
 #
-# - ``hold_out_net`` is a TorchRL context manager that temporarily sets
-#   ``requires_grad`` to False for a set of network parameters. This is used to
-#   prevent ``backward`` to write gradients on parameters that need not to be
-#   differentiated given the loss at hand.
-# - The value network is designed using the ``ValueOperator`` TensorDictModule
-#   subclass. This class will write a ``"state_action_value"`` if one of its
-#   ``in_keys`` is named "action", otherwise it will assume that only the
+# - :func:`torchrl.objectives.utils.hold_out_net` is a TorchRL context manager
+#   that temporarily sets :func:`torch.Tensor.requires_grad_()` to False for
+#   a designated set of network parameters. This is used to
+#   prevent :func:`torch.Tensor.backward()`` from writing gradients on
+#   parameters that need not to be differentiated given the loss at hand.
+# - The value network is designed using the
+#   :class:`torchrl.modules.ValueOperator` subclass from
+#   :class:`tensordict.nn.TensorDictModule` class. As explained earlier,
+#   this class will write a ``"state_action_value"`` entry if one of its
+#   ``in_keys`` is named ``"action"``, otherwise it will assume that only the
 #   state-value is returned and the output key will simply be ``"state_value"``.
 #   In the case of DDPG, the value if of the state-action pair,
-#   hence the first name is used.
-# - The ``step_mdp`` helper function returns a new TensorDict that essentially
-#   does the ``obs = next_obs`` step. In other words, it will return a new
-#   tensordict where the values that are related to the next state (next
-#   observations of various type) are selected and written as if they were
-#   current. This makes it possible to pass this new tensordict to the policy or
+#   hence the ``"state_action_value"`` will be used.
+# - The :func:`torchrl.envs.utils.step_mdp` helper function is the equivalent of
+#   the ``obs = next_obs`` command found in multiple RL algorithms.
+#   It will return a new :class:`tensordict.TensorDict` instance that contains
+#   all the data that will need to be used in the next iteration.
+#   This makes it possible to pass this new tensordict to the policy or
 #   value network.
 # - When using prioritized replay buffer, a priority key is added to the
 #   sampled tensordict (named ``"td_error"`` by default). Then, this
@@ -1053,9 +1066,9 @@ for i, tensordict in enumerate(collector):
             # This is the crucial bit: we'll compute the TD(lambda) instead of a simple single step estimate
             done = sampled_tensordict["done"]
             reward = sampled_tensordict["reward"]
-            value = qnet(sampled_tensordict.view(-1)).view(
-                sampled_tensordict.shape
-            )["state_action_value"]
+            value = qnet(sampled_tensordict.view(-1)).view(sampled_tensordict.shape)[
+                "state_action_value"
+            ]
             advantage = vec_td_lambda_advantage_estimate(
                 gamma, lmbda, value, next_value, reward, done
             )
