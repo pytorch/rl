@@ -875,12 +875,13 @@ del collector
 
 ###############################################################################
 # Experiment results
-# ^^^^^^^^^^^^^^^^^^
+# ------------------
+#
 # We make a simple plot of the average rewards during training. We can observe
 # that our policy learned quite well to solve the task.
 #
 # **Note**: As already mentioned above, to get a more reasonable performance,
-# use a greater value for ``total_frames`` e.g. 1000000.
+# use a greater value for ``total_frames`` e.g. 1M.
 
 plt.figure()
 plt.plot(*zip(*rewards), label="training")
@@ -892,7 +893,8 @@ plt.tight_layout()
 
 ###############################################################################
 # Sampling trajectories and using TD(lambda)
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ------------------------------------------
+#
 # TD(lambda) is known to be less biased than the regular TD-error we used in
 # the previous example. To use it, however, we need to sample trajectories and
 # not single transitions.
@@ -904,7 +906,7 @@ plt.tight_layout()
 # 250 steps (note that the total trajectory length is actually 1000, but we
 # collect batches of 500 transitions obtained over 2 environments running in
 # parallel, hence only 250 steps per trajectory are collected at any given
-# time). Hence, we'll devide our replay buffer size by 250:
+# time). Hence, we'll divide our replay buffer size by 250:
 
 buffer_size = 100000 // frame_skip // 250
 print("the new buffer size is", buffer_size)
