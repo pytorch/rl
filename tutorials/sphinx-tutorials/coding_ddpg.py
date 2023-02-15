@@ -742,29 +742,32 @@ scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(
 #   state-value is returned and the output key will simply be ``"state_value"``.
 #   In the case of DDPG, the value if of the state-action pair,
 #   hence the ``"state_action_value"`` will be used.
-# - The :func:`torchrl.envs.utils.step_mdp` helper function is the equivalent of
-#   the ``obs = next_obs`` command found in multiple RL algorithms.
-#   It will return a new :class:`tensordict.TensorDict` instance that contains
-#   all the data that will need to be used in the next iteration.
+# - The :func:`torchrl.envs.utils.step_mdp(tensordict)` helper function is the
+#   equivalent of the ``obs = next_obs`` command found in multiple RL
+#   algorithms. It will return a new :class:`tensordict.TensorDict` instance
+#   that contains all the data that will need to be used in the next iteration.
 #   This makes it possible to pass this new tensordict to the policy or
 #   value network.
 # - When using prioritized replay buffer, a priority key is added to the
 #   sampled tensordict (named ``"td_error"`` by default). Then, this
-#   TensorDict will be fed back to the replay buffer using the ``update_priority``
+#   TensorDict will be fed back to the replay buffer using the
+#   :func:`torchrl.data.replay_buffers.TensorDictReplayBuffer.update_tensordict_priority`
 #   method. Under the hood, this method will read the index present in the
 #   TensorDict as well as the priority value, and update its list of priorities
 #   at these indices.
 # - TorchRL provides optimized versions of the loss functions (such as this one)
 #   where one only needs to pass a sampled tensordict and obtains a dictionary
-#   of losses and metadata in return (see ``torchrl.objectives`` for more
+#   of losses and metadata in return (see :mod:`torchrl.objectives` for more
 #   context). Here we write the full loss function in the optimization loop
-#   for transparency. Similarly, the target network updates are written
-#   explicitely but TorchRL provides a couple of dedicated classes for this
-#   (see ``torchrl.objectives.SoftUpdate`` and ``torchrl.objectives.HardUpdate``).
-# - After each collection of data, we call ``collector.update_policy_weights_()``,
+#   for transparency.
+#   Similarly, the target network updates are written explicitly but
+#   TorchRL provides a couple of dedicated classes for this
+#   (see :class:`torchrl.objectives.SoftUpdate` and
+#   :class:`torchrl.objectives.HardUpdate`).
+# - After each collection of data, we call :func:`collector.update_policy_weights_()`,
 #   which will update the policy network weights on the data collector. If the
 #   code is executed on cpu or with a single cuda device, this part can be
-#   ommited. If the collector is executed on another device, then its weights
+#   omitted. If the collector is executed on another device, then its weights
 #   must be synced with those on the main, training process and this method
 #   should be incorporated in the training loop (ideally early in the loop in
 #   async settings, and at the end of it in sync settings).
