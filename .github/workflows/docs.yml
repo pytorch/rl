@@ -39,10 +39,10 @@ jobs:
         wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh"
         bash ./miniconda.sh -b -f -p "${conda_dir}"
         eval "$(${conda_dir}/bin/conda shell.bash hook)"
-        printf "python: ${PYTHON_VERSION}\n"
         printf "* Creating a test environment\n"
         conda create --prefix "${env_dir}" -y python=3.8
         conda activate "${env_dir}"
+        python -c "print('hello world')"
     - name: Install rsync
       shell: bash -el {0}
       run: |
