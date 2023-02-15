@@ -831,7 +831,9 @@ for i, tensordict in enumerate(collector):
             optimizer_qnet.step()
             optimizer_qnet.zero_grad()
 
-            # compute loss for actor and backprop: the actor must maximise the state-action value, hence the loss is the neg value of this.
+            # compute loss for actor and backprop:
+            # the actor must maximise the state-action value, hence the loss
+            # is the neg value of this.
             sampled_tensordict_actor = sampled_tensordict.select(*actor.in_keys)
             with hold_out_net(qnet):
                 qnet(actor(sampled_tensordict_actor))
