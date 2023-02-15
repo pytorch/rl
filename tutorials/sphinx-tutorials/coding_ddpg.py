@@ -461,11 +461,17 @@ def make_replay_buffer(make_replay_buffer=3):
 ###############################################################################
 # Hyperparameters
 # ^^^^^^^^^^^^^^^
-# After having written all our helper functions, it is now time to set the
+#
+# After having written our helper functions, it is time to set the
 # experiment hyperparameters:
 
-backend = "gym"  # or "dm_control"
-frame_skip = 2  # if this value is changed, the number of frames collected etc. need to be adjusted
+# The backend can be gym or dm_control
+backend = "gym"
+# frame_skip batches multiple step together with a single action
+# If > 1, the other frame counts (e.g. frames_per_batch, total_frames) need to
+# be adjusted to have a consistent total number of frames collected across
+# experiments.
+frame_skip = 2
 from_pixels = False
 reward_scaling = 5.0
 
@@ -476,8 +482,10 @@ device = (
     else torch.device("cuda:0")
 )
 
-init_env_steps = 1000  # number of random steps used as for stats computation
-env_per_collector = 2  # number of environments in each data collector
+# number of random steps used as for stats computation
+init_env_steps = 1000
+# number of environments in each data collector
+env_per_collector = 2
 
 env_library = None  # overwritten because global in env maker
 env_name = None  # overwritten because global in env maker

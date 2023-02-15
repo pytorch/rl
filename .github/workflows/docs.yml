@@ -40,6 +40,7 @@ jobs:
         ./.circleci/docs/gen_docs.sh
 
   deploy:
+    needs: build_docs_job
     runs-on: ubuntu-20.04
     strategy:
       matrix:
