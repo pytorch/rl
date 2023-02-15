@@ -1533,8 +1533,15 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         )
         if self.dtype != val.dtype or len(self.shape) > val.ndim or val_have_wrong_dim:
             return False
-
-        return ((val >= torch.zeros(self.nvec.size())) & (val < self.nvec)).all().item()
+        val_device = val.device
+        return (
+            (
+                (val >= torch.zeros(self.nvec.size(), device=val_device))
+                & (val < self.nvec.to(val_device))
+            )
+            .all()
+            .item()
+        )
 
     def to_onehot(
         self, val: Optional[torch.Tensor] = None, safe: bool = True
