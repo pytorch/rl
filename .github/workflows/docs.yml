@@ -21,6 +21,15 @@ jobs:
         shell: bash -el {0}
     container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu18.04
     steps:
+    - name: Install deps
+      shell: bash -el {0}
+      run: |
+        apt-get update -y
+        apt-get install software-properties-common -y
+        add-apt-repository ppa:git-core/candidate -y
+        apt-get update -y
+        apt-get upgrade -y
+        apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev
     - name: Install conda
       run: |
         printf "* Installing conda\n"
@@ -34,15 +43,6 @@ jobs:
         printf "* Creating a test environment\n"
         conda create --prefix "${env_dir}" -y python=3.8
         conda activate "${env_dir}"
-    - name: Install deps
-      shell: bash -el {0}
-      run: |
-        apt-get update -y
-        apt-get install software-properties-common -y
-        add-apt-repository ppa:git-core/candidate -y
-        apt-get update -y
-        apt-get upgrade -y
-        apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev
     - name: Install rsync
       shell: bash -el {0}
       run: |
