@@ -45,7 +45,7 @@ pip3 install -r docs/requirements.txt --quiet --root-user-action=ignore
 printf "Installed all dependencies\n"
 
 printf "smoke test\n"
-MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
+PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
 print(DMControlEnv('cheetah', 'run').reset())
 """
 
