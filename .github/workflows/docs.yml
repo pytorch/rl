@@ -39,9 +39,6 @@ jobs:
         ## setup_env.sh
         ./.circleci/docs/setup_env.sh
 
-        ## gen_docs.sh
-        ./.circleci/docs/gen_docs.sh
-
   deploy:
     needs: build_docs_job
     runs-on: ubuntu-20.04
