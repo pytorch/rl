@@ -31,9 +31,12 @@ python --version
 
 pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118
 
-python -m pip install git+https://github.com/pytorch-labs/tensordict.git
+printf "Installing tensordict"
+python -m pip install git+https://github.com/pytorch-labs/tensordict.git --quiet
 
-python -m pip install -e .
+printf "Installing torchrl"
+python -m pip install -e . --quiet
 
-python -m pip install -r docs/requirements.txt
-printf "Installed all dependencied"
+printf "Installing requirements"
+python -m pip install -r docs/requirements.txt --quiet
+printf "Installed all dependencies"
