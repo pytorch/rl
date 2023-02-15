@@ -402,7 +402,9 @@ def make_ddpg_actor(
 # performance of our algorithm needs to be assessed in deterministic mode. We
 # do this using a dedicated class, ``Recorder``, which executes the policy in
 # the environment at a given frequency and returns some statistics obtained
-# from these simulations. The following helper function builds this object:
+# from these simulations.
+#
+# The following helper function builds this object:
 
 def make_recorder(actor_model_explore, transform_state_dict):
     base_env = make_env()
@@ -428,8 +430,8 @@ def make_recorder(actor_model_explore, transform_state_dict):
 # is used to give a higher likelihood of sampling to some items than others)
 # and regular, circular experience replay.
 #
-# We also provide a special storage, named
-# :class:`torchrl.data.replay_buffers.storages.LazyMemmapStorage`, that will
+# TorchRL replay buffers are composable: one can pick up the storage, sampling
+# and writing strategies. It is also possible to
 # store tensors on physical memory using a memory-mapped array. The following
 # function takes care of creating the replay buffer with the desired
 # hyperparameters:
@@ -458,7 +460,7 @@ def make_replay_buffer(make_replay_buffer=3):
 
 ###############################################################################
 # Hyperparameters
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^
 # After having written all our helper functions, it is now time to set the
 # experiment hyperparameters:
 
