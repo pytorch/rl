@@ -46,24 +46,19 @@ jobs:
         conda activate "${env_dir}"
         python -c "print('hello world')"
     - name: Install rsync
-      shell: bash -el {0}
       run: |
         apt-get update && apt-get install -y rsync
     - name: Check ldd --version
       run: ldd --version
     - name: Update pip
-      shell: bash -el {0}
       run: |
         python -m pip install --upgrade pip
     - name: check python version
-      shell: bash -el {0}
       run: |
         python --version
     - name: Check git version
-      shell: bash -el {0}
       run: git version
     - name: Install PyTorch
-      shell: bash
       run: |
         python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
     - name: Install tensordict
@@ -73,7 +68,6 @@ jobs:
       run: |
         python -m pip install -e .
     - name: Test torchrl installation
-      shell: bash
       run: |
         mkdir _tmp
         cd _tmp
