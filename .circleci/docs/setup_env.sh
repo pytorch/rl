@@ -3,8 +3,8 @@ apt-get install software-properties-common -y
 add-apt-repository ppa:git-core/candidate -y
 apt-get update -y
 apt-get upgrade -y
-apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip \
-  wget libglew2.0 sudo git cmake libz-dev \
+apt-get -y install libglfw3 libglew2.0 gcc curl g++ unzip \
+  wget sudo git cmake libz-dev \
   zlib1g-dev python3.8 python3-pip ninja
 
 
