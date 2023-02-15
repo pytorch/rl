@@ -1,11 +1,14 @@
-apt-get update -y
-apt-get install software-properties-common -y
-add-apt-repository ppa:git-core/candidate -y
-apt-get update -y
-apt-get upgrade -y
-apt-get -y install libglfw3 libglew2.0 gcc curl g++ unzip \
-  wget sudo git cmake libz-dev \
-  zlib1g-dev python3.8 python3-pip ninja
+#apt-get update -y
+#apt-get install software-properties-common -y
+#add-apt-repository ppa:git-core/candidate -y
+#apt-get update -y
+#apt-get upgrade -y
+#apt-get -y install libglfw3 libglew2.0 gcc curl g++ unzip \
+#  wget sudo git cmake libz-dev \
+#  zlib1g-dev python3.8 python3-pip ninja
+
+yum install -y glfw
+yum install -y glew
 
 
 root_dir="$(pwd)"
