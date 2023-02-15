@@ -21,17 +21,6 @@ jobs:
         shell: bash -el {0}
     container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu18.04
     steps:
-    - uses: conda-incubator/setup-miniconda@v2
-      with:
-        miniconda-version: "latest"
-        activate-environment: build_doc
-        auto-update-conda: true
-        python-version: ${{ matrix.python-version }}
-    - name: Conda info
-      shell: bash -el {0}
-      run: conda info
-    - name: Conda list
-      run: conda list
     - name: Install deps
       shell: bash -el {0}
       run: |
@@ -41,6 +30,19 @@ jobs:
         apt-get update -y
         apt-get upgrade -y
         apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev
+    - name: Install conda
+      run: |
+        printf "* Installing conda\n"
+        root_dir=$(pwd)
+        env_dir="${root_dir}/env"
+        conda_dir="${root_dir}/conda"
+        wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
+        bash ./miniconda.sh -b -f -p "${conda_dir}"
+        eval "$(${conda_dir}/bin/conda shell.bash hook)"
+        printf "python: ${PYTHON_VERSION}\n"
+        printf "* Creating a test environment\n"
+        conda create --prefix "${env_dir}" -y python=3.8
+        conda activate "${env_dir}"
     - name: Install rsync
       shell: bash -el {0}
       run: |
