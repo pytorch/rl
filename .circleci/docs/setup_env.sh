@@ -33,7 +33,7 @@ printf "python version\n"
 python --version
 
 #pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
-pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
 
 printf "Installing tensordict\n"
 pip3 install git+https://github.com/pytorch-labs/tensordict.git --quiet --root-user-action=ignore
@@ -46,7 +46,7 @@ pip3 install -r docs/requirements.txt --quiet --root-user-action=ignore
 printf "Installed all dependencies\n"
 
 printf "smoke test\n"
-PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
+PYOPENGL_PLATFORM=glfw MUJOCO_GL=glfw python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
 print(DMControlEnv('cheetah', 'run').reset())
 """
 
