@@ -56,7 +56,7 @@ print(DMControlEnv('cheetah', 'run').reset())
 printf "building docs...\n"
 cd ./docs
 #timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build SPHINXOPTS=-v ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
-MUJOCO_GL=egl sphinx-build ./source _local_build
+PYOPENGL_PLATFORM=glfw MUJOCO_GL=glfw sphinx-build ./source _local_build
 cd ..
 printf "done!\n"
 
