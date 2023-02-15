@@ -25,12 +25,12 @@ conda activate "${env_dir}"
 
 conda install -c conda-forge zlib -y
 
-pip3 install --upgrade pip
+pip3 install --upgrade pip --quiet
 
 printf "python version"
 python --version
 
-pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118
+pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet
 
 printf "Installing tensordict"
 python -m pip install git+https://github.com/pytorch-labs/tensordict.git --quiet
