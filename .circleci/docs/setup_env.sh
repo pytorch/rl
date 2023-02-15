@@ -41,3 +41,18 @@ pip3 install -e . --quiet --root-user-action=ignore
 printf "Installing requirements\n"
 pip3 install -r docs/requirements.txt --quiet --root-user-action=ignore
 printf "Installed all dependencies\n"
+
+printf "smoke test\n"
+python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
+print(DMControlEnv('cheetah', 'run').reset())
+"""
+
+printf "building docs...\n"
+cd ./docs
+#timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build SPHINXOPTS=-v ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+MUJOCO_GL=egl sphinx-build ./source _local_build
+cd ..
+printf "done!\n"
+
+git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/_local_build/tensordict
+rm -rf docs/_local_build/tensordict/.git
