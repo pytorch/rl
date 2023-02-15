@@ -224,6 +224,28 @@ def make_transformed_env(
     return env
 
 ###############################################################################
+# Normalization of the observations
+# ---------------------------------
+#
+# To compute the normalizing statistics, we run an arbitrary number of random
+# steps in the environment and compute the mean and standard deviation of the
+# collected observations. The :func:`ObservationNorm.init_stats()` method can
+# be used for this purpose. To get the summary statistics, we create a dummy
+# environment and run it for a given number of steps, collect data over a given
+# number of steps and compute its summary statistics.
+#
+
+def get_env_stats():
+    """Gets the stats of an environment."""
+    proof_env = make_transformed_env(make_env())
+    proof_env.set_seed(seed)
+    t = proof_env.transform[2]
+    t.init_stats(init_env_steps)
+    transform_state_dict = t.state_dict()
+    proof_env.close()
+    return transform_state_dict
+
+###############################################################################
 # Parallel execution
 # ------------------
 #
@@ -271,33 +293,11 @@ def parallel_env_constructor(
         pin_memory=False,
     )
     env = make_transformed_env(parallel_env)
-    # we call `init_stats` for a limitied number of steps, just to instantiate
+    # we call `init_stats` for a limited number of steps, just to instantiate
     # the lazy buffers.
     env.transform[2].init_stats(3, cat_dim=1, reduce_dim=[0, 1])
     env.transform[2].load_state_dict(transform_state_dict)
     return env
-
-###############################################################################
-# Normalization of the observations
-# ---------------------------------
-#
-# To compute the normalizing statistics, we run an arbitrary number of random
-# steps in the environment and compute the mean and standard deviation of the
-# collected observations. The :func:`ObservationNorm.init_stats()` method can
-# be used for this purpose. To get the summary statistics, we create a dummy
-# environment and run it for a given number of steps, collect data over a given
-# number of steps and compute its summary statistics.
-#
-
-def get_env_stats():
-    """Gets the stats of an environment."""
-    proof_env = make_transformed_env(make_env())
-    proof_env.set_seed(seed)
-    t = proof_env.transform[2]
-    t.init_stats(init_env_steps)
-    transform_state_dict = t.state_dict()
-    proof_env.close()
-    return transform_state_dict
 
 ###############################################################################
 # Building the model
