@@ -41,7 +41,7 @@ Coding DDPG using TorchRL
 # this algorithm.
 #
 # Imports
-# ^^^^^^^
+# -------
 #
 
 # sphinx_gallery_start_ignore
@@ -87,7 +87,7 @@ from torchrl.trainers import Recorder
 
 ###############################################################################
 # Environment
-# ^^^^^^^^^^^
+# -----------
 #
 # In most algorithms, the first thing that needs to be taken care of is the
 # construction of the environmet as it conditions the remainder of the
@@ -122,6 +122,9 @@ from torchrl.trainers import Recorder
 # with either one of the two backends considered above (dm-control or gym).
 #
 
+env_library = None
+env_name = None
+
 def make_env():
     """Create a base env."""
     global env_library
@@ -150,7 +153,7 @@ def make_env():
 
 ###############################################################################
 # Transforms
-# ----------
+# ^^^^^^^^^^
 #
 # Now that we have a base environment, we may want to modify its representation
 # to make it more policy-friendly. In TorchRL, transforms are appended to the
@@ -225,7 +228,7 @@ def make_transformed_env(
 
 ###############################################################################
 # Normalization of the observations
-# ---------------------------------
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # To compute the normalizing statistics, we run an arbitrary number of random
 # steps in the environment and compute the mean and standard deviation of the
@@ -247,7 +250,7 @@ def get_env_stats():
 
 ###############################################################################
 # Parallel execution
-# ------------------
+# ^^^^^^^^^^^^^^^^^^
 #
 # The following helper function allows us to run environments in parallel.
 # Running environments in parallel can significantly speed up the collection
@@ -301,7 +304,7 @@ def parallel_env_constructor(
 
 ###############################################################################
 # Building the model
-# ^^^^^^^^^^^^^^^^^^
+# ------------------
 #
 # We now turn to the setup of the model and loss function. DDPG requires a
 # value network, trained to estimate the value of a state-action pair, and a
@@ -396,7 +399,7 @@ def make_ddpg_actor(
 
 ###############################################################################
 # Evaluator: building your recorder object
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ----------------------------------------
 #
 # As the training data is obtained using some exploration strategy, the true
 # performance of our algorithm needs to be assessed in deterministic mode. We
@@ -424,7 +427,7 @@ def make_recorder(actor_model_explore, transform_state_dict):
 
 ###############################################################################
 # Replay buffer
-# ^^^^^^^^^^^^^
+# -------------
 #
 # Replay buffers come in two flavors: prioritized (where some error signal
 # is used to give a higher likelihood of sampling to some items than others)
@@ -460,81 +463,109 @@ def make_replay_buffer(make_replay_buffer=3):
 
 ###############################################################################
 # Hyperparameters
-# ^^^^^^^^^^^^^^^
+# ---------------
 #
 # After having written our helper functions, it is time to set the
 # experiment hyperparameters:
 
+###############################################################################
+# Environment
+# ^^^^^^^^^^^
+
 # The backend can be gym or dm_control
 backend = "gym"
+
+exp_name = "cheetah"
+
 # frame_skip batches multiple step together with a single action
 # If > 1, the other frame counts (e.g. frames_per_batch, total_frames) need to
 # be adjusted to have a consistent total number of frames collected across
 # experiments.
 frame_skip = 2
 from_pixels = False
+# Scaling the reward helps us control the signal magnitude for a more
+# efficient learning.
 reward_scaling = 5.0
 
-# execute on cuda if available
+# Number of random steps used as for stats computation using ObservationNorm
+init_env_steps = 1000
+
+# Exploration: Number of frames before OU noise becomes null
+annealing_frames = (
+    1000000 // frame_skip
+)
+
+###############################################################################
+# Collection
+# ^^^^^^^^^^
+
+# We will execute the policy on cuda if available
 device = (
     torch.device("cpu")
     if torch.cuda.device_count() == 0
     else torch.device("cuda:0")
 )
 
-# number of random steps used as for stats computation
-init_env_steps = 1000
-# number of environments in each data collector
+# Number of environments in each data collector
 env_per_collector = 2
 
-env_library = None  # overwritten because global in env maker
-env_name = None  # overwritten because global in env maker
-
-exp_name = "cheetah"
-annealing_frames = (
-    1000000 // frame_skip
-)  # Number of frames before OU noise becomes null
-lr = 5e-4
-weight_decay = 0.0
+# Total frames we will use during training. Scale up to 500K - 1M for a more
+# meaningful training
 total_frames = 5000 // frame_skip
+# Number of frames returned by the collector at each iteration of the outer loop
+frames_per_batch = 1000 // frame_skip
 init_random_frames = 0
-# init_random_frames = 5000 // frame_skip   # Number of random frames used as warm-up
-optim_steps_per_batch = 32  # Number of iterations of the inner loop
-batch_size = 128
-frames_per_batch = (
-    1000 // frame_skip
-)  # Number of frames returned by the collector at each iteration of the outer loop
-gamma = 0.99
-tau = 0.005  # Decay factor for the target network
-prb = True  # If True, a Prioritized replay buffer will be used
-buffer_size = min(
-    total_frames, 1000000 // frame_skip
-)  # Number of frames stored in the buffer
-buffer_scratch_dir = "/tmp/"
+# We'll be using the MultiStep class to have a less myopic representation of
+# upcoming states
 n_steps_forward = 3
 
-record_interval = 10  # record every 10 batch collected
+# record every 10 batch collected
+record_interval = 10
+
+###############################################################################
+# Optimizer and optimization
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+lr = 5e-4
+weight_decay = 0.0
+# UTD: Number of iterations of the inner loop
+update_to_data = 32
+batch_size = 128
+
+###############################################################################
+# Model
+# ^^^^^
+
+gamma = 0.99
+tau = 0.005  # Decay factor for the target network
 
 # Network specs
 num_cells = 64
 num_layers = 2
 
+###############################################################################
+# Replay buffer
+# ^^^^^^^^^^^^^
+
+prb = True  # If True, a Prioritized replay buffer will be used
+buffer_size = min(
+    total_frames, 1000000 // frame_skip
+)  # Number of frames stored in the buffer
+buffer_scratch_dir = "/tmp/"
+
 seed = 0
 
 ###############################################################################
-# **Note**: for fast rendering of the tutorial ``total_frames`` hyperparameter
-# was set to a very low number. To get a reasonable performance, use a greater
-# value e.g. 1000000.
-#
 # Initialization
-# ^^^^^^^^^^^^^^
+# --------------
+#
 # To initialize the experiment, we first acquire the observation statistics,
 # then build the networks, wrap them in an exploration wrapper (following the
 # seminal DDPG paper, we used an Ornstein-Uhlenbeck process to add noise to the
 # sampled actions).
 
-torch.manual_seed(0)
-np.random.seed(0)
+torch.manual_seed(seed)
+np.random.seed(seed)
 
 # get stats for normalization
 transform_state_dict = get_env_stats()
@@ -546,6 +577,7 @@ actor, qnet = make_ddpg_actor(
 )
 if device == torch.device("cpu"):
     actor.share_memory()
+
 # Target network
 qnet_target = deepcopy(qnet).requires_grad_(False)
 
@@ -564,9 +596,11 @@ create_env_fn = parallel_env_constructor(
 
 ###############################################################################
 # Data collector
-# ------------------------------
-# Creating the data collector is a crucial step in an RL experiment. TorchRL
-# provides a couple of classes to collect data in parallel. Here we will use
+# ^^^^^^^^^^^^^^
+#
+# TorchRL provides specialized classes to help you collect data by executing
+# the policy in the environment.
+# Here we will use
 # ``MultiaSyncDataCollector``, a data collector that will be executed in an
 # async manner (i.e. data will be collected while the policy is being optimized).
 #
@@ -590,6 +624,10 @@ create_env_fn = parallel_env_constructor(
 # observation is changed to be the n-step forward observation.
 
 # Batch collector:
+if n_steps_forward > 0:
+    multistep = MultiStep(n_steps_max=n_steps_forward, gamma=gamma)
+else:
+    multistep = None
 collector = MultiaSyncDataCollector(
     create_env_fn=[create_env_fn, create_env_fn],
     policy=actor_model_explore,
@@ -598,9 +636,7 @@ collector = MultiaSyncDataCollector(
     frames_per_batch=frames_per_batch,
     init_random_frames=init_random_frames,
     reset_at_each_iter=False,
-    postproc=MultiStep(n_steps_max=n_steps_forward, gamma=gamma)
-    if n_steps_forward > 0
-    else None,
+    postproc=multistep,
     split_trajs=True,
     devices=[device, device],  # device for execution
     storing_devices=[device, device],  # device where data will be stored and passed
@@ -711,7 +747,7 @@ for i, tensordict in enumerate(collector):
 
     # optimization steps
     if collected_frames >= init_random_frames:
-        for _ in range(optim_steps_per_batch):
+        for _ in range(update_to_data):
             # sample from replay buffer
             sampled_tensordict = replay_buffer.sample(batch_size).clone()
 
@@ -955,7 +991,7 @@ for i, tensordict in enumerate(collector):
 
     # optimization steps
     if collected_frames >= init_random_frames:
-        for _ in range(optim_steps_per_batch):
+        for _ in range(update_to_data):
             # sample from replay buffer
             sampled_tensordict = replay_buffer.sample(batch_size_traj)
             # reset the batch size temporarily, and exclude index whose shape is incompatible with the new size

@@ -246,7 +246,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if collected_frames >= cfg.init_random_frames:
             if i % cfg.record_interval == 0:
                 logger.log_scalar("cmpt", cmpt)
-            for j in range(cfg.optim_steps_per_batch):
+            for j in range(cfg.update_to_data):
                 cmpt += 1
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(
@@ -286,7 +286,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     scaler1.unscale_(world_model_opt)
                     clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
                     scaler1.step(world_model_opt)
-                    if j == cfg.optim_steps_per_batch - 1 and do_log:
+                    if j == cfg.update_to_data - 1 and do_log:
                         logger.log_scalar(
                             "loss_world_model",
                             loss_world_model.detach().item(),
@@ -322,7 +322,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 scaler2.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
                 scaler2.step(actor_opt)
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
+                if j == cfg.update_to_data - 1 and do_log:
                     logger.log_scalar(
                         "loss_actor",
                         actor_loss_td["loss_actor"].detach().item(),
@@ -343,7 +343,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 scaler3.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
                 scaler3.step(value_opt)
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
+                if j == cfg.update_to_data - 1 and do_log:
                     logger.log_scalar(
                         "loss_value",
                         value_loss_td["loss_value"].detach().item(),
@@ -356,7 +356,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     )
                 value_opt.zero_grad()
                 scaler3.update()
-                if j == cfg.optim_steps_per_batch - 1:
+                if j == cfg.update_to_data - 1:
                     do_log = False
 
             stats = retrieve_stats_from_state_dict(obs_norm_state_dict)
