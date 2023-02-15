@@ -50,11 +50,15 @@ jobs:
       run: |
         echo "$HOME/miniconda/bin" >> $GITHUB_PATH
         echo "CONDA=$HOME/miniconda" >> $GITHUB_PATH
-    - name: create and activate conda env
+    - name: create conda env
       run: |
         $HOME/miniconda/bin/conda create --prefix ./doc_env python=3.8
         $HOME/miniconda/bin/conda info
+        $HOME/miniconda/bin/conda init
+    - name: activate conda env
+      run: |
         $HOME/miniconda/bin/conda activate ./doc_env
+
     - name: check python version
       run: |
         python --version

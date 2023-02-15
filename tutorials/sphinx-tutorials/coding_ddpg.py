@@ -16,7 +16,9 @@ Coding DDPG using TorchRL
 #
 # This tutorial is more  than the PPO tutorial: it covers
 # multiple topics that were left aside. We strongly advise the reader to go
-# through the PPO tutorial first before trying out this one.
+# through the PPO tutorial first before trying out this one. The goal is to
+# show how flexible torchrl is when it comes to writing scripts that can cover
+# multiple use cases.
 #
 # Key learnings:
 #
@@ -87,7 +89,9 @@ from torchrl.trainers import Recorder
 # Environment
 # ^^^^^^^^^^^
 #
-# Let us start by building the environment.
+# In most algorithms, the first thing that needs to be taken care of is the
+# construction of the environmet as it conditions the remainder of the
+# training script.
 #
 # For this example, we will be using the ``"cheetah"`` task. The goal is to make
 # a half-cheetah run as fast as possible.
