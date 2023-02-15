@@ -54,7 +54,7 @@ jobs:
       run: |
         $HOME/miniconda/bin/conda create --prefix ./doc_env python=3.8
         $HOME/miniconda/bin/conda info
-        $HOME/miniconda/bin/conda init
+        $HOME/miniconda/bin/conda init bash
     - name: activate conda env
       run: |
         $HOME/miniconda/bin/conda activate ./doc_env

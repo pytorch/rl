@@ -153,7 +153,8 @@ def make_env():
 # ----------
 #
 # Now that we have a base environment, we may want to modify its representation
-# to make it more policy-friendly.
+# to make it more policy-friendly. In TorchRL, transforms are appended to the
+# base environment in a specialized :class:`torchr.envs.TransformedEnv` class.
 #
 # - It is common in DDPG to rescale the reward using some heuristic value. We
 #   will multiply the reward by 5 in this example.
@@ -200,8 +201,11 @@ def make_transformed_env(
 
     # We concatenate all states into a single "observation_vector"
     # even if there is a single tensor, it'll be renamed in "observation_vector".
-    # This facilitates the downstream operations as we know the name of the output tensor.
-    # In some environments (not half-cheetah), there may be more than one observation vector: in this case this code snippet will concatenate them all.
+    # This facilitates the downstream operations as we know the name of the
+    # output tensor.
+    # In some environments (not half-cheetah), there may be more than one
+    # observation vector: in this case this code snippet will concatenate them
+    # all.
     selected_keys = list(env.observation_spec.keys())
     out_key = "observation_vector"
     env.append_transform(CatTensors(in_keys=selected_keys, out_key=out_key))
@@ -267,6 +271,8 @@ def parallel_env_constructor(
         pin_memory=False,
     )
     env = make_transformed_env(parallel_env)
+    # we call `init_stats` for a limitied number of steps, just to instantiate
+    # the lazy buffers.
     env.transform[2].init_stats(3, cat_dim=1, reduce_dim=[0, 1])
     env.transform[2].load_state_dict(transform_state_dict)
     return env
