@@ -21,6 +21,8 @@ jobs:
         shell: bash -el {0}
     container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu18.04
     steps:
+    - name: Checkout
+      uses: actions/checkout@v3
     - name: Install deps
       shell: bash -el {0}
       run: |
@@ -49,8 +51,6 @@ jobs:
         apt-get update && apt-get install -y rsync
     - name: Check ldd --version
       run: ldd --version
-    - name: Checkout
-      uses: actions/checkout@v3
     - name: Update pip
       shell: bash -el {0}
       run: |
