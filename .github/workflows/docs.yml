@@ -10,16 +10,11 @@ on:
   workflow_dispatch:
 jobs:
   build_docs_job:
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        include:
-         - os: linux.g5.4xlarge.nvidia.gpu
-           python-version: 3.8
+    runs-on: linux.g5.4xlarge.nvidia.gpu
     defaults:
       run:
         shell: bash -l {0}
-    container: nvidia/cudagl:11.4.0-base
+    container: nvidia/cudagl:11.4.0-runtime
     steps:
     - name: Install deps
       run: |
@@ -39,7 +34,7 @@ jobs:
         bash ./miniconda.sh -b -f -p "${conda_dir}"
         eval "$(${conda_dir}/bin/conda shell.bash hook)"
         printf "* Creating a test environment\n"
-        conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+        conda create --prefix "${env_dir}" -y python=3.8
         printf "* Activating\n"
         conda activate "${env_dir}"
     - name: Update pip
@@ -54,7 +49,8 @@ jobs:
     - name: Install PyTorch
       shell: bash
       run: |
-        pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
+        pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
+        #pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
     - name: Install tensordict
       run: |
         pip3 install git+https://github.com/pytorch-labs/tensordict.git --quiet --root-user-action=ignore
@@ -70,7 +66,7 @@ jobs:
         mkdir _tmp
         cd _tmp
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
-        print(DMControlEnv('cheetah', 'run').reset())"""
+        print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
     - name: Build the docset
       id: build_doc
