@@ -7,8 +7,8 @@
 #  wget sudo git cmake libz-dev \
 #  zlib1g-dev python3.8 python3-pip ninja
 
-yum install -y mesa-libGL freeglut egl-utils glew glfw
-#yum install -y glew glfw
+#yum install -y mesa-libGL freeglut egl-utils glew glfw
+yum install -y glew glfw
 
 root_dir="$(pwd)"
 conda_dir="${root_dir}/conda"
