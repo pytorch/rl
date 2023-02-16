@@ -600,8 +600,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = TensorDict(
                 {}, device=self.device, batch_size=self.batch_size, _run_checks=False
             )
-        elif not self.batch_locked:
+        elif not self.batch_locked and not self.batch_size:
             shape = tensordict.shape
+        elif not self.batch_locked and tensordict.shape != self.batch_size:
+            raise RuntimeError(
+                "The input tensordict and the env have a different batch size: "
+                f"env.batch_size={self.batch_size} and tensordict.batch_size={tensordict.shape}. "
+                f"Non batch-locked environment require the env batch-size to be either empty or to"
+                f" match the tensordict one."
+            )
         action = self.action_spec.rand(shape)
         tensordict.set("action", action)
         return self.step(tensordict)
