@@ -11,6 +11,7 @@ on:
 
 jobs:
   build_docs_job:
+    runs-on: linux.g5.4xlarge.nvidia.gpu
     env:
       DOCKER_IMAGE: nvidia/cudagl:11.4.2-runtime
       REPOSITORY: pytorch/rl
@@ -30,7 +31,6 @@ jobs:
 
         ## setup_env.sh
         ./.circleci/docs/setup_env.sh
-    runs-on: linux.g5.4xlarge.nvidia.gpu
     timeout-minutes: 45
     steps:
       - name: Clean workspace
@@ -55,7 +55,7 @@ jobs:
           github-secret: ${{ github.token }}
 
       - name: Pull docker image
-        uses: ./test-infra/.github/actions/pull-docker-image
+        uses: pytorch/test-infra/.github/actions/pull-docker-image
         with:
           docker-image: ${{ env.DOCKER_IMAGE }}
 
