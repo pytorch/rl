@@ -1051,7 +1051,8 @@ for i, tensordict in enumerate(collector):
         for _ in range(update_to_data):
             # sample from replay buffer
             sampled_tensordict = replay_buffer.sample(batch_size_traj)
-            # reset the batch size temporarily, and exclude index whose shape is incompatible with the new size
+            # reset the batch size temporarily, and exclude index
+            # whose shape is incompatible with the new size
             index = sampled_tensordict.get("index")
             sampled_tensordict.exclude("index", inplace=True)
 
@@ -1065,7 +1066,8 @@ for i, tensordict in enumerate(collector):
                 next_value = next_tensordict["state_action_value"]
                 assert not next_value.requires_grad
 
-            # This is the crucial bit: we'll compute the TD(lambda) instead of a simple single step estimate
+            # This is the crucial part: we'll compute the TD(lambda)
+            # instead of a simple single step estimate
             done = sampled_tensordict["done"]
             reward = sampled_tensordict["reward"]
             value = qnet(sampled_tensordict.view(-1)).view(sampled_tensordict.shape)[
