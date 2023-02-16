@@ -34,8 +34,8 @@ pip3 install --upgrade pip --quiet --root-user-action=ignore
 printf "python version\n"
 python --version
 
-#pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
-pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
+pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
+#pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
 
 printf "Installing tensordict\n"
 pip3 install git+https://github.com/pytorch-labs/tensordict.git --quiet --root-user-action=ignore
