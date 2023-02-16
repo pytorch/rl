@@ -40,9 +40,6 @@ jobs:
           mkdir -p "${GITHUB_WORKSPACE}"
           echo "::endgroup::"
 
-      - name: Install rsync 📚
-        run: |
-          apt-get update && apt-get install -y rsync
       - name: Checkout
         uses: actions/checkout@v3
 
@@ -104,6 +101,10 @@ jobs:
         run: |
           git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/_local_build/tensordict
           rm -rf docs/_local_build/tensordict/.git
+
+      - name: Install rsync 📚
+        run: |
+          apt-get update && apt-get install -y rsync
 
       - name: Deploy
         if: ${{ github.ref == 'refs/heads/main' }}
