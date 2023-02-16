@@ -115,4 +115,4 @@ jobs:
 
       - name: Teardown Linux
         if: ${{ always() }}
-        uses: ./test-infra/.github/actions/teardown-linux
+        uses: pytorch/test-infra/.github/actions/teardown-linux
