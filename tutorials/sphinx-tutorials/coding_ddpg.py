@@ -902,9 +902,11 @@ plt.tight_layout()
 # We modify the previous example to make this possible.
 #
 # The first modification consists in building a replay buffer that stores
-# trajectories (and not transitions). We'll collect trajectories of (at most)
-# 250 steps (note that the total trajectory length is actually 1000, but we
-# collect batches of 500 transitions obtained over 2 environments running in
+# trajectories (and not transitions).
+#
+# Specifically, we'll collect trajectories of (at most)
+# 250 steps (note that the total trajectory length is actually 1000 frames, but
+# we collect batches of 500 transitions obtained over 2 environments running in
 # parallel, hence only 250 steps per trajectory are collected at any given
 # time). Hence, we'll divide our replay buffer size by 250:
 
@@ -912,8 +914,6 @@ buffer_size = 100000 // frame_skip // 250
 print("the new buffer size is", buffer_size)
 batch_size_traj = max(4, batch_size // 250)
 print("the new batch size for trajectories is", batch_size_traj)
-
-###############################################################################
 
 n_steps_forward = 0  # disable multi-step for simplicity
 

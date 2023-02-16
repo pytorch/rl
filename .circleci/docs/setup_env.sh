@@ -8,7 +8,7 @@
 #  zlib1g-dev python3.8 python3-pip ninja
 
 #yum install -y mesa-libGL freeglut egl-utils glew glfw
-yum install -y glew glfw
+#yum install -y glew glfw
 
 root_dir="$(pwd)"
 conda_dir="${root_dir}/conda"
@@ -25,6 +25,8 @@ eval "$(${conda_dir}/bin/conda shell.bash hook)"
 
 printf "* Creating a test environment\n"
 conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+
+printf "* Activating\n"
 conda activate "${env_dir}"
 
 conda install -c conda-forge zlib -y
