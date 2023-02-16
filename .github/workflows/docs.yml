@@ -19,7 +19,7 @@ jobs:
     defaults:
       run:
         shell: bash -l {0}
-    container: nvidia/cudagl:11.4.0-base
+    container: nvidia/cudagl:11.4.0-runtime
     steps:
     - name: Install deps
       run: |
@@ -46,6 +46,9 @@ jobs:
       run: |
         apt-get install python3.8 python3-pip -y
         pip3 install --upgrade pip
+    - name: check nvidia
+      run: |
+        nvidia-smi
     - name: check python version
       run: |
         python3 --version
