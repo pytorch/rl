@@ -21,7 +21,7 @@ jobs:
       repository: pytorch/rl
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      docker-image: pytorch/manylinux-cuda118
+      docker-image: nvidia/cudagl:11.4.0-base
       timeout: 45
       script: |
         # Set env vars from matrix
