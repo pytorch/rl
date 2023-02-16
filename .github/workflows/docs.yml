@@ -16,7 +16,10 @@ jobs:
         include:
          - os: linux.g5.4xlarge.nvidia.gpu
            python-version: 3.8
-    container: nvidia/cudagl:11.4.0-runtime
+    container:
+      image: nvidia/cudagl:11.4.0-runtime
+      volumes:
+        - /usr/lib/wsl/lib/:/usr/local/bin
     steps:
     - name: Check for dockerenv file
       run: (ls /.dockerenv && echo Found dockerenv) || (echo No dockerenv)
