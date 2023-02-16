@@ -17,7 +17,7 @@ jobs:
          - os: linux.g5.4xlarge.nvidia.gpu
            python-version: 3.8
     container:
-      image: nvidia/cuda:12.0.1-runtime
+      image: nvidia/cuda:12.0.1-runtime-ubuntu20.04
     steps:
     - name: Check for dockerenv file
       run: (ls /.dockerenv && echo Found dockerenv) || (echo No dockerenv)
