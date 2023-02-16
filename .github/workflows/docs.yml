@@ -16,9 +16,6 @@ jobs:
         shell: bash -l {0}
     container: nvidia/cudagl:11.4.0-runtime
     steps:
-    - name: check nvidia
-      run: |
-        nvidia-smi
     - name: Install deps
       run: |
         apt-get update && apt-get install -y git wget gcc g++
@@ -52,7 +49,8 @@ jobs:
     - name: Install PyTorch
       shell: bash
       run: |
-        pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
+        pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
+        #pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
     - name: Install tensordict
       run: |
         pip3 install git+https://github.com/pytorch-labs/tensordict.git --quiet --root-user-action=ignore
