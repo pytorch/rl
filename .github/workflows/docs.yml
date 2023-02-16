@@ -14,8 +14,11 @@ jobs:
     defaults:
       run:
         shell: bash -l {0}
-    container: nvidia/cudagl:11.4.0-base
+    container: nvidia/cudagl:11.4.0-runtime
     steps:
+    - name: check nvidia
+      run: |
+        nvidia-smi
     - name: Install deps
       run: |
         apt-get update && apt-get install -y git wget gcc g++
