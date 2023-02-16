@@ -10,12 +10,7 @@ on:
   workflow_dispatch:
 jobs:
   build_docs_job:
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        include:
-         - os: linux.g5.4xlarge.nvidia.gpu
-           python-version: 3.8
+    runs-on: linux.g5.4xlarge.nvidia.gpu
     defaults:
       run:
         shell: bash -l {0}
@@ -39,7 +34,7 @@ jobs:
         bash ./miniconda.sh -b -f -p "${conda_dir}"
         eval "$(${conda_dir}/bin/conda shell.bash hook)"
         printf "* Creating a test environment\n"
-        conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+        conda create --prefix "${env_dir}" -y python=3.8
         printf "* Activating\n"
         conda activate "${env_dir}"
     - name: Update pip
