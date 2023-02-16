@@ -21,12 +21,15 @@ jobs:
         shell: bash -l {0}
     container: nvidia/cudagl:11.4.0-runtime
     steps:
-    - name: Install deps
+    - name: check nvidia
       run: |
-        apt-get update && apt-get install -y git wget gcc g++
+        nvidia-smi
     - name: Checkout
       uses: actions/checkout@v3
     # Update references
+    - name: Install deps
+      run: |
+        apt-get update && apt-get install -y git wget gcc g++
     - name: Setup conda
       run: |
         root_dir="$(pwd)"
@@ -46,9 +49,6 @@ jobs:
       run: |
         apt-get install python3.8 python3-pip -y
         pip3 install --upgrade pip
-    - name: check nvidia
-      run: |
-        nvidia-smi
     - name: check python version
       run: |
         python3 --version
