@@ -48,7 +48,7 @@ jobs:
         pip3 install --upgrade pip
     - name: check python version
       run: |
-        python --version
+        python3 --version
     - name: Check git version
       run: git version
     - name: Install PyTorch
