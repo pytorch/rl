@@ -34,7 +34,7 @@ Basics
 ------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    tutorials/coding_ppo
    tutorials/pendulum
@@ -46,7 +46,7 @@ Intermediate
 ------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    tutorials/torch_envs
    tutorials/pretrained_models
@@ -55,7 +55,7 @@ Advanced
 --------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    tutorials/multi_task
    tutorials/coding_ddpg
