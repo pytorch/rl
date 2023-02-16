@@ -9,6 +9,7 @@
 
 #yum install -y mesa-libGL freeglut egl-utils glew glfw
 #yum install -y glew glfw
+apt-get update && apt-get install -y git wget gcc g++
 
 root_dir="$(pwd)"
 conda_dir="${root_dir}/conda"
