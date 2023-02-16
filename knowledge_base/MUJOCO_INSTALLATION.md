@@ -129,6 +129,7 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
      #include <GL/glew.h>
               ^~~~~~~~~~~
     ```
+
     _Solution_: make sure glew is installed (see above: `conda install -c conda-forge glew` or the `apt-get` version of it).
 2. 
     ```
@@ -136,14 +137,15 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
       #include <GL/gl.h>
                ^~~~~~~~~
     ```
+
     _Solution_: This should disappear once `mesalib` is installed: `conda install -y -c conda-forge mesalib`
-3. 
+4. 
    ```
    FileNotFoundError: [Errno 2] No such file or directory: 'patchelf'
    ```
 
-   _Solution_: `pip install patchelf`
-4. 
+    _Solution_: `pip install patchelf`
+5. 
     ```
     ImportError: /usr/lib/x86_64-linux-gnu/libOpenGL.so.0: undefined symbol: _glapi_tls_Current
     ```
@@ -155,7 +157,7 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
     conda env config vars set LD_PRELOAD=/path/to/conda/envs/mujoco_env/x86_64-conda-linux-gnu/sysroot/usr/lib64/libGLdispatch.so.0
     ```
 
-5.
+6. 
     ```
     mujoco.FatalError: gladLoadGL error
     
@@ -166,6 +168,7 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
 
 
 **Sanity check**
+
 To check that your mujoco-py has been built against the GPU, run
 ```python
 >>> import mujoco_py
@@ -191,17 +194,18 @@ RuntimeError: Failed to initialize OpenGL
 
 2. Rendered images are completely black.
 
-> Make sure to call `env.render()` before reading the pixels.
+   _Solution_: Make sure to call `env.render()` before reading the pixels.
 
 3. `patchelf` dependency is missing.
 
-> Install using `conda install patchelf` or `pip install patchelf`
+   _Solution_: Install using `conda install patchelf` or `pip install patchelf`
 
 4. Errors like "Onscreen rendering needs 101 device"
 
-> Make sure to set `DISPLAY` environment variable correctly.
+   _Solution_: Make sure to set `DISPLAY` environment variable correctly.
 
 5. `ImportError: Cannot initialize a headless EGL display.`
-  Make sure you have installed mujoco and all its dependencies (see instructions above).
-  Make sure you have set the `MUJOCO_GL=egl`.
-  Make sure you have a GPU accessible on your machine.
+
+   _Solution_: Make sure you have installed mujoco and all its dependencies (see instructions above).
+   Make sure you have set the `MUJOCO_GL=egl`.
+   Make sure you have a GPU accessible on your machine.
