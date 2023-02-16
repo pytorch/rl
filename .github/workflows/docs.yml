@@ -44,15 +44,15 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup Linux
-        uses: ./test-infra/.github/actions/setup-linux
+        uses: pytorch/test-infra/.github/actions/setup-linux@main
 
       - name: Setup SSH
-        uses: ./test-infra/.github/actions/setup-ssh
+        uses: pytorch/test-infra/.github/actions/setup-ssh@main
         with:
           github-secret: ${{ github.token }}
 
       - name: Pull docker image
-        uses: ./test-infra/.github/actions/pull-docker-image
+        uses: pytorch/test-infra/.github/actions/pull-docker-image@main
         with:
           docker-image: ${{ env.DOCKER_IMAGE }}
 
@@ -116,4 +116,4 @@ jobs:
 
       - name: Teardown Linux
         if: ${{ always() }}
-        uses: ./test-infra/.github/actions/teardown-linux
+        uses: pytorch/test-infra/.github/actions/teardown-linux@main
