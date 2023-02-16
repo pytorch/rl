@@ -453,7 +453,7 @@ def make_recorder(actor_model_explore, transform_state_dict):
 #
 
 
-def make_replay_buffer(make_replay_buffer=3):
+def make_replay_buffer(buffer_size, prefetch=3):
     if prb:
         sampler = PrioritizedSampler(
             max_capacity=buffer_size,
@@ -470,7 +470,7 @@ def make_replay_buffer(make_replay_buffer=3):
         ),
         sampler=sampler,
         pin_memory=False,
-        prefetch=make_replay_buffer,
+        prefetch=prefetch,
     )
     return replay_buffer
 
@@ -697,7 +697,7 @@ collector.set_seed(seed)
 # ^^^^^^^^^^^^^
 #
 
-replay_buffer = make_replay_buffer()
+replay_buffer = make_replay_buffer(buffer_size, prefetch=3)
 
 ###############################################################################
 # Recorder
@@ -858,7 +858,7 @@ for i, tensordict in enumerate(collector):
     )
     td_record = recorder(None)
     if td_record is not None:
-        rewards_eval.append((i, td_record["r_evaluation"]))
+        rewards_eval.append((i, td_record["r_evaluation"].item()))
     if len(rewards_eval):
         pbar.set_description(
             f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f}), reward eval: reward: {rewards_eval[-1][1]: 4.4f}"
@@ -920,8 +920,8 @@ n_steps_forward = 0  # disable multi-step for simplicity
 ###############################################################################
 # The following code is identical to the initialization we made earlier:
 
-torch.manual_seed(0)
-np.random.seed(0)
+torch.manual_seed(seed)
+np.random.seed(seed)
 
 # get stats for normalization
 transform_state_dict = get_env_stats()
@@ -933,6 +933,7 @@ actor, qnet = make_ddpg_actor(
 )
 if device == torch.device("cpu"):
     actor.share_memory()
+
 # Target network
 qnet_target = deepcopy(qnet).requires_grad_(False)
 
@@ -949,6 +950,10 @@ create_env_fn = parallel_env_constructor(
     transform_state_dict=transform_state_dict,
 )
 # Batch collector:
+if n_steps_forward > 0:
+    multistep = MultiStep(n_steps_max=n_steps_forward, gamma=gamma)
+else:
+    multistep = None
 collector = MultiaSyncDataCollector(
     create_env_fn=[create_env_fn, create_env_fn],
     policy=actor_model_explore,
@@ -957,9 +962,7 @@ collector = MultiaSyncDataCollector(
     frames_per_batch=frames_per_batch,
     init_random_frames=init_random_frames,
     reset_at_each_iter=False,
-    postproc=MultiStep(n_steps_max=n_steps_forward, gamma=gamma)
-    if n_steps_forward > 0
-    else None,
+    postproc=multistep,
     split_trajs=False,
     devices=[device, device],  # device for execution
     storing_devices=[device, device],  # device where data will be stored and passed
@@ -971,7 +974,7 @@ collector = MultiaSyncDataCollector(
 collector.set_seed(seed)
 
 # Replay buffer:
-replay_buffer = make_replay_buffer(0)
+replay_buffer = make_replay_buffer(buffer_size, prefetch=0)
 
 # trajectory recorder
 recorder = make_recorder(actor_model_explore, transform_state_dict)
@@ -989,9 +992,10 @@ scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(
 )
 
 ###############################################################################
-# The training loop needs to be modified. First, whereas before extending the
-# replay buffer we used to flatten the collected data, this won't be the case
-# anymore. To understand why, let's check the output shape of the data collector:
+# The training loop needs to be slightly adapted.
+# First, whereas before extending the replay buffer we used to flatten the
+# collected data, this won't be the case anymore. To understand why, let's
+# check the output shape of the data collector:
 
 for data in collector:
     print(data.shape)
@@ -1001,7 +1005,8 @@ for data in collector:
 # We see that our data has shape ``[2, 250]`` as expected: 2 envs, each
 # returning 250 frames.
 #
-# Let's import the td_lambda function
+# Let's import the td_lambda function:
+#
 
 from torchrl.objectives.value.functional import vec_td_lambda_advantage_estimate
 
@@ -1015,13 +1020,6 @@ lmbda = 0.95
 # to compute gradients. This ensures that do not have batches that are
 # 'too big' but still compute an accurate return.
 #
-# Note that when storing tensordicts the replay buffer, we must change their
-# batch size: indeed, we will be storing an "index" (and possibly an
-# priority) key in the stored tensordicts that will not have a time dimension.
-# Because of this, when sampling from the replay buffer, we remove the keys
-# that do not have a time dimension, change the batch size to
-# ``torch.Size([batch, time])``, compute our loss and then revert the
-# batch size to ``torch.Size([batch])``.
 
 rewards = []
 rewards_eval = []
@@ -1044,9 +1042,6 @@ for i, tensordict in enumerate(collector):
         r0 = tensordict["reward"].mean().item()
 
     # extend the replay buffer with the new data
-    tensordict.batch_size = tensordict.batch_size[
-        :1
-    ]  # this is necessary for prioritized replay buffers: we will assign one priority value to each element, hence the batch_size must comply with the number of priority values
     current_frames = tensordict.numel()
     collected_frames += current_frames
     replay_buffer.extend(tensordict.cpu())
@@ -1121,7 +1116,7 @@ for i, tensordict in enumerate(collector):
     )
     td_record = recorder(None)
     if td_record is not None:
-        rewards_eval.append((i, td_record["r_evaluation"]))
+        rewards_eval.append((i, td_record["r_evaluation"].item()))
     #     if len(rewards_eval):
     #         pbar.set_description(f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f}), reward eval: reward: {rewards_eval[-1][1]: 4.4f}")
 
