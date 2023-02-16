@@ -9,110 +9,110 @@ on:
       - "*"
   workflow_dispatch:
 
-job:
-  name: build_docs_job
-  env:
-    DOCKER_IMAGE: nvidia/cudagl:11.4.2-runtime
-    REPOSITORY: pytorch/rl
-    SCRIPT: |
-      # Set env vars from matrix
-      export PYTHON_VERSION=${{ matrix.python_version }}
-      # Commenting these out for now because the GPU test are not working inside docker
-      export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
-      export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
-      # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
-      #export CU_VERSION="cpu"
+jobs:
+  build_docs_job:
+    env:
+      DOCKER_IMAGE: nvidia/cudagl:11.4.2-runtime
+      REPOSITORY: pytorch/rl
+      SCRIPT: |
+        # Set env vars from matrix
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        # Commenting these out for now because the GPU test are not working inside docker
+        export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
+        export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
+        # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
+        #export CU_VERSION="cpu"
 
-      echo "PYTHON_VERSION: $PYTHON_VERSION"
-      echo "CU_VERSION: $CU_VERSION"
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
 
-      cd /work
+        cd /work
 
-      ## setup_env.sh
-      ./.circleci/docs/setup_env.sh
-  runs-on: linux.g5.4xlarge.nvidia.gpu
-  timeout-minutes: 45
-  steps:
-    - name: Clean workspace
-      run: |
-        echo "::group::Cleanup debug output"
-        sudo rm -rfv "${GITHUB_WORKSPACE}"
-        mkdir -p "${GITHUB_WORKSPACE}"
-        echo "::endgroup::"
+        ## setup_env.sh
+        ./.circleci/docs/setup_env.sh
+    runs-on: linux.g5.4xlarge.nvidia.gpu
+    timeout-minutes: 45
+    steps:
+      - name: Clean workspace
+        run: |
+          echo "::group::Cleanup debug output"
+          sudo rm -rfv "${GITHUB_WORKSPACE}"
+          mkdir -p "${GITHUB_WORKSPACE}"
+          echo "::endgroup::"
 
-    - name: Install rsync 📚
-      run: |
-        apt-get update && apt-get install -y rsync
-    - name: Checkout
-      uses: actions/checkout@v3
+      - name: Install rsync 📚
+        run: |
+          apt-get update && apt-get install -y rsync
+      - name: Checkout
+        uses: actions/checkout@v3
 
-    - name: Setup Linux
-      uses: pytorch/test-infra/.github/actions/setup-linux
+      - name: Setup Linux
+        uses: pytorch/test-infra/.github/actions/setup-linux
 
-    - name: Setup SSH
-      uses: pytorch/test-infra/.github/actions/setup-ssh
-      with:
-        github-secret: ${{ github.token }}
+      - name: Setup SSH
+        uses: pytorch/test-infra/.github/actions/setup-ssh
+        with:
+          github-secret: ${{ github.token }}
 
-    - name: Pull docker image
-      uses: ./test-infra/.github/actions/pull-docker-image
-      with:
-        docker-image: ${{ env.DOCKER_IMAGE }}
+      - name: Pull docker image
+        uses: ./test-infra/.github/actions/pull-docker-image
+        with:
+          docker-image: ${{ env.DOCKER_IMAGE }}
 
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Run script in container
-      continue-on-error: ${{ inputs.continue-on-error }}
-      working-directory: ${{ inputs.repository }}
-      run: |
-        set -ex
-        {
-          echo "#!/usr/bin/env bash";
-          echo "set -eou pipefail";
-          # shellcheck disable=SC2016
-          echo 'eval "$(conda shell.bash hook)"';
-          echo "${SCRIPT}";
-        } > "${RUNNER_TEMP}/exec_script"
-        chmod +x "${RUNNER_TEMP}/exec_script"
-        # detached container should get cleaned up by teardown_ec2_linux
-        # shellcheck disable=SC2086,SC2090
-        container_name=$(docker run \
-          -e RUNNER_ARTIFACT_DIR=/artifacts \
-          --env-file="${RUNNER_TEMP}/github_env_${GITHUB_RUN_ID}" \
-          `# It is unknown why the container sees a different value for this.` \
-          --env=GITHUB_STEP_SUMMARY \
-          --cap-add=SYS_PTRACE \
-          --detach \
-          --ipc=host \
-          --security-opt seccomp=unconfined \
-          --shm-size=2g \
-          --tty \
-          --ulimit stack=10485760:83886080 \
-          ${GPU_FLAG:-} \
-          -v "${GITHUB_WORKSPACE}/${REPOSITORY}:/work" \
-          -v "${GITHUB_WORKSPACE}/test-infra:/test-infra" \
-          -v "${RUNNER_ARTIFACT_DIR}:/artifacts" \
-          -v "${RUNNER_TEMP}/exec_script:/exec" \
-          -v "${GITHUB_STEP_SUMMARY}":"${GITHUB_STEP_SUMMARY}" \
-          -w /work \
-          "${DOCKER_IMAGE}"
-        )
-        docker exec -t "${container_name}" bash /exec
+      - name: Run script in container
+        continue-on-error: ${{ inputs.continue-on-error }}
+        working-directory: ${{ inputs.repository }}
+        run: |
+          set -ex
+          {
+            echo "#!/usr/bin/env bash";
+            echo "set -eou pipefail";
+            # shellcheck disable=SC2016
+            echo 'eval "$(conda shell.bash hook)"';
+            echo "${SCRIPT}";
+          } > "${RUNNER_TEMP}/exec_script"
+          chmod +x "${RUNNER_TEMP}/exec_script"
+          # detached container should get cleaned up by teardown_ec2_linux
+          # shellcheck disable=SC2086,SC2090
+          container_name=$(docker run \
+            -e RUNNER_ARTIFACT_DIR=/artifacts \
+            --env-file="${RUNNER_TEMP}/github_env_${GITHUB_RUN_ID}" \
+            `# It is unknown why the container sees a different value for this.` \
+            --env=GITHUB_STEP_SUMMARY \
+            --cap-add=SYS_PTRACE \
+            --detach \
+            --ipc=host \
+            --security-opt seccomp=unconfined \
+            --shm-size=2g \
+            --tty \
+            --ulimit stack=10485760:83886080 \
+            ${GPU_FLAG:-} \
+            -v "${GITHUB_WORKSPACE}/${REPOSITORY}:/work" \
+            -v "${GITHUB_WORKSPACE}/test-infra:/test-infra" \
+            -v "${RUNNER_ARTIFACT_DIR}:/artifacts" \
+            -v "${RUNNER_TEMP}/exec_script:/exec" \
+            -v "${GITHUB_STEP_SUMMARY}":"${GITHUB_STEP_SUMMARY}" \
+            -w /work \
+            "${DOCKER_IMAGE}"
+          )
+          docker exec -t "${container_name}" bash /exec
 
-    - name: Pull TensorDict docs
-      run: |
-        git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/_local_build/tensordict
-        rm -rf docs/_local_build/tensordict/.git
+      - name: Pull TensorDict docs
+        run: |
+          git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/_local_build/tensordict
+          rm -rf docs/_local_build/tensordict/.git
 
-    - name: Deploy
-      if: ${{ github.ref == 'refs/heads/main' }}
-      uses: JamesIves/github-pages-deploy-action@releases/v4
-      with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: gh-pages # The branch the action should deploy to.
-          folder: docs/_local_build/ # The folder the action should deploy.
+      - name: Deploy
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: JamesIves/github-pages-deploy-action@releases/v4
+        with:
+            token: ${{ secrets.GITHUB_TOKEN }}
+            branch: gh-pages # The branch the action should deploy to.
+            folder: docs/_local_build/ # The folder the action should deploy.
 
-    - name: Teardown Linux
-      if: ${{ always() }}
-      uses: ./test-infra/.github/actions/teardown-linux
+      - name: Teardown Linux
+        if: ${{ always() }}
+        uses: ./test-infra/.github/actions/teardown-linux
