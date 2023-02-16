@@ -75,6 +75,9 @@ jobs:
         #timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
         cd ..
+    - name: Install rsync 📚
+      run: |
+        apt-get update && apt-get install -y rsync
     - name: Pull TensorDict docs
       run: |
         git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/_local_build/tensordict
