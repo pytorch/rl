@@ -10,53 +10,83 @@ on:
   workflow_dispatch:
 jobs:
   build_docs_job:
-    strategy:
-      matrix:
-        python_version: ["3.8"] # "3.8", "3.9", "3.10", "3.11"
-        cuda_arch_version: ["11.8"] # "11.6", "11.7"
-      fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
-    with:
-      runner: linux.g5.4xlarge.nvidia.gpu
-      repository: pytorch/rl
-      gpu-arch-type: cuda
-      gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      docker-image: nvidia/cudagl:11.4.0-base
-      timeout: 45
-      script: |
-        # Set env vars from matrix
-        export PYTHON_VERSION=${{ matrix.python_version }}
-        # Commenting these out for now because the GPU test are not working inside docker
-        export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
-        export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
-        # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
-        #export CU_VERSION="cpu"
-
-        echo "PYTHON_VERSION: $PYTHON_VERSION"
-        echo "CU_VERSION: $CU_VERSION"
-        
-        cd /work
-
-        ## setup_env.sh
-        ./.circleci/docs/setup_env.sh
-
-  deploy:
-    needs: build_docs_job
     runs-on: ubuntu-20.04
     strategy:
       matrix:
         include:
-         - os: linux.12xlarge
+         - os: linux.g5.4xlarge.nvidia.gpu
            python-version: 3.8
     defaults:
       run:
         shell: bash -l {0}
-    container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu18.04
+    container: nvidia/cudagl:11.4.0-base
     steps:
+    - name: Install deps
+      run: |
+        apt-get update && apt-get install -y git wget gcc g++
     - name: Checkout
       uses: actions/checkout@v3
+    # Update references
+    - name: Setup conda
+      run: |
+        root_dir="$(pwd)"
+        conda_dir="${root_dir}/conda"
+        env_dir="${root_dir}/env"
+        os=Linux
+        # 1. Install conda at ./conda
+        printf "* Installing conda\n"
+        wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
+        bash ./miniconda.sh -b -f -p "${conda_dir}"
+        eval "$(${conda_dir}/bin/conda shell.bash hook)"
+        printf "* Creating a test environment\n"
+        conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+        printf "* Activating\n"
+        conda activate "${env_dir}"
+    - name: Update pip
+      run: |
+        apt-get install python3.8 python3-pip -y
+        pip3 install --upgrade pip
+    - name: check python version
+      run: |
+        python3 --version
+    - name: Check git version
+      run: git version
+    - name: Install PyTorch
+      shell: bash
+      run: |
+        pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
+    - name: Install tensordict
+      run: |
+        pip3 install git+https://github.com/pytorch-labs/tensordict.git --quiet --root-user-action=ignore
+    - name: Install TorchRL
+      run: |
+        pip3 install -e . --quiet --root-user-action=ignore
+    - name: Install requirements
+      run: |
+        pip3 install -r docs/requirements.txt --quiet --root-user-action=ignore
+    - name: Test torchrl installation
+      shell: bash
+      run: |
+        mkdir _tmp
+        cd _tmp
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
+        print(DMControlEnv('cheetah', 'run').reset())"""
+        cd ..
+    - name: Build the docset
+      id: build_doc
+      run: |
+        cd ./docs
+        #timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
+        cd ..
+    - name: Pull TensorDict docs
+      run: |
+        git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/_local_build/tensordict
+        rm -rf docs/_local_build/tensordict/.git
+    - name: Get output time
+      run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
-      if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      if: ${{ github.ref == 'refs/heads/main' }}
       uses: JamesIves/github-pages-deploy-action@releases/v4
       with:
           token: ${{ secrets.GITHUB_TOKEN }}
