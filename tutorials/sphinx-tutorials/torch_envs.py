@@ -96,7 +96,7 @@ print(tensordict)
 # we can just generate a random action:
 
 
-def policy(tensordict):
+def policy(tensordict, env=env):
     tensordict.set("action", env.action_spec.rand())
     return tensordict
 
@@ -266,7 +266,7 @@ env.close()
 
 ###############################################################################
 # Transforming envs
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^
 # It is common to pre-process the output of an environment before having it
 # read by the policy or stored in a buffer.
 #
@@ -460,6 +460,8 @@ parallel_env.close()
 out_seed = parallel_env.set_seed(10)
 print(out_seed)
 
+del parallel_env
+
 ###############################################################################
 # Accessing environment attributes
 # ---------------------------------
@@ -518,6 +520,7 @@ print(something)
 ###############################################################################
 
 parallel_env.close()
+del parallel_env
 
 ###############################################################################
 # kwargs for parallel environments
@@ -527,8 +530,7 @@ parallel_env.close()
 
 ###############################################################################
 
-from torchrl.envs import Compose, ParallelEnv, Resize, ToTensorImage, TransformedEnv
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs import ParallelEnv
 
 
 def env_make(env_name):
@@ -552,6 +554,7 @@ plt.imshow(tensordict[0].get("pixels").permute(1, 2, 0).numpy())
 plt.subplot(122)
 plt.imshow(tensordict[1].get("pixels").permute(1, 2, 0).numpy())
 parallel_env.close()
+del parallel_env
 
 from matplotlib import pyplot as plt
 
@@ -572,7 +575,6 @@ from torchrl.envs import (
     ToTensorImage,
     TransformedEnv,
 )
-from torchrl.envs.libs.gym import GymEnv
 
 
 def env_make(env_name):
@@ -598,6 +600,7 @@ plt.imshow(tensordict[0].get("pixels").permute(1, 2, 0).numpy())
 plt.subplot(122)
 plt.imshow(tensordict[1].get("pixels").permute(1, 2, 0).numpy())
 parallel_env.close()
+del parallel_env
 
 ###############################################################################
 # VecNorm
@@ -667,3 +670,10 @@ print(
 )
 
 env.close()
+del env
+
+# sphinx_gallery_start_ignore
+import time
+
+time.sleep(10)
+# sphinx_gallery_end_ignore

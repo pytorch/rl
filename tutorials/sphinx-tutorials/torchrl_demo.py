@@ -119,10 +119,10 @@ This demo was presented at ICML 2022 on the industry demo day.
 # other dependencies (gym, torchvision, wandb / tensorboard) are optional.
 #
 # Data
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^
 #
 # TensorDict
-# ------------------------------
+# ----------
 
 # sphinx_gallery_start_ignore
 import warnings
@@ -369,7 +369,10 @@ env.reset()
 
 ###############################################################################
 
-env.action_spec
+print(env.action_spec)
+
+env.close()
+del env
 
 ###############################################################################
 # Modules
@@ -570,7 +573,7 @@ with set_exploration_mode("mean"):
 
 ###############################################################################
 # Using Environments and Modules
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 from torchrl.envs.utils import step_mdp
 
@@ -624,36 +627,37 @@ print(tensordicts_stack)
 
 ###############################################################################
 
-# helper
 torch.manual_seed(0)
 env.set_seed(0)
 tensordict_rollout = env.rollout(policy=actor, max_steps=max_steps)
 tensordict_rollout
 
-###############################################################################
 
 (tensordict_rollout == tensordicts_prealloc).all()
 
 from tensordict.nn import TensorDictModule
 
+###############################################################################
 # Collectors
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^
 
 from torchrl.collectors import MultiaSyncDataCollector, MultiSyncDataCollector
-
-###############################################################################
 
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
 
+###############################################################################
 # EnvCreator makes sure that we can send a lambda function from process to process
+
 parallel_env = ParallelEnv(3, EnvCreator(lambda: GymEnv("Pendulum-v1")))
 create_env_fn = [parallel_env, parallel_env]
 
 actor_module = nn.Linear(3, 1)
 actor = TensorDictModule(actor_module, in_keys=["observation"], out_keys=["action"])
 
+###############################################################################
 # Sync data collector
+
 devices = ["cpu", "cpu"]
 
 collector = MultiSyncDataCollector(
@@ -696,10 +700,12 @@ for i, d in enumerate(collector):
 print(i)
 collector.shutdown()
 del collector
+del create_env_fn
+del parallel_env
 
 ###############################################################################
 # Objectives
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^
 
 # TorchRL delivers meta-RL compatible loss functions
 # Disclaimer: This APi may change in the future
@@ -746,7 +752,7 @@ print(tensordict)
 
 ###############################################################################
 # State of the Library
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^
 #
 # TorchRL is currently an **alpha-release**: there may be bugs and there is no
 # guarantee about BC-breaking changes. We should be able to move to a beta-release
@@ -767,6 +773,12 @@ print(tensordict)
 
 ###############################################################################
 # Installing the Library
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^
 #
 # The library is on PyPI: *pip install torchrl*
+
+# sphinx_gallery_start_ignore
+import time
+
+time.sleep(10)
+# sphinx_gallery_end_ignore

@@ -14,6 +14,40 @@ The :obj:`trainer.train()` method can be sketched as follows:
 .. code-block::
    :caption: Trainer loops
 
+           >>> for batch in collector:
+           ...     batch = self._process_batch_hook(batch)  # "batch_process"
+           ...     self._pre_steps_log_hook(batch)  # "pre_steps_log"
+           ...     self._pre_optim_hook()  # "pre_optim_steps"
+           ...     for j in range(self.optim_steps_per_batch):
+           ...         sub_batch = self._process_optim_batch_hook(batch)  # "process_optim_batch"
+           ...         losses = self.loss_module(sub_batch)
+           ...         self._post_loss_hook(sub_batch)  # "post_loss"
+           ...         self.optimizer.step()
+           ...         self.optimizer.zero_grad()
+           ...         self._post_optim_hook()  # "post_optim"
+           ...         self._post_optim_log(sub_batch)  # "post_optim_log"
+           ...     self._post_steps_hook()  # "post_steps"
+           ...     self._post_steps_log_hook(batch)  #  "post_steps_log"
+
+   There are 10 hooks that can be used in a trainer loop:
+
+           >>> for batch in collector:
+           ...     batch = self._process_batch_hook(batch)  # "batch_process"
+           ...     self._pre_steps_log_hook(batch)  # "pre_steps_log"
+           ...     self._pre_optim_hook()  # "pre_optim_steps"
+           ...     for j in range(self.optim_steps_per_batch):
+           ...         sub_batch = self._process_optim_batch_hook(batch)  # "process_optim_batch"
+           ...         losses = self.loss_module(sub_batch)
+           ...         self._post_loss_hook(sub_batch)  # "post_loss"
+           ...         self.optimizer.step()
+           ...         self.optimizer.zero_grad()
+           ...         self._post_optim_hook()  # "post_optim"
+           ...         self._post_optim_log(sub_batch)  # "post_optim_log"
+           ...     self._post_steps_hook()  # "post_steps"
+           ...     self._post_steps_log_hook(batch)  #  "post_steps_log"
+
+   There are 10 hooks that can be used in a trainer loop:
+
         >>> for batch in collector:
         ...     batch = self._process_batch_hook(batch)  # "batch_process"
         ...     self._pre_steps_log_hook(batch)  # "pre_steps_log"

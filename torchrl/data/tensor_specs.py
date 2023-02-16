@@ -595,7 +595,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
                 f"{self.__class__.__name__}.index(...)"
             )
         index = index.nonzero().squeeze()
-        index = index.expand(*tensor_to_index.shape[:-1], index.shape[-1])
+        index = index.expand((*tensor_to_index.shape[:-1], index.shape[-1]))
         return tensor_to_index.gather(-1, index)
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
@@ -679,17 +679,17 @@ class BoundedTensorSpec(TensorSpec):
             if shape is not None and shape != maximum.shape:
                 raise RuntimeError(err_msg)
             shape = maximum.shape
-            minimum = minimum.expand(*shape).clone()
+            minimum = minimum.expand(shape).clone()
         elif minimum.ndimension():
             if shape is not None and shape != minimum.shape:
                 raise RuntimeError(err_msg)
             shape = minimum.shape
-            maximum = maximum.expand(*shape).clone()
+            maximum = maximum.expand(shape).clone()
         elif shape is None:
             raise RuntimeError(err_msg)
         else:
-            minimum = minimum.expand(*shape).clone()
-            maximum = maximum.expand(*shape).clone()
+            minimum = minimum.expand(shape).clone()
+            maximum = maximum.expand(shape).clone()
 
         if minimum.numel() > maximum.numel():
             maximum = maximum.expand_as(minimum).clone()
@@ -1028,7 +1028,7 @@ class BinaryDiscreteTensorSpec(TensorSpec):
                 f" {self.__class__.__name__}.index(...)"
             )
         index = index.nonzero().squeeze()
-        index = index.expand(*tensor_to_index.shape[:-1], index.shape[-1])
+        index = index.expand((*tensor_to_index.shape[:-1], index.shape[-1]))
         return tensor_to_index.gather(-1, index)
 
     def is_in(self, val: torch.Tensor) -> bool:
@@ -1203,7 +1203,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         out = []
         for _index, _tensor_to_index in zip(indices, tensor_to_index):
             _index = _index.nonzero().squeeze()
-            _index = _index.expand(*_tensor_to_index.shape[:-1], _index.shape[-1])
+            _index = _index.expand((*_tensor_to_index.shape[:-1], _index.shape[-1]))
             out.append(_tensor_to_index.gather(-1, _index))
         return torch.cat(out, -1)
 
@@ -1941,7 +1941,7 @@ class CompositeSpec(TensorSpec):
             )
         out = CompositeSpec(
             {
-                key: value.expand(*shape, *value.shape[self.ndim :])
+                key: value.expand((*shape, *value.shape[self.ndim :]))
                 for key, value in tuple(self.items())
             },
             shape=shape,

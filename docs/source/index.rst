@@ -34,18 +34,19 @@ Basics
 ------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
-   tutorials/torchrl_demo
    tutorials/coding_ppo
+   tutorials/pendulum
    tutorials/tensordict_tutorial
    tutorials/tensordict_module
+   tutorials/torchrl_demo
 
 Intermediate
 ------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    tutorials/torch_envs
    tutorials/pretrained_models
@@ -54,7 +55,7 @@ Advanced
 --------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    tutorials/multi_task
    tutorials/coding_ddpg

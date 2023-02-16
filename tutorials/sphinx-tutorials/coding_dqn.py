@@ -227,7 +227,7 @@ eval_rollout = dummy_env.rollout(max_steps=10000).cpu()
 # in the input ``TensorDict``.
 
 
-def make_model():
+def make_model(dummy_env):
     cnn_kwargs = {
         "num_cells": [32, 64, 64],
         "kernel_sizes": [6, 4, 3],
@@ -243,7 +243,6 @@ def make_model():
             64,
             64,
         ],
-        # "out_features": dummy_env.action_spec.shape[-1],
         "activation_class": nn.ELU,
     }
     net = DuelingCnnDQNet(
@@ -293,7 +292,7 @@ def make_model():
     actor_explore,
     params,
     params_target,
-) = make_model()
+) = make_model(dummy_env)
 params_flat = params.flatten_keys(".")
 params_target_flat = params_target.flatten_keys(".")
 
@@ -379,7 +378,7 @@ for j, data in enumerate(data_collector):
 
     if data["done"].any():
         done = data["done"].squeeze(-1)
-        traj_lengths.append(data["step_count"][done].float().mean().item())
+        traj_lengths.append(data["collector", "step_count"][done].float().mean().item())
 
     # check that we have enough data to start training
     if sum(frames) > init_random_frames:
@@ -484,6 +483,10 @@ for j, data in enumerate(data_collector):
     # update policy weights
     data_collector.update_policy_weights_()
 
+print("shutting down")
+data_collector.shutdown()
+del data_collector
+
 if is_notebook():
     display.clear_output(wait=True)
     display.display(plt.gcf())
@@ -547,7 +550,7 @@ from torchrl.objectives.value.functional import vec_td_lambda_advantage_estimate
     actor_explore,
     params,
     params_target,
-) = make_model()
+) = make_model(dummy_env)
 params_flat = params.flatten_keys(".")
 params_target_flat = params_target.flatten_keys(".")
 
@@ -614,7 +617,7 @@ for j, data in enumerate(data_collector):
 
     if data["done"].any():
         done = data["done"].squeeze(-1)
-        traj_lengths.append(data["step_count"][done].float().mean().item())
+        traj_lengths.append(data["collector", "step_count"][done].float().mean().item())
 
     if sum(frames) > init_random_frames:
         for _ in range(n_optim):
@@ -725,6 +728,10 @@ for j, data in enumerate(data_collector):
 
     # update policy weights
     data_collector.update_policy_weights_()
+
+print("shutting down")
+data_collector.shutdown()
+del data_collector
 
 if is_notebook():
     display.clear_output(wait=True)
@@ -851,7 +858,8 @@ if len(traj_lengths):
 
 dummy_env.transform.insert(0, CatTensors(["pixels"], "pixels_save", del_keys=False))
 eval_rollout = dummy_env.rollout(max_steps=10000, policy=actor, auto_reset=True).cpu()
-eval_rollout
+print(eval_rollout)
+del dummy_env
 
 ###############################################################################
 
@@ -885,3 +893,9 @@ eval_rollout
 # - More fancy exploration techniques, such as NoisyLinear layers and such
 #   (check ``torchrl.modules.NoisyLinear``, which is fully compatible with the
 #   ``MLP`` class used in our Dueling DQN).
+
+# sphinx_gallery_start_ignore
+import time
+
+time.sleep(10)
+# sphinx_gallery_end_ignore

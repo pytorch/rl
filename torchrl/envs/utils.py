@@ -230,18 +230,10 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
 
     # test dtypes
     real_tensordict = env.rollout(3)  # keep empty structures, for example dict()
-    # real_tensordict = real_tensordict.exclude(
-    #     *[
-    #         key
-    #         for key in real_tensordict.keys(True)
-    #         if (isinstance(key, str) and key.startswith("_"))
-    #         or (
-    #             isinstance(key, tuple) and any(subkey.startswith("_") for subkey in key)
-    #         )
-    #     ]
-    # )
     for key, value in real_tensordict[..., -1].items():
         _check_isin(key, value, env.observation_spec, env.input_spec)
+
+    print("check_env_specs succeeded!")
 
 
 def _check_isin(key, value, obs_spec, input_spec):
