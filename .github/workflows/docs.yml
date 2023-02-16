@@ -19,7 +19,7 @@ jobs:
     defaults:
       run:
         shell: bash -l {0}
-    container: nvidia/cudagl:11.4.0-runtime
+    container: nvidia/cudagl:11.4.0-devel
     steps:
     - name: Check for dockerenv file
       run: (ls /.dockerenv && echo Found dockerenv) || (echo No dockerenv)
