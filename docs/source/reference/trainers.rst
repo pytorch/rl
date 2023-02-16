@@ -18,7 +18,7 @@ The :obj:`trainer.train()` method can be sketched as follows:
            ...     batch = self._process_batch_hook(batch)  # "batch_process"
            ...     self._pre_steps_log_hook(batch)  # "pre_steps_log"
            ...     self._pre_optim_hook()  # "pre_optim_steps"
-           ...     for j in range(self.update_to_data):
+           ...     for j in range(self.optim_steps_per_batch):
            ...         sub_batch = self._process_optim_batch_hook(batch)  # "process_optim_batch"
            ...         losses = self.loss_module(sub_batch)
            ...         self._post_loss_hook(sub_batch)  # "post_loss"
@@ -35,7 +35,7 @@ The :obj:`trainer.train()` method can be sketched as follows:
            ...     batch = self._process_batch_hook(batch)  # "batch_process"
            ...     self._pre_steps_log_hook(batch)  # "pre_steps_log"
            ...     self._pre_optim_hook()  # "pre_optim_steps"
-           ...     for j in range(self.update_to_data):
+           ...     for j in range(self.optim_steps_per_batch):
            ...         sub_batch = self._process_optim_batch_hook(batch)  # "process_optim_batch"
            ...         losses = self.loss_module(sub_batch)
            ...         self._post_loss_hook(sub_batch)  # "post_loss"
