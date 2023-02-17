@@ -82,7 +82,7 @@ from tensordict.nn import get_functional
 from torch import nn
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
-from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs import EnvCreator, ParallelEnv, RewardScaling
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     CatFrames,
@@ -126,7 +126,7 @@ device = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
 # ^^^^^^^^^
 
 # the learning rate of the optimizer
-lr = 2e-4
+lr = 2e-3
 # the beta parameters of Adam
 betas = (0.9, 0.999)
 # Optimization steps per batch collected (aka UPD or updates per data)
@@ -147,23 +147,32 @@ tau = 0.005
 ###############################################################################
 # Data collection and replay buffer
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Values to be used for proper training have been commented
 
-# total frames collected in the environment. In other implementations, the user defines a maximum number of episodes.
-# This is harder to do with our data collectors since they return batches of N collected frames, where N is a constant.
-# However, one can easily get the same restriction on number of episodes by breaking the training loop when a certain number
+# total frames collected in the environment. In other implementations, the
+# user defines a maximum number of episodes.
+# This is harder to do with our data collectors since they return batches
+# of N collected frames, where N is a constant.
+# However, one can easily get the same restriction on number of episodes by
+# breaking the training loop when a certain number
 # episodes has been collected.
-total_frames = 500
+total_frames = 1000  # 500000
+
 # Random frames used to initialize the replay buffer.
-init_random_frames = 100
+init_random_frames = 100  # 1000
+
 # Frames in each batch collected.
-frames_per_batch = 32
+frames_per_batch = 32  # 128
+
 # Frames sampled from the replay buffer at each optimization step
-batch_size = 32
+batch_size = 32  # 128
+
 # Size of the replay buffer in terms of frames
 buffer_size = min(total_frames, 100000)
+
 # Number of environments run in parallel in each data collector
-num_workers = 2
-num_collectors = 2
+num_workers = 2  # 8
+num_collectors = 2  # 4
 
 
 ###############################################################################
@@ -172,11 +181,11 @@ num_collectors = 2
 
 # Initial and final value of the epsilon factor in Epsilon-greedy exploration (notice that since our policy is deterministic exploration is crucial)
 eps_greedy_val = 0.1
-eps_greedy_val_env = 0.05
+eps_greedy_val_env = 0.005
 
 # To speed up learning, we set the bias of the last layer of our value network
 # to a predefined value (this is not mandatory)
-init_bias = 20.0
+init_bias = 2.0
 
 ###############################################################################
 # **Note**: for fast rendering of the tutorial ``total_frames`` hyperparameter
@@ -202,6 +211,7 @@ init_bias = 20.0
 # - :class:`torchrl.envs.ToTensorImage` will convert a ``[W, H, C]`` uint8
 #   tensor in a floating point tensor in the ``[0, 1]`` space with shape
 #   ``[C, W, H]``;
+# - :class:`torchrl.envs.RewardScaling` to reduce the scale of the return;
 # - :class:`torchrl.envs.GrayScale` will turn our image into grayscale;
 # - :class:`torchrl.envs.Resize` will resize the image in a 64x64 format;
 # - :class:`torchrl.envs.CatFrames` will concatenate an arbitrary number of
@@ -236,6 +246,7 @@ def make_env(parallel=False, observation_norm_state_dict=None):
         base_env,
         Compose(
             ToTensorImage(),
+            RewardScaling(loc=0.0, scale=0.1),
             GrayScale(),
             Resize(64, 64),
             CatFrames(4, in_keys=["pixels"], dim=-3),
@@ -317,9 +328,10 @@ def make_model(dummy_env):
         "kernel_sizes": [6, 4, 3],
         "strides": [2, 2, 1],
         "activation_class": nn.ELU,
-        "squeeze_output": True,
-        "aggregator_class": nn.AdaptiveAvgPool2d,
-        "aggregator_kwargs": {"output_size": (1, 1)},
+        # This can be used to reduce the size of the last layer of the CNN
+        # "squeeze_output": True,
+        # "aggregator_class": nn.AdaptiveAvgPool2d,
+        # "aggregator_kwargs": {"output_size": (1, 1)},
     }
     mlp_kwargs = {
         "depth": 2,
@@ -377,7 +389,6 @@ def make_model(dummy_env):
 # them is quite easy:
 
 params_flat = params.flatten_keys(".")
-params_target_flat = params_target.flatten_keys(".")
 
 ###############################################################################
 # We will be using the adam optimizer:
@@ -451,14 +462,8 @@ data_collector = MultiaSyncDataCollector(
     frames_per_batch=frames_per_batch,
     total_frames=total_frames,
     exploration_mode="random",  # this is the default behaviour: the collector runs in `"random"` (or explorative) mode
-    devices=[
-        device,
-    ]
-    * num_collectors,  # each collector can sit on a different device
-    storing_devices=[
-        device,
-    ]
-    * num_collectors,
+    devices=[device] * num_collectors,
+    storing_devices=[device] * num_collectors,
     split_trajs=False,
 )
 
@@ -477,10 +482,6 @@ data_collector = MultiaSyncDataCollector(
 # :math:`R(s, a)` is the result of the reward function, and :math:`V(s)` is a
 # value function that returns 0 for terminating states.
 #
-
-###############################################################################
-# Training loop
-# -------------
 # We store the logs in a defaultdict:
 
 logs_exp1 = defaultdict(list)
@@ -536,47 +537,52 @@ for j, data in enumerate(data_collector):
                 exp_value = reward + gamma * next_value * (1 - done)
             assert exp_value.shape == action_value.shape
             # we use MSE loss but L1 or smooth L1 should also work
-            error = nn.functional.mse_loss(exp_value, action_value).mean()
+            # error = nn.functional.mse_loss(exp_value, action_value).mean()
+            error = nn.functional.smooth_l1_loss(exp_value, action_value).mean()
             error.backward()
 
-            gv = sum([p.grad.pow(2).sum() for p in params_flat.values()]).sqrt()
-            nn.utils.clip_grad_value_(list(params_flat.values()), 1)
+            gv = nn.utils.clip_grad_norm_(list(params_flat.values()), 1)
 
             optim.step()
             optim.zero_grad()
 
             # update of the target parameters
-            for (key, p1) in params_flat.items():
-                p2 = params_target_flat[key]
-                params_target_flat.set_(key, tau * p1.data + (1 - tau) * p2.data)
+            params_target.apply(
+                lambda p_target, p_orig: p_orig * tau + p_target * (1 - tau),
+                params,
+                inplace=True,
+            )
 
-        pbar.set_description(
-            f"error: {error: 4.4f}, value: {action_value.mean(): 4.4f}"
-        )
         actor_explore.step(current_frames)
 
         # Logging
-        with set_exploration_mode("mode"), torch.no_grad():
-            # execute a rollout. The `set_exploration_mode("mode")` has no effect here since the policy is deterministic, but we add it for completeness
-            eval_rollout = test_env.rollout(
-                max_steps=10000,
-                policy=actor,
-            ).cpu()
         logs_exp1["grad_vals"].append(float(gv))
-        logs_exp1["traj_lengths_eval"].append(eval_rollout.shape[-1])
-        logs_exp1["evals"].append(eval_rollout["reward"].squeeze(-1).sum(-1).item())
-        if len(logs_exp1["mavgs"]):
-            logs_exp1["mavgs"].append(
-                logs_exp1["evals"][-1] * 0.05 + logs_exp1["mavgs"][-1] * 0.95
-            )
-        else:
-            logs_exp1["mavgs"].append(logs_exp1["evals"][-1])
         logs_exp1["losses"].append(error.item())
         logs_exp1["values"].append(action_value.mean().item())
         logs_exp1["traj_count"].append(prev_traj_count + data["done"].sum().item())
+
+        if j % 10 == 0:
+            with set_exploration_mode("mode"), torch.no_grad():
+                # execute a rollout. The `set_exploration_mode("mode")` has no effect here since the policy is deterministic, but we add it for completeness
+                eval_rollout = test_env.rollout(
+                    max_steps=10000,
+                    policy=actor,
+                ).cpu()
+            logs_exp1["traj_lengths_eval"].append(eval_rollout.shape[-1])
+            logs_exp1["evals"].append(eval_rollout["reward"].sum().item())
+            if len(logs_exp1["mavgs"]):
+                logs_exp1["mavgs"].append(
+                    logs_exp1["evals"][-1] * 0.05 + logs_exp1["mavgs"][-1] * 0.95
+                )
+            else:
+                logs_exp1["mavgs"].append(logs_exp1["evals"][-1])
+            pbar.set_description(
+                f"error: {error: 4.4f}, value: {action_value.mean(): 4.4f}, test return: {logs_exp1['evals'][-1]: 4.4f}"
+            )
+
         prev_traj_count = logs_exp1["traj_count"][-1]
         # plots
-        if j % 10 == 0:
+        if j % 100 == 0:
             if is_notebook():
                 display.clear_output(wait=True)
                 display.display(plt.gcf())
@@ -587,12 +593,12 @@ for j, data in enumerate(data_collector):
             plt.plot(
                 logs_exp1["frames"][-len(logs_exp1["evals"]) :],
                 logs_exp1["evals"],
-                label="return",
+                label="return (eval)",
             )
             plt.plot(
                 logs_exp1["frames"][-len(logs_exp1["mavgs"]) :],
                 logs_exp1["mavgs"],
-                label="mavg",
+                label="mavg of returns (eval)",
             )
             plt.xlabel("frames collected")
             plt.ylabel("trajectory length (= return)")
@@ -693,7 +699,6 @@ from torchrl.objectives.value.functional import vec_td_lambda_advantage_estimate
     params_target,
 ) = make_model(test_env)
 params_flat = params.flatten_keys(".")
-params_target_flat = params_target.flatten_keys(".")
 
 optim = torch.optim.Adam(list(params_flat.values()), lr)
 test_env = make_env(
@@ -720,16 +725,14 @@ data_collector = MultiaSyncDataCollector(
         make_env(
             parallel=True, observation_norm_state_dict=observation_norm_state_dict
         ),
-        make_env(
-            parallel=True, observation_norm_state_dict=observation_norm_state_dict
-        ),
-    ],
+    ]
+    * num_collectors,
     policy=actor_explore,
     frames_per_batch=frames_per_batch,
     total_frames=total_frames,
     exploration_mode="random",
-    devices=[device, device],
-    storing_devices=[device, device],
+    devices=[device] * num_collectors,
+    storing_devices=[device] * num_collectors,
     split_trajs=False,
 )
 
@@ -795,41 +798,48 @@ for j, data in enumerate(data_collector):
             error = error.mean()
             error.backward()
 
-            gv = nn.utils.clip_grad_norm_(list(params_flat.values()), 100)
+            gv = nn.utils.clip_grad_norm_(list(params_flat.values()), 1)
 
             optim.step()
             optim.zero_grad()
 
-            for (key, p1) in params_flat.items():
-                p2 = params_target_flat[key]
-                params_target_flat.set_(key, tau * p1.data + (1 - tau) * p2.data)
+            # update of the target parameters
+            params_target.apply(
+                lambda p_target, p_orig: p_orig * tau + p_target * (1 - tau),
+                params,
+                inplace=True,
+            )
 
-        pbar.set_description(
-            f"error: {error: 4.4f}, value: {action_value.mean(): 4.4f}"
-        )
         actor_explore.step(current_frames)
 
-        # logs_exp2
-        with set_exploration_mode("random"), torch.no_grad():
-            #         eval_rollout = dummy_env.rollout(max_steps=1000, policy=actor_explore, auto_reset=True).cpu()
-            eval_rollout = test_env.rollout(
-                max_steps=10000, policy=actor, auto_reset=True
-            ).cpu()
+        # Logging
         logs_exp2["grad_vals"].append(float(gv))
-        logs_exp2["traj_lengths_eval"].append(eval_rollout.shape[-1])
-        logs_exp2["evals"].append(eval_rollout["reward"].squeeze(-1).sum(-1).item())
-        if len(logs_exp2["mavgs"]):
-            logs_exp2["mavgs"].append(
-                logs_exp2["evals"][-1] * 0.05 + logs_exp2["mavgs"][-1] * 0.95
-            )
-        else:
-            logs_exp2["mavgs"].append(logs_exp2["evals"][-1])
+
         logs_exp2["losses"].append(error.item())
         logs_exp2["values"].append(action_value.mean().item())
         logs_exp2["traj_count"].append(prev_traj_count + data["done"].sum().item())
+        if j % 10 == 0:
+            with set_exploration_mode("mode"), torch.no_grad():
+                # execute a rollout. The `set_exploration_mode("mode")` has no effect here since the policy is deterministic, but we add it for completeness
+                eval_rollout = test_env.rollout(
+                    max_steps=10000,
+                    policy=actor,
+                ).cpu()
+            logs_exp2["traj_lengths_eval"].append(eval_rollout.shape[-1])
+            logs_exp2["evals"].append(eval_rollout["reward"].sum().item())
+            if len(logs_exp2["mavgs"]):
+                logs_exp2["mavgs"].append(
+                    logs_exp2["evals"][-1] * 0.05 + logs_exp2["mavgs"][-1] * 0.95
+                )
+            else:
+                logs_exp2["mavgs"].append(logs_exp2["evals"][-1])
+            pbar.set_description(
+                f"error: {error: 4.4f}, value: {action_value.mean(): 4.4f}, test return: {logs_exp2['evals'][-1]: 4.4f}"
+            )
+
         prev_traj_count = logs_exp2["traj_count"][-1]
         # plots
-        if j % 10 == 0:
+        if j % 100 == 0:
             if is_notebook():
                 display.clear_output(wait=True)
                 display.display(plt.gcf())
@@ -840,12 +850,12 @@ for j, data in enumerate(data_collector):
             plt.plot(
                 logs_exp2["frames"][-len(logs_exp2["evals"]) :],
                 logs_exp2["evals"],
-                label="return",
+                label="returns (eval)",
             )
             plt.plot(
                 logs_exp2["frames"][-len(logs_exp2["mavgs"]) :],
                 logs_exp2["mavgs"],
-                label="mavg",
+                label="mavg of returns (eval)",
             )
             plt.xlabel("frames collected")
             plt.ylabel("trajectory length (= return)")
