@@ -483,6 +483,7 @@ pbar = tqdm.tqdm(total=total_frames)
 for j, data in enumerate(data_collector):
     current_frames = data.numel()
     pbar.update(current_frames)
+    data = data.view(-1)
 
     # We store the values on the replay buffer, after placing them on CPU.
     # When called for the first time, this will instantiate our storage
