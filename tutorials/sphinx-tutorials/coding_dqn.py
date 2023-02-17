@@ -1,30 +1,38 @@
 # -*- coding: utf-8 -*-
 """
 Coding a pixel-based DQN using TorchRL
-=======================================
+======================================
+**Author**: `Vincent Moens <https://github.com/vmoens>`_
+
 """
 
 ##############################################################################
 # This tutorial will guide you through the steps to code DQN to solve the
 # CartPole task from scratch. DQN
 # (`Deep Q-Learning <https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf>`_) was
-# the founding work in deep reinforcement learning. On a high level, the
-# algorithm is quite simple: Q-learning consists in learning a table of
-# state-action values in such a way that, when facing any particular state,
+# the founding work in deep reinforcement learning.
+# On a high level, the algorithm is quite simple: Q-learning consists in learning a table of
+# state-action values in such a way that, when encountering any particular state,
 # we know which action to pick just by searching for the action with the
 # highest value. This simple setting requires the actions and states to be
-# discretizable. DQN uses a neural network that maps state-actions pairs to
-# a certain value, which amortizes the cost of storing and exploring all the
-# possible states: if a state has not been seen in the past, we can still pass
-# it through our neural network and get an interpolated value for each of the
+# discrete, otherwise a lookup table cannot be built.
+#
+# DQN uses a neural network that encodes a map from the state-action space to
+# a value (scalar) space, which amortizes the cost of storing and exploring all
+# the possible state-action combinations: if a state has not been seen in the
+# past, we can still pass it in conjunction with the various actions available
+# through our neural network and get an interpolated value for each of the
 # actions available.
+#
+# **Prerequisites**: We encourage you to get familiar with torchrl through the
+# `PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>` first.
 #
 # In this tutorial, you will learn:
 #
 # - how to build an environment in TorchRL, including transforms (e.g. data
 #   normalization, frame concatenation, resizing and turning to grayscale)
 #   and parallel execution;
-# - how to design a QValue actor, i.e. an actor that esitmates the action
+# - how to design a QValue actor, i.e. an actor that estimates the action
 #   values and picks up the action with the highest estimated return;
 # - how to collect data from your environment efficiently and store them
 #   in a replay buffer;

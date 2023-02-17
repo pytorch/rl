@@ -796,16 +796,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def fake_tensordict(self) -> TensorDictBase:
         """Returns a fake tensordict with key-value pairs that match in shape, device and dtype what can be expected during an environment rollout."""
         input_spec = self.input_spec
-        fake_input = input_spec.zero()
         observation_spec = self.observation_spec
         fake_obs = observation_spec.zero()
+        fake_input = input_spec.zero()
+        # the input and output key may match, but the output prevails
+        # Hence we generate the input, and override using the output
+        fake_in_out = fake_input.clone().update(fake_obs)
         reward_spec = self.reward_spec
         fake_reward = reward_spec.zero()
         fake_td = TensorDict(
             {
-                **fake_obs,
+                **fake_in_out,
                 "next": fake_obs.clone(),
-                **fake_input,
                 "reward": fake_reward,
                 "done": torch.zeros(
                     (*self.batch_size, 1), dtype=torch.bool, device=self.device
