@@ -622,7 +622,7 @@ env = TransformedEnv(
 # The following figure summarized this flow for environments and replay
 # buffers.
 #
-# .. figure:: /_static/img/transforms.gif
+# .. figure:: /_static/img/transforms.png
 #
 #    Transform API
 #

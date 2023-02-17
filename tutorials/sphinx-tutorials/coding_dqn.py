@@ -36,7 +36,7 @@ Coding a pixel-based DQN using TorchRL
 #    :alt: Cart Pole
 #
 # **Prerequisites**: We encourage you to get familiar with torchrl through the
-# `PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>` first.
+# `PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>`_ first.
 # This tutorial is more complex and full-fleshed, but it may be .
 #
 # In this tutorial, you will learn:
@@ -67,6 +67,7 @@ Coding a pixel-based DQN using TorchRL
 
 # sphinx_gallery_start_ignore
 import warnings
+from collections import defaultdict
 
 warnings.filterwarnings("ignore")
 # sphinx_gallery_end_ignore
@@ -151,7 +152,7 @@ tau = 0.005
 # This is harder to do with our data collectors since they return batches of N collected frames, where N is a constant.
 # However, one can easily get the same restriction on number of episodes by breaking the training loop when a certain number
 # episodes has been collected.
-total_frames = 500
+total_frames = 500000
 # Random frames used to initialize the replay buffer.
 init_random_frames = 100
 # Frames in each batch collected.
@@ -211,6 +212,7 @@ init_bias = 20.0
 #   given some custom summary statistics.
 #
 
+
 def make_env(parallel=False, observation_norm_state_dict=None):
     if observation_norm_state_dict is None:
         observation_norm_state_dict = {"standard_normal": True}
@@ -252,9 +254,11 @@ def make_env(parallel=False, observation_norm_state_dict=None):
 # dimensions must be reduced, and the ``keep_dims`` parameter to ensure that
 # not all dimensions disappear in the process:
 
-dummy_env = make_env()
-dummy_env.transform[-1].init_stats(num_iter=1000, cat_dim=0, reduce_dim=[-1, -2, -4], keep_dims=(-1, -2))
-observation_norm_state_dict = dummy_env.transform[-1].state_dict()
+test_env = make_env()
+test_env.transform[-1].init_stats(
+    num_iter=1000, cat_dim=0, reduce_dim=[-1, -2, -4], keep_dims=(-1, -2)
+)
+observation_norm_state_dict = test_env.transform[-1].state_dict()
 
 ###############################################################################
 # let's check that normalizing constants have a size of ``[C, 1, 1]`` where
@@ -272,10 +276,10 @@ print(observation_norm_state_dict)
 #
 # .. math::
 #
-#    val = b(obs) + v(obs) - E[v(obs)]
+#    val = b(obs) + v(obs) - \mathbb{E}[v(obs)]
 #
-# where :math:`b` is a :math:`num_obs \rightarrow 1` function and :math:`v` is a
-# :math:`num_obs \rightarrow num_actions` function.
+# where :math:`b` is a :math:`\# obs \rightarrow 1` function and :math:`v` is a
+# :math:`\# obs \rightarrow num_actions` function.
 #
 # Our network is wrapped in a :class:`torchrl.modules.QValueActor`, which will read the state-action
 # values, pick up the one with the maximum value and write all those results
@@ -303,6 +307,7 @@ print(observation_norm_state_dict)
 # To this aim, we use :func:`tensordict.nn.get_functional`, which augments
 # our modules with some extra feature that make them compatible with parameters
 # passed in the ``TensorDict`` format.
+
 
 def make_model(dummy_env):
     cnn_kwargs = {
@@ -363,7 +368,7 @@ def make_model(dummy_env):
     actor_explore,
     params,
     params_target,
-) = make_model(dummy_env)
+) = make_model(test_env)
 
 ###############################################################################
 # We represent the parameters and targets as flat structures, but unflattening
@@ -373,19 +378,39 @@ params_flat = params.flatten_keys(".")
 params_target_flat = params_target.flatten_keys(".")
 
 ###############################################################################
-# Regular DQN
-# -----------
+# We will be using the adam optimizer:
+
+optim = torch.optim.Adam(list(params_flat.values()), lr, betas=betas)
+
+###############################################################################
+# We create a test environment for evaluation of the policy:
+
+test_env = make_env(
+    parallel=False, observation_norm_state_dict=observation_norm_state_dict
+)
+# sanity check:
+print(actor_explore(test_env.reset()))
+
+###############################################################################
+# Collecting and storing data
+# ---------------------------
 #
-# We'll start with a simple implementation of DQN where the returns are
-# computed without bootstrapping, i.e.
+# Replay buffers
+# ^^^^^^^^^^^^^^
 #
-#   return = reward + gamma * value_next_step * not_terminated
+# Replay buffers play a central role in off-policy RL algorithms such as DQN.
+# They constitute the dataset we will be sampling from during training.
 #
-# We start with the *replay buffer*. We'll use a regular replay buffer,
-# although a prioritized RB could improve the performance significantly.
-# We place the storage on disk using ``LazyMemmapStorage``. The only requirement
-# of this storage is that the data given to it must always have the same
-# shape. This storage will be instantiated later.
+# Here, we will use a regular sampling strategy, although a prioritized RB
+# could improve the performance significantly.
+#
+# We place the storage on disk using
+# :class:`torchrl.data.replay_buffers.storages.LazyMemmapStorage` class. This
+# storage is created in a lazy manner: it will only be instantiated once the
+# first batch of data is passed to it.
+#
+# The only requirement of this storage is that the data passed to it at write
+# time must always have the same shape.
 
 replay_buffer = TensorDictReplayBuffer(
     storage=LazyMemmapStorage(buffer_size),
@@ -393,16 +418,33 @@ replay_buffer = TensorDictReplayBuffer(
 )
 
 ###############################################################################
-# Our *data collector* will run two parallel environments in parallel, and
-# deliver the collected tensordicts once at a time to the main process. We'll
-# use the ``MultiaSyncDataCollector`` collector, which will collect data while
-# the optimization is taking place.
+# Data collector
+# ^^^^^^^^^^^^^^
+#
+# As in `PPO <https://pytorch.org/rl/tutorials/coding_ppo.html>` and
+# `DDPG <https://pytorch.org/rl/tutorials/coding_ddpg.html>`, we will be using
+# a data collector as a dataloader in the outer loop.
+#
+# We choose the following configuration: we will be running a series of
+# parallel environments synchronously in parallel in different collectors,
+# themselves running in parallel but asynchronously.
+# The advantage of this configuration is that we can balance the amount of
+# compute that is executed in batch with what we want to be executed
+# asynchronously. We encourage the reader to experiment how the collection
+# speed is impacted by modifying the number of collectors (ie the number of
+# environment constructors passed to the collector) and the number of
+# environment executed in parallel in each collector (controlled by the
+# ``num_workers`` hyperparameter).
 
 
 data_collector = MultiaSyncDataCollector(
     [
-        make_env(parallel=True, observation_norm_state_dict=observation_norm_state_dict),
-        make_env(parallel=True, observation_norm_state_dict=observation_norm_state_dict),
+        make_env(
+            parallel=True, observation_norm_state_dict=observation_norm_state_dict
+        ),
+        make_env(
+            parallel=True, observation_norm_state_dict=observation_norm_state_dict
+        ),
     ],  # 2 collectors, each with an set of `num_workers` environments being run in parallel
     policy=actor_explore,
     frames_per_batch=frames_per_batch,
@@ -410,55 +452,57 @@ data_collector = MultiaSyncDataCollector(
     exploration_mode="random",  # this is the default behaviour: the collector runs in `"random"` (or explorative) mode
     devices=[device, device],  # each collector can sit on a different device
     storing_devices=[device, device],
+    split_trajs=False,
 )
 
 ###############################################################################
-# Our *optimizer* and the env used for evaluation
-
-optim = torch.optim.Adam(list(params_flat.values()), lr)
-dummy_env = make_env(parallel=False, observation_norm_state_dict=observation_norm_state_dict)
-print(actor_explore(dummy_env.reset()))
-
-###############################################################################
-# Various lists that will contain the values recorded for evaluation:
-
-evals = []
-traj_lengths_eval = []
-losses = []
-frames = []
-values = []
-grad_vals = []
-traj_lengths = []
-mavgs = []
-traj_count = []
-prev_traj_count = 0
+# Training loop of a regular DQN
+# ------------------------------
+#
+# We'll start with a simple implementation of DQN where the returns are
+# computed without bootstrapping, i.e.
+#
+# .. math::
+#
+#       Q_{t}(s, a) = R(s, a) + \gamma * V_{t+1}(s)
+#
+# where :math:`Q(s, a)` is the Q-value of the current state-action pair,
+# :math:`R(s, a)` is the result of the reward function, and :math:`V(s)` is a
+# value function that returns 0 for terminating states.
+#
 
 ###############################################################################
 # Training loop
-# ------------------------------
+# -------------
+# We store the logs in a defaultdict:
+
+logs_exp1 = defaultdict(list)
+prev_traj_count = 0
 
 pbar = tqdm.tqdm(total=total_frames)
 for j, data in enumerate(data_collector):
-    # trajectories are padded to be stored in the same tensordict: since we do not care about consecutive step, we'll just mask the tensordict and get the flattened representation instead.
-    mask = data["collector", "mask"]
-    current_frames = mask.sum().cpu().item()
+    current_frames = data.numel()
     pbar.update(current_frames)
 
-    # We store the values on the replay buffer, after placing them on CPU. When called for the first time, this will instantiate our storage object which will print its content.
-    replay_buffer.extend(data[mask].cpu())
+    # We store the values on the replay buffer, after placing them on CPU.
+    # When called for the first time, this will instantiate our storage
+    # object which will print its content.
+    replay_buffer.extend(data.cpu())
 
     # some logging
-    if len(frames):
-        frames.append(current_frames + frames[-1])
+    if len(logs_exp1["frames"]):
+        logs_exp1["frames"].append(current_frames + logs_exp1["frames"][-1])
     else:
-        frames.append(current_frames)
+        logs_exp1["frames"].append(current_frames)
 
     if data["done"].any():
         done = data["done"].squeeze(-1)
-        traj_lengths.append(data["collector", "step_count"][done].float().mean().item())
+        logs_exp1["traj_lengths"].append(
+            data["collector", "step_count"][done].float().mean().item()
+        )
 
     # check that we have enough data to start training
-    if sum(frames) > init_random_frames:
+    if sum(logs_exp1["frames"]) > init_random_frames:
         for _ in range(n_optim):
             # sample from the RB and send to device
             sampled_data = replay_buffer.sample(batch_size)
@@ -503,21 +547,23 @@ for j, data in enumerate(data_collector):
         )
         actor_explore.step(current_frames)
 
-        # logs
+        # Logging
         with set_exploration_mode("mode"), torch.no_grad():
             # execute a rollout. The `set_exploration_mode("mode")` has no effect here since the policy is deterministic, but we add it for completeness
-            eval_rollout = dummy_env.rollout(max_steps=10000, policy=actor).cpu()
-        grad_vals.append(float(gv))
-        traj_lengths_eval.append(eval_rollout.shape[-1])
-        evals.append(eval_rollout["reward"].squeeze(-1).sum(-1).item())
-        if len(mavgs):
-            mavgs.append(evals[-1] * 0.05 + mavgs[-1] * 0.95)
+            eval_rollout = test_env.rollout(max_steps=10000, policy=actor).cpu()
+        logs_exp1["grad_vals"].append(float(gv))
+        logs_exp1["traj_lengths_eval"].append(eval_rollout.shape[-1])
+        logs_exp1["evals"].append(eval_rollout["reward"].squeeze(-1).sum(-1).item())
+        if len(logs_exp1["mavgs"]):
+            logs_exp1["mavgs"].append(
+                logs_exp1["evals"][-1] * 0.05 + logs_exp1["mavgs"][-1] * 0.95
+            )
         else:
-            mavgs.append(evals[-1])
-        losses.append(error.item())
-        values.append(action_value.mean().item())
-        traj_count.append(prev_traj_count + data["done"].sum().item())
-        prev_traj_count = traj_count[-1]
+            logs_exp1["mavgs"].append(logs_exp1["evals"][-1])
+        logs_exp1["losses"].append(error.item())
+        logs_exp1["values"].append(action_value.mean().item())
+        logs_exp1["traj_count"].append(prev_traj_count + data["done"].sum().item())
+        prev_traj_count = logs_exp1["traj_count"][-1]
         # plots
         if j % 10 == 0:
             if is_notebook():
@@ -527,30 +573,53 @@ for j, data in enumerate(data_collector):
                 plt.clf()
             plt.figure(figsize=(15, 15))
             plt.subplot(3, 2, 1)
-            plt.plot(frames[-len(evals) :], evals, label="return")
-            plt.plot(frames[-len(mavgs) :], mavgs, label="mavg")
+            plt.plot(
+                logs_exp1["frames"][-len(logs_exp1["evals"]) :],
+                logs_exp1["evals"],
+                label="return",
+            )
+            plt.plot(
+                logs_exp1["frames"][-len(logs_exp1["mavgs"]) :],
+                logs_exp1["mavgs"],
+                label="mavg",
+            )
             plt.xlabel("frames collected")
             plt.ylabel("trajectory length (= return)")
             plt.subplot(3, 2, 2)
-            plt.plot(traj_count[-len(evals) :], evals, label="return")
-            plt.plot(traj_count[-len(mavgs) :], mavgs, label="mavg")
+            plt.plot(
+                logs_exp1["traj_count"][-len(logs_exp1["evals"]) :],
+                logs_exp1["evals"],
+                label="return",
+            )
+            plt.plot(
+                logs_exp1["traj_count"][-len(logs_exp1["mavgs"]) :],
+                logs_exp1["mavgs"],
+                label="mavg",
+            )
             plt.xlabel("trajectories collected")
             plt.legend()
             plt.subplot(3, 2, 3)
-            plt.plot(frames[-len(losses) :], losses)
+            plt.plot(
+                logs_exp1["frames"][-len(logs_exp1["losses"]) :], logs_exp1["losses"]
+            )
             plt.xlabel("frames collected")
             plt.title("loss")
             plt.subplot(3, 2, 4)
-            plt.plot(frames[-len(values) :], values)
+            plt.plot(
+                logs_exp1["frames"][-len(logs_exp1["values"]) :], logs_exp1["values"]
+            )
             plt.xlabel("frames collected")
             plt.title("value")
             plt.subplot(3, 2, 5)
-            plt.plot(frames[-len(grad_vals) :], grad_vals)
+            plt.plot(
+                logs_exp1["frames"][-len(logs_exp1["grad_vals"]) :],
+                logs_exp1["grad_vals"],
+            )
             plt.xlabel("frames collected")
             plt.title("grad norm")
-            if len(traj_lengths):
+            if len(logs_exp1["traj_lengths"]):
                 plt.subplot(3, 2, 6)
-                plt.plot(traj_lengths)
+                plt.plot(logs_exp1["traj_lengths"])
                 plt.xlabel("batches")
                 plt.title("traj length (training)")
         plt.savefig("dqn_td0.png")
@@ -579,38 +648,22 @@ plt.tight_layout()
 plt.axis("off")
 
 ###############################################################################
-
-# save results
-torch.save(
-    {
-        "frames": frames,
-        "evals": evals,
-        "mavgs": mavgs,
-        "losses": losses,
-        "values": values,
-        "grad_vals": grad_vals,
-        "traj_lengths_training": traj_lengths,
-        "traj_count": traj_count,
-        "weights": (params,),
-    },
-    "saved_results_td0.pt",
-)
-
-###############################################################################
 # TD-lambda
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ---------
+#
 # We can improve the above algorithm by getting a better estimate of the
 # return, using not only the next state value but the whole sequence of rewards
 # and values that follow a particular step.
 #
 # TorchRL provides a vectorized version of TD(lambda) named
-# ``vec_td_lambda_advantage_estimate``. We'll use this to obtain a target
-# value that the value network will be trained to match.
+# :func:`torchrl.objectives.value.functional.vec_td_lambda_advantage_estimate`.
+# We'll use this to obtain a target value that the value network will be
+# trained to match.
 #
 # The big difference in this implementation is that we'll store entire
 # trajectories and not single steps in the replay buffer. This will be done
-# automatically as long as we're not "flattening" the tensordict collected
-# using its mask: by keeping a shape ``[Batch x timesteps]`` and giving this
+# automatically as long as we're not "flattening" the tensordict collected:
+# by keeping a shape ``[Batch x timesteps]`` and giving this
 # to the RB, we'll be creating a replay buffer of size
 # ``[Capacity x timesteps]``.
 
@@ -627,11 +680,22 @@ from torchrl.objectives.value.functional import vec_td_lambda_advantage_estimate
     actor_explore,
     params,
     params_target,
-) = make_model(dummy_env)
+) = make_model(test_env)
 params_flat = params.flatten_keys(".")
 params_target_flat = params_target.flatten_keys(".")
 
+optim = torch.optim.Adam(list(params_flat.values()), lr)
+test_env = make_env(
+    parallel=False, observation_norm_state_dict=observation_norm_state_dict
+)
+print(actor_explore(test_env.reset()))
+
 ###############################################################################
+# Data: Replay buffer and collector
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Building the replay buffer of the appropriate size:
+#
 
 max_size = frames_per_batch // n_workers
 
@@ -641,62 +705,56 @@ replay_buffer = TensorDictReplayBuffer(
 )
 
 data_collector = MultiaSyncDataCollector(
-    [make_env(parallel=True, observation_norm_state_dict=observation_norm_state_dict), make_env(parallel=True, observation_norm_state_dict=observation_norm_state_dict)],
+    [
+        make_env(
+            parallel=True, observation_norm_state_dict=observation_norm_state_dict
+        ),
+        make_env(
+            parallel=True, observation_norm_state_dict=observation_norm_state_dict
+        ),
+    ],
     policy=actor_explore,
     frames_per_batch=frames_per_batch,
     total_frames=total_frames,
     exploration_mode="random",
     devices=[device, device],
     storing_devices=[device, device],
+    split_trajs=False,
 )
 
-###############################################################################
 
-optim = torch.optim.Adam(list(params_flat.values()), lr)
-dummy_env = make_env(parallel=False, observation_norm_state_dict=observation_norm_state_dict)
-print(actor_explore(dummy_env.reset()))
-
-###############################################################################
-
-evals = []
-traj_lengths_eval = []
-losses = []
-frames = []
-values = []
-grad_vals = []
-traj_lengths = []
-mavgs = []
-traj_count = []
+logs_exp2 = defaultdict(list)
 prev_traj_count = 0
 
 ###############################################################################
 # Training loop
-# ------------------------------
+# -------------
+#
 # There are very few differences with the training loop above:
 #
-# - The tensordict received by the collector is not masked but padded to the
-#   desired shape (such that all tensordicts have the same shape of
-#   ``[Batch x max_size]``), and sent directly to the RB.
-# - We use ``vec_td_lambda_advantage_estimate`` to compute the target value.
+# - The tensordict received by the collector is used as-is, without being
+#   flattened, to keep the temporal relation between consecutive steps.
+# - We use :func:`vec_td_lambda_advantage_estimate` to compute the target value.
 
 pbar = tqdm.tqdm(total=total_frames)
 for j, data in enumerate(data_collector):
-    mask = data["collector", "mask"]
     data = pad(data, [0, 0, 0, max_size - data.shape[1]])
-    current_frames = mask.sum().cpu().item()
+    current_frames = data.numel()
     pbar.update(current_frames)
 
     replay_buffer.extend(data.cpu())
-    if len(frames):
-        frames.append(current_frames + frames[-1])
+    if len(logs_exp2["frames"]):
+        logs_exp2["frames"].append(current_frames + logs_exp2["frames"][-1])
     else:
-        frames.append(current_frames)
+        logs_exp2["frames"].append(current_frames)
 
     if data["done"].any():
         done = data["done"].squeeze(-1)
-        traj_lengths.append(data["collector", "step_count"][done].float().mean().item())
+        logs_exp2["traj_lengths"].append(
+            data["collector", "step_count"][done].float().mean().item()
+        )
 
-    if sum(frames) > init_random_frames:
+    if sum(logs_exp2["frames"]) > init_random_frames:
         for _ in range(n_optim):
             sampled_data = replay_buffer.sample(batch_size // max_size)
             sampled_data = sampled_data.clone().to(device, non_blocking=True)
@@ -723,16 +781,9 @@ for j, data in enumerate(data_collector):
                 reward,
                 done,
             ).pow(2)
-            # reward + gamma * next_value * (1 - done)
-            mask = sampled_data["collector", "mask"]
-            error = error[mask].mean()
-            # assert exp_value.shape == action_value.shape
-            # error = nn.functional.smooth_l1_loss(exp_value, action_value).mean()
-            # error = nn.functional.mse_loss(exp_value, action_value)[mask].mean()
+            error = error.mean()
             error.backward()
 
-            # gv = sum([p.grad.pow(2).sum() for p in params_flat.values()]).sqrt()
-            # nn.utils.clip_grad_value_(list(params_flat.values()), 1)
             gv = nn.utils.clip_grad_norm_(list(params_flat.values()), 100)
 
             optim.step()
@@ -747,23 +798,25 @@ for j, data in enumerate(data_collector):
         )
         actor_explore.step(current_frames)
 
-        # logs
+        # logs_exp2
         with set_exploration_mode("random"), torch.no_grad():
             #         eval_rollout = dummy_env.rollout(max_steps=1000, policy=actor_explore, auto_reset=True).cpu()
-            eval_rollout = dummy_env.rollout(
+            eval_rollout = test_env.rollout(
                 max_steps=10000, policy=actor, auto_reset=True
             ).cpu()
-        grad_vals.append(float(gv))
-        traj_lengths_eval.append(eval_rollout.shape[-1])
-        evals.append(eval_rollout["reward"].squeeze(-1).sum(-1).item())
-        if len(mavgs):
-            mavgs.append(evals[-1] * 0.05 + mavgs[-1] * 0.95)
+        logs_exp2["grad_vals"].append(float(gv))
+        logs_exp2["traj_lengths_eval"].append(eval_rollout.shape[-1])
+        logs_exp2["evals"].append(eval_rollout["reward"].squeeze(-1).sum(-1).item())
+        if len(logs_exp2["mavgs"]):
+            logs_exp2["mavgs"].append(
+                logs_exp2["evals"][-1] * 0.05 + logs_exp2["mavgs"][-1] * 0.95
+            )
         else:
-            mavgs.append(evals[-1])
-        losses.append(error.item())
-        values.append(action_value[mask].mean().item())
-        traj_count.append(prev_traj_count + data["done"].sum().item())
-        prev_traj_count = traj_count[-1]
+            logs_exp2["mavgs"].append(logs_exp2["evals"][-1])
+        logs_exp2["losses"].append(error.item())
+        logs_exp2["values"].append(action_value.mean().item())
+        logs_exp2["traj_count"].append(prev_traj_count + data["done"].sum().item())
+        prev_traj_count = logs_exp2["traj_count"][-1]
         # plots
         if j % 10 == 0:
             if is_notebook():
@@ -773,30 +826,53 @@ for j, data in enumerate(data_collector):
                 plt.clf()
             plt.figure(figsize=(15, 15))
             plt.subplot(3, 2, 1)
-            plt.plot(frames[-len(evals) :], evals, label="return")
-            plt.plot(frames[-len(mavgs) :], mavgs, label="mavg")
+            plt.plot(
+                logs_exp2["frames"][-len(logs_exp2["evals"]) :],
+                logs_exp2["evals"],
+                label="return",
+            )
+            plt.plot(
+                logs_exp2["frames"][-len(logs_exp2["mavgs"]) :],
+                logs_exp2["mavgs"],
+                label="mavg",
+            )
             plt.xlabel("frames collected")
             plt.ylabel("trajectory length (= return)")
             plt.subplot(3, 2, 2)
-            plt.plot(traj_count[-len(evals) :], evals, label="return")
-            plt.plot(traj_count[-len(mavgs) :], mavgs, label="mavg")
+            plt.plot(
+                logs_exp2["traj_count"][-len(logs_exp2["evals"]) :],
+                logs_exp2["evals"],
+                label="return",
+            )
+            plt.plot(
+                logs_exp2["traj_count"][-len(logs_exp2["mavgs"]) :],
+                logs_exp2["mavgs"],
+                label="mavg",
+            )
             plt.xlabel("trajectories collected")
             plt.legend()
             plt.subplot(3, 2, 3)
-            plt.plot(frames[-len(losses) :], losses)
+            plt.plot(
+                logs_exp2["frames"][-len(logs_exp2["losses"]) :], logs_exp2["losses"]
+            )
             plt.xlabel("frames collected")
             plt.title("loss")
             plt.subplot(3, 2, 4)
-            plt.plot(frames[-len(values) :], values)
+            plt.plot(
+                logs_exp2["frames"][-len(logs_exp2["values"]) :], logs_exp2["values"]
+            )
             plt.xlabel("frames collected")
             plt.title("value")
             plt.subplot(3, 2, 5)
-            plt.plot(frames[-len(grad_vals) :], grad_vals)
+            plt.plot(
+                logs_exp2["frames"][-len(logs_exp2["grad_vals"]) :],
+                logs_exp2["grad_vals"],
+            )
             plt.xlabel("frames collected")
             plt.title("grad norm")
-            if len(traj_lengths):
+            if len(logs_exp2["traj_lengths"]):
                 plt.subplot(3, 2, 6)
-                plt.plot(traj_lengths)
+                plt.plot(logs_exp2["traj_lengths"])
                 plt.xlabel("batches")
                 plt.title("traj length (training)")
         plt.savefig("dqn_tdlambda.png")
@@ -815,31 +891,13 @@ if is_notebook():
     display.display(plt.gcf())
 
 ###############################################################################
-# **Note**: As already mentioned above, to get a more reasonable performance,
+# **Note**: As mentioned above, to get a more reasonable performance,
 # use a greater value for ``total_frames`` e.g. 500000.
 
 plt.figure(figsize=(15, 15))
 plt.imshow(plt.imread("dqn_tdlambda.png"))
 plt.tight_layout()
 plt.axis("off")
-
-###############################################################################
-
-# save results
-torch.save(
-    {
-        "frames": frames,
-        "evals": evals,
-        "mavgs": mavgs,
-        "losses": losses,
-        "values": values,
-        "grad_vals": grad_vals,
-        "traj_lengths_training": traj_lengths,
-        "traj_count": traj_count,
-        "weights": (params,),
-    },
-    "saved_results_tdlambda.pt",
-)
 
 ###############################################################################
 # Let's compare the results on a single plot. Because the TD(lambda) version
@@ -849,36 +907,36 @@ torch.save(
 # **Note**: As already mentioned above, to get a more reasonable performance,
 # use a greater value for ``total_frames`` e.g. 500000.
 
-load_td0 = torch.load("saved_results_td0.pt")
-load_tdlambda = torch.load("saved_results_tdlambda.pt")
-frames_td0 = load_td0["frames"]
-frames_tdlambda = load_tdlambda["frames"]
-evals_td0 = load_td0["evals"]
-evals_tdlambda = load_tdlambda["evals"]
-mavgs_td0 = load_td0["mavgs"]
-mavgs_tdlambda = load_tdlambda["mavgs"]
-losses_td0 = load_td0["losses"]
-losses_tdlambda = load_tdlambda["losses"]
-values_td0 = load_td0["values"]
-values_tdlambda = load_tdlambda["values"]
-grad_vals_td0 = load_td0["grad_vals"]
-grad_vals_tdlambda = load_tdlambda["grad_vals"]
-traj_lengths_td0 = load_td0["traj_lengths_training"]
-traj_lengths_tdlambda = load_tdlambda["traj_lengths_training"]
-traj_count_td0 = load_td0["traj_count"]
-traj_count_tdlambda = load_tdlambda["traj_count"]
+frames_td0 = logs_exp1["frames"]
+frames_tdlambda = logs_exp2["frames"]
+evals_td0 = logs_exp1["evals"]
+evals_tdlambda = logs_exp2["evals"]
+mavgs_td0 = logs_exp1["mavgs"]
+mavgs_tdlambda = logs_exp2["mavgs"]
+losses_td0 = logs_exp1["losses"]
+losses_tdlambda = logs_exp2["losses"]
+values_td0 = logs_exp1["values"]
+values_tdlambda = logs_exp2["values"]
+grad_vals_td0 = logs_exp1["grad_vals"]
+grad_vals_tdlambda = logs_exp2["grad_vals"]
+traj_lengths_td0 = logs_exp1["traj_lengths_training"]
+traj_lengths_tdlambda = logs_exp2["traj_lengths_training"]
+traj_count_td0 = logs_exp1["traj_count"]
+traj_count_tdlambda = logs_exp2["traj_count"]
 
 plt.figure(figsize=(15, 15))
 plt.subplot(3, 2, 1)
-plt.plot(frames[-len(evals_td0) :], evals_td0, label="return (td0)", alpha=0.5)
+plt.plot(frames_td0[-len(evals_td0) :], evals_td0, label="return (td0)", alpha=0.5)
 plt.plot(
-    frames[-len(evals_tdlambda) :],
+    frames_tdlambda[-len(evals_tdlambda) :],
     evals_tdlambda,
     label="return (td(lambda))",
     alpha=0.5,
 )
-plt.plot(frames[-len(mavgs_td0) :], mavgs_td0, label="mavg (td0)")
-plt.plot(frames[-len(mavgs_tdlambda) :], mavgs_tdlambda, label="mavg (td(lambda))")
+plt.plot(frames_td0[-len(mavgs_td0) :], mavgs_td0, label="mavg (td0)")
+plt.plot(
+    frames_tdlambda[-len(mavgs_tdlambda) :], mavgs_tdlambda, label="mavg (td(lambda))"
+)
 plt.xlabel("frames collected")
 plt.ylabel("trajectory length (= return)")
 plt.subplot(3, 2, 2)
@@ -898,28 +956,36 @@ plt.plot(
 plt.xlabel("trajectories collected")
 plt.legend()
 plt.subplot(3, 2, 3)
-plt.plot(frames[-len(losses_td0) :], losses_td0, label="loss (td0)")
-plt.plot(frames[-len(losses_tdlambda) :], losses_tdlambda, label="loss (td(lambda))")
+plt.plot(traj_count_td0[-len(losses_td0) :], losses_td0, label="loss (td0)")
+plt.plot(
+    frames_tdlambda[-len(losses_tdlambda) :], losses_tdlambda, label="loss (td(lambda))"
+)
 plt.xlabel("frames collected")
 plt.title("loss")
 plt.legend()
 plt.subplot(3, 2, 4)
-plt.plot(frames[-len(values_td0) :], values_td0, label="values (td0)")
-plt.plot(frames[-len(values_tdlambda) :], values_tdlambda, label="values (td(lambda))")
+plt.plot(traj_count_td0[-len(values_td0) :], values_td0, label="values (td0)")
+plt.plot(
+    frames_tdlambda[-len(values_tdlambda) :],
+    values_tdlambda,
+    label="values (td(lambda))",
+)
 plt.xlabel("frames collected")
 plt.title("value")
 plt.legend()
 plt.subplot(3, 2, 5)
-plt.plot(frames[-len(grad_vals_td0) :], grad_vals_td0, label="gradient norm (td0)")
 plt.plot(
-    frames[-len(grad_vals_tdlambda) :],
+    traj_count_td0[-len(grad_vals_td0) :], grad_vals_td0, label="gradient norm (td0)"
+)
+plt.plot(
+    frames_tdlambda[-len(grad_vals_tdlambda) :],
     grad_vals_tdlambda,
     label="gradient norm (td(lambda))",
 )
 plt.xlabel("frames collected")
 plt.title("grad norm")
 plt.legend()
-if len(traj_lengths):
+if len(traj_lengths_td0) and len(traj_lengths_tdlambda):
     plt.subplot(3, 2, 6)
     plt.plot(traj_lengths_td0, label="episode length (td0)")
     plt.plot(traj_lengths_tdlambda, label="episode length (td(lambda))")
@@ -933,19 +999,27 @@ if len(traj_lengths):
 # If all goes well, the duration should be significantly longer than with the
 # initial, random rollout.
 
-dummy_env.transform.insert(0, CatTensors(["pixels"], "pixels_save", del_keys=False))
-eval_rollout = dummy_env.rollout(max_steps=10000, policy=actor, auto_reset=True).cpu()
+test_env.transform.insert(0, CatTensors(["pixels"], "pixels_save", del_keys=False))
+eval_rollout = test_env.rollout(max_steps=10000, policy=actor, auto_reset=True).cpu()
 print(eval_rollout)
-del dummy_env
+del test_env
+
+import imageio
+
+imageio.mimwrite("cartpole.gif", eval_rollout["pixels_save"].numpy(), fps=30)
 
 ###############################################################################
-
-# imageio.mimwrite('cartpole.mp4', eval_rollout["pixels_save"].numpy(), fps=30);
-# Video('cartpole.mp4', width=480, height=360) #the width and height option as additional thing new in Ipython 7.6.1
+# The video of the rollout can be saved using the imageio package:
+#
+# .. code-block::
+#
+#   import imageio
+#   imageio.mimwrite('cartpole.mp4', eval_rollout["pixels_save"].numpy(), fps=30);
 
 ###############################################################################
 # Conclusion and possible improvements
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ------------------------------------
+#
 # We have seen that using TD(lambda) greatly improved the performance of our
 # algorithm. Other possible improvements could include:
 #
