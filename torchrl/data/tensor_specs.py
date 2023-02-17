@@ -618,31 +618,29 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             and self.use_register == other.use_register
         )
 
-    def to_categorical(
-        self, val: Optional[torch.Tensor] = None, safe: bool = True
-    ) -> Union[DiscreteTensorSpec, torch.Tensor]:
-        """Convert a given one-hot tensor in categorical format or convert the spec to the equivalent categorical spec.
+    def to_categorical(self, val: torch.Tensor, safe: bool = True) -> torch.Tensor:
+        """Converts a given one-hot tensor in categorical format.
 
         Args:
-            val (torch.Tensor, optional): One-hot tensor to convert in categorical format. If not provided, the function
-                will convert the spec to the equivalent DiscreteTensorSpec (default).
+            val (torch.Tensor, optional): One-hot tensor to convert in categorical format.
             safe (bool): boolean value indicating whether a check should be
                 performed on the value against the domain of the spec.
 
         Returns:
-            If val is provided, returns the categorical tensor, otherwise returns a DiscreteTensorSpec
+            The categorical tensor.
         """
-        if val is None:
-            return DiscreteTensorSpec(
-                self.space.n,
-                device=self.device,
-                dtype=self.dtype,
-                shape=self.shape[:-1],
-            )
-        else:
-            if safe:
-                self.assert_is_in(val)
-            return val.argmax(-1)
+        if safe:
+            self.assert_is_in(val)
+        return val.argmax(-1)
+
+    def to_categorical_spec(self) -> DiscreteTensorSpec:
+        """Converts the spec to the equivalent categorical spec."""
+        return DiscreteTensorSpec(
+            self.space.n,
+            device=self.device,
+            dtype=self.dtype,
+            shape=self.shape[:-1],
+        )
 
 
 @dataclass(repr=False)
@@ -1233,32 +1231,30 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         vals = self._split(val)
         return torch.cat([super()._project(_val) for _val in vals], -1)
 
-    def to_categorical(
-        self, val: Optional[torch.Tensor] = None, safe: bool = True
-    ) -> Union[MultiDiscreteTensorSpec, torch.Tensor]:
-        """Convert a given one-hot tensor in categorical format or convert the spec to the equivalent categorical spec.
+    def to_categorical(self, val: torch.Tensor, safe: bool = True) -> torch.Tensor:
+        """Converts a given one-hot tensor in categorical format.
 
         Args:
-            val (torch.Tensor, optional): One-hot tensor to convert in categorical format. If not provided, the function
-                will convert the spec to the equivalent MultiDiscreteTensorSpec (default).
+            val (torch.Tensor, optional): One-hot tensor to convert in categorical format.
             safe (bool): boolean value indicating whether a check should be
                 performed on the value against the domain of the spec.
 
         Returns:
-            If val is provided, returns the categorical tensor, otherwise returns a MultiDiscreteTensorSpec
+            The categorical tensor.
         """
-        if val is None:
-            return MultiDiscreteTensorSpec(
-                [_space.n for _space in self.space],
-                device=self.device,
-                dtype=self.dtype,
-                shape=[*self.shape[:-1], len(self.space)],
-            )
-        else:
-            if safe:
-                self.assert_is_in(val)
-            vals = self._split(val)
-            return torch.stack([val.argmax(-1) for val in vals], -1)
+        if safe:
+            self.assert_is_in(val)
+        vals = self._split(val)
+        return torch.stack([val.argmax(-1) for val in vals], -1)
+
+    def to_categorical_spec(self) -> MultiDiscreteTensorSpec:
+        """Converts the spec to the equivalent categorical spec."""
+        return MultiDiscreteTensorSpec(
+            [_space.n for _space in self.space],
+            device=self.device,
+            dtype=self.dtype,
+            shape=[*self.shape[:-1], len(self.space)],
+        )
 
     def expand(self, *shape):
         nvecs = [space.n for space in self.space]
@@ -1353,29 +1349,27 @@ class DiscreteTensorSpec(TensorSpec):
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
         return super().to_numpy(val, safe)
 
-    def to_onehot(
-        self, val: Optional[torch.Tensor] = None, safe: bool = True
-    ) -> Union[OneHotDiscreteTensorSpec, torch.Tensor]:
-        """One-hot encode a given tensor or convert the spec to the equivalent one-hot spec.
+    def to_one_hot(self, val: torch.Tensor, safe: bool = True) -> torch.Tensor:
+        """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
 
         Args:
-            val (torch.Tensor, optional): Tensor to one-hot encode. If not provided, the function will convert the
-                spec to the equivalent OneHotDiscreteTensorSpec (default).
+            val (torch.Tensor, optional): Tensor to one-hot encode.
             safe (bool): boolean value indicating whether a check should be
                 performed on the value against the domain of the spec.
 
         Returns:
-            If val is provided, returns the one-hot encoded tensor, otherwise returns a OneHotDiscreteTensorSpec
+            The one-hot encoded tensor.
         """
-        if val is None:
-            shape = [*self.shape, self.space.n]
-            return OneHotDiscreteTensorSpec(
-                n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
-            )
-        else:
-            if safe:
-                self.assert_is_in(val)
-            return torch.nn.functional.one_hot(val, self.space.n)
+        if safe:
+            self.assert_is_in(val)
+        return torch.nn.functional.one_hot(val, self.space.n)
+
+    def to_one_hot_spec(self) -> OneHotDiscreteTensorSpec:
+        """Converts the spec to the equivalent one-hot spec."""
+        shape = [*self.shape, self.space.n]
+        return OneHotDiscreteTensorSpec(
+            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+        )
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
@@ -1543,38 +1537,38 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             .item()
         )
 
-    def to_onehot(
-        self, val: Optional[torch.Tensor] = None, safe: bool = True
+    def to_one_hot(
+        self, val: torch.Tensor, safe: bool = True
     ) -> Union[MultiOneHotDiscreteTensorSpec, torch.Tensor]:
-        """One-hot encode a given tensor or convert the spec to the equivalent one-hot spec.
+        """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
 
         Args:
-            val (torch.Tensor, optional): Tensor to one-hot encode. If not provided, the function will convert the
-                spec to the equivalent MultiOneHotDiscreteTensorSpec (default).
+            val (torch.Tensor, optional): Tensor to one-hot encode.
             safe (bool): boolean value indicating whether a check should be
                 performed on the value against the domain of the spec.
 
         Returns:
-            If val is provided, returns the one-hot encoded tensor, otherwise returns a MultiOneHotDiscreteTensorSpec
+            The one-hot encoded tensor.
         """
-        if val is None:
-            nvec = [_space.n for _space in self.space]
-            return MultiOneHotDiscreteTensorSpec(
-                nvec,
-                device=self.device,
-                dtype=self.dtype,
-                shape=[*self.shape[:-1], sum(nvec)],
-            )
-        else:
-            if safe:
-                self.assert_is_in(val)
-            return torch.cat(
-                [
-                    torch.nn.functional.one_hot(val[..., i], n)
-                    for i, n in enumerate(self.nvec)
-                ],
-                -1,
-            ).to(self.device)
+        if safe:
+            self.assert_is_in(val)
+        return torch.cat(
+            [
+                torch.nn.functional.one_hot(val[..., i], n)
+                for i, n in enumerate(self.nvec)
+            ],
+            -1,
+        ).to(self.device)
+
+    def to_one_hot_spec(self) -> MultiOneHotDiscreteTensorSpec:
+        """Converts the spec to the equivalent one-hot spec."""
+        nvec = [_space.n for _space in self.space]
+        return MultiOneHotDiscreteTensorSpec(
+            nvec,
+            device=self.device,
+            dtype=self.dtype,
+            shape=[*self.shape[:-1], sum(nvec)],
+        )
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
