@@ -126,7 +126,7 @@ device = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
 # ^^^^^^^^^
 
 # the learning rate of the optimizer
-lr = 2e-3
+lr = 2e-4
 # the beta parameters of Adam
 betas = (0.9, 0.999)
 # Optimization steps per batch collected (aka UPD or updates per data)
@@ -152,7 +152,7 @@ tau = 0.005
 # This is harder to do with our data collectors since they return batches of N collected frames, where N is a constant.
 # However, one can easily get the same restriction on number of episodes by breaking the training loop when a certain number
 # episodes has been collected.
-total_frames = 500000
+total_frames = 500
 # Random frames used to initialize the replay buffer.
 init_random_frames = 100
 # Frames in each batch collected.
@@ -162,7 +162,9 @@ batch_size = 32
 # Size of the replay buffer in terms of frames
 buffer_size = min(total_frames, 100000)
 # Number of environments run in parallel in each data collector
-n_workers = 1
+num_workers = 2
+num_collectors = 2
+
 
 ###############################################################################
 # Environment and exploration
@@ -218,7 +220,7 @@ def make_env(parallel=False, observation_norm_state_dict=None):
         observation_norm_state_dict = {"standard_normal": True}
     if parallel:
         base_env = ParallelEnv(
-            n_workers,
+            num_workers,
             EnvCreator(
                 lambda: GymEnv(
                     "CartPole-v1", from_pixels=True, pixels_only=True, device=device
@@ -438,20 +440,25 @@ replay_buffer = TensorDictReplayBuffer(
 
 
 data_collector = MultiaSyncDataCollector(
+    # ``num_collectors`` collectors, each with an set of `num_workers` environments being run in parallel
     [
         make_env(
             parallel=True, observation_norm_state_dict=observation_norm_state_dict
         ),
-        make_env(
-            parallel=True, observation_norm_state_dict=observation_norm_state_dict
-        ),
-    ],  # 2 collectors, each with an set of `num_workers` environments being run in parallel
+    ]
+    * num_collectors,
     policy=actor_explore,
     frames_per_batch=frames_per_batch,
     total_frames=total_frames,
     exploration_mode="random",  # this is the default behaviour: the collector runs in `"random"` (or explorative) mode
-    devices=[device, device],  # each collector can sit on a different device
-    storing_devices=[device, device],
+    devices=[
+        device,
+    ]
+    * num_collectors,  # each collector can sit on a different device
+    storing_devices=[
+        device,
+    ]
+    * num_collectors,
     split_trajs=False,
 )
 
@@ -551,7 +558,10 @@ for j, data in enumerate(data_collector):
         # Logging
         with set_exploration_mode("mode"), torch.no_grad():
             # execute a rollout. The `set_exploration_mode("mode")` has no effect here since the policy is deterministic, but we add it for completeness
-            eval_rollout = test_env.rollout(max_steps=10000, policy=actor).cpu()
+            eval_rollout = test_env.rollout(
+                max_steps=10000,
+                policy=actor,
+            ).cpu()
         logs_exp1["grad_vals"].append(float(gv))
         logs_exp1["traj_lengths_eval"].append(eval_rollout.shape[-1])
         logs_exp1["evals"].append(eval_rollout["reward"].squeeze(-1).sum(-1).item())
@@ -698,7 +708,7 @@ print(actor_explore(test_env.reset()))
 # Building the replay buffer of the appropriate size:
 #
 
-max_size = frames_per_batch // n_workers
+max_size = frames_per_batch // num_workers
 
 replay_buffer = TensorDictReplayBuffer(
     storage=LazyMemmapStorage(-(-buffer_size // max_size)),

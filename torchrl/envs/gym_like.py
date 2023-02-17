@@ -194,6 +194,7 @@ class GymLikeEnv(_EnvWrapper):
             if len(info) == 2:
                 # gym 0.26
                 truncation, info = info
+                done = done | truncation
             elif len(info) == 1:
                 info = info[0]
             elif len(info) == 0:
