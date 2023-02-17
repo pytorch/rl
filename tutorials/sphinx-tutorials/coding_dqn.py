@@ -24,14 +24,28 @@ Coding a pixel-based DQN using TorchRL
 # through our neural network and get an interpolated value for each of the
 # actions available.
 #
+# We will solve the classic control problem of the cart pole. From the
+# Gymnasium doc from where this environment is retrieved:
+#
+# | A pole is attached by an un-actuated joint to a cart, which moves along a
+# | frictionless track. The pendulum is placed upright on the cart and the goal
+# | is to balance the pole by applying forces in the left and right direction
+# | on the cart.
+#
+# .. figure:: /_static/img/cart_pole.gif
+#    :alt: Cart Pole
+#
 # **Prerequisites**: We encourage you to get familiar with torchrl through the
 # `PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>` first.
+# This tutorial is more complex and full-fleshed, but it may be .
 #
 # In this tutorial, you will learn:
 #
 # - how to build an environment in TorchRL, including transforms (e.g. data
 #   normalization, frame concatenation, resizing and turning to grayscale)
-#   and parallel execution;
+#   and parallel execution. Unlike what we did in the
+#   `DDPG tutorial <https://pytorch.org/rl/tutorials/coding_ddpg.html>`_, we
+#   will normalize the pixels and not the state vector.
 # - how to design a QValue actor, i.e. an actor that estimates the action
 #   values and picks up the action with the highest estimated return;
 # - how to collect data from your environment efficiently and store them
@@ -42,7 +56,8 @@ Coding a pixel-based DQN using TorchRL
 # - and finally how to evaluate your model.
 #
 # This tutorial assumes the reader is familiar with some of TorchRL
-# primitives, such as ``TensorDict`` and ``TensorDictModules``, although it
+# primitives, such as :class:`tensordict.TensorDict` and
+# :class:`tensordict.TensorDictModules`, although it
 # should be sufficiently transparent to be understood without a deep
 # understanding of these classes.
 #
@@ -97,21 +112,41 @@ def is_notebook() -> bool:
 
 ###############################################################################
 # Hyperparameters
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Let's start with our hyperparameters. This is a totally arbitrary list of
-# hyperparams that we found to work well in practice. Hopefully the performance
-# of the algorithm should not be too sentitive to slight variations of these.
+# ---------------
+#
+# Let's start with our hyperparameters. The following setting should work well
+# in practice, and the performance of the algorithm should hopefully not be
+# too sensitive to slight variations of these.
 
-# hyperparams
+device = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
+
+###############################################################################
+# Optimizer
+# ^^^^^^^^^
 
 # the learning rate of the optimizer
 lr = 2e-3
 # the beta parameters of Adam
 betas = (0.9, 0.999)
+# Optimization steps per batch collected (aka UPD or updates per data)
+n_optim = 4
+
+###############################################################################
+# DQN parameters
+# ^^^^^^^^^^^^^^
+
 # gamma decay factor
 gamma = 0.99
 # lambda decay factor (see second the part with TD(lambda)
 lmbda = 0.95
+
+# Smooth target network update decay parameter. This loosely corresponds to a 1/(1-tau) interval with hard target network update
+tau = 0.005
+
+###############################################################################
+# Data collection and replay buffer
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 # total frames collected in the environment. In other implementations, the user defines a maximum number of episodes.
 # This is harder to do with our data collectors since they return batches of N collected frames, where N is a constant.
 # However, one can easily get the same restriction on number of episodes by breaking the training loop when a certain number
@@ -121,8 +156,6 @@ total_frames = 500
 init_random_frames = 100
 # Frames in each batch collected.
 frames_per_batch = 32
-# Optimization steps per batch collected
-n_optim = 4
 # Frames sampled from the replay buffer at each optimization step
 batch_size = 32
 # Size of the replay buffer in terms of frames
@@ -130,16 +163,16 @@ buffer_size = min(total_frames, 100000)
 # Number of environments run in parallel in each data collector
 n_workers = 1
 
-device = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
-
-# Smooth target network update decay parameter. This loosely corresponds to a 1/(1-tau) interval with hard target network update
-tau = 0.005
+###############################################################################
+# Environment and exploration
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 # Initial and final value of the epsilon factor in Epsilon-greedy exploration (notice that since our policy is deterministic exploration is crucial)
 eps_greedy_val = 0.1
 eps_greedy_val_env = 0.05
 
-# To speed up learning, we set the bias of the last layer of our value network to a predefined value
+# To speed up learning, we set the bias of the last layer of our value network
+# to a predefined value (this is not mandatory)
 init_bias = 20.0
 
 ###############################################################################
@@ -148,20 +181,39 @@ init_bias = 20.0
 # value e.g. 500000
 #
 # Building the environment
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Our environment builder has three arguments:
+# ------------------------
 #
-# - parallel: determines whether multiple environments have to be run in
-#   parallel. We stack the transforms after the ParallelEnv to take advantage
+# Our environment builder has two arguments:
+#
+# - ``parallel``: determines whether multiple environments have to be run in
+#   parallel. We stack the transforms after the
+#   :class:`torchrl.envs.ParallelEnv` to take advantage
 #   of vectorization of the operations on device, although this would
-#   techinally work with every single environment attached to its own set of
+#   technically work with every single environment attached to its own set of
 #   transforms.
-# - mean and standard deviation: we normalize the observations (images)
-#   with two parameters computed from a random rollout in the environment.
+# - ``observation_norm_state_dict`` will contain the normalizing constants for
+#   the :class:`torchrl.envs.ObservationNorm` tranform.
+#
+# We will be using five transforms:
+#
+# - :class:`torchrl.envs.ToTensorImage` will convert a ``[W, H, C]`` uint8
+#   tensor in a floating point tensor in the ``[0, 1]`` space with shape
+#   ``[C, W, H]``;
+# - :class:`torchrl.envs.GrayScale` will turn our image into grayscale;
+# - :class:`torchrl.envs.Resize` will resize the image in a 64x64 format;
+# - :class:`torchrl.envs.CatFrames` will concatenate an arbitrary number of
+#   successive frames (``N=4``) in a single tensor along the channel dimension.
+#   This is useful as a single image does not carry information about the
+#   motion of the cartpole. Some memory about past observations and actions
+#   is needed, either via a recurrent neural network or using a stack of
+#   frames.
+# - :class:`torchrl.envs.ObservationNorm` which will normalize our observations
+#   given some custom summary statistics.
+#
 
-
-def make_env(parallel=False, m=0, s=1):
-
+def make_env(parallel=False, observation_norm_state_dict=None):
+    if observation_norm_state_dict is None:
+        observation_norm_state_dict = {"standard_normal": True}
     if parallel:
         base_env = ParallelEnv(
             n_workers,
@@ -182,58 +234,75 @@ def make_env(parallel=False, m=0, s=1):
             ToTensorImage(),
             GrayScale(),
             Resize(64, 64),
-            ObservationNorm(in_keys=["pixels"], loc=m, scale=s, standard_normal=True),
             CatFrames(4, in_keys=["pixels"], dim=-3),
+            ObservationNorm(in_keys=["pixels"], **observation_norm_state_dict),
         ),
     )
     return env
 
 
 ###############################################################################
-# Compute normalizing constants:
+# Compute normalizing constants
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# To normalize images, we don't want to normalize each pixel independently
+# with a full ``[C, W, H]`` normalizing mask, but with simpler ``[C, 1, 1]``
+# shaped loc and scale parameters. We will be using the ``reduce_dim`` argument
+# of :func:`torchrl.envs.ObservationNorm.init_stats` to instruct which
+# dimensions must be reduced, and the ``keep_dims`` parameter to ensure that
+# not all dimensions disappear in the process:
 
 dummy_env = make_env()
-v = dummy_env.transform[3].parent.reset()["pixels"]
-m, s = v.mean().item(), v.std().item()
-m, s
+dummy_env.transform[-1].init_stats(num_iter=1000, cat_dim=0, reduce_dim=[-1, -2, -4], keep_dims=(-1, -2))
+observation_norm_state_dict = dummy_env.transform[-1].state_dict()
 
 ###############################################################################
-# The problem
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# We can have a look at the problem by generating a video with a random
-# policy. From gym:
-#
-# *A pole is attached by an un-actuated joint to a cart, which moves along a*
-# *frictionless track. The pendulum is placed upright on the cart and the*
-# *goal is to balance the pole by applying forces in the left and right*
-# *direction on the cart.*
-
-# we add a CatTensors transform to copy the "pixels" before it's being replaced by its grayscale, resized version
-dummy_env.transform.insert(0, CatTensors(["pixels"], "pixels_save", del_keys=False))
-# we omit the policy from the rollout call: this will generate random actions from the env.action_spec attribute
-eval_rollout = dummy_env.rollout(max_steps=10000).cpu()
-
-# imageio.mimwrite('cartpole_random.mp4', eval_rollout["pixels_save"].numpy(), fps=30)
-# Video('cartpole_random.mp4', width=480, height=360)
+# let's check that normalizing constants have a size of ``[C, 1, 1]`` where
+# ``C=4`` (because of :class:`torchrl.envs.CatFrames`).
+print(observation_norm_state_dict)
 
 ###############################################################################
 # Building the model (Deep Q-network)
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# The following function builds a ``DuelingCnnDQNet`` object which is a
-# simple CNN followed by a two-layer MLP. The only trick used here is that
-# the action values (i.e. left and right action value) are computed using
+# -----------------------------------
+#
+# The following function builds a :class:`torchrl.modules.DuelingCnnDQNet`
+# object which is a simple CNN followed by a two-layer MLP. The only trick used
+# here is that the action values (i.e. left and right action value) are
+# computed using
 #
 # .. math::
 #
-#    values = baseline(observation) + values(observation) - values(observation).mean()
+#    val = b(obs) + v(obs) - E[v(obs)]
 #
-# where ``baseline`` is a ``num_obs -> 1`` function and ``values`` is a
-# ``num_obs -> num_actions`` function.
+# where :math:`b` is a :math:`num_obs \rightarrow 1` function and :math:`v` is a
+# :math:`num_obs \rightarrow num_actions` function.
 #
-# Our network is wrapped in a ``QValueActor``, which will read the state-action
+# Our network is wrapped in a :class:`torchrl.modules.QValueActor`, which will read the state-action
 # values, pick up the one with the maximum value and write all those results
-# in the input ``TensorDict``.
-
+# in the input :class:`tensordict.TensorDict`.
+#
+# Target parameters
+# ^^^^^^^^^^^^^^^^^
+#
+# Many off-policy RL algorithms use the concept of "target parameters" when it
+# comes to estimate the value of the ``t+1`` state or state-action pair.
+# The target parameters are lagged copies of the model parameters. Because
+# their predictions mismatch those of the current model configuration, they
+# help learning by putting a pessimistic bound on the value being estimated.
+# This is a powerful trick (known as "Double Q-Learning") that is ubiquitous
+# in similar algorithms.
+#
+# Functionalizing modules
+# ^^^^^^^^^^^^^^^^^^^^^^^
+#
+# One of the features of torchrl is its usage of functional modules: as the
+# same architecture is often used with multiple sets of parameters (e.g.
+# trainable and target parameters), we functionalize the modules and isolate
+# the various sets of parameters in separate tensordicts.
+#
+# To this aim, we use :func:`tensordict.nn.get_functional`, which augments
+# our modules with some extra feature that make them compatible with parameters
+# passed in the ``TensorDict`` format.
 
 def make_model(dummy_env):
     cnn_kwargs = {
@@ -259,23 +328,23 @@ def make_model(dummy_env):
     net.value[-1].bias.data.fill_(init_bias)
 
     actor = QValueActor(net, in_keys=["pixels"], spec=dummy_env.action_spec).to(device)
-    # init actor
-    tensordict = dummy_env.reset()
-    print("reset results:", tensordict)
+    # init actor: because the model is composed of lazy conv/linear layers,
+    # we must pass a fake batch of data through it to instantiate them.
+    tensordict = dummy_env.fake_tensordict()
     actor(tensordict)
-    print("Q-value network results:", tensordict)
 
-    # make functional
+    # Make functional:
     # here's an explicit way of creating the parameters and buffer tensordict.
     # Alternatively, we could have used `params = make_functional(actor)` from
     # tensordict.nn
     params = TensorDict({k: v for k, v in actor.named_parameters()}, [])
     buffers = TensorDict({k: v for k, v in actor.named_buffers()}, [])
-    params = params.update(buffers).unflatten_keys(".")  # creates a nested TensorDict
+    params = params.update(buffers)
+    params = params.unflatten_keys(".")  # creates a nested TensorDict
     factor = get_functional(actor)
 
     # creating the target parameters is fairly easy with tensordict:
-    (params_target,) = (params.to_tensordict().detach(),)
+    params_target = params.clone().detach()
 
     # we wrap our actor in an EGreedyWrapper for data collection
     actor_explore = EGreedyWrapper(
@@ -288,12 +357,6 @@ def make_model(dummy_env):
     return factor, actor, actor_explore, params, params_target
 
 
-###############################################################################
-# When creating the model, we initialize the network with an environment reset.
-# We print the resulting tensordict instance to get an idea of what
-# ``QValueActor`` (pay attention to the keys ``action``, ``action_value`` and
-# ``chosen_action_value`` after calling the policy).
-
 (
     factor,
     actor,
@@ -301,12 +364,18 @@ def make_model(dummy_env):
     params,
     params_target,
 ) = make_model(dummy_env)
+
+###############################################################################
+# We represent the parameters and targets as flat structures, but unflattening
+# them is quite easy:
+
 params_flat = params.flatten_keys(".")
 params_target_flat = params_target.flatten_keys(".")
 
 ###############################################################################
 # Regular DQN
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# -----------
+#
 # We'll start with a simple implementation of DQN where the returns are
 # computed without bootstrapping, i.e.
 #
@@ -332,8 +401,8 @@ replay_buffer = TensorDictReplayBuffer(
 
 data_collector = MultiaSyncDataCollector(
     [
-        make_env(True, m=m, s=s),
-        make_env(True, m=m, s=s),
+        make_env(parallel=True, observation_norm_state_dict=observation_norm_state_dict),
+        make_env(parallel=True, observation_norm_state_dict=observation_norm_state_dict),
     ],  # 2 collectors, each with an set of `num_workers` environments being run in parallel
     policy=actor_explore,
     frames_per_batch=frames_per_batch,
@@ -347,7 +416,7 @@ data_collector = MultiaSyncDataCollector(
 # Our *optimizer* and the env used for evaluation
 
 optim = torch.optim.Adam(list(params_flat.values()), lr)
-dummy_env = make_env(parallel=False, m=m, s=s)
+dummy_env = make_env(parallel=False, observation_norm_state_dict=observation_norm_state_dict)
 print(actor_explore(dummy_env.reset()))
 
 ###############################################################################
@@ -572,7 +641,7 @@ replay_buffer = TensorDictReplayBuffer(
 )
 
 data_collector = MultiaSyncDataCollector(
-    [make_env(True, m=m, s=s), make_env(True, m=m, s=s)],
+    [make_env(parallel=True, observation_norm_state_dict=observation_norm_state_dict), make_env(parallel=True, observation_norm_state_dict=observation_norm_state_dict)],
     policy=actor_explore,
     frames_per_batch=frames_per_batch,
     total_frames=total_frames,
@@ -584,7 +653,7 @@ data_collector = MultiaSyncDataCollector(
 ###############################################################################
 
 optim = torch.optim.Adam(list(params_flat.values()), lr)
-dummy_env = make_env(parallel=False, m=m, s=s)
+dummy_env = make_env(parallel=False, observation_norm_state_dict=observation_norm_state_dict)
 print(actor_explore(dummy_env.reset()))
 
 ###############################################################################
