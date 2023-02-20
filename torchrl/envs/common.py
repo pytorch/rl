@@ -584,15 +584,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"got {tensordict.batch_size} and {self.batch_size}"
             )
 
-    def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
-        """Performs a random step in the environment given the action_spec attribute.
+    def rand_action(self, tensordict: Optional[TensorDictBase] = None):
+        """Performs a random action given the action_spec attribute.
 
         Args:
-            tensordict (TensorDictBase, optional): tensordict where the resulting info should be written.
+            tensordict (TensorDictBase, optional): tensordict where the resulting action should be written.
 
         Returns:
-            a tensordict object with the new observation after a random step in the environment. The action will
-            be stored with the "action" key.
+            a tensordict object with the "action" entry updated with a random
+            sample from the action-spec.
 
         """
         shape = torch.Size([])
@@ -611,6 +611,20 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
         action = self.action_spec.rand(shape)
         tensordict.set("action", action)
+        return tensordict
+
+    def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
+        """Performs a random step in the environment given the action_spec attribute.
+
+        Args:
+            tensordict (TensorDictBase, optional): tensordict where the resulting info should be written.
+
+        Returns:
+            a tensordict object with the new observation after a random step in the environment. The action will
+            be stored with the "action" key.
+
+        """
+        self.rand_action(tensordict)
         return self.step(tensordict)
 
     @property
@@ -680,7 +694,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if policy is None:
 
             def policy(td):
-                td["action"] = self.action_spec.rand()
+                self.rand_action(td)
                 return td
 
         tensordicts = []
