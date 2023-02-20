@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import functools
-import gc
 
 import torch
 
@@ -15,7 +14,7 @@ from torchrl.envs.utils import classproperty
 IMPORT_ERR = None
 try:
     import habitat
-    import habitat.utils.gym_definitions  # noqa
+    import habitat.gym  # noqa
 
     _has_habitat = True
 except ImportError as err:
@@ -87,6 +86,5 @@ class HabitatEnv(GymEnv):
 
         self._env.close()
         del self._env
-        gc.collect()
         self.rebuild_with_kwargs(**kwargs)
         return super().to(device)

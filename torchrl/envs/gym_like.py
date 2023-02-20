@@ -167,6 +167,12 @@ class GymLikeEnv(_EnvWrapper):
         """
         if isinstance(observations, dict):
             observations = {key: value for key, value in observations.items()}
+            if "state" in observations and "observation" not in observations:
+                # we rename "state" in "observation" as "observation" is the conventional name
+                # for single observation in torchrl.
+                # naming it 'state' will result in envs that have a different name for the state vector
+                # when queried with and without pixels
+                observations["observation"] = observations.pop("state")
         if not isinstance(observations, (TensorDict, dict)):
             (key,) = itertools.islice(self.observation_spec.keys(), 1)
             observations = {key: observations}
@@ -177,7 +183,7 @@ class GymLikeEnv(_EnvWrapper):
         action = tensordict.get("action")
         action_np = self.read_action(action)
 
-        reward = self.reward_spec.zero(self.batch_size)
+        reward = self.reward_spec.zero()
         for _ in range(self.wrapper_frame_skip):
             obs, _reward, done, *info = self._output_transform(
                 self._env.step(action_np)
@@ -200,7 +206,7 @@ class GymLikeEnv(_EnvWrapper):
                 )
 
             if _reward is None:
-                _reward = self.reward_spec.zero(self.batch_size)
+                _reward = self.reward_spec.zero()
 
             reward = self.read_reward(reward, _reward)
 
@@ -254,7 +260,10 @@ class GymLikeEnv(_EnvWrapper):
             for key, item in self.observation_spec.items():
                 if key not in tensordict_out.keys():
                     tensordict_out[key] = item.zero()
-        tensordict_out.set("done", torch.zeros(*self.batch_size, 1, dtype=torch.bool))
+        tensordict_out.set_default(
+            "done",
+            torch.zeros(*self.batch_size, 1, dtype=torch.bool, device=self.device),
+        )
         return tensordict_out
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:

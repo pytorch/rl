@@ -89,19 +89,21 @@ def make_env_transforms(
         env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
-        env.append_transform(FlattenObservation(0, -3))
-        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
-        if stats is None:
+        env.append_transform(FlattenObservation(0, -3, allow_positive_dim=True))
+        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"], dim=-3))
+        if stats is None and obs_norm_state_dict is None:
             obs_stats = {
-                "loc": torch.zeros(env.observation_spec["pixels"].shape),
-                "scale": torch.ones(env.observation_spec["pixels"].shape),
+                "loc": torch.zeros(()),
+                "scale": torch.ones(()),
             }
+        elif stats is None and obs_norm_state_dict is not None:
+            obs_stats = obs_norm_state_dict
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
         obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
-        if obs_norm_state_dict:
-            obs_norm.load_state_dict(obs_norm_state_dict)
+        # if obs_norm_state_dict:
+        #     obs_norm.load_state_dict(obs_norm_state_dict)
         env.append_transform(obs_norm)
     if norm_rewards:
         reward_scaling = 1.0
@@ -125,8 +127,10 @@ def make_env_transforms(
     )
 
     default_dict = {
-        "state": UnboundedContinuousTensorSpec(cfg.state_dim),
-        "belief": UnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
+        "state": UnboundedContinuousTensorSpec(shape=(*env.batch_size, cfg.state_dim)),
+        "belief": UnboundedContinuousTensorSpec(
+            shape=(*env.batch_size, cfg.rssm_hidden_dim)
+        ),
     }
     env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -417,6 +421,6 @@ class EnvConfig:
     # Disables grayscale transform.
     max_frames_per_traj: int = 1000
     # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
-    batch_transform: bool = False
+    batch_transform: bool = True
     # if True, the transforms will be applied to the parallel env, and not to each individual env.\
     image_size: int = 84

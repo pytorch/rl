@@ -2,6 +2,7 @@ import collections
 import math
 import os
 import time
+import warnings
 from functools import wraps
 from importlib import import_module
 
@@ -188,6 +189,9 @@ class implement_for:
     will lead to the explicit error.
     In case of intersected ranges, first fitting implementation is used.
 
+    This wrapper also works to implement different backends for a same function (eg. gym vs gymnasium,
+    numpy vs jax-numpy etc).
+
     Args:
         module_name: version is checked for the module with this name (e.g. "gym").
         from_version: version from which implementation is compatible. Can be open (None).
@@ -196,6 +200,19 @@ class implement_for:
     Examples:
         >>> @implement_for(“gym”, “0.13”, “0.14”)
         >>> def fun(self, x):
+        ...     # Older gym versions will return x + 1
+        ...     return x + 1
+        ...
+        >>> @implement_for(“gym”, “0.14”, None)
+        >>> def fun(self, x):
+        ...     # More recent gym versions will return x + 2
+        ...     return x + 2
+        ...
+        >>> @implement_for(“gymnasium”, “0.27”, None)
+        >>> def fun(self, x):
+        ...     # If gymnasium is to be used instead of gym, x+3 will be returned
+        ...     return x + 3
+        ...
 
         This indicates that the function is compatible with gym 0.13+, but doesn't with gym 0.14+.
     """
@@ -211,31 +228,47 @@ class implement_for:
         self.to_version = to_version
 
     def __call__(self, fn):
-        @wraps(fn)
-        def unsupported():
-            raise ModuleNotFoundError(
-                f"Supported version of '{self.module_name}' has not been found."
-            )
 
         # If the module is missing replace the function with the mock.
-        try:
-            module = import_module(self.module_name)
-        except ModuleNotFoundError:
-            return unsupported
-
         func_name = f"{fn.__module__}.{fn.__name__}"
         implementations = implement_for._implementations
 
+        @wraps(fn)
+        def unsupported(*args, **kwargs):
+            raise ModuleNotFoundError(
+                f"Supported version of '{func_name}' has not been found."
+            )
+
         # Return fitting implementation if it was encountered before.
         if func_name in implementations:
-            return implementations[func_name]
+            try:
+                # check that backends don't conflict
+                module = import_module(self.module_name)
+                version = module.__version__
 
-        version = module.__version__
+                if (self.from_version is None or version >= self.from_version) and (
+                    self.to_version is None or version < self.to_version
+                ):
+                    warnings.warn(
+                        f"Got multiple backends for {func_name}. "
+                        f"Using the last queried ({module} with version {version})."
+                    )
+                else:
+                    return implementations[func_name]
+            except ModuleNotFoundError:
+                # then it's ok, there is no conflict
+                return implementations[func_name]
+        try:
+            module = import_module(self.module_name)
+            version = module.__version__
 
-        if (self.from_version is None or version >= self.from_version) and (
-            self.to_version is None or version < self.to_version
-        ):
-            implementations[func_name] = fn
-            return fn
+            if (self.from_version is None or version >= self.from_version) and (
+                self.to_version is None or version < self.to_version
+            ):
+                implementations[func_name] = fn
+                return fn
+
+        except ModuleNotFoundError:
+            return unsupported
 
         return unsupported

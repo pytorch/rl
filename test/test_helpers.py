@@ -89,15 +89,6 @@ def dreamer_constructor_fixture():
     sys.path.pop()
 
 
-def _assert_keys_match(td, expeceted_keys):
-    td_keys = list(td.keys())
-    d = set(td_keys) - set(expeceted_keys)
-    assert len(d) == 0, f"{d} is in tensordict but unexpected: {td.keys()}"
-    d = set(expeceted_keys) - set(td_keys)
-    assert len(d) == 0, f"{d} is expected but not in tensordict: {td.keys()}"
-    assert len(td_keys) == len(expeceted_keys)
-
-
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.skipif(not _has_tv, reason="No torchvision library found")
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
@@ -152,16 +143,23 @@ def test_dqn_maker(
         else:
             actor(td)
 
-        expected_keys = ["done", "action", "action_value"]
+        expected_keys = [
+            "done",
+            "action",
+            "action_value",
+        ]
         if from_pixels:
-            expected_keys += ["pixels", "pixels_orig"]
+            expected_keys += [
+                "pixels",
+                "pixels_orig",
+            ]
         else:
             expected_keys += ["observation_orig", "observation_vector"]
 
         if not distributional:
             expected_keys += ["chosen_action_value"]
         try:
-            _assert_keys_match(td, expected_keys)
+            assert set(td.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -217,7 +215,11 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
                 actor(td)
         expected_keys = ["done", "action", "param"]
         if from_pixels:
-            expected_keys += ["pixels", "hidden", "pixels_orig"]
+            expected_keys += [
+                "pixels",
+                "hidden",
+                "pixels_orig",
+            ]
         else:
             expected_keys += ["observation_vector", "observation_orig"]
 
@@ -225,7 +227,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
             expected_keys += ["scale", "loc", "_eps_gSDE"]
 
         try:
-            _assert_keys_match(td, expected_keys)
+            assert set(td.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -245,7 +247,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
             value(td)
         expected_keys += ["state_action_value"]
         try:
-            _assert_keys_match(td, expected_keys)
+            assert set(td.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -360,7 +362,7 @@ def test_ppo_maker(
                 actor(td_clone)
 
         try:
-            _assert_keys_match(td_clone, expected_keys)
+            assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -398,7 +400,7 @@ def test_ppo_maker(
         else:
             value(td_clone)
         try:
-            _assert_keys_match(td_clone, expected_keys)
+            assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -514,7 +516,7 @@ def test_a2c_maker(
                 actor(td_clone)
 
         try:
-            _assert_keys_match(td_clone, expected_keys)
+            assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -552,7 +554,7 @@ def test_a2c_maker(
         else:
             value(td_clone)
         try:
-            _assert_keys_match(td_clone, expected_keys)
+            assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -643,7 +645,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
                 torch.testing.assert_close(td_clone.get("action"), tsf_loc)
 
         try:
-            _assert_keys_match(td_clone, expected_keys)
+            assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -667,7 +669,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             expected_keys += ["_eps_gSDE"]
 
         try:
-            _assert_keys_match(td_clone, expected_keys)
+            assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -687,7 +689,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             expected_keys += ["_eps_gSDE"]
 
         try:
-            _assert_keys_match(td, expected_keys)
+            assert set(td.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -756,12 +758,16 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
         if from_pixels:
-            expected_keys += ["hidden", "pixels", "pixels_orig"]
+            expected_keys += [
+                "hidden",
+                "pixels",
+                "pixels_orig",
+            ]
         else:
             expected_keys += ["observation_vector", "observation_orig"]
 
         try:
-            _assert_keys_match(td, expected_keys)
+            assert set(td.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -786,11 +792,15 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
         if from_pixels:
-            expected_keys += ["hidden", "pixels", "pixels_orig"]
+            expected_keys += [
+                "hidden",
+                "pixels",
+                "pixels_orig",
+            ]
         else:
             expected_keys += ["observation_vector", "observation_orig"]
         try:
-            _assert_keys_match(td, expected_keys)
+            assert set(td.keys()) == set(expected_keys)
         except AssertionError:
             proof_environment.close()
             raise
@@ -974,6 +984,9 @@ def test_transformed_env_constructor_with_state_dict(from_pixels):
             use_env_creator=False,
             custom_env_maker=env_maker,
         )()
+        for t in t_env.transform:
+            if isinstance(t, ObservationNorm):
+                t.init_stats(4)
         idx, state_dict = retrieve_observation_norms_state_dict(t_env)[0]
 
         obs_transform = transformed_env_constructor(
@@ -1016,6 +1029,12 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
     t_env.transform = ObservationNorm(standard_normal=True, **stats)
     if composed:
         t_env.append_transform(ObservationNorm(standard_normal=True, **stats))
+    if not initialized:
+        with pytest.raises(
+            ValueError, match="Attempted to use an uninitialized parameter"
+        ):
+            pre_init_state_dict = t_env.transform.state_dict()
+        return
     pre_init_state_dict = t_env.transform.state_dict()
     initialize_observation_norm_transforms(
         proof_environment=t_env, num_iter=100, key=stat_key
@@ -1033,7 +1052,9 @@ def test_initialize_stats_from_non_obs_transform(device):
     env.set_seed(1)
 
     t_env = TransformedEnv(env)
-    t_env.transform = FlattenObservation(first_dim=0, last_dim=-3)
+    t_env.transform = FlattenObservation(
+        first_dim=0, last_dim=-3, allow_positive_dim=True
+    )
     pre_init_state_dict = t_env.transform.state_dict()
     initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
     post_init_state_dict = t_env.transform.state_dict()
@@ -1057,9 +1078,11 @@ def test_retrieve_observation_norms_state_dict(device, composed):
     env.set_seed(1)
 
     t_env = TransformedEnv(env)
-    t_env.transform = ObservationNorm(standard_normal=True)
+    t_env.transform = ObservationNorm(standard_normal=True, loc=0.5, scale=0.2)
     if composed:
-        t_env.append_transform(ObservationNorm(standard_normal=True))
+        t_env.append_transform(
+            ObservationNorm(standard_normal=True, loc=1.0, scale=0.3)
+        )
     initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
     state_dicts = retrieve_observation_norms_state_dict(t_env)
     expected_state_count = 2 if composed else 1
@@ -1067,7 +1090,7 @@ def test_retrieve_observation_norms_state_dict(device, composed):
 
     assert len(state_dicts) == expected_state_count
     for idx, state_dict in enumerate(state_dicts):
-        assert len(state_dict[1]) == 2
+        assert len(state_dict[1]) == 3
         assert state_dict[0] == expected_idx[idx]
 
 

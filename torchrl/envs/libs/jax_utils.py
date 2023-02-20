@@ -96,19 +96,22 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
     return type(object_example)(**t)
 
 
-def _extract_spec(data: Union[torch.Tensor, TensorDictBase]) -> TensorSpec:
+def _extract_spec(data: Union[torch.Tensor, TensorDictBase], key=None) -> TensorSpec:
     if isinstance(data, torch.Tensor):
+        shape = data.shape
+        if key in ("reward", "done"):
+            shape = (*shape, 1)
         if data.dtype in (torch.float, torch.double, torch.half):
             return UnboundedContinuousTensorSpec(
-                shape=data.shape, dtype=data.dtype, device=data.device
+                shape=shape, dtype=data.dtype, device=data.device
             )
         else:
             return UnboundedDiscreteTensorSpec(
-                shape=data.shape, dtype=data.dtype, device=data.device
+                shape=shape, dtype=data.dtype, device=data.device
             )
     elif isinstance(data, TensorDictBase):
         return CompositeSpec(
-            **{key: _extract_spec(value) for key, value in data.items()}
+            {key: _extract_spec(value, key=key) for key, value in data.items()}
         )
     else:
         raise TypeError(f"Unsupported data type {type(data)}")
