@@ -680,7 +680,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if policy is None:
 
             def policy(td):
-                self.rand_step(td)
+                td["action"] = self.action_spec.rand()
                 return td
 
         tensordicts = []
