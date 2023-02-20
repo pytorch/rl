@@ -1,8 +1,23 @@
 from typing import Callable, Optional
 
-import d4rl  # noqa
+GYM_ERR = None
+try:
+    import gym  # noqa
 
-import gym  # noqa
+    _has_gym = True
+except ModuleNotFoundError as err:
+    _has_gym = False
+    GYM_ERR = err
+
+D4RL_ERR = None
+try:
+    import d4rl  # noqa
+
+    _has_d4rl = True
+except ModuleNotFoundError as err:
+    _has_d4rl = False
+    D4RL_ERR = err
+
 import torch
 from tensordict.tensordict import make_tensordict
 
@@ -15,6 +30,30 @@ from torchrl.envs.libs.gym import GymWrapper
 
 class D4RLExperienceReplay(TensorDictReplayBuffer):
     """An Experience replay class for D4RL.
+
+    To install D4RL, follow the instructions on the
+    `official repo <https://github.com/Farama-Foundation/D4RL>`__.
+
+    The replay buffer contains the env specs under D4RLExperienceReplay.specs.
+
+    Args:
+        name (str): the name of the D4RL env to get the data from.
+        storage (Storage, optional): the storage to be used. If none is provided
+            a default ListStorage with max_size of 1_000 will be created.
+        sampler (Sampler, optional): the sampler to be used. If none is provided
+            a default RandomSampler() will be used.
+        writer (Writer, optional): the writer to be used. If none is provided
+            a default RoundRobinWriter() will be used.
+        collate_fn (callable, optional): merges a list of samples to form a
+            mini-batch of Tensor(s)/outputs.  Used when using batched
+            loading from a map-style dataset.
+        pin_memory (bool): whether pin_memory() should be called on the rb
+            samples.
+        prefetch (int, optional): number of next batches to be prefetched
+            using multithreading.
+        transform (Transform, optional): Transform to be executed when sample() is called.
+            To chain transforms use the :obj:`Compose` class.
+        env_kwargs (key-value pairs): additional kwargs for the env.
 
     Examples:
         >>> from torchrl.data.datasets.d4rl import D4RLExperienceReplay
@@ -37,6 +76,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         transform: Optional["Transform"] = None,  # noqa-F821
         **env_kwargs,
     ):
+        if not _has_gym:
+            raise ImportError("Could not import gym") from GYM_ERR
+        if not _has_d4rl:
+            raise ImportError("Could not import d4rl") from D4RL_ERR
         env = GymWrapper(gym.make(name, **env_kwargs))
         dataset = make_tensordict(
             {
