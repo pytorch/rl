@@ -600,7 +600,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = TensorDict(
                 {}, device=self.device, batch_size=self.batch_size, _run_checks=False
             )
-        elif not self.batch_locked and not self.batch_size:
+
+        if not self.batch_locked and not self.batch_size:
             shape = tensordict.shape
         elif not self.batch_locked and tensordict.shape != self.batch_size:
             raise RuntimeError(
@@ -624,7 +625,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             be stored with the "action" key.
 
         """
-        self.rand_action(tensordict)
+        tensordict = self.rand_action(tensordict)
         return self.step(tensordict)
 
     @property
