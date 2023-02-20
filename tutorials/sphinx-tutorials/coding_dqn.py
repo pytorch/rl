@@ -874,7 +874,6 @@ for j, data in enumerate(data_collector):
     data_collector.update_policy_weights_()
 
 
-
 ###############################################################################
 # TD(:math:`\lambda`) performs significantly better than TD(0) because it
 # retrieves a much less biased estimate of the state-action value.
@@ -952,7 +951,6 @@ def plot_both():
     plt.legend()
 
     plt.savefig("dqn.png")
-
 
 
 ###############################################################################
