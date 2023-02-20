@@ -711,7 +711,6 @@ del data_collector
 # ``[Capacity x timesteps]``.
 
 
-from tensordict.tensordict import pad
 from torchrl.objectives.value.functional import vec_td_lambda_advantage_estimate
 
 ###############################################################################
