@@ -22,6 +22,7 @@ control library <https://github.com/Farama-Foundation/Gymnasium>`__.
 Key learnings:
 
 - How to design an environment in TorchRL:
+
   - Writing specs (input, observation and reward);
   - Implementing behaviour: seeding, reset and step.
 - Transforming your environment inputs and outputs, and writing your own
@@ -139,7 +140,7 @@ DEFAULT_Y = 1.0
 #
 # The step method is the first thing to consider, as it will encode
 # the simulation that is of interest to us. In TorchRL, the
-# :class:`torchrl.envs.EnvBase` class has a :func:`EnvBase.step(tensordict)`
+# :class:`torchrl.envs.EnvBase` class has a :func:`EnvBase.step`
 # method that receives a :class:`tensordict.TensorDict`
 # instance with an ``"action"`` entry indicating what action is to be taken.
 #

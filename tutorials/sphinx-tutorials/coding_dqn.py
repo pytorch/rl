@@ -140,7 +140,7 @@ n_optim = 8
 gamma = 0.99
 
 ###############################################################################
-# lambda decay factor (see second the part with TD(:math:`lambda`)
+# lambda decay factor (see second the part with TD(:math:`\lambda`)
 lmbda = 0.95
 
 ###############################################################################
@@ -673,14 +673,14 @@ def plot(logs, name):
         plt.show()
 
 
-# sphinx_gallery_start_ignore
-plot(logs_exp1, "dqn_td0.png")
-# sphinx_gallery_end_ignore
-
 ###############################################################################
 # The performance of the policy can be measured as the length of trajectories.
 # As we can see on the results of the :func:`plot` function, the performance
 # of the policy increases, albeit slowly.
+#
+# .. code-block:: python
+#
+#    plot(logs_exp1, "dqn_td0.png")
 #
 # .. figure:: /_static/img/dqn_td0.png
 #    :alt: Cart Pole results with TD(0)
@@ -692,7 +692,7 @@ del data_collector
 
 ###############################################################################
 # DQN with TD(:math:`\lambda`)
-# ============================
+# ----------------------------
 #
 # We can improve the above algorithm by getting a better estimate of the
 # return, using not only the next state value but the whole sequence of rewards
@@ -874,13 +874,14 @@ for j, data in enumerate(data_collector):
     data_collector.update_policy_weights_()
 
 
-# sphinx_gallery_start_ignore
-plot(logs_exp2, "dqn_tdlambda.png")
-# sphinx_gallery_end_ignore
 
 ###############################################################################
 # TD(:math:`\lambda`) performs significantly better than TD(0) because it
 # retrieves a much less biased estimate of the state-action value.
+#
+# .. code-block:: python
+#
+#    plot(logs_exp2, "dqn_tdlambda.png")
 #
 # .. figure:: /_static/img/dqn_tdlambda.png
 #    :alt: Cart Pole results with TD(lambda)
@@ -953,11 +954,12 @@ def plot_both():
     plt.savefig("dqn.png")
 
 
-# sphinx_gallery_start_ignore
-plot_both()
-# sphinx_gallery_end_ignore
 
 ###############################################################################
+# .. code-block:: python
+#
+#    plot_both()
+#
 # .. figure:: /_static/img/dqn.png
 #    :alt: Cart Pole results from the TD(:math:`lambda`) trained policy.
 #
@@ -992,7 +994,7 @@ del test_env
 #   imageio.mimwrite('cartpole.mp4', eval_rollout["pixels_save"].numpy(), fps=30);
 #
 # .. figure:: /_static/img/cartpole.gif
-#    :alt: Cart Pole results from the TD(:math:`lambda`) trained policy.
+#    :alt: Cart Pole results from the TD(:math:`\lambda`) trained policy.
 
 ###############################################################################
 # Conclusion and possible improvements
@@ -1005,7 +1007,7 @@ del test_env
 # - How to create a policy that picks up the action with the highest value
 #   with :class:`torchrl.modules.QValueNetwork`;
 # - How to build a multiprocessed data collector;
-# - How to train a DQN with TD(:math:`lambda`) returns.
+# - How to train a DQN with TD(:math:`\lambda`) returns.
 #
 # We have seen that using TD(:math:`\lambda`) greatly improved the performance
 # of DQN. Other possible improvements could include:
