@@ -33,11 +33,6 @@ try:
     # Libraries necessary for MultiThreadedEnv
     import envpool
 
-    try:
-        import gym
-    except ModuleNotFoundError:
-        import gymnasium as gym
-
     import treevalue
 
     _has_envpool = True
