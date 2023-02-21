@@ -1,11 +1,18 @@
-from collections import defaultdict
+"""
+Train example with a distributed collector
+==========================================
 
+This script reproduces the PPO example in https://pytorch.org/rl/tutorials/coding_ppo.html
+with a DistributedCollector.
+"""
+
+from collections import defaultdict
 import matplotlib.pyplot as plt
 import ray
 import torch
+from torch import nn
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
-from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.distributed.distributed_collector import DistributedCollector
 from torchrl.data.replay_buffers import ReplayBuffer
@@ -28,13 +35,18 @@ from tqdm import tqdm
 
 if __name__ == "__main__":
 
-    device = "cpu" if not torch.has_cuda else "cuda:0"
+    # 0. Initialize ray cluster
+    ray.init()
+
+    # 1. Define Hyperparameters
+    device = "cpu"  # if not torch.has_cuda else "cuda:0"
     num_cells = 256
     lr = 3e-4
     max_grad_norm = 1.0
     frame_skip = 1
-    frames_per_batch = 1000 // frame_skip
-    total_frames = 1_000_000 // frame_skip
+    num_collectors = 1
+    frames_per_batch = 1000 // num_collectors // frame_skip
+    total_frames = 50_000 // frame_skip
     sub_batch_size = 64
     num_epochs = 10
     clip_epsilon = (
@@ -44,15 +56,8 @@ if __name__ == "__main__":
     lmbda = 0.95
     entropy_eps = 1e-4
 
-    ######################################
-
-    # 0. Initialize ray cluster
-    ray.init()
-
-    ######################################
-
-    base_env = GymEnv("Pendulum-v0", device=device, frame_skip=frame_skip)
-
+    # 2. Define Environment
+    base_env = GymEnv("InvertedDoublePendulum-v4", device=device, frame_skip=frame_skip)
     env = TransformedEnv(
         base_env,
         Compose(
@@ -64,13 +69,10 @@ if __name__ == "__main__":
             StepCounter(),
         ),
     )
-
     env.transform[0].init_stats(num_iter=1000, reduce_dim=0, cat_dim=0)
-    print("normalization constant shape:", env.transform[0].loc.shape)
     check_env_specs(env)
 
-    ######################################
-
+    # 3. Define actor and critic
     actor_net = nn.Sequential(
         nn.LazyLinear(num_cells, device=device),
         nn.Tanh(),
@@ -81,11 +83,9 @@ if __name__ == "__main__":
         nn.LazyLinear(2 * env.action_spec.shape[-1], device=device),
         NormalParamExtractor(),
     )
-
     policy_module = TensorDictModule(
         actor_net, in_keys=["observation"], out_keys=["loc", "scale"]
     )
-
     policy_module = ProbabilisticActor(
         module=policy_module,
         spec=env.action_spec,
@@ -96,7 +96,6 @@ if __name__ == "__main__":
             "max": env.action_spec.space.maximum,
         },
         return_log_prob=True,
-        # we'll need the log-prob for the numerator of the importance weights
     )
 
     value_net = nn.Sequential(
@@ -117,16 +116,14 @@ if __name__ == "__main__":
     policy_module(env.reset())
     value_module(env.reset())
 
-    ######################################
-
+    # 4. Distributed collector
     remote_config = {
         "num_cpus": 1,
         "num_gpus": 0.2,
         "memory": 5 * 1024 ** 3,
         "object_store_memory": 2 * 1024 ** 3
     }
-
-    distributed_collector = DistributedCollector(
+    collector = DistributedCollector(
         collector_class=SyncDataCollector,
         collector_params={
             "create_env_fn": env,
@@ -138,52 +135,55 @@ if __name__ == "__main__":
             "split_trajs": False,
         },
         remote_config=remote_config,
-        num_collectors=3,
+        num_collectors=num_collectors,
         total_frames=total_frames,
         communication="sync",
     )
 
-    ######################################
+    # collector = SyncDataCollector(
+    #     env,
+    #     policy_module,
+    #     frames_per_batch=frames_per_batch,
+    #     total_frames=total_frames,
+    #     split_trajs=False,
+    #     device=device,
+    # )
 
+    # 5. Define replay buffer
     replay_buffer = ReplayBuffer(
-        storage=LazyTensorStorage(frames_per_batch * 2), # TODO: is this correct ?
+        storage=LazyTensorStorage(frames_per_batch * num_collectors),
         sampler=SamplerWithoutReplacement(),
     )
 
-    ######################################
-
+    # 6. Define loss
     advantage_module = GAE(
-        gamma=gamma, lmbda=lmbda, value_network=value_module, average_gae=True
-    )
-
+        gamma=gamma, lmbda=lmbda, value_network=value_module, average_gae=True)
     loss_module = ClipPPOLoss(
         actor=policy_module,
         critic=value_module,
         advantage_key="advantage",
         clip_epsilon=clip_epsilon,
         entropy_bonus=bool(entropy_eps),
-        entropy_coef=entropy_eps,
-        # these keys match by default but we set this for completeness
+        entropy_coef=entropy_eps, # these keys match by default but we set this for completeness
         value_target_key=advantage_module.value_target_key,
         critic_coef=1.0,
         gamma=0.99,
         loss_critic_type="smooth_l1",
     )
 
+    # 7. Define optimizer
     optim = torch.optim.Adam(loss_module.parameters(), lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optim, total_frames // frames_per_batch, 0.0
     )
 
-    ######################################
-
+    # 8. Define training loop
     logs = defaultdict(list)
     pbar = tqdm(total=total_frames * frame_skip)
     eval_str = ""
-
     # We iterate over the distributed_collector until it reaches the total number of frames it was
     # designed to collect:
-    for i, tensordict_data in enumerate(distributed_collector):
+    for i, tensordict_data in enumerate(collector):
         # we now have a batch of data to work with. Let's learn something from it.
         for _ in range(num_epochs):
             # We'll need an "advantage" signal to make PPO work.
@@ -227,7 +227,8 @@ if __name__ == "__main__":
             # it will then execute this policy at each step.
             with set_exploration_mode("mean"), torch.no_grad():
                 # execute a rollout with the trained policy
-                eval_rollout = env.rollout(1000, policy_module)
+                # eval_rollout = env.rollout(1000, policy_module)
+                eval_rollout = env.rollout(1000, collector.local_collector().policy)
                 logs["eval reward"].append(eval_rollout["reward"].mean().item())
                 logs["eval reward (sum)"].append(eval_rollout["reward"].sum().item())
                 logs["eval step_count"].append(eval_rollout["step_count"].max().item())
@@ -239,15 +240,23 @@ if __name__ == "__main__":
         # this is a nice-to-have but nothing necessary for PPO to work.
         scheduler.step()
 
-    ######################################
-
+    # 9. Plot results
     plt.figure(figsize=(10, 10))
-    plt.subplot(1, 1, 1)
+    plt.subplot(2, 2, 1)
     plt.plot(logs["reward"])
     plt.title("training rewards (average)")
+    plt.subplot(2, 2, 2)
+    plt.plot(logs["step_count"])
+    plt.title("Max step count (training)")
+    plt.subplot(2, 2, 3)
+    plt.plot(logs["eval reward (sum)"])
+    plt.title("Return (test)")
+    plt.subplot(2, 2, 4)
+    plt.plot(logs["eval step_count"])
+    plt.title("Max step count (test)")
     save_name = "/tmp/results.jpg"
     plt.savefig(save_name)
+    print(f"results saved in {save_name}")
 
-    ######################################
-
+    # 10. end cluster
     ray.shutdown()

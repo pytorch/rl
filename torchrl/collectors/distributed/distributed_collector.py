@@ -124,8 +124,8 @@ class DistributedCollector(IterableDataset, ABC):
 
         # Create remote instances of the collector class
         self._remote_collectors = []
-        if self.num_collectors > 1:
-            self.add_collectors(self.num_collectors - 1, collector_params)
+        if self.num_collectors > 0:
+            self.add_collectors(self.num_collectors, collector_params)
 
         # Print info of all remote workers
         pending_samples = [e.print_remote_collector_info.remote() for e in self.remote_collectors()]
@@ -167,10 +167,9 @@ class DistributedCollector(IterableDataset, ABC):
         while self.collected_frames < self.total_frames:
 
             # Broadcast agent weights
-            # TODO. is there a cleaner way to get the policy weights ?
             self.local_collector().update_policy_weights_()
-            state_dict = self._local_collector.state_dict()
-            state_dict.pop("env_state_dict")  # We dont need to send the env state
+            state_dict = {"policy_state_dict": self._local_collector.policy.state_dict()}
+            state_dict = ray.put(state_dict)
             for e in self.remote_collectors():
                 e.load_state_dict.remote(**{"state_dict": state_dict, "strict": False})
 
@@ -179,7 +178,7 @@ class DistributedCollector(IterableDataset, ABC):
 
             # Wait for all rollouts
             samples_ready = []
-            while len(samples_ready) < self.num_collectors - 1:
+            while len(samples_ready) < self.num_collectors:
                 samples_ready, samples_not_ready = ray.wait(
                     pending_samples, num_returns=len(pending_samples), timeout=0.001)
 
@@ -218,10 +217,8 @@ class DistributedCollector(IterableDataset, ABC):
             self.collected_frames += out_td.numel()
 
             # Update agent weights
-            # TODO. is there a cleaner way to get the policy weights?
             self.local_collector().update_policy_weights_()
-            state_dict = self._local_collector.state_dict()
-            state_dict.pop("env_state_dict")  # We dont need to send the env state
+            state_dict = {"policy_state_dict": self._local_collector.policy.state_dict()}
             state_dict = ray.put(state_dict)
             w.load_state_dict.remote(**{"state_dict": state_dict, "strict": False})
 
