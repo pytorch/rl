@@ -39,7 +39,7 @@ def collect(rank, rank0_ip):
         init_method=f"tcp://{rank0_ip}:10002",
         rpc_timeout=MAX_TIME_TO_CONNECT,
         _transports=["uv"],
-        devices=[0],
+        # devices=[0],
     )
     # options.set_device_map("TRAINER_NODE", {i: i for i in range(torch.cuda.device_count())})
     print("init rpc")
@@ -99,14 +99,14 @@ class DistributedDataCollector(_DataCollector):
             init_method="tcp://localhost:10002",
             rpc_timeout=10_000,
             _transports=["uv"],
-            devices=[0],
+            # devices=[0],
         )
         self.options = options
         if self.device_maps is not None:
             for i in range(self.num_workers):
                 self.options.set_device_map(
                     f"COLLECTOR_NODE_{i+1}",
-                    {0: 0},
+                    device_maps,
                     )
         print("init rpc")
         rpc.init_rpc(
