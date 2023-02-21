@@ -1205,9 +1205,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             shape=(self.num_workers,),
         )
 
-    def _add_shape_to_spec(
-        self, spec: TensorSpec
-    ) -> TensorSpec:
+    def _add_shape_to_spec(self, spec: TensorSpec) -> TensorSpec:
         return spec.expand((self.num_workers, *spec.shape))
 
     def _get_reward_spec(self) -> TensorSpec:
