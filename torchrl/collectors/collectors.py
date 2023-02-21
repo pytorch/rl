@@ -1221,7 +1221,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     __doc__ += _MultiDataCollector.__doc__
 
-
     # for RPC
     def next(self):
         return super().next()

@@ -91,7 +91,9 @@ class DistributedDataCollector(_DataCollector):
             init_method="tcp://localhost:10002",
             rpc_timeout=10_000,
             _transports=["uv"],
-            device_maps={"COLLECTOR_NODE_{i}": device_maps for i in range(self.num_workers)},
+            device_maps={
+                "COLLECTOR_NODE_{i}": device_maps for i in range(self.num_workers)
+            },
         )
         print("init rpc")
         rpc.init_rpc(
@@ -136,7 +138,7 @@ class DistributedDataCollector(_DataCollector):
             collector_rref = rpc.remote(
                 collector_info,
                 self.collector_class,
-                args=([env_make] * self.num_workers_per_collector, self.policy),
+                args=([env_make] * self.num_workers_per_collector if self.collector_class is not SyncDataCollector else env_make, self.policy),
                 kwargs={
                     "frames_per_batch": self.frames_per_batch,
                     "total_frames": self.total_frames,
