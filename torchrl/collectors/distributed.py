@@ -8,12 +8,9 @@ except ImportError as err:
 else:
     _has_submitit = True
 
+
 class DistributedaSyncDataCollector:
-    def __init__(
-        self,
-        slurm_kwargs,
-        **collector_kwargs
-        ):
+    def __init__(self, slurm_kwargs, **collector_kwargs):
 
         ex = submitit.AutoExecutor(folder)
         ex.update_parameters(mem_gb=1, cpus_per_task=4, timeout_min=5)

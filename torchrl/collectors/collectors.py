@@ -23,7 +23,7 @@ from tensordict.tensordict import TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
-from torchrl._utils import _check_for_faulty_process, prod
+from torchrl._utils import _check_for_faulty_process, prod, accept_remote_rref_udf_invocation
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -242,6 +242,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         return string
 
 
+@accept_remote_rref_udf_invocation
 class SyncDataCollector(_DataCollector):
     """Generic data collector for RL problems. Requires and environment constructor and a policy.
 
@@ -1149,6 +1150,7 @@ also that the state dict is synchronised across processes if needed."""
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
 
 
+@accept_remote_rref_udf_invocation
 class MultiSyncDataCollector(_MultiDataCollector):
     """Runs a given number of DataCollectors on separate processes synchronously.
 
@@ -1300,6 +1302,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         # self._shutdown_main()
 
 
+@accept_remote_rref_udf_invocation
 class MultiaSyncDataCollector(_MultiDataCollector):
     """Runs a given number of DataCollectors on separate processes asynchronously.
 
@@ -1457,6 +1460,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                     self.pipes[idx].send((idx, "continue"))
 
 
+@accept_remote_rref_udf_invocation
 class aSyncDataCollector(MultiaSyncDataCollector):
     """Runs a single DataCollector on a separate process.
 
