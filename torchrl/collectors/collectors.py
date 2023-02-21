@@ -1232,12 +1232,15 @@ class MultiSyncDataCollector(_MultiDataCollector):
     # for RPC
     def next(self):
         return super().next()
+
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         return super().set_seed(seed, static_seed)
+
     # for RPC
     def state_dict(self) -> OrderedDict:
         return super().state_dict()
+
     # for RPC
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         return super().load_state_dict(state_dict)
@@ -1400,12 +1403,15 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     # for RPC
     def next(self):
         return super().next()
+
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         return super().set_seed(seed, static_seed)
+
     # for RPC
     def state_dict(self) -> OrderedDict:
         return super().state_dict()
+
     # for RPC
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         return super().load_state_dict(state_dict)
@@ -1603,12 +1609,15 @@ class aSyncDataCollector(MultiaSyncDataCollector):
     # for RPC
     def next(self):
         return super().next()
+
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         return super().set_seed(seed, static_seed)
+
     # for RPC
     def state_dict(self) -> OrderedDict:
         return super().state_dict()
+
     # for RPC
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         return super().load_state_dict(state_dict)

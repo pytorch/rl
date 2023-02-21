@@ -8,8 +8,12 @@ import submitit
 from torch.distributed import rpc
 
 from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.collectors.collectors import RandomPolicy, MultiSyncDataCollector, \
-    SyncDataCollector, _DataCollector
+from torchrl.collectors.collectors import (
+    _DataCollector,
+    MultiSyncDataCollector,
+    RandomPolicy,
+    SyncDataCollector,
+)
 from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.vec_env import _BatchedEnv
 
@@ -38,7 +42,13 @@ def collect(rank, rank0_ip):
 
 class DistributedDataCollector(_DataCollector):
     def __init__(
-        self, env_makers, policy, collector_class, num_workers_per_collector, frames_per_batch, total_frames
+        self,
+        env_makers,
+        policy,
+        collector_class,
+        num_workers_per_collector,
+        frames_per_batch,
+        total_frames,
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -73,6 +83,7 @@ class DistributedDataCollector(_DataCollector):
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
         )
+        self._init_workers()
 
     def _init_workers(self):
         self.collector_infos = []
@@ -134,15 +145,10 @@ class DistributedDataCollector(_DataCollector):
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         for worker in self.collector_infos:
-            seed = rpc.rpc_sync(
-                worker,
-                self.collector_class.set_seed,
-                args=(seed,)
-            )
-
+            seed = rpc.rpc_sync(worker, self.collector_class.set_seed, args=(seed,))
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
-    # for RPC
+
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
