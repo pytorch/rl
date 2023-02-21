@@ -67,6 +67,7 @@ class DistributedDataCollector(_DataCollector):
         hostname = socket.gethostname()
         IPAddr = socket.gethostbyname(hostname)
         print("IP address", IPAddr)
+        self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(IPAddr)
         os.environ["MASTER_PORT"] = "29500"
         os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
