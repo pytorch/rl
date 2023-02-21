@@ -1369,6 +1369,9 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         kwargs["env_name"] = self.env_name
         kwargs["create_env_kwargs"] = create_env_kwargs
         super().__init__(**kwargs)
+        self.observation_spec = self.observation_spec.expand((*self.batch_size, *self.observation_spec.shape))
+        self.input_spec = self.input_spec.expand((*self.batch_size, *self.input_spec.shape))
+        self.reward_spec = self.reward_spec.expand((*self.batch_size, *self.reward_spec.shape))
 
     def _build_env(
         self,
