@@ -4,6 +4,7 @@ import time
 from typing import OrderedDict
 
 import submitit
+import torch.cuda
 
 from torch.distributed import rpc
 
@@ -36,6 +37,7 @@ def collect(rank, rank0_ip):
         rpc_timeout=MAX_TIME_TO_CONNECT,
         _transports=["uv"],
     )
+    options.set_device_map("TRAINER_NODE", {i: i for i in range(torch.cuda.device_count())})
     print("init rpc")
     rpc.init_rpc(
         f"COLLECTOR_NODE_{rank}",
