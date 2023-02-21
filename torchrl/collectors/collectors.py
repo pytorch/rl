@@ -116,6 +116,8 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
 
 
 class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
+    _iterator = None
+
     def _get_policy_and_device(
         self,
         policy: Optional[
@@ -223,7 +225,12 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             self.policy.load_state_dict(self.get_weights_fn())
 
     def __iter__(self) -> Iterator[TensorDictBase]:
-        return iter(self.iterator())
+        return self.iterator()
+
+    def __next__(self):
+        if self._iterator is None:
+            self._iterator = iter(self)
+        return next(self._iterator)
 
     @abc.abstractmethod
     def iterator(self) -> Iterator[TensorDictBase]:
