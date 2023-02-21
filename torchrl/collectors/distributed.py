@@ -7,8 +7,9 @@ import submitit
 from torch.distributed import rpc
 
 from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.collectors.collectors import RandomPolicy
-from torchrl.envs import EnvCreator, EnvBase
+from torchrl.collectors.collectors import RandomPolicy, MultiSyncDataCollector, \
+    SyncDataCollector, _DataCollector
+from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.vec_env import _BatchedEnv
 
 
@@ -34,13 +35,22 @@ def collect(rank, rank0_ip):
     rpc.shutdown()
 
 
-class DistributedDataCollector:
-    def __init__(self, env_makers, policy, num_envs_per_collector, frames_per_batch, total_frames):
+class DistributedDataCollector(_DataCollector):
+    def __init__(
+        self, env_makers, policy, collector_class, num_workers_per_collector, frames_per_batch, total_frames
+    ):
+        if collector_class == "async":
+            collector_class = MultiaSyncDataCollector
+        elif collector_class == "sync":
+            collector_class = MultiSyncDataCollector
+        elif collector_class == "single":
+            collector_class = SyncDataCollector
+        self.collector_class = collector_class
         self.env_constructors = env_makers
         self.policy = policy
         self.num_workers = len(env_makers)
         self.frames_per_batch = frames_per_batch
-        self.num_envs_per_collector =  num_envs_per_collector
+        self.num_workers_per_collector = num_workers_per_collector
         self.total_frames = total_frames
 
         hostname = socket.gethostname()
@@ -91,8 +101,8 @@ class DistributedDataCollector:
                 env_make = EnvCreator(env_make)
             collector_rref = rpc.remote(
                 collector_info,
-                MultiaSyncDataCollector,
-                args=([env_make] * self.num_envs_per_collector, self.policy),
+                self.collector_class,
+                args=([env_make] * self.num_workers_per_collector, self.policy),
                 kwargs={
                     "frames_per_batch": self.frames_per_batch,
                     "total_frames": self.total_frames,
