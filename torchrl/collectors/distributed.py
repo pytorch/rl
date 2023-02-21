@@ -107,19 +107,20 @@ class DistributedDataCollector(_DataCollector):
             while True:
                 counter += 1
                 time.sleep(1.0)
-                ERR = None
                 try:
                     print("trying to connect to collector node")
                     collector_info = rpc.get_worker_info(f"COLLECTOR_NODE_{i+1}")
                     break
                 except RuntimeError as err:
-                    ERR = err
+                    if counter > 100:
+                        raise RuntimeError(
+                            "Could not connect to remote node"
+                            ) from err
                     continue
-                if counter > 100:
-                    raise RuntimeError("Could not connect to remote node") from ERR
             env_make = self.env_constructors[i]
             if not isinstance(env_make, (EnvBase, EnvCreator)):
                 env_make = EnvCreator(env_make)
+            print("Making collector in remote node")
             collector_rref = rpc.remote(
                 collector_info,
                 self.collector_class,
@@ -130,6 +131,7 @@ class DistributedDataCollector(_DataCollector):
                     "split_trajs": False,
                 },
             )
+            print("Asking for the first batch")
             future = rpc.rpc_async(
                 collector_info, MultiaSyncDataCollector.next, args=(collector_rref,)
             )
