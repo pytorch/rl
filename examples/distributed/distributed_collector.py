@@ -2,7 +2,10 @@
 Example use of a distributed collector
 ======================================
 
-This example illustrates how a TorchRL collector can be converted into a
+This example illustrates how a TorchRL collector can be converted into a distributed collector.
+
+This example should create 3 collector instances, 1 local and 2 remote, but 4 instances seem to
+be created. Why?
 """
 
 import ray
@@ -10,7 +13,7 @@ from torch import nn
 from tensordict.nn import TensorDictModule
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.collectors.collectors import SyncDataCollector
-from torchrl.collectors.distributed import DistributedCollector
+from torchrl.collectors.distributed.distributed_collector import DistributedCollector
 
 if __name__ == "__main__":
 
@@ -20,7 +23,6 @@ if __name__ == "__main__":
     # 1. Create environment
     env_maker = lambda: GymEnv("Pendulum-v0", device="cpu")
     policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
-
 
     # 2. Define distributed collector
     remote_config = {
@@ -57,3 +59,4 @@ if __name__ == "__main__":
         num_frames += batch.shape.numel()
         print(f"batch {counter}, total frames {num_frames}")
     distributed_collector.stop()
+

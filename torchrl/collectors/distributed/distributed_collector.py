@@ -1,9 +1,13 @@
 import torch
+import logging
 from abc import ABC
 from typing import Iterator
 from torch.utils.data import IterableDataset
 from tensordict.tensordict import TensorDictBase
+from ray._private.services import get_node_ip_address
 
+
+logger = logging.getLogger(__name__)
 
 try:
     import ray
@@ -17,6 +21,13 @@ default_remote_config = {
     "memory": 5 * 1024 ** 3,
     "object_store_memory": 2 * 1024 ** 3
 }
+
+
+def print_remote_collector_info(self):
+    """Print some information about the remote collector."""
+    s = f"Created remote collector in machine {get_node_ip_address()} using gpus {ray.get_gpu_ids()}"
+    # logger.warning(s)
+    print(s)
 
 
 @classmethod
@@ -96,6 +107,7 @@ class DistributedCollector(IterableDataset, ABC):
 
         # Monkey patching as_remote to collector class # TODO: is that ok ?
         collector_class.as_remote = as_remote
+        collector_class.print_remote_collector_info = print_remote_collector_info
 
         self.collected_frames = 0
         self.total_frames = total_frames
@@ -114,6 +126,10 @@ class DistributedCollector(IterableDataset, ABC):
         self._remote_collectors = []
         if self.num_collectors > 1:
             self.add_collectors(self.num_collectors - 1, collector_params)
+
+        # Print info of all remote workers
+        pending_samples = [e.print_remote_collector_info.remote() for e in self.remote_collectors()]
+        ray.wait(pending_samples)
 
     @staticmethod
     def _make_collector(cls, collector_params):
