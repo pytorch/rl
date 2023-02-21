@@ -9,6 +9,7 @@ with a DistributedCollector.
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import ray
+import math
 import torch
 from torch import nn
 from tensordict.nn import TensorDictModule
@@ -41,13 +42,13 @@ if __name__ == "__main__":
     # 1. Define Hyperparameters
     device = "cpu"  # if not torch.has_cuda else "cuda:0"
     num_cells = 256
-    lr = 3e-4
     max_grad_norm = 1.0
     frame_skip = 1
-    num_collectors = 1
-    frames_per_batch = 1000 // num_collectors // frame_skip
-    total_frames = 50_000 // frame_skip
-    sub_batch_size = 64
+    num_collectors = 4
+    lr = 3e-4 * math.sqrt(num_collectors)
+    frames_per_batch = 1000 // frame_skip
+    total_frames = 50_000 * num_collectors // frame_skip
+    sub_batch_size = 64 * num_collectors
     num_epochs = 10
     clip_epsilon = (
         0.2
@@ -119,9 +120,9 @@ if __name__ == "__main__":
     # 4. Distributed collector
     remote_config = {
         "num_cpus": 1,
-        "num_gpus": 0.2,
-        "memory": 5 * 1024 ** 3,
-        "object_store_memory": 2 * 1024 ** 3
+        "num_gpus": 0.1,
+        "memory": 1024 ** 3,
+        "object_store_memory": 1024 ** 3
     }
     collector = DistributedCollector(
         collector_class=SyncDataCollector,
@@ -218,22 +219,14 @@ if __name__ == "__main__":
         stepcount_str = f"step count (max): {logs['step_count'][-1]}"
         logs["lr"].append(optim.param_groups[0]["lr"])
         lr_str = f"lr policy: {logs['lr'][-1]: 4.4f}"
-        if i % 10 == 0:
-            # We evaluate the policy once every 10 batches of data.
-            # Evaluation is rather simple: execute the policy without exploration
-            # (take the expected value of the action distribution) for a given
-            # number of steps (1000, which is our env horizon).
-            # The ``rollout`` method of the env can take a policy as argument:
-            # it will then execute this policy at each step.
-            with set_exploration_mode("mean"), torch.no_grad():
-                # execute a rollout with the trained policy
-                # eval_rollout = env.rollout(1000, policy_module)
-                eval_rollout = env.rollout(1000, collector.local_collector().policy)
-                logs["eval reward"].append(eval_rollout["reward"].mean().item())
-                logs["eval reward (sum)"].append(eval_rollout["reward"].sum().item())
-                logs["eval step_count"].append(eval_rollout["step_count"].max().item())
-                eval_str = f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} (init: {logs['eval reward (sum)'][0]: 4.4f}), eval step-count: {logs['eval step_count'][-1]}"
-                del eval_rollout
+        with set_exploration_mode("mean"), torch.no_grad():
+            # execute a rollout with the trained policy
+            eval_rollout = env.rollout(1000, policy_module)
+            logs["eval reward"].append(eval_rollout["reward"].mean().item())
+            logs["eval reward (sum)"].append(eval_rollout["reward"].sum().item())
+            logs["eval step_count"].append(eval_rollout["step_count"].max().item())
+            eval_str = f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} (init: {logs['eval reward (sum)'][0]: 4.4f}), eval step-count: {logs['eval step_count'][-1]}"
+            del eval_rollout
         pbar.set_description(", ".join([eval_str, cum_reward_str, stepcount_str, lr_str]))
 
         # We're also using a learning rate scheduler. Like the gradient clipping,

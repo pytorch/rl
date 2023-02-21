@@ -188,7 +188,10 @@ class DistributedCollector(IterableDataset, ABC):
                 rollouts = ray.get(r)
                 ray.internal.free(r)
                 out_td.append(rollouts)
-            out_td = torch.cat(out_td)
+            if len(rollouts.batch_size):
+                out_td = torch.stack(out_td)
+            else:
+                out_td = torch.cat(out_td)
 
             self.collected_frames += out_td.numel()
 
