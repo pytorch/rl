@@ -91,7 +91,7 @@ class DistributedDataCollector(_DataCollector):
             init_method="tcp://localhost:10002",
             rpc_timeout=10_000,
             _transports=["uv"],
-            device_maps=device_maps,
+            device_maps={"COLLECTOR_NODE_{i}": device_maps for i in range(self.num_workers)},
         )
         print("init rpc")
         rpc.init_rpc(
