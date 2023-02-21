@@ -102,12 +102,12 @@ class DistributedDataCollector(_DataCollector):
             devices=list(range(torch.cuda.device_count())),
         )
         self.options = options
-        if self.device_maps is not None:
-            for i in range(self.num_workers):
-                self.options.set_device_map(
-                    f"COLLECTOR_NODE_{i+1}",
-                    {i: 0},
-                    )
+        # if self.device_maps is not None:
+        #     for i in range(self.num_workers):
+        #         self.options.set_device_map(
+        #             f"COLLECTOR_NODE_{i+1}",
+        #             {i: 0},
+        #             )
         print("init rpc")
         rpc.init_rpc(
             "TRAINER_NODE",
