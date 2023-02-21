@@ -1384,6 +1384,9 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 if _device not in self.postprocs:
                     self.postprocs[_device] = deepcopy(postproc).to(_device)
 
+    def next(self):
+        return super().next()
+
     @property
     def frames_per_batch_worker(self):
         return self.frames_per_batch
