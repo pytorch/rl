@@ -77,6 +77,7 @@ class DistributedDataCollector(_DataCollector):
         self.slurm_kwargs = (
             slurm_kwargs if slurm_kwargs is not None else DEFAULT_SLURM_CONF
         )
+        self.device_maps = device_maps
         self.collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
 
         hostname = socket.gethostname()
@@ -91,10 +92,8 @@ class DistributedDataCollector(_DataCollector):
             init_method="tcp://localhost:10002",
             rpc_timeout=10_000,
             _transports=["uv"],
-            device_maps={
-                "COLLECTOR_NODE_{i}": device_maps for i in range(self.num_workers)
-            },
         )
+        self.options = options
         print("init rpc")
         rpc.init_rpc(
             "TRAINER_NODE",
@@ -116,6 +115,8 @@ class DistributedDataCollector(_DataCollector):
             job = executor.submit(collect, i + 1, self.IPAddr)  # will compute add(5, 7)
             print("job id", job.job_id)  # ID of your job
             self.executors.append(executor)
+            if self.device_maps is not None:
+                self.options.set_device_map(f"COLLECTOR_NODE_{i}", self.device_maps)
 
         for i in range(self.num_workers):
             counter = 0
