@@ -18,6 +18,7 @@ from torchrl.collectors.collectors import (
 from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.vec_env import _BatchedEnv
 
+
 MAX_TIME_TO_CONNECT = 1000
 DEFAULT_SLURM_CONF = {
     "timeout_min": 10,
@@ -28,6 +29,8 @@ DEFAULT_SLURM_CONF = {
 
 
 def collect(rank, rank0_ip):
+    torch.cuda.init()
+
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
@@ -103,7 +106,7 @@ class DistributedDataCollector(_DataCollector):
             for i in range(self.num_workers):
                 self.options.set_device_map(
                     f"COLLECTOR_NODE_{i+1}",
-                    {i: 0},
+                    self.device_maps,
                     )
         print("init rpc")
         rpc.init_rpc(
