@@ -103,7 +103,7 @@ class DistributedDataCollector(_DataCollector):
             for i in range(self.num_workers):
                 self.options.set_device_map(
                     f"COLLECTOR_NODE_{i+1}",
-                    self.device_maps
+                    {i: 0},
                     )
         print("init rpc")
         rpc.init_rpc(
