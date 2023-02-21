@@ -17,6 +17,7 @@ from torchrl.collectors.collectors import (
 from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.vec_env import _BatchedEnv
 
+MAX_TIME_TO_CONNECT = 1000
 DEFAULT_SLURM_CONF = {'timeout_min': 10, 'slurm_partition': "train", 'slurm_cpus_per_task': 32, 'slurm_gpus_per_node': 1}
 def collect(rank, rank0_ip):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
@@ -107,15 +108,16 @@ class DistributedDataCollector(_DataCollector):
 
         for i in range(self.num_workers):
             counter = 0
+            time_interval = 1.0
             while True:
                 counter += 1
-                time.sleep(1.0)
+                time.sleep(time_interval)
                 try:
                     print("trying to connect to collector node")
                     collector_info = rpc.get_worker_info(f"COLLECTOR_NODE_{i+1}")
                     break
                 except RuntimeError as err:
-                    if counter > 100:
+                    if counter*time_interval > MAX_TIME_TO_CONNECT:
                         raise RuntimeError(
                             "Could not connect to remote node"
                             ) from err
