@@ -72,7 +72,8 @@ print(tdreset[0])
 
 ###############################################################################
 # Policy
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^
+#
 # We will design a policy where a backbone reads the "observation" key.
 # Then specific sub-components will ready the "observation_stand" and
 # "observation_walk" keys of the stacked tensordicts, if they are present,
@@ -119,7 +120,8 @@ seq(tdreset)
 
 ###############################################################################
 # Executing diverse tasks in parallel
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
 # We can parallelize the operations if the common keys-value pairs share the
 # same specs (in particular their shape and dtype must match: you can't do the
 # following if the observation shapes are different but are pointed to by the
@@ -174,7 +176,6 @@ print(tdreset)
 print(tdreset[0])
 print(tdreset[1])  # should be different but all have an "action" key
 
-###############################################################################
 
 env.step(tdreset)  # computes actions and execute steps in parallel
 print(tdreset)
@@ -183,7 +184,7 @@ print(tdreset[1])  # next_observation has now been written
 
 ###############################################################################
 # Rollout
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^
 
 td_rollout = env.rollout(100, policy=seq, return_contiguous=False)
 
@@ -194,3 +195,12 @@ td_rollout[:, 0]  # tensordict of the first step: only the common keys are shown
 ###############################################################################
 
 td_rollout[0]  # tensordict of the first env: the stand obs is present
+
+env.close()
+del env
+
+# sphinx_gallery_start_ignore
+import time
+
+time.sleep(10)
+# sphinx_gallery_end_ignore

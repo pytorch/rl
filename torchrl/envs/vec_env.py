@@ -32,7 +32,12 @@ from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 try:
     # Libraries necessary for MultiThreadedEnv
     import envpool
-    import gym
+
+    try:
+        import gym
+    except ModuleNotFoundError:
+        import gymnasium as gym
+
     import treevalue
 
     _has_envpool = True
@@ -1033,7 +1038,7 @@ def _run_worker_pipe_shared_mem(
                 reset_keys = set(_td.keys())
             if pin_memory:
                 _td.pin_memory()
-            tensordict.update_(_td)
+            tensordict.update_(_td.select(*tensordict.keys(), strict=False))
             child_pipe.send(("reset_obs", reset_keys))
 
         elif cmd == "step":

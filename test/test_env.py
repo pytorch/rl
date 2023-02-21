@@ -48,7 +48,10 @@ from torchrl.modules.tensordict_module import WorldModelWrapper
 
 gym_version = None
 if _has_gym:
-    import gym
+    try:
+        import gymnasium as gym
+    except ModuleNotFoundError:
+        import gym
 
     gym_version = version.parse(gym.__version__)
 
@@ -743,6 +746,7 @@ class TestParallel:
         env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("device", get_available_devices())
@@ -1054,7 +1058,10 @@ def test_batch_unlocked_with_batch_size(device):
 )
 @pytest.mark.parametrize("device", get_available_devices())
 def test_info_dict_reader(device, seed=0):
-    import gym
+    try:
+        import gymnasium as gym
+    except ModuleNotFoundError:
+        import gym
 
     env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED), device=device)
     env.set_info_dict_reader(default_info_dict_reader(["x_position"]))

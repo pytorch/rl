@@ -62,7 +62,10 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
                 device=out_split.get("done").device,
             ),
         )
-    MAX = max(*[out_split.shape[0] for out_split in out_splits])
+    if len(out_splits) > 1:
+        MAX = max(*[out_split.shape[0] for out_split in out_splits])
+    else:
+        MAX = out_splits[0].shape[0]
     td = torch.stack(
         [pad(out_split, [0, MAX - out_split.shape[0]]) for out_split in out_splits], 0
     ).contiguous()

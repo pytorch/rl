@@ -595,7 +595,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
                 f"{self.__class__.__name__}.index(...)"
             )
         index = index.nonzero().squeeze()
-        index = index.expand(*tensor_to_index.shape[:-1], index.shape[-1])
+        index = index.expand((*tensor_to_index.shape[:-1], index.shape[-1]))
         return tensor_to_index.gather(-1, index)
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
@@ -618,9 +618,28 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             and self.use_register == other.use_register
         )
 
-    def to_categorical(self) -> DiscreteTensorSpec:
+    def to_categorical(self, val: torch.Tensor, safe: bool = True) -> torch.Tensor:
+        """Converts a given one-hot tensor in categorical format.
+
+        Args:
+            val (torch.Tensor, optional): One-hot tensor to convert in categorical format.
+            safe (bool): boolean value indicating whether a check should be
+                performed on the value against the domain of the spec.
+
+        Returns:
+            The categorical tensor.
+        """
+        if safe:
+            self.assert_is_in(val)
+        return val.argmax(-1)
+
+    def to_categorical_spec(self) -> DiscreteTensorSpec:
+        """Converts the spec to the equivalent categorical spec."""
         return DiscreteTensorSpec(
-            self.space.n, device=self.device, dtype=self.dtype, shape=self.shape[:-1]
+            self.space.n,
+            device=self.device,
+            dtype=self.dtype,
+            shape=self.shape[:-1],
         )
 
 
@@ -679,17 +698,17 @@ class BoundedTensorSpec(TensorSpec):
             if shape is not None and shape != maximum.shape:
                 raise RuntimeError(err_msg)
             shape = maximum.shape
-            minimum = minimum.expand(*shape).clone()
+            minimum = minimum.expand(shape).clone()
         elif minimum.ndimension():
             if shape is not None and shape != minimum.shape:
                 raise RuntimeError(err_msg)
             shape = minimum.shape
-            maximum = maximum.expand(*shape).clone()
+            maximum = maximum.expand(shape).clone()
         elif shape is None:
             raise RuntimeError(err_msg)
         else:
-            minimum = minimum.expand(*shape).clone()
-            maximum = maximum.expand(*shape).clone()
+            minimum = minimum.expand(shape).clone()
+            maximum = maximum.expand(shape).clone()
 
         if minimum.numel() > maximum.numel():
             maximum = maximum.expand_as(minimum).clone()
@@ -1028,7 +1047,7 @@ class BinaryDiscreteTensorSpec(TensorSpec):
                 f" {self.__class__.__name__}.index(...)"
             )
         index = index.nonzero().squeeze()
-        index = index.expand(*tensor_to_index.shape[:-1], index.shape[-1])
+        index = index.expand((*tensor_to_index.shape[:-1], index.shape[-1]))
         return tensor_to_index.gather(-1, index)
 
     def is_in(self, val: torch.Tensor) -> bool:
@@ -1184,13 +1203,6 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             return None
         return val.split(split_sizes, dim=-1)
 
-    def to_numpy(self, val: torch.Tensor, safe: bool = True) -> np.ndarray:
-        if safe:
-            self.assert_is_in(val)
-        vals = self._split(val)
-        out = torch.stack([val.argmax(-1) for val in vals], -1).numpy()
-        return out
-
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
         if not isinstance(index, torch.Tensor):
             raise ValueError(
@@ -1203,7 +1215,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         out = []
         for _index, _tensor_to_index in zip(indices, tensor_to_index):
             _index = _index.nonzero().squeeze()
-            _index = _index.expand(*_tensor_to_index.shape[:-1], _index.shape[-1])
+            _index = _index.expand((*_tensor_to_index.shape[:-1], _index.shape[-1]))
             out.append(_tensor_to_index.gather(-1, _index))
         return torch.cat(out, -1)
 
@@ -1219,8 +1231,24 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         vals = self._split(val)
         return torch.cat([super()._project(_val) for _val in vals], -1)
 
-    def to_categorical(self) -> MultiDiscreteTensorSpec:
+    def to_categorical(self, val: torch.Tensor, safe: bool = True) -> torch.Tensor:
+        """Converts a given one-hot tensor in categorical format.
 
+        Args:
+            val (torch.Tensor, optional): One-hot tensor to convert in categorical format.
+            safe (bool): boolean value indicating whether a check should be
+                performed on the value against the domain of the spec.
+
+        Returns:
+            The categorical tensor.
+        """
+        if safe:
+            self.assert_is_in(val)
+        vals = self._split(val)
+        return torch.stack([val.argmax(-1) for val in vals], -1)
+
+    def to_categorical_spec(self) -> MultiDiscreteTensorSpec:
+        """Converts the spec to the equivalent categorical spec."""
         return MultiDiscreteTensorSpec(
             [_space.n for _space in self.space],
             device=self.device,
@@ -1321,12 +1349,23 @@ class DiscreteTensorSpec(TensorSpec):
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
         return super().to_numpy(val, safe)
 
-    def to_onehot(self) -> OneHotDiscreteTensorSpec:
-        # if len(self.shape) > 1:
-        #     raise RuntimeError(
-        #         f"DiscreteTensorSpec with shape that has several dimensions can't be converted to "
-        #         f"OneHotDiscreteTensorSpec. Got shape={self.shape}."
-        #     )
+    def to_one_hot(self, val: torch.Tensor, safe: bool = True) -> torch.Tensor:
+        """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
+
+        Args:
+            val (torch.Tensor, optional): Tensor to one-hot encode.
+            safe (bool): boolean value indicating whether a check should be
+                performed on the value against the domain of the spec.
+
+        Returns:
+            The one-hot encoded tensor.
+        """
+        if safe:
+            self.assert_is_in(val)
+        return torch.nn.functional.one_hot(val, self.space.n)
+
+    def to_one_hot_spec(self) -> OneHotDiscreteTensorSpec:
+        """Converts the spec to the equivalent one-hot spec."""
         shape = [*self.shape, self.space.n]
         return OneHotDiscreteTensorSpec(
             n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
@@ -1488,17 +1527,41 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         )
         if self.dtype != val.dtype or len(self.shape) > val.ndim or val_have_wrong_dim:
             return False
-
-        return ((val >= torch.zeros(self.nvec.size())) & (val < self.nvec)).all().item()
-
-    def to_onehot(self) -> MultiOneHotDiscreteTensorSpec:
-        if len(self.shape) > 1:
-            raise RuntimeError(
-                f"DiscreteTensorSpec with shape that has several dimensions can't be converted to"
-                f"OneHotDiscreteTensorSpec. Got shape={self.shape}. This could be accomplished via padding or "
-                f"nestedtensors but it is not implemented yet. If you would like to see that feature, please submit "
-                f"an issue of torchrl's github repo. "
+        val_device = val.device
+        return (
+            (
+                (val >= torch.zeros(self.nvec.size(), device=val_device))
+                & (val < self.nvec.to(val_device))
             )
+            .all()
+            .item()
+        )
+
+    def to_one_hot(
+        self, val: torch.Tensor, safe: bool = True
+    ) -> Union[MultiOneHotDiscreteTensorSpec, torch.Tensor]:
+        """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
+
+        Args:
+            val (torch.Tensor, optional): Tensor to one-hot encode.
+            safe (bool): boolean value indicating whether a check should be
+                performed on the value against the domain of the spec.
+
+        Returns:
+            The one-hot encoded tensor.
+        """
+        if safe:
+            self.assert_is_in(val)
+        return torch.cat(
+            [
+                torch.nn.functional.one_hot(val[..., i], n)
+                for i, n in enumerate(self.nvec)
+            ],
+            -1,
+        ).to(self.device)
+
+    def to_one_hot_spec(self) -> MultiOneHotDiscreteTensorSpec:
+        """Converts the spec to the equivalent one-hot spec."""
         nvec = [_space.n for _space in self.space]
         return MultiOneHotDiscreteTensorSpec(
             nvec,
@@ -1941,7 +2004,7 @@ class CompositeSpec(TensorSpec):
             )
         out = CompositeSpec(
             {
-                key: value.expand(*shape, *value.shape[self.ndim :])
+                key: value.expand((*shape, *value.shape[self.ndim :]))
                 for key, value in tuple(self.items())
             },
             shape=shape,
