@@ -59,6 +59,7 @@ class DistributedDataCollector(_DataCollector):
         total_frames,
         slurm_kwargs=None,
         collector_kwargs=None,
+        device_maps=None,
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -90,6 +91,7 @@ class DistributedDataCollector(_DataCollector):
             init_method="tcp://localhost:10002",
             rpc_timeout=10_000,
             _transports=["uv"],
+            device_maps=device_maps,
         )
         print("init rpc")
         rpc.init_rpc(
