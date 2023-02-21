@@ -527,6 +527,33 @@ class SyncDataCollector(_DataCollector):
         """
         return self.env.set_seed(seed, static_seed=static_seed)
 
+    def _iterator_step(self) -> TensorDictBase:
+
+        if not hasattr(self, "_iter"):
+            self._iter = -1
+        if not hasattr(self, "_frames"):
+            self._frames = 0
+
+        self._iter += 1
+        tensordict_out = self.rollout()
+        self._frames += tensordict_out.numel()
+        if self._frames >= self.total_frames:
+            self.env.close()
+
+        if self.split_trajs:
+            tensordict_out = split_trajectories(tensordict_out)
+        if self.postproc is not None:
+            tensordict_out = self.postproc(tensordict_out)
+        if self._exclude_private_keys:
+            excluded_keys = [
+                key for key in tensordict_out.keys() if key.startswith("_")
+            ]
+            tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
+        if self.return_same_td:
+            return tensordict_out
+        else:
+            return tensordict_out.clone()
+
     def iterator(self) -> Iterator[TensorDictBase]:
         """Iterates through the DataCollector.
 

@@ -8,10 +8,8 @@ from tensordict.tensordict import TensorDictBase
 try:
     import ray
     _has_ray = True
-    IMPORT_ERR = ""
 except ImportError as err:
     _has_ray = False
-    IMPORT_ERR = str(err)
 
 default_remote_config = {
     "num_cpus": 1,
@@ -23,7 +21,7 @@ default_remote_config = {
 
 # Doubts:
 #   should backend (e.g. ray, submitit) be an input parameter?
-
+#   Each collector has a different iterator function... how do I generalize over that
 
 @classmethod
 def as_remote(cls,
@@ -92,6 +90,11 @@ class DistributedCollector(IterableDataset, ABC):
                  communication="sync",  # "sync" or "async"
                  ):
 
+        if not _has_ray:
+            raise RuntimeError(
+                f"ray library not found, unable to create a DistributedCollector. "
+            )
+
         if communication not in ("sync", "async"):
             raise ValueError(f"Communication parameter in CollectorSet has to be sync or async.")
 
@@ -151,19 +154,15 @@ class DistributedCollector(IterableDataset, ABC):
 
         while self.collected_frames < self.total_frames:
 
-            # Broadcast weights
-            policy_weights = {}  # TODO. get latest weights
-            latest_weights = ray.put(policy_weights)
-
-            # Update agent weights
-            # TODO. is there a cleaner way to get the policy weights?
+            # Broadcast agent weights
+            # TODO. is there a cleaner way to get the policy weights ?
             state_dict = self._local_collector.state_dict()  # TODO. get latest weights
             state_dict.pop("env_state_dict")  # We dont need to send the env state
             for e in self.remote_collectors():
                 e.load_state_dict.remote(state_dict)
 
             # Ask for batches to all remote workers.
-            pending_samples = [e.rollout.remote() for e in self.remote_collectors()]
+            pending_samples = [e._iterator_step.remote() for e in self.remote_collectors()]
 
             # Wait for all rollouts
             samples_ready = []
@@ -186,7 +185,7 @@ class DistributedCollector(IterableDataset, ABC):
 
         pending_tasks = {}
         for w in self.remote_collectors():
-            future = w.rollout.remote()
+            future = w._iterator_step.remote()
             pending_tasks[future] = w
 
         while self.collected_frames < self.total_frames:
@@ -212,7 +211,7 @@ class DistributedCollector(IterableDataset, ABC):
             w.load_state_dict.remote(state_dict)
 
             # Schedule a new collection task
-            future = w.rollout.remote()
+            future = w._iterator_step.remote()
             pending_tasks[future] = w
 
             yield out_td
@@ -225,7 +224,7 @@ if __name__ == "__main__":
     from tensordict.nn import TensorDictModule
     from torch import nn
 
-    env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+    env_maker = lambda: GymEnv("Pendulum-v0", device="cpu")
     policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
 
     ray.init()
@@ -245,7 +244,7 @@ if __name__ == "__main__":
         },
         remote_config=default_remote_config,
         num_collectors=3,
-        total_frames=1000,
+        total_frames=10000,
         communication="async",
     )
 
@@ -253,4 +252,6 @@ if __name__ == "__main__":
     for batch in distributed_collector:
         counter += 1
         print(f"batch {counter}, shape {batch.shape}")
+        if counter == 1:
+            break
     distributed_collector.stop()
