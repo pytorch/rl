@@ -44,7 +44,7 @@ if __name__ == "__main__":
     num_cells = 256
     max_grad_norm = 1.0
     frame_skip = 1
-    num_collectors = 4
+    num_collectors = 1  # TODO: 1 remote collector works just like in the original scripts, increasing that make the agent learn less
     lr = 3e-4 * math.sqrt(num_collectors)
     frames_per_batch = 1000 // frame_skip
     total_frames = 50_000 * num_collectors // frame_skip
@@ -140,15 +140,6 @@ if __name__ == "__main__":
         total_frames=total_frames,
         communication="sync",
     )
-
-    # collector = SyncDataCollector(
-    #     env,
-    #     policy_module,
-    #     frames_per_batch=frames_per_batch,
-    #     total_frames=total_frames,
-    #     split_trajs=False,
-    #     device=device,
-    # )
 
     # 5. Define replay buffer
     replay_buffer = ReplayBuffer(
