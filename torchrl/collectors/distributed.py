@@ -144,7 +144,7 @@ class DistributedDataCollector(_DataCollector):
             )
             print("Asking for the first batch")
             future = rpc.rpc_async(
-                collector_info, MultiaSyncDataCollector.next, args=(collector_rref,)
+                collector_info, self.collector_class.next, args=(collector_rref,)
             )
 
             self.collector_infos.append(collector_info)
