@@ -47,17 +47,13 @@ class IQLLoss(LossModule):
             `"td_error"`.
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
-        temperature (float, optional): temperature for the TODO
-        expectile (float, optional): expectile for the TODO
-        delay_actor (bool, optional): Whether to separate the target actor
-            networks from the actor networks used for data collection.
-            Default is :obj:`False`.
-        delay_qvalue (bool, optional): Whether to separate the target Q value
-            networks from the Q value networks used for data collection.
-            Default is :obj:`False`.
-        delay_value (bool, optional): Whether to separate the target value
-            networks from the value networks used for data collection.
-            Default is :obj:`False`.
+        temperature (float, optional):  Inverse temperature (beta).
+        For smaller hyperparameter values, the objective behaves similarly to
+        behavioral cloning, while for larger values, it attempts to recover the
+        maximum of the Q-function.
+        expectile (float, optional): expectile τ. A larger value of τ is crucial
+        for antmaze tasks that require dynamical programming ("stichting").
+
     """
 
     def __init__(
@@ -71,8 +67,6 @@ class IQLLoss(LossModule):
         loss_function: str = "smooth_l1",
         temperature: float = 1.0,
         expectile: float = 0.5,
-        delay_actor: bool = False,
-        delay_qvalue: bool = False,
     ) -> None:
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
@@ -83,11 +77,10 @@ class IQLLoss(LossModule):
         self.expectile = expectile
 
         # Actor Network
-        self.delay_actor = delay_actor
         self.convert_to_functional(
             actor_network,
             "actor_network",
-            create_target_params=self.delay_actor,
+            create_target_params=False,
             funs_to_decorate=["forward", "get_dist"],
         )
 
@@ -101,14 +94,14 @@ class IQLLoss(LossModule):
         value_params = list(value_network.parameters())
 
         # Q Function Network
-        self.delay_qvalue = delay_qvalue
+        self.delay_qvalue = True
         self.num_qvalue_nets = num_qvalue_nets
 
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
-            create_target_params=self.delay_qvalue,
+            create_target_params=True,
             compare_against=list(actor_network.parameters()) + value_params,
         )
 
