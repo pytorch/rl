@@ -45,6 +45,7 @@ def collect(rank, rank0_ip):
         rpc_backend_options=options,
     )
     print("waiting...")
+    print("device count", torch.cuda.device_count())
     time.sleep(10_000)
     rpc.shutdown()
 
