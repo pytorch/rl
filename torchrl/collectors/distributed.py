@@ -1,6 +1,7 @@
 import os
 import socket
 import time
+from typing import OrderedDict
 
 import submitit
 
@@ -138,3 +139,10 @@ class DistributedDataCollector(_DataCollector):
                 self.collector_class.set_seed,
                 args=(seed,)
             )
+
+
+    def state_dict(self) -> OrderedDict:
+        raise NotImplementedError
+    # for RPC
+    def load_state_dict(self, state_dict: OrderedDict) -> None:
+        raise NotImplementedError
