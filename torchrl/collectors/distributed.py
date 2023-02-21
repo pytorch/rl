@@ -126,7 +126,15 @@ class DistributedDataCollector(_DataCollector):
                     total_frames += data.numel()
                     self.futures[i] = rpc.rpc_async(
                         self.collector_infos[i],
-                        MultiaSyncDataCollector.next,
+                        self.collector_class.next,
                         args=(self.collector_rrefs[i],),
                     )
                     yield data
+
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+        for worker in self.collector_infos:
+            seed = rpc.rpc_sync(
+                worker,
+                self.collector_class.set_seed,
+                args=(seed,)
+            )

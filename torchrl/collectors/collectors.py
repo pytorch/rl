@@ -1229,6 +1229,19 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def _queue_len(self) -> int:
         return self.num_workers
 
+    # for RPC
+    def next(self):
+        return super().next()
+    # for RPC
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+        return super().set_seed(seed, static_seed)
+    # for RPC
+    def state_dict(self) -> OrderedDict:
+        return super().state_dict()
+    # for RPC
+    def load_state_dict(self, state_dict: OrderedDict) -> None:
+        return super().load_state_dict(state_dict)
+
     def iterator(self) -> Iterator[TensorDictBase]:
         i = -1
         frames = 0
@@ -1384,8 +1397,18 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 if _device not in self.postprocs:
                     self.postprocs[_device] = deepcopy(postproc).to(_device)
 
+    # for RPC
     def next(self):
         return super().next()
+    # for RPC
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+        return super().set_seed(seed, static_seed)
+    # for RPC
+    def state_dict(self) -> OrderedDict:
+        return super().state_dict()
+    # for RPC
+    def load_state_dict(self, state_dict: OrderedDict) -> None:
+        return super().load_state_dict(state_dict)
 
     @property
     def frames_per_batch_worker(self):
@@ -1576,6 +1599,19 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             pin_memory=pin_memory,
             **kwargs,
         )
+
+    # for RPC
+    def next(self):
+        return super().next()
+    # for RPC
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+        return super().set_seed(seed, static_seed)
+    # for RPC
+    def state_dict(self) -> OrderedDict:
+        return super().state_dict()
+    # for RPC
+    def load_state_dict(self, state_dict: OrderedDict) -> None:
+        return super().load_state_dict(state_dict)
 
 
 def _main_async_collector(
