@@ -1,0 +1,59 @@
+"""
+Example use of a distributed collector
+======================================
+
+This example illustrates how a TorchRL collector can be converted into a
+"""
+
+import ray
+from torch import nn
+from tensordict.nn import TensorDictModule
+from torchrl.envs.libs.gym import GymEnv
+from torchrl.collectors.collectors import SyncDataCollector
+from torchrl.collectors.distributed import DistributedCollector
+
+if __name__ == "__main__":
+
+    # 0. Initialize ray cluster
+    ray.init()
+
+    # 1. Create environment
+    env_maker = lambda: GymEnv("Pendulum-v0", device="cpu")
+    policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+
+
+    # 2. Define distributed collector
+    remote_config = {
+        "num_cpus": 1,
+        "num_gpus": 0.2,
+        "memory": 5 * 1024 ** 3,
+        "object_store_memory": 2 * 1024 ** 3
+    }
+    distributed_collector = DistributedCollector(
+        collector_class=SyncDataCollector,
+        collector_params={
+            "create_env_fn": env_maker,
+            "policy": policy,
+            "total_frames": -1,
+            # TODO: maybe automatically set always to -1, DistributedCollector already specifies total frames.
+            "max_frames_per_traj": 50,
+            "frames_per_batch": 200,
+            "init_random_frames": -1,
+            "reset_at_each_iter": False,
+            "device": "cpu",
+            "storing_device": "cpu",
+        },
+        remote_config=remote_config,
+        num_collectors=3,
+        total_frames=10000,
+        communication="async",
+    )
+
+    # Sample batches until reaching total_frames
+    counter = 0
+    num_frames = 0
+    for batch in distributed_collector:
+        counter += 1
+        num_frames += batch.shape.numel()
+        print(f"batch {counter}, total frames {num_frames}")
+    distributed_collector.stop()

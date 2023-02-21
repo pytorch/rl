@@ -19,10 +19,6 @@ default_remote_config = {
 }
 
 
-# Doubts:
-#   should backend (e.g. ray, submitit) be an input parameter?
-#   Each collector has a different iterator function... how do I generalize over that
-
 @classmethod
 def as_remote(cls,
               num_cpus=None,
@@ -31,7 +27,7 @@ def as_remote(cls,
               object_store_memory=None,
               resources=None):
     """
-    Creates an instance of a remote ray FakeCollector.
+    Creates an instance of a remote ray class.
 
     Parameters
     ----------
@@ -50,8 +46,8 @@ def as_remote(cls,
 
     Returns
     -------
-    w : FakeCollector
-        A ray remote FakeCollector class.
+    w : func
+        A function to create ray remote class instances.
     """
     w = ray.remote(
         num_cpus=num_cpus,
@@ -84,9 +80,9 @@ class DistributedCollector(IterableDataset, ABC):
     def __init__(self,
                  collector_class,
                  collector_params,
-                 remote_config=default_remote_config,  # TODO: mutable type as input
+                 remote_config=default_remote_config,  # TODO: mutable type as input, not correct
                  num_collectors=1,
-                 total_frames=1000,
+                 total_frames=1000,  # TODO: is this parameter necessary? it is already specified in each collector.
                  communication="sync",  # "sync" or "async"
                  ):
 
@@ -109,8 +105,8 @@ class DistributedCollector(IterableDataset, ABC):
         self.remote_config = remote_config
         self.communication = communication
 
-        # Create a local instance of the collector class
-        # TODO: can be used to track latest policy weights
+        # Create a local instance of the collector class.
+        # Will be used to track latest policy weights.
         self._local_collector = self._make_collector(
             self.collector_class, collector_params)
 
@@ -156,10 +152,10 @@ class DistributedCollector(IterableDataset, ABC):
 
             # Broadcast agent weights
             # TODO. is there a cleaner way to get the policy weights ?
-            state_dict = self._local_collector.state_dict()  # TODO. get latest weights
+            state_dict = self._local_collector.state_dict()
             state_dict.pop("env_state_dict")  # We dont need to send the env state
             for e in self.remote_collectors():
-                e.load_state_dict.remote(state_dict)
+                e.load_state_dict.remote(**{"state_dict": state_dict, "strict": False})
 
             # Ask for batches to all remote workers.
             pending_samples = [e._iterator_step.remote() for e in self.remote_collectors()]
@@ -167,7 +163,8 @@ class DistributedCollector(IterableDataset, ABC):
             # Wait for all rollouts
             samples_ready = []
             while len(samples_ready) < self.num_collectors - 1:
-                samples_ready, samples_not_ready = ray.wait(pending_samples, num_returns=len(pending_samples), timeout=0.001)
+                samples_ready, samples_not_ready = ray.wait(
+                    pending_samples, num_returns=len(pending_samples), timeout=0.001)
 
             # Retrieve and concatenate Tensordicts
             out_td = []
@@ -205,53 +202,13 @@ class DistributedCollector(IterableDataset, ABC):
 
             # Update agent weights
             # TODO. is there a cleaner way to get the policy weights?
-            state_dict = self._local_collector.state_dict()  # TODO. get latest weights
+            state_dict = self._local_collector.state_dict()
             state_dict.pop("env_state_dict")  # We dont need to send the env state
             state_dict = ray.put(state_dict)
-            w.load_state_dict.remote(state_dict)
+            w.load_state_dict.remote(**{"state_dict": state_dict, "strict": False})
 
             # Schedule a new collection task
             future = w._iterator_step.remote()
             pending_tasks[future] = w
 
             yield out_td
-
-
-if __name__ == "__main__":
-
-    from torchrl.collectors.collectors import SyncDataCollector
-    from torchrl.envs.libs.gym import GymEnv
-    from tensordict.nn import TensorDictModule
-    from torch import nn
-
-    env_maker = lambda: GymEnv("Pendulum-v0", device="cpu")
-    policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
-
-    ray.init()
-
-    distributed_collector = DistributedCollector(
-        collector_class=SyncDataCollector,
-        collector_params={
-            "create_env_fn": env_maker,
-            "policy": policy,
-            "total_frames": 2000,
-            "max_frames_per_traj": 50,
-            "frames_per_batch": 200,
-            "init_random_frames": -1,
-            "reset_at_each_iter": False,
-            "device": "cpu",
-            "storing_device": "cpu",
-        },
-        remote_config=default_remote_config,
-        num_collectors=3,
-        total_frames=10000,
-        communication="async",
-    )
-
-    counter = 0
-    for batch in distributed_collector:
-        counter += 1
-        print(f"batch {counter}, shape {batch.shape}")
-        if counter == 1:
-            break
-    distributed_collector.stop()
