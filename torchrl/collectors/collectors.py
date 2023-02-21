@@ -230,7 +230,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
     def next(self):
         if self._iterator is None:
             self._iterator = iter(self)
-        return next(self._iterator)
+        return next(self._iterator).cpu()
 
     @abc.abstractmethod
     def iterator(self) -> Iterator[TensorDictBase]:
