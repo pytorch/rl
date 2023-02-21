@@ -516,6 +516,10 @@ class SyncDataCollector(_DataCollector):
         self._has_been_done = None
         self._exclude_private_keys = True
 
+    # for RPC
+    def next(self):
+        return super().next()
+
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
 

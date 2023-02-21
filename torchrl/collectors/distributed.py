@@ -138,7 +138,12 @@ class DistributedDataCollector(_DataCollector):
             collector_rref = rpc.remote(
                 collector_info,
                 self.collector_class,
-                args=([env_make] * self.num_workers_per_collector if self.collector_class is not SyncDataCollector else env_make, self.policy),
+                args=(
+                    [env_make] * self.num_workers_per_collector
+                    if self.collector_class is not SyncDataCollector
+                    else env_make,
+                    self.policy,
+                ),
                 kwargs={
                     "frames_per_batch": self.frames_per_batch,
                     "total_frames": self.total_frames,
