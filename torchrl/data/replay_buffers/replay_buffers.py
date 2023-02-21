@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
-from _utils import accept_remote_rref_udf_invocation
+from ..._utils import accept_remote_rref_udf_invocation
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import expand_right
 
