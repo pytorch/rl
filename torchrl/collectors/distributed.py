@@ -37,7 +37,7 @@ def collect(rank, rank0_ip):
         rpc_backend_options=options,
     )
     print("waiting...")
-    time.sleep(100)
+    time.sleep(10_000)
     rpc.shutdown()
 
 
@@ -169,3 +169,6 @@ class DistributedDataCollector(_DataCollector):
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
+
+    def shutdown(self):
+        rpc.shutdown()
