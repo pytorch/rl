@@ -15,6 +15,7 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.collectors.collectors import SyncDataCollector
 from torchrl.collectors.distributed.distributed_collector import DistributedCollector
 
+
 if __name__ == "__main__":
 
     # 0. Initialize ray cluster
@@ -36,8 +37,7 @@ if __name__ == "__main__":
         collector_params={
             "create_env_fn": env_maker,
             "policy": policy,
-            "total_frames": -1,
-            # TODO: maybe automatically set always to -1, DistributedCollector already specifies total frames.
+            "total_frames": -1,  # automatically set always to -1 ? DistributedCollector already specifies total_frames.
             "max_frames_per_traj": 50,
             "frames_per_batch": 200,
             "init_random_frames": -1,
@@ -59,4 +59,6 @@ if __name__ == "__main__":
         num_frames += batch.shape.numel()
         print(f"batch {counter}, total frames {num_frames}")
     distributed_collector.stop()
+
+    ray.shutdown()
 

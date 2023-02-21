@@ -168,6 +168,7 @@ class DistributedCollector(IterableDataset, ABC):
 
             # Broadcast agent weights
             # TODO. is there a cleaner way to get the policy weights ?
+            self.local_collector().update_policy_weights_()
             state_dict = self._local_collector.state_dict()
             state_dict.pop("env_state_dict")  # We dont need to send the env state
             for e in self.remote_collectors():
@@ -218,6 +219,7 @@ class DistributedCollector(IterableDataset, ABC):
 
             # Update agent weights
             # TODO. is there a cleaner way to get the policy weights?
+            self.local_collector().update_policy_weights_()
             state_dict = self._local_collector.state_dict()
             state_dict.pop("env_state_dict")  # We dont need to send the env state
             state_dict = ray.put(state_dict)
