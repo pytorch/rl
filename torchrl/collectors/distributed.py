@@ -18,7 +18,14 @@ from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.vec_env import _BatchedEnv
 
 MAX_TIME_TO_CONNECT = 1000
-DEFAULT_SLURM_CONF = {'timeout_min': 10, 'slurm_partition': "train", 'slurm_cpus_per_task': 32, 'slurm_gpus_per_node': 0}
+DEFAULT_SLURM_CONF = {
+    "timeout_min": 10,
+    "slurm_partition": "train",
+    "slurm_cpus_per_task": 32,
+    "slurm_gpus_per_node": 0,
+}
+
+
 def collect(rank, rank0_ip):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = "29500"
@@ -66,7 +73,9 @@ class DistributedDataCollector(_DataCollector):
         self.frames_per_batch = frames_per_batch
         self.num_workers_per_collector = num_workers_per_collector
         self.total_frames = total_frames
-        self.slurm_kwargs = slurm_kwargs if slurm_kwargs is not None else DEFAULT_SLURM_CONF
+        self.slurm_kwargs = (
+            slurm_kwargs if slurm_kwargs is not None else DEFAULT_SLURM_CONF
+        )
         self.collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
 
         hostname = socket.gethostname()
@@ -99,9 +108,7 @@ class DistributedDataCollector(_DataCollector):
         for i in range(self.num_workers):
             print("Submitting job")
             executor = submitit.AutoExecutor(folder="log_test")
-            executor.update_parameters(
-                **self.slurm_kwargs
-            )
+            executor.update_parameters(**self.slurm_kwargs)
             job = executor.submit(collect, i + 1, self.IPAddr)  # will compute add(5, 7)
             print("job id", job.job_id)  # ID of your job
             self.executors.append(executor)
@@ -117,10 +124,8 @@ class DistributedDataCollector(_DataCollector):
                     collector_info = rpc.get_worker_info(f"COLLECTOR_NODE_{i+1}")
                     break
                 except RuntimeError as err:
-                    if counter*time_interval > MAX_TIME_TO_CONNECT:
-                        raise RuntimeError(
-                            "Could not connect to remote node"
-                            ) from err
+                    if counter * time_interval > MAX_TIME_TO_CONNECT:
+                        raise RuntimeError("Could not connect to remote node") from err
                     continue
             env_make = self.env_constructors[i]
             if not isinstance(env_make, (EnvBase, EnvCreator)):

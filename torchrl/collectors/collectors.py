@@ -1221,13 +1221,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     __doc__ += _MultiDataCollector.__doc__
 
-    @property
-    def frames_per_batch_worker(self):
-        return -(-self.frames_per_batch // self.num_workers)
-
-    @property
-    def _queue_len(self) -> int:
-        return self.num_workers
 
     # for RPC
     def next(self):
@@ -1244,6 +1237,14 @@ class MultiSyncDataCollector(_MultiDataCollector):
     # for RPC
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         return super().load_state_dict(state_dict)
+
+    @property
+    def frames_per_batch_worker(self):
+        return -(-self.frames_per_batch // self.num_workers)
+
+    @property
+    def _queue_len(self) -> int:
+        return self.num_workers
 
     def iterator(self) -> Iterator[TensorDictBase]:
         i = -1
