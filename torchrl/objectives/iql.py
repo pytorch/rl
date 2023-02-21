@@ -73,7 +73,6 @@ class IQLLoss(LossModule):
         expectile: float = 0.5,
         delay_actor: bool = False,
         delay_qvalue: bool = False,
-        delay_value: bool = False,
     ) -> None:
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
@@ -93,11 +92,10 @@ class IQLLoss(LossModule):
         )
 
         # Value Function Network
-        self.delay_value = delay_value
         self.convert_to_functional(
             value_network,
             "value_network",
-            create_target_params=self.delay_value,
+            create_target_params=False,
             compare_against=list(actor_network.parameters()),
         )
         value_params = list(value_network.parameters())
