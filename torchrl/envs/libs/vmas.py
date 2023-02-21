@@ -2,7 +2,11 @@ from typing import Dict, List, Optional
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from torchrl.data import CompositeSpec, DEVICE_TYPING, UnboundedContinuousTensorSpec
+from torchrl.data.tensor_specs import (
+    CompositeSpec,
+    DEVICE_TYPING,
+    UnboundedContinuousTensorSpec,
+)
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 from torchrl.envs.utils import _selective_unsqueeze

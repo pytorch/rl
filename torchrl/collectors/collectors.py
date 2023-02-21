@@ -25,7 +25,7 @@ from torch.utils.data import IterableDataset
 
 from torchrl._utils import _check_for_faulty_process, prod
 from torchrl.collectors.utils import split_trajectories
-from torchrl.data import TensorSpec
+from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import TransformedEnv

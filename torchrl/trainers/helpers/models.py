@@ -10,7 +10,7 @@ from typing import Optional, Sequence
 import torch
 from torch import distributions as d, nn
 
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     UnboundedContinuousTensorSpec,

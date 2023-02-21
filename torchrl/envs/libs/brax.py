@@ -8,7 +8,11 @@ from typing import Dict, Optional, Union
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
+from torchrl.data.tensor_specs import (
+    BoundedTensorSpec,
+    CompositeSpec,
+    UnboundedContinuousTensorSpec,
+)
 from torchrl.envs.common import _EnvWrapper
 
 try:

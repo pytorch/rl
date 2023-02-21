@@ -20,11 +20,12 @@ except ModuleNotFoundError as err:
 
 import torch
 from tensordict.tensordict import make_tensordict
-
-from torchrl.data import CompositeSpec, LazyMemmapStorage
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import Writer
+
+from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.envs.libs.gym import GymWrapper
 
 

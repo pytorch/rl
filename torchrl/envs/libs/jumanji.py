@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DEVICE_TYPING,
