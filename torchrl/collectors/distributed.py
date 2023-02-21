@@ -66,7 +66,7 @@ class DistributedDataCollector(_DataCollector):
         self.num_workers_per_collector = num_workers_per_collector
         self.total_frames = total_frames
         self.slurm_kwargs = slurm_kwargs if slurm_kwargs is not None else DEFAULT_SLURM_CONF
-        self.collector_kwargs = collector_kwargs
+        self.collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
 
         hostname = socket.gethostname()
         IPAddr = socket.gethostbyname(hostname)
@@ -106,7 +106,6 @@ class DistributedDataCollector(_DataCollector):
             self.executors.append(executor)
 
         for i in range(self.num_workers):
-            print("creating the collector")
             counter = 0
             while True:
                 counter += 1
