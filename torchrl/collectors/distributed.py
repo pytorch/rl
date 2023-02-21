@@ -26,7 +26,7 @@ def collect(rank, rank0_ip):
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
         init_method=f"tcp://{rank0_ip}:10002",
-        rpc_timeout=120,
+        rpc_timeout=250,
         _transports=["uv"],
     )
     print("init rpc")
