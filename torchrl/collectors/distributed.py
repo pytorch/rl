@@ -96,6 +96,12 @@ class DistributedDataCollector(_DataCollector):
             _transports=["uv"],
         )
         self.options = options
+        if self.device_maps is not None:
+            for i in range(self.num_workers):
+                self.options.set_device_map(
+                    f"COLLECTOR_NODE_{i+1}",
+                    self.device_maps
+                    )
         print("init rpc")
         rpc.init_rpc(
             "TRAINER_NODE",
@@ -117,8 +123,6 @@ class DistributedDataCollector(_DataCollector):
             job = executor.submit(collect, i + 1, self.IPAddr)  # will compute add(5, 7)
             print("job id", job.job_id)  # ID of your job
             self.executors.append(executor)
-            if self.device_maps is not None:
-                self.options.set_device_map(f"COLLECTOR_NODE_{i}", self.device_maps)
 
         for i in range(self.num_workers):
             counter = 0
