@@ -17,7 +17,7 @@ from torchrl.collectors.collectors import (
 from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.vec_env import _BatchedEnv
 
-
+DEFAULT_SLURM_CONF = {'timeout_min': 10, 'slurm_partition': "train", 'slurm_cpus_per_task': 32, 'slurm_gpus_per_node': 1}
 def collect(rank, rank0_ip):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = "29500"
@@ -49,6 +49,8 @@ class DistributedDataCollector(_DataCollector):
         num_workers_per_collector,
         frames_per_batch,
         total_frames,
+        slurm_kwargs=None,
+        collector_kwargs=None,
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -63,6 +65,8 @@ class DistributedDataCollector(_DataCollector):
         self.frames_per_batch = frames_per_batch
         self.num_workers_per_collector = num_workers_per_collector
         self.total_frames = total_frames
+        self.slurm_kwargs = slurm_kwargs if slurm_kwargs is not None else DEFAULT_SLURM_CONF
+        self.collector_kwargs = collector_kwargs
 
         hostname = socket.gethostname()
         IPAddr = socket.gethostbyname(hostname)
@@ -95,7 +99,7 @@ class DistributedDataCollector(_DataCollector):
             print("Submitting job")
             executor = submitit.AutoExecutor(folder="log_test")
             executor.update_parameters(
-                timeout_min=10, slurm_partition="train", slurm_cpus_per_task=32
+                **self.slurm_kwargs
             )
             job = executor.submit(collect, i + 1, self.IPAddr)  # will compute add(5, 7)
             print("job id", job.job_id)  # ID of your job
@@ -129,6 +133,7 @@ class DistributedDataCollector(_DataCollector):
                     "frames_per_batch": self.frames_per_batch,
                     "total_frames": self.total_frames,
                     "split_trajs": False,
+                    **self.collector_kwargs,
                 },
             )
             print("Asking for the first batch")
