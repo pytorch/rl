@@ -60,14 +60,14 @@ def as_remote(cls,
     w : func
         A function to create ray remote class instances.
     """
-    w = ray.remote(
+    c = ray.remote(
         num_cpus=num_cpus,
         num_gpus=num_gpus,
         memory=memory,
         object_store_memory=object_store_memory,
         resources=resources)(cls)
-    w.is_remote = True
-    return w
+    c.is_remote = True
+    return c
 
 
 class DistributedCollector(IterableDataset, ABC):
@@ -105,7 +105,7 @@ class DistributedCollector(IterableDataset, ABC):
         if communication not in ("sync", "async"):
             raise ValueError(f"Communication parameter in CollectorSet has to be sync or async.")
 
-        # Monkey patching as_remote to collector class # TODO: is that ok ?
+        # Monkey patching as_remote and print_remote_collector_info to collector class # TODO: is that ok ?
         collector_class.as_remote = as_remote
         collector_class.print_remote_collector_info = print_remote_collector_info
 
