@@ -90,6 +90,7 @@ class DistributedDataCollector(_DataCollector):
         self.collector_infos = []
         self.collector_rrefs = []
         self.futures = []
+        self.executors = []
         for i in range(self.num_workers):
             print("Submitting job")
             executor = submitit.AutoExecutor(folder="log_test")
@@ -98,17 +99,24 @@ class DistributedDataCollector(_DataCollector):
             )
             job = executor.submit(collect, i + 1, self.IPAddr)  # will compute add(5, 7)
             print("job id", job.job_id)  # ID of your job
+            self.executors.append(executor)
 
+        for i in range(self.num_workers):
             print("creating the collector")
+            counter = 0
             while True:
+                counter += 1
                 time.sleep(1.0)
+                ERR = None
                 try:
                     print("trying to connect to collector node")
                     collector_info = rpc.get_worker_info(f"COLLECTOR_NODE_{i+1}")
                     break
                 except RuntimeError as err:
-                    print(err)
+                    ERR = err
                     continue
+                if counter > 100:
+                    raise RuntimeError("Could not connect to remote node") from ERR
             env_make = self.env_constructors[i]
             if not isinstance(env_make, (EnvBase, EnvCreator)):
                 env_make = EnvCreator(env_make)
