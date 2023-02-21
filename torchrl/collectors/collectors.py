@@ -223,7 +223,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             self.policy.load_state_dict(self.get_weights_fn())
 
     def __iter__(self) -> Iterator[TensorDictBase]:
-        return self.iterator()
+        return iter(self.iterator())
 
     @abc.abstractmethod
     def iterator(self) -> Iterator[TensorDictBase]:

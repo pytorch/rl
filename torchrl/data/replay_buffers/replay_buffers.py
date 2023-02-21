@@ -9,11 +9,12 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
-from ..._utils import accept_remote_rref_udf_invocation
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import expand_right
 
 from torchrl.data.utils import DEVICE_TYPING
+
+from ..._utils import accept_remote_rref_udf_invocation
 
 from .samplers import PrioritizedSampler, RandomSampler, Sampler
 from .storages import _get_default_collate, ListStorage, Storage

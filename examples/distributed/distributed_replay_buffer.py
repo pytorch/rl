@@ -15,8 +15,8 @@ import time
 
 import torch
 import torch.distributed.rpc as rpc
-from torchrl._utils import accept_remote_rref_invocation
 from tensordict import TensorDict
+from torchrl._utils import accept_remote_rref_invocation
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
