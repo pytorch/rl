@@ -9,11 +9,13 @@ from ray._private.services import get_node_ip_address
 
 logger = logging.getLogger(__name__)
 
+RAY_ERR = None
 try:
     import ray
     _has_ray = True
 except ImportError as err:
     _has_ray = False
+    RAY_ERR = err
 
 default_remote_config = {
     "num_cpus": 1,
