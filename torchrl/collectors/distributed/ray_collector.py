@@ -96,15 +96,15 @@ class RayDistributedCollector(_DataCollector):
     Distributed data collector with Ray (https://docs.ray.io/) backend.
 
     This Python class serves as a ray-based solution to instantiate and coordinate multiple
-    data collectors in a distributed cluster. Like TorchRL non-distributed collector, this
-    collector is an iterable that yields TensorDict until a target number of collected
-    frames is reached and handles distributed data collection under the hood.
+    data collectors in a distributed cluster. Like TorchRL non-distributed collectors, this
+    collector is an iterable that yields TensorDicts until a target number of collected
+    frames is reached, but handles distributed data collection under the hood.
 
     The coordination between collector instances can be specified as synchronous or asynchronous.
     In synchronous coordination, this class waits for all remote collectors to collect a rollout,
-    concatenates all rollouts into a single TensorDict instance and finally yields the  concatenated
+    concatenates all rollouts into a single TensorDict instance and finally yields the concatenated
     data. On the other hand, if the coordination is to be carried out asynchronously, this class
-    provides a seamless the rollouts as they become available from individual remote collectors.
+    provides the rollouts as they become available from individual remote collectors.
 
     Args:
         collector_class (Python Class): class to be remotely instantiated.
