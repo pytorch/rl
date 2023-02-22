@@ -146,7 +146,7 @@ class DistributedCollector(IterableDataset, ABC):
             [self._make_collector(cls, collector_params) for _ in range(num_collectors)])
 
     def local_collector(self):
-        """Return local collector"""
+        """Returns local collector."""
         return self._local_collector
 
     def remote_collectors(self):
