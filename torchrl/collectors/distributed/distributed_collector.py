@@ -93,7 +93,10 @@ class DistributedCollector(IterableDataset, ABC):
     def __init__(self,
                  collector_class,
                  collector_params,
-                 remote_config=default_remote_config,  # TODO: mutable type as input, not correct
+                 remote_config=None,
+...
+    if remote_config is None:
+        remote_config = default_remote_config
                  num_collectors=1,
                  total_frames=1000,  # TODO: is this parameter necessary? it is already specified in each collector.
                  communication="sync",  # "sync" or "async"
