@@ -100,11 +100,22 @@ def distributed_init_collection_node(
         split_trajs=False,
         **collector_kwargs,
     )
+    if not sync:
+        _store = torch.distributed.TCPStore(
+            host_name=rank0_ip,
+            port=int(TCP_PORT),
+            world_size=world_size,
+            is_master=False,
+        )
     for data in collector:
         if sync:
             data.gather_and_stack(dest=0)
         else:
+            _store.set(f"NODE_{rank}_status", "busy")
             data.isend(dst=0)
+            while _store.get(f"NODE_{rank}_status") != "continue":
+                time.sleep(1e-4)
+
     collector.shutdown()
 
 
@@ -213,6 +224,13 @@ class DistributedDataCollector(_DataCollector):
             total_frames=self.total_frames,
             split_trajs=False,
         )
+        if not self._sync:
+            self._store = torch.distributed.TCPStore(
+                host_name=self.IPAddr,
+                port=int(TCP_PORT),
+                world_size=self.num_workers+1,
+                is_master=True,
+            )
         for data in pseudo_collector:
             break
         if not issubclass(self.collector_class, SyncDataCollector):
@@ -396,6 +414,7 @@ class DistributedDataCollector(_DataCollector):
                     for i in range(self.num_workers):
                         if all(_data.is_completed() for _data in trackers[i]):
                             data = self._out_tensordict[i].to_tensordict()
+                            self._store.set(f"NODE_{i+1}_status", "continue")
                             break
             total_frames += data.numel()
             yield data
