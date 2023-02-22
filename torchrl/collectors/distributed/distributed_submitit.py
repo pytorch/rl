@@ -1,6 +1,7 @@
 import os
 import socket
 import time
+from datetime import timedelta
 from typing import OrderedDict
 
 SUBMITIT_ERR = None
@@ -87,7 +88,7 @@ def distributed_init_collection_node(
         backend,
         rank=rank,
         world_size=world_size,
-        timeout=MAX_TIME_TO_CONNECT,
+        timeout=timedelta(MAX_TIME_TO_CONNECT),
         init_method=f"tcp://{rank0_ip}:10003",
     )
     collector = collector_class(
@@ -200,7 +201,7 @@ class DistributedDataCollector(_DataCollector):
             backend,
             rank=0,
             world_size=world_size,
-            timeout=MAX_TIME_TO_CONNECT,
+            timeout=timedelta(MAX_TIME_TO_CONNECT),
             init_method=f"tcp://{self.IPAddr}:10003",
         )
         env_constructor = self.env_constructors[0]
