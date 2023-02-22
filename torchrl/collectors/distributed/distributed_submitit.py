@@ -420,7 +420,7 @@ class DistributedDataCollector(_DataCollector):
                     for i in range(self.num_workers):
                         rank = i+1
                         if all(_data.wait() for _data in trackers[i]):
-                            assert self._store.get(f"NODE_{rank}_status") == "done"
+                            assert self._store.get(f"NODE_{rank}_status") == "done", self._store.get(f"NODE_{rank}_status")
                             data = self._out_tensordict[i].to_tensordict()
                             self._store.set(f"NODE_{rank}_status", "continue")
                             trackers[i] = self._out_tensordict[i].irecv(
