@@ -32,9 +32,10 @@ DEFAULT_SLURM_CONF = {
     "slurm_cpus_per_task": 32,
     "slurm_gpus_per_node": 0,
 }
+TCP_PORT=os.environ.get("TCP_PORT", "10003")
 
 
-def rpc_init_collection_node(rank, rank0_ip, world_size, backend):
+def rpc_init_collection_node(rank, rank0_ip, world_size, ):
     """Sets up RPC on the distant node.
 
     Args:
