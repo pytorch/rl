@@ -8,7 +8,6 @@ This example should create 3 collector instances, 1 local and 2 remote, but 4 in
 be created. Why?
 """
 
-import ray
 from torch import nn
 from tensordict.nn import TensorDictModule
 from torchrl.envs.libs.gym import GymEnv
@@ -17,9 +16,6 @@ from torchrl.collectors.distributed.distributed_collector import DistributedColl
 
 
 if __name__ == "__main__":
-
-    # 0. Initialize ray cluster
-    ray.init()
 
     # 1. Create environment
     env_maker = lambda: GymEnv("Pendulum-v0", device="cpu")
@@ -59,6 +55,4 @@ if __name__ == "__main__":
         num_frames += batch.shape.numel()
         print(f"batch {counter}, total frames {num_frames}")
     distributed_collector.stop()
-
-    ray.shutdown()
 

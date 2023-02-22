@@ -8,7 +8,6 @@ with a DistributedCollector.
 
 from collections import defaultdict
 import matplotlib.pyplot as plt
-import ray
 import math
 import torch
 from torch import nn
@@ -36,8 +35,6 @@ from tqdm import tqdm
 
 if __name__ == "__main__":
 
-    # 0. Initialize ray cluster
-    ray.init()
 
     # 1. Define Hyperparameters
     device = "cpu"  # if not torch.has_cuda else "cuda:0"
@@ -242,5 +239,3 @@ if __name__ == "__main__":
     plt.savefig(save_name)
     print(f"results saved in {save_name}")
 
-    # 10. end cluster
-    ray.shutdown()
