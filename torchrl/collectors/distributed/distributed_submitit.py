@@ -365,6 +365,12 @@ class DistributedDataCollector(_DataCollector):
         else:
             self._init_master_dist(self.num_workers + 1, self.backend)
 
+    def iterator(self):
+        if self.backend.startswith("rcp"):
+            yield from self._iterator_rpc()
+        else:
+            yield from self._iterator_dist()
+
     def _iterator_dist(self):
         total_frames = 0
         while total_frames < self.total_frames:
