@@ -211,12 +211,20 @@ class DistributedDataCollector(_DataCollector):
             self.policy,
             frames_per_batch=self._frames_per_batch_corrected,
             total_frames=self.total_frames,
+            split_trajs=False,
         )
         for data in pseudo_collector:
             break
-        self._out_tensordict = data.expand(
-            (self.num_workers, self.num_workers_per_collector, *data.shape)
-        ).to_tensordict()
+        if not issubclass(self.collector_class, SyncDataCollector):
+            # Multi-data collectors
+            self._out_tensordict = data.expand(
+                (self.num_workers, self.num_workers_per_collector, *data.shape)
+            ).to_tensordict()
+        else:
+            # Multi-data collectors
+            self._out_tensordict = data.expand(
+                (self.num_workers, *data.shape)
+            ).to_tensordict()
 
     def _init_master_rpc(
         self,
