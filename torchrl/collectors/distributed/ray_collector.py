@@ -119,6 +119,7 @@ class RayDistributedCollector(IterableDataset, _DataCollector, ABC):
     """
 
     def __init__(self,
+                 policy,
                  collector_class,
                  collector_params,
                  ray_init_config=None,
@@ -161,10 +162,12 @@ class RayDistributedCollector(IterableDataset, _DataCollector, ABC):
         self.coordination = coordination
 
         # Create a local instance of the collector class.
-        # Will be used to track latest policy weights.
-        self._local_collector = self._make_collector(
-            self.collector_class, collector_params)
-        self.local_collector().is_remote = False
+        # self._local_collector = self._make_collector(
+        #     self.collector_class, collector_params)
+        # self.local_collector().is_remote = False
+
+        # Probably we just need a copy of the policy!
+        self.local_policy = policy
 
         # Create remote instances of the collector class
         self._remote_collectors = []
@@ -212,8 +215,9 @@ class RayDistributedCollector(IterableDataset, _DataCollector, ABC):
         while self.collected_frames < self.total_frames:
 
             # Broadcast agent weights
-            self.local_collector().update_policy_weights_()
-            policy_weights_local_collector = {"policy_state_dict": self._local_collector.policy.state_dict()}
+            # self.local_collector().update_policy_weights_()
+            # policy_weights_local_collector = {"policy_state_dict": self._local_collector.policy.state_dict()}
+            policy_weights_local_collector = {"policy_state_dict": self.local_policy.state_dict()}
             policy_weights_local_collector_ref = ray.put(policy_weights_local_collector)
             for e in self.remote_collectors():
                 e.load_state_dict.remote(**{"state_dict": policy_weights_local_collector_ref, "strict": False})
@@ -268,8 +272,9 @@ class RayDistributedCollector(IterableDataset, _DataCollector, ABC):
             self.collected_frames += out_td.numel()
 
             # Update agent weights
-            self.local_collector().update_policy_weights_()
-            policy_weights_local_collector = {"policy_state_dict": self._local_collector.policy.state_dict()}
+            # self.local_collector().update_policy_weights_()
+            # policy_weights_local_collector = {"policy_state_dict": self._local_collector.policy.state_dict()}
+            policy_weights_local_collector = {"policy_state_dict": self.local_policy.state_dict()}
             policy_weights_local_collector_ref = ray.put(policy_weights_local_collector)
             w.load_state_dict.remote(**{"state_dict": policy_weights_local_collector_ref, "strict": False})
 

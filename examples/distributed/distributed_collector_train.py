@@ -122,6 +122,7 @@ if __name__ == "__main__":
         "object_store_memory": 1024 ** 3
     }
     collector = DistributedCollector(
+        policy=policy_module,
         collector_class=SyncDataCollector,
         collector_params={
             "create_env_fn": env,
