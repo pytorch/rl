@@ -217,7 +217,6 @@ class DistributedDataCollector(_DataCollector):
                 init_collection_node, i + 1, self.IPAddr, self.num_workers + 1
             )
             print("job id", job.job_id)  # ID of your job
-            self.executors.append(executor)
 
         self._init_master(
             self.num_workers + 1,
