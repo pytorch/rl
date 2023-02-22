@@ -50,7 +50,7 @@ def rpc_init_collection_node(rank, rank0_ip, world_size, ):
     # os.environ['TP_SOCKET_IFNAME']='lo'
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
-        init_method=f"tcp://{rank0_ip}:10003",
+        init_method=f"tcp://{rank0_ip}:{TCP_PORT}",
         rpc_timeout=MAX_TIME_TO_CONNECT,
         _transports=["uv"],
         # Currently fails when nodes have more than 0 gpus avail,
@@ -90,7 +90,7 @@ def distributed_init_collection_node(
         rank=rank,
         world_size=world_size,
         timeout=timedelta(MAX_TIME_TO_CONNECT),
-        init_method=f"tcp://{rank0_ip}:10003",
+        init_method=f"tcp://{rank0_ip}:{TCP_PORT}",
     )
     collector = collector_class(
         env_make,
@@ -203,7 +203,7 @@ class DistributedDataCollector(_DataCollector):
             rank=0,
             world_size=world_size,
             timeout=timedelta(MAX_TIME_TO_CONNECT),
-            init_method=f"tcp://{self.IPAddr}:10003",
+            init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
         env_constructor = self.env_constructors[0]
         pseudo_collector = SyncDataCollector(
@@ -231,7 +231,7 @@ class DistributedDataCollector(_DataCollector):
     ):
         options = rpc.TensorPipeRpcBackendOptions(
             num_worker_threads=16,
-            init_method=f"tcp://{self.IPAddr}:10003",
+            init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
             rpc_timeout=10_000,
             _transports=["uv"],
             # Currently fails when nodes have more than 0 gpus avail,
