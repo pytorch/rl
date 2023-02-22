@@ -116,7 +116,7 @@ def distributed_init_collection_node(
             data.gather_and_stack(dest=0)
         else:
             _store.set(f"NODE_{rank}_status", "busy")
-            data.isend(dst=0)
+            data.cpu().isend(dst=0)
             _store.set(f"NODE_{rank}_status", "done")
             while _store.get(f"NODE_{rank}_status") != b"continue":
                 time.sleep(1e-4)
