@@ -256,6 +256,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         cls._inplace_update = _inplace_update
         cls._batch_locked = _batch_locked
         cls._device = None
+        # cached in_keys to be excluded from update when calling step
+        cls._cache_in_keys = None
         return super().__new__(cls)
 
     def __setattr__(self, key, value):
@@ -386,10 +388,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
         tensordict.unlock()
-        # Keys need to be non-nested for tensordict_out.exclude below
-        obs_keys = set(self.observation_spec.keys(nested_keys=False))
+
+        obs_keys = self.observation_spec.keys(nested_keys=False)
+        # we deliberately do not update the input values, but we want to keep track of
+        # new keys considered as "input" by inverse transforms.
+        in_keys = self._get_in_keys_to_exclude(tensordict)
         tensordict_out_select = tensordict_out.select(*obs_keys)
-        tensordict_out = tensordict_out.exclude(*obs_keys, inplace=True)
+        tensordict_out = tensordict_out.exclude(*obs_keys, *in_keys)
         tensordict_out.set("next", tensordict_out_select)
 
         reward = tensordict_out.get("reward")
@@ -435,6 +440,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict.update(tensordict_out, inplace=self._inplace_update)
 
         return tensordict
+
+    def _get_in_keys_to_exclude(self, tensordict):
+        if self._cache_in_keys is None:
+            self._cache_in_keys = list(
+                set(self.input_spec.keys(True)).intersection(
+                    tensordict.keys(True, True)
+                )
+            )
+        return self._cache_in_keys
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise NotImplementedError("EnvBase.forward is not implemented")
@@ -570,6 +584,36 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"got {tensordict.batch_size} and {self.batch_size}"
             )
 
+    def rand_action(self, tensordict: Optional[TensorDictBase] = None):
+        """Performs a random action given the action_spec attribute.
+
+        Args:
+            tensordict (TensorDictBase, optional): tensordict where the resulting action should be written.
+
+        Returns:
+            a tensordict object with the "action" entry updated with a random
+            sample from the action-spec.
+
+        """
+        shape = torch.Size([])
+        if tensordict is None:
+            tensordict = TensorDict(
+                {}, device=self.device, batch_size=self.batch_size, _run_checks=False
+            )
+
+        if not self.batch_locked and not self.batch_size:
+            shape = tensordict.shape
+        elif not self.batch_locked and tensordict.shape != self.batch_size:
+            raise RuntimeError(
+                "The input tensordict and the env have a different batch size: "
+                f"env.batch_size={self.batch_size} and tensordict.batch_size={tensordict.shape}. "
+                f"Non batch-locked environment require the env batch-size to be either empty or to"
+                f" match the tensordict one."
+            )
+        action = self.action_spec.rand(shape)
+        tensordict.set("action", action)
+        return tensordict
+
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
         """Performs a random step in the environment given the action_spec attribute.
 
@@ -581,12 +625,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             be stored with the "action" key.
 
         """
-        if tensordict is None:
-            tensordict = TensorDict(
-                {}, device=self.device, batch_size=self.batch_size, _run_checks=False
-            )
-        action = self.action_spec.rand()
-        tensordict.set("action", action)
+        tensordict = self.rand_action(tensordict)
         return self.step(tensordict)
 
     @property
@@ -627,7 +666,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 Default is :obj:`True`.
             auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
                 policy device before the policy is used. Default is :obj:`False`.
-            break_when_any_done (bool): breaks if any of the done state is True. Default is True.
+            break_when_any_done (bool): breaks if any of the done state is True. If False, a reset() is
+                called on the sub-envs that are done. Default is True.
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if auto_reset is False, an initial
                 tensordict must be provided.
@@ -655,7 +695,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if policy is None:
 
             def policy(td):
-                return td.set("action", self.action_spec.rand())
+                self.rand_action(td)
+                return td
 
         tensordicts = []
         for i in range(max_steps):
@@ -665,6 +706,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device)
             tensordict = self.step(tensordict)
+
             tensordicts.append(tensordict.clone())
             if (
                 break_when_any_done and tensordict.get("done").any()
@@ -675,7 +717,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 keep_other=True,
                 exclude_reward=False,
                 exclude_action=False,
+                exclude_done=False,
             )
+            if not break_when_any_done and tensordict.get("done").any():
+                tensordict["_reset"] = tensordict.get(
+                    "done",
+                    torch.ones(
+                        *tensordict.shape,
+                        1,
+                        dtype=torch.bool,
+                    ),
+                ).squeeze(-1)
+                self.reset(tensordict)
 
             if callback is not None:
                 callback(self, tensordict)
@@ -758,16 +811,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def fake_tensordict(self) -> TensorDictBase:
         """Returns a fake tensordict with key-value pairs that match in shape, device and dtype what can be expected during an environment rollout."""
         input_spec = self.input_spec
-        fake_input = input_spec.zero()
         observation_spec = self.observation_spec
         fake_obs = observation_spec.zero()
+        fake_input = input_spec.zero()
+        # the input and output key may match, but the output prevails
+        # Hence we generate the input, and override using the output
+        fake_in_out = fake_input.clone().update(fake_obs)
         reward_spec = self.reward_spec
         fake_reward = reward_spec.zero()
         fake_td = TensorDict(
             {
-                **fake_obs,
+                **fake_in_out,
                 "next": fake_obs.clone(),
-                **fake_input,
                 "reward": fake_reward,
                 "done": torch.zeros(
                     (*self.batch_size, 1), dtype=torch.bool, device=self.device

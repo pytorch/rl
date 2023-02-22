@@ -131,9 +131,9 @@ def make_policy(env):
 
 
 def _is_consistent_device_type(
-    device_type, policy_device_type, passing_device_type, tensordict_device_type
+    device_type, policy_device_type, storing_device_type, tensordict_device_type
 ):
-    if passing_device_type is None:
+    if storing_device_type is None:
         if device_type is None:
             if policy_device_type is None:
                 return tensordict_device_type == "cpu"
@@ -142,22 +142,22 @@ def _is_consistent_device_type(
 
         return tensordict_device_type == device_type
 
-    return tensordict_device_type == passing_device_type
+    return tensordict_device_type == storing_device_type
 
 
 @pytest.mark.skipif(
     _os_is_windows and _python_is_3_10,
     reason="Windows Access Violation in torch.multiprocessing / BrokenPipeError in multiprocessing.connection",
 )
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("device", ["cuda", "cpu", None])
 @pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
-@pytest.mark.parametrize("passing_device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("storing_device", ["cuda", "cpu", None])
 def test_output_device_consistency(
-    num_env, device, policy_device, passing_device, seed=40
+    num_env, device, policy_device, storing_device, seed=40
 ):
     if (
-        device == "cuda" or policy_device == "cuda" or passing_device == "cuda"
+        device == "cuda" or policy_device == "cuda" or storing_device == "cuda"
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
 
@@ -169,7 +169,7 @@ def test_output_device_consistency(
 
     _device = "cuda:0" if device == "cuda" else device
     _policy_device = "cuda:0" if policy_device == "cuda" else policy_device
-    _passing_device = "cuda:0" if passing_device == "cuda" else passing_device
+    _storing_device = "cuda:0" if storing_device == "cuda" else storing_device
 
     if num_env == 1:
 
@@ -201,12 +201,12 @@ def test_output_device_consistency(
         max_frames_per_traj=2000,
         total_frames=20000,
         device=_device,
-        passing_device=_passing_device,
+        storing_device=_storing_device,
         pin_memory=False,
     )
     for _, d in enumerate(collector):
         assert _is_consistent_device_type(
-            device, policy_device, passing_device, d.device.type
+            device, policy_device, storing_device, d.device.type
         )
         break
 
@@ -220,20 +220,20 @@ def test_output_device_consistency(
         max_frames_per_traj=2000,
         total_frames=20000,
         device=_device,
-        passing_device=_passing_device,
+        storing_device=_storing_device,
         pin_memory=False,
     )
 
     for _, d in enumerate(ccollector):
         assert _is_consistent_device_type(
-            device, policy_device, passing_device, d.device.type
+            device, policy_device, storing_device, d.device.type
         )
         break
 
     ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     if num_env == 1:
@@ -309,7 +309,7 @@ def test_collector_env_reset():
         return GymEnv(PONG_VERSIONED, frame_skip=4)
 
     env = SerialEnv(2, make_env)
-    # env = SerialEnv(3, lambda: GymEnv("CartPole-v1", frame_skip=4))
+    # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
     env.set_seed(0)
     collector = SyncDataCollector(
         env, total_frames=10000, frames_per_batch=10000, split_trajs=False
@@ -331,7 +331,7 @@ def test_collector_env_reset():
     assert _data["reward"].sum(-2).min() == -21
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["vec"])
 def test_collector_done_persist(num_env, env_name, seed=5):
     if num_env == 1:
@@ -381,7 +381,7 @@ def test_collector_done_persist(num_env, env_name, seed=5):
 
 
 @pytest.mark.parametrize("frames_per_batch", [200, 10])
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["vec"])
 def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
     if num_env == 1:
@@ -475,7 +475,7 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 #         ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_collector_batch_size(num_env, env_name, seed=100):
     if num_env == 3 and _os_is_windows:
@@ -498,7 +498,7 @@ def test_collector_batch_size(num_env, env_name, seed=100):
 
     torch.manual_seed(0)
     np.random.seed(0)
-    num_workers = 4
+    num_workers = 2
     frames_per_batch = 20
     ccollector = MultiaSyncDataCollector(
         create_env_fn=[env_fn for _ in range(num_workers)],
@@ -534,7 +534,7 @@ def test_collector_batch_size(num_env, env_name, seed=100):
     ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_concurrent_collector_seed(num_env, env_name, seed=100):
     if num_env == 1:
@@ -581,7 +581,7 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
     ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
     if num_env == 1:
@@ -644,7 +644,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
     collector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("collector_class", [SyncDataCollector, aSyncDataCollector])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
@@ -833,7 +833,7 @@ def test_update_weights(use_async):
         [create_env] * 3,
         policy=policy,
         devices=[torch.device("cuda:0")] * 3,
-        passing_devices=[torch.device("cuda:0")] * 3,
+        storing_devices=[torch.device("cuda:0")] * 3,
     )
     # collect state_dict
     state_dict = collector.state_dict()
@@ -1010,13 +1010,13 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
 
 
 @pytest.mark.parametrize("device", ["cuda", "cpu"])
-@pytest.mark.parametrize("passing_device", ["cuda", "cpu"])
+@pytest.mark.parametrize("storing_device", ["cuda", "cpu"])
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
-def test_collector_device_combinations(device, passing_device):
+def test_collector_device_combinations(device, storing_device):
     if (
         _os_is_windows
         and _python_is_3_10
-        and passing_device == "cuda"
+        and storing_device == "cuda"
         and device == "cuda"
     ):
         pytest.skip("Windows fatal exception: access violation in torch.storage")
@@ -1036,11 +1036,11 @@ def test_collector_device_combinations(device, passing_device):
         max_frames_per_traj=2000,
         total_frames=20000,
         device=device,
-        passing_device=passing_device,
+        storing_device=storing_device,
         pin_memory=False,
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(passing_device)
+    assert batch.device == torch.device(storing_device)
     collector.shutdown()
 
     collector = MultiSyncDataCollector(
@@ -1057,13 +1057,13 @@ def test_collector_device_combinations(device, passing_device):
         devices=[
             device,
         ],
-        passing_devices=[
-            passing_device,
+        storing_devices=[
+            storing_device,
         ],
         pin_memory=False,
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(passing_device)
+    assert batch.device == torch.device(storing_device)
     collector.shutdown()
 
     collector = MultiaSyncDataCollector(
@@ -1080,13 +1080,13 @@ def test_collector_device_combinations(device, passing_device):
         devices=[
             device,
         ],
-        passing_devices=[
-            passing_device,
+        storing_devices=[
+            storing_device,
         ],
         pin_memory=False,
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(passing_device)
+    assert batch.device == torch.device(storing_device)
     collector.shutdown()
 
 
@@ -1100,7 +1100,7 @@ def test_collector_device_combinations(device, passing_device):
     ],
 )
 class TestAutoWrap:
-    num_envs = 3
+    num_envs = 2
 
     @pytest.fixture
     def env_maker(self):

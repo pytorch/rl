@@ -367,10 +367,9 @@ class LazyMemmapStorage(LazyTensorStorage):
             )
         elif is_tensorclass(data):
             out = (
-                data.expand(self.max_size, *data.shape)
-                .clone()
-                .zero_()
-                .memmap_(prefix=self.scratch_dir)
+                data.clone()
+                .expand(self.max_size, *data.shape)
+                .memmap_like(prefix=self.scratch_dir)
                 .to(self.device)
             )
             for key, tensor in sorted(
@@ -384,10 +383,9 @@ class LazyMemmapStorage(LazyTensorStorage):
             # out = TensorDict({}, [self.max_size, *data.shape])
             print("The storage is being created: ")
             out = (
-                data.expand(self.max_size, *data.shape)
-                .to_tensordict()
-                .zero_()
-                .memmap_(prefix=self.scratch_dir)
+                data.clone()
+                .expand(self.max_size, *data.shape)
+                .memmap_like(prefix=self.scratch_dir)
                 .to(self.device)
             )
             for key, tensor in sorted(

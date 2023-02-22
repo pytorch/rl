@@ -149,7 +149,10 @@ def test_dqn_maker(
             "action_value",
         ]
         if from_pixels:
-            expected_keys += ["pixels", "pixels_orig", "_reset"]
+            expected_keys += [
+                "pixels",
+                "pixels_orig",
+            ]
         else:
             expected_keys += ["observation_orig", "observation_vector"]
 
@@ -212,7 +215,11 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
                 actor(td)
         expected_keys = ["done", "action", "param"]
         if from_pixels:
-            expected_keys += ["pixels", "hidden", "pixels_orig", "_reset"]
+            expected_keys += [
+                "pixels",
+                "hidden",
+                "pixels_orig",
+            ]
         else:
             expected_keys += ["observation_vector", "observation_orig"]
 
@@ -354,10 +361,6 @@ def test_ppo_maker(
             else:
                 actor(td_clone)
 
-        if from_pixels:
-            # for CatFrames
-            expected_keys += ["_reset"]
-
         try:
             assert set(td_clone.keys()) == set(expected_keys)
         except AssertionError:
@@ -385,9 +388,6 @@ def test_ppo_maker(
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
         ]
-        if from_pixels:
-            # for CatFrames
-            expected_keys += ["_reset"]
         if shared_mapping:
             expected_keys += ["hidden"]
         if len(gsde):
@@ -497,9 +497,6 @@ def test_a2c_maker(
             "action",
             "sample_log_prob",
         ]
-        if from_pixels:
-            # for CatFrames
-            expected_keys += ["_reset"]
         if action_space == "continuous":
             expected_keys += ["loc", "scale"]
         else:
@@ -545,9 +542,6 @@ def test_a2c_maker(
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
         ]
-        if from_pixels:
-            # for CatFrames
-            expected_keys += ["_reset"]
         if shared_mapping:
             expected_keys += ["hidden"]
         if len(gsde):
@@ -639,9 +633,6 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             "loc",
             "scale",
         ]
-        if from_pixels:
-            # for CatFrames
-            expected_keys += ["_reset"]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
 
@@ -767,7 +758,11 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
         if from_pixels:
-            expected_keys += ["hidden", "pixels", "pixels_orig", "_reset"]
+            expected_keys += [
+                "hidden",
+                "pixels",
+                "pixels_orig",
+            ]
         else:
             expected_keys += ["observation_vector", "observation_orig"]
 
@@ -797,7 +792,11 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
         if from_pixels:
-            expected_keys += ["hidden", "pixels", "pixels_orig", "_reset"]
+            expected_keys += [
+                "hidden",
+                "pixels",
+                "pixels_orig",
+            ]
         else:
             expected_keys += ["observation_vector", "observation_orig"]
         try:
@@ -872,7 +871,6 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "state",
             ("next", "reco_pixels"),
             "next",
-            "_reset",
         }
         assert set(out.keys(True)) == expected_keys
 
@@ -986,6 +984,9 @@ def test_transformed_env_constructor_with_state_dict(from_pixels):
             use_env_creator=False,
             custom_env_maker=env_maker,
         )()
+        for t in t_env.transform:
+            if isinstance(t, ObservationNorm):
+                t.init_stats(4)
         idx, state_dict = retrieve_observation_norms_state_dict(t_env)[0]
 
         obs_transform = transformed_env_constructor(
@@ -1028,6 +1029,12 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
     t_env.transform = ObservationNorm(standard_normal=True, **stats)
     if composed:
         t_env.append_transform(ObservationNorm(standard_normal=True, **stats))
+    if not initialized:
+        with pytest.raises(
+            ValueError, match="Attempted to use an uninitialized parameter"
+        ):
+            pre_init_state_dict = t_env.transform.state_dict()
+        return
     pre_init_state_dict = t_env.transform.state_dict()
     initialize_observation_norm_transforms(
         proof_environment=t_env, num_iter=100, key=stat_key
@@ -1045,7 +1052,9 @@ def test_initialize_stats_from_non_obs_transform(device):
     env.set_seed(1)
 
     t_env = TransformedEnv(env)
-    t_env.transform = FlattenObservation(first_dim=0, last_dim=-3)
+    t_env.transform = FlattenObservation(
+        first_dim=0, last_dim=-3, allow_positive_dim=True
+    )
     pre_init_state_dict = t_env.transform.state_dict()
     initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
     post_init_state_dict = t_env.transform.state_dict()
@@ -1069,9 +1078,11 @@ def test_retrieve_observation_norms_state_dict(device, composed):
     env.set_seed(1)
 
     t_env = TransformedEnv(env)
-    t_env.transform = ObservationNorm(standard_normal=True)
+    t_env.transform = ObservationNorm(standard_normal=True, loc=0.5, scale=0.2)
     if composed:
-        t_env.append_transform(ObservationNorm(standard_normal=True))
+        t_env.append_transform(
+            ObservationNorm(standard_normal=True, loc=1.0, scale=0.3)
+        )
     initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
     state_dicts = retrieve_observation_norms_state_dict(t_env)
     expected_state_count = 2 if composed else 1
@@ -1079,7 +1090,7 @@ def test_retrieve_observation_norms_state_dict(device, composed):
 
     assert len(state_dicts) == expected_state_count
     for idx, state_dict in enumerate(state_dicts):
-        assert len(state_dict[1]) == 2
+        assert len(state_dict[1]) == 3
         assert state_dict[0] == expected_idx[idx]
 
 

@@ -8,17 +8,14 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
-    - gym
     - pygame
-    - gym[accept-rom-license]
-    - gym[atari]
     - moviepy
     - pytest-cov
     - pytest-mock
     - pytest-instafail
+    - pytest-rerunfailures
     - expecttest
     - pyyaml
     - scipy
     - dm_control
     - coverage
-    - envpool

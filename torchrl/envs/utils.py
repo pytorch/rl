@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import pkg_resources
 import torch
@@ -154,7 +155,7 @@ SUPPORTED_LIBRARIES = {
 }
 
 
-def check_env_specs(env, return_contiguous=True, check_dtype=True):
+def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
@@ -171,20 +172,29 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True):
             of inputs/outputs). Defaults to True.
         check_dtype (bool, optional): if False, dtype checks will be skipped.
             Defaults to True.
+        seed (int, optional): for reproducibility, a seed is set.
+
+    Caution: this function resets the env seed. It should be used "offline" to
+    check that an env is adequately constructed, but it may affect the seeding
+    of an experiment and as such should be kept out of training scripts.
+
     """
+    torch.manual_seed(0)
+    env.set_seed(0)
+
     fake_tensordict = env.fake_tensordict().flatten_keys(".")
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
-    # remove private keys
-    real_tensordict = real_tensordict.exclude(
-        *[
-            key
-            for key in real_tensordict.keys(True)
-            if (isinstance(key, str) and key.startswith("_"))
-            or (
-                isinstance(key, tuple) and any(subkey.startswith("_") for subkey in key)
-            )
-        ]
-    )
+    # # remove private keys
+    # real_tensordict = real_tensordict.exclude(
+    #     *[
+    #         key
+    #         for key in real_tensordict.keys(True)
+    #         if (isinstance(key, str) and key.startswith("_"))
+    #         or (
+    #             isinstance(key, tuple) and any(subkey.startswith("_") for subkey in key)
+    #         )
+    #     ]
+    # )
     real_tensordict = real_tensordict.flatten_keys(".")
 
     keys1 = set(fake_tensordict.keys(True))
@@ -220,18 +230,10 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True):
 
     # test dtypes
     real_tensordict = env.rollout(3)  # keep empty structures, for example dict()
-    real_tensordict = real_tensordict.exclude(
-        *[
-            key
-            for key in real_tensordict.keys(True)
-            if (isinstance(key, str) and key.startswith("_"))
-            or (
-                isinstance(key, tuple) and any(subkey.startswith("_") for subkey in key)
-            )
-        ]
-    )
     for key, value in real_tensordict[..., -1].items():
         _check_isin(key, value, env.observation_spec, env.input_spec)
+
+    print("check_env_specs succeeded!")
 
 
 def _check_isin(key, value, obs_spec, input_spec):
@@ -287,3 +289,9 @@ class classproperty:
 
     def __get__(self, owner_self, owner_cls):
         return self.fget(owner_cls)
+
+
+def _sort_keys(element):
+    if isinstance(element, tuple):
+        return "_-|-_".join(element)
+    return element

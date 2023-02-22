@@ -38,7 +38,9 @@ try:
 
 except ImportError as err:
     _has_dmc = False
-    IMPORT_ERR = str(err)
+    IMPORT_ERR = err
+else:
+    IMPORT_ERR = None
 
 __all__ = ["DMControlEnv", "DMControlWrapper"]
 
@@ -299,10 +301,8 @@ class DMControlEnv(DMControlWrapper):
     def __init__(self, env_name, task_name, **kwargs):
         if not _has_dmc:
             raise ImportError(
-                f"""dm_control python package was not found. Please install this dependency.
-(Got the error message: {IMPORT_ERR}).
-"""
-            )
+                "dm_control python package was not found. Please install this dependency."
+            ) from IMPORT_ERR
         kwargs["env_name"] = env_name
         kwargs["task_name"] = task_name
         super().__init__(**kwargs)

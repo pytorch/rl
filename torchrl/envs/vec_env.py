@@ -32,13 +32,14 @@ from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 try:
     # Libraries necessary for MultiThreadedEnv
     import envpool
-    import gym
+
     import treevalue
 
     _has_envpool = True
 except ImportError as err:
     _has_envpool = False
     IMPORT_ERR_ENVPOOL = err
+from torchrl.envs.utils import _sort_keys
 
 
 def _check_start(fun):
@@ -52,12 +53,6 @@ def _check_start(fun):
         return fun(self, *args, **kwargs)
 
     return decorated_fun
-
-
-def _sort_keys(element):
-    if isinstance(element, tuple):
-        return "_-|-_".join(element)
-    return element
 
 
 class _dispatch_caller_parallel:
@@ -176,6 +171,7 @@ class _BatchedEnv(EnvBase):
 
         super().__init__(device=None)
         self.is_closed = True
+        self._cache_in_keys = None
 
         self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
@@ -256,6 +252,15 @@ class _BatchedEnv(EnvBase):
         else:
             for _kwargs, _new_kwargs in zip(self.create_env_kwargs, kwargs):
                 _kwargs.update(_new_kwargs)
+
+    def _get_in_keys_to_exclude(self, tensordict):
+        if self._cache_in_keys is None:
+            self._cache_in_keys = list(
+                set(self.input_spec.keys(True)).intersection(
+                    tensordict.keys(True, True)
+                )
+            )
+        return self._cache_in_keys
 
     def _set_properties(self):
         meta_data = self.meta_data
@@ -435,7 +440,7 @@ class _BatchedEnv(EnvBase):
                 self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
             if not len(self.env_input_keys):
                 raise RuntimeError(
-                    f"found 0 action keys in {sorted(self.selected_keys,key=_sort_keys)}"
+                    f"found 0 action keys in {sorted(self.selected_keys, key=_sort_keys)}"
                 )
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
@@ -595,18 +600,25 @@ class SerialEnv(_BatchedEnv):
         tensordict: TensorDict,
     ) -> TensorDict:
         self._assert_tensordict_shape(tensordict)
-
-        tensordict_in = tensordict.select(
-            *self.env_input_keys,
-            strict=False,
+        tensordict_in = tensordict.clone(False)
+        # update the shared tensordict to keep the input entries up-to-date
+        self.shared_tensordict_parent.update_(
+            tensordict_in.select(*self.input_spec.keys(), strict=False)
         )
-        tensordict_out = []
+        # If a key is both in input and output spec, we should keep it because it has been modified
+        input_keys = set(self.input_spec.keys(True)) - set(
+            self.observation_spec.keys(True)
+        )
         for i in range(self.num_workers):
-            _tensordict_out = self._envs[i]._step(tensordict_in[i])
-            tensordict_out.append(_tensordict_out)
+            # shared_tensordicts are locked, and we need to select the keys since we update in-place.
+            # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
+            out_td = self._envs[i]._step(tensordict_in[i])
+            out_td = out_td.exclude(*input_keys)
+            out_td = out_td.select(*self.shared_tensordicts[i].keys(), strict=False)
+            self.shared_tensordicts[i].update_(out_td)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return torch.stack(tensordict_out, 0).clone()
+        return self.shared_tensordict_parent.clone()
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
@@ -776,10 +788,7 @@ class ParallelEnv(_BatchedEnv):
         self._assert_tensordict_shape(tensordict)
 
         self.shared_tensordict_parent.update_(
-            tensordict.select(
-                *self.env_input_keys,
-                strict=False,
-            )
+            tensordict.select(*self.input_spec.keys(), strict=False)
         )
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
@@ -1024,17 +1033,22 @@ def _run_worker_pipe_shared_mem(
                 reset_keys = set(_td.keys())
             if pin_memory:
                 _td.pin_memory()
-            tensordict.update_(_td)
+            tensordict.update_(_td.select(*tensordict.keys(), strict=False))
             child_pipe.send(("reset_obs", reset_keys))
 
         elif cmd == "step":
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            _td = tensordict.select(
-                *env_input_keys,
-                strict=False,
-            )
+            if _td is not None:
+                _td = _td.update(
+                    tensordict.select(
+                        *env_input_keys,
+                        strict=False,
+                    ),
+                )
+            else:
+                _td = tensordict.clone(recurse=False)
             _td = env._step(_td)
             if step_keys is None:
                 step_keys = set(env.observation_spec.keys()).union(
@@ -1162,66 +1176,36 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         # DM_Control-compatible specs as env.spec.action_spec(). We use the Gym ones.
 
         # Gym specs produced by EnvPool don't contain batch_size, we add it to satisfy checks in EnvBase
-        action_spec = self._add_shape_to_spec(self._env.spec.action_space)
-        transformed_spec = _gym_to_torchrl_spec_transform(
-            action_spec,
+        action_spec = _gym_to_torchrl_spec_transform(
+            self._env.spec.action_space,
             device=self.device,
             categorical_action_encoding=True,
         )
-        if not transformed_spec.shape:
-            transformed_spec.shape = (self.num_workers,)
+        action_spec = self._add_shape_to_spec(action_spec)
         return CompositeSpec(
-            action=transformed_spec,
-            shape=transformed_spec.shape,
+            action=action_spec,
+            shape=(self.num_workers,),
         )
 
     def _get_observation_spec(self) -> TensorSpec:
         # Gym specs produced by EnvPool don't contain batch_size, we add it to satisfy checks in EnvBase
-        obs_spec = self._add_shape_to_spec(self._env.spec.observation_space)
         observation_spec = _gym_to_torchrl_spec_transform(
-            obs_spec,
+            self._env.spec.observation_space,
             device=self.device,
             categorical_action_encoding=True,
         )
-        if isinstance(observation_spec, CompositeSpec):
-            observation_spec.shape = (self.num_workers,)
+        observation_spec = self._add_shape_to_spec(observation_spec)
         return CompositeSpec(
             observation=observation_spec,
-            shape=observation_spec.shape,
+            shape=(self.num_workers,),
         )
 
-    def _add_shape_to_spec(
-        self, spec: gym.spaces.space.Space
-    ) -> gym.spaces.space.Space:
-        if isinstance(spec, gym.spaces.Box):
-            return gym.spaces.Box(
-                low=np.stack([spec.low] * self.num_workers),
-                high=np.stack([spec.high] * self.num_workers),
-                dtype=spec.dtype,
-                shape=(self.num_workers, *spec.shape),
-            )
-        if isinstance(spec, gym.spaces.dict.Dict):
-            spec_dict = {}
-            for key in spec.keys():
-                if isinstance(spec[key], gym.spaces.Box):
-                    spec_dict[key] = gym.spaces.Box(
-                        low=np.stack([spec[key].low] * self.num_workers),
-                        high=np.stack([spec[key].high] * self.num_workers),
-                        dtype=spec[key].dtype,
-                        shape=(self.num_workers, *spec[key].shape),
-                    )
-                elif isinstance(spec[key], gym.spaces.dict.Dict):
-                    # If needed, we could add support by applying this function recursively
-                    raise TypeError("Nested specs with depth > 1 are not supported.")
-            return spec_dict
-        if isinstance(spec, gym.spaces.discrete.Discrete):
-            # Discrete spec in Gym doesn't have shape, so nothing to change
-            return spec
-        raise TypeError(f"Unsupported spec type {spec.__class__}.")
+    def _add_shape_to_spec(self, spec: TensorSpec) -> TensorSpec:
+        return spec.expand((self.num_workers, *spec.shape))
 
     def _get_reward_spec(self) -> TensorSpec:
         return UnboundedContinuousTensorSpec(
-            device=self.device, shape=(self.num_workers,)
+            device=self.device, shape=(self.num_workers, 1)
         )
 
     def __repr__(self) -> str:

@@ -58,6 +58,16 @@ def _set_gym_environments():  # noqa: F811
     PONG_VERSIONED = "ALE/Pong-v5"
 
 
+@implement_for("gymnasium", "0.27.0", None)
+def _set_gym_environments():  # noqa: F811
+    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
+
+    CARTPOLE_VERSIONED = "CartPole-v1"
+    HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
+    PENDULUM_VERSIONED = "Pendulum-v1"
+    PONG_VERSIONED = "ALE/Pong-v5"
+
+
 if _has_gym:
     _set_gym_environments()
 
@@ -118,6 +128,16 @@ def dtype_fixture():
     torch.set_default_dtype(torch.double)
     yield dtype
     torch.set_default_dtype(dtype)
+
+
+@contextlib.contextmanager
+def set_global_var(module, var_name, value):
+    old_value = getattr(module, var_name)
+    setattr(module, var_name, value)
+    try:
+        yield
+    finally:
+        setattr(module, var_name, old_value)
 
 
 def _make_envs(
@@ -263,13 +283,3 @@ def get_transform_out(env_name, transformed_in):
             )
 
     return t_out
-
-
-@contextlib.contextmanager
-def set_global_var(module, var_name, value):
-    old_value = getattr(module, var_name)
-    setattr(module, var_name, value)
-    try:
-        yield
-    finally:
-        setattr(module, var_name, old_value)

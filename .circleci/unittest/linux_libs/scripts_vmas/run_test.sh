@@ -25,5 +25,6 @@ export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
 # this workflow only tests the libs
 python -c "import vmas"
 
-coverage run -m pytest test/test_libs.py --instafail -v --durations 20 --capture no -k TestVmas
+python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 --capture no -k TestVmas
+coverage combine
 coverage xml -i
