@@ -91,7 +91,6 @@ class IQLLoss(LossModule):
             create_target_params=False,
             compare_against=list(actor_network.parameters()),
         )
-        value_params = list(value_network.parameters())
 
         # Q Function Network
         self.delay_qvalue = True
@@ -102,7 +101,8 @@ class IQLLoss(LossModule):
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=True,
-            compare_against=list(actor_network.parameters()) + value_params,
+            compare_against=list(actor_network.parameters())
+            + list(value_network.parameters()),
         )
 
         self.register_buffer("gamma", torch.tensor(gamma))
@@ -196,9 +196,7 @@ class IQLLoss(LossModule):
         td_q = vmap(self.qvalue_network, (None, 0))(
             td_q, self.target_qvalue_network_params
         )
-        min_q = (
-            td_q.get("state_action_value").min(0)[0].squeeze(-1)
-        )  # make sure is detached
+        min_q = td_q.get("state_action_value").min(0)[0].squeeze(-1)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys)
         self.value_network(

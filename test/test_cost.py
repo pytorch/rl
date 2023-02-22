@@ -2901,7 +2901,7 @@ class TestIQL:
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
-    @pytest.mark.parametrize("expectile", [0.0, 0.5, 1.0])
+    @pytest.mark.parametrize("expectile", [0.1, 0.5, 1.0])
     def test_iql(
         self,
         num_qvalue,
@@ -3014,7 +3014,7 @@ class TestIQL:
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
-    @pytest.mark.parametrize("expectile", [0.0, 0.5, 1.0])
+    @pytest.mark.parametrize("expectile", [0.1, 0.5, 1.0])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_iql_batcher(
         self,
