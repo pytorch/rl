@@ -34,7 +34,7 @@ def collect(rank, rank0_ip, world_size):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-    os.environ['TP_SOCKET_IFNAME']='lo'
+    # os.environ['TP_SOCKET_IFNAME']='lo'
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
         init_method=f"tcp://{rank0_ip}:10003",
@@ -95,7 +95,7 @@ class DistributedDataCollector(_DataCollector):
         os.environ["MASTER_ADDR"] = str(IPAddr)
         os.environ["MASTER_PORT"] = "29500"
         os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-        os.environ['TP_SOCKET_IFNAME'] = 'lo'
+        # os.environ['TP_SOCKET_IFNAME'] = 'lo'
 
         self._init_workers()
 
