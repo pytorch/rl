@@ -29,8 +29,6 @@ DEFAULT_SLURM_CONF = {
 
 
 def collect(rank, rank0_ip, world_size):
-    torch.cuda.init()
-
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
@@ -52,7 +50,6 @@ def collect(rank, rank0_ip, world_size):
     )
     print("waiting...")
     print("device count", torch.cuda.device_count())
-    time.sleep(10_000)
     rpc.shutdown()
 
 
