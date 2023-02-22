@@ -215,7 +215,7 @@ class DistributedDataCollector(_DataCollector):
         for data in pseudo_collector:
             break
         self._out_tensordict = data.expand(
-            (self.num_workers, *data.shape)
+            (self.num_workers, self.num_workers_per_collector, *data.shape)
         ).to_tensordict()
 
     def _init_master_rpc(
