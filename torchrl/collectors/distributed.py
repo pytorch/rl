@@ -28,12 +28,13 @@ DEFAULT_SLURM_CONF = {
 }
 
 
-def collect(rank, rank0_ip):
+def collect(rank, rank0_ip, world_size):
     torch.cuda.init()
 
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
+    os.environ['TP_SOCKET_IFNAME']='lo'
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
         init_method=f"tcp://{rank0_ip}:10002",
@@ -48,6 +49,7 @@ def collect(rank, rank0_ip):
         rank=rank,
         backend=rpc.BackendType.TENSORPIPE,
         rpc_backend_options=options,
+        world_size=world_size,
     )
     print("waiting...")
     print("device count", torch.cuda.device_count())
@@ -94,6 +96,8 @@ class DistributedDataCollector(_DataCollector):
         os.environ["MASTER_ADDR"] = str(IPAddr)
         os.environ["MASTER_PORT"] = "29500"
         os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
+        os.environ['TP_SOCKET_IFNAME'] = 'lo'
+
         options = rpc.TensorPipeRpcBackendOptions(
             num_worker_threads=16,
             init_method="tcp://localhost:10002",
@@ -102,18 +106,13 @@ class DistributedDataCollector(_DataCollector):
             # devices=[0],
         )
         self.options = options
-        if self.device_maps is not None:
-            for i in range(self.num_workers):
-                self.options.set_device_map(
-                    f"COLLECTOR_NODE_{i+1}",
-                    device_maps,
-                    )
         print("init rpc")
         rpc.init_rpc(
             "TRAINER_NODE",
             rank=0,
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
+            world_size=self.num_workers+1,
         )
         self._init_workers()
 
@@ -126,7 +125,7 @@ class DistributedDataCollector(_DataCollector):
             print("Submitting job")
             executor = submitit.AutoExecutor(folder="log_test")
             executor.update_parameters(**self.slurm_kwargs)
-            job = executor.submit(collect, i + 1, self.IPAddr)  # will compute add(5, 7)
+            job = executor.submit(collect, i + 1, self.IPAddr, self.num_workers+1)  # will compute add(5, 7)
             print("job id", job.job_id)  # ID of your job
             self.executors.append(executor)
 
