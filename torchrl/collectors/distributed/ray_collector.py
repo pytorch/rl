@@ -237,7 +237,7 @@ class RayDistributedCollector(_DataCollector):
                 rollouts = ray.get(r)
                 ray.internal.free(r)  # should not be necessary, deleted automatically when ref count is down to 0
                 out_td.append(rollouts)
-            if len(pending_tasks[0].batch_size):
+            if len(rollouts.batch_size):
                 out_td = torch.stack(out_td)
             else:
                 out_td = torch.cat(out_td)
