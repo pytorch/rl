@@ -186,8 +186,6 @@ class DistributedDataCollector(_DataCollector):
         self.collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
         self.backend = backend
 
-        if not sync and backend.startswith("distributed"):
-            raise RuntimeError
         # os.environ['TP_SOCKET_IFNAME'] = 'lo'
 
         self._init_workers()
