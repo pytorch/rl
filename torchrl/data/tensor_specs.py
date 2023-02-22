@@ -1947,7 +1947,7 @@ class CompositeSpec(TensorSpec):
         )
 
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
-        return {key: self[key]._to_numpy(val) for key, val in val.items()}
+        return {key: self[key].to_numpy(val) for key, val in val.items()}
 
     def zero(self, shape=None) -> TensorDictBase:
         if shape is None:
