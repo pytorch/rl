@@ -420,10 +420,9 @@ class DistributedDataCollector(_DataCollector):
                 while data is None:
                     for i in range(self.num_workers):
                         rank = i + 1
-                        if all(_data.wait() for _data in trackers[i]):
-                            assert (
-                                self._store.get(f"NODE_{rank}_status") == b"done"
-                            ), self._store.get(f"NODE_{rank}_status")
+                        if self._store.get(f"NODE_{rank}_status") == b"done":
+                            for _tracker in trackers[i]:
+                                _tracker.wait()
                             data = self._out_tensordict[i].to_tensordict()
                             data._origin = rank
                             self._store.set(f"NODE_{rank}_status", "continue")
