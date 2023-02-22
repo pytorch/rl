@@ -412,7 +412,7 @@ class DistributedDataCollector(_DataCollector):
                 data = None
                 while data is None:
                     for i in range(self.num_workers):
-                        if all(_data.is_completed() for _data in trackers[i]):
+                        if all(_data.wait() for _data in trackers[i]):
                             data = self._out_tensordict[i].to_tensordict()
                             self._store.set(f"NODE_{i+1}_status", "continue")
                             break
