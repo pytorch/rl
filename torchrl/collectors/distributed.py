@@ -37,7 +37,7 @@ def collect(rank, rank0_ip, world_size):
     os.environ['TP_SOCKET_IFNAME']='lo'
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
-        init_method=f"tcp://{rank0_ip}:10002",
+        init_method=f"tcp://{rank0_ip}:10003",
         rpc_timeout=MAX_TIME_TO_CONNECT,
         _transports=["uv"],
     )
@@ -114,7 +114,7 @@ class DistributedDataCollector(_DataCollector):
 
         options = rpc.TensorPipeRpcBackendOptions(
             num_worker_threads=16,
-            init_method="tcp://localhost:10002",
+            init_method=f"tcp://{self.IPAddr}:10003",
             rpc_timeout=10_000,
             _transports=["uv"],
         )
@@ -124,7 +124,7 @@ class DistributedDataCollector(_DataCollector):
             "TRAINER_NODE",
             rank=0,
             backend=rpc.BackendType.TENSORPIPE,
-            rpc_backend_options=options,
+            rpc_backend_options=self.options,
             world_size=self.num_workers+1,
         )
 
