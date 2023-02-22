@@ -246,7 +246,7 @@ class DistributedDataCollector(_DataCollector):
         if not issubclass(self.collector_class, SyncDataCollector):
             # Multi-data collectors
             self._out_tensordict = data.expand(
-                (self.num_workers, self.num_workers_per_collector, *data.shape)
+                (self.num_workers, *data.shape)
             ).to_tensordict().to(self.storing_device)
         else:
             # Multi-data collectors
