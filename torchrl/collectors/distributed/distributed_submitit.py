@@ -397,8 +397,8 @@ class DistributedDataCollector(_DataCollector):
                         if all(_data.is_completed() for _data in trackers[i]):
                             data = self._out_tensordict[i].to_tensordict()
                             break
-            yield data
             total_frames += data.numel()
+            yield data
 
     def _iterator_rpc(self):
         total_frames = 0
