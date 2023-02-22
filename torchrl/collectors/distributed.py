@@ -97,21 +97,6 @@ class DistributedDataCollector(_DataCollector):
         os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
         os.environ['TP_SOCKET_IFNAME'] = 'lo'
 
-        options = rpc.TensorPipeRpcBackendOptions(
-            num_worker_threads=16,
-            init_method="tcp://localhost:10002",
-            rpc_timeout=10_000,
-            _transports=["uv"],
-        )
-        self.options = options
-        print("init rpc")
-        rpc.init_rpc(
-            "TRAINER_NODE",
-            rank=0,
-            backend=rpc.BackendType.TENSORPIPE,
-            rpc_backend_options=options,
-            world_size=self.num_workers+1,
-        )
         self._init_workers()
 
     def _init_workers(self):
@@ -127,6 +112,22 @@ class DistributedDataCollector(_DataCollector):
             print("job id", job.job_id)  # ID of your job
             self.executors.append(executor)
 
+        options = rpc.TensorPipeRpcBackendOptions(
+            num_worker_threads=16,
+            init_method="tcp://localhost:10002",
+            rpc_timeout=10_000,
+            _transports=["uv"],
+        )
+        self.options = options
+        print("init rpc")
+        rpc.init_rpc(
+            "TRAINER_NODE",
+            rank=0,
+            backend=rpc.BackendType.TENSORPIPE,
+            rpc_backend_options=options,
+            world_size=self.num_workers+1,
+        )
+
         for i in range(self.num_workers):
             counter = 0
             time_interval = 1.0
@@ -141,12 +142,15 @@ class DistributedDataCollector(_DataCollector):
                     if counter * time_interval > MAX_TIME_TO_CONNECT:
                         raise RuntimeError("Could not connect to remote node") from err
                     continue
+            self.collector_infos.append(collector_info)
+
+        for i in range(self.num_workers):
             env_make = self.env_constructors[i]
             if not isinstance(env_make, (EnvBase, EnvCreator)):
                 env_make = EnvCreator(env_make)
             print("Making collector in remote node")
             collector_rref = rpc.remote(
-                collector_info,
+                self.collector_infos[i],
                 self.collector_class,
                 args=(
                     [env_make] * self.num_workers_per_collector
@@ -161,13 +165,14 @@ class DistributedDataCollector(_DataCollector):
                     **self.collector_kwargs,
                 },
             )
+            self.collector_rrefs.append(collector_rref)
+
+        for i in range(self.num_workers):
             print("Asking for the first batch")
             future = rpc.rpc_async(
-                collector_info, self.collector_class.next, args=(collector_rref,)
+                self.collector_infos[i], self.collector_class.next, args=(self.collector_rrefs[i],)
             )
 
-            self.collector_infos.append(collector_info)
-            self.collector_rrefs.append(collector_rref)
             self.futures.append(future)
 
     def iterator(self):
