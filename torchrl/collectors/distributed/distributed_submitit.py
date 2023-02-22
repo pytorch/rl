@@ -420,8 +420,7 @@ class DistributedDataCollector(_DataCollector):
                         if all(_data.wait() for _data in trackers[i]):
                             data = self._out_tensordict[i].to_tensordict()
                             self._store.set(f"NODE_{i+1}_status", "continue")
-                            trackers.append(
-                                self._out_tensordict[i].irecv(
+                            trackers[i] = self._out_tensordict[i].irecv(
                                     src=i + 1,
                                     return_premature=True
                                 )
