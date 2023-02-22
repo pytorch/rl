@@ -113,6 +113,7 @@ def distributed_init_collection_node(
         else:
             _store.set(f"NODE_{rank}_status", "busy")
             data.isend(dst=0)
+            _store.set(f"NODE_{rank}_status", "done")
             while _store.get(f"NODE_{rank}_status") != "continue":
                 time.sleep(1e-4)
 
@@ -417,13 +418,15 @@ class DistributedDataCollector(_DataCollector):
                 data = None
                 while data is None:
                     for i in range(self.num_workers):
+                        rank = i+1
                         if all(_data.wait() for _data in trackers[i]):
+                            assert self._store.get(f"NODE_{rank}_status") == "done"
                             data = self._out_tensordict[i].to_tensordict()
-                            self._store.set(f"NODE_{i+1}_status", "continue")
+                            self._store.set(f"NODE_{rank}_status", "continue")
                             trackers[i] = self._out_tensordict[i].irecv(
-                                    src=i + 1,
-                                    return_premature=True
-                                )
+                                src=i + 1,
+                                return_premature=True
+                            )
                             break
             total_frames += data.numel()
             yield data
