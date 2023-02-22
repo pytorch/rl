@@ -221,6 +221,8 @@ class DistributedDataCollector(_DataCollector):
         while IPAddr is None and count < 100:
             count += 1
             stdout_master = job_master.stdout()
+            if stdout_master is None:
+                time.sleep(1.0)
             for line in stdout_master.split("\n"):
                 if "IP address" in line:
                     IPAddr = line.split("IP address: ")
