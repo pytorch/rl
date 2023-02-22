@@ -232,11 +232,11 @@ class DistributedDataCollector(_DataCollector):
                 time.sleep(1.0)
         if count >= 100:
             raise RuntimeError("Failed to get the IP address of master node.")
-
+        print("IP address:", IPAddr)
         for i in range(self.num_workers):
             print("Submitting job")
             job = executor.submit(
-                init_collection_node, i + 1, self.IPAddr, self.num_workers + 1
+                init_collection_node, i + 1, IPAddr, self.num_workers + 1
             )
             print("job id", job.job_id)  # ID of your job
             self.executors.append(executor)
