@@ -206,11 +206,11 @@ class RayDistributedCollector(_DataCollector):
 
     def iterator(self):
         if self.coordination == "sync":
-            return self.sync_iterator()
+            return self._sync_iterator()
         else:
-            return self.async_iterator()
+            return self._async_iterator()
 
-    def sync_iterator(self) -> Iterator[TensorDictBase]:
+    def _sync_iterator(self) -> Iterator[TensorDictBase]:
 
         while self.collected_frames < self.total_frames:
 
@@ -249,7 +249,7 @@ class RayDistributedCollector(_DataCollector):
         self.stop_remote_collectors()
         ray.shutdown()
 
-    def async_iterator(self) -> Iterator[TensorDictBase]:
+    def _async_iterator(self) -> Iterator[TensorDictBase]:
 
         pending_tasks = {}
         for w in self.remote_collectors():
