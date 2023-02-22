@@ -97,7 +97,7 @@ def distributed_init_collection_node(
         timeout=timedelta(MAX_TIME_TO_CONNECT),
         init_method=f"tcp://{rank0_ip}:{TCP_PORT}",
     )
-    if not issubclass(collector_class, SyncDataCollector)
+    if not issubclass(collector_class, SyncDataCollector):
         env_make = [env_make] * num_workers
     collector = collector_class(
         env_make,
