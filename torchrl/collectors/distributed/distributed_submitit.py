@@ -102,7 +102,7 @@ def distributed_init_collection_node(
     )
     for data in collector:
         if sync:
-            data.send(dst=0)
+            data.gather_and_stack(dst=0)
         else:
             data.isend(dst=0)
     collector.shutdown()
