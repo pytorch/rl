@@ -424,7 +424,6 @@ class DistributedDataCollector(_DataCollector):
                                     src=i + 1,
                                     return_premature=True
                                 )
-                            )
                             break
             total_frames += data.numel()
             yield data
