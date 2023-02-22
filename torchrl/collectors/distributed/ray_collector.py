@@ -1,11 +1,17 @@
-import torch
 import logging
 from abc import ABC
-from typing import Dict, Iterator, OrderedDict
+from typing import Dict, Iterator, OrderedDict, List
+import torch
 from torch.utils.data import IterableDataset
-from tensordict.tensordict import TensorDictBase
 from ray._private.services import get_node_ip_address
-from torchrl.collectors.collectors import _DataCollector
+from tensordict.tensordict import TensorDictBase
+from torchrl.envs import EnvBase, EnvCreator
+from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.collectors.collectors import (
+    _DataCollector,
+    MultiSyncDataCollector,
+    SyncDataCollector,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -144,6 +150,7 @@ class RayDistributedCollector(IterableDataset, _DataCollector, ABC):
         # Monkey patching as_remote and print_remote_collector_info to collector class
         collector_class.as_remote = as_remote
         collector_class.print_remote_collector_info = print_remote_collector_info
+        self.collector_class = collector_class
 
         self.collected_frames = 0
         self.total_frames = total_frames
@@ -224,7 +231,7 @@ class RayDistributedCollector(IterableDataset, _DataCollector, ABC):
             out_td = []
             for r in pending_tasks:
                 rollouts = ray.get(r)
-                ray.internal.free(r)
+                ray.internal.free(r)  # should not be necessary, deleted automatically when ref count is down to 0
                 out_td.append(rollouts)
             if len(pending_tasks[0].batch_size):
                 out_td = torch.stack(out_td)
@@ -257,7 +264,7 @@ class RayDistributedCollector(IterableDataset, _DataCollector, ABC):
 
             # Retrieve single rollouts
             out_td = ray.get(future)
-            ray.internal.free(future)
+            ray.internal.free(future)  # should not be necessary, deleted automatically when ref count is down to 0
             self.collected_frames += out_td.numel()
 
             # Update agent weights
@@ -286,11 +293,23 @@ class RayDistributedCollector(IterableDataset, _DataCollector, ABC):
         self.stop_remote_collectors()
         ray.shutdown()
 
-    def set_seed(self, seed: int, static_seed: bool = False) -> int:
-        raise NotImplementedError
+    def set_seed(self, seed: int, static_seed: bool = False) -> List[int]:
+        """Adds a set_seed(seed, static_seed) method call for each remote collector."""
+        futures = [collector.set_seed.remote(seed, static_seed) for collector in self.remote_collectors()]
+        results = ray.get(object_refs=futures)
+        return results
 
-    def state_dict(self) -> OrderedDict:
-        raise NotImplementedError
+    def state_dict(self) -> List[OrderedDict]:
+        """Adds a state_dict() method call for each remote collector."""
+        futures = [collector.state_dict.remote() for collector in self.remote_collectors()]
+        results = ray.get(object_refs=futures)
+        return results
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
-        raise NotImplementedError
+        """Adds a load_state_dict(state_dict) method call for each remote collector."""
+        for collector in self.remote_collectors():
+            collector.load_state_dict.remote(state_dict)
+
+    def shutdown(self):
+        """Finishes processes started by ray.init()."""
+        ray.shutdown()
