@@ -399,22 +399,33 @@ class DistributedDataCollector(_DataCollector):
 
     def _iterator_dist(self):
         total_frames = 0
+        if not self._sync:
+            trackers = []
+            for i in range(self.num_workers):
+                trackers.append(
+                    self._out_tensordict[i].irecv(
+                        src=i + 1,
+                        return_premature=True
+                        )
+                )
+
         while total_frames < self.total_frames:
             if self._sync:
                 self._out_tensordict.gather_and_stack(dest=0)
                 data = self._out_tensordict.to_tensordict()
             else:
-                trackers = []
-                for i in range(self.num_workers):
-                    trackers.append(
-                        self._out_tensordict[i].irecv(src=i + 1, return_premature=True)
-                    )
                 data = None
                 while data is None:
                     for i in range(self.num_workers):
                         if all(_data.wait() for _data in trackers[i]):
                             data = self._out_tensordict[i].to_tensordict()
                             self._store.set(f"NODE_{i+1}_status", "continue")
+                            trackers.append(
+                                self._out_tensordict[i].irecv(
+                                    src=i + 1,
+                                    return_premature=True
+                                )
+                            )
                             break
             total_frames += data.numel()
             yield data
