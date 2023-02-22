@@ -226,7 +226,7 @@ class DistributedDataCollector(_DataCollector):
                 continue
             for line in stdout_master.split("\n"):
                 if "IP address" in line:
-                    IPAddr = line.split("IP address: ")
+                    IPAddr = line.split("IP address ")[-1]
                     break
             else:
                 time.sleep(1.0)
