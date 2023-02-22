@@ -103,7 +103,7 @@ def distributed_init_collection_node(
     if not sync:
         _store = torch.distributed.TCPStore(
             host_name=rank0_ip,
-            port=int(TCP_PORT),
+            port=int(TCP_PORT)+1,
             world_size=world_size,
             is_master=False,
         )
@@ -227,7 +227,7 @@ class DistributedDataCollector(_DataCollector):
         if not self._sync:
             self._store = torch.distributed.TCPStore(
                 host_name=self.IPAddr,
-                port=int(TCP_PORT),
+                port=int(TCP_PORT)+1,
                 world_size=self.num_workers+1,
                 is_master=True,
             )
