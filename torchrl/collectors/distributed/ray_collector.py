@@ -312,7 +312,8 @@ class RayDistributedCollector(_DataCollector):
         for collector, state_dict in zip(self.remote_collectors(), state_dict):
             collector.load_state_dict.remote(state_dict)
 
-    def shutdown(self):
+    @staticmethod
+    def shutdown():
         """Finishes processes started by ray.init()."""
         ray.shutdown()
 
