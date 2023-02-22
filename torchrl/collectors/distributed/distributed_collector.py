@@ -154,7 +154,7 @@ class DistributedCollector(IterableDataset, ABC):
         return self._remote_collectors
 
     def stop(self):
-        """Stop all remote collectors"""
+        """Stops all remote collectors."""
         for w in self.remote_collectors():
             w.__ray_terminate__.remote()
 
