@@ -1,6 +1,6 @@
 import logging
 from abc import ABC
-from typing import Dict, Iterator, OrderedDict, List
+from typing import Dict, Iterator, OrderedDict, List, Union
 import torch
 from torch.utils.data import IterableDataset
 from ray._private.services import get_node_ip_address
@@ -160,13 +160,6 @@ class RayDistributedCollector(_DataCollector):
         self.num_collectors = num_collectors
         self.remote_config = remote_config
         self.coordination = coordination
-
-        # Create a local instance of the collector class.
-        # self._local_collector = self._make_collector(
-        #     self.collector_class, collector_params)
-        # self.local_collector().is_remote = False
-
-        # Probably we just need a copy of the policy!
         self.local_policy = policy
 
         # Create remote instances of the collector class
@@ -190,9 +183,9 @@ class RayDistributedCollector(_DataCollector):
         self._remote_collectors.extend(
             [self._make_collector(cls, collector_params) for _ in range(num_collectors)])
 
-    def local_collector(self):
+    def local_policy(self):
         """Returns local collector."""
-        return self._local_collector
+        return self.local_policy
 
     def remote_collectors(self):
         """Returns list of remote collectors."""
@@ -215,8 +208,6 @@ class RayDistributedCollector(_DataCollector):
         while self.collected_frames < self.total_frames:
 
             # Broadcast agent weights
-            # self.local_collector().update_policy_weights_()
-            # policy_weights_local_collector = {"policy_state_dict": self._local_collector.policy.state_dict()}
             policy_weights_local_collector = {"policy_state_dict": self.local_policy.state_dict()}
             policy_weights_local_collector_ref = ray.put(policy_weights_local_collector)
             for e in self.remote_collectors():
@@ -272,8 +263,6 @@ class RayDistributedCollector(_DataCollector):
             self.collected_frames += out_td.numel()
 
             # Update agent weights
-            # self.local_collector().update_policy_weights_()
-            # policy_weights_local_collector = {"policy_state_dict": self._local_collector.policy.state_dict()}
             policy_weights_local_collector = {"policy_state_dict": self.local_policy.state_dict()}
             policy_weights_local_collector_ref = ray.put(policy_weights_local_collector)
             w.load_state_dict.remote(**{"state_dict": policy_weights_local_collector_ref, "strict": False})
@@ -298,9 +287,13 @@ class RayDistributedCollector(_DataCollector):
         self.stop_remote_collectors()
         ray.shutdown()
 
-    def set_seed(self, seed: int, static_seed: bool = False) -> List[int]:
+    def set_seed(self, seed: Union[int, List[int]], static_seed: bool = False) -> List[int]:
         """Calls set_seed(seed, static_seed) method for each remote collector and results a list of results."""
-        futures = [collector.set_seed.remote(seed, static_seed) for collector in self.remote_collectors()]
+        if isinstance(seed, int):
+            seed = [seed]
+        if len(seed) == 1:
+            seed = seed * len(self.remote_collectors())
+        futures = [collector.set_seed.remote(s, static_seed) for s, collector in zip(seed, self.remote_collectors())]
         results = ray.get(object_refs=futures)
         return results
 
@@ -310,9 +303,13 @@ class RayDistributedCollector(_DataCollector):
         results = ray.get(object_refs=futures)
         return results
 
-    def load_state_dict(self, state_dict: OrderedDict) -> None:
+    def load_state_dict(self, state_dict: Union[OrderedDict, List[OrderedDict]]) -> None:
         """Calls load_state_dict(state_dict) method for each remote collector."""
-        for collector in self.remote_collectors():
+        if isinstance(state_dict, OrderedDict):
+            state_dict = [state_dict]
+        if len(state_dict) == 1:
+            state_dict = state_dict * len(self.remote_collectors())
+        for collector, state_dict in zip(self.remote_collectors(), state_dict):
             collector.load_state_dict.remote(state_dict)
 
     def shutdown(self):
