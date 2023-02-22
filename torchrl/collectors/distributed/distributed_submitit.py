@@ -33,7 +33,7 @@ DEFAULT_SLURM_CONF = {
 }
 
 
-def init_collection_node(rank, rank0_ip, world_size):
+def rpc_init_collection_node(rank, rank0_ip, world_size, backend):
     """Sets up RPC on the distant node.
 
     Args:
@@ -67,19 +67,93 @@ def init_collection_node(rank, rank0_ip, world_size):
     rpc.shutdown()
 
 
+def distributed_init_collection_node(
+    rank,
+    rank0_ip,
+    sync,
+    world_size,
+    backend,
+    collector_class,
+    env_make,
+    policy,
+    frames_per_batch,
+    total_frames,
+    collector_kwargs,
+):
+    if not backend.startswith("distributed"):
+        raise RuntimeError(f"Backend {backend} is incompatible with the collector.")
+    _, backend = backend.split(":")
+    torch.distributed.init_process_group(
+        backend,
+        rank=rank,
+        world_size=world_size,
+        timeout=MAX_TIME_TO_CONNECT,
+        init_method=f"tcp://{rank0_ip}:10003",
+    )
+    collector = collector_class(
+        env_make,
+        policy,
+        frames_per_batch=frames_per_batch,
+        total_frames=total_frames,
+        split_trajs=False,
+        **collector_kwargs,
+    )
+    for data in collector:
+        if sync:
+            data.send(dst=0)
+        else:
+            data.isend(dst=0)
+    collector.shutdown()
+
+
 class DistributedDataCollector(_DataCollector):
+    """A distributed data collector with submitit backend.
+
+    To find more about submitit, visit https://github.com/facebookincubator/submitit
+
+    Supports sync and async data collection.
+
+    Args:
+        env_makers (list of callables or EnvBase instances): a list of the
+            same length as the number of nodes to be launched.
+        policy (Callable[[TensorDict], TensorDict]): a callable that populates
+            the tensordict with an `"action"` field.
+        collector_class (type): a collector class for the remote node. Can be
+            :class:`torchrl.collectors.SyncDataCollector`, :class:`torchrl.collectors.MultiSyncDataCollector`, :class:`torchrl.collectors.MultiaSyncDataCollector`
+            or a derived class of these.
+        frames_per_batch (int): the number of frames to be gathered in each
+            batch.
+        total_frames (int): the total number of frames to be collected from the
+            distributed collector.
+        num_workers_per_collector (int): the number of copies of the
+            env constructor that is to be used on the remote nodes.
+            Defaults to 1 (a single env per collector).
+        sync (bool): if ``True``, the resulting tensordict is a stack of all the
+            tensordicts collected on each node. If ``False`` (default), each
+            tensordict results from a separate node in a "first-ready,
+            first-served" fashion.
+        slurm_kwargs (dict): a dictionary of parameters to be passed to the
+            submitit executor.
+        collector_kwargs (dict): a dictionary of parameters to be passed to the
+            remote data-collector.
+        backend (str): must be one of "rpc" or "distributed:<distributed_backed>".
+            <distributed_backed> is one of "gloo", "mpi", "nccl" or "ucc". See
+            the torch.distributed documentation for more information.
+            Defaults to "distributed:gloo".
+    """
+
     def __init__(
         self,
         env_makers,
         policy,
         collector_class,
-        num_workers_per_collector,
         frames_per_batch,
         total_frames,
+        num_workers_per_collector=1,
         sync=False,
         slurm_kwargs=None,
         collector_kwargs=None,
-        device_maps=None,
+        backend="distributed:gloo",
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -100,21 +174,51 @@ class DistributedDataCollector(_DataCollector):
                     f"Cannot dispatch {self.frames_per_batch} frames across {self.num_workers}. "
                     f"Consider using a number of frames per batch that is divisible by the number of workers."
                 )
-            self.frames_per_batch = self.frames_per_batch // self.num_workers
+            self._frames_per_batch_corrected = self.frames_per_batch // self.num_workers
+        else:
+            self._frames_per_batch_corrected = self.frames_per_batch
 
         self.num_workers_per_collector = num_workers_per_collector
         self.total_frames = total_frames
         self.slurm_kwargs = (
             slurm_kwargs if slurm_kwargs is not None else DEFAULT_SLURM_CONF
         )
-        self.device_maps = device_maps
         self.collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
+        self.backend = backend
 
+        if not sync and backend.startswith("distributed"):
+            raise RuntimeError
         # os.environ['TP_SOCKET_IFNAME'] = 'lo'
 
         self._init_workers()
 
-    def _init_master(
+    def _init_master_dist(
+        self,
+        world_size,
+        backend,
+    ):
+        _, backend = backend.split(":")
+        torch.distributed.init_process_group(
+            backend,
+            rank=0,
+            world_size=world_size,
+            timeout=MAX_TIME_TO_CONNECT,
+            init_method=f"tcp://{self.IPAddr}:10003",
+        )
+        env_constructor = self.env_constructors[0]
+        pseudo_collector = SyncDataCollector(
+            env_constructor,
+            self.policy,
+            frames_per_batch=self._frames_per_batch_corrected,
+            total_frames=self.total_frames,
+        )
+        for data in pseudo_collector:
+            break
+        self._out_tensordict = data.expand(
+            (self.num_workers, *data.shape)
+        ).to_tensordict()
+
+    def _init_master_rpc(
         self,
         world_size,
         env_constructors,
@@ -125,7 +229,6 @@ class DistributedDataCollector(_DataCollector):
         total_frames,
         collector_kwargs,
     ):
-
         options = rpc.TensorPipeRpcBackendOptions(
             num_worker_threads=16,
             init_method=f"tcp://{self.IPAddr}:10003",
@@ -200,6 +303,29 @@ class DistributedDataCollector(_DataCollector):
         self.collector_rrefs = collector_rrefs
         self.collector_infos = collector_infos
 
+    def _init_worker_rpc(self, executor, i):
+        job = executor.submit(
+            rpc_init_collection_node, i + 1, self.IPAddr, self.num_workers + 1
+        )
+        return job
+
+    def _init_worker_dist(self, executor, i):
+        job = executor.submit(
+            distributed_init_collection_node,
+            i + 1,
+            self.IPAddr,
+            self._sync,
+            self.num_workers + 1,
+            self.backend,
+            self.collector_class,
+            self.env_constructors[i],
+            self.policy,
+            self._frames_per_batch_corrected,
+            self.total_frames,
+            self.collector_kwargs,
+        )
+        return job
+
     def _init_workers(self):
         executor = submitit.AutoExecutor(folder="log_test")
         executor.update_parameters(**self.slurm_kwargs)
@@ -213,33 +339,61 @@ class DistributedDataCollector(_DataCollector):
 
         for i in range(self.num_workers):
             print("Submitting job")
-            job = executor.submit(
-                init_collection_node, i + 1, self.IPAddr, self.num_workers + 1
-            )
+            if self.backend.startswith("rpc"):
+                job = self._init_worker_rpc(
+                    executor,
+                    i,
+                )
+            else:
+                job = self._init_worker_dist(
+                    executor,
+                    i,
+                )
             print("job id", job.job_id)  # ID of your job
 
-        self._init_master(
-            self.num_workers + 1,
-            self.env_constructors,
-            self.collector_class,
-            self.num_workers_per_collector,
-            self.policy,
-            self.frames_per_batch,
-            self.total_frames,
-            self.collector_kwargs,
-        )
+        if self.backend.startswith("rpc"):
+            self._init_master_rpc(
+                self.num_workers + 1,
+                self.env_constructors,
+                self.collector_class,
+                self.num_workers_per_collector,
+                self.policy,
+                self._frames_per_batch_corrected,
+                self.total_frames,
+                self.collector_kwargs,
+            )
+        else:
+            self._init_master_dist(self.num_workers + 1, self.backend)
 
-    def iterator(self):
+    def _iterator_dist(self):
         total_frames = 0
         while total_frames < self.total_frames:
             if self._sync:
-                data = self._next_sync()
+                self._out_tensordict.gather_and_stack(0)
+                data = self._out_tensordict.to_tensordict()
             else:
-                data = self._next_async()
-
+                trackers = []
+                for i in range(self.num_workers):
+                    trackers.append(
+                        self._out_tensordict[i].irecv(src=i + 1, return_premature=True)
+                    )
+                for i in range(self.num_workers):
+                    if all(_data.is_complete() for _data in trackers[i]):
+                        data = self._out_tensordict[i].to_tensordict()
+                        break
             total_frames += data.numel()
 
-    def _next_async(self):
+    def _iterator_rpc(self):
+        total_frames = 0
+        while total_frames < self.total_frames:
+            if self._sync:
+                data = self._next_sync_rpc()
+            else:
+                data = self._next_async_rpc()
+            total_frames += data.numel()
+            yield data
+
+    def _next_async_rpc(self):
         for i, future in enumerate(self.futures):
             if future.done():
                 data = future.value()
@@ -252,7 +406,7 @@ class DistributedDataCollector(_DataCollector):
             else:
                 time.sleep(SLEEP_INTERVAL)
 
-    def _next_sync(self):
+    def _next_sync_rpc(self):
         data = []
         for i, future in enumerate(self.futures):
             if future.done():
