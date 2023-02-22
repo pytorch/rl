@@ -172,6 +172,7 @@ class DistributedDataCollector(_DataCollector):
         slurm_kwargs=None,
         collector_kwargs=None,
         backend="distributed:gloo",
+        storing_device="cpu",
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -184,6 +185,7 @@ class DistributedDataCollector(_DataCollector):
         self.policy = policy
         self.num_workers = len(env_makers)
         self.frames_per_batch = frames_per_batch
+        self.storing_device = storing_device
         # make private to avoid changes from users during collection
         self._sync = sync
         if self._sync:
@@ -242,12 +244,12 @@ class DistributedDataCollector(_DataCollector):
             # Multi-data collectors
             self._out_tensordict = data.expand(
                 (self.num_workers, self.num_workers_per_collector, *data.shape)
-            ).to_tensordict()
+            ).to_tensordict().to(self.storing_device)
         else:
             # Multi-data collectors
             self._out_tensordict = data.expand(
                 (self.num_workers, *data.shape)
-            ).to_tensordict()
+            ).to_tensordict().to(self.storing_device)
 
     def _init_master_rpc(
         self,
