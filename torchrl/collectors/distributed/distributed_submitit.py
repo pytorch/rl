@@ -102,7 +102,7 @@ def distributed_init_collection_node(
     )
     for data in collector:
         if sync:
-            data.gather_and_stack(dst=0)
+            data.gather_and_stack(dest=0)
         else:
             data.isend(dst=0)
     collector.shutdown()
@@ -375,7 +375,7 @@ class DistributedDataCollector(_DataCollector):
         total_frames = 0
         while total_frames < self.total_frames:
             if self._sync:
-                self._out_tensordict.gather_and_stack(0)
+                self._out_tensordict.gather_and_stack(dest=0)
                 data = self._out_tensordict.to_tensordict()
             else:
                 trackers = []
