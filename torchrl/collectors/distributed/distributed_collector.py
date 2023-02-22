@@ -140,7 +140,7 @@ class DistributedCollector(IterableDataset, ABC):
         return w
 
     def add_collectors(self, num_collectors, collector_params):
-        """Create and add a number of remote collectors to the set."""
+        """Creates and adds a number of remote collectors to the set."""
         cls = self.collector_class.as_remote(**self.remote_config).remote
         self._remote_collectors.extend(
             [self._make_collector(cls, collector_params) for _ in range(num_collectors)])
