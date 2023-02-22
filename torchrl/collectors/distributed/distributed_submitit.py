@@ -383,10 +383,12 @@ class DistributedDataCollector(_DataCollector):
                     trackers.append(
                         self._out_tensordict[i].irecv(src=i + 1, return_premature=True)
                     )
-                for i in range(self.num_workers):
-                    if all(_data.is_completed() for _data in trackers[i]):
-                        data = self._out_tensordict[i].to_tensordict()
-                        break
+                data = None
+                while data is None:
+                    for i in range(self.num_workers):
+                        if all(_data.is_completed() for _data in trackers[i]):
+                            data = self._out_tensordict[i].to_tensordict()
+                            break
             total_frames += data.numel()
 
     def _iterator_rpc(self):
