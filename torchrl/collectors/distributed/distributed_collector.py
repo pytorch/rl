@@ -150,7 +150,7 @@ class DistributedCollector(IterableDataset, ABC):
         return self._local_collector
 
     def remote_collectors(self):
-        """Returns list of remote collectors"""
+        """Returns list of remote collectors."""
         return self._remote_collectors
 
     def stop(self):
