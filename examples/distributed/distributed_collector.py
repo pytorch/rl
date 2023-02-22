@@ -55,5 +55,4 @@ if __name__ == "__main__":
         counter += 1
         num_frames += batch.shape.numel()
         print(f"batch {counter}, total frames {num_frames}")
-    distributed_collector.stop()
 
