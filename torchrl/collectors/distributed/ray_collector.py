@@ -181,8 +181,8 @@ class RayDistributedCollector(IterableDataset, _DataCollector, ABC):
     @staticmethod
     def _make_collector(cls, collector_params):
         """Create a single collector instance."""
-        w = cls(**collector_params)
-        return w
+        collector = cls(**collector_params)
+        return collector
 
     def add_collectors(self, num_collectors, collector_params):
         """Creates and adds a number of remote collectors to the set."""
@@ -299,19 +299,19 @@ class RayDistributedCollector(IterableDataset, _DataCollector, ABC):
         ray.shutdown()
 
     def set_seed(self, seed: int, static_seed: bool = False) -> List[int]:
-        """Adds a set_seed(seed, static_seed) method call for each remote collector."""
+        """Calls set_seed(seed, static_seed) method for each remote collector and results a list of results."""
         futures = [collector.set_seed.remote(seed, static_seed) for collector in self.remote_collectors()]
         results = ray.get(object_refs=futures)
         return results
 
     def state_dict(self) -> List[OrderedDict]:
-        """Adds a state_dict() method call for each remote collector."""
+        """Calls state_dict() method for each remote collector and returns a list of results."""
         futures = [collector.state_dict.remote() for collector in self.remote_collectors()]
         results = ray.get(object_refs=futures)
         return results
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
-        """Adds a load_state_dict(state_dict) method call for each remote collector."""
+        """Calls load_state_dict(state_dict) method for each remote collector."""
         for collector in self.remote_collectors():
             collector.load_state_dict.remote(state_dict)
 
