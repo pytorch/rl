@@ -32,10 +32,14 @@ DEFAULT_SLURM_CONF = {
     "slurm_cpus_per_task": 32,
     "slurm_gpus_per_node": 0,
 }
-TCP_PORT=os.environ.get("TCP_PORT", "10003")
+TCP_PORT = os.environ.get("TCP_PORT", "10003")
 
 
-def rpc_init_collection_node(rank, rank0_ip, world_size, ):
+def rpc_init_collection_node(
+    rank,
+    rank0_ip,
+    world_size,
+):
     """Sets up RPC on the distant node.
 
     Args:
@@ -103,7 +107,7 @@ def distributed_init_collection_node(
     if not sync:
         _store = torch.distributed.TCPStore(
             host_name=rank0_ip,
-            port=int(TCP_PORT)+1,
+            port=int(TCP_PORT) + 1,
             world_size=world_size,
             is_master=False,
         )
@@ -228,8 +232,8 @@ class DistributedDataCollector(_DataCollector):
         if not self._sync:
             self._store = torch.distributed.TCPStore(
                 host_name=self.IPAddr,
-                port=int(TCP_PORT)+1,
-                world_size=self.num_workers+1,
+                port=int(TCP_PORT) + 1,
+                world_size=self.num_workers + 1,
                 is_master=True,
             )
         for data in pseudo_collector:
@@ -404,10 +408,7 @@ class DistributedDataCollector(_DataCollector):
             trackers = []
             for i in range(self.num_workers):
                 trackers.append(
-                    self._out_tensordict[i].irecv(
-                        src=i + 1,
-                        return_premature=True
-                        )
+                    self._out_tensordict[i].irecv(src=i + 1, return_premature=True)
                 )
 
         while total_frames < self.total_frames:
@@ -418,14 +419,16 @@ class DistributedDataCollector(_DataCollector):
                 data = None
                 while data is None:
                     for i in range(self.num_workers):
-                        rank = i+1
+                        rank = i + 1
                         if all(_data.wait() for _data in trackers[i]):
-                            assert self._store.get(f"NODE_{rank}_status") == b"done", self._store.get(f"NODE_{rank}_status")
+                            assert (
+                                self._store.get(f"NODE_{rank}_status") == b"done"
+                            ), self._store.get(f"NODE_{rank}_status")
                             data = self._out_tensordict[i].to_tensordict()
+                            data._origin = rank
                             self._store.set(f"NODE_{rank}_status", "continue")
                             trackers[i] = self._out_tensordict[i].irecv(
-                                src=i + 1,
-                                return_premature=True
+                                src=i + 1, return_premature=True
                             )
                             break
             total_frames += data.numel()
