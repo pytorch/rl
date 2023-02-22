@@ -40,7 +40,7 @@ if __name__ == "__main__":
     num_cells = 256
     max_grad_norm = 1.0
     frame_skip = 1
-    num_collectors = 1  # TODO: 1 remote collector works just like in the original scripts, increasing that make the agent learn less
+    num_collectors = 2
     lr = 3e-4 * math.sqrt(num_collectors)
     frames_per_batch = 1000 // frame_skip
     total_frames = 50_000 * num_collectors // frame_skip
