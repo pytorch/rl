@@ -14,7 +14,7 @@ from torch import nn
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torchrl.collectors import SyncDataCollector
-from torchrl.collectors.distributed.distributed_collector import DistributedCollector
+from torchrl.collectors.distributed.ray_collector import RayDistributedCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -121,7 +121,7 @@ if __name__ == "__main__":
         "memory": 1024 ** 3,
         "object_store_memory": 1024 ** 3
     }
-    collector = DistributedCollector(
+    collector = RayDistributedCollector(
         policy=policy_module,
         collector_class=SyncDataCollector,
         collector_params={
@@ -136,7 +136,7 @@ if __name__ == "__main__":
         remote_config=remote_config,
         num_collectors=num_collectors,
         total_frames=total_frames,
-        communication="sync",
+        coordination="sync",
     )
 
     # 5. Define replay buffer

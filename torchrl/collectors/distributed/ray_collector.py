@@ -318,3 +318,7 @@ class RayDistributedCollector(_DataCollector):
     def shutdown(self):
         """Finishes processes started by ray.init()."""
         ray.shutdown()
+
+    def __repr__(self) -> str:
+        string = f"{self.__class__.__name__}()"
+        return string

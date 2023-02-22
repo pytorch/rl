@@ -18,7 +18,7 @@ from torchrl.collectors.distributed.ray_collector import RayDistributedCollector
 if __name__ == "__main__":
 
     # 1. Create environment
-    env_maker = lambda: GymEnv("Pendulum-v0", device="cpu")
+    env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
     policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
 
     # 2. Define distributed collector
@@ -43,9 +43,9 @@ if __name__ == "__main__":
             "storing_device": "cpu",
         },
         remote_config=remote_config,
-        num_collectors=3,
+        num_collectors=1,
         total_frames=10000,
-        communication="async",
+        coordination="async",
     )
 
     # Sample batches until reaching total_frames
