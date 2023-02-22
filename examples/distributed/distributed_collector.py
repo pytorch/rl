@@ -12,7 +12,7 @@ from torch import nn
 from tensordict.nn import TensorDictModule
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.collectors.collectors import SyncDataCollector
-from torchrl.collectors.distributed.distributed_collector import DistributedCollector
+from torchrl.collectors.distributed.ray_collector import RayDistributedCollector
 
 
 if __name__ == "__main__":
@@ -28,7 +28,7 @@ if __name__ == "__main__":
         "memory": 5 * 1024 ** 3,
         "object_store_memory": 2 * 1024 ** 3
     }
-    distributed_collector = DistributedCollector(
+    distributed_collector = RayDistributedCollector(
         policy=policy,
         collector_class=SyncDataCollector,
         collector_params={

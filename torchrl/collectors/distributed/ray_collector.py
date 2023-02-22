@@ -91,7 +91,7 @@ def as_remote(cls,
     return remote_collector
 
 
-class RayDistributedCollector(IterableDataset, _DataCollector, ABC):
+class RayDistributedCollector(_DataCollector):
     """
     Distributed data collector with Ray (https://docs.ray.io/) backend.
 
@@ -204,7 +204,7 @@ class RayDistributedCollector(IterableDataset, _DataCollector, ABC):
             # collector.__ray_terminate__.remote()  # This will kill the actor but let pending tasks finish
             ray.kill(collector)  # This will interrupt any running tasks on the actor, causing them to fail immediately
 
-    def __iter__(self) -> Iterator[TensorDictBase]:
+    def iterator(self):
         if self.coordination == "sync":
             return self.sync_iterator()
         else:
