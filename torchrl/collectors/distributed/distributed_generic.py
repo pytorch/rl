@@ -29,7 +29,6 @@ except ModuleNotFoundError as err:
     _has_submitit = False
     SUBMITIT_ERR = err
 
-SLEEP_INTERVAL = 1e-6
 MAX_TIME_TO_CONNECT = 1000
 DEFAULT_SLURM_CONF = {
     "timeout_min": 10,
@@ -111,7 +110,7 @@ def distributed_init_collection_node(
             data = next(collector_iter)
             if verbose:
                 print(f"node with rank {rank} -- sending {data}")
-            data.isend(dst=0)
+            data.send(dst=0)
             if verbose:
                 print(f"node with rank {rank} -- setting to 'done'")
             if not sync:
