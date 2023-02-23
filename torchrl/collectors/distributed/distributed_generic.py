@@ -31,8 +31,6 @@ except ModuleNotFoundError as err:
     _has_submitit = False
     SUBMITIT_ERR = err
 
-from torchrl.envs import EnvBase, EnvCreator
-
 SLEEP_INTERVAL = 1e-6
 MAX_TIME_TO_CONNECT = 1000
 DEFAULT_SLURM_CONF = {
@@ -41,12 +39,12 @@ DEFAULT_SLURM_CONF = {
     "slurm_cpus_per_task": 32,
     "slurm_gpus_per_node": 0,
 }
-TCP_PORT = os.environ.get("TCP_PORT", "10003")
 
 
 def distributed_init_collection_node(
     rank,
     rank0_ip,
+    tcpport,
     sync,
     world_size,
     backend,
@@ -55,21 +53,11 @@ def distributed_init_collection_node(
     env_make,
     policy,
     frames_per_batch,
-    total_frames,
     collector_kwargs,
-    verbose=True,
+    verbose=False,
 ):
     if verbose:
-        print(f"node with rank {rank} -- launching distributed")
-    torch.distributed.init_process_group(
-        backend,
-        rank=rank,
-        world_size=world_size,
-        timeout=timedelta(MAX_TIME_TO_CONNECT),
-        init_method=f"tcp://{rank0_ip}:{TCP_PORT}",
-    )
-    if verbose:
-        print(f"node with rank {rank} -- creating collector")
+        print(f"node with rank {rank} -- creating collector of type {collector_class}")
     if not issubclass(collector_class, SyncDataCollector):
         env_make = [env_make] * num_workers
     elif num_workers != 1:
@@ -84,30 +72,44 @@ def distributed_init_collection_node(
         split_trajs=False,
         **collector_kwargs,
     )
+
+    print("tcp port", tcpport)
+    if verbose:
+        print(f"node with rank {rank} -- launching distributed")
+    torch.distributed.init_process_group(
+        backend,
+        rank=rank,
+        world_size=world_size,
+        timeout=timedelta(MAX_TIME_TO_CONNECT),
+        init_method=f"tcp://{rank0_ip}:{tcpport}",
+    )
     if verbose:
         print(f"node with rank {rank} -- creating store")
     # The store carries instructions for the node
     _store = torch.distributed.TCPStore(
         host_name=rank0_ip,
-        port=int(TCP_PORT) + 1,
+        port=tcpport + 1,
         world_size=world_size,
         is_master=False,
     )
+    # while _store.get(f"NODE_{rank}_status") != b"placeholder":
+    #     continue
     if isinstance(policy, nn.Module):
         policy_weights = TensorDict(dict(policy.named_parameters()), [])
     else:
         policy_weights = TensorDict({}, [])
     collector_iter = iter(collector)
-    _store.set(f"NODE_{rank}_status", "busy")
-    if verbose:
-        print(f"node with rank {rank} -- first data")
-    data = next(collector_iter)
     if verbose:
         print(f"node with rank {rank} -- loop")
     while True:
-        instruction = _store.get(f"NODE_{rank}_status")
-        if instruction == b"busy":
-            _store.set(f"NODE_{rank}_status", "sending")
+        instruction = _store.get(f"NODE_{rank}_in")
+        if verbose:
+            print(f"node with rank {rank} -- new instruction: {instruction}")
+        _store.delete_key(f"NODE_{rank}_in")
+        if instruction == b"continue":
+            if verbose:
+                print(f"node with rank {rank} -- new data")
+            data = next(collector_iter)
             if verbose:
                 print(f"node with rank {rank} -- sending {data}")
             # sync and async only differ by how they send data
@@ -115,17 +117,10 @@ def distributed_init_collection_node(
                 data.gather_and_stack(dest=0)
             else:
                 data.isend(dst=0)
-            _store.set(f"NODE_{rank}_status", "done")
-            # wait for instruction
-            while _store.get(f"NODE_{rank}_status") == b"done":
-                continue
-            instruction = _store.get(f"NODE_{rank}_status")
-        if instruction == b"continue":
             if verbose:
-                print(f"node with rank {rank} -- new data")
-            _store.set(f"NODE_{rank}_status", "busy")
-            data = next(collector_iter)
-            continue
+                print(f"node with rank {rank} -- setting to 'done'")
+            if not sync:
+                _store.set(f"NODE_{rank}_out", b"done")
         elif instruction == b"shutdown":
             if verbose:
                 print(f"node with rank {rank} -- shutting down")
@@ -133,7 +128,7 @@ def distributed_init_collection_node(
                 collector.shutdown()
             except Exception:
                 pass
-            _store.set(f"NODE_{rank}_status", "down")
+            _store.set(f"NODE_{rank}_out", b"down")
             break
         elif instruction == b"update_weights":
             if sync:
@@ -144,11 +139,12 @@ def distributed_init_collection_node(
                 policy_weights.irecv(0)
             # the policy has been updated: we can simply update the weights
             collector.update_policy_weights_()
+            _store.set(f"NODE_{rank}_out", b"updated")
         elif instruction.startswith(b"seeding"):
             seed = int(instruction.split(b"seeding_"))
             new_seed = collector.set_seed(seed)
-            _store.set(f"NODE_{rank}_status", "seeded")
-            _store.set(f"NODE_{rank}_seed", str(new_seed))
+            _store.set(f"NODE_{rank}_out", b"seeded")
+            _store.set(f"NODE_{rank}_seed", str(new_seed).encode("utf-8"))
         else:
             raise RuntimeError(f"Instruction {instruction} is not recognised")
     if not collector.closed:
@@ -170,11 +166,12 @@ class DistributedDataCollector(_DataCollector):
             batch.
         total_frames (int): the total number of frames to be collected from the
             distributed collector.
-        collector_class (type, optional): a collector class for the remote node. Can be
+        collector_class (type or str, optional): a collector class for the remote node. Can be
             :class:`torchrl.collectors.SyncDataCollector`,
             :class:`torchrl.collectors.MultiSyncDataCollector`,
             :class:`torchrl.collectors.MultiaSyncDataCollector`
-            or a derived class of these.
+            or a derived class of these. The strings "single", "sync" and
+            "async" correspond to respective class.
             Defaults to :class:`torchrl.collectors.SyncDataCollector`.
         collector_kwargs (dict, optional): a dictionary of parameters to be passed to the
             remote data-collector.
@@ -219,6 +216,7 @@ class DistributedDataCollector(_DataCollector):
             To find more about submitit, visit
             https://github.com/facebookincubator/submitit
             Defaults to "submitit".
+        tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
     """
 
     def __init__(
@@ -237,6 +235,7 @@ class DistributedDataCollector(_DataCollector):
         update_after_each_batch=False,
         max_weight_update_interval=-1,
         launcher="submitit",
+        tcp_port=None,
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -259,6 +258,10 @@ class DistributedDataCollector(_DataCollector):
         self.max_weight_update_interval = max_weight_update_interval
         self.launcher = launcher
         self._batches_since_weight_update = [0 for _ in range(self.num_workers)]
+        if tcp_port is None:
+            self.tcp_port = os.environ.get("TCP_PORT", "10003")
+        else:
+            self.tcp_port = str(tcp_port)
 
         # make private to avoid changes from users during collection
         self._sync = sync
@@ -283,12 +286,14 @@ class DistributedDataCollector(_DataCollector):
         # os.environ['TP_SOCKET_IFNAME'] = 'lo'
 
         self._init_workers()
+        self._make_container()
 
     def _init_master_dist(
         self,
         world_size,
         backend,
     ):
+        TCP_PORT = self.tcp_port
         torch.distributed.init_process_group(
             backend,
             rank=0,
@@ -296,6 +301,17 @@ class DistributedDataCollector(_DataCollector):
             timeout=timedelta(MAX_TIME_TO_CONNECT),
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
+        self._store = torch.distributed.TCPStore(
+            host_name=self.IPAddr,
+            port=int(TCP_PORT) + 1,
+            world_size=self.num_workers + 1,
+            is_master=True,
+        )
+        # for rank in range(1, self.num_workers + 1):
+        #     self._store.set(f"NODE_{rank}_seed", "placeholder")
+        #     self._store.set(f"NODE_{rank}_status", "placeholder")
+
+    def _make_container(self):
         env_constructor = self.env_constructors[0]
         pseudo_collector = SyncDataCollector(
             env_constructor,
@@ -304,13 +320,6 @@ class DistributedDataCollector(_DataCollector):
             total_frames=self.total_frames,
             split_trajs=False,
         )
-        if not self._sync:
-            self._store = torch.distributed.TCPStore(
-                host_name=self.IPAddr,
-                port=int(TCP_PORT) + 1,
-                world_size=self.num_workers + 1,
-                is_master=True,
-            )
         for data in pseudo_collector:
             break
         if not issubclass(self.collector_class, SyncDataCollector):
@@ -329,10 +338,12 @@ class DistributedDataCollector(_DataCollector):
             )
 
     def _init_worker_dist_submitit(self, executor, i):
+        TCP_PORT = self.tcp_port
         job = executor.submit(
             distributed_init_collection_node,
             i + 1,
             self.IPAddr,
+            int(TCP_PORT),
             self._sync,
             self.num_workers + 1,
             self.backend,
@@ -341,17 +352,18 @@ class DistributedDataCollector(_DataCollector):
             self.env_constructors[i],
             self.policy,
             self._frames_per_batch_corrected,
-            self.total_frames,
             self.collector_kwargs,
         )
         return job
 
     def _init_worker_dist_mp(self, i):
+        TCP_PORT = self.tcp_port
         job = mp.Process(
             target=distributed_init_collection_node,
             args=(
                 i + 1,
                 self.IPAddr,
+                int(TCP_PORT),
                 self._sync,
                 self.num_workers + 1,
                 self.backend,
@@ -360,7 +372,6 @@ class DistributedDataCollector(_DataCollector):
                 self.env_constructors[i],
                 self.policy,
                 self._frames_per_batch_corrected,
-                self.total_frames,
                 self.collector_kwargs,
             ),
         )
@@ -374,6 +385,7 @@ class DistributedDataCollector(_DataCollector):
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = "29500"
+
         if self.launcher == "mp":
             self.jobs = []
         elif self.launcher == "submitit":
@@ -393,13 +405,15 @@ class DistributedDataCollector(_DataCollector):
                 )
                 self.jobs.append(job)
                 print("job launched")
-
         self._init_master_dist(self.num_workers + 1, self.backend)
 
     def iterator(self):
         yield from self._iterator_dist()
 
     def _iterator_dist(self):
+        for rank in range(1, self.num_workers + 1):
+            self._store.set(f"NODE_{rank}_in", b"continue")
+
         total_frames = 0
         if not self._sync:
             trackers = []
@@ -417,27 +431,33 @@ class DistributedDataCollector(_DataCollector):
                 else:
                     for j in range(self.num_workers):
                         self._batches_since_weight_update[j] += 1
+                total_frames += data.numel()
+
+                if total_frames < self.total_frames:
+                    for rank in range(1, self.num_workers + 1):
+                        self._store.set(f"NODE_{rank}_in", b"continue")
+
             else:
                 data = None
                 while data is None:
                     for i in range(self.num_workers):
                         rank = i + 1
-                        # if all(_tracker.is_completed() for _tracker in trackers[i]):
-                        if self._store.get(f"NODE_{rank}_status") == b"done":
+                        if self._store.get(f"NODE_{rank}_out") == b"done":
+                            self._store.delete_key(f"NODE_{rank}_out")
                             for _tracker in trackers[i]:
                                 _tracker.wait()
                             data = self._out_tensordict[i].to_tensordict()
-                            data._origin = rank
                             if self.update_after_each_batch:
                                 self.update_policy_weights_(rank)
-                            self._store.set(f"NODE_{rank}_status", "continue")
+                            total_frames += data.numel()
+                            if total_frames < self.total_frames:
+                                self._store.set(f"NODE_{rank}_in", b"continue")
                             trackers[i] = self._out_tensordict[i].irecv(
                                 src=i + 1, return_premature=True
                             )
                             for j in range(self.num_workers):
                                 self._batches_since_weight_update[j] += j != i
                             break
-            total_frames += data.numel()
             yield data
 
             if self.max_weight_update_interval > -1:
@@ -451,7 +471,7 @@ class DistributedDataCollector(_DataCollector):
 
         for i in range(self.num_workers):
             rank = i + 1
-            self._store.set(f"NODE_{rank}_status", "shutdown")
+            self._store.set(f"NODE_{rank}_in", b"shutdown")
 
     def update_policy_weights_(self, worker_rank=None) -> None:
         """Updates the weights of the worker nodes.
@@ -465,27 +485,27 @@ class DistributedDataCollector(_DataCollector):
         workers = range(self.num_workers) if worker_rank is None else [worker_rank - 1]
         for i in workers:
             rank = i + 1
-            self._store.set(f"NODE_{rank}_status", "update_weights")
+            self._store.set(f"NODE_{rank}_in", b"update_weights")
             if self._sync:
                 self.policy_weights.send(rank)
             else:
                 self.policy_weights.isend(rank)
             self._batches_since_weight_update[rank - 1] = 0
+            status = self._store.get(f"NODE_{rank}_out")
+            if status != b"updated":
+                raise RuntimeError(f"Expected 'updated' but got status {status}.")
+            self._store.delete_key(f"NODE_{rank}_out")
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         for i in range(self.num_workers):
             rank = i + 1
-            self._store.set(f"NODE_{rank}_status", f"seeding_{seed}")
-            count = 0
-            interval = 1e-4
-            while self._store.get(f"NODE_{rank}_status") != b"seeded":
-                count += 1
-                if count > 1e6:
-                    raise RuntimeError(
-                        f"Failed to seed during the allowed interval of {count*interval}s."
-                    )
-                time.sleep(interval)
+            self._store.set(f"NODE_{rank}_in", f"seeding_{seed}".encode("utf-8"))
+            status = self._store.get(f"NODE_{rank}_out")
+            if status != b"updated":
+                raise RuntimeError(f"Expected 'seeded' but got status {status}.")
+            self._store.delete_key(f"NODE_{rank}_out")
             new_seed = self._store.get(f"NODE_{rank}_seed")
+            self._store.delete_key(f"NODE_{rank}_seed")
             seed = int(new_seed)
         return seed
 
@@ -498,17 +518,11 @@ class DistributedDataCollector(_DataCollector):
     def shutdown(self):
         for i in range(self.num_workers):
             rank = i + 1
-            self._store.set(f"NODE_{rank}_status", "shutdown")
-            count = 0
-            interval = 1e-4
-            while self._store.get(f"NODE_{rank}_status") != b"down":
-                count += 1
-                if count > 1e6:
-                    warnings.warn(
-                        f"Failed to shutdown during the allowed interval of {count*interval}s. "
-                        f"The remote process may of may not be inactive."
-                    )
-                time.sleep(interval)
+            self._store.set(f"NODE_{rank}_in", b"shutdown")
+            status = self._store.get(f"NODE_{rank}_out")
+            if status != b"down":
+                raise RuntimeError(f"Expected 'down' but got status {status}.")
+            self._store.delete_key(f"NODE_{rank}_out")
             if self.launcher == "mp":
                 if not self.jobs[i].is_alive():
                     continue

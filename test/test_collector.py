@@ -4,12 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import os
 import sys
-from torchrl.collectors.distributed import DistributedDataCollector
+
 import numpy as np
 import pytest
 import torch
-from torch import multiprocessing as mp
 from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
 from mocking_classes import (
     ContinuousActionVecMockEnv,
@@ -21,7 +21,7 @@ from mocking_classes import (
 )
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
-from torch import nn
+from torch import multiprocessing as mp, nn
 from torchrl._utils import seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
@@ -29,6 +29,7 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     RandomPolicy,
 )
+from torchrl.collectors.distributed import DistributedDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
@@ -1198,6 +1199,7 @@ class TestDistributedCollector:
             total_frames=1000,
             frames_per_batch=frames_per_batch,
             launcher="mp",
+            tcp_port=str(1234),
         )
         total = 0
         for data in collector:
@@ -1212,8 +1214,8 @@ class TestDistributedCollector:
         queue = mp.Queue(1)
         proc = mp.Process(
             target=TestDistributedCollector._test_distributed_collector_basic,
-            args=(queue, frames_per_batch)
-            )
+            args=(queue, frames_per_batch),
+        )
         proc.start()
         try:
             out = queue.get(timeout=100)
@@ -1224,7 +1226,7 @@ class TestDistributedCollector:
 
     @staticmethod
     def _test_distributed_collector_sync(queue, sync):
-        frames_per_batch=50
+        frames_per_batch = 50
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         collector = DistributedDataCollector(
@@ -1234,6 +1236,7 @@ class TestDistributedCollector:
             frames_per_batch=frames_per_batch,
             launcher="mp",
             sync=sync,
+            tcp_port=str(1234),
         )
         total = 0
         for data in collector:
@@ -1243,28 +1246,13 @@ class TestDistributedCollector:
         assert total == 200
         queue.put("passed")
 
-    @pytest.mark.parametrize("sync", [True, False])
+    @pytest.mark.parametrize("sync", [False, True])
     def test_distributed_collector_sync(self, sync):
         queue = mp.Queue(1)
         proc = mp.Process(
             target=TestDistributedCollector._test_distributed_collector_sync,
-            args=(queue, sync)
-            )
-        proc.start()
-        try:
-            out = queue.get(timeout=100)
-            assert out == "passed"
-        finally:
-            proc.join()
-            queue.close()
-
-    @pytest.mark.parametrize("frames_per_batch", [50, 100])
-    def test_distributed_collector_sync(self, frames_per_batch):
-        queue = mp.Queue(1)
-        proc = mp.Process(
-            target=TestDistributedCollector._test_distributed_collector_basic,
-            args=(queue, frames_per_batch)
-            )
+            args=(queue, sync),
+        )
         proc.start()
         try:
             out = queue.get(timeout=100)
@@ -1274,7 +1262,8 @@ class TestDistributedCollector:
             queue.close()
 
     @staticmethod
-    def _test_distributed_collector_collector_class(queue, collector_class):
+    def _test_distributed_collector_class(queue, collector_class):
+        frames_per_batch = 50
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         collector = DistributedDataCollector(
@@ -1282,8 +1271,9 @@ class TestDistributedCollector:
             policy,
             collector_class=collector_class,
             total_frames=200,
-            frames_per_batch=100,
+            frames_per_batch=frames_per_batch,
             launcher="mp",
+            tcp_port=str(1234),
         )
         total = 0
         for data in collector:
@@ -1293,10 +1283,20 @@ class TestDistributedCollector:
         assert total == 200
         queue.put("passed")
 
-    @pytest.mark.parametrize("collector_class", [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector])
-    def test_distributed_collector_collector_class(self, collector_class):
+    @pytest.mark.parametrize(
+        "collector_class",
+        [
+            MultiSyncDataCollector,
+            MultiaSyncDataCollector,
+            SyncDataCollector,
+        ],
+    )
+    def test_distributed_collector_class(self, collector_class):
         queue = mp.Queue(1)
-        proc = mp.Process(target=TestDistributedCollector._test_distributed_collector_collector_class, args=(queue, collector_class))
+        proc = mp.Process(
+            target=TestDistributedCollector._test_distributed_collector_class,
+            args=(queue, collector_class),
+        )
         proc.start()
         try:
             out = queue.get(timeout=100)
