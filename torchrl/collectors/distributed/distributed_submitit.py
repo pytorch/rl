@@ -426,8 +426,7 @@ class DistributedDataCollector(_DataCollector):
                 while data is None:
                     for i in range(self.num_workers):
                         rank = i + 1
-                        if all(_tracker.is_completed() for _tracker in trackers[i]):
-                        # if self._store.get(f"NODE_{rank}_status") == b"done":
+                        if self._store.get(f"NODE_{rank}_status") == b"done":
                             for _tracker in trackers[i]:
                                 _tracker.wait()
                             data = self._out_tensordict[i].to_tensordict()
