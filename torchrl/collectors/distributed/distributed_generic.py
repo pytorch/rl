@@ -424,6 +424,13 @@ class DistributedDataCollector(_DataCollector):
 
         while total_frames < self.total_frames:
             if self._sync:
+                # in the 'sync' case we should update before collecting the data
+                if self.update_after_each_batch:
+                    self.update_policy_weights_()
+                else:
+                    for j in range(self.num_workers):
+                        self._batches_since_weight_update[j] += 1
+
                 if total_frames < self.total_frames:
                     for rank in range(1, self.num_workers + 1):
                         self._store.set(f"NODE_{rank}_in", b"continue")
@@ -442,11 +449,6 @@ class DistributedDataCollector(_DataCollector):
                 data = self._out_tensordict.to_tensordict()
                 total_frames += data.numel()
                 yield data
-                if self.update_after_each_batch:
-                    self.update_policy_weights_()
-                else:
-                    for j in range(self.num_workers):
-                        self._batches_since_weight_update[j] += 1
 
             else:
                 data = None
