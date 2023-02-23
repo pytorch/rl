@@ -110,7 +110,6 @@ def distributed_init_collection_node(
             data = next(collector_iter)
             if verbose:
                 print(f"node with rank {rank} -- sending {data}")
-            # sync and async only differ by how they send data
             data.send(dst=0)
             if verbose:
                 print(f"node with rank {rank} -- setting to 'done'")
@@ -452,7 +451,8 @@ class DistributedDataCollector(_DataCollector):
                 while data is None:
                     for i in range(self.num_workers):
                         rank = i + 1
-                        if self._store.get(f"NODE_{rank}_out") == b"done":
+                        if all(_tracker.done() for _tracker in trackers[i]):
+                        # if self._store.get(f"NODE_{rank}_out") == b"done":
                             self._store.delete_key(f"NODE_{rank}_out")
                             for _tracker in trackers[i]:
                                 _tracker.wait()
