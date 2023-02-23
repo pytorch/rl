@@ -111,10 +111,7 @@ def distributed_init_collection_node(
             if verbose:
                 print(f"node with rank {rank} -- sending {data}")
             # sync and async only differ by how they send data
-            if sync:
-                data.gather_and_stack(dest=0)
-            else:
-                data.send(dst=0)
+            data.send(dst=0)
             if verbose:
                 print(f"node with rank {rank} -- setting to 'done'")
             if not sync:
