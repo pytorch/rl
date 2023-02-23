@@ -110,7 +110,7 @@ def distributed_init_collection_node(
             data = next(collector_iter)
             if verbose:
                 print(f"node with rank {rank} -- sending {data}")
-            data.send(dst=0)
+            data.isend(dst=0)
             if verbose:
                 print(f"node with rank {rank} -- setting to 'done'")
             if not sync:
