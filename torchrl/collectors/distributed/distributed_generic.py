@@ -6,8 +6,6 @@ Generic distributed data-collector using torch.distributed backend
 
 import os
 import socket
-import time
-import warnings
 from datetime import timedelta
 from typing import OrderedDict
 
@@ -73,7 +71,7 @@ def distributed_init_collection_node(
         **collector_kwargs,
     )
 
-    print("tcp port", tcpport)
+    print("IP address:", rank0_ip, "\ttcp port:", tcpport)
     if verbose:
         print(f"node with rank {rank} -- launching distributed")
     torch.distributed.init_process_group(
@@ -320,19 +318,19 @@ class DistributedDataCollector(_DataCollector):
             total_frames=self.total_frames,
             split_trajs=False,
         )
-        for data in pseudo_collector:
+        for _data in pseudo_collector:
             break
         if not issubclass(self.collector_class, SyncDataCollector):
             # Multi-data collectors
             self._out_tensordict = (
-                data.expand((self.num_workers, *data.shape))
+                _data.expand((self.num_workers, *_data.shape))
                 .to_tensordict()
                 .to(self.storing_device)
             )
         else:
             # Multi-data collectors
             self._out_tensordict = (
-                data.expand((self.num_workers, *data.shape))
+                _data.expand((self.num_workers, *_data.shape))
                 .to_tensordict()
                 .to(self.storing_device)
             )
@@ -382,6 +380,7 @@ class DistributedDataCollector(_DataCollector):
 
         hostname = socket.gethostname()
         IPAddr = socket.gethostbyname(hostname)
+        print("Server IP address:", IPAddr)
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = "29500"
