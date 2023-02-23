@@ -74,11 +74,6 @@ def as_remote(cls, remote_config):
     return remote_collector
 
 
-# TODO: make sure env_makers is not a list of lists.
-# TODO: allow env_makers to be None if specified in collector_kwargs. but not in both.
-# TODO: allow policy to be None if specified in collector_kwargs. but not in both.
-# TODO: add example
-# TODO: add tests
 class RayDistributedCollector(_DataCollector):
     """Distributed data collector with Ray (https://docs.ray.io/) backend.
 
@@ -115,8 +110,20 @@ class RayDistributedCollector(_DataCollector):
             same length as the number of nodes to be launched.
         policy (Callable[[TensorDict], TensorDict]): a callable that populates
             the tensordict with an `"action"` field.
-        collector_class (Python class): a collector class to be remotely instantiated.
+        collector_class (Python class): a collector class to be remotely instantiated. Can be
+            :class:`torchrl.collectors.SyncDataCollector`,
+            :class:`torchrl.collectors.MultiSyncDataCollector`,
+            :class:`torchrl.collectors.MultiaSyncDataCollector`
+            or a derived class of these.
+            Defaults to :class:`torchrl.collectors.SyncDataCollector`.
         collector_kwargs (dict): collector_class kwargs.
+        num_workers_per_collector (int): the number of copies of the
+            env constructor that is to be used on the remote nodes.
+            Defaults to 1 (a single env per collector).
+            On a single worker node all the sub-workers will be
+            executing the same environment. If different environments need to
+            be executed, they should be dispatched across worker nodes, not
+            subnodes.
         ray_init_config (dict, Optional): kwargs used to call ray.init().
         remote_config (dict, Optional): ray resource specs for the remote collectors.
         num_collectors (int, Optional): total number of collectors to be instantiated.
@@ -130,25 +137,48 @@ class RayDistributedCollector(_DataCollector):
             first-served" fashion.
 
     Examples:
-
+        >>> from torch import nn
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from torchrl.collectors.collectors import SyncDataCollector
+        >>> from torchrl.collectors.distributed.ray_collector import RayDistributedCollector
+        >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+        >>> distributed_collector = RayDistributedCollector(
+        ...     env_makers=[env_maker],
+        ...     policy=policy,
+        ...     collector_class=SyncDataCollector,
+        ...     collector_kwargs={
+        ...         "max_frames_per_traj": 50,
+        ...         "init_random_frames": -1,
+        ...         "reset_at_each_iter": False,
+        ...         "device": "cpu",
+        ...         "storing_device": "cpu",
+        ...     },
+        ...     num_collectors=1,
+        ...     total_frames=10000,
+        ...     frames_per_batch=200,
+        ... )
+        >>> for i, data in enumerate(collector):
+        ...     if i == 2:
+        ...         print(data)
+        ...         break
     """
 
     def __init__(self,
-                 env_makers: Union[Callable, EnvBase, List],
+                 env_makers: Union[Callable, EnvBase, List[Callable], List[EnvBase]],
                  policy: Callable[[TensorDict], TensorDict],
                  collector_class: Callable[[TensorDict], TensorDict],
                  frames_per_batch: int,
                  total_frames: int = -1,
                  collector_kwargs: Union[Dict, List[Dict]] = None,
+                 num_workers_per_collector: int = 1,
                  sync: bool = False,
                  ray_init_config: Dict = None,
                  remote_config: Dict = None,
                  num_collectors: int = None,
                  storing_device: torch.device = torch.device("cpu"),
                  ):
-
-        # storing_device
-        # num_workers_per_collector=1,
 
         if remote_config is None:
             remote_config = DEFAULT_REMOTE_CLASS_CONFIG
@@ -200,11 +230,15 @@ class RayDistributedCollector(_DataCollector):
         if not ray.is_initialized():
             raise RuntimeError(f"Ray could not be initialized.")
 
-        # Monkey patching as_remote and print_remote_collector_info to collector class
+        if collector_class == "async":
+            collector_class = MultiaSyncDataCollector
+        elif collector_class == "sync":
+            collector_class = MultiSyncDataCollector
+        elif collector_class == "single":
+            collector_class = SyncDataCollector
         collector_class.as_remote = as_remote
         collector_class.print_remote_collector_info = print_remote_collector_info
         self.collector_class = collector_class
-
         self.collected_frames = 0
         self.total_frames = total_frames
         self.collector_class = collector_class
@@ -231,6 +265,7 @@ class RayDistributedCollector(_DataCollector):
         if self.num_collectors > 0:
             self.add_collectors(
                 env_makers,
+                num_workers_per_collector,
                 self.local_policy,
                 self.frames_per_batch,
                 collector_kwargs)
@@ -240,10 +275,10 @@ class RayDistributedCollector(_DataCollector):
         ray.wait(object_refs=pending_samples)
 
     @staticmethod
-    def _make_collector(cls, env_makers, policy, frames_per_batch, other_params):
+    def _make_collector(cls, env_maker, policy, frames_per_batch, other_params):
         """Create a single collector instance."""
         collector = cls(
-            env_makers,
+            env_maker,
             policy,
             total_frames=-1,
             frames_per_batch=frames_per_batch,
@@ -251,17 +286,17 @@ class RayDistributedCollector(_DataCollector):
             **other_params)
         return collector
 
-    def add_collectors(self, env_makers, policy, frames_per_batch, collector_kwargs):
+    def add_collectors(self, env_makers, num_envs, policy, frames_per_batch, collector_kwargs):
         """Creates and adds a number of remote collectors to the set."""
         cls = self.collector_class.as_remote(self.remote_config).remote
         self._remote_collectors.extend([
             self._make_collector(
                 cls,
-                env_makers,
+                [env_maker] * num_envs if self.collector_class is not SyncDataCollector else env_maker,
                 policy,
                 frames_per_batch,
                 other_params
-            ) for env_makers, other_params in zip(env_makers, collector_kwargs)
+            ) for env_maker, other_params in zip(env_makers, collector_kwargs)
         ])
 
     def local_policy(self):
