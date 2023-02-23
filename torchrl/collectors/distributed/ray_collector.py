@@ -65,8 +65,7 @@ def as_remote(cls,
               memory=None,
               object_store_memory=None,
               resources=None):
-    """
-    Creates an instance of a remote ray class.
+    """Creates an instance of a remote ray class.
 
     Args:
         cls (Python Class): class to be remotely instantiated.
