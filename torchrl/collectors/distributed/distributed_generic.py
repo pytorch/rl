@@ -105,6 +105,7 @@ def distributed_init_collection_node(
             print(f"node with rank {rank} -- new instruction: {instruction}")
         _store.delete_key(f"NODE_{rank}_in")
         if instruction == b"continue":
+            _store.set(f"NODE_{rank}_status", b"busy")
             if verbose:
                 print(f"node with rank {rank} -- new data")
             data = next(collector_iter)
@@ -114,7 +115,7 @@ def distributed_init_collection_node(
             if verbose:
                 print(f"node with rank {rank} -- setting to 'done'")
             if not sync:
-                _store.set(f"NODE_{rank}_out", b"done")
+                _store.set(f"NODE_{rank}_status", b"done")
         elif instruction == b"shutdown":
             if verbose:
                 print(f"node with rank {rank} -- shutting down")
@@ -451,9 +452,7 @@ class DistributedDataCollector(_DataCollector):
                 while data is None:
                     for i in range(self.num_workers):
                         rank = i + 1
-                        if all(_tracker.done() for _tracker in trackers[i]):
-                        # if self._store.get(f"NODE_{rank}_out") == b"done":
-                            self._store.delete_key(f"NODE_{rank}_out")
+                        if self._store.get(f"NODE_{rank}_status") == b"done":
                             for _tracker in trackers[i]:
                                 _tracker.wait()
                             data = self._out_tensordict[i].to_tensordict()
