@@ -103,7 +103,7 @@ def distributed_init_collection_node(
         instruction = _store.get(f"NODE_{rank}_in")
         if verbose:
             print(f"node with rank {rank} -- new instruction: {instruction}")
-        # _store.delete_key(f"NODE_{rank}_in")
+        _store.delete_key(f"NODE_{rank}_in")
         if instruction == b"continue":
             _store.set(f"NODE_{rank}_status", b"busy")
             if verbose:
@@ -111,7 +111,7 @@ def distributed_init_collection_node(
             data = next(collector_iter)
             if verbose:
                 print(f"node with rank {rank} -- sending {data}")
-            data.send(dst=0)
+            data.isend(dst=0)
             if verbose:
                 print(f"node with rank {rank} -- setting to 'done'")
             if not sync:
@@ -503,7 +503,7 @@ class DistributedDataCollector(_DataCollector):
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"updated":
                 raise RuntimeError(f"Expected 'updated' but got status {status}.")
-            # self._store.delete_key(f"NODE_{rank}_out")
+            self._store.delete_key(f"NODE_{rank}_out")
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         for i in range(self.num_workers):
@@ -512,9 +512,9 @@ class DistributedDataCollector(_DataCollector):
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"updated":
                 raise RuntimeError(f"Expected 'seeded' but got status {status}.")
-            # self._store.delete_key(f"NODE_{rank}_out")
+            self._store.delete_key(f"NODE_{rank}_out")
             new_seed = self._store.get(f"NODE_{rank}_seed")
-            # self._store.delete_key(f"NODE_{rank}_seed")
+            self._store.delete_key(f"NODE_{rank}_seed")
             seed = int(new_seed)
         return seed
 
@@ -531,7 +531,7 @@ class DistributedDataCollector(_DataCollector):
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"down":
                 raise RuntimeError(f"Expected 'down' but got status {status}.")
-            # self._store.delete_key(f"NODE_{rank}_out")
+            self._store.delete_key(f"NODE_{rank}_out")
             if self.launcher == "mp":
                 if not self.jobs[i].is_alive():
                     continue
