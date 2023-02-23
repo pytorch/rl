@@ -110,7 +110,8 @@ class RayDistributedCollector(_DataCollector):
         num_collectors (int, Optional): total number of collectors to be instantiated.
         total_frames (int, Optional): lower bound of the total number of frames returned by the collector.
             The iterator will stop once the total number of frames equates or exceeds the total number of
-            frames passed to the collector. Default value is -1, which mean no target total number of frame.
+            frames passed to the collector. Default value is -1, which mean no target total number of frames
+            (i.e. the collector will run indefinitely).
         coordination (str): coordination pattern between collector instances (should be 'sync' or 'async')
     """
 
