@@ -440,12 +440,13 @@ class DistributedDataCollector(_DataCollector):
                     for _tracker in tracker:
                         _tracker.wait()
                 data = self._out_tensordict.to_tensordict()
+                total_frames += data.numel()
+                yield data
                 if self.update_after_each_batch:
                     self.update_policy_weights_()
                 else:
                     for j in range(self.num_workers):
                         self._batches_since_weight_update[j] += 1
-                total_frames += data.numel()
 
             else:
                 data = None
