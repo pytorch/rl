@@ -1,3 +1,9 @@
+"""
+Generic distributed data-collector using torch.distributed.rpc backend
+======================================================================
+
+"""
+
 import os
 import socket
 import time
@@ -13,6 +19,7 @@ except ModuleNotFoundError as err:
     _has_submitit = False
     SUBMITIT_ERR = err
 import torch.cuda
+from tensordict import TensorDict
 
 from torch.distributed import rpc
 
@@ -99,32 +106,60 @@ def distributed_init_collection_node(
     )
     if not issubclass(collector_class, SyncDataCollector):
         env_make = [env_make] * num_workers
+    elif num_workers != 1:
+        raise RuntimeError(
+            "SyncDataCollector and subclasses can only support a single environment."
+        )
+
     collector = collector_class(
         env_make,
         policy,
         frames_per_batch=frames_per_batch,
-        total_frames=total_frames,
+        total_frames=-1,
         split_trajs=False,
         **collector_kwargs,
     )
-    if not sync:
-        _store = torch.distributed.TCPStore(
-            host_name=rank0_ip,
-            port=int(TCP_PORT) + 1,
-            world_size=world_size,
-            is_master=False,
-        )
-    for data in collector:
-        if sync:
-            data.gather_and_stack(dest=0)
-        else:
+    # The store carries instructions for the node
+    _store = torch.distributed.TCPStore(
+        host_name=rank0_ip,
+        port=int(TCP_PORT) + 1,
+        world_size=world_size,
+        is_master=False,
+    )
+    policy_weights = TensorDict(dict(policy.named_parameters()), [])
+    collector_iter = iter(collector)
+    _store.set(f"NODE_{rank}_status", "busy")
+    data = next(collector_iter)
+    while True:
+        instruction = _store.get(f"NODE_{rank}_status")
+        if instruction == "busy":
+            _store.set(f"NODE_{rank}_status", "sending")
+            if sync:
+                data.gather_and_stack(dest=0)
+            else:
+                data.isend(dst=0)
+            _store.set(f"NODE_{rank}_status", "sent")
+        # wait for instruction
+        while _store.get(f"NODE_{rank}_status") == b"sent":
+            continue
+        instruction = _store.get(f"NODE_{rank}_status")
+        if instruction == "continue":
             _store.set(f"NODE_{rank}_status", "busy")
-            data.cpu().isend(dst=0)
-            _store.set(f"NODE_{rank}_status", "done")
-            while _store.get(f"NODE_{rank}_status") != b"continue":
-                time.sleep(1e-4)
+            data = next(collector_iter)
+        elif instruction == "shutdown":
+            try:
+                collector.shutdown()
+            except Exception:
+                pass
+            break
+        elif instruction == "update_weights":
+            policy_weights.recv(0)
+            # the policy has been updated: we can simply update the weights
+            collector.update_policy_weights_()
 
-    collector.shutdown()
+    if not collector.closed:
+        collector.shutdown()
+    return
 
 
 class DistributedDataCollector(_DataCollector):
@@ -139,24 +174,31 @@ class DistributedDataCollector(_DataCollector):
             same length as the number of nodes to be launched.
         policy (Callable[[TensorDict], TensorDict]): a callable that populates
             the tensordict with an `"action"` field.
-        collector_class (type): a collector class for the remote node. Can be
-            :class:`torchrl.collectors.SyncDataCollector`, :class:`torchrl.collectors.MultiSyncDataCollector`, :class:`torchrl.collectors.MultiaSyncDataCollector`
-            or a derived class of these.
         frames_per_batch (int): the number of frames to be gathered in each
             batch.
         total_frames (int): the total number of frames to be collected from the
             distributed collector.
+        collector_class (type): a collector class for the remote node. Can be
+            :class:`torchrl.collectors.SyncDataCollector`,
+            :class:`torchrl.collectors.MultiSyncDataCollector`,
+            :class:`torchrl.collectors.MultiaSyncDataCollector`
+            or a derived class of these.
+            Defaults to :class:`torchrl.collectors.SyncDataCollector`.
+        collector_kwargs (dict): a dictionary of parameters to be passed to the
+            remote data-collector.
         num_workers_per_collector (int): the number of copies of the
             env constructor that is to be used on the remote nodes.
             Defaults to 1 (a single env per collector).
+            On a single worker node all the sub-workers will be
+            executing the same environment. If different environments need to
+            be executed, they should be dispatched across worker nodes, not
+            subnodes.
         sync (bool): if ``True``, the resulting tensordict is a stack of all the
             tensordicts collected on each node. If ``False`` (default), each
             tensordict results from a separate node in a "first-ready,
             first-served" fashion.
         slurm_kwargs (dict): a dictionary of parameters to be passed to the
             submitit executor.
-        collector_kwargs (dict): a dictionary of parameters to be passed to the
-            remote data-collector.
         backend (str): must be one of "rpc" or "distributed:<distributed_backed>".
             <distributed_backed> is one of "gloo", "mpi", "nccl" or "ucc". See
             the torch.distributed documentation for more information.
@@ -167,13 +209,13 @@ class DistributedDataCollector(_DataCollector):
         self,
         env_makers,
         policy,
-        collector_class,
         frames_per_batch,
         total_frames,
+        collector_class=SyncDataCollector,
+        collector_kwargs=None,
         num_workers_per_collector=1,
         sync=False,
         slurm_kwargs=None,
-        collector_kwargs=None,
         backend="distributed:gloo",
         storing_device="cpu",
     ):
@@ -186,6 +228,7 @@ class DistributedDataCollector(_DataCollector):
         self.collector_class = collector_class
         self.env_constructors = env_makers
         self.policy = policy
+        self.policy_weights = TensorDict(dict(self.policy), [])
         self.num_workers = len(env_makers)
         self.frames_per_batch = frames_per_batch
         self.storing_device = storing_device
@@ -245,14 +288,18 @@ class DistributedDataCollector(_DataCollector):
             break
         if not issubclass(self.collector_class, SyncDataCollector):
             # Multi-data collectors
-            self._out_tensordict = data.expand(
-                (self.num_workers, *data.shape)
-            ).to_tensordict().to(self.storing_device)
+            self._out_tensordict = (
+                data.expand((self.num_workers, *data.shape))
+                .to_tensordict()
+                .to(self.storing_device)
+            )
         else:
             # Multi-data collectors
-            self._out_tensordict = data.expand(
-                (self.num_workers, *data.shape)
-            ).to_tensordict().to(self.storing_device)
+            self._out_tensordict = (
+                data.expand((self.num_workers, *data.shape))
+                .to_tensordict()
+                .to(self.storing_device)
+            )
 
     def _init_master_rpc(
         self,
@@ -439,6 +486,18 @@ class DistributedDataCollector(_DataCollector):
                             break
             total_frames += data.numel()
             yield data
+        for i in range(self.num_workers):
+            rank = i + 1
+            self._store.set(f"NODE_{rank}_status", "shutdown")
+
+    def update_policy_weights_(self) -> None:
+        if self.backend.startswith("rpc"):
+            raise NotImplementedError
+        else:
+            for i in range(self.num_workers):
+                rank = i + 1
+                self._store.set(f"NODE_{rank}_status", "update_weights")
+                self.policy_weights.send(rank)
 
     def _iterator_rpc(self):
         total_frames = 0

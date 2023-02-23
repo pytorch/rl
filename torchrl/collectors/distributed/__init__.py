@@ -1,1 +1,1 @@
-from .distributed_submitit import DistributedDataCollector
+from .distributed_generic import DistributedDataCollector
