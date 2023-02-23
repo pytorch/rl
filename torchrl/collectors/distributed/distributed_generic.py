@@ -114,7 +114,7 @@ def distributed_init_collection_node(
             if sync:
                 data.gather_and_stack(dest=0)
             else:
-                data.isend(dst=0)
+                data.send(dst=0)
             if verbose:
                 print(f"node with rank {rank} -- setting to 'done'")
             if not sync:
@@ -410,20 +410,35 @@ class DistributedDataCollector(_DataCollector):
         yield from self._iterator_dist()
 
     def _iterator_dist(self):
-        for rank in range(1, self.num_workers + 1):
-            self._store.set(f"NODE_{rank}_in", b"continue")
 
         total_frames = 0
         if not self._sync:
+            for rank in range(1, self.num_workers + 1):
+                self._store.set(f"NODE_{rank}_in", b"continue")
             trackers = []
             for i in range(self.num_workers):
+                rank = i + 1
                 trackers.append(
-                    self._out_tensordict[i].irecv(src=i + 1, return_premature=True)
+                    self._out_tensordict[i].irecv(src=rank, return_premature=True)
                 )
 
         while total_frames < self.total_frames:
             if self._sync:
-                self._out_tensordict.gather_and_stack(dest=0)
+                if total_frames < self.total_frames:
+                    for rank in range(1, self.num_workers + 1):
+                        self._store.set(f"NODE_{rank}_in", b"continue")
+                trackers = []
+                for i in range(self.num_workers):
+                    rank = i + 1
+                    trackers.append(
+                        self._out_tensordict[i].irecv(
+                            src=rank,
+                            return_premature=True
+                            )
+                    )
+                for tracker in trackers:
+                    for _tracker in tracker:
+                        _tracker.wait()
                 data = self._out_tensordict.to_tensordict()
                 if self.update_after_each_batch:
                     self.update_policy_weights_()
@@ -431,10 +446,6 @@ class DistributedDataCollector(_DataCollector):
                     for j in range(self.num_workers):
                         self._batches_since_weight_update[j] += 1
                 total_frames += data.numel()
-
-                if total_frames < self.total_frames:
-                    for rank in range(1, self.num_workers + 1):
-                        self._store.set(f"NODE_{rank}_in", b"continue")
 
             else:
                 data = None
@@ -457,7 +468,7 @@ class DistributedDataCollector(_DataCollector):
                             for j in range(self.num_workers):
                                 self._batches_since_weight_update[j] += j != i
                             break
-            yield data
+                yield data
 
             if self.max_weight_update_interval > -1:
                 for j in range(self.num_workers):
