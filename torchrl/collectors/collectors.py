@@ -417,7 +417,7 @@ class SyncDataCollector(_DataCollector):
         self.env: EnvBase = env
         self.closed = False
         self.reset_when_done = reset_when_done
-        self.n_env = self.env.numel()
+        self.n_env = self.env.batch_size.numel()
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,

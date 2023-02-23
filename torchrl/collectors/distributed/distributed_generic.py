@@ -11,6 +11,17 @@ import warnings
 from datetime import timedelta
 from typing import OrderedDict
 
+import torch.cuda
+from tensordict import TensorDict
+from torch import multiprocessing as mp, nn
+
+from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.collectors.collectors import (
+    _DataCollector,
+    MultiSyncDataCollector,
+    SyncDataCollector,
+)
+
 SUBMITIT_ERR = None
 try:
     import submitit
@@ -19,15 +30,7 @@ try:
 except ModuleNotFoundError as err:
     _has_submitit = False
     SUBMITIT_ERR = err
-import torch.cuda
-from tensordict import TensorDict
 
-from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.collectors.collectors import (
-    _DataCollector,
-    MultiSyncDataCollector,
-    SyncDataCollector,
-)
 from torchrl.envs import EnvBase, EnvCreator
 
 SLEEP_INTERVAL = 1e-6
@@ -54,7 +57,10 @@ def distributed_init_collection_node(
     frames_per_batch,
     total_frames,
     collector_kwargs,
+    verbose=True,
 ):
+    if verbose:
+        print(f"node with rank {rank} -- launching distributed")
     torch.distributed.init_process_group(
         backend,
         rank=rank,
@@ -62,13 +68,14 @@ def distributed_init_collection_node(
         timeout=timedelta(MAX_TIME_TO_CONNECT),
         init_method=f"tcp://{rank0_ip}:{TCP_PORT}",
     )
+    if verbose:
+        print(f"node with rank {rank} -- creating collector")
     if not issubclass(collector_class, SyncDataCollector):
         env_make = [env_make] * num_workers
     elif num_workers != 1:
         raise RuntimeError(
             "SyncDataCollector and subclasses can only support a single environment."
         )
-
     collector = collector_class(
         env_make,
         policy,
@@ -77,6 +84,8 @@ def distributed_init_collection_node(
         split_trajs=False,
         **collector_kwargs,
     )
+    if verbose:
+        print(f"node with rank {rank} -- creating store")
     # The store carries instructions for the node
     _store = torch.distributed.TCPStore(
         host_name=rank0_ip,
@@ -84,41 +93,59 @@ def distributed_init_collection_node(
         world_size=world_size,
         is_master=False,
     )
-    policy_weights = TensorDict(dict(policy.named_parameters()), [])
+    if isinstance(policy, nn.Module):
+        policy_weights = TensorDict(dict(policy.named_parameters()), [])
+    else:
+        policy_weights = TensorDict({}, [])
     collector_iter = iter(collector)
     _store.set(f"NODE_{rank}_status", "busy")
+    if verbose:
+        print(f"node with rank {rank} -- first data")
     data = next(collector_iter)
+    if verbose:
+        print(f"node with rank {rank} -- loop")
     while True:
         instruction = _store.get(f"NODE_{rank}_status")
-        if instruction == "busy":
+        if instruction == b"busy":
             _store.set(f"NODE_{rank}_status", "sending")
+            if verbose:
+                print(f"node with rank {rank} -- sending {data}")
             # sync and async only differ by how they send data
             if sync:
                 data.gather_and_stack(dest=0)
             else:
                 data.isend(dst=0)
-            _store.set(f"NODE_{rank}_status", "sent")
+            _store.set(f"NODE_{rank}_status", "done")
             # wait for instruction
-            while _store.get(f"NODE_{rank}_status") == b"sent":
+            while _store.get(f"NODE_{rank}_status") == b"done":
                 continue
             instruction = _store.get(f"NODE_{rank}_status")
-        if instruction == "continue":
+        if instruction == b"continue":
+            if verbose:
+                print(f"node with rank {rank} -- new data")
             _store.set(f"NODE_{rank}_status", "busy")
             data = next(collector_iter)
             continue
-        elif instruction == "shutdown":
+        elif instruction == b"shutdown":
+            if verbose:
+                print(f"node with rank {rank} -- shutting down")
             try:
                 collector.shutdown()
             except Exception:
                 pass
             _store.set(f"NODE_{rank}_status", "down")
             break
-        elif instruction == "update_weights":
-            policy_weights.recv(0)
+        elif instruction == b"update_weights":
+            if sync:
+                policy_weights.recv(0)
+            else:
+                # wthout further arguments, irecv blocks until weights have
+                # been updated
+                policy_weights.irecv(0)
             # the policy has been updated: we can simply update the weights
             collector.update_policy_weights_()
-        elif instruction.startswith("seeding"):
-            seed = int(instruction.split("seeding_"))
+        elif instruction.startswith(b"seeding"):
+            seed = int(instruction.split(b"seeding_"))
             new_seed = collector.set_seed(seed)
             _store.set(f"NODE_{rank}_status", "seeded")
             _store.set(f"NODE_{rank}_seed", str(new_seed))
@@ -130,9 +157,7 @@ def distributed_init_collection_node(
 
 
 class DistributedDataCollector(_DataCollector):
-    """A distributed data collector with submitit backend.
-
-    To find more about submitit, visit https://github.com/facebookincubator/submitit
+    """A distributed data collector with torch.distributed backend.
 
     Supports sync and async data collection.
 
@@ -186,7 +211,14 @@ class DistributedDataCollector(_DataCollector):
             parameters being updated for a certain time even if ``update_after_each_batch``
             is turned on.
             Defaults to -1 (no forced update).
-
+        launcher (str, optional): how jobs should be launched.
+            Can be one of "submitit" or "mp" for multiprocessing. The former
+            can launch jobs across multiple nodes, whilst the latter will only
+            launch jobs on a single machine. "submitit" requires the homonymous
+            library to be installed.
+            To find more about submitit, visit
+            https://github.com/facebookincubator/submitit
+            Defaults to "submitit".
     """
 
     def __init__(
@@ -204,6 +236,7 @@ class DistributedDataCollector(_DataCollector):
         storing_device="cpu",
         update_after_each_batch=False,
         max_weight_update_interval=-1,
+        launcher="submitit",
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -214,12 +247,17 @@ class DistributedDataCollector(_DataCollector):
         self.collector_class = collector_class
         self.env_constructors = env_makers
         self.policy = policy
-        self.policy_weights = TensorDict(dict(self.policy), [])
+        if isinstance(policy, nn.Module):
+            policy_weights = TensorDict(dict(policy.named_parameters()), [])
+        else:
+            policy_weights = TensorDict({}, [])
+        self.policy_weights = policy_weights
         self.num_workers = len(env_makers)
         self.frames_per_batch = frames_per_batch
         self.storing_device = storing_device
         self.update_after_each_batch = update_after_each_batch
         self.max_weight_update_interval = max_weight_update_interval
+        self.launcher = launcher
         self._batches_since_weight_update = [0 for _ in range(self.num_workers)]
 
         # make private to avoid changes from users during collection
@@ -290,7 +328,7 @@ class DistributedDataCollector(_DataCollector):
                 .to(self.storing_device)
             )
 
-    def _init_worker_dist(self, executor, i):
+    def _init_worker_dist_submitit(self, executor, i):
         job = executor.submit(
             distributed_init_collection_node,
             i + 1,
@@ -308,23 +346,53 @@ class DistributedDataCollector(_DataCollector):
         )
         return job
 
+    def _init_worker_dist_mp(self, i):
+        job = mp.Process(
+            target=distributed_init_collection_node,
+            args=(
+                i + 1,
+                self.IPAddr,
+                self._sync,
+                self.num_workers + 1,
+                self.backend,
+                self.collector_class,
+                self.num_workers_per_collector,
+                self.env_constructors[i],
+                self.policy,
+                self._frames_per_batch_corrected,
+                self.total_frames,
+                self.collector_kwargs,
+            ),
+        )
+        job.start()
+        return job
+
     def _init_workers(self):
-        executor = submitit.AutoExecutor(folder="log_test")
-        executor.update_parameters(**self.slurm_kwargs)
 
         hostname = socket.gethostname()
         IPAddr = socket.gethostbyname(hostname)
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = "29500"
-
+        if self.launcher == "mp":
+            self.jobs = []
+        elif self.launcher == "submitit":
+            executor = submitit.AutoExecutor(folder="log_test")
+            executor.update_parameters(**self.slurm_kwargs)
         for i in range(self.num_workers):
             print("Submitting job")
-            job = self._init_worker_dist(
-                executor,
-                i,
-            )
-            print("job id", job.job_id)  # ID of your job
+            if self.launcher == "submitit":
+                job = self._init_worker_dist_submitit(
+                    executor,
+                    i,
+                )
+                print("job id", job.job_id)  # ID of your job
+            elif self.launcher == "mp":
+                job = self._init_worker_dist_mp(
+                    i,
+                )
+                self.jobs.append(job)
+                print("job launched")
 
         self._init_master_dist(self.num_workers + 1, self.backend)
 
@@ -441,3 +509,8 @@ class DistributedDataCollector(_DataCollector):
                         f"The remote process may of may not be inactive."
                     )
                 time.sleep(interval)
+            if self.launcher == "mp":
+                if not self.jobs[i].is_alive():
+                    continue
+                self.jobs[i].join(timeout=10)
+        print("collector shut down")

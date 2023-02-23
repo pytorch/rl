@@ -5,10 +5,11 @@
 
 import argparse
 import sys
-
+from torchrl.collectors.distributed import DistributedDataCollector
 import numpy as np
 import pytest
 import torch
+from torch import multiprocessing as mp
 from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
 from mocking_classes import (
     ContinuousActionVecMockEnv,
@@ -1184,6 +1185,125 @@ class TestAutoWrap:
 def weight_reset(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
         m.reset_parameters()
+
+
+class TestDistributedCollector:
+    @staticmethod
+    def _test_distributed_collector_basic(queue, frames_per_batch):
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
+        collector = DistributedDataCollector(
+            [env],
+            policy,
+            total_frames=1000,
+            frames_per_batch=frames_per_batch,
+            launcher="mp",
+        )
+        total = 0
+        for data in collector:
+            total += data.numel()
+            assert data.numel() == frames_per_batch
+        collector.shutdown()
+        assert total == 1000
+        queue.put("passed")
+
+    @pytest.mark.parametrize("frames_per_batch", [50, 100])
+    def test_distributed_collector_basic(self, frames_per_batch):
+        queue = mp.Queue(1)
+        proc = mp.Process(
+            target=TestDistributedCollector._test_distributed_collector_basic,
+            args=(queue, frames_per_batch)
+            )
+        proc.start()
+        try:
+            out = queue.get(timeout=100)
+            assert out == "passed"
+        finally:
+            proc.join()
+            queue.close()
+
+    @staticmethod
+    def _test_distributed_collector_sync(queue, sync):
+        frames_per_batch=50
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
+        collector = DistributedDataCollector(
+            [env],
+            policy,
+            total_frames=200,
+            frames_per_batch=frames_per_batch,
+            launcher="mp",
+            sync=sync,
+        )
+        total = 0
+        for data in collector:
+            total += data.numel()
+            assert data.numel() == frames_per_batch
+        collector.shutdown()
+        assert total == 200
+        queue.put("passed")
+
+    @pytest.mark.parametrize("sync", [True, False])
+    def test_distributed_collector_sync(self, sync):
+        queue = mp.Queue(1)
+        proc = mp.Process(
+            target=TestDistributedCollector._test_distributed_collector_sync,
+            args=(queue, sync)
+            )
+        proc.start()
+        try:
+            out = queue.get(timeout=100)
+            assert out == "passed"
+        finally:
+            proc.join()
+            queue.close()
+
+    @pytest.mark.parametrize("frames_per_batch", [50, 100])
+    def test_distributed_collector_sync(self, frames_per_batch):
+        queue = mp.Queue(1)
+        proc = mp.Process(
+            target=TestDistributedCollector._test_distributed_collector_basic,
+            args=(queue, frames_per_batch)
+            )
+        proc.start()
+        try:
+            out = queue.get(timeout=100)
+            assert out == "passed"
+        finally:
+            proc.join()
+            queue.close()
+
+    @staticmethod
+    def _test_distributed_collector_collector_class(queue, collector_class):
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
+        collector = DistributedDataCollector(
+            [env],
+            policy,
+            collector_class=collector_class,
+            total_frames=200,
+            frames_per_batch=100,
+            launcher="mp",
+        )
+        total = 0
+        for data in collector:
+            total += data.numel()
+            assert data.numel() == frames_per_batch
+        collector.shutdown()
+        assert total == 200
+        queue.put("passed")
+
+    @pytest.mark.parametrize("collector_class", [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector])
+    def test_distributed_collector_collector_class(self, collector_class):
+        queue = mp.Queue(1)
+        proc = mp.Process(target=TestDistributedCollector._test_distributed_collector_collector_class, args=(queue, collector_class))
+        proc.start()
+        try:
+            out = queue.get(timeout=100)
+            assert out == "passed"
+        finally:
+            proc.join()
+            queue.close()
 
 
 if __name__ == "__main__":
