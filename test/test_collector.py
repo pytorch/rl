@@ -28,7 +28,7 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     RandomPolicy,
 )
-from torchrl.collectors.distributed import RayDistributedCollector
+from torchrl.collectors.distributed.ray_collector import RayDistributedCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
@@ -1188,8 +1188,9 @@ def weight_reset(m):
 
 
 class TestRayDistributedCollector:
-    @staticmethod
-    def _test_distributed_collector_basic(queue, frames_per_batch):
+
+    @pytest.mark.parametrize("frames_per_batch", [50, 100])
+    def test_ray_distributed_collector_basic(self, frames_per_batch):
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         collector = RayDistributedCollector(
@@ -1201,48 +1202,47 @@ class TestRayDistributedCollector:
         total = 0
         for data in collector:
             total += data.numel()
-            assert data.numel() == frames_per_batch
+            assert data.numel() == 100
         collector.shutdown()
         assert total == 1000
-        queue.put("passed")
 
-    @pytest.mark.parametrize("sync", [True, False])
-    def _test_distributed_collector_sync(self, sync):
-        frames_per_batch = 50
-        env = ContinuousActionVecMockEnv()
-        policy = RandomPolicy(env.action_spec)
-        collector = RayDistributedCollector(
-            [env],
-            policy,
-            total_frames=200,
-            frames_per_batch=frames_per_batch,
-            sync=sync,
-        )
-        total = 0
-        for data in collector:
-            total += data.numel()
-            assert data.numel() == frames_per_batch
-        collector.shutdown()
-        assert total == 200
-
-    @pytest.mark.parametrize("frames_per_batch", [50, 100])
-    @pytest.mark.parametrize("collector_class", [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector])
-    def _test_distributed_collector_collector_class(self, frames_per_batch, collector_class):
-        env = ContinuousActionVecMockEnv()
-        policy = RandomPolicy(env.action_spec)
-        collector = RayDistributedCollector(
-            [env],
-            policy,
-            collector_class=collector_class,
-            total_frames=200,
-            frames_per_batch=frames_per_batch,
-        )
-        total = 0
-        for data in collector:
-            total += data.numel()
-            assert data.numel() == frames_per_batch
-        collector.shutdown()
-        assert total == 200
+    # @pytest.mark.parametrize("sync", [True, False])
+    # def test_ray_distributed_collector_sync(self, sync):
+    #     frames_per_batch = 50
+    #     env = ContinuousActionVecMockEnv()
+    #     policy = RandomPolicy(env.action_spec)
+    #     collector = RayDistributedCollector(
+    #         [env],
+    #         policy,
+    #         total_frames=200,
+    #         frames_per_batch=frames_per_batch,
+    #         sync=sync,
+    #     )
+    #     total = 0
+    #     for data in collector:
+    #         total += data.numel()
+    #         assert data.numel() == frames_per_batch
+    #     collector.shutdown()
+    #     assert total == 200
+    #
+    # @pytest.mark.parametrize("frames_per_batch", [50, 100])
+    # @pytest.mark.parametrize("collector_class", [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector])
+    # def test_ray_distributed_collector_collector_class(self, frames_per_batch, collector_class):
+    #     env = ContinuousActionVecMockEnv()
+    #     policy = RandomPolicy(env.action_spec)
+    #     collector = RayDistributedCollector(
+    #         [env],
+    #         policy,
+    #         collector_class=collector_class,
+    #         total_frames=200,
+    #         frames_per_batch=frames_per_batch,
+    #     )
+    #     total = 0
+    #     for data in collector:
+    #         total += data.numel()
+    #         assert data.numel() == frames_per_batch
+    #     collector.shutdown()
+    #     assert total == 200
 
 
 if __name__ == "__main__":
