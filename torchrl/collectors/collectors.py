@@ -112,6 +112,8 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
 
 
 class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
+    _iterator = None
+
     def _get_policy_and_device(
         self,
         policy: Optional[
@@ -124,11 +126,9 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         observation_spec: TensorSpec = None,
     ) -> Tuple[TensorDictModule, torch.device, Union[None, Callable[[], dict]]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
-
         From a policy and a device, assigns the self.device attribute to
         the desired device and maps the policy onto it or (if the device is
         ommitted) assigns the self.device attribute to the policy device.
-
         Args:
             create_env_fn (Callable or list of callables): an env creator
                 function (or a list of creators)
@@ -137,7 +137,6 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             device (int, str or torch.device, optional): device where to place
                 the policy
             observation_spec (TensorSpec, optional): spec of the observations
-
         """
         # if create_env_fn is not None:
         #     if create_env_kwargs is None:
@@ -220,6 +219,11 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()
+
+    def next(self):
+        if self._iterator is None:
+            self._iterator = iter(self)
+        return next(self._iterator).cpu()
 
     @abc.abstractmethod
     def iterator(self) -> Iterator[TensorDictBase]:
@@ -526,33 +530,6 @@ class SyncDataCollector(_DataCollector):
 
         """
         return self.env.set_seed(seed, static_seed=static_seed)
-
-    def _iterator_step(self) -> TensorDictBase:
-
-        if not hasattr(self, "_iter"):
-            self._iter = -1
-        if not hasattr(self, "_frames"):
-            self._frames = 0
-
-        self._iter += 1
-        tensordict_out = self.rollout()
-        self._frames += tensordict_out.numel()
-        if self._frames >= self.total_frames:
-            self.env.close()
-
-        if self.split_trajs:
-            tensordict_out = split_trajectories(tensordict_out)
-        if self.postproc is not None:
-            tensordict_out = self.postproc(tensordict_out)
-        if self._exclude_private_keys:
-            excluded_keys = [
-                key for key in tensordict_out.keys() if key.startswith("_")
-            ]
-            tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
-        if self.return_same_td:
-            return tensordict_out
-        else:
-            return tensordict_out.clone()
 
     def iterator(self) -> Iterator[TensorDictBase]:
         """Iterates through the DataCollector.

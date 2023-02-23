@@ -212,7 +212,7 @@ class RayDistributedCollector(_DataCollector):
                 e.load_state_dict.remote(**{"state_dict": policy_weights_local_collector_ref, "strict": False})
 
             # Ask for batches to all remote workers.
-            pending_tasks = [e._iterator_step.remote() for e in self.remote_collectors()]
+            pending_tasks = [e.next.remote() for e in self.remote_collectors()]
 
             # Wait for all rollouts
             samples_ready = []
@@ -242,7 +242,7 @@ class RayDistributedCollector(_DataCollector):
 
         pending_tasks = {}
         for w in self.remote_collectors():
-            future = w._iterator_step.remote()
+            future = w.next.remote()
             pending_tasks[future] = w
 
         while self.collected_frames < self.total_frames:
@@ -266,7 +266,7 @@ class RayDistributedCollector(_DataCollector):
             w.load_state_dict.remote(**{"state_dict": policy_weights_local_collector_ref, "strict": False})
 
             # Schedule a new collection task
-            future = w._iterator_step.remote()
+            future = w.next.remote()
             pending_tasks[future] = w
 
             yield out_td
