@@ -75,9 +75,8 @@ def as_remote(cls, remote_config):
 
 
 # TODO: make sure env_makers is not a list of lists.
-# TODO: add frames_per_batch=frames_per_batch, total_frames=total_frames and split_trajs=False.
-# TODO: allow env_makers to be None if specified in collector_kwargs.
-# TODO: allow policy to be None if specified in collector_kwargs.
+# TODO: allow env_makers to be None if specified in collector_kwargs. but not in both.
+# TODO: allow policy to be None if specified in collector_kwargs. but not in both.
 # TODO: add example
 # TODO: add tests
 class RayDistributedCollector(_DataCollector):
@@ -125,7 +124,10 @@ class RayDistributedCollector(_DataCollector):
             The iterator will stop once the total number of frames equates or exceeds the total number of
             frames passed to the collector. Default value is -1, which mean no target total number of frames
             (i.e. the collector will run indefinitely).
-        coordination (str): coordination pattern between collector instances (should be 'sync' or 'async')
+        sync (bool): if ``True``, the resulting tensordict is a stack of all the
+            tensordicts collected on each node. If ``False`` (default), each
+            tensordict results from a separate node in a "first-ready,
+            first-served" fashion.
 
     Examples:
 
@@ -135,13 +137,18 @@ class RayDistributedCollector(_DataCollector):
                  env_makers: Union[Callable, EnvBase, List],
                  policy: Callable[[TensorDict], TensorDict],
                  collector_class: Callable[[TensorDict], TensorDict],
-                 collector_kwargs: Union[Dict, List[Dict]],
+                 frames_per_batch: int,
+                 total_frames: int = -1,
+                 collector_kwargs: Union[Dict, List[Dict]] = None,
+                 sync: bool = False,
                  ray_init_config: Dict = None,
                  remote_config: Dict = None,
                  num_collectors: int = None,
-                 total_frames: int = -1,
-                 coordination: str = "synchronous",
+                 storing_device: torch.device = torch.device("cpu"),
                  ):
+
+        # storing_device
+        # num_workers_per_collector=1,
 
         if remote_config is None:
             remote_config = DEFAULT_REMOTE_CLASS_CONFIG
@@ -155,31 +162,34 @@ class RayDistributedCollector(_DataCollector):
             ) from RAY_ERR
 
         if num_collectors:
-
-            if isinstance(env_makers, list) and len(env_makers) != num_collectors:
-                raise ValueError(
-                    f"Inconsistent RayDistributedCollector parameters, env_makers is a list of length "
-                    f"{len(env_makers)} but the specified number of collectors is {num_collectors}."
-                )
+            if isinstance(env_makers, list):
+                if len(env_makers) != num_collectors:
+                    raise ValueError(
+                        f"Inconsistent RayDistributedCollector parameters, env_makers is a list of length "
+                        f"{len(env_makers)} but the specified number of collectors is {num_collectors}."
+                    )
             else:
                 env_makers = [env_makers] * num_collectors
 
-            if isinstance(collector_kwargs, list) and len(collector_kwargs) != num_collectors:
-                raise ValueError(
-                    f"Inconsistent RayDistributedCollector parameters, collector_kwargs is a list of length "
-                    f"{len(collector_kwargs)} but the specified number of collectors is {num_collectors}."
-                )
+            if isinstance(collector_kwargs, list):
+                if len(collector_kwargs) != num_collectors:
+                    raise ValueError(
+                        f"Inconsistent RayDistributedCollector parameters, collector_kwargs is a list of length "
+                        f"{len(collector_kwargs)} but the specified number of collectors is {num_collectors}."
+                    )
             else:
                 collector_kwargs = [collector_kwargs] * num_collectors
 
-        elif isinstance(env_makers, list) and isinstance(collector_kwargs, list):
+        if isinstance(env_makers, list) and isinstance(collector_kwargs, list):
             if len(env_makers) != len(collector_kwargs):
                 raise ValueError(
                     f"Inconsistent RayDistributedCollector parameters, env_makers is a list of length "
                     f"{len(env_makers)} but collector_kwargs is a list of length {len(collector_kwargs)}."
                 )
-            else:
-                env_makers, collector_kwargs = [env_makers], [collector_kwargs]
+            num_collectors = len(env_makers)
+        else:
+            env_makers, collector_kwargs = [env_makers], [collector_kwargs]
+            num_collectors = 1
 
         for i in range(len(env_makers)):
             if not isinstance(env_makers[i], (EnvBase, EnvCreator)):
@@ -198,39 +208,60 @@ class RayDistributedCollector(_DataCollector):
         self.collected_frames = 0
         self.total_frames = total_frames
         self.collector_class = collector_class
-        self.collector_params = collector_kwargs
+        self.collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
+        self.frames_per_batch = frames_per_batch
+        self.storing_device = storing_device
         self.num_collectors = num_collectors
         self.remote_config = remote_config
-        self.coordination = coordination
         self.local_policy = policy
+        self._sync = sync
+
+        if self._sync:
+            if self.frames_per_batch % self.num_collectors != 0:
+                raise RuntimeError(
+                    f"Cannot dispatch {self.frames_per_batch} frames across {self.num_collectors}. "
+                    f"Consider using a number of frames per batch that is divisible by the number of workers."
+                )
+            self._frames_per_batch_corrected = self.frames_per_batch // self.num_collectors
+        else:
+            self._frames_per_batch_corrected = self.frames_per_batch
 
         # Create remote instances of the collector class
         self._remote_collectors = []
         if self.num_collectors > 0:
-            self.add_collectors(env_makers, collector_kwargs)
+            self.add_collectors(
+                env_makers,
+                self.local_policy,
+                self.frames_per_batch,
+                collector_kwargs)
 
         # Print info of all remote workers
         pending_samples = [e.print_remote_collector_info.remote() for e in self.remote_collectors()]
         ray.wait(object_refs=pending_samples)
 
     @staticmethod
-    def _make_collector(cls, policy, env_makers, other_params):
+    def _make_collector(cls, env_makers, policy, frames_per_batch, other_params):
         """Create a single collector instance."""
         collector = cls(
             env_makers,
             policy,
+            total_frames=-1,
+            frames_per_batch=frames_per_batch,
+            split_trajs=False,
             **other_params)
         return collector
 
-    def add_collectors(self, env_makers, collector_params):
+    def add_collectors(self, env_makers, policy, frames_per_batch, collector_kwargs):
         """Creates and adds a number of remote collectors to the set."""
-        cls = self.collector_class.as_remote(**self.remote_config).remote
+        cls = self.collector_class.as_remote(self.remote_config).remote
         self._remote_collectors.extend([
             self._make_collector(
                 cls,
                 env_makers,
+                policy,
+                frames_per_batch,
                 other_params
-            ) for env_makers, other_params in zip(env_makers, collector_params)
+            ) for env_makers, other_params in zip(env_makers, collector_kwargs)
         ])
 
     def local_policy(self):
@@ -248,7 +279,7 @@ class RayDistributedCollector(_DataCollector):
             ray.kill(collector)  # This will interrupt any running tasks on the actor, causing them to fail immediately
 
     def iterator(self):
-        if self.coordination == "synchronous":
+        if self._sync:
             return self._sync_iterator()
         else:
             return self._async_iterator()
@@ -285,7 +316,7 @@ class RayDistributedCollector(_DataCollector):
 
             self.collected_frames += out_td.numel()
 
-            yield out_td
+            yield out_td.to(self.storing_device)
 
         self.shutdown()
 
@@ -311,7 +342,7 @@ class RayDistributedCollector(_DataCollector):
             ray.internal.free(future)  # should not be necessary, deleted automatically when ref count is down to 0
             self.collected_frames += out_td.numel()
 
-            yield out_td
+            yield out_td.to(self.storing_device)
 
             # Update agent weights
             policy_weights_local_collector = {"policy_state_dict": self.local_policy.state_dict()}

@@ -40,7 +40,7 @@ if __name__ == "__main__":
     num_cells = 256
     max_grad_norm = 1.0
     frame_skip = 1
-    num_collectors = 2
+    num_collectors = 3
     lr = 3e-4
     frames_per_batch = 1000 // frame_skip
     total_frames = 50_000 // frame_skip
@@ -121,22 +121,19 @@ if __name__ == "__main__":
         "object_store_memory": 1024 ** 3
     }
     collector = RayDistributedCollector(
-        env_makers=[env_maker] * num_collectors,
+        env_makers=[env] * num_collectors,
         policy=policy_module,
         collector_class=SyncDataCollector,
         collector_kwargs={
-            "create_env_fn": env,
-            "policy": policy_module,
-            "total_frames": -1,  # automatically set always to -1 ? DistributedCollector already specifies total_frames.
             "max_frames_per_traj": 50,
-            "frames_per_batch": frames_per_batch,
             "device": device,
-            "split_trajs": False,
         },
         remote_config=remote_config,
         num_collectors=num_collectors,
         total_frames=total_frames,
-        coordination="async",
+        sync=False,
+        # storing_device=device,
+        frames_per_batch=frames_per_batch,
     )
 
     # 5. Define replay buffer

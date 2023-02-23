@@ -33,11 +33,7 @@ if __name__ == "__main__":
         policy=policy,
         collector_class=SyncDataCollector,
         collector_kwargs={
-            "create_env_fn": env_maker,
-            "policy": policy,
-            "total_frames": -1,  # automatically set always to -1 ? DistributedCollector already specifies total_frames.
             "max_frames_per_traj": 50,
-            "frames_per_batch": 200,
             "init_random_frames": -1,
             "reset_at_each_iter": False,
             "device": "cpu",
@@ -46,7 +42,7 @@ if __name__ == "__main__":
         remote_config=remote_config,
         num_collectors=1,
         total_frames=10000,
-        coordination="async",
+        frames_per_batch=200,
     )
 
     # Sample batches until reaching total_frames
