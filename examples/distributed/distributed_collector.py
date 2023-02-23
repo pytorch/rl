@@ -31,7 +31,7 @@ if __name__ == "__main__":
     distributed_collector = RayDistributedCollector(
         policy=policy,
         collector_class=SyncDataCollector,
-        collector_params={
+        collector_kwargs={
             "create_env_fn": env_maker,
             "policy": policy,
             "total_frames": -1,  # automatically set always to -1 ? DistributedCollector already specifies total_frames.

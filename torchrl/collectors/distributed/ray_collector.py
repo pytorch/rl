@@ -46,8 +46,7 @@ DEFAULT_RAY_INIT_CONFIG = {
 DEFAULT_REMOTE_CLASS_CONFIG = {
     "num_cpus": 1,
     "num_gpus": 0.2,
-    "memory": 5 * 1024 ** 3,
-    "object_store_memory": 2 * 1024 ** 3
+    "memory": 2 * 1024 ** 3,
 }
 
 
@@ -59,31 +58,17 @@ def print_remote_collector_info(self):
 
 
 @classmethod
-def as_remote(cls,
-              num_cpus=None,
-              num_gpus=None,
-              memory=None,
-              object_store_memory=None,
-              resources=None):
+def as_remote(cls, remote_config):
     """Creates an instance of a remote ray class.
 
     Args:
         cls (Python Class): class to be remotely instantiated.
-        num_cpus (int): the quantity of CPU cores to reserve for this class.
-        num_gpus (float): the quantity of GPUs to reserve for this class.
-        memory (int): the heap memory quota for this class (in bytes).
-        object_store_memory (int): the object store memory quota for this class (in bytes).
-        resources (Dict[str, float]): the default resources required by the class creation task.
+        remote_config (dict): the quantity of CPU cores to reserve for this class.
 
     Returns:
         A function that creates ray remote class instances.
     """
-    remote_collector = ray.remote(
-        num_cpus=num_cpus,
-        num_gpus=num_gpus,
-        memory=memory,
-        object_store_memory=object_store_memory,
-        resources=resources)(cls)
+    remote_collector = ray.remote(**remote_config)(cls)
     remote_collector.is_remote = True
     return remote_collector
 
@@ -96,7 +81,24 @@ class RayDistributedCollector(_DataCollector):
     collector is an iterable that yields TensorDicts until a target number of collected
     frames is reached, but handles distributed data collection under the hood.
 
-    The coordination between collector instances can be specified as synchronous or asynchronous.
+    The class dictionary input parameter "ray_init_config" can be used to provide the kwargs to
+    call Ray initialization method ray.init(). If "ray_init_config" is not provided, the default
+    behaviour is to autodetect an existing Ray cluster or start a new Ray instance locally if no
+    existing cluster is found. Refer to Ray documentation for advanced initialization kwargs.
+
+    Similarly, dictionary input parameter "remote_config" can be used to specify the kwargs for
+    ray.remote() when called to created each remote collector actor, including collector compute
+    resources.The sum of all collector resources should be available in the cluster. Refer to Ray
+    documentation for advanced configuration of the ray.remote() method. Default kwargs are:
+
+    {
+        "num_cpus": 1,
+        "num_gpus": 0.2,
+        "memory": 2 * 1024 ** 3,
+    }
+
+
+    The coordination between collector instances can be specified as "synchronous" or "asynchronous".
     In synchronous coordination, this class waits for all remote collectors to collect a rollout,
     concatenates all rollouts into a single TensorDict instance and finally yields the concatenated
     data. On the other hand, if the coordination is to be carried out asynchronously, this class
@@ -104,7 +106,7 @@ class RayDistributedCollector(_DataCollector):
 
     Args:
         collector_class (Python Class): class to be remotely instantiated.
-        collector_params (dict): collector_class kwargs.
+        collector_kwargs (dict): collector_class kwargs.
         ray_init_config (dict, Optional): kwargs used to call ray.init().
         remote_config (dict, Optional): ray resource specs for the remote collectors.
         num_collectors (int, Optional): total number of collectors to be instantiated.
@@ -113,17 +115,20 @@ class RayDistributedCollector(_DataCollector):
             frames passed to the collector. Default value is -1, which mean no target total number of frames
             (i.e. the collector will run indefinitely).
         coordination (str): coordination pattern between collector instances (should be 'sync' or 'async')
+
+    Examples:
+
     """
 
     def __init__(self,
                  policy,
                  collector_class,
-                 collector_params,
+                 collector_kwargs,
                  ray_init_config=None,
                  remote_config=None,
                  num_collectors=1,
                  total_frames=-1,
-                 coordination="sync",  # "sync" or "async"
+                 coordination="synchronous",
                  ):
 
         if remote_config is None:
@@ -137,7 +142,7 @@ class RayDistributedCollector(_DataCollector):
                 f"ray library not found, unable to create a DistributedCollector. "
             ) from RAY_ERR
 
-        if coordination not in ("sync", "async"):
+        if coordination not in ("synchronous", "asynchronous"):
             raise ValueError(f"Coordination input parameter in CollectorSet has to be sync or async.")
 
         # Connect to an existing Ray cluster or start one and connect to it.
@@ -153,7 +158,7 @@ class RayDistributedCollector(_DataCollector):
         self.collected_frames = 0
         self.total_frames = total_frames
         self.collector_class = collector_class
-        self.collector_params = collector_params
+        self.collector_params = collector_kwargs
         self.num_collectors = num_collectors
         self.remote_config = remote_config
         self.coordination = coordination
@@ -162,7 +167,7 @@ class RayDistributedCollector(_DataCollector):
         # Create remote instances of the collector class
         self._remote_collectors = []
         if self.num_collectors > 0:
-            self.add_collectors(self.num_collectors, collector_params)
+            self.add_collectors(self.num_collectors, collector_kwargs)
 
         # Print info of all remote workers
         pending_samples = [e.print_remote_collector_info.remote() for e in self.remote_collectors()]
@@ -195,7 +200,7 @@ class RayDistributedCollector(_DataCollector):
             ray.kill(collector)  # This will interrupt any running tasks on the actor, causing them to fail immediately
 
     def iterator(self):
-        if self.coordination == "sync":
+        if self.coordination == "synchronous":
             return self._sync_iterator()
         else:
             return self._async_iterator()
@@ -234,8 +239,7 @@ class RayDistributedCollector(_DataCollector):
 
             yield out_td
 
-        self.stop_remote_collectors()
-        ray.shutdown()
+        self.shutdown()
 
     def _async_iterator(self) -> Iterator[TensorDictBase]:
 
@@ -259,6 +263,8 @@ class RayDistributedCollector(_DataCollector):
             ray.internal.free(future)  # should not be necessary, deleted automatically when ref count is down to 0
             self.collected_frames += out_td.numel()
 
+            yield out_td
+
             # Update agent weights
             policy_weights_local_collector = {"policy_state_dict": self.local_policy.state_dict()}
             policy_weights_local_collector_ref = ray.put(policy_weights_local_collector)
@@ -267,8 +273,6 @@ class RayDistributedCollector(_DataCollector):
             # Schedule a new collection task
             future = w.next.remote()
             pending_tasks[future] = w
-
-            yield out_td
 
         # Wait for the in-process collections tasks to finish.
         refs = list(pending_tasks.keys())
@@ -281,18 +285,13 @@ class RayDistributedCollector(_DataCollector):
         #         force=False,
         #     )
 
-        self.stop_remote_collectors()
-        ray.shutdown()
+        self.shutdown()
 
-    def set_seed(self, seed: Union[int, List[int]], static_seed: bool = False) -> List[int]:
+    def set_seed(self, seed: int, static_seed: bool = False) -> List[int]:
         """Calls set_seed(seed, static_seed) method for each remote collector and results a list of results."""
-        if isinstance(seed, int):
-            seed = [seed]
-        if len(seed) == 1:
-            seed = seed * len(self.remote_collectors())
-        futures = [collector.set_seed.remote(s, static_seed) for s, collector in zip(seed, self.remote_collectors())]
-        results = ray.get(object_refs=futures)
-        return results
+        for collector in self.remote_collectors():
+            seed = ray.get(object_refs=collector.set_seed.remote(seed, static_seed))
+        return seed
 
     def state_dict(self) -> List[OrderedDict]:
         """Calls state_dict() method for each remote collector and returns a list of results."""
@@ -309,9 +308,9 @@ class RayDistributedCollector(_DataCollector):
         for collector, state_dict in zip(self.remote_collectors(), state_dict):
             collector.load_state_dict.remote(state_dict)
 
-    @staticmethod
-    def shutdown():
+    def shutdown(self):
         """Finishes processes started by ray.init()."""
+        self.stop_remote_collectors()
         ray.shutdown()
 
     def __repr__(self) -> str:

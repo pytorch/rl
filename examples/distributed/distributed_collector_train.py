@@ -41,10 +41,10 @@ if __name__ == "__main__":
     max_grad_norm = 1.0
     frame_skip = 1
     num_collectors = 2
-    lr = 3e-4 * math.sqrt(num_collectors)
+    lr = 3e-4
     frames_per_batch = 1000 // frame_skip
-    total_frames = 50_000 * num_collectors // frame_skip
-    sub_batch_size = 64 * num_collectors
+    total_frames = 50_000 // frame_skip
+    sub_batch_size = 64
     num_epochs = 10
     clip_epsilon = (
         0.2
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     collector = RayDistributedCollector(
         policy=policy_module,
         collector_class=SyncDataCollector,
-        collector_params={
+        collector_kwargs={
             "create_env_fn": env,
             "policy": policy_module,
             "total_frames": -1,  # automatically set always to -1 ? DistributedCollector already specifies total_frames.
@@ -135,12 +135,12 @@ if __name__ == "__main__":
         remote_config=remote_config,
         num_collectors=num_collectors,
         total_frames=total_frames,
-        coordination="sync",
+        coordination="async",
     )
 
     # 5. Define replay buffer
     replay_buffer = ReplayBuffer(
-        storage=LazyTensorStorage(frames_per_batch * num_collectors),
+        storage=LazyTensorStorage(frames_per_batch),
         sampler=SamplerWithoutReplacement(),
     )
 
