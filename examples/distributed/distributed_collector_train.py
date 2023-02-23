@@ -121,6 +121,7 @@ if __name__ == "__main__":
         "object_store_memory": 1024 ** 3
     }
     collector = RayDistributedCollector(
+        env_makers=[env_maker] * num_collectors,
         policy=policy_module,
         collector_class=SyncDataCollector,
         collector_kwargs={

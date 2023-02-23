@@ -1,6 +1,7 @@
 import logging
-from typing import Dict, Iterator, OrderedDict, List, Union
+from typing import Dict, Iterator, OrderedDict, List, Union, Callable
 import torch
+from tensordict import TensorDict
 from ray._private.services import get_node_ip_address
 from tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase, EnvCreator
@@ -73,6 +74,12 @@ def as_remote(cls, remote_config):
     return remote_collector
 
 
+# TODO: make sure env_makers is not a list of lists.
+# TODO: add frames_per_batch=frames_per_batch, total_frames=total_frames and split_trajs=False.
+# TODO: allow env_makers to be None if specified in collector_kwargs.
+# TODO: allow policy to be None if specified in collector_kwargs.
+# TODO: add example
+# TODO: add tests
 class RayDistributedCollector(_DataCollector):
     """Distributed data collector with Ray (https://docs.ray.io/) backend.
 
@@ -105,7 +112,11 @@ class RayDistributedCollector(_DataCollector):
     provides the rollouts as they become available from individual remote collectors.
 
     Args:
-        collector_class (Python Class): class to be remotely instantiated.
+        env_makers (list of callables or EnvBase instances): a list of the
+            same length as the number of nodes to be launched.
+        policy (Callable[[TensorDict], TensorDict]): a callable that populates
+            the tensordict with an `"action"` field.
+        collector_class (Python class): a collector class to be remotely instantiated.
         collector_kwargs (dict): collector_class kwargs.
         ray_init_config (dict, Optional): kwargs used to call ray.init().
         remote_config (dict, Optional): ray resource specs for the remote collectors.
@@ -121,14 +132,15 @@ class RayDistributedCollector(_DataCollector):
     """
 
     def __init__(self,
-                 policy,
-                 collector_class,
-                 collector_kwargs,
-                 ray_init_config=None,
-                 remote_config=None,
-                 num_collectors=1,
-                 total_frames=-1,
-                 coordination="synchronous",
+                 env_makers: Union[Callable, EnvBase, List],
+                 policy: Callable[[TensorDict], TensorDict],
+                 collector_class: Callable[[TensorDict], TensorDict],
+                 collector_kwargs: Union[Dict, List[Dict]],
+                 ray_init_config: Dict = None,
+                 remote_config: Dict = None,
+                 num_collectors: int = None,
+                 total_frames: int = -1,
+                 coordination: str = "synchronous",
                  ):
 
         if remote_config is None:
@@ -142,8 +154,36 @@ class RayDistributedCollector(_DataCollector):
                 f"ray library not found, unable to create a DistributedCollector. "
             ) from RAY_ERR
 
-        if coordination not in ("synchronous", "asynchronous"):
-            raise ValueError(f"Coordination input parameter in CollectorSet has to be sync or async.")
+        if num_collectors:
+
+            if isinstance(env_makers, list) and len(env_makers) != num_collectors:
+                raise ValueError(
+                    f"Inconsistent RayDistributedCollector parameters, env_makers is a list of length "
+                    f"{len(env_makers)} but the specified number of collectors is {num_collectors}."
+                )
+            else:
+                env_makers = [env_makers] * num_collectors
+
+            if isinstance(collector_kwargs, list) and len(collector_kwargs) != num_collectors:
+                raise ValueError(
+                    f"Inconsistent RayDistributedCollector parameters, collector_kwargs is a list of length "
+                    f"{len(collector_kwargs)} but the specified number of collectors is {num_collectors}."
+                )
+            else:
+                collector_kwargs = [collector_kwargs] * num_collectors
+
+        elif isinstance(env_makers, list) and isinstance(collector_kwargs, list):
+            if len(env_makers) != len(collector_kwargs):
+                raise ValueError(
+                    f"Inconsistent RayDistributedCollector parameters, env_makers is a list of length "
+                    f"{len(env_makers)} but collector_kwargs is a list of length {len(collector_kwargs)}."
+                )
+            else:
+                env_makers, collector_kwargs = [env_makers], [collector_kwargs]
+
+        for i in range(len(env_makers)):
+            if not isinstance(env_makers[i], (EnvBase, EnvCreator)):
+                env_makers[i] = EnvCreator(env_makers[i])
 
         # Connect to an existing Ray cluster or start one and connect to it.
         ray.init(**ray_init_config)
@@ -167,23 +207,31 @@ class RayDistributedCollector(_DataCollector):
         # Create remote instances of the collector class
         self._remote_collectors = []
         if self.num_collectors > 0:
-            self.add_collectors(self.num_collectors, collector_kwargs)
+            self.add_collectors(env_makers, collector_kwargs)
 
         # Print info of all remote workers
         pending_samples = [e.print_remote_collector_info.remote() for e in self.remote_collectors()]
         ray.wait(object_refs=pending_samples)
 
     @staticmethod
-    def _make_collector(cls, collector_params):
+    def _make_collector(cls, policy, env_makers, other_params):
         """Create a single collector instance."""
-        collector = cls(**collector_params)
+        collector = cls(
+            env_makers,
+            policy,
+            **other_params)
         return collector
 
-    def add_collectors(self, num_collectors, collector_params):
+    def add_collectors(self, env_makers, collector_params):
         """Creates and adds a number of remote collectors to the set."""
         cls = self.collector_class.as_remote(**self.remote_config).remote
-        self._remote_collectors.extend(
-            [self._make_collector(cls, collector_params) for _ in range(num_collectors)])
+        self._remote_collectors.extend([
+            self._make_collector(
+                cls,
+                env_makers,
+                other_params
+            ) for env_makers, other_params in zip(env_makers, collector_params)
+        ])
 
     def local_policy(self):
         """Returns local collector."""
