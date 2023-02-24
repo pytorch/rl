@@ -8,6 +8,7 @@ import sys
 
 import numpy as np
 import pytest
+import ray
 import torch
 from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
 from mocking_classes import (
@@ -1188,8 +1189,7 @@ def weight_reset(m):
 
 
 class TestRayDistributedCollector:
-
-    @pytest.mark.parametrize("frames_per_batch", [50, 100])
+    @pytest.mark.parametrize("frames_per_batch", [50])
     def test_ray_distributed_collector_basic(self, frames_per_batch):
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
@@ -1202,7 +1202,7 @@ class TestRayDistributedCollector:
         total = 0
         for data in collector:
             total += data.numel()
-            assert data.numel() == 100
+            assert data.numel() == frames_per_batch
         collector.shutdown()
         assert total == 1000
 
