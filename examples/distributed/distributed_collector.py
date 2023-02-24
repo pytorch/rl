@@ -10,7 +10,6 @@ be created. Why?
 
 from tensordict.nn import TensorDictModule
 from torch import nn
-from torchrl.collectors.collectors import SyncDataCollector
 from torchrl.collectors.distributed.ray_collector import RayDistributedCollector
 from torchrl.envs.libs.gym import GymEnv
 

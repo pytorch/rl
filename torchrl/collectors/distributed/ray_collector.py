@@ -240,9 +240,11 @@ class RayDistributedCollector(_DataCollector):
             )
 
         def check_list_length_consistency(*lists):
-            """Checks that all input lists have the same length. If any non-list
-            input is given, it is converted to a list of the same length  as the
-            others by repeating the same element multiple times.
+            """Checks that all input lists have the same length.
+
+            If any non-list input is given, it is converted to a list
+            of the same length  as the others by repeating the same
+            element multiple times.
             """
             lengths = set()
             new_lists = []
@@ -256,8 +258,8 @@ class RayDistributedCollector(_DataCollector):
                     lengths.add(len(new_lst))
             if len(lengths) > 1:
                 raise ValueError(
-                    f"Inconsistent RayDistributedCollector parameters. env_makers, "
-                    f"collector_kwargs and remote_configs are lists of different length."
+                    "Inconsistent RayDistributedCollector parameters. env_makers, "
+                    "collector_kwargs and remote_configs are lists of different length."
                 )
             else:
                 return new_lists
@@ -275,11 +277,11 @@ class RayDistributedCollector(_DataCollector):
         # If ray available, try to connect to an existing Ray cluster or start one and connect to it.
         if not _has_ray:
             raise RuntimeError(
-                f"ray library not found, unable to create a DistributedCollector. "
+                "ray library not found, unable to create a DistributedCollector. "
             ) from RAY_ERR
         ray.init(**ray_init_config)
         if not ray.is_initialized():
-            raise RuntimeError(f"Ray could not be initialized.")
+            raise RuntimeError("Ray could not be initialized.")
 
         # Define collector_class, monkey patch it with as_remote and print_remote_collector_info methods
         if collector_class == "async":
@@ -383,7 +385,7 @@ class RayDistributedCollector(_DataCollector):
 
     def stop_remote_collectors(self):
         """Stops all remote collectors."""
-        for i in range(len(self._remote_collectors)):
+        for _ in range(len(self._remote_collectors)):
             collector = self.remote_collectors().pop()
             # collector.__ray_terminate__.remote()  # This will kill the actor but let pending tasks finish
             ray.kill(
@@ -530,13 +532,13 @@ class RayDistributedCollector(_DataCollector):
             self._batches_since_weight_update[worker_rank - 1] = 0
 
     def set_seed(self, seed: int, static_seed: bool = False) -> List[int]:
-        """Calls set_seed(seed, static_seed) method for each remote collector and results a list of results."""
+        """Calls parent method for each remote collector iteratively and returns final seed."""
         for collector in self.remote_collectors():
             seed = ray.get(object_refs=collector.set_seed.remote(seed, static_seed))
         return seed
 
     def state_dict(self) -> List[OrderedDict]:
-        """Calls state_dict() method for each remote collector and returns a list of results."""
+        """Calls parent method for each remote collector and returns a list of results."""
         futures = [
             collector.state_dict.remote() for collector in self.remote_collectors()
         ]
@@ -546,13 +548,13 @@ class RayDistributedCollector(_DataCollector):
     def load_state_dict(
         self, state_dict: Union[OrderedDict, List[OrderedDict]]
     ) -> None:
-        """Calls load_state_dict(state_dict) method for each remote collector."""
+        """Calls parent method for each remote collector."""
         if isinstance(state_dict, OrderedDict):
-            state_dict = [state_dict]
+            state_dicts = [state_dict]
         if len(state_dict) == 1:
-            state_dict = state_dict * len(self.remote_collectors())
-        for collector, state_dict in zip(self.remote_collectors(), state_dict):
-            collector.load_state_dict.remote(state_dict)
+            state_dicts = state_dict * len(self.remote_collectors())
+        for collector, state_dict in zip(self.remote_collectors(), state_dicts):
+            collector.load_state_dict.remote(state_dicts)
 
     def shutdown(self):
         """Finishes processes started by ray.init()."""

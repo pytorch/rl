@@ -6,9 +6,7 @@ This script reproduces the PPO example in https://pytorch.org/rl/tutorials/codin
 with a DistributedCollector.
 """
 
-import math
 from collections import defaultdict
-
 import matplotlib.pyplot as plt
 import torch
 from tensordict.nn import TensorDictModule
