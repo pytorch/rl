@@ -502,6 +502,7 @@ class SyncDataCollector(_DataCollector):
                 device=self.storing_device,
             ),
         )
+        self._tensordict_out.lock()
 
         if split_trajs is None:
             if not self.reset_when_done:
@@ -666,6 +667,8 @@ class SyncDataCollector(_DataCollector):
                     self._tensordict_out[..., j] = self._tensordict
                     if is_shared:
                         self._tensordict_out.share_memory_()
+                    else:
+                        self._tensordict_out.lock()
 
                 self._reset_if_necessary()
                 self._tensordict.update(step_mdp(self._tensordict), inplace=True)

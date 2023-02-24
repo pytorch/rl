@@ -57,10 +57,12 @@ def distributed_init_collection_node(
         print(f"node with rank {rank} -- creating collector of type {collector_class}")
     if not issubclass(collector_class, SyncDataCollector):
         env_make = [env_make] * num_workers
-    elif num_workers != 1:
-        raise RuntimeError(
-            "SyncDataCollector and subclasses can only support a single environment."
-        )
+    else:
+        collector_kwargs["return_same_td"] = True
+        if num_workers != 1:
+            raise RuntimeError(
+                "SyncDataCollector and subclasses can only support a single environment."
+            )
     collector = collector_class(
         env_make,
         policy,
@@ -318,18 +320,24 @@ class DistributedDataCollector(_DataCollector):
             break
         if not issubclass(self.collector_class, SyncDataCollector):
             # Multi-data collectors
-            self._out_tensordict = (
+            self._tensordict_out = (
                 _data.expand((self.num_workers, *_data.shape))
                 .to_tensordict()
                 .to(self.storing_device)
             )
         else:
             # Multi-data collectors
-            self._out_tensordict = (
+            self._tensordict_out = (
                 _data.expand((self.num_workers, *_data.shape))
                 .to_tensordict()
                 .to(self.storing_device)
             )
+        if self._sync:
+            self._tensordict_out.lock()
+        else:
+            self._tensordict_out = self._tensordict_out.unbind(0)
+            for td in self._tensordict_out:
+                td.lock()
 
     def _init_worker_dist_submitit(self, executor, i):
         TCP_PORT = self.tcp_port
@@ -415,7 +423,7 @@ class DistributedDataCollector(_DataCollector):
             for i in range(self.num_workers):
                 rank = i + 1
                 trackers.append(
-                    self._out_tensordict[i].irecv(src=rank, return_premature=True)
+                    self._tensordict_out[i].irecv(src=rank, return_premature=True)
                 )
 
         while total_frames < self.total_frames:
@@ -434,15 +442,12 @@ class DistributedDataCollector(_DataCollector):
                 for i in range(self.num_workers):
                     rank = i + 1
                     trackers.append(
-                        self._out_tensordict[i].irecv(
-                            src=rank,
-                            return_premature=True
-                            )
+                        self._tensordict_out[i].irecv(src=rank, return_premature=True)
                     )
                 for tracker in trackers:
                     for _tracker in tracker:
                         _tracker.wait()
-                data = self._out_tensordict.to_tensordict()
+                data = self._tensordict_out.clone()
                 total_frames += data.numel()
                 yield data
 
@@ -454,13 +459,13 @@ class DistributedDataCollector(_DataCollector):
                         if self._store.get(f"NODE_{rank}_status") == b"done":
                             for _tracker in trackers[i]:
                                 _tracker.wait()
-                            data = self._out_tensordict[i].to_tensordict()
+                            data = self._tensordict_out[i].clone()
                             if self.update_after_each_batch:
                                 self.update_policy_weights_(rank)
                             total_frames += data.numel()
                             if total_frames < self.total_frames:
                                 self._store.set(f"NODE_{rank}_in", b"continue")
-                            trackers[i] = self._out_tensordict[i].irecv(
+                            trackers[i] = self._tensordict_out[i].irecv(
                                 src=i + 1, return_premature=True
                             )
                             for j in range(self.num_workers):
