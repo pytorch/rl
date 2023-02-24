@@ -129,6 +129,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         From a policy and a device, assigns the self.device attribute to
         the desired device and maps the policy onto it or (if the device is
         ommitted) assigns the self.device attribute to the policy device.
+
         Args:
             create_env_fn (Callable or list of callables): an env creator
                 function (or a list of creators)
