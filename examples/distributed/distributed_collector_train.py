@@ -7,6 +7,7 @@ with a DistributedCollector.
 """
 
 from collections import defaultdict
+
 import matplotlib.pyplot as plt
 import torch
 from tensordict.nn import TensorDictModule
