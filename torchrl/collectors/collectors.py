@@ -126,6 +126,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         observation_spec: TensorSpec = None,
     ) -> Tuple[TensorDictModule, torch.device, Union[None, Callable[[], dict]]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
+
         From a policy and a device, assigns the self.device attribute to
         the desired device and maps the policy onto it or (if the device is
         ommitted) assigns the self.device attribute to the policy device.

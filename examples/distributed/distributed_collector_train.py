@@ -169,7 +169,7 @@ if __name__ == "__main__":
     eval_str = ""
     # We iterate over the distributed_collector until it reaches the total number of frames it was
     # designed to collect:
-    for i, tensordict_data in enumerate(collector):
+    for tensordict_data in collector:
         # we now have a batch of data to work with. Let's learn something from it.
         for _ in range(num_epochs):
             # We'll need an "advantage" signal to make PPO work.

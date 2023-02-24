@@ -201,7 +201,7 @@ class RayDistributedCollector(_DataCollector):
         ray_init_config: Dict = None,
         remote_configs: Union[Dict, List[Dict]] = None,
         num_collectors: int = None,
-        storing_device: torch.device = torch.device("cpu"),
+        storing_device: torch.device = "cpu",
         update_after_each_batch=False,
         max_weight_update_interval=-1,
     ):
@@ -554,7 +554,7 @@ class RayDistributedCollector(_DataCollector):
         if len(state_dict) == 1:
             state_dicts = state_dict * len(self.remote_collectors())
         for collector, state_dict in zip(self.remote_collectors(), state_dicts):
-            collector.load_state_dict.remote(state_dicts)
+            collector.load_state_dict.remote(state_dict)
 
     def shutdown(self):
         """Finishes processes started by ray.init()."""

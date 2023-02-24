@@ -16,8 +16,10 @@ from torchrl.envs.libs.gym import GymEnv
 
 if __name__ == "__main__":
 
-    # 1. Create environment
-    env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+    # 1. Create environment factory
+    def env_maker():
+        return GymEnv("Pendulum-v1", device="cpu")
+
     policy = TensorDictModule(
         nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"]
     )
