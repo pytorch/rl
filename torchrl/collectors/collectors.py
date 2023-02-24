@@ -67,6 +67,20 @@ class RandomPolicy:
         return td.set("action", self.action_spec.rand())
 
 
+class RolloutInterruptor:
+    def __init__(self):
+        self._collect = False
+
+    def start_collection(self):
+        self._collect = True
+
+    def stop_collection(self):
+        self._collect = False
+
+    def collection_stopped(self):
+        return self._collect is False
+
+
 def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
     """Maps the tensors to CPU through a nested dictionary."""
     return OrderedDict(
@@ -619,17 +633,21 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.set_(("collector", "step_count"), steps)
 
     @torch.no_grad()
-    def rollout(self) -> TensorDictBase:
+    def rollout(self, interruptor=None) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
 
         Returns:
             TensorDictBase containing the computed rollout.
 
         """
+        interruptor = RolloutInterruptor()
+        interruptor.stop_collection()
+
         if self.reset_at_each_iter:
             self._tensordict.update(self.env.reset(), inplace=True)
             self._tensordict.fill_(("collector", "step_count"), 0)
 
+        self._tensordict_out.fill_(0)  # TODO is this necessary ?
         with set_exploration_mode(self.exploration_mode):
             for j in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
@@ -653,6 +671,8 @@ class SyncDataCollector(_DataCollector):
 
                 self._reset_if_necessary()
                 self._tensordict.update(step_mdp(self._tensordict), inplace=True)
+                if interruptor and interruptor.collection_stopped():
+                    break
 
         return self._tensordict_out
 
