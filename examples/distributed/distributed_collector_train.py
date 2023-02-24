@@ -6,13 +6,14 @@ This script reproduces the PPO example in https://pytorch.org/rl/tutorials/codin
 with a DistributedCollector.
 """
 
-from collections import defaultdict
-import matplotlib.pyplot as plt
 import math
+from collections import defaultdict
+
+import matplotlib.pyplot as plt
 import torch
-from torch import nn
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
+from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.distributed.ray_collector import RayDistributedCollector
 from torchrl.data.replay_buffers import ReplayBuffer
@@ -46,9 +47,7 @@ if __name__ == "__main__":
     total_frames = 50_000 // frame_skip
     sub_batch_size = 64
     num_epochs = 10
-    clip_epsilon = (
-        0.2
-    )
+    clip_epsilon = 0.2
     gamma = 0.99
     lmbda = 0.95
     entropy_eps = 1e-4
@@ -117,8 +116,8 @@ if __name__ == "__main__":
     remote_config = {
         "num_cpus": 1,
         "num_gpus": 0.1,
-        "memory": 1024 ** 3,
-        "object_store_memory": 1024 ** 3
+        "memory": 1024**3,
+        "object_store_memory": 1024**3,
     }
     collector = RayDistributedCollector(
         env_makers=[env] * num_collectors,
@@ -128,7 +127,7 @@ if __name__ == "__main__":
             "max_frames_per_traj": 50,
             "device": device,
         },
-        remote_config=remote_config,
+        remote_configs=remote_config,
         num_collectors=num_collectors,
         total_frames=total_frames,
         sync=False,
@@ -145,14 +144,15 @@ if __name__ == "__main__":
 
     # 6. Define loss
     advantage_module = GAE(
-        gamma=gamma, lmbda=lmbda, value_network=value_module, average_gae=True)
+        gamma=gamma, lmbda=lmbda, value_network=value_module, average_gae=True
+    )
     loss_module = ClipPPOLoss(
         actor=policy_module,
         critic=value_module,
         advantage_key="advantage",
         clip_epsilon=clip_epsilon,
         entropy_bonus=bool(entropy_eps),
-        entropy_coef=entropy_eps, # these keys match by default but we set this for completeness
+        entropy_coef=entropy_eps,  # these keys match by default but we set this for completeness
         value_target_key=advantage_module.value_target_key,
         critic_coef=1.0,
         gamma=0.99,
@@ -184,9 +184,9 @@ if __name__ == "__main__":
                 subdata, *_ = replay_buffer.sample(sub_batch_size)
                 loss_vals = loss_module(subdata.to(device))
                 loss_value = (
-                        loss_vals["loss_objective"]
-                        + loss_vals["loss_critic"]
-                        + loss_vals["loss_entropy"]
+                    loss_vals["loss_objective"]
+                    + loss_vals["loss_critic"]
+                    + loss_vals["loss_entropy"]
                 )
 
                 # Optimization: backward, grad clipping and optim step
@@ -199,9 +199,7 @@ if __name__ == "__main__":
 
         logs["reward"].append(tensordict_data["reward"].mean().item())
         pbar.update(tensordict_data.numel() * frame_skip)
-        cum_reward_str = (
-            f"average reward={logs['reward'][-1]: 4.4f} (init={logs['reward'][0]: 4.4f})"
-        )
+        cum_reward_str = f"average reward={logs['reward'][-1]: 4.4f} (init={logs['reward'][0]: 4.4f})"
         logs["step_count"].append(tensordict_data["step_count"].max().item())
         stepcount_str = f"step count (max): {logs['step_count'][-1]}"
         logs["lr"].append(optim.param_groups[0]["lr"])
@@ -214,7 +212,9 @@ if __name__ == "__main__":
             logs["eval step_count"].append(eval_rollout["step_count"].max().item())
             eval_str = f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} (init: {logs['eval reward (sum)'][0]: 4.4f}), eval step-count: {logs['eval step_count'][-1]}"
             del eval_rollout
-        pbar.set_description(", ".join([eval_str, cum_reward_str, stepcount_str, lr_str]))
+        pbar.set_description(
+            ", ".join([eval_str, cum_reward_str, stepcount_str, lr_str])
+        )
 
         # We're also using a learning rate scheduler. Like the gradient clipping,
         # this is a nice-to-have but nothing necessary for PPO to work.
@@ -237,4 +237,3 @@ if __name__ == "__main__":
     save_name = "/tmp/results.jpg"
     plt.savefig(save_name)
     print(f"results saved in {save_name}")
-

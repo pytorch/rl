@@ -8,39 +8,31 @@ This example should create 3 collector instances, 1 local and 2 remote, but 4 in
 be created. Why?
 """
 
-from torch import nn
 from tensordict.nn import TensorDictModule
-from torchrl.envs.libs.gym import GymEnv
+from torch import nn
 from torchrl.collectors.collectors import SyncDataCollector
 from torchrl.collectors.distributed.ray_collector import RayDistributedCollector
+from torchrl.envs.libs.gym import GymEnv
 
 
 if __name__ == "__main__":
 
     # 1. Create environment
     env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
-    policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+    policy = TensorDictModule(
+        nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"]
+    )
 
     # 2. Define distributed collector
     remote_config = {
         "num_cpus": 1,
         "num_gpus": 0.2,
-        "memory": 5 * 1024 ** 3,
-        "object_store_memory": 2 * 1024 ** 3
+        "memory": 5 * 1024**3,
+        "object_store_memory": 2 * 1024**3,
     }
     distributed_collector = RayDistributedCollector(
-        env_makers=[env_maker],
-        policy=policy,
-        collector_class=SyncDataCollector,
-        collector_kwargs={
-            "max_frames_per_traj": 50,
-            "init_random_frames": -1,
-            "reset_at_each_iter": False,
-            "device": "cpu",
-            "storing_device": "cpu",
-        },
-        remote_config=remote_config,
-        num_collectors=1,
+        [env_maker],
+        policy,
         total_frames=10000,
         frames_per_batch=200,
     )
@@ -52,4 +44,3 @@ if __name__ == "__main__":
         counter += 1
         num_frames += batch.shape.numel()
         print(f"batch {counter}, total frames {num_frames}")
-

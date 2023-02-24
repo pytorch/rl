@@ -309,9 +309,7 @@ class RayDistributedCollector(_DataCollector):
                     f"Cannot dispatch {frames_per_batch} frames across {self.num_collectors}. "
                     f"Consider using a number of frames per batch that is divisible by the number of workers."
                 )
-            self._frames_per_batch_corrected = (
-                frames_per_batch // self.num_collectors
-            )
+            self._frames_per_batch_corrected = frames_per_batch // self.num_collectors
         else:
             self._frames_per_batch_corrected = frames_per_batch
 
@@ -385,7 +383,8 @@ class RayDistributedCollector(_DataCollector):
 
     def stop_remote_collectors(self):
         """Stops all remote collectors."""
-        for collector in self.remote_collectors():
+        for i in range(len(self._remote_collectors)):
+            collector = self.remote_collectors().pop()
             # collector.__ray_terminate__.remote()  # This will kill the actor but let pending tasks finish
             ray.kill(
                 collector
@@ -398,7 +397,7 @@ class RayDistributedCollector(_DataCollector):
             return self._async_iterator()
 
     def _sync_iterator(self) -> Iterator[TensorDictBase]:
-
+        """Collects one data batch per remote collector in each iteration."""
         while self.collected_frames < self.total_frames:
 
             if self.update_after_each_batch:
@@ -446,7 +445,7 @@ class RayDistributedCollector(_DataCollector):
         self.shutdown()
 
     def _async_iterator(self) -> Iterator[TensorDictBase]:
-
+        """Collects a data batch from a single remote collector in each iteration."""
         pending_tasks = {}
         for index, collector in enumerate(self.remote_collectors()):
             future = collector.next.remote()
@@ -504,6 +503,7 @@ class RayDistributedCollector(_DataCollector):
 
     def update_policy_weights_(self, worker_rank=None) -> None:
         """Updates the weights of the worker nodes.
+
         Args:
             worker_rank (int, optional): if provided, only this worker weights
                 will be updated.
