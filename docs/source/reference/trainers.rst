@@ -234,10 +234,10 @@ Loggers
     :template: rl_template_fun.rst
 
     Logger
-    CSVLogger
-    MLFlowLogger
-    TensorboardLogger
-    WandbLogger
+    csv.CSVLogger
+    mlflow.MLFlowLogger
+    tensorboard.TensorboardLogger
+    wandb.WandbLogger
     get_logger
     generate_exp_name
 

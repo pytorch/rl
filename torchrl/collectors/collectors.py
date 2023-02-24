@@ -228,9 +228,16 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         return self.iterator()
 
     def next(self):
-        if self._iterator is None:
-            self._iterator = iter(self)
-        return next(self._iterator).cpu()
+        try:
+            if self._iterator is None:
+                self._iterator = iter(self)
+            return next(self._iterator).cpu()
+        except StopIteration:
+            return None
+
+    @abc.abstractmethod
+    def shutdown(self):
+        raise NotImplementedError
 
     @abc.abstractmethod
     def iterator(self) -> Iterator[TensorDictBase]:
@@ -520,6 +527,10 @@ class SyncDataCollector(_DataCollector):
     # for RPC
     def next(self):
         return super().next()
+
+    # for RPC
+    def shutdown(self):
+        return super().shutdown()
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -1072,12 +1083,15 @@ also that the state dict is synchronised across processes if needed."""
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "close"))
 
-            msg = self.pipes[idx].recv()
-            if msg != "closed":
-                raise RuntimeError(f"got {msg} but expected 'close'")
+            if self.pipes[idx].poll(10.0):
+                msg = self.pipes[idx].recv()
+                if msg != "closed":
+                    raise RuntimeError(f"got {msg} but expected 'close'")
+            else:
+                continue
 
         for proc in self.procs:
-            proc.join()
+            proc.join(10.0)
 
         self.queue_out.close()
         for pipe in self.pipes:
@@ -1231,6 +1245,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
     # for RPC
     def next(self):
         return super().next()
+
+    # for RPC
+    def shutdown(self):
+        return super().shutdown()
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -1412,6 +1430,10 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
+    def shutdown(self):
+        return super().shutdown()
+
+    # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         return super().set_seed(seed, static_seed)
 
@@ -1498,7 +1520,6 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     def reset(self, reset_idx: Optional[Sequence[bool]] = None) -> None:
         super().reset(reset_idx)
         if self.queue_out.full():
-            print("waiting")
             time.sleep(_TIMEOUT)  # wait until queue is empty
         if self.queue_out.full():
             raise Exception("self.queue_out is full")
@@ -1616,6 +1637,10 @@ class aSyncDataCollector(MultiaSyncDataCollector):
     # for RPC
     def next(self):
         return super().next()
+
+    # for RPC
+    def shutdown(self):
+        return super().shutdown()
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:

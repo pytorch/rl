@@ -20,6 +20,7 @@ except ModuleNotFoundError as err:
     SUBMITIT_ERR = err
 import torch.cuda
 from tensordict import TensorDict
+from torch import multiprocessing as mp, nn
 
 from torch.distributed import rpc
 
@@ -40,11 +41,12 @@ DEFAULT_SLURM_CONF = {
     "slurm_gpus_per_node": 0,
 }
 TCP_PORT = os.environ.get("TCP_PORT", "10003")
-
+IDLE_TIMEOUT = os.environ.get("RCP_IDLE_TIMEOUT", 10)
 
 def rpc_init_collection_node(
     rank,
     rank0_ip,
+    tcp_port,
     world_size,
 ):
     """Sets up RPC on the distant node.
@@ -61,7 +63,7 @@ def rpc_init_collection_node(
     # os.environ['TP_SOCKET_IFNAME']='lo'
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
-        init_method=f"tcp://{rank0_ip}:{TCP_PORT}",
+        init_method=f"tcp://{rank0_ip}:{tcp_port}",
         rpc_timeout=MAX_TIME_TO_CONNECT,
         _transports=["uv"],
         # Currently fails when nodes have more than 0 gpus avail,
@@ -76,96 +78,11 @@ def rpc_init_collection_node(
         rpc_backend_options=options,
         world_size=world_size,
     )
-    print("waiting...")
     rpc.shutdown()
 
 
-def distributed_init_collection_node(
-    rank,
-    rank0_ip,
-    sync,
-    world_size,
-    backend,
-    collector_class,
-    num_workers,
-    env_make,
-    policy,
-    frames_per_batch,
-    total_frames,
-    collector_kwargs,
-):
-    if not backend.startswith("distributed"):
-        raise RuntimeError(f"Backend {backend} is incompatible with the collector.")
-    _, backend = backend.split(":")
-    torch.distributed.init_process_group(
-        backend,
-        rank=rank,
-        world_size=world_size,
-        timeout=timedelta(MAX_TIME_TO_CONNECT),
-        init_method=f"tcp://{rank0_ip}:{TCP_PORT}",
-    )
-    if not issubclass(collector_class, SyncDataCollector):
-        env_make = [env_make] * num_workers
-    elif num_workers != 1:
-        raise RuntimeError(
-            "SyncDataCollector and subclasses can only support a single environment."
-        )
-
-    collector = collector_class(
-        env_make,
-        policy,
-        frames_per_batch=frames_per_batch,
-        total_frames=-1,
-        split_trajs=False,
-        **collector_kwargs,
-    )
-    # The store carries instructions for the node
-    _store = torch.distributed.TCPStore(
-        host_name=rank0_ip,
-        port=int(TCP_PORT) + 1,
-        world_size=world_size,
-        is_master=False,
-    )
-    policy_weights = TensorDict(dict(policy.named_parameters()), [])
-    collector_iter = iter(collector)
-    _store.set(f"NODE_{rank}_status", "busy")
-    data = next(collector_iter)
-    while True:
-        instruction = _store.get(f"NODE_{rank}_status")
-        if instruction == "busy":
-            _store.set(f"NODE_{rank}_status", "sending")
-            if sync:
-                data.gather_and_stack(dest=0)
-            else:
-                data.isend(dst=0)
-            _store.set(f"NODE_{rank}_status", "sent")
-        # wait for instruction
-        while _store.get(f"NODE_{rank}_status") == b"sent":
-            continue
-        instruction = _store.get(f"NODE_{rank}_status")
-        if instruction == "continue":
-            _store.set(f"NODE_{rank}_status", "busy")
-            data = next(collector_iter)
-        elif instruction == "shutdown":
-            try:
-                collector.shutdown()
-            except Exception:
-                pass
-            break
-        elif instruction == "update_weights":
-            policy_weights.recv(0)
-            # the policy has been updated: we can simply update the weights
-            collector.update_policy_weights_()
-
-    if not collector.closed:
-        collector.shutdown()
-    return
-
-
-class DistributedDataCollector(_DataCollector):
-    """A distributed data collector with submitit backend.
-
-    To find more about submitit, visit https://github.com/facebookincubator/submitit
+class RPCDataCollector(_DataCollector):
+    """An RPC-based distributed data collector.
 
     Supports sync and async data collection.
 
@@ -178,31 +95,54 @@ class DistributedDataCollector(_DataCollector):
             batch.
         total_frames (int): the total number of frames to be collected from the
             distributed collector.
-        collector_class (type): a collector class for the remote node. Can be
+        collector_class (type or str, optional): a collector class for the remote node. Can be
             :class:`torchrl.collectors.SyncDataCollector`,
             :class:`torchrl.collectors.MultiSyncDataCollector`,
             :class:`torchrl.collectors.MultiaSyncDataCollector`
-            or a derived class of these.
+            or a derived class of these. The strings "single", "sync" and
+            "async" correspond to respective class.
             Defaults to :class:`torchrl.collectors.SyncDataCollector`.
-        collector_kwargs (dict): a dictionary of parameters to be passed to the
+        collector_kwargs (dict, optional): a dictionary of parameters to be passed to the
             remote data-collector.
-        num_workers_per_collector (int): the number of copies of the
+        num_workers_per_collector (int, optional): the number of copies of the
             env constructor that is to be used on the remote nodes.
             Defaults to 1 (a single env per collector).
             On a single worker node all the sub-workers will be
             executing the same environment. If different environments need to
             be executed, they should be dispatched across worker nodes, not
             subnodes.
-        sync (bool): if ``True``, the resulting tensordict is a stack of all the
+        sync (bool, optional): if ``True``, the resulting tensordict is a stack of all the
             tensordicts collected on each node. If ``False`` (default), each
             tensordict results from a separate node in a "first-ready,
             first-served" fashion.
         slurm_kwargs (dict): a dictionary of parameters to be passed to the
             submitit executor.
-        backend (str): must be one of "rpc" or "distributed:<distributed_backed>".
-            <distributed_backed> is one of "gloo", "mpi", "nccl" or "ucc". See
-            the torch.distributed documentation for more information.
-            Defaults to "distributed:gloo".
+        update_after_each_batch (bool, optional): if ``True``, the weights will
+            be updated after each collection. For ``sync=True``, this means that
+            all workers will see their weights updated. For ``sync=False``,
+            only the worker from which the data has been gathered will be
+            updated.
+            Defaults to ``False``, ie. updates have to be executed manually
+            through
+            ``torchrl.collectors.distributed.DistributedDataCollector.update_policy_weights_()``
+        max_weight_update_interval (int, optional): the maximum number of
+            batches that can be collected before the policy weights of a worker
+            is updated.
+            For sync collections, this parameter is overwritten by ``update_after_each_batch``.
+            For async collections, it may be that one worker has not seen its
+            parameters being updated for a certain time even if ``update_after_each_batch``
+            is turned on.
+            Defaults to -1 (no forced update).
+        launcher (str, optional): how jobs should be launched.
+            Can be one of "submitit" or "mp" for multiprocessing. The former
+            can launch jobs across multiple nodes, whilst the latter will only
+            launch jobs on a single machine. "submitit" requires the homonymous
+            library to be installed.
+            To find more about submitit, visit
+            https://github.com/facebookincubator/submitit
+            Defaults to "submitit".
+        tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
+
     """
 
     def __init__(
@@ -216,8 +156,11 @@ class DistributedDataCollector(_DataCollector):
         num_workers_per_collector=1,
         sync=False,
         slurm_kwargs=None,
-        backend="distributed:gloo",
         storing_device="cpu",
+        update_after_each_batch=False,
+        max_weight_update_interval=-1,
+        launcher="submitit",
+        tcp_port=None,
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -228,12 +171,25 @@ class DistributedDataCollector(_DataCollector):
         self.collector_class = collector_class
         self.env_constructors = env_makers
         self.policy = policy
-        self.policy_weights = TensorDict(dict(self.policy), [])
+        if isinstance(policy, nn.Module):
+            policy_weights = TensorDict(dict(policy.named_parameters()), [])
+        else:
+            policy_weights = TensorDict({}, [])
+        self.policy_weights = policy_weights
         self.num_workers = len(env_makers)
         self.frames_per_batch = frames_per_batch
         self.storing_device = storing_device
         # make private to avoid changes from users during collection
         self._sync = sync
+        self.update_after_each_batch = update_after_each_batch
+        self.max_weight_update_interval = max_weight_update_interval
+        self.launcher = launcher
+        self._batches_since_weight_update = [0 for _ in range(self.num_workers)]
+        if tcp_port is None:
+            self.tcp_port = os.environ.get("TCP_PORT", "10003")
+        else:
+            self.tcp_port = str(tcp_port)
+
         if self._sync:
             if self.frames_per_batch % self.num_workers != 0:
                 raise RuntimeError(
@@ -250,71 +206,16 @@ class DistributedDataCollector(_DataCollector):
             slurm_kwargs if slurm_kwargs is not None else DEFAULT_SLURM_CONF
         )
         self.collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
-        self.backend = backend
-
-        # os.environ['TP_SOCKET_IFNAME'] = 'lo'
 
         self._init_workers()
-
-    def _init_master_dist(
-        self,
-        world_size,
-        backend,
-    ):
-        _, backend = backend.split(":")
-        torch.distributed.init_process_group(
-            backend,
-            rank=0,
-            world_size=world_size,
-            timeout=timedelta(MAX_TIME_TO_CONNECT),
-            init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
-        )
-        env_constructor = self.env_constructors[0]
-        pseudo_collector = SyncDataCollector(
-            env_constructor,
-            self.policy,
-            frames_per_batch=self._frames_per_batch_corrected,
-            total_frames=self.total_frames,
-            split_trajs=False,
-        )
-        if not self._sync:
-            self._store = torch.distributed.TCPStore(
-                host_name=self.IPAddr,
-                port=int(TCP_PORT) + 1,
-                world_size=self.num_workers + 1,
-                is_master=True,
-            )
-        for data in pseudo_collector:
-            break
-        if not issubclass(self.collector_class, SyncDataCollector):
-            # Multi-data collectors
-            self._out_tensordict = (
-                data.expand((self.num_workers, *data.shape))
-                .to_tensordict()
-                .to(self.storing_device)
-            )
-        else:
-            # Multi-data collectors
-            self._out_tensordict = (
-                data.expand((self.num_workers, *data.shape))
-                .to_tensordict()
-                .to(self.storing_device)
-            )
 
     def _init_master_rpc(
         self,
         world_size,
-        env_constructors,
-        collector_class,
-        num_workers_per_collector,
-        policy,
-        frames_per_batch,
-        total_frames,
-        collector_kwargs,
     ):
         options = rpc.TensorPipeRpcBackendOptions(
             num_worker_threads=16,
-            init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
+            init_method=f"tcp://{self.IPAddr}:{self.tcp_port}",
             rpc_timeout=10_000,
             _transports=["uv"],
             # Currently fails when nodes have more than 0 gpus avail,
@@ -330,6 +231,16 @@ class DistributedDataCollector(_DataCollector):
             world_size=world_size,
         )
 
+    def _launch_workers(self,
+                        world_size,
+                        env_constructors,
+                        collector_class,
+                        num_workers_per_collector,
+                        policy,
+                        frames_per_batch,
+                        total_frames,
+                        collector_kwargs,
+                        ):
         num_workers = world_size - 1
         time_interval = 1.0
         collector_infos = []
@@ -365,7 +276,7 @@ class DistributedDataCollector(_DataCollector):
                 ),
                 kwargs={
                     "frames_per_batch": frames_per_batch,
-                    "total_frames": total_frames,
+                    "total_frames": -1,
                     "split_trajs": False,
                     **collector_kwargs,
                 },
@@ -380,35 +291,28 @@ class DistributedDataCollector(_DataCollector):
                 collector_class.next,
                 args=(collector_rrefs[i],),
             )
-
             futures.append(future)
         self.futures = futures
         self.collector_rrefs = collector_rrefs
         self.collector_infos = collector_infos
 
     def _init_worker_rpc(self, executor, i):
-        job = executor.submit(
-            rpc_init_collection_node, i + 1, self.IPAddr, self.num_workers + 1
-        )
-        return job
+        if self.launcher == "submitit":
+            job = executor.submit(
+                rpc_init_collection_node, i + 1, self.IPAddr, self.tcp_port, self.num_workers + 1
+            )
+            print("job id", job.job_id)  # ID of your job
+            return job
+        elif self.launcher == "mp":
+            job = mp.Process(
+                target=rpc_init_collection_node, args=(i + 1, self.IPAddr, self.tcp_port, self.num_workers + 1),
+            )
+            job.start()
+            return job
+        else:
+            raise NotImplementedError(f"Unknown launcher {self.launcher}")
 
-    def _init_worker_dist(self, executor, i):
-        job = executor.submit(
-            distributed_init_collection_node,
-            i + 1,
-            self.IPAddr,
-            self._sync,
-            self.num_workers + 1,
-            self.backend,
-            self.collector_class,
-            self.num_workers_per_collector,
-            self.env_constructors[i],
-            self.policy,
-            self._frames_per_batch_corrected,
-            self.total_frames,
-            self.collector_kwargs,
-        )
-        return job
+
 
     def _init_workers(self):
         executor = submitit.AutoExecutor(folder="log_test")
@@ -421,120 +325,72 @@ class DistributedDataCollector(_DataCollector):
         os.environ["MASTER_PORT"] = "29500"
         # os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
 
+        self.jobs = []
         for i in range(self.num_workers):
             print("Submitting job")
-            if self.backend.startswith("rpc"):
-                job = self._init_worker_rpc(
+            job = self._init_worker_rpc(
                     executor,
                     i,
                 )
-            else:
-                job = self._init_worker_dist(
-                    executor,
-                    i,
-                )
-            print("job id", job.job_id)  # ID of your job
+            self.jobs.append(job)
 
-        if self.backend.startswith("rpc"):
-            self._init_master_rpc(
-                self.num_workers + 1,
-                self.env_constructors,
-                self.collector_class,
-                self.num_workers_per_collector,
-                self.policy,
-                self._frames_per_batch_corrected,
-                self.total_frames,
-                self.collector_kwargs,
-            )
-        else:
-            self._init_master_dist(self.num_workers + 1, self.backend)
+        self._init_master_rpc(
+            self.num_workers + 1,
+        )
+        self._launch_workers(
+            self.num_workers + 1,
+            self.env_constructors,
+            self.collector_class,
+            self.num_workers_per_collector,
+            self.policy,
+            self._frames_per_batch_corrected,
+            self.total_frames,
+            self.collector_kwargs,
+        )
 
     def iterator(self):
-        if self.backend.startswith("rcp"):
-            yield from self._iterator_rpc()
-        else:
-            yield from self._iterator_dist()
-
-    def _iterator_dist(self):
-        total_frames = 0
-        if not self._sync:
-            trackers = []
-            for i in range(self.num_workers):
-                trackers.append(
-                    self._out_tensordict[i].irecv(src=i + 1, return_premature=True)
-                )
-
-        while total_frames < self.total_frames:
-            if self._sync:
-                self._out_tensordict.gather_and_stack(dest=0)
-                data = self._out_tensordict.to_tensordict()
-            else:
-                data = None
-                while data is None:
-                    for i in range(self.num_workers):
-                        rank = i + 1
-                        # if all(_tracker.is_completed() for _tracker in trackers[i]):
-                        if self._store.get(f"NODE_{rank}_status") == b"done":
-                            for _tracker in trackers[i]:
-                                _tracker.wait()
-                            data = self._out_tensordict[i].to_tensordict()
-                            data._origin = rank
-                            self._store.set(f"NODE_{rank}_status", "continue")
-                            trackers[i] = self._out_tensordict[i].irecv(
-                                src=i + 1, return_premature=True
-                            )
-                            break
-            total_frames += data.numel()
-            yield data
-        for i in range(self.num_workers):
-            rank = i + 1
-            self._store.set(f"NODE_{rank}_status", "shutdown")
-
-    def update_policy_weights_(self) -> None:
-        if self.backend.startswith("rpc"):
-            raise NotImplementedError
-        else:
-            for i in range(self.num_workers):
-                rank = i + 1
-                self._store.set(f"NODE_{rank}_status", "update_weights")
-                self.policy_weights.send(rank)
-
-    def _iterator_rpc(self):
-        total_frames = 0
-        while total_frames < self.total_frames:
+        print("Iterating")
+        self._collected_frames = 0
+        while self._collected_frames < self.total_frames:
             if self._sync:
                 data = self._next_sync_rpc()
             else:
                 data = self._next_async_rpc()
-            total_frames += data.numel()
             yield data
 
+    def update_policy_weights_(self) -> None:
+        raise NotImplementedError
+
     def _next_async_rpc(self):
-        for i, future in enumerate(self.futures):
-            if future.done():
-                data = future.value()
-                self.futures[i] = rpc.rpc_async(
-                    self.collector_infos[i],
-                    self.collector_class.next,
-                    args=(self.collector_rrefs[i],),
-                )
-                return data
-            else:
-                time.sleep(SLEEP_INTERVAL)
+        while True:
+            for i, future in enumerate(self.futures):
+                if future.done():
+                    data = future.value()
+                    self._collected_frames += data.numel()
+                    if self._collected_frames < self.total_frames:
+                        self.futures[i] = rpc.rpc_async(
+                            self.collector_infos[i],
+                            self.collector_class.next,
+                            args=(self.collector_rrefs[i],),
+                        )
+                    else:
+                        self.futures[i] = None
+                    return data
 
     def _next_sync_rpc(self):
         data = []
-        for i, future in enumerate(self.futures):
-            if future.done():
-                data += [future.value()]
-                self.futures[i] = rpc.rpc_async(
-                    self.collector_infos[i],
-                    self.collector_class.next,
-                    args=(self.collector_rrefs[i],),
-                )
-            else:
-                time.sleep(SLEEP_INTERVAL)
+        while len(data) < self.num_workers:
+            for i, future in enumerate(self.futures):
+                # the order is NOT guaranteed: should we change that?
+                if future.done():
+                    data += [future.value()]
+                    self.futures[i] = rpc.rpc_async(
+                        self.collector_infos[i],
+                        self.collector_class.next,
+                        args=(self.collector_rrefs[i],),
+                    )
         data = torch.cat(data)
+        self._collected_frames += data.numel()
         return data
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -548,4 +404,23 @@ class DistributedDataCollector(_DataCollector):
         raise NotImplementedError
 
     def shutdown(self):
-        rpc.shutdown()
+        for future in self.futures:
+            # clear the futures
+            while future is not None and not future.done():
+                continue
+        for i in range(self.num_workers):
+            rpc.rpc_sync(
+                self.collector_infos[i],
+                self.collector_class.shutdown,
+                args=(self.collector_rrefs[i],),
+                timeout=int(IDLE_TIMEOUT),
+            )
+        rpc.shutdown(timeout=int(IDLE_TIMEOUT))
+        if self.launcher == "mp":
+            for job in self.jobs:
+                job.join(int(IDLE_TIMEOUT))
+        elif self.launcher == "submitit":
+            for job in self.jobs:
+                _ = job.result()
+        else:
+            raise NotImplementedError(f"Unknown launcher {self.launcher}")

@@ -250,6 +250,8 @@ class DistributedDataCollector(_DataCollector):
         self.num_workers = len(env_makers)
         self.frames_per_batch = frames_per_batch
         self.storing_device = storing_device
+        # make private to avoid changes from users during collection
+        self._sync = sync
         self.update_after_each_batch = update_after_each_batch
         self.max_weight_update_interval = max_weight_update_interval
         self.launcher = launcher
@@ -259,8 +261,6 @@ class DistributedDataCollector(_DataCollector):
         else:
             self.tcp_port = str(tcp_port)
 
-        # make private to avoid changes from users during collection
-        self._sync = sync
         if self._sync:
             if self.frames_per_batch % self.num_workers != 0:
                 raise RuntimeError(
