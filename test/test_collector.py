@@ -27,6 +27,7 @@ from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
     RandomPolicy,
+    Interruptor,
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
@@ -1186,27 +1187,39 @@ def weight_reset(m):
         m.reset_parameters()
 
 
-# def test_collector_interruptor_mechanism(env_name, seed=100):
-#
-#     def env_fn(seed):
-#         env = MockSerialEnv(device="cpu")
-#         env.set_seed(seed)
-#         return env
-#
-#     policy = make_policy(env_name)
-#
-#     collector = SyncDataCollector(
-#         create_env_fn=env_fn,
-#         create_env_kwargs={"seed": seed},
-#         policy=policy,
-#         frames_per_batch=50,
-#         total_frames=200,
-#         device="cpu",
-#     )
-#
-#     for batch in collector:
-#         assert batch[0, 0]["observation"].sum() != 0
-#         assert batch[0, 1:]["observation"].sum() == 0
+@pytest.mark.parametrize("env_name", ["conv", "vec"])
+def test_collector_interruptor_mechanism(env_name, seed=100):
+
+    def env_fn(seed):
+        env = make_make_env(env_name)()
+        env.set_seed(seed)
+        return env
+
+    policy = make_policy(env_name)
+
+    # 2. Define interruptor object
+    interruptor = Interruptor()
+    interruptor.start_collection()
+
+    collector = SyncDataCollector(
+        create_env_fn=env_fn,
+        create_env_kwargs={"seed": seed},
+        policy=policy,
+        frames_per_batch=50,
+        total_frames=200,
+        device="cpu",
+        interruptor=interruptor,
+    )
+
+    interruptor.stop_collection()
+    for batch in collector:
+        if env_name == "vec":
+            assert batch[0, 0]["observation"].sum() != 0
+            assert batch[0, 1:]["observation"].sum() == 0
+        else:
+            assert batch[0, 0]["pixels"].sum() != 0
+            assert batch[0, 1:]["pixels"].sum() == 0
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
