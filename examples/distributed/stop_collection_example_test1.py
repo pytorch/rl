@@ -8,39 +8,40 @@ be created. Why?
 
 from tensordict.nn import TensorDictModule
 from torch import nn
-from torchrl.collectors.collectors import SyncDataCollector
+from torchrl.collectors.collectors import SyncDataCollector, Interruptor
 from torchrl.envs.libs.gym import GymEnv
 
 
 if __name__ == "__main__":
 
     # 1. Create environment factory
-    def env_maker():
-        return GymEnv("Pendulum-v1", device="cpu")
-
+    env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
     policy = TensorDictModule(
         nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"]
     )
 
+    # 2. Define interruptor object
+    interruptor = Interruptor()
+    interruptor.start_collection()
+
     # 2. Define distributed collector
-    remote_config = {
-        "num_cpus": 1,
-        "num_gpus": 0.2,
-        "memory": 5 * 1024**3,
-        "object_store_memory": 2 * 1024**3,
-    }
-    distributed_collector = SyncDataCollector(
-        [env_maker],
+    collector = SyncDataCollector(
+        env_maker,
         policy,
-        total_frames=10000,
-        frames_per_batch=200,
+        total_frames=2000,
+        frames_per_batch=50,
+        device="cpu",
+        storing_device="cpu",
+        interruptor=interruptor,
     )
 
     # Sample batches until reaching total_frames
     counter = 0
     num_frames = 0
-    for batch in distributed_collector:
-        import ipdb; ipdb.set_trace()
+    interruptor.stop_collection()
+    for batch in collector:
         counter += 1
         num_frames += batch.shape.numel()
         print(f"batch {counter}, total frames {num_frames}")
+        assert batch[0, 0]["observation"].sum() != 0
+        assert batch[0, 1:]["observation"].sum() == 0

@@ -67,7 +67,7 @@ class RandomPolicy:
         return td.set("action", self.action_spec.rand())
 
 
-class RolloutInterruptor:
+class Interruptor:
     def __init__(self):
         self._collect = False
 
@@ -383,6 +383,7 @@ class SyncDataCollector(_DataCollector):
         init_with_lag: bool = False,
         return_same_td: bool = False,
         reset_when_done: bool = True,
+        interruptor=None,
     ):
         self.closed = True
         if seed is not None:
@@ -517,6 +518,7 @@ class SyncDataCollector(_DataCollector):
         self.split_trajs = split_trajs
         self._has_been_done = None
         self._exclude_private_keys = True
+        self.interruptor = interruptor
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -633,21 +635,20 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.set_(("collector", "step_count"), steps)
 
     @torch.no_grad()
-    def rollout(self, interruptor=None) -> TensorDictBase:
+    def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
 
         Returns:
             TensorDictBase containing the computed rollout.
 
         """
-        interruptor = RolloutInterruptor()
-        interruptor.stop_collection()
-
         if self.reset_at_each_iter:
             self._tensordict.update(self.env.reset(), inplace=True)
             self._tensordict.fill_(("collector", "step_count"), 0)
 
-        self._tensordict_out.fill_(0)  # TODO is this necessary ?
+        for key in self._tensordict_out.keys():
+            self._tensordict_out.fill_(key, 0.0)
+
         with set_exploration_mode(self.exploration_mode):
             for j in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
@@ -671,7 +672,7 @@ class SyncDataCollector(_DataCollector):
 
                 self._reset_if_necessary()
                 self._tensordict.update(step_mdp(self._tensordict), inplace=True)
-                if interruptor and interruptor.collection_stopped():
+                if self.interruptor and self.interruptor.collection_stopped():
                     break
 
         return self._tensordict_out

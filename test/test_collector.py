@@ -1186,6 +1186,28 @@ def weight_reset(m):
         m.reset_parameters()
 
 
+# def test_collector_interruptor_mechanism(env_name, seed=100):
+#
+#     def env_fn(seed):
+#         env = MockSerialEnv(device="cpu")
+#         env.set_seed(seed)
+#         return env
+#
+#     policy = make_policy(env_name)
+#
+#     collector = SyncDataCollector(
+#         create_env_fn=env_fn,
+#         create_env_kwargs={"seed": seed},
+#         policy=policy,
+#         frames_per_batch=50,
+#         total_frames=200,
+#         device="cpu",
+#     )
+#
+#     for batch in collector:
+#         assert batch[0, 0]["observation"].sum() != 0
+#         assert batch[0, 1:]["observation"].sum() == 0
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
