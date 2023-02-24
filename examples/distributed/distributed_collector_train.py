@@ -134,6 +134,7 @@ if __name__ == "__main__":
         sync=False,
         storing_device=device,
         frames_per_batch=frames_per_batch,
+        update_after_each_batch=True,
     )
 
     # 5. Define replay buffer
