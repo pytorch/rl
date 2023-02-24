@@ -55,7 +55,10 @@ DEFAULT_REMOTE_CLASS_CONFIG = {
 
 def print_remote_collector_info(self):
     """Prints some information about the remote collector."""
-    s = f"Created remote collector in machine {get_node_ip_address()} using gpus {ray.get_gpu_ids()}"
+    s = (
+        f"Created remote collector with in machine "
+        f"{get_node_ip_address()} using gpus {ray.get_gpu_ids()}"
+    )
     # logger.warning(s)
     print(s)
 
@@ -205,7 +208,6 @@ class RayDistributedCollector(_DataCollector):
         update_after_each_batch=False,
         max_weight_update_interval=-1,
     ):
-
         if remote_configs is None:
             remote_configs = DEFAULT_REMOTE_CLASS_CONFIG
 
@@ -243,7 +245,7 @@ class RayDistributedCollector(_DataCollector):
             """Checks that all input lists have the same length.
 
             If any non-list input is given, it is converted to a list
-            of the same length  as the others by repeating the same
+            of the same length as the others by repeating the same
             element multiple times.
             """
             lengths = set()
@@ -293,7 +295,7 @@ class RayDistributedCollector(_DataCollector):
         collector_class.as_remote = as_remote
         collector_class.print_remote_collector_info = print_remote_collector_info
 
-        self.local_policy = policy
+        self._local_policy = policy
         self.collector_class = collector_class
         self.collected_frames = 0
         self.total_frames = total_frames
@@ -321,7 +323,7 @@ class RayDistributedCollector(_DataCollector):
             self.add_collectors(
                 env_makers,
                 num_workers_per_collector,
-                self.local_policy,
+                policy,
                 frames_per_batch,
                 collector_kwargs,
                 remote_configs,
@@ -360,24 +362,20 @@ class RayDistributedCollector(_DataCollector):
             env_makers, collector_kwargs, remote_configs
         ):
             cls = self.collector_class.as_remote(remote_config).remote
-            self._remote_collectors.extend(
-                [
-                    self._make_collector(
-                        cls,
-                        [env_maker] * num_envs
-                        if self.collector_class is not SyncDataCollector
-                        else env_maker,
-                        policy,
-                        frames_per_batch,
-                        other_params,
-                    )
-                    for env_maker, other_params in zip(env_makers, collector_kwargs)
-                ]
+            collector = self._make_collector(
+                cls,
+                [env_maker] * num_envs
+                if self.collector_class is not SyncDataCollector
+                else env_maker,
+                policy,
+                frames_per_batch,
+                other_params,
             )
+            self._remote_collectors.extend([collector])
 
     def local_policy(self):
         """Returns local collector."""
-        return self.local_policy
+        return self._local_policy
 
     def remote_collectors(self):
         """Returns list of remote collectors."""
@@ -401,7 +399,6 @@ class RayDistributedCollector(_DataCollector):
     def _sync_iterator(self) -> Iterator[TensorDictBase]:
         """Collects one data batch per remote collector in each iteration."""
         while self.collected_frames < self.total_frames:
-
             if self.update_after_each_batch:
                 self.update_policy_weights_()
             else:
@@ -454,7 +451,6 @@ class RayDistributedCollector(_DataCollector):
             pending_tasks[future] = index
 
         while self.collected_frames < self.total_frames:
-
             if not len(list(pending_tasks.keys())) == len(self.remote_collectors()):
                 raise RuntimeError("Missing pending tasks, something went wrong")
 
@@ -476,7 +472,7 @@ class RayDistributedCollector(_DataCollector):
             for j in range(self.num_collectors):
                 self._batches_since_weight_update[j] += 1
             if self.update_after_each_batch:
-                self.update_policy_weights_(worker_rank=collector_index)
+                self.update_policy_weights_(worker_rank=collector_index + 1)
             elif self.max_weight_update_interval > -1:
                 for j in range(self.num_collectors):
                     rank = j + 1
@@ -512,7 +508,7 @@ class RayDistributedCollector(_DataCollector):
         """
         # Update agent weights
         policy_weights_local_collector = {
-            "policy_state_dict": self.local_policy.state_dict()
+            "policy_state_dict": self.local_policy().state_dict()
         }
         policy_weights_local_collector_ref = ray.put(policy_weights_local_collector)
 
@@ -524,9 +520,9 @@ class RayDistributedCollector(_DataCollector):
                         "strict": False,
                     }
                 )
-                self._batches_since_weight_update[index - 1] = 0
+                self._batches_since_weight_update[index] = 0
         else:
-            self.remote_collectors()[worker_rank].load_state_dict.remote(
+            self.remote_collectors()[worker_rank - 1].load_state_dict.remote(
                 **{"state_dict": policy_weights_local_collector_ref, "strict": False}
             )
             self._batches_since_weight_update[worker_rank - 1] = 0
