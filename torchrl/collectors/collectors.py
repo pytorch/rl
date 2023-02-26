@@ -528,10 +528,6 @@ class SyncDataCollector(_DataCollector):
     def next(self):
         return super().next()
 
-    # for RPC
-    def shutdown(self):
-        return super().shutdown()
-
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
 
