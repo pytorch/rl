@@ -7,7 +7,6 @@ Generic distributed data-collector using torch.distributed.rpc backend
 import os
 import socket
 import time
-from datetime import timedelta
 from typing import OrderedDict
 
 SUBMITIT_ERR = None
@@ -42,6 +41,7 @@ DEFAULT_SLURM_CONF = {
 }
 TCP_PORT = os.environ.get("TCP_PORT", "10003")
 IDLE_TIMEOUT = os.environ.get("RCP_IDLE_TIMEOUT", 10)
+
 
 def rpc_init_collection_node(
     rank,
@@ -231,16 +231,17 @@ class RPCDataCollector(_DataCollector):
             world_size=world_size,
         )
 
-    def _launch_workers(self,
-                        world_size,
-                        env_constructors,
-                        collector_class,
-                        num_workers_per_collector,
-                        policy,
-                        frames_per_batch,
-                        total_frames,
-                        collector_kwargs,
-                        ):
+    def _launch_workers(
+        self,
+        world_size,
+        env_constructors,
+        collector_class,
+        num_workers_per_collector,
+        policy,
+        frames_per_batch,
+        total_frames,
+        collector_kwargs,
+    ):
         num_workers = world_size - 1
         time_interval = 1.0
         collector_infos = []
@@ -298,25 +299,33 @@ class RPCDataCollector(_DataCollector):
 
     def _init_worker_rpc(self, executor, i):
         if self.launcher == "submitit":
+            if not _has_submitit:
+                raise ImportError("submitit not found.") from SUBMITIT_ERR
             job = executor.submit(
-                rpc_init_collection_node, i + 1, self.IPAddr, self.tcp_port, self.num_workers + 1
+                rpc_init_collection_node,
+                i + 1,
+                self.IPAddr,
+                self.tcp_port,
+                self.num_workers + 1,
             )
             print("job id", job.job_id)  # ID of your job
             return job
         elif self.launcher == "mp":
             job = mp.Process(
-                target=rpc_init_collection_node, args=(i + 1, self.IPAddr, self.tcp_port, self.num_workers + 1),
+                target=rpc_init_collection_node,
+                args=(i + 1, self.IPAddr, self.tcp_port, self.num_workers + 1),
             )
             job.start()
             return job
         else:
             raise NotImplementedError(f"Unknown launcher {self.launcher}")
 
-
-
     def _init_workers(self):
-        executor = submitit.AutoExecutor(folder="log_test")
-        executor.update_parameters(**self.slurm_kwargs)
+        if self.launcher == "submitit":
+            executor = submitit.AutoExecutor(folder="log_test")
+            executor.update_parameters(**self.slurm_kwargs)
+        else:
+            executor = None
 
         hostname = socket.gethostname()
         IPAddr = socket.gethostbyname(hostname)
@@ -329,9 +338,9 @@ class RPCDataCollector(_DataCollector):
         for i in range(self.num_workers):
             print("Submitting job")
             job = self._init_worker_rpc(
-                    executor,
-                    i,
-                )
+                executor,
+                i,
+            )
             self.jobs.append(job)
 
         self._init_master_rpc(
@@ -375,7 +384,7 @@ class RPCDataCollector(_DataCollector):
                         )
                     else:
                         self.futures[i] = None
-                    return data
+                    return data.to(self.storing_device)
 
     def _next_sync_rpc(self):
         data = []
@@ -389,7 +398,7 @@ class RPCDataCollector(_DataCollector):
                         self.collector_class.next,
                         args=(self.collector_rrefs[i],),
                     )
-        data = torch.cat(data)
+        data = torch.cat(data).to(self.storing_device)
         self._collected_frames += data.numel()
         return data
 

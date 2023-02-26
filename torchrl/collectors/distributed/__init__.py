@@ -1,2 +1,2 @@
-from .distributed_generic import DistributedDataCollector
-from .distributed_rpc import RPCDataCollector
+from .generic import DistributedDataCollector
+from .rpc import RPCDataCollector

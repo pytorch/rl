@@ -1226,14 +1226,13 @@ class TestDistributedCollector:
             proc.join()
             queue.close()
 
-
     @staticmethod
     def _test_distributed_collector_mult(queue, frames_per_batch):
         os.environ["RCP_IDLE_TIMEOUT"] = "10"
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         collector = RPCDataCollector(
-            [env]*2,
+            [env] * 2,
             policy,
             total_frames=1000,
             frames_per_batch=frames_per_batch,
@@ -1245,7 +1244,7 @@ class TestDistributedCollector:
             total += data.numel()
             assert data.numel() == frames_per_batch
         collector.shutdown()
-        assert total == -frames_per_batch*(1000//-frames_per_batch)
+        assert total == -frames_per_batch * (1000 // -frames_per_batch)
         queue.put("passed")
 
     def test_distributed_collector_mult(self, frames_per_batch=300):
@@ -1393,7 +1392,7 @@ class TestRPCCollector:
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         collector = RPCDataCollector(
-            [env]*2,
+            [env] * 2,
             policy,
             total_frames=1000,
             frames_per_batch=frames_per_batch,
@@ -1405,7 +1404,7 @@ class TestRPCCollector:
             total += data.numel()
             assert data.numel() == frames_per_batch
         collector.shutdown()
-        assert total == -frames_per_batch*(1000//-frames_per_batch)
+        assert total == -frames_per_batch * (1000 // -frames_per_batch)
         queue.put("passed")
 
     def test_distributed_collector_mult(self, frames_per_batch=300):
