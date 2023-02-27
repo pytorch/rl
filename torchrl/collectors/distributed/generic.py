@@ -91,7 +91,7 @@ def _distributed_init_collection_node(
         port=tcpport + 1,
         world_size=world_size,
         is_master=False,
-        timeout=10,
+        timeout=timedelta(10),
     )
     if isinstance(policy, nn.Module):
         policy_weights = TensorDict(dict(policy.named_parameters()), [])
@@ -303,7 +303,7 @@ class DistributedDataCollector(_DataCollector):
             port=int(TCP_PORT) + 1,
             world_size=self.num_workers + 1,
             is_master=True,
-            timeout=10,
+            timeout=timedelta(10),
         )
         self._store.set("TRAINER_status", b"alive")
 
