@@ -51,7 +51,7 @@ def distributed_init_collection_node(
     policy,
     frames_per_batch,
     collector_kwargs,
-    verbose=False,
+    verbose=True,
 ):
     if verbose:
         print(f"node with rank {rank} -- creating collector of type {collector_class}")
@@ -91,8 +91,6 @@ def distributed_init_collection_node(
         world_size=world_size,
         is_master=False,
     )
-    # while _store.get(f"NODE_{rank}_status") != b"placeholder":
-    #     continue
     if isinstance(policy, nn.Module):
         policy_weights = TensorDict(dict(policy.named_parameters()), [])
     else:
@@ -112,11 +110,12 @@ def distributed_init_collection_node(
             data = next(collector_iter)
             if verbose:
                 print(f"node with rank {rank} -- sending {data}")
-            data.isend(dst=0)
-            if verbose:
-                print(f"node with rank {rank} -- setting to 'done'")
-            if not sync:
-                _store.set(f"NODE_{rank}_status", b"done")
+            if _store.get("TRAINER_status") == b"alive":
+                data.isend(dst=0)
+                if verbose:
+                    print(f"node with rank {rank} -- setting to 'done'")
+                if not sync:
+                    _store.set(f"NODE_{rank}_status", b"done")
         elif instruction == b"shutdown":
             if verbose:
                 print(f"node with rank {rank} -- shutting down")
@@ -303,9 +302,7 @@ class DistributedDataCollector(_DataCollector):
             world_size=self.num_workers + 1,
             is_master=True,
         )
-        # for rank in range(1, self.num_workers + 1):
-        #     self._store.set(f"NODE_{rank}_seed", "placeholder")
-        #     self._store.set(f"NODE_{rank}_status", "placeholder")
+        self._store.set("TRAINER_status", b"alive")
 
     def _make_container(self):
         env_constructor = self.env_constructors[0]
@@ -529,13 +526,16 @@ class DistributedDataCollector(_DataCollector):
         raise NotImplementedError
 
     def shutdown(self):
+        self._store.set("TRAINER_status", b"shutdown")
         for i in range(self.num_workers):
             rank = i + 1
+            print(f"shutting down node with rank={rank}")
             self._store.set(f"NODE_{rank}_in", b"shutdown")
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"down":
                 raise RuntimeError(f"Expected 'down' but got status {status}.")
             self._store.delete_key(f"NODE_{rank}_out")
+        for i in range(self.num_workers):
             if self.launcher == "mp":
                 if not self.jobs[i].is_alive():
                     continue
