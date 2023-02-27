@@ -20,7 +20,7 @@ from mocking_classes import (
 )
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
-from torch import multiprocessing as nn
+from torch import nn
 from torchrl._utils import seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
