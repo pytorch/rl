@@ -91,6 +91,7 @@ def _distributed_init_collection_node(
         port=tcpport + 1,
         world_size=world_size,
         is_master=False,
+        timeout=10,
     )
     if isinstance(policy, nn.Module):
         policy_weights = TensorDict(dict(policy.named_parameters()), [])
@@ -302,6 +303,7 @@ class DistributedDataCollector(_DataCollector):
             port=int(TCP_PORT) + 1,
             world_size=self.num_workers + 1,
             is_master=True,
+            timeout=10,
         )
         self._store.set("TRAINER_status", b"alive")
 
@@ -532,6 +534,8 @@ class DistributedDataCollector(_DataCollector):
             rank = i + 1
             print(f"shutting down node with rank={rank}")
             self._store.set(f"NODE_{rank}_in", b"shutdown")
+        for i in range(self.num_workers):
+            rank = i + 1
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"down":
                 raise RuntimeError(f"Expected 'down' but got status {status}.")
