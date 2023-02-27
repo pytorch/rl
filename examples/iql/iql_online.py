@@ -21,9 +21,9 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     MLP,
-    NormalParamWrapper,
+    NormalParamExtractor,
     ProbabilisticActor,
-    SafeModule,
+    TensorDictModule,
     ValueOperator,
 )
 from torchrl.modules.distributions import TanhNormal
@@ -124,13 +124,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
         "tanh_loc": cfg.tanh_loc,
     }
 
-    actor_net = NormalParamWrapper(
+    actor_net = NormalParamExtractor(
         actor_net,
         scale_mapping=f"biased_softplus_{cfg.default_policy_scale}",
         scale_lb=cfg.scale_lb,
     )
     in_keys_actor = in_keys
-    actor_module = SafeModule(
+    actor_module = TensorDictModule(
         actor_net,
         in_keys=in_keys_actor,
         out_keys=[
@@ -214,7 +214,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         max_frames_per_traj=cfg.max_frames_per_traj,
         total_frames=cfg.total_frames,
         device=cfg.device,
-        passing_device=cfg.device,
     )
     collector.set_seed(cfg.seed)
 
