@@ -117,6 +117,12 @@ class IQLLoss(LossModule):
             "At least one of the networks of SACLoss must have trainable " "parameters."
         )
 
+    @staticmethod
+    def loss_value_diff(diff, expectile=0.8):
+        """Loss function for iql expectile value difference."""
+        weight = torch.where(diff > 0, expectile, (1 - expectile))
+        return weight * (diff**2)
+
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:
@@ -204,7 +210,7 @@ class IQLLoss(LossModule):
             params=self.value_network_params,
         )
         value = td_copy.get("state_value").squeeze(-1)
-        value_loss = loss_value_diff(min_q - value, self.expectile).mean()
+        value_loss = self.loss_value_diff(min_q - value, self.expectile).mean()
         return value_loss
 
     def _loss_qvalue(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
@@ -247,9 +253,3 @@ class IQLLoss(LossModule):
             .mean()
         )
         return loss_qval, td_error.detach().max(0)[0]
-
-
-def loss_value_diff(diff, expectile=0.8):
-    """Loss function for value difference."""
-    weight = torch.where(diff > 0, expectile, (1 - expectile))
-    return weight * (diff**2)
