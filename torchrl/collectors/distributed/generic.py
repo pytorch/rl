@@ -146,6 +146,7 @@ def _distributed_init_collection_node(
             raise RuntimeError(f"Instruction {instruction} is not recognised")
     if not collector.closed:
         collector.shutdown()
+    del collector
     return
 
 
@@ -406,8 +407,8 @@ class DistributedDataCollector(_DataCollector):
                 job = self._init_worker_dist_mp(
                     i,
                 )
-                self.jobs.append(job)
                 print("job launched")
+            self.jobs.append(job)
         self._init_master_dist(self.num_workers + 1, self.backend)
 
     def iterator(self):
@@ -536,13 +537,17 @@ class DistributedDataCollector(_DataCollector):
             self._store.set(f"NODE_{rank}_in", b"shutdown")
         for i in range(self.num_workers):
             rank = i + 1
+            print(f"getting status of node {rank}", end="\t")
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"down":
                 raise RuntimeError(f"Expected 'down' but got status {status}.")
             self._store.delete_key(f"NODE_{rank}_out")
+            print(status)
         for i in range(self.num_workers):
             if self.launcher == "mp":
                 if not self.jobs[i].is_alive():
                     continue
                 self.jobs[i].join(timeout=10)
+            else:
+                self.jobs[i].result()
         print("collector shut down")
