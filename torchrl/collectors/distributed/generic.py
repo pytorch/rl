@@ -390,8 +390,7 @@ class DistributedDataCollector(_DataCollector):
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = "29500"
 
-        if self.launcher == "mp":
-            self.jobs = []
+        self.jobs = []
         elif self.launcher == "submitit":
             executor = submitit.AutoExecutor(folder="log_test")
             executor.update_parameters(**self.slurm_kwargs)
