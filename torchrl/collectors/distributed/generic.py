@@ -25,7 +25,7 @@ SUBMITIT_ERR = None
 try:
     import submitit
 
-    _has_submitit = False
+    _has_submitit = True
 except ModuleNotFoundError as err:
     _has_submitit = False
     SUBMITIT_ERR = err
@@ -392,6 +392,8 @@ class DistributedDataCollector(_DataCollector):
 
         self.jobs = []
         if self.launcher == "submitit":
+            if not _has_submitit:
+                raise ImportError("submitit not found.") from SUBMITIT_ERR
             executor = submitit.AutoExecutor(folder="log_test")
             executor.update_parameters(**self.slurm_kwargs)
         for i in range(self.num_workers):

@@ -14,7 +14,7 @@ SUBMITIT_ERR = None
 try:
     import submitit
 
-    _has_submitit = False
+    _has_submitit = True
 except ModuleNotFoundError as err:
     _has_submitit = False
     SUBMITIT_ERR = err
