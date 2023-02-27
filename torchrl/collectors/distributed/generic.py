@@ -1,7 +1,9 @@
-"""Generic distributed data-collector using torch.distributed backend
-==================================================================
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
-"""
+r"""Generic distributed data-collector using torch.distributed backend."""
 
 import os
 import socket
