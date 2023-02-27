@@ -391,7 +391,7 @@ class DistributedDataCollector(_DataCollector):
         os.environ["MASTER_PORT"] = "29500"
 
         self.jobs = []
-        elif self.launcher == "submitit":
+        if self.launcher == "submitit":
             executor = submitit.AutoExecutor(folder="log_test")
             executor.update_parameters(**self.slurm_kwargs)
         for i in range(self.num_workers):
