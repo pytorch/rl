@@ -16,6 +16,7 @@ from mocking_classes import (
     DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
+    MockBatchedLockedEnv,
     MockSerialEnv,
 )
 from tensordict.nn import TensorDictModule
@@ -1179,6 +1180,27 @@ class TestAutoWrap:
             collector_class(
                 **self._create_collector_kwargs(env_maker, collector_class, policy)
             )
+
+
+@pytest.mark.parametrize("env_class", [MockSerialEnv, MockBatchedLockedEnv])
+def test_initial_obs_consistency(env_class, seed=1):
+    if env_class == MockSerialEnv:
+        num_envs = 1
+        env = MockSerialEnv(device="cpu")
+    elif env_class == MockBatchedLockedEnv:
+        num_envs = 2
+        env = MockBatchedLockedEnv(device="cpu", batch_size=[num_envs])
+    env.set_seed(seed)
+    collector = SyncDataCollector(
+        create_env_fn=env,
+        frames_per_batch=(env.max_val * 2 + 2) * num_envs,  # at least two episodes
+        split_trajs=False,
+    )
+    for _, d in enumerate(collector):
+        break
+    obs = d["observation"].squeeze()
+    arange = torch.arange(1, collector.env.counter).float().expand_as(obs)
+    assert torch.allclose(obs, arange)
 
 
 def weight_reset(m):
