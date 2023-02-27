@@ -261,7 +261,7 @@ class GymLikeEnv(_EnvWrapper):
             for key, item in self.observation_spec.items():
                 if key not in tensordict_out.keys():
                     tensordict_out[key] = item.zero()
-        tensordict_out.set_default(
+        tensordict_out.setdefault(
             "done",
             torch.zeros(*self.batch_size, 1, dtype=torch.bool, device=self.device),
         )
