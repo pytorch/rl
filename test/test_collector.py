@@ -4,9 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
-import os
 import sys
-import time
 
 import numpy as np
 import pytest
@@ -22,7 +20,7 @@ from mocking_classes import (
 )
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
-from torch import multiprocessing as mp, nn
+from torch import multiprocessing as nn
 from torchrl._utils import seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
@@ -30,7 +28,6 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     RandomPolicy,
 )
-from torchrl.collectors.distributed import DistributedDataCollector, RPCDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv

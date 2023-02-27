@@ -1,5 +1,4 @@
-"""
-Generic distributed data-collector using torch.distributed backend
+"""Generic distributed data-collector using torch.distributed backend
 ==================================================================
 
 """
@@ -38,7 +37,7 @@ DEFAULT_SLURM_CONF = {
 }
 
 
-def distributed_init_collection_node(
+def _distributed_init_collection_node(
     rank,
     rank0_ip,
     tcpport,
@@ -51,7 +50,7 @@ def distributed_init_collection_node(
     policy,
     frames_per_batch,
     collector_kwargs,
-    verbose=True,
+    verbose=False,
 ):
     if verbose:
         print(f"node with rank {rank} -- creating collector of type {collector_class}")
@@ -339,7 +338,7 @@ class DistributedDataCollector(_DataCollector):
     def _init_worker_dist_submitit(self, executor, i):
         TCP_PORT = self.tcp_port
         job = executor.submit(
-            distributed_init_collection_node,
+            _distributed_init_collection_node,
             i + 1,
             self.IPAddr,
             int(TCP_PORT),
@@ -358,7 +357,7 @@ class DistributedDataCollector(_DataCollector):
     def _init_worker_dist_mp(self, i):
         TCP_PORT = self.tcp_port
         job = mp.Process(
-            target=distributed_init_collection_node,
+            target=_distributed_init_collection_node,
             args=(
                 i + 1,
                 self.IPAddr,

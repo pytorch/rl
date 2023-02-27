@@ -19,7 +19,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
@@ -219,9 +219,19 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                 policy.share_memory()
         return policy, device, get_weights_fn
 
-    def update_policy_weights_(self) -> None:
-        """Update the policy weights if the policy of the data collector and the trained policy live on different devices."""
-        if self.get_weights_fn is not None:
+    def update_policy_weights_(
+        self, policy_weights: Optional[TensorDictBase] = None
+    ) -> None:
+        """Updates the policy weights if the policy of the data collector and the trained policy live on different devices.
+
+        Args:
+            policy_weights (TensorDictBase, optional): if provided, a TensorDict containing
+                the weights of the policy to be used for the udpdate.
+
+        """
+        if policy_weights is not None:
+            self.policy_weights.apply(lambda x: x.data).update_(policy_weights)
+        elif self.get_weights_fn is not None:
             self.policy.load_state_dict(self.get_weights_fn())
 
     def __iter__(self) -> Iterator[TensorDictBase]:
@@ -431,6 +441,11 @@ class SyncDataCollector(_DataCollector):
             device=device,
             observation_spec=self.env.observation_spec,
         )
+        if isinstance(self.policy, nn.Module):
+            self.policy_weights = TensorDict(dict(self.policy.named_parameters()), [])
+        else:
+            self.policy_weights = TensorDict({}, [])
+
         self.env: EnvBase = self.env.to(self.device)
 
         if not total_frames > 0:
@@ -527,6 +542,12 @@ class SyncDataCollector(_DataCollector):
     # for RPC
     def next(self):
         return super().next()
+
+    # for RPC
+    def update_policy_weights_(
+        self, policy_weights: Optional[TensorDictBase] = None
+    ) -> None:
+        super().update_policy_weights_(policy_weights)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -911,6 +932,7 @@ class _MultiDataCollector(_DataCollector):
                 f"Found {type(devices)} instead."
             )
         self._policy_dict = {}
+        self._policy_weights_dict = {}
         self._get_weights_fn_dict = {}
 
         for i, (_device, create_env, kwargs) in enumerate(
@@ -932,6 +954,13 @@ class _MultiDataCollector(_DataCollector):
                 policy=policy, device=_device, observation_spec=observation_spec
             )
             self._policy_dict[_device] = _policy
+            if isinstance(_policy, nn.Module):
+                self._policy_weights_dict[_device] = TensorDict(
+                    dict(_policy.named_parameters()), []
+                )
+            else:
+                self._policy_weights_dict[_device] = TensorDict({}, [])
+
             self._get_weights_fn_dict[_device] = _get_weight_fn
             devices[i] = _device
         self.devices = devices
@@ -987,9 +1016,13 @@ class _MultiDataCollector(_DataCollector):
     def frames_per_batch_worker(self):
         raise NotImplementedError
 
-    def update_policy_weights_(self) -> None:
+    def update_policy_weights_(self, policy_weights=None) -> None:
         for _device in self._policy_dict:
-            if self._get_weights_fn_dict[_device] is not None:
+            if policy_weights is not None:
+                self._policy_weights_dict[_device].apply(lambda x: x.data).update_(
+                    policy_weights
+                )
+            elif self._get_weights_fn_dict[_device] is not None:
                 self._policy_dict[_device].load_state_dict(
                     self._get_weights_fn_dict[_device]()
                 )
@@ -1258,6 +1291,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         return super().load_state_dict(state_dict)
 
+    # for RPC
+    def update_policy_weights_(
+        self, policy_weights: Optional[TensorDictBase] = None
+    ) -> None:
+        super().update_policy_weights_(policy_weights)
+
     @property
     def frames_per_batch_worker(self):
         return -(-self.frames_per_batch // self.num_workers)
@@ -1440,6 +1479,12 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     # for RPC
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         return super().load_state_dict(state_dict)
+
+    # for RPC
+    def update_policy_weights_(
+        self, policy_weights: Optional[TensorDictBase] = None
+    ) -> None:
+        super().update_policy_weights_(policy_weights)
 
     @property
     def frames_per_batch_worker(self):

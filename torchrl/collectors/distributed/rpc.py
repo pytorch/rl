@@ -1,5 +1,4 @@
-"""
-Generic distributed data-collector using torch.distributed.rpc backend
+"""Generic distributed data-collector using torch.distributed.rpc backend
 ======================================================================
 
 """
@@ -54,6 +53,7 @@ def rpc_init_collection_node(
     Args:
         rank (int): the rank of the process;
         rank0_ip (str): the IP address of the master process (rank 0)
+        tcp_port (str or int): the TCP port of the master process
         world_size (int): the total number of nodes, including master.
 
     """
@@ -368,7 +368,19 @@ class RPCDataCollector(_DataCollector):
             yield data
 
     def update_policy_weights_(self) -> None:
-        raise NotImplementedError
+        futures = []
+        for i in range(self.num_workers):
+            print(f"calling update on worker {i}")
+            futures.append(
+                rpc.rpc_async(
+                    self.collector_infos[i],
+                    self.collector_class.update_policy_weights_,
+                    args=(self.collector_rrefs[i], self.policy_weights.detach()),
+                )
+            )
+        for i in range(self.num_workers):
+            print(f"waiting for worker {i}")
+            self.futures[i].wait()
 
     def _next_async_rpc(self):
         while True:
