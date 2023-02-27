@@ -97,6 +97,8 @@ class _MockEnv(EnvBase):
 
 
 class MockSerialEnv(EnvBase):
+    """A simple counting env that is reset after a predifined max number of steps."""
+
     @classmethod
     def __new__(
         cls,
@@ -844,9 +846,16 @@ class ActionObsMergeLinear(nn.Module):
 
 
 class CountingEnv(EnvBase):
-    def __init__(self, max_steps: int = 5, **kwargs):
+    """An env that is done after a given number of steps.
+
+    The action is the count increment.
+
+    """
+
+    def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
         super().__init__(**kwargs)
         self.max_steps = max_steps
+        self.start_val = start_val
 
         self.observation_spec = CompositeSpec(
             observation=UnboundedContinuousTensorSpec(
@@ -878,9 +887,9 @@ class CountingEnv(EnvBase):
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         if tensordict is not None and "_reset" in tensordict.keys():
             _reset = tensordict.get("_reset")
-            self.count[_reset] = 0
+            self.count[_reset] = self.start_val
         else:
-            self.count[:] = 0
+            self.count[:] = self.start_val
         return TensorDict(
             source={
                 "observation": self.count.clone(),
@@ -900,6 +909,90 @@ class CountingEnv(EnvBase):
             source={
                 "observation": self.count,
                 "done": self.count > self.max_steps,
+                "reward": torch.zeros_like(self.count, dtype=torch.float),
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+
+
+class CountingBatchedEnv(EnvBase):
+    """An env that is done after a given number of steps.
+
+    The action is the count increment.
+
+    Unlike ``CountingEnv``, different envs of the batch can have different max_steps
+    """
+
+    def __init__(
+        self,
+        max_steps: torch.Tensor = None,
+        start_val: torch.Tensor = None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        if max_steps is None:
+            max_steps = torch.tensor(5)
+        if start_val is None:
+            start_val = torch.zeros(())
+        if not max_steps.shape == self.batch_size:
+            raise RuntimeError("batch_size and max_steps shape must match.")
+
+        self.max_steps = max_steps
+        self.start_val = start_val
+
+        self.observation_spec = CompositeSpec(
+            observation=UnboundedContinuousTensorSpec(
+                (
+                    *self.batch_size,
+                    1,
+                )
+            ),
+            shape=self.batch_size,
+        )
+        self.reward_spec = UnboundedContinuousTensorSpec(
+            (
+                *self.batch_size,
+                1,
+            )
+        )
+        self.input_spec = CompositeSpec(
+            action=BinaryDiscreteTensorSpec(n=1, shape=[*self.batch_size, 1]),
+            shape=self.batch_size,
+        )
+
+        self.count = torch.zeros(
+            (*self.batch_size, 1), device=self.device, dtype=torch.int
+        )
+
+    def _set_seed(self, seed: Optional[int]):
+        torch.manual_seed(seed)
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        if tensordict is not None and "_reset" in tensordict.keys():
+            _reset = tensordict.get("_reset")
+            self.count[_reset] = self.start_val[_reset].unsqueeze(-1)
+        else:
+            self.count[:] = self.start_val.unsqueeze(-1)
+        return TensorDict(
+            source={
+                "observation": self.count.clone(),
+                "done": self.count > self.max_steps.unsqueeze(-1),
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        action = tensordict.get("action")
+        self.count += action.to(torch.int).unsqueeze(-1)
+        return TensorDict(
+            source={
+                "observation": self.count,
+                "done": self.count > self.max_steps.unsqueeze(-1),
                 "reward": torch.zeros_like(self.count, dtype=torch.float),
             },
             batch_size=self.batch_size,
