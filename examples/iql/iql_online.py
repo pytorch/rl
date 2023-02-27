@@ -10,6 +10,8 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
+from tensordict.nn import TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
 
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
@@ -19,13 +21,7 @@ from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import (
-    MLP,
-    NormalParamExtractor,
-    ProbabilisticActor,
-    TensorDictModule,
-    ValueOperator,
-)
+from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
 from torchrl.modules.distributions import TanhNormal
 
 from torchrl.objectives import SoftUpdate
@@ -124,11 +120,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         "tanh_loc": cfg.tanh_loc,
     }
 
-    actor_net = NormalParamExtractor(
-        actor_net,
+    actor_extractor = NormalParamExtractor(
         scale_mapping=f"biased_softplus_{cfg.default_policy_scale}",
         scale_lb=cfg.scale_lb,
     )
+
+    actor_net = nn.Sequential(actor_net, actor_extractor)
     in_keys_actor = in_keys
     actor_module = TensorDictModule(
         actor_net,
