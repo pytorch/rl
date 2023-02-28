@@ -23,7 +23,6 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
-
 from torchrl._utils import _check_for_faulty_process
 from torchrl.collectors.utils import (
     bring_forward_and_squash_batch_sizes,
@@ -298,11 +297,11 @@ class SyncDataCollector(_DataCollector):
             updated. This feature should be used cautiously: if the same tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
             Default is False.
-        mask_env_batch_size (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size,
-            with a value of True it indicates to consider the corresponding dimension of env.batch_size as part of the
-            batch of environments used to collect frames. A value of False it indicates NOT to consider that dimension
-            as part of the batch of environments used to collect frames (used for agent dimension in multi-agent settings).
-            Default is None (corresponding to all True).
+       mask_env_batch_size (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size.
+            A value of ``True`` indicates that the corresponding dimension of ``env.batch_size`` is to be included in
+            the computation of the number of frames collected. A value of ``False`` indicates NOT to consider this particular dimension
+            as part of the batch of environments used to collect frames (e.g. used for agent dimension in multi-agent settings).
+            Defaults to ``True`` for all dims.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -919,7 +918,8 @@ class _MultiDataCollector(_DataCollector):
             reset once one of them is done.
             Defaults to `True`.
         mask_env_batch_size (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size.
-            A value of ``True`` indicates that the corresponding dimension of ``env.batch_size`` is to be included in the computation of the number of frames collected. A value of ``False`` indicates NOT to consider this particular dimension
+            A value of ``True`` indicates that the corresponding dimension of ``env.batch_size`` is to be included in
+            the computation of the number of frames collected. A value of ``False`` indicates NOT to consider this particular dimension
             as part of the batch of environments used to collect frames (e.g. used for agent dimension in multi-agent settings).
             Defaults to ``True`` for all dims.
 
@@ -1634,7 +1634,8 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
             default = True
         mask_env_batch_size (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size.
-            A value of ``True`` indicates that the corresponding dimension of ``env.batch_size`` is to be included in the computation of the number of frames collected. A value of ``False`` indicates NOT to consider this particular dimension
+            A value of ``True`` indicates that the corresponding dimension of ``env.batch_size`` is to be included in
+            the computation of the number of frames collected. A value of ``False`` indicates NOT to consider this particular dimension
             as part of the batch of environments used to collect frames (e.g. used for agent dimension in multi-agent settings).
             Defaults to ``True`` for all dims.
 
