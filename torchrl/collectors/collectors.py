@@ -911,11 +911,10 @@ class _MultiDataCollector(_DataCollector):
             in other words, if the env is a multi-agent env, all agents will be
             reset once one of them is done.
             Defaults to `True`.
-        mask_env_batch_size (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size,
-            with a value of True it indicates to consider the corresponding dimension of env.batch_size as part of the
-            batch of environments used to collect frames. A value of False it indicates NOT to consider that dimension
-            as part of the batch of environments used to collect frames (used for agent dimension in multi-agent settings).
-            Default is None (corresponding to all True).
+        mask_env_batch_size (Sequence[bool], optional): a sequence of bools of the same length as env.batch_size.
+            A value of ``True`` indicates that the corresponding dimension of ``env.batch_size`` is to be included in the computation of the number of frames collected. A value of ``False`` indicates NOT to consider this particular dimension
+            as part of the batch of environments used to collect frames (e.g. used for agent dimension in multi-agent settings).
+            Defaults to ``True`` for all dims.
 
     """
 
