@@ -24,6 +24,8 @@ on:
 
 jobs:
   build-wheel-linux:
+    # Don't run on forked repos.
+    if: github.repository_owner == 'pytorch'
     runs-on: ubuntu-18.04
     strategy:
       matrix:
@@ -61,6 +63,8 @@ jobs:
           path: dist/*.whl
 
   build-wheel-mac:
+    # Don't run on forked repos.
+    if: github.repository_owner == 'pytorch'
     runs-on: macos-latest
     strategy:
       matrix:
@@ -91,6 +95,8 @@ jobs:
           path: dist/*.whl
 
   test-wheel-mac:
+    # Don't run on forked repos.
+    if: github.repository_owner == 'pytorch'
     needs: build-wheel-mac
     runs-on: macos-latest
     strategy:
@@ -138,6 +144,8 @@ jobs:
           exit $EXIT_STATUS
 
   upload-wheel-linux:
+    # Don't run on forked repos.
+    if: github.repository_owner == 'pytorch'
     needs: test-wheel-linux
     runs-on: ubuntu-18.04
     strategy:
@@ -167,6 +175,8 @@ jobs:
               --verbose
 
   upload-wheel-mac:
+    # Don't run on forked repos.
+    if: github.repository_owner == 'pytorch'
     needs: test-wheel-mac
     runs-on: macos-latest
     strategy:
@@ -193,6 +203,8 @@ jobs:
               --verbose
 
   test-wheel-linux:
+    # Don't run on forked repos.
+    if: github.repository_owner == 'pytorch'
     needs: build-wheel-linux
     runs-on: ubuntu-18.04
     strategy:
@@ -254,8 +266,10 @@ jobs:
           exit $EXIT_STATUS
 
   build-wheel-windows:
+    # Don't run on forked repos.
+    if: github.repository_owner == 'pytorch'
     runs-on: windows-latest
-    strategy: 
+    strategy:
       matrix:
         python_version: [["3.7", "3.7"], ["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
     steps:
@@ -284,6 +298,8 @@ jobs:
           path: dist/*.whl
 
   test-wheel-windows:
+    # Don't run on forked repos.
+    if: github.repository_owner == 'pytorch'
     needs: build-wheel-windows
     runs-on: windows-latest
     strategy:
@@ -336,6 +352,8 @@ jobs:
           exit $EXIT_STATUS
 
   upload-wheel-windows:
+    # Don't run on forked repos.
+    if: github.repository_owner == 'pytorch'
     needs: test-wheel-windows
     runs-on: windows-latest
     strategy:

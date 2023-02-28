@@ -446,6 +446,14 @@ class TestComposite:
             r = ts.rand()
             assert ts.is_in(r)
 
+    def test_to_numpy(self, is_complete, device, dtype):
+        ts = self._composite_spec(is_complete, device, dtype)
+        for _ in range(100):
+            r = ts.rand()
+            for key, value in ts.to_numpy(r).items():
+                spec = ts[key]
+                assert (spec.to_numpy(r[key]) == value).all()
+
     @pytest.mark.parametrize("shape", [[], [3]])
     def test_project(self, is_complete, device, dtype, shape):
         ts = self._composite_spec(is_complete, device, dtype)

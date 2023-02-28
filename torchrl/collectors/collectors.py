@@ -639,7 +639,7 @@ class SyncDataCollector(_DataCollector):
             if self._frames >= self.total_frames:
                 break
 
-    def _reset_if_necessary(self) -> None:
+    def _step_and_maybe_reset(self) -> None:
         done = self._tensordict.get("done")
         if not self.reset_when_done:
             done = torch.zeros_like(done)
@@ -660,6 +660,11 @@ class SyncDataCollector(_DataCollector):
             done_or_terminated = done_or_terminated | _reset
 
         if done_or_terminated.any():
+            if not done_or_terminated.all():
+                self._tensordict[~done_or_terminated] = step_mdp(
+                    self._tensordict[~done_or_terminated]
+                )
+
             traj_ids = self._tensordict.get(("collector", "traj_ids")).clone()
             steps = steps.clone()
             if len(self.env.batch_size):
@@ -698,6 +703,8 @@ class SyncDataCollector(_DataCollector):
                 ("collector", "traj_ids"), traj_ids
             )  # no ops if they already match
             self._tensordict.set_(("collector", "step_count"), steps)
+        else:
+            self._tensordict.update(step_mdp(self._tensordict), inplace=True)
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
@@ -749,8 +756,8 @@ class SyncDataCollector(_DataCollector):
                     ] = tensordict
                     if is_shared:
                         self._tensordict_out.share_memory_()
-                self._reset_if_necessary()
-                self._tensordict.update(step_mdp(self._tensordict), inplace=True)
+
+                self._step_and_maybe_reset()
 
         return self._tensordict_out
 

@@ -13,6 +13,7 @@ import torch
 from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
 from mocking_classes import (
     ContinuousActionVecMockEnv,
+    CountingBatchedEnv,
     CountingEnv,
     DiscreteActionConvMockEnv,
     DiscreteActionConvPolicy,
@@ -1322,6 +1323,52 @@ class TestAutoWrap:
             collector_class(
                 **self._create_collector_kwargs(env_maker, collector_class, policy)
             )
+
+
+@pytest.mark.parametrize("env_class", [CountingEnv, CountingBatchedEnv])
+def test_initial_obs_consistency(env_class, seed=1):
+    torch.manual_seed(seed)
+    start_val = 4
+    if env_class == CountingEnv:
+        num_envs = 1
+        env = CountingEnv(device="cpu", max_steps=8, start_val=start_val)
+        max_steps = 8
+    elif env_class == CountingBatchedEnv:
+        num_envs = 2
+        env = CountingBatchedEnv(
+            device="cpu",
+            batch_size=[num_envs],
+            max_steps=torch.arange(num_envs) + 17,
+            start_val=torch.ones([num_envs]) * start_val,
+        )
+        max_steps = env.max_steps.max().item()
+    env.set_seed(seed)
+    policy = lambda tensordict: tensordict.set(
+        "action", torch.ones(tensordict.shape, dtype=torch.int)
+    )
+    collector = SyncDataCollector(
+        create_env_fn=env,
+        policy=policy,
+        frames_per_batch=((max_steps - 3) * 2 + 2) * num_envs,  # at least two episodes
+        split_trajs=False,
+    )
+    for _d in collector:
+        break
+    obs = _d["observation"].squeeze()
+    if env_class == CountingEnv:
+        arange_0 = start_val + torch.arange(max_steps - 3)
+        arange = start_val + torch.arange(2)
+        expected = torch.cat([arange_0, arange_0, arange]).float()
+    else:
+        # the first env has a shorter horizon than the second
+        arange_0 = start_val + torch.arange(max_steps - 3 - 1)
+        arange = start_val + torch.arange(start_val)
+        expected_0 = torch.cat([arange_0, arange_0, arange]).float()
+        arange_0 = start_val + torch.arange(max_steps - 3)
+        arange = start_val + torch.arange(2)
+        expected_1 = torch.cat([arange_0, arange_0, arange]).float()
+        expected = torch.stack([expected_0, expected_1])
+    assert torch.allclose(obs, expected)
 
 
 def weight_reset(m):
