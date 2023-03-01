@@ -961,6 +961,7 @@ class TestVmas:
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
     def test_vmas_batch_size(self, scenario_name, num_envs, n_agents):
+        torch.manual_seed(0)
         n_rollout_samples = 5
         env = VmasEnv(
             scenario_name=scenario_name,
@@ -1025,6 +1026,7 @@ class TestVmas:
         n_agents=5,
         n_rollout_samples=3,
     ):
+        torch.manual_seed(0)
         def make_vmas():
             env = VmasEnv(
                 scenario_name=scenario_name,
@@ -1053,6 +1055,7 @@ class TestVmas:
         n_rollout_samples=3,
         max_steps=3,
     ):
+        torch.manual_seed(0)
         def make_vmas():
             env = VmasEnv(
                 scenario_name=scenario_name,
@@ -1075,14 +1078,15 @@ class TestVmas:
         tensordict = env.reset(
             TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
         )
-        assert tensordict["done"][_reset].all().item() is False
+        assert not tensordict["done"][_reset].all().item()
         # vmas resets all the agent dimension if only one of the agents needs resetting
         # thus, here we check that where we did not reset any agent, all agents are still done
-        assert tensordict["done"].all(dim=1)[~_reset.any(dim=1)].all().item() is True
+        assert tensordict["done"].all(dim=1)[~_reset.any(dim=1)].all().item()
 
     @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
     @pytest.mark.parametrize("first", [0, 1])
     def test_to_device(self, scenario_name: str, first: int):
+        torch.manual_seed(0)
         devices = get_available_devices()
 
         def make_vmas():
