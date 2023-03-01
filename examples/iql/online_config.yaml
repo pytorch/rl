@@ -44,6 +44,7 @@ expectile: 0.7
 
 # Logging
 logger: wandb
+mode: online
 
 # Replay Buffer
 prb: 0
