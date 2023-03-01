@@ -90,7 +90,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         )
         dataset.rename_key("terminals", "done")
         dataset.rename_key("observations", "observation")
-        dataset.rename_key("next_observations", "next/observation")
+        # dataset.rename_key("next_observations", "next/observation")
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
         dataset = dataset.unflatten_keys("/")
