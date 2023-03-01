@@ -122,10 +122,7 @@ class VmasWrapper(_EnvWrapper):
             )
         self.batch_size = torch.Size([self.n_agents, *self.batch_size])
         self.input_spec = self.input_spec.expand(self.batch_size)
-        self.observation_spec = self.observation_spec.expand(self.batch_size)
-        self.reward_spec = self.reward_spec.expand(
-            [*self.batch_size, *self.reward_spec.shape]
-        )
+        self.output_spec = self.output_spec.expand(self.batch_size)
 
     @property
     def lib(self):

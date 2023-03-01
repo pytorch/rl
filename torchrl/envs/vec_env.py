@@ -613,12 +613,12 @@ class SerialEnv(_BatchedEnv):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             out_td = self._envs[i]._step(tensordict_in[i])
-            out_td = out_td.exclude(*input_keys)
-            out_td = out_td.select(*self.shared_tensordicts[i].keys(), strict=False)
-            self.shared_tensordicts[i].update_(out_td)
+            # out_td = out_td.exclude(*input_keys)
+            # out_td = out_td.select(*self.shared_tensordicts[i].keys(), strict=False)
+            self.shared_tensordicts[i].get("next").update_(out_td)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return self.shared_tensordict_parent.clone()
+        return self.shared_tensordict_parent.get("next").clone()
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
@@ -793,21 +793,18 @@ class ParallelEnv(_BatchedEnv):
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
-        keys = set()
+        # keys = set()
         for i in range(self.num_workers):
             msg, data = self.parent_channels[i].recv()
             if msg != "step_result":
                 raise RuntimeError(
                     f"Expected 'step_result' but received {msg} from worker {i}"
                 )
-            # data is the set of updated keys
-            keys = keys.union(data)
+            # # data is the set of updated keys
+            # keys = keys.union(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return self.shared_tensordict_parent.select(
-            *keys,
-            strict=False,
-        ).clone()
+        return self.shared_tensordict_parent.get("next")
 
     @_check_start
     def _shutdown_workers(self) -> None:
@@ -1056,7 +1053,7 @@ def _run_worker_pipe_shared_mem(
                 )
             if pin_memory:
                 _td.pin_memory()
-            tensordict.update_(_td.select(*step_keys, strict=False))
+            tensordict.get("next").update_(_td.select(*step_keys, strict=False))
             msg = "step_result"
             data = (msg, step_keys)
             child_pipe.send(data)
