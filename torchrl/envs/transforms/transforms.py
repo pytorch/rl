@@ -523,8 +523,8 @@ but got an object of type {type(transform)}."""
         out_tensordict = self.transform._call(out_tensordict)
         return out_tensordict
 
-    def state_dict(self) -> OrderedDict:
-        state_dict = self.transform.state_dict()
+    def state_dict(self, *args, **kwargs) -> OrderedDict:
+        state_dict = self.transform.state_dict(*args, **kwargs)
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
