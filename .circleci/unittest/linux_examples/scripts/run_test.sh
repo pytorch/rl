@@ -119,7 +119,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   num_workers=4 \
   env_per_collector=2 \
   collector_devices=cuda:0 \
-  logger=tensorboard 
+  mode=offline 
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
   total_frames=48 \
   batch_size=10 \
@@ -127,7 +127,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_onli
   num_workers=4 \
   env_per_collector=2 \
   collector_devices=cuda:0 \
-  logger=tensorboard 
+  mode=offline 
 
 # With single envs
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
@@ -220,7 +220,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   frames_per_batch=16 \
   num_workers=2 \
   env_per_collector=1 \
-  logger=tensorboard \
+  mode=offline \
   collector_devices=cuda:0 
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
   total_frames=48 \
@@ -228,7 +228,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_onli
   frames_per_batch=16 \
   num_workers=2 \
   env_per_collector=1 \
-  logger=tensorboard \
+  mode=offline \
   collector_devices=cuda:0
 
 
