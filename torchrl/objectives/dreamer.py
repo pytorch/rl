@@ -65,7 +65,7 @@ class DreamerModelLoss(LossModule):
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
-        tensordict.rename_key("reward", "true_reward")
+        tensordict.rename_key(("next", "reward"), ("next", "true_reward"))
         tensordict = self.world_model(tensordict)
         # compute model loss
         kl_loss = self.kl_loss(
@@ -84,8 +84,8 @@ class DreamerModelLoss(LossModule):
         reco_loss = reco_loss.mean().unsqueeze(-1)
 
         reward_loss = distance_loss(
-            tensordict.get("true_reward"),
-            tensordict.get("reward"),
+            tensordict.get(("next", "true_reward")),
+            tensordict.get(("next", "reward")),
             self.reward_loss,
         )
         if not self.global_average:

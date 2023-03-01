@@ -24,8 +24,6 @@ def step_mdp(
     tensordict: TensorDictBase,
     next_tensordict: TensorDictBase = None,
     keep_other: bool = True,
-    exclude_reward: bool = True,
-    exclude_done: bool = True,
     exclude_action: bool = True,
     _run_check: bool = True,
 ) -> TensorDictBase:
@@ -37,12 +35,6 @@ def step_mdp(
         tensordict (TensorDictBase): tensordict with keys to be renamed
         next_tensordict (TensorDictBase, optional): destination tensordict
         keep_other (bool, optional): if True, all keys that do not start with :obj:`'next_'` will be kept.
-            Default is True.
-        exclude_reward (bool, optional): if True, the :obj:`"reward"` key will be discarded
-            from the resulting tensordict.
-            Default is True.
-        exclude_done (bool, optional): if True, the :obj:`"done"` key will be discarded
-            from the resulting tensordict.
             Default is True.
         exclude_action (bool, optional): if True, the :obj:`"action"` key will be discarded
             from the resulting tensordict.
@@ -69,14 +61,6 @@ def step_mdp(
     """
     other_keys = []
     prohibited = set()
-    if exclude_done:
-        prohibited.add("done")
-    else:
-        other_keys.append("done")
-    if exclude_reward:
-        prohibited.add("reward")
-    else:
-        other_keys.append("reward")
     if exclude_action:
         prohibited.add("action")
     else:
@@ -199,7 +183,6 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
 
     keys1 = set(fake_tensordict.keys(True))
     keys2 = set(real_tensordict.keys(True))
-
     if keys1 != keys2:
         raise AssertionError(
             "The keys of the fake tensordict and the one collected during rollout do not match:"

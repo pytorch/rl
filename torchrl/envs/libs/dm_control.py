@@ -234,28 +234,32 @@ class DMControlWrapper(GymLikeEnv):
 
     @property
     def observation_spec(self) -> TensorSpec:
-        if self._observation_spec is None:
-            self.__dict__["_observation_spec"] = _dmcontrol_to_torchrl_spec_transform(
+        try:
+            return self.output_spec["observation"]
+        except KeyError:
+            self.observation_spec = _dmcontrol_to_torchrl_spec_transform(
                 self._env.observation_spec(), device=self.device
             )
-        return self._observation_spec
+            return self.output_spec["observation"]
 
     @observation_spec.setter
     def observation_spec(self, value: TensorSpec) -> None:
         if not isinstance(value, CompositeSpec):
             raise TypeError("The type of an observation_spec must be Composite.")
-        self.__dict__["_observation_spec"] = value
+        self.output_spec["observation"] = value
 
     @property
     def reward_spec(self) -> TensorSpec:
-        if self._reward_spec is None:
+        try:
+            return self.output_spec["reward"]
+        except KeyError:
             reward_spec = _dmcontrol_to_torchrl_spec_transform(
                 self._env.reward_spec(), device=self.device
             )
             if len(reward_spec.shape) == 0:
                 reward_spec.shape = torch.Size([1])
-            self.__dict__["_reward_spec"] = reward_spec
-        return self._reward_spec
+            self.output_spec["reward"] = reward_spec
+            return reward_spec
 
     @reward_spec.setter
     def reward_spec(self, value: TensorSpec) -> None:
@@ -270,7 +274,7 @@ class DMControlWrapper(GymLikeEnv):
                 " with a null number of dimensions. Try using a multidimensional"
                 " spec instead, for instance with a singleton dimension at the tail)."
             )
-        self.__dict__["_reward_spec"] = value
+        self.output_spec["reward"] = value
 
     def __repr__(self) -> str:
         return (

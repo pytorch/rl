@@ -56,9 +56,11 @@ class _MockEnv(EnvBase):
         *args,
         **kwargs,
     ):
-        for key, item in list(cls._observation_spec.items()):
-            cls._observation_spec[key] = item.to(torch.get_default_dtype())
-        cls._reward_spec = cls._reward_spec.to(torch.get_default_dtype())
+        for key, item in list(cls._output_spec["observation"].items()):
+            cls._output_spec["observation"][key] = item.to(torch.get_default_dtype())
+        cls._output_spec["reward"] = cls._output_spec["reward"].to(
+            torch.get_default_dtype()
+        )
         return super().__new__(*args, **kwargs)
 
     def __init__(
@@ -136,8 +138,8 @@ class MockSerialEnv(EnvBase):
             )
         if input_spec is None:
             input_spec = CompositeSpec(action=action_spec, shape=batch_size)
-        cls._reward_spec = reward_spec
-        cls._observation_spec = observation_spec
+        cls._output_spec["reward"] = reward_spec
+        cls._output_spec["observation"] = observation_spec
         cls._input_spec = input_spec
         return super().__new__(*args, **kwargs)
 
@@ -223,8 +225,8 @@ class MockBatchedLockedEnv(EnvBase):
                     1,
                 )
             )
-        cls._reward_spec = reward_spec
-        cls._observation_spec = observation_spec
+        cls._output_spec["reward"] = reward_spec
+        cls._output_spec["observation"] = observation_spec
         cls._input_spec = input_spec
         return super().__new__(
             cls,
@@ -374,8 +376,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
                     "action": action_spec,
                 }
             )
-        cls._reward_spec = reward_spec
-        cls._observation_spec = observation_spec
+        cls._output_spec["reward"] = reward_spec
+        cls._output_spec["observation"] = observation_spec
         cls._input_spec = input_spec
         cls.from_pixels = from_pixels
         cls.categorical_action_encoding = categorical_action_encoding
@@ -468,8 +470,9 @@ class ContinuousActionVecMockEnv(_MockEnv):
                 },
                 shape=batch_size,
             )
-        cls._reward_spec = reward_spec
-        cls._observation_spec = observation_spec
+        cls._output_spec = CompositeSpec()
+        cls._output_spec["reward"] = reward_spec
+        cls._output_spec["observation"] = observation_spec
         cls._input_spec = input_spec
         cls.from_pixels = from_pixels
         return super().__new__(*args, **kwargs)

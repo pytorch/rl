@@ -184,7 +184,7 @@ class BraxWrapper(_EnvWrapper):
 
         # build result
         state["reward"] = reward = state.get("reward").view(*self.reward_spec.shape)
-        state["done"] = state.get("done").view(*self.reward_spec.shape)
+        state["done"] = state.get(("next", "done")).view(*self.reward_spec.shape)
         done = state["done"].bool()
         tensordict_out = TensorDict(
             source={
@@ -218,7 +218,9 @@ class BraxWrapper(_EnvWrapper):
 
         # build result
         next_state.set("reward", next_state.get("reward").view(self.reward_spec.shape))
-        next_state.set("done", next_state.get("done").view(self.reward_spec.shape))
+        next_state.set(
+            "done", next_state.get(("next", "done")).view(self.reward_spec.shape)
+        )
         done = next_state["done"].bool()
         reward = next_state["reward"]
         tensordict_out = TensorDict(
@@ -248,7 +250,9 @@ class BraxWrapper(_EnvWrapper):
         )
 
         # extract done values: we assume a shape identical to reward
-        next_done = next_state_nograd.get("done").view(*self.reward_spec.shape)
+        next_done = next_state_nograd.get(("next", "done")).view(
+            *self.reward_spec.shape
+        )
         next_reward = next_reward.view(*self.reward_spec.shape)
 
         # merge with tensors with grad function

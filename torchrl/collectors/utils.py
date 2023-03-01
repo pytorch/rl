@@ -59,7 +59,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
             torch.ones(
                 out_split.shape,
                 dtype=torch.bool,
-                device=out_split.get("done").device,
+                device=out_split.get(("next", "done")).device,
             ),
         )
     if len(out_splits) > 1:

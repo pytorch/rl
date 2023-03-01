@@ -572,7 +572,7 @@ class SyncDataCollector(_DataCollector):
                 break
 
     def _step_and_maybe_reset(self) -> None:
-        done = self._tensordict.get("done")
+        done = self._tensordict.get(("next", "done"))
         if not self.reset_when_done:
             done = torch.zeros_like(done)
         steps = self._tensordict.get(("collector", "step_count"))
@@ -608,8 +608,9 @@ class SyncDataCollector(_DataCollector):
                 self._tensordict.zero_()
             self.env.reset(self._tensordict)
 
-            if (_reset is None and self._tensordict.get("done").any()) or (
-                _reset is not None and self._tensordict.get("done")[_reset].any()
+            if (_reset is None and self._tensordict.get(("next", "done")).any()) or (
+                _reset is not None
+                and self._tensordict.get(("next", "done"))[_reset].any()
             ):
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
@@ -1696,7 +1697,6 @@ def _main_async_collector(
                     print(f"worker {idx} has timed out")
                 has_timed_out = True
                 continue
-            # pipe_child.send("done")
 
         elif msg == "update":
             dc.update_policy_weights_()
