@@ -44,7 +44,7 @@ TCP_PORT = os.environ.get("TCP_PORT", "10003")
 IDLE_TIMEOUT = os.environ.get("RCP_IDLE_TIMEOUT", 10)
 
 
-def rpc_init_collection_node(
+def _rpc_init_collection_node(
     rank,
     rank0_ip,
     tcp_port,
@@ -59,6 +59,20 @@ def rpc_init_collection_node(
         world_size (int): the total number of nodes, including master.
 
     """
+    proc = mp.Process(
+        target=_rpc_init_collection_node_proc,
+        args=(rank, rank0_ip, tcp_port, world_size),
+    )
+    proc.start()
+    proc.join()
+
+
+def _rpc_init_collection_node_proc(
+    rank,
+    rank0_ip,
+    tcp_port,
+    world_size,
+):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = "29500"
     # os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
@@ -304,7 +318,7 @@ class RPCDataCollector(_DataCollector):
             if not _has_submitit:
                 raise ImportError("submitit not found.") from SUBMITIT_ERR
             job = executor.submit(
-                rpc_init_collection_node,
+                _rpc_init_collection_node,
                 i + 1,
                 self.IPAddr,
                 self.tcp_port,
@@ -314,7 +328,7 @@ class RPCDataCollector(_DataCollector):
             return job
         elif self.launcher == "mp":
             job = mp.Process(
-                target=rpc_init_collection_node,
+                target=_rpc_init_collection_node,
                 args=(i + 1, self.IPAddr, self.tcp_port, self.num_workers + 1),
             )
             job.start()
