@@ -41,7 +41,7 @@ from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
-from torchrl.envs.utils import step_mdp
+from torchrl.envs.utils import step_mdp, check_env_specs
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
@@ -250,10 +250,11 @@ class TestModelBasedEnvBase:
         mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([10])
         )
+        check_env_specs(mb_env)
         rollout = mb_env.rollout(max_steps=100)
-        expected_keys = {("next", key) for key in mb_env.observation_spec.keys()}
+        expected_keys = {("next", key) for key in (*mb_env.observation_spec.keys(), "reward", "done")}
         expected_keys = expected_keys.union(set(mb_env.input_spec.keys()))
-        expected_keys = expected_keys.union({"reward", "done", "next"})
+        expected_keys = expected_keys.union({"done", "next"})
         assert set(rollout.keys(True)) == expected_keys
         assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 
