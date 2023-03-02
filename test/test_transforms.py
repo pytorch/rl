@@ -77,7 +77,7 @@ from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
-from torchrl.envs.utils import check_env_specs
+from torchrl.envs.utils import check_env_specs, step_mdp
 
 TIMEOUT = 100.0
 
@@ -174,30 +174,35 @@ class TestBinarizeReward(TransformBase):
     def test_single_trans_env_check(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), BinarizeReward())
         check_env_specs(env)
+        env.close()
 
     def test_serial_trans_env_check(self):
         env = SerialEnv(
             2, lambda: TransformedEnv(ContinuousActionVecMockEnv(), BinarizeReward())
         )
         check_env_specs(env)
+        env.close()
 
     def test_parallel_trans_env_check(self):
         env = ParallelEnv(
             2, lambda: TransformedEnv(ContinuousActionVecMockEnv(), BinarizeReward())
         )
         check_env_specs(env)
+        env.close()
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
             SerialEnv(2, lambda: ContinuousActionVecMockEnv()), BinarizeReward()
         )
         check_env_specs(env)
+        env.close()
 
     def test_trans_parallel_env_check(self):
         env = TransformedEnv(
             ParallelEnv(2, lambda: ContinuousActionVecMockEnv()), BinarizeReward()
         )
         check_env_specs(env)
+        env.close()
 
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
@@ -242,7 +247,7 @@ class TestBinarizeReward(TransformBase):
     def test_transform_env(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), BinarizeReward())
         rollout = env.rollout(3)
-        assert env.reward_spec.is_in(rollout["reward"])
+        assert env.reward_spec.is_in(rollout["next", "reward"])
 
     def test_transform_model(self):
         device = "cpu"
@@ -1013,30 +1018,39 @@ class TestStepCounter(TransformBase):
     def test_transform_compose(self, max_steps, device, batch, reset_workers):
         torch.manual_seed(0)
         step_counter = Compose(StepCounter(max_steps))
+        done = torch.zeros(*batch, 1, dtype=torch.bool)
         td = TensorDict(
-            {"done": torch.zeros(*batch, 1, dtype=torch.bool)}, batch, device=device
+            {"done": done, ("next", "done"): done}, batch, device=device
         )
-        if reset_workers:
-            td.set("_reset", torch.randn(batch) < 0)
-        step_counter.reset(td)
+        _reset = torch.zeros((), dtype=torch.bool)
+        while not _reset.any() and reset_workers:
+            _reset = torch.randn(batch) < 0
+            td.set("_reset", _reset)
+            td.set("done", _reset)
+            td.set(("next", "done"), done)
+
+        td = step_counter.reset(td)
         assert not torch.all(td.get("step_count"))
         i = 0
         while max_steps is None or i < max_steps:
-            step_counter._step(td)
+            td = step_counter._step(td)
             i += 1
-            assert torch.all(td.get("step_count") == i), (td.get("step_count"), i)
+            assert torch.all(td.get(("next", "step_count")) == i), (td.get(("next", "step_count")), i)
+            td = step_mdp(td)
+            td["next", "done"] = done
             if max_steps is None:
                 break
+
         if max_steps is not None:
             assert torch.all(td.get("step_count") == max_steps)
             assert torch.all(td.get("done"))
-        step_counter.reset(td)
+        td = step_counter.reset(td)
         if reset_workers:
             assert torch.all(
-                torch.masked_select(td.get("step_count"), td.get("_reset")) == 0
+                torch.masked_select(td.get("step_count"), _reset) == 0
             )
             assert torch.all(
-                torch.masked_select(td.get("step_count"), ~td.get("_reset")) == i
+                torch.masked_select(td.get("step_count"), ~_reset) == i
             )
         else:
             assert torch.all(td.get("step_count") == 0)
@@ -1046,7 +1060,7 @@ class TestStepCounter(TransformBase):
 
     def test_transform_model(self):
         transform = StepCounter(10)
-        td = TensorDict({"a": torch.randn(10)}, [10])
+        _ = TensorDict({"a": torch.randn(10)}, [10])
         model = nn.Sequential(transform, nn.Identity())
         with pytest.raises(
             NotImplementedError, match="StepCounter cannot be called independently"
@@ -1060,30 +1074,39 @@ class TestStepCounter(TransformBase):
     def test_transform_no_env(self, max_steps, device, batch, reset_workers):
         torch.manual_seed(0)
         step_counter = StepCounter(max_steps)
+        done = torch.zeros(*batch, 1, dtype=torch.bool)
         td = TensorDict(
-            {"done": torch.zeros(*batch, 1, dtype=torch.bool)}, batch, device=device
+            {"done": done, ("next", "done"): done}, batch, device=device
         )
-        if reset_workers:
-            td.set("_reset", torch.randn(batch) < 0)
-        step_counter.reset(td)
+        _reset = torch.zeros((), dtype=torch.bool)
+        while not _reset.any() and reset_workers:
+            _reset = torch.randn(batch) < 0
+            td.set("_reset", _reset)
+            td.set("done", _reset)
+            td.set(("next", "done"), done)
+
+        td = step_counter.reset(td)
         assert not torch.all(td.get("step_count"))
         i = 0
         while max_steps is None or i < max_steps:
-            step_counter._step(td)
+            td = step_counter._step(td)
             i += 1
-            assert torch.all(td.get("step_count") == i), (td.get("step_count"), i)
+            assert torch.all(td.get(("next", "step_count")) == i), (td.get(("next", "step_count")), i)
+            td = step_mdp(td)
+            td["next", "done"] = done
             if max_steps is None:
                 break
+
         if max_steps is not None:
             assert torch.all(td.get("step_count") == max_steps)
             assert torch.all(td.get("done"))
-        step_counter.reset(td)
+        td = step_counter.reset(td)
         if reset_workers:
             assert torch.all(
-                torch.masked_select(td.get("step_count"), td.get("_reset")) == 0
+                torch.masked_select(td.get("step_count"), _reset) == 0
             )
             assert torch.all(
-                torch.masked_select(td.get("step_count"), ~td.get("_reset")) == i
+                torch.masked_select(td.get("step_count"), ~_reset) == i
             )
         else:
             assert torch.all(td.get("step_count") == 0)

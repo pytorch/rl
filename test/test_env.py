@@ -122,7 +122,7 @@ def test_env_seed(env_name, frame_skip, seed=0):
     td1a = env.step(td0a.clone().set("action", action))
 
     env.set_seed(seed)
-    td0b = env.specs.build_tensordict()
+    td0b = env.fake_tensordict()
     td0b = env.reset(tensordict=td0b)
     td1b = env.step(td0b.clone().set("action", action))
 
@@ -190,7 +190,7 @@ def test_rollout_predictability(device):
     ).all()
     assert (
         torch.arange(first + 1, first + 101, device=device)
-        == td_out.get("reward").squeeze()
+        == td_out.get(("next", "reward")).squeeze()
     ).all()
     assert (
         torch.arange(first, first + 100, device=device)
@@ -227,7 +227,7 @@ def test_rollout_reset(env_name, frame_skip, parallel, seed=0):
     env.set_seed(100)
     out = env.rollout(100, break_when_any_done=False)
     assert out.shape == torch.Size([3, 100])
-    assert (out["done"].squeeze().sum(-1) == torch.tensor([5, 3, 2])).all()
+    assert (out["next", "done"].squeeze().sum(-1) == torch.tensor([5, 3, 2])).all()
 
 
 class TestModelBasedEnvBase:

@@ -78,12 +78,7 @@ class EnvMetaData:
     @staticmethod
     def build_metadata_from_env(env) -> EnvMetaData:
         tensordict = env.fake_tensordict().clone()
-        specs = {
-            "input_spec": env.input_spec,
-            "observation_spec": env.observation_spec,
-            "reward_spec": env.reward_spec,
-        }
-        specs = CompositeSpec(**specs, shape=env.batch_size).to("cpu")
+        specs = env.specs.to("cpu")
 
         batch_size = env.batch_size
         env_str = str(env)
@@ -231,6 +226,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @input_spec.setter
     def input_spec(self, value: TensorSpec) -> None:
+        if value is None:
+            self.__dict__["_output_spec"] = None
+            return
         if not isinstance(value, CompositeSpec):
             raise TypeError("The type of an input_spec must be Composite.")
         if value.shape[: len(self.batch_size)] != self.batch_size:
@@ -249,6 +247,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @output_spec.setter
     def output_spec(self, value: TensorSpec) -> None:
+        if value is None:
+            self.__dict__["_output_spec"] = None
+            return
         if not isinstance(value, CompositeSpec):
             raise TypeError("The type of an output_spec must be Composite.")
         elif value.shape[: len(self.batch_size)] != self.batch_size:
@@ -721,9 +722,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 tensordict,
                 keep_other=True,
                 exclude_action=False,
+                exclude_done=False,
+                exclude_reward=True,
             )
-            if not break_when_any_done and tensordict.get(("next", "done")).any():
-                tensordict["_reset"] = tensordict.get(
+            if not break_when_any_done and tensordict.get("done").any():
+                _reset = tensordict.get(
                     "done",
                     torch.ones(
                         *tensordict.shape,
@@ -731,6 +734,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         dtype=torch.bool,
                     ),
                 ).squeeze(-1)
+                tensordict.set("_reset", _reset)
                 self.reset(tensordict)
 
             if callback is not None:

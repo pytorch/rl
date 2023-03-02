@@ -24,6 +24,8 @@ def step_mdp(
     tensordict: TensorDictBase,
     next_tensordict: TensorDictBase = None,
     keep_other: bool = True,
+    exclude_reward: bool = True,
+    exclude_done: bool = False,
     exclude_action: bool = True,
     _run_check: bool = True,
 ) -> TensorDictBase:
@@ -35,10 +37,17 @@ def step_mdp(
         tensordict (TensorDictBase): tensordict with keys to be renamed
         next_tensordict (TensorDictBase, optional): destination tensordict
         keep_other (bool, optional): if True, all keys that do not start with :obj:`'next_'` will be kept.
-            Default is True.
+            Default is ``True``.
+        exclude_reward (bool, optional): if True, the :obj:`"reward"` key will be discarded
+            from the resulting tensordict.
+            Default is ``True``.
+        exclude_done (bool, optional): if True, the :obj:`"done"` key will be discarded
+            from the resulting tensordict.
+            Default is ``False`` such that one can keep track of the done state
+            at t and t+1.
         exclude_action (bool, optional): if True, the :obj:`"action"` key will be discarded
             from the resulting tensordict.
-            Default is True.
+            Default is ``True``.
 
     Returns:
          A new tensordict (or next_tensordict) containing the tensors of the t+1 step.
@@ -70,7 +79,16 @@ def step_mdp(
     if keep_other:
         other_keys = [key for key in tensordict.keys() if key not in prohibited]
     select_tensordict = tensordict.select(*other_keys)
-    select_tensordict = select_tensordict.update(tensordict.get("next"))
+    excluded = []
+    if exclude_reward:
+        excluded.append("reward")
+    if exclude_done:
+        excluded.append("done")
+    next_td = tensordict.get("next")
+    if len(excluded):
+        next_td = next_td.exclude(*excluded)
+    select_tensordict = select_tensordict.update(next_td)
+
 
     if next_tensordict is not None:
         return next_tensordict.update(select_tensordict)

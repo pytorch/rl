@@ -157,7 +157,8 @@ class Transform(nn.Module):
 
         """
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys(include_nested=True):
+            is_tuple = isinstance(in_key, tuple)
+            if in_key in tensordict.keys(include_nested=is_tuple):
                 observation = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(
                     out_key,
@@ -184,8 +185,11 @@ class Transform(nn.Module):
         with the parent env.
 
         """
-        out = self._call(tensordict)
-        return out
+        tensordict = tensordict.clone(False)
+        next_tensordict = tensordict.get("next")
+        next_tensordict = self._call(next_tensordict)
+        tensordict.set("next", next_tensordict)
+        return tensordict
 
     def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         if self.invertible:
@@ -209,6 +213,26 @@ class Transform(nn.Module):
 
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
         return self._inv_call(tensordict)
+
+    def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
+        """Transforms the output spec such that the resulting spec matches transform mapping.
+
+        This method should generally be left untouched. Changes should be implemented using
+        :meth:`~.transform_observation_spec`, :meth:`~.transform_reward_spec` and :meth:`~.transform_done_spec`.
+        Args:
+            output_spec (TensorSpec): spec before the transform
+
+        Returns:
+            expected spec after the transform
+
+        """
+        output_spec = output_spec.clone()
+        output_spec["observation"] = self.transform_observation_spec(output_spec["observation"])
+        if "reward" in output_spec.keys():
+            output_spec["reward"] = self.transform_reward_spec(output_spec["reward"])
+        if "done" in output_spec.keys():
+            output_spec["done"] = self.transform_done_spec(output_spec["done"])
+        return output_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         """Transforms the input spec such that the resulting spec matches transform mapping.
@@ -245,6 +269,18 @@ class Transform(nn.Module):
 
         """
         return reward_spec
+
+    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
+        """Transforms the done spec such that the resulting spec matches transform mapping.
+
+        Args:
+            done_spec (TensorSpec): spec before the transform
+
+        Returns:
+            expected spec after the transform
+
+        """
+        return done_spec
 
     def dump(self, **kwargs) -> None:
         pass
@@ -446,17 +482,17 @@ but got an object of type {type(transform)}."""
         return self.base_env._inplace_update
 
     @property
-    def observation_spec(self) -> TensorSpec:
+    def output_spec(self) -> TensorSpec:
         """Observation spec of the transformed environment."""
-        if self._observation_spec is None or not self.cache_specs:
-            observation_spec = self.transform.transform_observation_spec(
-                self.base_env.observation_spec.clone()
+        if self._output_spec is None or not self.cache_specs:
+            output_spec = self.transform.transform_output_spec(
+                self.base_env.output_spec.clone()
             )
             if self.cache_specs:
-                self.__dict__["_observation_spec"] = observation_spec
+                self.__dict__["_output_spec"] = output_spec
         else:
-            observation_spec = self._observation_spec
-        return observation_spec
+            output_spec = self._output_spec
+        return output_spec
 
     @property
     def action_spec(self) -> TensorSpec:
@@ -479,31 +515,27 @@ but got an object of type {type(transform)}."""
     @property
     def reward_spec(self) -> TensorSpec:
         """Reward spec of the transformed environment."""
-        if self._reward_spec is None or not self.cache_specs:
-            reward_spec = self.transform.transform_reward_spec(
-                self.base_env.reward_spec.clone()
-            )
-            if self.cache_specs:
-                self.__dict__["_reward_spec"] = reward_spec
-        else:
-            reward_spec = self._reward_spec
-        return reward_spec
+        return self.output_spec["reward"]
+
+    @property
+    def observation_spec(self) -> TensorSpec:
+        """Reward spec of the transformed environment."""
+        return self.output_spec["observation"]
+
+    @property
+    def done_spec(self) -> TensorSpec:
+        """Reward spec of the transformed environment."""
+        return self.output_spec["done"]
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         tensordict_in = self.transform.inv(tensordict)
         tensordict_out = self.base_env._step(tensordict_in)
-        tensordict_out = (
-            tensordict_out.update(  # update the output with the original tensordict
-                tensordict.exclude(
-                    *tensordict_out.keys(True, True)
-                )  # exclude the newly written keys
-            )
-        )
+        tensordict_out = tensordict_in.set("next", tensordict_out)
         next_tensordict = self.transform._step(tensordict_out)
         # tensordict_out.update(next_tensordict, inplace=False)
 
-        return next_tensordict
+        return next_tensordict.get("next")
 
     def set_seed(
         self, seed: Optional[int] = None, static_seed: bool = False
@@ -2908,42 +2940,40 @@ class StepCounter(Transform):
         super().__init__([])
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        done = tensordict.get("done", None)
+        if done is None:
+            done = torch.ones(
+                self.parent.done_spec.shape,
+                dtype=self.parent.done_spec.dtype,
+                device=self.parent.done_spec.device
+            )
         _reset = tensordict.get(
             "_reset",
-            default=torch.ones(
-                tensordict.batch_size, dtype=torch.bool, device=tensordict.device
-            ),
+            # TODO: decide if using done here, or using a default `True` tensor
+            default=torch.ones_like(done.squeeze(-1)),
         )
-        step_count = tensordict.get(
-            "step_count",
-            torch.zeros(
+        step_count = tensordict.get("step_count", None,)
+        if step_count is None:
+            step_count = torch.zeros(
                 tensordict.batch_size,
                 dtype=torch.int64,
                 device=tensordict.device,
-            ),
-        )
+            )
         step_count[_reset] = 0
-        tensordict.set(
-            "step_count",
-            step_count,
-        )
+        tensordict.set("step_count", step_count,)
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        step_count = tensordict.get(
-            "step_count",
-            torch.zeros(
-                tensordict.batch_size,
-                dtype=torch.int64,
-                device=tensordict.device,
-            ),
-        )
+        # We need to re-write the _step and not the _call since we look at "step_count"
+        # at `t` and update the value at `t+1`. _call only has access to info from `t+1`.
+        tensordict = tensordict.clone(False)
+        step_count = tensordict.get("step_count",)
         next_step_count = step_count + 1
-        tensordict.set("step_count", next_step_count)
+        tensordict.set(("next", "step_count"), next_step_count)
         if self.max_steps is not None:
             done = tensordict.get(("next", "done"))
             done = done | (next_step_count >= self.max_steps).unsqueeze(-1)
-            tensordict.set("done", done)
+            tensordict.set_(("next", "done"), done)
         return tensordict
 
     def transform_observation_spec(
