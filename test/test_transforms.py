@@ -801,7 +801,14 @@ class TestR3M(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "action", ("next", "reward"), ("next", "done"), "next"}
+            {
+                ("next", "vec"),
+                ("next", "pixels_orig"),
+                "action",
+                ("next", "reward"),
+                ("next", "done"),
+                "next",
+            }
         )
         if tensor_pixels_key:
             exp_keys.add(("next", tensor_pixels_key[0]))
@@ -860,7 +867,14 @@ class TestR3M(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "action", ("next", "reward"), ("next", "done"), "next"}
+            {
+                ("next", "vec"),
+                ("next", "pixels_orig"),
+                "action",
+                ("next", "reward"),
+                ("next", "done"),
+                "next",
+            }
         )
         if not stack_images:
             exp_keys.add(("next", "vec2"))
@@ -889,7 +903,14 @@ class TestR3M(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "action", ("next", "reward"), ("next", "done"), "next"}
+            {
+                ("next", "vec"),
+                ("next", "pixels_orig"),
+                "action",
+                ("next", "reward"),
+                ("next", "done"),
+                "next",
+            }
         )
         assert set(td.keys(True)) == exp_keys, set(td.keys()) - exp_keys
         transformed_env.close()
@@ -3760,10 +3781,11 @@ class TestRewardSum(TransformBase):
         batch = 4
         rs = RewardSum()
         td = TensorDict(
-            {"next": {
-                "done": torch.zeros((batch, 1), dtype=torch.bool),
-                "reward": torch.rand((batch, 1)),
-            },
+            {
+                "next": {
+                    "done": torch.zeros((batch, 1), dtype=torch.bool),
+                    "reward": torch.rand((batch, 1)),
+                },
                 "episode_reward": torch.zeros((batch, 1), dtype=torch.bool),
             },
             device=device,
@@ -5195,7 +5217,14 @@ class TestVIP(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "next", "action", ("next", "reward"), ("next", "done")}
+            {
+                ("next", "vec"),
+                ("next", "pixels_orig"),
+                "next",
+                "action",
+                ("next", "reward"),
+                ("next", "done"),
+            }
         )
         if tensor_pixels_key:
             exp_keys.add(("next", tensor_pixels_key[0]))
@@ -5248,7 +5277,14 @@ class TestVIP(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "next", "action", ("next", "reward"), ("next", "done")}
+            {
+                ("next", "vec"),
+                ("next", "pixels_orig"),
+                "next",
+                "action",
+                ("next", "reward"),
+                ("next", "done"),
+            }
         )
         if not stack_images:
             exp_keys.add(("next", "vec2"))
@@ -5277,7 +5313,14 @@ class TestVIP(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "next", "action", ("next", "reward"), ("next", "done")}
+            {
+                ("next", "vec"),
+                ("next", "pixels_orig"),
+                "next",
+                "action",
+                ("next", "reward"),
+                ("next", "done"),
+            }
         )
         assert set(td.keys(True)) == exp_keys, set(td.keys(True)) - exp_keys
         transformed_env.close()
@@ -5322,7 +5365,14 @@ class TestVIP(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "next", "action", ("next", "reward"), ("next", "done")}
+            {
+                ("next", "vec"),
+                ("next", "pixels_orig"),
+                "next",
+                "action",
+                ("next", "reward"),
+                ("next", "done"),
+            }
         )
         assert set(td.keys(True)) == exp_keys, td
 
@@ -5559,13 +5609,14 @@ class TestVecNorm:
             make_env = EnvCreator(
                 lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm())
             )
-            env_input_keys = None
         else:
             make_env = EnvCreator(
                 lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
             )
-            env_input_keys = ["action", ContinuousActionVecMockEnv._out_key]
-        parallel_env = ParallelEnv(2, make_env, env_input_keys=env_input_keys)
+        parallel_env = ParallelEnv(
+            2,
+            make_env,
+        )
         queue_out = mp.Queue(1)
         queue_in = mp.Queue(1)
         proc = mp.Process(
@@ -5858,7 +5909,7 @@ class TestTransforms:
             device=device,
         )
 
-        compose.inv(td)
+        td = compose.inv(td)
         for key in keys_to_transform:
             assert td.get(key).dtype == torch.double
         for key in keys_total - keys_to_transform:
@@ -5944,15 +5995,14 @@ class TestTransforms:
         assert env._input_spec is not None
         assert "action" in env._input_spec
         assert env._input_spec["action"] is not None
-        assert env._observation_spec is not None
-        assert env._reward_spec is not None
+        assert env._output_spec["observation"] is not None
+        assert env._output_spec["reward"] is not None
 
         env.insert_transform(0, CatFrames(N=4, dim=-1, in_keys=[key]))
 
         # transformed envs do not have spec after insert -- they need to be computed
         assert env._input_spec is None
-        assert env._observation_spec is None
-        assert env._reward_spec is None
+        assert env._output_spec is None
 
         assert isinstance(env.transform, Compose)
         assert len(env.transform) == 1
@@ -5991,8 +6041,7 @@ class TestTransforms:
         assert isinstance(env.transform[4], FiniteTensorDictCheck)
 
         assert env._input_spec is None
-        assert env._observation_spec is None
-        assert env._reward_spec is None
+        assert env._output_spec is None
 
         env.insert_transform(-5, CatFrames(N=4, dim=-1, in_keys=[key]))
         assert isinstance(env.transform, Compose)
@@ -6006,8 +6055,7 @@ class TestTransforms:
         assert isinstance(env.transform[5], FiniteTensorDictCheck)
 
         assert env._input_spec is None
-        assert env._observation_spec is None
-        assert env._reward_spec is None
+        assert env._output_spec is None
 
         _ = copy(env.action_spec)
         _ = copy(env.observation_spec)
@@ -6021,8 +6069,8 @@ class TestTransforms:
             assert env._input_spec is not None
             assert "action" in env._input_spec
             assert env._input_spec["action"] is not None
-            assert env._observation_spec is not None
-            assert env._reward_spec is not None
+            assert env._output_spec["observation"] is not None
+            assert env._output_spec["reward"] is not None
 
         try:
             env.insert_transform(7, FiniteTensorDictCheck())
@@ -6032,8 +6080,8 @@ class TestTransforms:
             assert env._input_spec is not None
             assert "action" in env._input_spec
             assert env._input_spec["action"] is not None
-            assert env._observation_spec is not None
-            assert env._reward_spec is not None
+            assert env._output_spec["observation"] is not None
+            assert env._output_spec["reward"] is not None
 
         try:
             env.insert_transform(4, "ffff")
@@ -6043,8 +6091,8 @@ class TestTransforms:
             assert env._input_spec is not None
             assert "action" in env._input_spec
             assert env._input_spec["action"] is not None
-            assert env._observation_spec is not None
-            assert env._reward_spec is not None
+            assert env._output_spec["observation"] is not None
+            assert env._output_spec["reward"] is not None
 
 
 @pytest.mark.parametrize("device", get_available_devices())

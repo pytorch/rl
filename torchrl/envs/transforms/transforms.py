@@ -436,9 +436,8 @@ class TransformedEnv(EnvBase):
 
         self._last_obs = None
         self.cache_specs = cache_specs
-        self.__dict__["_reward_spec"] = None
         self.__dict__["_input_spec"] = None
-        self.__dict__["_observation_spec"] = None
+        self.__dict__["_output_spec"] = None
         self.batch_size = self.base_env.batch_size
 
     def _set_env(self, env: EnvBase, device) -> None:
@@ -601,9 +600,8 @@ but got an object of type {type(transform)}."""
         self.is_closed = True
 
     def empty_cache(self):
-        self.__dict__["_observation_spec"] = None
+        self.__dict__["_output_spec"] = None
         self.__dict__["_input_spec"] = None
-        self.__dict__["_reward_spec"] = None
         self.__dict__["_cache_in_keys"] = None
 
     def append_transform(self, transform: Transform) -> None:
@@ -663,8 +661,7 @@ but got an object of type {type(transform)}."""
     def _erase_metadata(self):
         if self.cache_specs:
             self.__dict__["_input_spec"] = None
-            self.__dict__["_observation_spec"] = None
-            self.__dict__["_reward_spec"] = None
+            self.__dict__["_output_spec"] = None
             self.__dict__["_cache_in_keys"] = None
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
@@ -673,8 +670,7 @@ but got an object of type {type(transform)}."""
 
         if self.cache_specs:
             self.__dict__["_input_spec"] = None
-            self.__dict__["_observation_spec"] = None
-            self.__dict__["_reward_spec"] = None
+            self.__dict__["_output_spec"] = None
         return self
 
     def __setattr__(self, key, value):
