@@ -33,12 +33,11 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     From there, builds a B x T x ... zero-padded tensordict with B batches on max duration T
     """
     sep = ".-|-."
-    rollout_tensordict = rollout_tensordict.flatten_keys(sep)
-    traj_ids = rollout_tensordict.get(sep.join(["collector", "traj_ids"]))
+    traj_ids = rollout_tensordict.get(("collector", "traj_ids"))
     splits = traj_ids.view(-1)
     splits = [(splits == i).sum().item() for i in splits.unique_consecutive()]
     # if all splits are identical then we can skip this function
-    mask_key = sep.join(("collector", "mask"))
+    mask_key = ("collector", "mask")
     if len(set(splits)) == 1 and splits[0] == traj_ids.shape[-1]:
         rollout_tensordict.set(
             mask_key,
@@ -69,5 +68,5 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     td = torch.stack(
         [pad(out_split, [0, MAX - out_split.shape[0]]) for out_split in out_splits], 0
     ).contiguous()
-    td = td.unflatten_keys(sep)
+    # td = td.unflatten_keys(sep)
     return td
