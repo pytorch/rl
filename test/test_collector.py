@@ -586,6 +586,7 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
 @pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
+    """Tests that a rollout gathered with env.rollout matches one gathered with the collector."""
     if num_env == 1:
 
         def env_fn(seed):
@@ -642,7 +643,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
         rollout1a.batch_size == b1.batch_size
     ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
 
-    assert_allclose_td(rollout1a, b1.select(*rollout1a.keys()))
+    assert_allclose_td(rollout1a, b1.select(*rollout1a.keys(True, True)))
     collector.shutdown()
 
 

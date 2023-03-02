@@ -572,7 +572,9 @@ class SyncDataCollector(_DataCollector):
                 break
 
     def _step_and_maybe_reset(self) -> None:
-        done = self._tensordict.get(("next", "done"))
+        self._tensordict = step_mdp(self._tensordict)
+
+        done = self._tensordict.get("done")
         if not self.reset_when_done:
             done = torch.zeros_like(done)
         steps = self._tensordict.get(("collector", "step_count"))
@@ -608,9 +610,9 @@ class SyncDataCollector(_DataCollector):
                 self._tensordict.zero_()
             self.env.reset(self._tensordict)
 
-            if (_reset is None and self._tensordict.get(("next", "done")).any()) or (
+            if (_reset is None and done.any()) or (
                 _reset is not None
-                and self._tensordict.get(("next", "done"))[_reset].any()
+                and done[_reset].any()
             ):
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
@@ -623,8 +625,6 @@ class SyncDataCollector(_DataCollector):
                 ("collector", "traj_ids"), traj_ids
             )  # no ops if they already match
             self._tensordict.set_(("collector", "step_count"), steps)
-        else:
-            self._tensordict.update(step_mdp(self._tensordict), inplace=True)
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
