@@ -1,4 +1,4 @@
-# Pro-tips and Debugging
+# Common PyTorch errors and solutions
 
 ## Gradient-related errors \[Newcomers\]
 
