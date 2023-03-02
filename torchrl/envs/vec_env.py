@@ -565,7 +565,9 @@ class SerialEnv(_BatchedEnv):
             self.shared_tensordicts[i].update_(out_td)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return self.shared_tensordict_parent.select(*self.env_input_keys, "next").clone(False)
+        return self.shared_tensordict_parent.select(*self.env_input_keys, "next").clone(
+            False
+        )
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
@@ -752,7 +754,9 @@ class ParallelEnv(_BatchedEnv):
                 )
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return self.shared_tensordict_parent.select(*self.env_input_keys, "next").clone(False)
+        return self.shared_tensordict_parent.select(*self.env_input_keys, "next").clone(
+            False
+        )
 
     @_check_start
     def _shutdown_workers(self) -> None:

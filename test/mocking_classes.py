@@ -165,7 +165,14 @@ class MockSerialEnv(EnvBase):
         )
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
-        return TensorDict({"next": TensorDict({"reward": n, "done": done, "observation": n.clone()}, batch_size=[])}, batch_size=[])
+        return TensorDict(
+            {
+                "next": TensorDict(
+                    {"reward": n, "done": done, "observation": n.clone()}, batch_size=[]
+                )
+            },
+            batch_size=[],
+        )
 
     def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
         self.max_val = max(self.counter + 100, self.counter * 2)
@@ -282,11 +289,14 @@ class MockBatchedLockedEnv(EnvBase):
             dtype=torch.bool,
             device=self.device,
         )
-        return TensorDict({"next": TensorDict(
-            {"reward": n, "done": done, "observation": n},
-            tensordict.batch_size,
-            device=self.device,
-        )},
+        return TensorDict(
+            {
+                "next": TensorDict(
+                    {"reward": n, "done": done, "observation": n},
+                    tensordict.batch_size,
+                    device=self.device,
+                )
+            },
             batch_size=tensordict.batch_size,
             device=self.device,
         )
@@ -948,7 +958,6 @@ class CountingEnv(EnvBase):
             device=self.device,
         )
         return tensordict.select().set("next", tensordict)
-
 
 
 class CountingBatchedEnv(EnvBase):
