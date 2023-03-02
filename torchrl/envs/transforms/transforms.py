@@ -63,11 +63,19 @@ def _apply_to_composite(function):
 
 
 def _apply_to_composite_inv(function):
+    # Changes the input_spec following a transform function.
+    # The usage is: if an env expects a certain input (e.g. a double tensor)
+    # but the input has to be transformed (e.g. it is float), this function will
+    # modify the spec to get a spec that from the outside matches what is given
+    # (ie a float).
+    # Now since EnvBase.step ignores new inputs (ie the root level of the
+    # tensor is not updated) an out_key that does not match the in_key has
+    # no effect on the spec.
     def new_fun(self, input_spec):
         if isinstance(input_spec, CompositeSpec):
             d = input_spec._specs
             for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-                if in_key in input_spec.keys():
+                if in_key in input_spec.keys() and in_key == out_key:
                     d[out_key] = function(self, input_spec[in_key].clone())
             return CompositeSpec(d, shape=input_spec.shape, device=input_spec.device)
         else:
@@ -172,7 +180,7 @@ class Transform(nn.Module):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys(include_nested=True):
+            if in_key in tensordict.keys(isinstance(in_key, tuple)):
                 observation = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(
                     out_key,
@@ -2244,16 +2252,14 @@ class FrameSkipTransform(Transform):
         self.frame_skip = frame_skip
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict_next = tensordict.get("next")
         parent = self.parent
         if parent is None:
             raise RuntimeError("parent not found for FrameSkipTransform")
-        reward = tensordict_next.get("reward")
+        reward = tensordict.get(("next", "reward"))
         for _ in range(self.frame_skip - 1):
-            tensordict_next = parent._step(tensordict)
-            reward = reward + tensordict_next.get("reward")
-        tensordict_next.set("reward", reward)
-        return tensordict.set("next", tensordict_next)
+            tensordict = parent._step(tensordict)
+            reward = reward + tensordict.get(("next", "reward"))
+        return tensordict.set(("next", "reward"), reward)
 
     def forward(self, tensordict):
         raise RuntimeError(
@@ -2470,6 +2476,13 @@ class TensorDictPrimer(Transform):
                     self.default_value,
                 )
             tensordict.set(key, value)
+        return tensordict
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for key in self.primers.keys():
+            if isinstance(key, str):
+                key = (key,)
+            tensordict[("next", *key)] = tensordict[key]
         return tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -2826,8 +2839,13 @@ class RewardSum(Transform):
     ):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
         if in_keys is None:
-            in_keys = ["reward"]
-        out_keys = [f"episode_{in_key}" for in_key in in_keys]
+            in_keys = [("next", "reward")]
+        if out_keys is None and in_keys == [("next", "reward")]:
+            out_keys = ["episode_reward"]
+        elif out_keys is None:
+            raise RuntimeError(
+                "the out_keys must be specified for non-conventional in-keys in RewardSum."
+            )
 
         super().__init__(in_keys=in_keys, out_keys=out_keys)
 
@@ -2849,7 +2867,7 @@ class RewardSum(Transform):
                     tensordict[out_key] = value.masked_fill(
                         expand_as_right(_reset, value), 0.0
                     )
-                elif in_key == "reward":
+                elif in_key == ("next", "reward"):
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
                     tensordict[out_key] = self.parent.reward_spec.zero()
@@ -2867,28 +2885,21 @@ class RewardSum(Transform):
 
         return tensordict
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Updates the episode rewards with the step rewards."""
-        # Sanity checks
-        for in_key in self.in_keys:
-            if in_key in tensordict.keys():
-                break
-        else:
-            return tensordict
-
         # Update episode rewards
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys():
+            if in_key in tensordict.keys(isinstance(in_key, tuple)):
                 reward = tensordict.get(in_key)
                 if out_key not in tensordict.keys():
-                    tensordict.set(out_key, torch.zeros_like(reward))
-                tensordict[out_key] = tensordict[out_key] + reward
+                    tensordict.set(("next", out_key), torch.zeros_like(reward))
+                tensordict["next", out_key] = tensordict[out_key] + reward
         return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         """Transforms the observation spec, adding the new keys generated by RewardSum."""
         # Retrieve parent reward spec
-        reward_spec = self.parent.specs["reward_spec"]
+        reward_spec = self.parent.reward_spec
 
         episode_specs = {}
         if isinstance(reward_spec, CompositeSpec):
@@ -2907,7 +2918,7 @@ class RewardSum(Transform):
 
         else:
             # If reward_spec is not a CompositeSpec, the only in_key should be ´reward´
-            if not set(self.in_keys) == {"reward"}:
+            if set(self.in_keys) != {("next", "reward")}:
                 raise KeyError(
                     "reward_spec is not a CompositeSpec class, in_keys should only include ´reward´"
                 )

@@ -2364,7 +2364,7 @@ class TestFlattenObservation(TransformBase):
         raise pytest.skip("No inverse method for FlattenObservation (yet).")
 
 
-class TestFrameSkipTransform:
+class TestFrameSkipTransform(TransformBase):
     def test_single_trans_env_check(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), FrameSkipTransform(2))
         check_env_specs(env)
@@ -3041,7 +3041,7 @@ class TestObservationNorm(TransformBase):
         env.set_seed(0)
         # assert "observation_inv" in env.input_spec.keys()
         # "observation_inv" should not appear in the tensordict
-        assert torch.allclose(td["action"] * 0.5 + 1, td["action_inv"])
+        assert torch.allclose(td["action"] * 0.5 + 1, t.inv(td)["action_inv"])
         assert torch.allclose((td["observation"] - 1) / 0.5, td["observation_out"])
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
@@ -3488,8 +3488,8 @@ class TestRewardClipping(TransformBase):
         t = Compose(RewardClipping(-0.1, 0.1))
         env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), t)
         td = env.rollout(3)
-        assert (td["reward"] <= 0.1).all()
-        assert (td["reward"] >= -0.1).all()
+        assert (td["next", "reward"] <= 0.1).all()
+        assert (td["next", "reward"] >= -0.1).all()
 
     def test_transform_model(self):
         t = RewardClipping(-0.1, 0.1)
@@ -3626,11 +3626,11 @@ class TestRewardScaling(TransformBase):
         torch.manual_seed(0)
         env.set_seed(0)
         td_base = env.base_env.rollout(3)
-        reward = td_base["reward"]
+        reward = td_base["next", "reward"]
         if standard_normal:
-            assert torch.allclose((reward - loc) / scale, td["reward"])
+            assert torch.allclose((reward - loc) / scale, td["next", "reward"])
         else:
-            assert torch.allclose((td["reward"] - loc) / scale, reward)
+            assert torch.allclose((td["next", "reward"] - loc) / scale, reward)
 
     @pytest.mark.parametrize("standard_normal", [True, False])
     def test_transform_model(self, standard_normal):
@@ -3698,7 +3698,7 @@ class TestRewardSum(TransformBase):
     ):
         t = RewardSum()
         reward = torch.randn(10)
-        td = TensorDict({"reward": reward}, [])
+        td = TensorDict({("next", "reward"): reward}, [])
         with pytest.raises(NotImplementedError):
             t(td)
 
@@ -3707,7 +3707,7 @@ class TestRewardSum(TransformBase):
     ):
         t = Compose(RewardSum())
         reward = torch.randn(10)
-        td = TensorDict({"reward": reward}, [])
+        td = TensorDict({("next", "reward"): reward}, [])
         with pytest.raises(NotImplementedError):
             t(td)
 
@@ -3715,8 +3715,6 @@ class TestRewardSum(TransformBase):
     def test_transform_env(
         self,
     ):
-        loc = 0.5
-        scale = 1.5
         t = Compose(RewardSum())
         env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), t)
         env.set_seed(0)
@@ -3725,9 +3723,9 @@ class TestRewardSum(TransformBase):
         env.set_seed(0)
         torch.manual_seed(0)
         td_base = env.base_env.rollout(3)
-        reward = td_base["reward"]
-        final_reward = td_base["reward"].sum(-2)
-        assert torch.allclose(td["reward"], reward)
+        reward = td_base["next", "reward"]
+        final_reward = td_base["next", "reward"].sum(-2)
+        assert torch.allclose(td["next", "reward"], reward)
         assert torch.allclose(td["next", "episode_reward"][..., -1, :], final_reward)
 
     def test_transform_model(
@@ -3736,7 +3734,7 @@ class TestRewardSum(TransformBase):
         t = RewardSum()
         model = nn.Sequential(t, nn.Identity())
         reward = torch.randn(10)
-        td = TensorDict({"reward": reward}, [])
+        td = TensorDict({("next", "reward"): reward}, [])
         with pytest.raises(NotImplementedError):
             model(td)
 
@@ -3746,11 +3744,11 @@ class TestRewardSum(TransformBase):
         t = RewardSum()
         rb = ReplayBuffer(LazyTensorStorage(10))
         reward = torch.randn(10)
-        td = TensorDict({"reward": reward}, []).expand(10)
+        td = TensorDict({("next", "reward"): reward}, []).expand(10)
         rb.append_transform(t)
         rb.extend(td)
         with pytest.raises(NotImplementedError):
-            td = rb.sample(2)
+            _ = rb.sample(2)
 
     @pytest.mark.parametrize(
         "keys",
@@ -3762,37 +3760,43 @@ class TestRewardSum(TransformBase):
         batch = 4
         rs = RewardSum()
         td = TensorDict(
-            {
+            {"next": {
                 "done": torch.zeros((batch, 1), dtype=torch.bool),
                 "reward": torch.rand((batch, 1)),
+            },
+                "episode_reward": torch.zeros((batch, 1), dtype=torch.bool),
             },
             device=device,
             batch_size=[batch],
         )
 
         # apply one time, episode_reward should be equal to reward again
-        td = rs._call(td)
+        td = rs._step(td)
+        td_next = td["next"]
         assert "episode_reward" in td.keys()
-        assert (td.get("episode_reward") == td.get("reward")).all()
+        assert (td_next.get("episode_reward") == td_next.get("reward")).all()
 
         # apply a second time, episode_reward should twice the reward
-        td = rs._call(td)
-        assert (td.get("episode_reward") == 2 * td.get("reward")).all()
+        td["episode_reward"] = td["next", "episode_reward"]
+        td = rs._step(td)
+        td_next = td["next"]
+        assert (td_next.get("episode_reward") == 2 * td_next.get("reward")).all()
 
         # reset environments
         td.set("_reset", torch.ones(batch, dtype=torch.bool, device=device))
         rs.reset(td)
 
         # apply a third time, episode_reward should be equal to reward again
-        td = rs._call(td)
-        assert (td.get("episode_reward") == td.get("reward")).all()
+        td = rs._step(td)
+        td_next = td["next"]
+        assert (td_next.get("episode_reward") == td_next.get("reward")).all()
 
         # test transform_observation_spec
         base_env = ContinuousActionVecMockEnv(
             reward_spec=UnboundedContinuousTensorSpec(shape=(3, 16, 16)),
         )
         transfomed_env = TransformedEnv(base_env, RewardSum())
-        transformed_observation_spec1 = transfomed_env.specs["observation_spec"]
+        transformed_observation_spec1 = transfomed_env.observation_spec
         assert isinstance(transformed_observation_spec1, CompositeSpec)
         assert "episode_reward" in transformed_observation_spec1.keys()
         assert "observation" in transformed_observation_spec1.keys()
@@ -3805,7 +3809,7 @@ class TestRewardSum(TransformBase):
             ),
         )
         transfomed_env = TransformedEnv(base_env, RewardSum())
-        transformed_observation_spec2 = transfomed_env.specs["observation_spec"]
+        transformed_observation_spec2 = transfomed_env.observation_spec
         assert isinstance(transformed_observation_spec2, CompositeSpec)
         assert "some_extra_observation" in transformed_observation_spec2.keys()
         assert "episode_reward" in transformed_observation_spec2.keys()
@@ -3905,7 +3909,7 @@ class TestUnsqueezeTransform(TransformBase):
             batch,
         )
 
-        unsqueeze.inv(td)
+        td_modif = unsqueeze.inv(td)
 
         expected_size = [*batch, *size, nchannels, 16, 16]
         for key in keys_total.difference(keys_inv):
@@ -3914,7 +3918,9 @@ class TestUnsqueezeTransform(TransformBase):
         if expected_size[unsqueeze_dim] == 1:
             del expected_size[unsqueeze_dim]
         for key in keys_inv:
-            assert td.get(key).shape == torch.Size(expected_size)
+            assert td_modif.get(key).shape == torch.Size(expected_size)
+        # for key in keys_inv:
+        #     assert td.get(key).shape != torch.Size(expected_size)
 
     def test_single_trans_env_check(self):
         env = TransformedEnv(
@@ -4099,9 +4105,10 @@ class TestUnsqueezeTransform(TransformBase):
         )
         td = env.rollout(3)
         assert env.action_spec.shape[-1] == 6
-        assert env.input_spec["action_t"].shape[-1] == 1
         assert td["action"].shape[-1] == 6
-        assert td["action_t"].shape[-1] == 1
+        # inverse transforms are now hidden from outer scope
+        # assert env.input_spec["action_t"].shape[-1] == 1
+        # assert td["action_t"].shape[-1] == 1
 
 
 class TestSqueezeTransform(TransformBase):
@@ -4171,7 +4178,7 @@ class TestSqueezeTransform(TransformBase):
             },
             batch,
         )
-        squeeze.inv(td)
+        td = squeeze.inv(td)
 
         expected_size = [*batch, *size, nchannels, 16, 16]
         for key in keys_total.difference(keys_inv):
@@ -4335,7 +4342,8 @@ class TestSqueezeTransform(TransformBase):
         )
         check_env_specs(env)
         r = env.rollout(3)
-        assert "action_un" in r.keys()
+        r2 = GymEnv(HALFCHEETAH_VERSIONED).rollout(3)
+        assert (r.zero_() == r2.zero_()).all()
 
 
 class TestToTensorImage(TransformBase):

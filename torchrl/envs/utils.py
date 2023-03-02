@@ -77,6 +77,7 @@ def step_mdp(
 
     prohibited.add("next")
     if keep_other:
+        # TODO: make this work with nested keys
         other_keys = [key for key in tensordict.keys() if key not in prohibited]
     select_tensordict = tensordict.select(*other_keys)
     excluded = []
