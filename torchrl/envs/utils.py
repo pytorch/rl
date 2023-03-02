@@ -89,7 +89,6 @@ def step_mdp(
         next_td = next_td.exclude(*excluded)
     select_tensordict = select_tensordict.update(next_td)
 
-
     if next_tensordict is not None:
         return next_tensordict.update(select_tensordict)
     else:

@@ -151,7 +151,6 @@ class _BatchedEnv(EnvBase):
         num_workers: int,
         create_env_fn: Union[Callable[[], EnvBase], Sequence[Callable[[], EnvBase]]],
         create_env_kwargs: Union[dict, Sequence[dict]] = None,
-        env_input_keys: Optional[Sequence[str]] = None,
         pin_memory: bool = False,
         selected_keys: Optional[Sequence[str]] = None,
         excluded_keys: Optional[Sequence[str]] = None,
@@ -199,7 +198,6 @@ class _BatchedEnv(EnvBase):
         self.num_workers = num_workers
         self.create_env_fn = create_env_fn
         self.create_env_kwargs = create_env_kwargs
-        self.env_input_keys = env_input_keys
         self.pin_memory = pin_memory
         self.selected_keys = selected_keys
         self.excluded_keys = excluded_keys
@@ -387,28 +385,19 @@ class _BatchedEnv(EnvBase):
                 else:
                     raise_no_selected_keys = True
 
-        if self.env_input_keys is not None:
-            if not all(
-                action_key in self.selected_keys for action_key in self.env_input_keys
-            ):
-                raise KeyError(
-                    "One of the action keys is not part of the selected keys or is part of the excluded keys. Action "
-                    "keys need to be part of the selected keys for env.step() to be called."
-                )
+        if self._single_task:
+            self.env_input_keys = sorted(self.input_spec.keys(), key=_sort_keys)
         else:
-            if self._single_task:
-                self.env_input_keys = sorted(self.input_spec.keys(), key=_sort_keys)
-            else:
-                env_input_keys = set()
-                for meta_data in self.meta_data:
-                    env_input_keys = env_input_keys.union(
-                        meta_data.specs["input_spec"].keys()
-                    )
-                self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
-            if not len(self.env_input_keys):
-                raise RuntimeError(
-                    f"found 0 action keys in {sorted(self.selected_keys, key=_sort_keys)}"
+            env_input_keys = set()
+            for meta_data in self.meta_data:
+                env_input_keys = env_input_keys.union(
+                    meta_data.specs["input_spec"].keys()
                 )
+            self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
+        if not len(self.env_input_keys):
+            raise RuntimeError(
+                f"found 0 action keys in {sorted(self.selected_keys, key=_sort_keys)}"
+            )
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
                 *self.selected_keys,
@@ -568,24 +557,15 @@ class SerialEnv(_BatchedEnv):
     ) -> TensorDict:
         self._assert_tensordict_shape(tensordict)
         tensordict_in = tensordict.clone(False)
-        # update the shared tensordict to keep the input entries up-to-date
-        self.shared_tensordict_parent.update_(
-            tensordict_in.select(*self.input_spec.keys(), strict=False)
-        )
-        # If a key is both in input and output spec, we should keep it because it has been modified
-        input_keys = set(self.input_spec.keys(True)) - set(
-            self.observation_spec.keys(True)
-        )
         for i in range(self.num_workers):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             out_td = self._envs[i]._step(tensordict_in[i])
-            # out_td = out_td.exclude(*input_keys)
-            # out_td = out_td.select(*self.shared_tensordicts[i].keys(), strict=False)
-            self.shared_tensordicts[i].get("next").update_(out_td)
+            out_td.update(tensordict_in[i].select(*self.input_spec.keys()))
+            self.shared_tensordicts[i].update_(out_td)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return self.shared_tensordict_parent.get("next").clone()
+        return self.shared_tensordict_parent.select(*self.env_input_keys, "next").clone(False)
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
@@ -758,23 +738,21 @@ class ParallelEnv(_BatchedEnv):
         self._assert_tensordict_shape(tensordict)
 
         self.shared_tensordict_parent.update_(
-            tensordict.select(*self.input_spec.keys(), strict=False)
+            tensordict.select(*self.env_input_keys, strict=False)
         )
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
         # keys = set()
         for i in range(self.num_workers):
-            msg, data = self.parent_channels[i].recv()
+            msg, _ = self.parent_channels[i].recv()
             if msg != "step_result":
                 raise RuntimeError(
                     f"Expected 'step_result' but received {msg} from worker {i}"
                 )
-            # # data is the set of updated keys
-            # keys = keys.union(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return self.shared_tensordict_parent.get("next")
+        return self.shared_tensordict_parent.select(*self.env_input_keys, "next").clone(False)
 
     @_check_start
     def _shutdown_workers(self) -> None:
@@ -955,7 +933,6 @@ def _run_worker_pipe_shared_mem(
     data = None
 
     reset_keys = None
-    step_keys = None
 
     while True:
         try:
@@ -1013,23 +990,16 @@ def _run_worker_pipe_shared_mem(
             i += 1
             if _td is not None:
                 _td = _td.update(
-                    tensordict.select(
-                        *env_input_keys,
-                        strict=False,
-                    ),
+                    tensordict.select(*env_input_keys),
                 )
             else:
                 _td = tensordict.clone(recurse=False)
             _td = env._step(_td)
-            if step_keys is None:
-                step_keys = set(env.observation_spec.keys()).union(
-                    {"done", "terminated", "reward"}
-                )
             if pin_memory:
                 _td.pin_memory()
-            tensordict.get("next").update_(_td.select(*step_keys, strict=False))
+            tensordict.update_(_td.select("next"))
             msg = "step_result"
-            data = (msg, step_keys)
+            data = (msg, None)
             child_pipe.send(data)
 
         elif cmd == "close":

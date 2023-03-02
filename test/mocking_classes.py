@@ -165,7 +165,7 @@ class MockSerialEnv(EnvBase):
         )
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
-        return TensorDict({"reward": n, "done": done, "observation": n.clone()}, [])
+        return TensorDict({"next": TensorDict({"reward": n, "done": done, "observation": n.clone()}, batch_size=[])}, batch_size=[])
 
     def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
         self.max_val = max(self.counter + 100, self.counter * 2)
@@ -282,9 +282,12 @@ class MockBatchedLockedEnv(EnvBase):
             dtype=torch.bool,
             device=self.device,
         )
-        return TensorDict(
+        return TensorDict({"next": TensorDict(
             {"reward": n, "done": done, "observation": n},
             tensordict.batch_size,
+            device=self.device,
+        )},
+            batch_size=tensordict.batch_size,
             device=self.device,
         )
 
@@ -436,7 +439,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         done = torch.zeros_like(done).all(-1).unsqueeze(-1)
         tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
-        return tensordict
+        return tensordict.select().set("next", tensordict)
 
 
 class ContinuousActionVecMockEnv(_MockEnv):
@@ -535,7 +538,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         done = reward = done.unsqueeze(-1)
         tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
-        return tensordict
+        return tensordict.select().set("next", tensordict)
 
     def _obs_step(self, obs, a):
         return obs + a / self.maxstep
@@ -935,7 +938,7 @@ class CountingEnv(EnvBase):
     ) -> TensorDictBase:
         action = tensordict.get("action")
         self.count += action.to(torch.int)
-        return TensorDict(
+        tensordict = TensorDict(
             source={
                 "observation": self.count,
                 "done": self.count > self.max_steps,
@@ -944,6 +947,8 @@ class CountingEnv(EnvBase):
             batch_size=self.batch_size,
             device=self.device,
         )
+        return tensordict.select().set("next", tensordict)
+
 
 
 class CountingBatchedEnv(EnvBase):
@@ -1019,7 +1024,7 @@ class CountingBatchedEnv(EnvBase):
     ) -> TensorDictBase:
         action = tensordict.get("action")
         self.count += action.to(torch.int).unsqueeze(-1)
-        return TensorDict(
+        tensordict = TensorDict(
             source={
                 "observation": self.count,
                 "done": self.count > self.max_steps.unsqueeze(-1),
@@ -1028,3 +1033,4 @@ class CountingBatchedEnv(EnvBase):
             batch_size=self.batch_size,
             device=self.device,
         )
+        return tensordict.select().set("next", tensordict)

@@ -376,6 +376,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         tensordict.lock()  # make sure _step does not modify the tensordict
         tensordict_out = self._step(tensordict)
+        # this tensordict should contain a "next" key
+        next_tensordict_out = tensordict_out.get("next", None)
+        if next_tensordict_out is None:
+            raise RuntimeError(
+                "The value returned by env._step must be a tensordict where the "
+                "values at t+1 have been written under a 'next' entry. This "
+                f"tensordict couldn't be found in the output, got: {tensordict_out}."
+            )
         if tensordict_out is tensordict:
             raise RuntimeError(
                 "EnvBase._step should return outplace changes to the input "
@@ -384,24 +392,17 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
         tensordict.unlock()
 
-        output_keys = (*self.observation_spec.keys(nested_keys=False), "reward", "done")
-        # we deliberately do not update the input values, but we want to keep track of
-        # new keys considered as "input" by inverse transforms.
-        in_keys = self._get_in_keys_to_exclude(tensordict)
-        tensordict_out_select = tensordict_out.select(*output_keys)
-        tensordict_out = tensordict_out.exclude(*output_keys, *in_keys)
-
         # TODO: Refactor this using reward spec
-        reward = tensordict_out_select.get("reward")
+        reward = next_tensordict_out.get("reward")
         # unsqueeze rewards if needed
         # the input tensordict may have more leading dimensions than the batch_size
         # e.g. in model-based contexts.
         batch_size = self.batch_size
         dims = len(batch_size)
         leading_batch_size = (
-            tensordict_out_select.batch_size[:-dims]
+            next_tensordict_out.batch_size[:-dims]
             if dims
-            else tensordict_out_select.shape
+            else next_tensordict_out.shape
         )
         expected_reward_shape = torch.Size(
             [*leading_batch_size, *self.reward_spec.shape]
@@ -409,35 +410,35 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         actual_reward_shape = reward.shape
         if actual_reward_shape != expected_reward_shape:
             reward = reward.view(expected_reward_shape)
-            tensordict_out_select.set("reward", reward)
+            next_tensordict_out.set("reward", reward)
 
         # TODO: Refactor this using done spec
-        done = tensordict_out_select.get("done")
+        done = next_tensordict_out.get("done")
         # unsqueeze done if needed
         expected_done_shape = torch.Size([*leading_batch_size, *batch_size, 1])
         actual_done_shape = done.shape
         if actual_done_shape != expected_done_shape:
             done = done.view(expected_done_shape)
-            tensordict_out_select.set("done", done)
+            next_tensordict_out.set("done", done)
 
-        tensordict_out.set("next", tensordict_out_select)
+        tensordict_out.set("next", next_tensordict_out)
 
         if self.run_type_checks:
             for key in self._select_observation_keys(tensordict_out):
                 obs = tensordict_out.get(key)
                 self.observation_spec.type_check(obs, key)
 
-            if tensordict_out_select.get("reward").dtype is not self.reward_spec.dtype:
+            if next_tensordict_out.get("reward").dtype is not self.reward_spec.dtype:
                 raise TypeError(
                     f"expected reward.dtype to be {self.reward_spec.dtype} "
                     f"but got {tensordict_out.get('reward').dtype}"
                 )
 
-            if tensordict_out_select.get("done").dtype is not self.done_spec.dtype:
+            if next_tensordict_out.get("done").dtype is not self.done_spec.dtype:
                 raise TypeError(
                     f"expected done.dtype to be torch.bool but got {tensordict_out.get('done').dtype}"
                 )
-        tensordict.update(tensordict_out, inplace=self._inplace_update)
+        tensordict.set("next", tensordict_out.get("next"))
 
         return tensordict
 

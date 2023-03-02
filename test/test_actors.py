@@ -131,6 +131,7 @@ class TestQValue:
         assert values.shape == in_values.shape
         assert (values == in_values).all()
 
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

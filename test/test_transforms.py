@@ -801,7 +801,7 @@ class TestR3M(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "action", "reward", "next"}
+            {("next", "vec"), ("next", "pixels_orig"), "action", ("next", "reward"), ("next", "done"), "next"}
         )
         if tensor_pixels_key:
             exp_keys.add(("next", tensor_pixels_key[0]))
@@ -860,7 +860,7 @@ class TestR3M(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "action", "reward", "next"}
+            {("next", "vec"), ("next", "pixels_orig"), "action", ("next", "reward"), ("next", "done"), "next"}
         )
         if not stack_images:
             exp_keys.add(("next", "vec2"))
@@ -889,7 +889,7 @@ class TestR3M(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "action", "reward", "next"}
+            {("next", "vec"), ("next", "pixels_orig"), "action", ("next", "reward"), ("next", "done"), "next"}
         )
         assert set(td.keys(True)) == exp_keys, set(td.keys()) - exp_keys
         transformed_env.close()
@@ -959,7 +959,7 @@ class TestR3M(TransformBase):
             list(transformed_env.input_spec.keys())
             + list(transformed_env.observation_spec.keys())
             + [("next", key) for key in transformed_env.observation_spec.keys()]
-            + ["reward", "done", "next"]
+            + [("next", "reward"), ("next", "done"), "done", "next"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 
@@ -1019,9 +1019,7 @@ class TestStepCounter(TransformBase):
         torch.manual_seed(0)
         step_counter = Compose(StepCounter(max_steps))
         done = torch.zeros(*batch, 1, dtype=torch.bool)
-        td = TensorDict(
-            {"done": done, ("next", "done"): done}, batch, device=device
-        )
+        td = TensorDict({"done": done, ("next", "done"): done}, batch, device=device)
         _reset = torch.zeros((), dtype=torch.bool)
         while not _reset.any() and reset_workers:
             _reset = torch.randn(batch) < 0
@@ -1035,7 +1033,10 @@ class TestStepCounter(TransformBase):
         while max_steps is None or i < max_steps:
             td = step_counter._step(td)
             i += 1
-            assert torch.all(td.get(("next", "step_count")) == i), (td.get(("next", "step_count")), i)
+            assert torch.all(td.get(("next", "step_count")) == i), (
+                td.get(("next", "step_count")),
+                i,
+            )
             td = step_mdp(td)
             td["next", "done"] = done
             if max_steps is None:
@@ -1046,12 +1047,8 @@ class TestStepCounter(TransformBase):
             assert torch.all(td.get("done"))
         td = step_counter.reset(td)
         if reset_workers:
-            assert torch.all(
-                torch.masked_select(td.get("step_count"), _reset) == 0
-            )
-            assert torch.all(
-                torch.masked_select(td.get("step_count"), ~_reset) == i
-            )
+            assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
+            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
         else:
             assert torch.all(td.get("step_count") == 0)
 
@@ -1075,9 +1072,7 @@ class TestStepCounter(TransformBase):
         torch.manual_seed(0)
         step_counter = StepCounter(max_steps)
         done = torch.zeros(*batch, 1, dtype=torch.bool)
-        td = TensorDict(
-            {"done": done, ("next", "done"): done}, batch, device=device
-        )
+        td = TensorDict({"done": done, ("next", "done"): done}, batch, device=device)
         _reset = torch.zeros((), dtype=torch.bool)
         while not _reset.any() and reset_workers:
             _reset = torch.randn(batch) < 0
@@ -1091,7 +1086,10 @@ class TestStepCounter(TransformBase):
         while max_steps is None or i < max_steps:
             td = step_counter._step(td)
             i += 1
-            assert torch.all(td.get(("next", "step_count")) == i), (td.get(("next", "step_count")), i)
+            assert torch.all(td.get(("next", "step_count")) == i), (
+                td.get(("next", "step_count")),
+                i,
+            )
             td = step_mdp(td)
             td["next", "done"] = done
             if max_steps is None:
@@ -1102,12 +1100,8 @@ class TestStepCounter(TransformBase):
             assert torch.all(td.get("done"))
         td = step_counter.reset(td)
         if reset_workers:
-            assert torch.all(
-                torch.masked_select(td.get("step_count"), _reset) == 0
-            )
-            assert torch.all(
-                torch.masked_select(td.get("step_count"), ~_reset) == i
-            )
+            assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
+            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
         else:
             assert torch.all(td.get("step_count") == 0)
 
@@ -1705,15 +1699,19 @@ class TestDoubleToFloat(TransformBase):
             device=device,
         )
         td.set("dont touch", dont_touch.clone())
+        # check that the transform does change the dtype in forward
         double2float(td)
         for key in keys:
             assert td.get(key).dtype == torch.float
         assert td.get("dont touch").dtype == torch.double
 
-        double2float.inv(td)
+        # check that inv does not affect the tensordict in-place
+        td = td.apply(lambda x: x.float())
+        td_modif = double2float.inv(td)
         for key in keys_inv:
-            assert td.get(key).dtype == torch.double
-        assert td.get("dont touch").dtype == torch.double
+            assert td.get(key).dtype != torch.double
+            assert td_modif.get(key).dtype == torch.double
+        assert td.get("dont touch").dtype != torch.double
 
         if len(keys_total) == 1 and len(keys_inv) and keys[0] == "action":
             action_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
@@ -2401,7 +2399,7 @@ class TestFrameSkipTransform:
 
     def test_transform_no_env(self):
         t = FrameSkipTransform(2)
-        tensordict = TensorDict({}, [])
+        tensordict = TensorDict({"next": {}}, [])
         with pytest.raises(
             RuntimeError, match="parent not found for FrameSkipTransform"
         ):
@@ -2409,7 +2407,7 @@ class TestFrameSkipTransform:
 
     def test_transform_compose(self):
         t = Compose(FrameSkipTransform(2))
-        tensordict = TensorDict({}, [])
+        tensordict = TensorDict({"next": {}}, [])
         with pytest.raises(
             RuntimeError, match="parent not found for FrameSkipTransform"
         ):
@@ -2491,10 +2489,10 @@ class TestFrameSkipTransform:
         for i in range(10):
             r = 0.0
             for _ in range(skip):
-                td1 = base_env.step(tensordicts[i].clone()).flatten_keys()
-                r = td1.get("reward") + r
-            td1.set("reward", r)
-            td2 = env.step(tensordicts[i].clone()).flatten_keys()
+                td1 = base_env.step(tensordicts[i].clone()).flatten_keys(".")
+                r = td1.get("next.reward") + r
+            td1.set("next.reward", r)
+            td2 = env.step(tensordicts[i].clone()).flatten_keys(".")
             for key in td1.keys():
                 torch.testing.assert_close(td1[key], td2[key])
 
@@ -2708,8 +2706,8 @@ class TestNoop(TransformBase):
             RuntimeError,
             match="NoopResetEnv.parent not found. Make sure that the parent is set.",
         ):
-            t.reset(TensorDict({}, []))
-        t._step(TensorDict({}, []))
+            t.reset(TensorDict({"next": {}}, []))
+        t._step(TensorDict({"next": {}}, []))
 
     def test_transform_compose(self):
         t = Compose(NoopResetEnv())
@@ -2717,8 +2715,8 @@ class TestNoop(TransformBase):
             RuntimeError,
             match="NoopResetEnv.parent not found. Make sure that the parent is set.",
         ):
-            t.reset(TensorDict({}, []))
-        t._step(TensorDict({}, []))
+            t.reset(TensorDict({"next": {}}, []))
+        t._step(TensorDict({"next": {}}, []))
 
     def test_transform_model(self):
         t = nn.Sequential(NoopResetEnv(), nn.Identity())
@@ -5189,7 +5187,7 @@ class TestVIP(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "next", "action", "reward"}
+            {("next", "vec"), ("next", "pixels_orig"), "next", "action", ("next", "reward"), ("next", "done")}
         )
         if tensor_pixels_key:
             exp_keys.add(("next", tensor_pixels_key[0]))
@@ -5242,7 +5240,7 @@ class TestVIP(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "next", "action", "reward"}
+            {("next", "vec"), ("next", "pixels_orig"), "next", "action", ("next", "reward"), ("next", "done")}
         )
         if not stack_images:
             exp_keys.add(("next", "vec2"))
@@ -5271,7 +5269,7 @@ class TestVIP(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "next", "action", "reward"}
+            {("next", "vec"), ("next", "pixels_orig"), "next", "action", ("next", "reward"), ("next", "done")}
         )
         assert set(td.keys(True)) == exp_keys, set(td.keys(True)) - exp_keys
         transformed_env.close()
@@ -5316,7 +5314,7 @@ class TestVIP(TransformBase):
 
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
-            {("next", "vec"), ("next", "pixels_orig"), "next", "action", "reward"}
+            {("next", "vec"), ("next", "pixels_orig"), "next", "action", ("next", "reward"), ("next", "done")}
         )
         assert set(td.keys(True)) == exp_keys, td
 
@@ -5347,7 +5345,7 @@ class TestVIP(TransformBase):
         explicit_reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
             -torch.norm(last_embedding - goal_embedding, dim=-1)
         )
-        torch.testing.assert_close(explicit_reward, td["reward"].squeeze())
+        torch.testing.assert_close(explicit_reward, td["next", "reward"].squeeze())
 
         transformed_env.close()
         del transformed_env
@@ -5413,7 +5411,7 @@ class TestVIP(TransformBase):
             list(transformed_env.input_spec.keys())
             + list(transformed_env.observation_spec.keys())
             + [("next", key) for key in transformed_env.observation_spec.keys()]
-            + ["reward", "done", "next"]
+            + [("next", "reward"), ("next", "done"), "done", "next"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 

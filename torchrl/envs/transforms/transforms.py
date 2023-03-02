@@ -152,8 +152,11 @@ class Transform(nn.Module):
         """Reads the input tensordict, and for the selected keys, applies the transform.
 
         For any operation that relates exclusively to the parent env (e.g. FrameSkip),
-        modify the _step method instead. _call should only be overwritten
+        modify the _step method instead. :meth:`~._call` should only be overwritten
         if a modification of the input tensordict is needed.
+
+        :meth:`~._call` will be called by :meth:`TransformedEnv.step` and
+        :meth:`TransformedEnv.reset`.
 
         """
         for in_key, out_key in zip(self.in_keys, self.out_keys):
@@ -178,14 +181,18 @@ class Transform(nn.Module):
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """The parent method of a transform during the env.step execution.
+        """The parent method of a transform during the ``env.step`` execution.
 
-        This method should be overwritten whenever the _step needs to be
-        adapted. Unlike _call, it is assumed that _step will execute some operation
-        with the parent env.
+        This method should be overwritten whenever the :meth:`~._step` needs to be
+        adapted. Unlike :meth:`~._call`, it is assumed that :meth:`~._step`
+        will execute some operation with the parent env or that it requires
+        access to the content of the tensordict at time ``t`` and not only
+        ``t+1`` (the ``"next"`` entry in the input tensordict).
+
+        :meth:`~._step` will only be called by :meth:`TransformedEnv.step` and
+        not by :meth:`TransformedEnv.reset`.
 
         """
-        tensordict = tensordict.clone(False)
         next_tensordict = tensordict.get("next")
         next_tensordict = self._call(next_tensordict)
         tensordict.set("next", next_tensordict)
@@ -201,7 +208,6 @@ class Transform(nn.Module):
         # # We create a shallow copy of the tensordict to avoid that changes are
         # # exposed to the user: we'd like that the input keys remain unchanged
         # # in the originating script if they're being transformed.
-        # tensordict = tensordict.clone(False)
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
             if in_key in tensordict.keys(include_nested=isinstance(in_key, tuple)):
                 item = self._inv_apply_transform(tensordict.get(in_key))
@@ -212,7 +218,7 @@ class Transform(nn.Module):
         return tensordict
 
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return self._inv_call(tensordict)
+        return self._inv_call(tensordict.clone(False))
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
         """Transforms the output spec such that the resulting spec matches transform mapping.
@@ -227,7 +233,9 @@ class Transform(nn.Module):
 
         """
         output_spec = output_spec.clone()
-        output_spec["observation"] = self.transform_observation_spec(output_spec["observation"])
+        output_spec["observation"] = self.transform_observation_spec(
+            output_spec["observation"]
+        )
         if "reward" in output_spec.keys():
             output_spec["reward"] = self.transform_reward_spec(output_spec["reward"])
         if "done" in output_spec.keys():
@@ -531,11 +539,10 @@ but got an object of type {type(transform)}."""
         tensordict = tensordict.clone(False)
         tensordict_in = self.transform.inv(tensordict)
         tensordict_out = self.base_env._step(tensordict_in)
-        tensordict_out = tensordict_in.set("next", tensordict_out)
-        next_tensordict = self.transform._step(tensordict_out)
-        # tensordict_out.update(next_tensordict, inplace=False)
-
-        return next_tensordict.get("next")
+        # we want the input entries to remain unchanged
+        tensordict_out = tensordict.update(tensordict_out)
+        tensordict_out = self.transform._step(tensordict_out)
+        return tensordict_out
 
     def set_seed(
         self, seed: Optional[int] = None, static_seed: bool = False
@@ -2237,15 +2244,16 @@ class FrameSkipTransform(Transform):
         self.frame_skip = frame_skip
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        tensordict_next = tensordict.get("next")
         parent = self.parent
         if parent is None:
             raise RuntimeError("parent not found for FrameSkipTransform")
-        reward = tensordict.get("reward")
+        reward = tensordict_next.get("reward")
         for _ in range(self.frame_skip - 1):
-            tensordict = parent._step(tensordict)
-            reward = reward + tensordict.get("reward")
-        tensordict.set("reward", reward)
-        return tensordict
+            tensordict_next = parent._step(tensordict)
+            reward = reward + tensordict_next.get("reward")
+        tensordict_next.set("reward", reward)
+        return tensordict.set("next", tensordict_next)
 
     def forward(self, tensordict):
         raise RuntimeError(
@@ -2322,7 +2330,7 @@ class NoopResetEnv(Transform):
             trial += 1
             if trial > _MAX_NOOPS_TRIALS:
                 tensordict = parent.rand_step(tensordict)
-                if tensordict.get("done"):
+                if tensordict.get(("next", "done")):
                     raise RuntimeError(
                         f"parent is still done after a single random step (i={i})."
                     )
@@ -2945,14 +2953,17 @@ class StepCounter(Transform):
             done = torch.ones(
                 self.parent.done_spec.shape,
                 dtype=self.parent.done_spec.dtype,
-                device=self.parent.done_spec.device
+                device=self.parent.done_spec.device,
             )
         _reset = tensordict.get(
             "_reset",
             # TODO: decide if using done here, or using a default `True` tensor
             default=torch.ones_like(done.squeeze(-1)),
         )
-        step_count = tensordict.get("step_count", None,)
+        step_count = tensordict.get(
+            "step_count",
+            None,
+        )
         if step_count is None:
             step_count = torch.zeros(
                 tensordict.batch_size,
@@ -2960,14 +2971,19 @@ class StepCounter(Transform):
                 device=tensordict.device,
             )
         step_count[_reset] = 0
-        tensordict.set("step_count", step_count,)
+        tensordict.set(
+            "step_count",
+            step_count,
+        )
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # We need to re-write the _step and not the _call since we look at "step_count"
         # at `t` and update the value at `t+1`. _call only has access to info from `t+1`.
         tensordict = tensordict.clone(False)
-        step_count = tensordict.get("step_count",)
+        step_count = tensordict.get(
+            "step_count",
+        )
         next_step_count = step_count + 1
         tensordict.set(("next", "step_count"), next_step_count)
         if self.max_steps is not None:
@@ -3051,7 +3067,8 @@ class ExcludeTransform(Transform):
                     key: value
                     for key, value in observation_spec.items()
                     if key not in self.excluded_keys
-                }
+                },
+                shape=observation_spec.shape,
             )
         return observation_spec
 
@@ -3101,7 +3118,8 @@ class SelectTransform(Transform):
                 key: value
                 for key, value in observation_spec.items()
                 if key in self.selected_keys
-            }
+            },
+            shape=observation_spec.shape,
         )
 
 

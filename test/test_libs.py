@@ -1027,6 +1027,7 @@ class TestVmas:
         n_rollout_samples=3,
     ):
         torch.manual_seed(0)
+
         def make_vmas():
             env = VmasEnv(
                 scenario_name=scenario_name,
@@ -1056,6 +1057,7 @@ class TestVmas:
         max_steps=3,
     ):
         torch.manual_seed(0)
+
         def make_vmas():
             env = VmasEnv(
                 scenario_name=scenario_name,
