@@ -23,7 +23,12 @@ from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process
-from torchrl.data import CompositeSpec, TensorSpec, UnboundedContinuousTensorSpec
+from torchrl.data import (
+    CompositeSpec,
+    DiscreteTensorSpec,
+    TensorSpec,
+    UnboundedContinuousTensorSpec,
+)
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
@@ -210,9 +215,8 @@ class _BatchedEnv(EnvBase):
                 "memmap and shared memory are mutually exclusive features."
             )
         self._batch_size = None
-        self.__dict__["_observation_spec"] = None
+        self.__dict__["_output_spec"] = None
         self.__dict__["_input_spec"] = None
-        self.__dict__["_reward_spec"] = None
         self._device = None
         self._dummy_env_str = None
         self._seeds = None
@@ -511,8 +515,7 @@ class _BatchedEnv(EnvBase):
             self.start()
         else:
             self.input_spec = self.input_spec.to(device)
-            self.reward_spec = self.reward_spec.to(device)
-            self.observation_spec = self.observation_spec.to(device)
+            self.output_spec = self.output_spec.to(device)
         return self
 
 
@@ -1094,8 +1097,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         self, env: "envpool.python.envpool.EnvPoolMixin"
     ) -> None:  # noqa: F821
         self.input_spec = self._get_input_spec()
-        self.reward_spec = self._get_reward_spec()
-        self.observation_spec = self._get_observation_spec()
+        self.output_spec = self._get_output_spec()
 
     def _init_env(self) -> Optional[int]:
         pass
@@ -1132,6 +1134,14 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             shape=(self.num_workers,),
         )
 
+    def _get_output_spec(self) -> TensorSpec:
+        return CompositeSpec(
+            observaiton=self._get_observation_spec(),
+            reward=self._get_reward_spec(),
+            done=self._get_done_spec(),
+            shape=(self.num_workers,),
+        )
+
     def _get_observation_spec(self) -> TensorSpec:
         # Gym specs produced by EnvPool don't contain batch_size, we add it to satisfy checks in EnvBase
         observation_spec = _gym_to_torchrl_spec_transform(
@@ -1151,6 +1161,14 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _get_reward_spec(self) -> TensorSpec:
         return UnboundedContinuousTensorSpec(
             device=self.device, shape=(self.num_workers, 1)
+        )
+
+    def _get_done_spec(self) -> TensorSpec:
+        return DiscreteTensorSpec(
+            2,
+            device=self.device,
+            shape=(self.num_workers, 1),
+            dtype=torch.bool,
         )
 
     def __repr__(self) -> str:
