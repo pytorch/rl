@@ -611,8 +611,7 @@ class SyncDataCollector(_DataCollector):
             self.env.reset(self._tensordict)
 
             if (_reset is None and done.any()) or (
-                _reset is not None
-                and done[_reset].any()
+                _reset is not None and done[_reset].any()
             ):
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
