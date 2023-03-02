@@ -270,8 +270,9 @@ class SyncDataCollector(_DataCollector):
             default=False.
         postproc (Callable, optional): A Batcher is an object that will read a batch of data and return it in a useful format for training.
             default: None.
-        split_trajs (bool): Boolean indicating whether the resulting TensorDict should be split according to the trajectories.
+        split_trajs (bool, optional): Boolean indicating whether the resulting TensorDict should be split according to the trajectories.
             See utils.split_trajectories for more information.
+            Defaults to False.
         device (int, str or torch.device, optional): The device on which the policy will be placed.
             If it differs from the input policy device, the update_policy_weights_() method should be queried
             at appropriate times during the training loop to accommodate for the lag between parameter configuration
@@ -492,10 +493,7 @@ class SyncDataCollector(_DataCollector):
         )
 
         if split_trajs is None:
-            if not self.reset_when_done:
-                split_trajs = False
-            else:
-                split_trajs = True
+            split_trajs = False
         elif not self.reset_when_done and split_trajs:
             raise RuntimeError(
                 "Cannot split trajectories when reset_when_done is False."
@@ -792,8 +790,9 @@ class _MultiDataCollector(_DataCollector):
         postproc (callable, optional): A PostProcessor is an object that will read a batch of data and process it in a
             useful format for training.
             default: None.
-        split_trajs (bool): Boolean indicating whether the resulting TensorDict should be split according to the trajectories.
+        split_trajs (bool, optional): Boolean indicating whether the resulting TensorDict should be split according to the trajectories.
             See utils.split_trajectories for more information.
+            Defaults to False.
         devices (int, str, torch.device or sequence of such, optional): The devices on which the policy will be placed.
             If it differs from the input policy device, the update_policy_weights_() method should be queried
             at appropriate times during the training loop to accommodate for the lag between parameter configuration
@@ -945,10 +944,7 @@ class _MultiDataCollector(_DataCollector):
         self.seed = seed
         self.reset_when_done = reset_when_done
         if split_trajs is None:
-            if not self.reset_when_done:
-                split_trajs = False
-            else:
-                split_trajs = True
+            split_trajs = False
         elif not self.reset_when_done and split_trajs:
             raise RuntimeError(
                 "Cannot split trajectories when reset_when_done is False."
