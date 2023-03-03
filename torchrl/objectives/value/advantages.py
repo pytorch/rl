@@ -7,7 +7,7 @@ from functools import wraps
 from typing import List, Optional, Tuple, Union
 
 import torch
-from tensordict.nn import dispatch_kwargs
+from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 
@@ -95,7 +95,7 @@ class TDEstimate(nn.Module):
         )
 
     @_self_set_grad_enabled
-    @dispatch_kwargs
+    @dispatch
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -269,7 +269,7 @@ class TDLambdaEstimate(nn.Module):
         )
 
     @_self_set_grad_enabled
-    @dispatch_kwargs
+    @dispatch
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -461,7 +461,7 @@ class GAE(nn.Module):
         )
 
     @_self_set_grad_enabled
-    @dispatch_kwargs
+    @dispatch
     def forward(
         self,
         tensordict: TensorDictBase,

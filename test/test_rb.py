@@ -75,7 +75,7 @@ _os_is_windows = sys.platform == "win32"
 @pytest.mark.parametrize("writer", [writers.RoundRobinWriter])
 @pytest.mark.parametrize("storage", [ListStorage, LazyTensorStorage, LazyMemmapStorage])
 @pytest.mark.parametrize("size", [3, 5, 100])
-class TestPrototypeBuffers:
+class TestComposableBuffers:
     def _get_rb(self, rb_type, size, sampler, writer, storage):
 
         if storage is not None:
@@ -883,6 +883,67 @@ def test_samplerwithoutrep(size, samples, drop_last):
         assert visited
     else:
         assert not visited
+
+
+class TestStateDict:
+    @pytest.mark.parametrize("storage_in", ["tensor", "memmap"])
+    @pytest.mark.parametrize("storage_out", ["tensor", "memmap"])
+    @pytest.mark.parametrize("init_out", [True, False])
+    def test_load_state_dict(self, storage_in, storage_out, init_out):
+        buffer_size = 100
+        if storage_in == "memmap":
+            storage_in = LazyMemmapStorage(
+                buffer_size,
+                device="cpu",
+            )
+        elif storage_in == "tensor":
+            storage_in = LazyTensorStorage(
+                buffer_size,
+                device="cpu",
+            )
+        if storage_out == "memmap":
+            storage_out = LazyMemmapStorage(
+                buffer_size,
+                device="cpu",
+            )
+        elif storage_out == "tensor":
+            storage_out = LazyTensorStorage(
+                buffer_size,
+                device="cpu",
+            )
+
+        replay_buffer = TensorDictReplayBuffer(
+            pin_memory=False,
+            prefetch=3,
+            storage=storage_in,
+        )
+        # fill replay buffer with random data
+        transition = TensorDict(
+            {
+                "observation": torch.ones(1, 4),
+                "action": torch.ones(1, 2),
+                "reward": torch.ones(1, 1),
+                "dones": torch.ones(1, 1),
+                "next": {"observation": torch.ones(1, 4)},
+            },
+            batch_size=1,
+        )
+        for _ in range(3):
+            replay_buffer.extend(transition)
+
+        state_dict = replay_buffer.state_dict()
+
+        new_replay_buffer = TensorDictReplayBuffer(
+            pin_memory=False,
+            prefetch=3,
+            storage=storage_out,
+        )
+        if init_out:
+            new_replay_buffer.extend(transition)
+
+        new_replay_buffer.load_state_dict(state_dict)
+        s = new_replay_buffer.sample(3)
+        assert (s.exclude("index") == 1).all()
 
 
 if __name__ == "__main__":
