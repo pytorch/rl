@@ -2397,7 +2397,7 @@ class TensorDictPrimer(Transform):
     """
 
     def __init__(self, primers: dict = None, random=False, default_value=0.0, **kwargs):
-        self.device = kwargs.pop("device", torch.device("cpu"))
+        self.device = kwargs.pop("device", None)
         if primers is not None:
             if kwargs:
                 raise RuntimeError(
@@ -2420,10 +2420,16 @@ class TensorDictPrimer(Transform):
 
     @property
     def device(self):
-        return self._device
+        device = self._device
+        if device is None and self.parent is not None:
+            device = self.parent.device
+            self._device = device
+        return device
 
     @device.setter
     def device(self, value):
+        if value is None:
+            self._device = None
         self._device = torch.device(value)
 
     def to(self, dtype_or_device):
