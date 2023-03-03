@@ -505,9 +505,7 @@ but got an object of type {type(transform)}."""
         """Observation spec of the transformed environment."""
         if self._output_spec is None or not self.cache_specs:
             output_spec = self.base_env.output_spec.clone()
-            output_spec = self.transform.transform_output_spec(
-                output_spec
-            )
+            output_spec = self.transform.transform_output_spec(output_spec)
             if self.cache_specs:
                 self.__dict__["_output_spec"] = output_spec
         else:

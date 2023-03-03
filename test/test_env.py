@@ -954,7 +954,6 @@ def test_steptensordict(
                 "reward": torch.randn(4, 1),
                 "done": torch.zeros(4, 1, dtype=torch.bool),
             },
-            "done": torch.zeros(4, 1, dtype=torch.bool),
             "beatles": torch.randn(4, 1),
             "action": torch.randn(4, 2),
         },
