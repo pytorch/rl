@@ -486,7 +486,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict_reset = self._reset(tensordict, **kwargs)
         done = tensordict_reset.get("done", None)
         if done is not None:
-            print("got done", done)
             # TODO: refactor this using done_spec
             # unsqueeze done if needed
             # the input tensordict may have more leading dimensions than the batch_size
