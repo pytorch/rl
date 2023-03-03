@@ -804,9 +804,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         print(f"calling {self}.to({device})")
         device = torch.device(device)
         if device == self.device:
+            print("already on device")
             return self
+        print("moving specs to device")
         self.input_spec = self.input_spec.to(device)
         self.output_spec = self.output_spec.to(device)
+        assert self.output_spec.device == device
         self.device = device
         return super().to(device)
 
