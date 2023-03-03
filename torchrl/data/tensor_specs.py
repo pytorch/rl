@@ -1957,7 +1957,7 @@ class CompositeSpec(TensorSpec):
 
     def clone(self) -> CompositeSpec:
         return self.__class__(
-            **{key: item.clone() for key, item in self.items()},
+            {key: item.clone() for key, item in self.items()},
             device=self._device,
             shape=self.shape,
         )
