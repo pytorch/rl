@@ -330,7 +330,7 @@ def test_collector_env_reset():
     assert (steps == 1)[done].all()
     # check that split traj has a minimum total reward of -21 (for pong only)
     _data = split_trajectories(_data)
-    assert _data["reward"].sum(-2).min() == -21
+    assert _data["next", "reward"].sum(-2).min() == -21
 
 
 @pytest.mark.parametrize("num_env", [1, 2])
