@@ -37,12 +37,16 @@ try:
     from torchvision.transforms.functional import center_crop
 
     try:
-        from torchvision.transforms.functional import resize, InterpolationMode
-        def interpolation_fn(interpolation):
+        from torchvision.transforms.functional import InterpolationMode, resize
+
+        def interpolation_fn(interpolation):  # noqa: D103
             return InterpolationMode(interpolation)
+
     except ImportError:
-        def interpolation_fn(interpolation):
+
+        def interpolation_fn(interpolation):  # noqa: D103
             return interpolation
+
         from torchvision.transforms.functional_tensor import resize
 
     _has_tv = True

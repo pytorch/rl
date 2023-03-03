@@ -357,7 +357,7 @@ def make_ddpg_actor(
     proof_environment.transform[2].load_state_dict(transform_state_dict)
 
     env_specs = proof_environment.specs
-    out_features = env_specs["action_spec"].shape[0]
+    out_features = env_specs["input_spec"]["action"].shape[0]
 
     actor_net = MLP(
         num_cells=[num_cells] * num_layers,
