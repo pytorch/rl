@@ -578,9 +578,18 @@ class SerialEnv(_BatchedEnv):
         for i, _env in enumerate(self._envs):
             _tensordict = tensordict[i] if tensordict is not None else None
             if not _reset[i].any():
+                # We update the stored tensordict with the value of the "next"
+                # key as one may be surprised to receive data that is not up-to-date
+                self.shared_tensordicts[i].update_(
+                    self.shared_tensordicts[i]["next"].select(
+                        *self._selected_reset_keys, strict=False
+                    )
+                )
                 if _tensordict is not None:
                     del _tensordict["_reset"]
-                    self.shared_tensordicts[i].update_(_tensordict.select(*self._selected_reset_keys))
+                    self.shared_tensordicts[i].update_(
+                        _tensordict.select(*self._selected_reset_keys, strict=False)
+                    )
                 continue
             _td = _env._reset(tensordict=_tensordict, **kwargs)
             self.shared_tensordicts[i].update_(
@@ -782,14 +791,23 @@ class ParallelEnv(_BatchedEnv):
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
         else:
-            _reset = torch.ones(self.batch_size, dtype=torch.bool)
+            _reset = torch.ones(self.batch_size, dtype=torch.bool, device=self.device)
 
         for i, channel in enumerate(self.parent_channels):
             kwargs["tensordict"] = tensordict[i] if tensordict is not None else None
             if not _reset[i].any():
+                self.shared_tensordicts[i].update_(
+                    self.shared_tensordicts[i]["next"].select(
+                        *self._selected_reset_keys, strict=False
+                    )
+                )
                 if kwargs["tensordict"] is not None:
                     del kwargs["tensordict"]["_reset"]
-                    self.shared_tensordict_parent[i].update_(kwargs["tensordict"])
+                    self.shared_tensordicts[i].update_(
+                        kwargs["tensordict"].select(
+                            *self._selected_reset_keys, strict=False
+                        )
+                    )
                 # we must update the
                 continue
             channel.send((cmd_out, kwargs))
@@ -942,20 +960,21 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
             _td = env._reset(**reset_kwargs)
+
             if "_reset" in _td.keys():
                 _td.del_("_reset")
-            done = _td.get("done", None)
-            if done is None:
-                _td["done"] = done = torch.zeros(
-                    *_td.batch_size, 1, dtype=torch.bool, device=env.device
-                )
-            elif done is not None and done.shape != torch.Size([*_td.batch_size, 1]):
-                _td.set("done", done.unsqueeze(-1))
-            if reset_keys is None:
-                reset_keys = set(_td.keys())
+            # done = _td.get("done", None)
+            # if done is None:
+            #     _td["done"] = torch.zeros(
+            #         *_td.batch_size, 1, dtype=torch.bool, device=env.device
+            #     )
+            # elif done is not None and done.shape != torch.Size([*_td.batch_size, 1]):
+            #     _td.set("done", done.unsqueeze(-1))
+            # if reset_keys is None:
+            #     reset_keys = set(_td.keys())
             if pin_memory:
                 _td.pin_memory()
-            tensordict.update_(_td.select(*tensordict.keys(), strict=False))
+            tensordict.update_(_td.select(*tensordict.keys(True, True), strict=False))
             child_pipe.send(("reset_obs", reset_keys))
 
         elif cmd == "step":
