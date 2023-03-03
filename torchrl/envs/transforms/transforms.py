@@ -2451,7 +2451,11 @@ class TensorDictPrimer(Transform):
                     f"The leading shape of the primer specs ({self.__class__}) should match the one of the parent env. "
                     f"Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's shape is {spec.shape}."
                 )
-            observation_spec[key] = spec.to(self.device)
+            try:
+                device = observation_spec.device
+            except RuntimeError:
+                device = self.device
+            observation_spec[key] = spec.to(device)
         return observation_spec
 
     @property
