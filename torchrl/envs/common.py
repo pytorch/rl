@@ -76,7 +76,7 @@ class EnvMetaData:
         self._specs = value.to("cpu")
 
     @staticmethod
-    def build_metadata_from_env(env) -> EnvMetaData:
+    def metadata_from_env(env) -> EnvMetaData:
         tensordict = env.fake_tensordict().clone()
         specs = env.specs.to("cpu")
 
@@ -242,7 +242,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         output_spec = self._output_spec
         if output_spec is None:
             output_spec = CompositeSpec(shape=self.batch_size, device=self.device)
-            self.output_spec = output_spec
+            self.__dict__["_output_spec"] = output_spec
         return output_spec
 
     @output_spec.setter
@@ -297,10 +297,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 " with a null number of dimensions. Try using a multidimensional"
                 " spec instead, for instance with a singleton dimension at the tail)."
             )
-        if self._output_spec is None:
-            self.output_spec = CompositeSpec(reward=value, shape=self.batch_size, device=self.device)
-        else:
-            self.output_spec["reward"] = value.to(self.device)
+        self.output_spec["reward"] = value.to(self.device)
 
     # Done spec: done specs belong to output_spec
     @property
@@ -329,10 +326,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 " with a null number of dimensions. Try using a multidimensional"
                 " spec instead, for instance with a singleton dimension at the tail)."
             )
-        if self._output_spec is None:
-            self.output_spec = CompositeSpec(done=value, shape=self.batch_size, device=self.device)
-        else:
-            self.output_spec["done"] = value.to(self.device)
+        self.output_spec["done"] = value.to(self.device)
 
     # observation spec: observation specs belong to output_spec
     @property
@@ -351,10 +345,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             raise ValueError(
                 f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
             )
-        if self.output_spec is None:
-            self.output_spec = CompositeSpec(observation=value, shape=self.batch_size, device=self.device)
-        else:
-            self.output_spec["observation"] = value.to(self.device)
+        self.output_spec["observation"] = value.to(self.device)
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.

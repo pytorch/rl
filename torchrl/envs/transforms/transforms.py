@@ -538,12 +538,12 @@ but got an object of type {type(transform)}."""
 
     @property
     def observation_spec(self) -> TensorSpec:
-        """Reward spec of the transformed environment."""
+        """Observation spec of the transformed environment."""
         return self.output_spec["observation"]
 
     @property
     def done_spec(self) -> TensorSpec:
-        """Reward spec of the transformed environment."""
+        """Done spec of the transformed environment."""
         return self.output_spec["done"]
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
