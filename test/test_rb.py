@@ -165,6 +165,7 @@ class TestPrototypeBuffers:
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
         )
         data = self._get_data(rb_type, size=5)
+        print(data)
         rb.extend(data)
         length = len(rb)
         for d in data[-length:]:

@@ -14,6 +14,7 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.nn import dispatch
 from tensordict.utils import expand_as_right
 from torch import nn, Tensor
 from torchrl.data.tensor_specs import (
@@ -177,6 +178,7 @@ class Transform(nn.Module):
                 )
         return tensordict
 
+    @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         for in_key, out_key in zip(self.in_keys, self.out_keys):
@@ -225,6 +227,7 @@ class Transform(nn.Module):
                 )
         return tensordict
 
+    @dispatch(source="in_keys_inv", dest="out_keys_inv")
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
         return self._inv_call(tensordict.clone(False))
 
