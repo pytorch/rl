@@ -1956,12 +1956,10 @@ class CompositeSpec(TensorSpec):
         return self.__class__(**kwargs, device=_device, shape=self.shape)
 
     def clone(self) -> CompositeSpec:
-        print("self._device", self._device)
         try:
             device = self.device
         except RuntimeError:
             device = self._device
-        print("clone device", device, )
         return self.__class__(
             {key: item.clone() for key, item in self.items()},
             device=device,

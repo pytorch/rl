@@ -241,7 +241,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def output_spec(self) -> TensorSpec:
         output_spec = self._output_spec
         if output_spec is None:
-            print("building output spec with device", self.device)
             output_spec = CompositeSpec(shape=self.batch_size, device=self.device)
             self.__dict__["_output_spec"] = output_spec
         return output_spec
@@ -801,15 +800,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 pass
 
     def to(self, device: DEVICE_TYPING) -> EnvBase:
-        print(f"calling {self}.to({device})")
         device = torch.device(device)
         if device == self.device:
-            print("already on device")
             return self
-        print("moving specs to device")
-        self.input_spec = self.input_spec.to(device)
-        self.output_spec = self.output_spec.to(device)
-        assert self.output_spec.device == device
+        self.__dict__["_input_spec"] = self.input_spec.to(device)
+        self.__dict__["_output_spec"] = self.output_spec.to(device)
         self.device = device
         return super().to(device)
 
