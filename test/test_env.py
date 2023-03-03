@@ -901,14 +901,14 @@ def test_env_base_reset_flag(batch_size, max_steps=3):
         td = env.step(
             TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
         )
-        assert (td["done"] == 0).all()
-        assert (td["next"]["observation"] == i + 1).all()
+        assert (td["next", "done"] == 0).all()
+        assert (td["next", "observation"] == i + 1).all()
 
     td = env.step(
         TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
     )
-    assert (td["done"] == 1).all()
-    assert (td["next"]["observation"] == max_steps + 1).all()
+    assert (td["next", "done"] == 1).all()
+    assert (td["next", "observation"] == max_steps + 1).all()
 
     _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
     td_reset = env.reset(
