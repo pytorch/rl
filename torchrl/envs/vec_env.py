@@ -565,7 +565,7 @@ class SerialEnv(_BatchedEnv):
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             out_td = self._envs[i]._step(tensordict_in[i])
             out_td.update(tensordict_in[i].select(*self.input_spec.keys()))
-            self.shared_tensordicts[i].update_(out_td)
+            self.shared_tensordicts[i].update(out_td, inplace=True)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         return self.shared_tensordict_parent.select(*self.env_input_keys, "next").clone(
