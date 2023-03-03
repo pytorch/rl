@@ -2457,14 +2457,6 @@ class TensorDictPrimer(Transform):
     def _batch_size(self):
         return self.parent.batch_size
 
-    @property
-    def device(self):
-        return self._device
-
-    @device.setter
-    def device(self, value):
-        self._device = value
-
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         for key, spec in self.primers.items():
             if spec.shape[: len(tensordict.shape)] != tensordict.shape:
