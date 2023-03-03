@@ -439,8 +439,8 @@ class TestParallel:
         )
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
-        assert "done" in td1.keys()
-        assert "reward" in td1.keys()
+        assert ("next", "done") in td1.keys(True)
+        assert ("next", "reward") in td1.keys(True)
 
         with pytest.raises(RuntimeError):
             # number of actions does not match number of workers
@@ -524,8 +524,8 @@ class TestParallel:
         )
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
-        assert "done" in td1.keys()
-        assert "reward" in td1.keys()
+        assert ("next", "done") in td1.keys(True)
+        assert ("next", "reward") in td1.keys(True)
 
         with pytest.raises(RuntimeError):
             # number of actions does not match number of workers
