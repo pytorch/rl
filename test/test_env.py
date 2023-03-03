@@ -551,9 +551,9 @@ class TestParallel:
         ],
     )
     @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [False, True])
-    @pytest.mark.parametrize("transformed_out", [True, False])
-    @pytest.mark.parametrize("static_seed", [True, False])
+    @pytest.mark.parametrize("transformed_in", [True, False, ])
+    @pytest.mark.parametrize("transformed_out", [False, True, ])
+    @pytest.mark.parametrize("static_seed", [False, True, ])
     def test_parallel_env_seed(
         self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
