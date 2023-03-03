@@ -396,15 +396,20 @@ class _BatchedEnv(EnvBase):
             )
             self.shared_tensordict_parent = shared_tensordict_parent.to(self.device)
         else:
+            # Multi-task: we share tensordict that *may* have different keys
+            print("selected keys", self._selected_keys)
+            print("parent td[0]", shared_tensordict_parent[0])
+            shared_tensordict_parent = [
+                tensordict.select(*self._selected_keys, strict=False).to(self.device)
+                for tensordict in shared_tensordict_parent
+            ]
+            print("second parent td[0]", shared_tensordict_parent[0])
             shared_tensordict_parent = torch.stack(
-                [
-                    tensordict.select(*self._selected_keys, strict=False).to(
-                        self.device
-                    )
-                    for tensordict in shared_tensordict_parent
-                ],
+                shared_tensordict_parent,
                 0,
             )
+            print("and now parent td[0]", shared_tensordict_parent[0])
+            print("parent td", shared_tensordict_parent)
             self.shared_tensordict_parent = shared_tensordict_parent
 
         if self.share_individual_td:
@@ -414,6 +419,8 @@ class _BatchedEnv(EnvBase):
                 ]
                 self.shared_tensordict_parent = torch.stack(self.shared_tensordicts, 0)
             else:
+                # Multi-task: we share tensordict that *may* have different keys
+                # LazyStacked already stores this so we don't need to do anything
                 self.shared_tensordicts = self.shared_tensordict_parent
             if self._share_memory:
                 for td in self.shared_tensordicts:
