@@ -186,7 +186,7 @@ class DreamerActorLoss(LossModule):
             with hold_out_net(self.value_model):
                 next_tensordict = self.value_model(next_tensordict)
 
-        reward = fake_data.get("reward")
+        reward = fake_data.get(("next", "reward"))
         next_value = next_tensordict.get("state_value")
         lambda_target = self.lambda_target(reward, next_value)
         fake_data.set("lambda_target", lambda_target)
