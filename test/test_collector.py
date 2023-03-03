@@ -1187,6 +1187,7 @@ class TestAutoWrap:
 
 @pytest.mark.parametrize("env_class", [CountingEnv, CountingBatchedEnv])
 def test_initial_obs_consistency(env_class, seed=1):
+    # non regression test on #938
     torch.manual_seed(seed)
     start_val = 4
     if env_class == CountingEnv:

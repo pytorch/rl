@@ -594,10 +594,6 @@ class SyncDataCollector(_DataCollector):
             done_or_terminated = done_or_terminated | _reset
 
         if done_or_terminated.any():
-            if not done_or_terminated.all():
-                self._tensordict[~done_or_terminated] = step_mdp(
-                    self._tensordict[~done_or_terminated]
-                )
 
             traj_ids = self._tensordict.get(("collector", "traj_ids")).clone()
             steps = steps.clone()
