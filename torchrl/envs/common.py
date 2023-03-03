@@ -278,7 +278,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         except KeyError:
             # populate the "reward" entry
             self.output_spec["reward"] = UnboundedContinuousTensorSpec(
-                shape=(*self.batch_size, 1)
+                shape=(*self.batch_size, 1), device=self.device
             )
             return self.output_spec["reward"]
 
@@ -310,7 +310,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         except KeyError:
             # populate the "done" entry
             self.output_spec["done"] = DiscreteTensorSpec(
-                n=2, shape=(*self.batch_size, 1), dtype=torch.bool
+                n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
             )
             return self.output_spec["done"]
 
