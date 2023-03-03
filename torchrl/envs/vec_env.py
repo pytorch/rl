@@ -580,7 +580,7 @@ class SerialEnv(_BatchedEnv):
             _td = _env._reset(tensordict=_tensordict, **kwargs)
             self.shared_tensordicts[i].update_(_td.select(*self._selected_keys, strict=False))
 
-        return self.shared_tensordict_parent.select(self._selected_reset_keys).clone()
+        return self.shared_tensordict_parent.select(*self._selected_reset_keys).clone()
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
