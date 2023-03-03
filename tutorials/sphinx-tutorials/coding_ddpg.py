@@ -374,12 +374,12 @@ def make_ddpg_actor(
     actor = ProbabilisticActor(
         module=actor_module,
         in_keys=["param"],
-        spec=CompositeSpec(action=env_specs["action_spec"]),
+        spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
         safe=True,
         distribution_class=TanhDelta,
         distribution_kwargs={
-            "min": env_specs["action_spec"].space.minimum,
-            "max": env_specs["action_spec"].space.maximum,
+            "min": env_specs["input_spec"]["action"].space.minimum,
+            "max": env_specs["input_spec"]["action"].space.maximum,
         },
     ).to(device)
 
