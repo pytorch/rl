@@ -999,9 +999,10 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         ("next", "hidden1"),
         ("next", "hidden2"),
         ("next", "observation"),
+        ("next", "done"),
+        ("next", "reward"),
         "next",
         "observation",
-        "reward",
         ("collector", "step_count"),
         ("collector", "traj_ids"),
     }
