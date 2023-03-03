@@ -471,21 +471,12 @@ class TestParallel:
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [True, False])
     @pytest.mark.parametrize("transformed_out", [True, False])
-    @pytest.mark.parametrize(
-        "selected_keys",
-        [
-            ["action", "observation", "next_observation", "done", "reward"],
-            ["hidden", "action", "observation", "next_observation", "done", "reward"],
-            None,
-        ],
-    )
     def test_parallel_env_with_policy(
         self,
         env_name,
         frame_skip,
         transformed_in,
         transformed_out,
-        selected_keys,
         T=10,
         N=3,
     ):
@@ -495,7 +486,6 @@ class TestParallel:
             transformed_in=transformed_in,
             transformed_out=transformed_out,
             N=N,
-            selected_keys=selected_keys,
         )
 
         policy = ActorCriticOperator(

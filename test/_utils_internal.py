@@ -146,7 +146,6 @@ def _make_envs(
     transformed_in,
     transformed_out,
     N,
-    selected_keys=None,
     device="cpu",
     kwargs=None,
 ):
@@ -178,10 +177,10 @@ def _make_envs(
 
     env0 = create_env_fn()
     env_parallel = ParallelEnv(
-        N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
+        N, create_env_fn, create_env_kwargs=kwargs
     )
     env_serial = SerialEnv(
-        N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
+        N, create_env_fn, create_env_kwargs=kwargs
     )
 
     if transformed_out:
@@ -208,7 +207,6 @@ def _make_envs(
             frame_skip,
             t_out,
             N,
-            selected_keys=None,
             device="cpu",
             kwargs=None,
         )
@@ -223,7 +221,6 @@ def _make_multithreaded_env(
     frame_skip,
     transformed_out,
     N,
-    selected_keys=None,
     device="cpu",
     kwargs=None,
 ):
