@@ -176,8 +176,6 @@ def get_env_metadata(
         if kwargs is None:
             kwargs = {}
         env = env_or_creator(**kwargs)
-        print(env)
-        print(env.specs)
         return EnvMetaData.metadata_from_env(env)
     elif isinstance(env_or_creator, EnvCreator):
         if not (

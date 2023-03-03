@@ -266,7 +266,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
         if self._input_spec is None:
-            self.input_spec = CompositeSpec(action=value, shape=self.batch_size, device=self.device)
+            self.input_spec = CompositeSpec(
+                action=value, shape=self.batch_size, device=self.device
+            )
         else:
             self.input_spec["action"] = value.to(self.device)
 
