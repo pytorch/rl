@@ -865,9 +865,9 @@ class TestParallel:
         )
         env.close()
 
-        assert (td_reset["next", "done"][_reset] == 0).all()
+        assert (td_reset["done"][_reset] == 0).all()
         assert (td_reset["observation"][_reset] == 0).all()
-        assert (td_reset["next", "done"][~_reset] == 1).all()
+        assert (td_reset["done"][~_reset] == 1).all()
         assert (td_reset["observation"][~_reset] == max_steps + 1).all()
 
 
