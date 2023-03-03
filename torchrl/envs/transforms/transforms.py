@@ -504,7 +504,8 @@ but got an object of type {type(transform)}."""
     def output_spec(self) -> TensorSpec:
         """Observation spec of the transformed environment."""
         if self._output_spec is None or not self.cache_specs:
-            print("1", self.base_env.device)
+            print("1", self.base_env, self.base_env.device)
+            print("1b", self.base_env.output_spec.device)
             output_spec = self.base_env.output_spec.clone()
             print("2", output_spec.device)
             output_spec = self.transform.transform_output_spec(
