@@ -235,7 +235,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             raise ValueError(
                 f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
             )
-        self.__dict__["_input_spec"] = value
+        self.__dict__["_input_spec"] = value.to(self.device)
 
     @property
     def output_spec(self) -> TensorSpec:
@@ -256,7 +256,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             raise ValueError(
                 f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
             )
-        self.__dict__["_output_spec"] = value
+        self.__dict__["_output_spec"] = value.to(self.device)
 
     # Action spec: action specs belong to input_spec
     @property
@@ -266,9 +266,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
         if self._input_spec is None:
-            self.input_spec = CompositeSpec(action=value, shape=self.batch_size)
+            self.input_spec = CompositeSpec(action=value, shape=self.batch_size, device=self.device)
         else:
-            self.input_spec["action"] = value
+            self.input_spec["action"] = value.to(self.device)
 
     # Reward spec: reward specs belong to output_spec
     @property
@@ -298,9 +298,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 " spec instead, for instance with a singleton dimension at the tail)."
             )
         if self._output_spec is None:
-            self.output_spec = CompositeSpec(reward=value, shape=self.batch_size)
+            self.output_spec = CompositeSpec(reward=value, shape=self.batch_size, device=self.device)
         else:
-            self.output_spec["reward"] = value
+            self.output_spec["reward"] = value.to(self.device)
 
     # Done spec: done specs belong to output_spec
     @property
@@ -330,9 +330,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 " spec instead, for instance with a singleton dimension at the tail)."
             )
         if self._output_spec is None:
-            self.output_spec = CompositeSpec(done=value, shape=self.batch_size)
+            self.output_spec = CompositeSpec(done=value, shape=self.batch_size, device=self.device)
         else:
-            self.output_spec["done"] = value
+            self.output_spec["done"] = value.to(self.device)
 
     # observation spec: observation specs belong to output_spec
     @property
@@ -352,9 +352,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
             )
         if self.output_spec is None:
-            self.output_spec = CompositeSpec(observation=value, shape=self.batch_size)
+            self.output_spec = CompositeSpec(observation=value, shape=self.batch_size, device=self.device)
         else:
-            self.output_spec["observation"] = value
+            self.output_spec["observation"] = value.to(self.device)
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.

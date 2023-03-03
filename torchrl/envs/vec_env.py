@@ -390,7 +390,9 @@ class _BatchedEnv(EnvBase):
                     raise_no_selected_keys = True
 
         if self._single_task:
-            self.env_input_keys = sorted(self.input_spec.keys(nested_keys=True), key=_sort_keys)
+            self.env_input_keys = sorted(
+                self.input_spec.keys(nested_keys=True), key=_sort_keys
+            )
             self.env_output_keys = []
             for key in self.output_spec["observation"].keys():
                 if isinstance(key, str):
@@ -407,9 +409,12 @@ class _BatchedEnv(EnvBase):
             env_output_keys = set()
             for meta_data in self.meta_data:
                 env_output_keys = env_output_keys.union(
-                    ("next", key) if isinstance(key, str) else ("next", *key) for key in meta_data.specs["output_spec"]["observation"].keys()
+                    ("next", key) if isinstance(key, str) else ("next", *key)
+                    for key in meta_data.specs["output_spec"]["observation"].keys()
                 )
-            env_output_keys = env_output_keys.union({("next", "reward"), ("next", "done")})
+            env_output_keys = env_output_keys.union(
+                {("next", "reward"), ("next", "done")}
+            )
             self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
             self.env_output_keys = sorted(env_output_keys, key=_sort_keys)
         if not len(self.env_input_keys):
@@ -579,7 +584,9 @@ class SerialEnv(_BatchedEnv):
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             out_td = self._envs[i]._step(tensordict_in[i])
             out_td.update(tensordict_in[i].select(*self.env_input_keys))
-            self.shared_tensordicts[i].update_(out_td.select(*self.env_input_keys, *self.env_output_keys))
+            self.shared_tensordicts[i].update_(
+                out_td.select(*self.env_input_keys, *self.env_output_keys)
+            )
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         return self.shared_tensordict_parent.select(*self.env_input_keys, "next").clone(
