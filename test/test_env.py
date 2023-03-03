@@ -949,8 +949,10 @@ def test_steptensordict(
     tensordict = TensorDict(
         {
             "ledzep": torch.randn(4, 2),
-            "next": {"ledzep": torch.randn(4, 2)},
-            "reward": torch.randn(4, 1),
+            "next": {"ledzep": torch.randn(4, 2),
+                     "reward": torch.randn(4, 1),
+                     "done": torch.zeros(4, 1, dtype=torch.bool),
+                     },
             "done": torch.zeros(4, 1, dtype=torch.bool),
             "beatles": torch.randn(4, 1),
             "action": torch.randn(4, 2),
@@ -975,7 +977,7 @@ def test_steptensordict(
         assert "beatles" not in out.keys()
     if not exclude_reward:
         assert "reward" in out.keys()
-        assert out["reward"] is tensordict["reward"]
+        assert out["reward"] is tensordict["next", "reward"]
     else:
         assert "reward" not in out.keys()
     if not exclude_action:
@@ -985,7 +987,7 @@ def test_steptensordict(
         assert "action" not in out.keys()
     if not exclude_done:
         assert "done" in out.keys()
-        assert out["done"] is tensordict["done"]
+        assert out["done"] is tensordict["next", "done"]
     else:
         assert "done" not in out.keys()
     if has_out:
@@ -1002,7 +1004,7 @@ def test_batch_locked(device):
     td = env.reset()
     td["action"] = env.action_spec.rand()
     td_expanded = td.expand(2).clone()
-    td = env.step(td)
+    _ = env.step(td)
 
     with pytest.raises(
         RuntimeError, match="Expected a tensordict with shape==env.shape, "
