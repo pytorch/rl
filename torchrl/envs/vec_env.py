@@ -380,6 +380,10 @@ class _BatchedEnv(EnvBase):
             self.env_output_keys = sorted(env_output_keys, key=_sort_keys)
         self._selected_keys = set(self.env_output_keys).union(self.env_input_keys).union(self.env_obs_keys)
         self._selected_keys.add("done")
+
+        self._selected_reset_keys = self.env_obs_keys + ["done"]
+        self._selected_step_keys = self.env_output_keys
+
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
                 *self._selected_keys,
@@ -538,7 +542,7 @@ class SerialEnv(_BatchedEnv):
             )
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return self.shared_tensordict_parent.select("next").clone(
+        return self.shared_tensordict_parent.select(*self._selected_step_keys).clone(
             False
         )
 
@@ -576,7 +580,7 @@ class SerialEnv(_BatchedEnv):
             _td = _env._reset(tensordict=_tensordict, **kwargs)
             self.shared_tensordicts[i].update_(_td.select(*self._selected_keys, strict=False))
 
-        return self.shared_tensordict_parent.exclude("next").clone()
+        return self.shared_tensordict_parent.select(self._selected_reset_keys).clone()
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
@@ -720,7 +724,7 @@ class ParallelEnv(_BatchedEnv):
                 )
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return self.shared_tensordict_parent.select("next").clone(
+        return self.shared_tensordict_parent.select(*self._selected_step_keys).clone(
             False
         )
 
@@ -802,7 +806,7 @@ class ParallelEnv(_BatchedEnv):
                 # there might be some delay between writing the shared tensordict
                 # and reading the updated value on the main process
                 sleep(0.01)
-        return self.shared_tensordict_parent.clone()
+        return self.shared_tensordict_parent.select(*self._selected_reset_keys).clone()
 
     def __reduce__(self):
         if not self.is_closed:
