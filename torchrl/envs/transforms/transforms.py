@@ -34,9 +34,11 @@ from torchrl.envs.utils import _sort_keys, step_mdp
 
 try:
     from torchvision.transforms.functional import center_crop
-    from torchvision.transforms.functional_tensor import (
-        resize,
-    )  # as of now resize is imported from torchvision
+
+    try:
+        from torchvision.transforms.functional import resize
+    except ImportError:
+        from torchvision.transforms.functional_tensor import resize
 
     _has_tv = True
 except ImportError:
