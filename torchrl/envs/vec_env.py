@@ -574,7 +574,7 @@ class SerialEnv(_BatchedEnv):
                     self.shared_tensordicts[i].update_(_tensordict)
                 continue
             _td = _env._reset(tensordict=_tensordict, **kwargs)
-            self.shared_tensordicts[i].update_(_td.select(self._selected_keys))
+            self.shared_tensordicts[i].update_(_td.select(*self._selected_keys))
 
         return self.shared_tensordict_parent.exclude("next").clone()
 
