@@ -161,7 +161,6 @@ class DMControlWrapper(GymLikeEnv):
 
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         # specs are defined when first called
-        print("calling _make_specs")
         self.output_spec["observation"] = _dmcontrol_to_torchrl_spec_transform(
             self._env.observation_spec(), device=self.device
         )
@@ -179,7 +178,6 @@ class DMControlWrapper(GymLikeEnv):
             )
         )
         self.__dict__["_input_spec"] = input_spec
-        print(self.observation_spec)
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
