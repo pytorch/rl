@@ -2430,6 +2430,7 @@ class TensorDictPrimer(Transform):
     def device(self, value):
         if value is None:
             self._device = None
+            return
         self._device = torch.device(value)
 
     def to(self, dtype_or_device):
