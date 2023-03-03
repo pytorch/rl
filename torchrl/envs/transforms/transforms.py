@@ -13,8 +13,8 @@ from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch
+from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right
 from torch import nn, Tensor
 from torchrl.data.tensor_specs import (
@@ -229,7 +229,8 @@ class Transform(nn.Module):
 
     @dispatch(source="in_keys_inv", dest="out_keys_inv")
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return self._inv_call(tensordict.clone(False))
+        out = self._inv_call(tensordict.clone(False))
+        return out
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
         """Transforms the output spec such that the resulting spec matches transform mapping.
