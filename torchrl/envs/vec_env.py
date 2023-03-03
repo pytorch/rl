@@ -285,15 +285,15 @@ class _BatchedEnv(EnvBase):
 
             _input_spec = {}
             for md in meta_data:
-                _input_spec.update(dict(**md.specs["input_spec"]))
-            input_spec = CompositeSpec(**_input_spec, shape=meta_data[0].batch_size)
+                _input_spec.update(md.specs["input_spec"])
+            input_spec = CompositeSpec(_input_spec, shape=meta_data[0].batch_size)
             input_spec = input_spec.expand(self.num_workers, *input_spec.shape)
             self.input_spec = input_spec
 
             _output_spec = {}
             for md in meta_data:
-                _output_spec.update(dict(**md.specs["output_spec"]))
-            output_spec = CompositeSpec(**_output_spec, shape=meta_data[0].batch_size)
+                _output_spec.update(md.specs["output_spec"])
+            output_spec = CompositeSpec(_output_spec, shape=meta_data[0].batch_size)
             output_spec = output_spec.expand(self.num_workers, *output_spec.shape)
             self.output_spec = output_spec
 
