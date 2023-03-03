@@ -282,6 +282,8 @@ class _BatchedEnv(EnvBase):
                 [meta_data.tensordict for meta_data in meta_data], 0
             )
             self._batch_locked = meta_data[0].batch_locked
+        self.output_spec = self.output_spec.to(self.device)
+        self.input_spec = self.input_spec.to(self.device)
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
@@ -365,8 +367,7 @@ class _BatchedEnv(EnvBase):
             env_obs_keys = set()
             for meta_data in self.meta_data:
                 env_obs_keys = env_obs_keys.union(
-                    key
-                    for key in meta_data.specs["output_spec"]["observation"].keys()
+                    key for key in meta_data.specs["output_spec"]["observation"].keys()
                 )
                 env_output_keys = env_output_keys.union(
                     ("next", key) if isinstance(key, str) else ("next", *key)
@@ -378,7 +379,11 @@ class _BatchedEnv(EnvBase):
             self.env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
             self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
             self.env_output_keys = sorted(env_output_keys, key=_sort_keys)
-        self._selected_keys = set(self.env_output_keys).union(self.env_input_keys).union(self.env_obs_keys)
+        self._selected_keys = (
+            set(self.env_output_keys)
+            .union(self.env_input_keys)
+            .union(self.env_obs_keys)
+        )
         self._selected_keys.add("done")
 
         self._selected_reset_keys = self.env_obs_keys + ["done"]
@@ -393,7 +398,9 @@ class _BatchedEnv(EnvBase):
         else:
             shared_tensordict_parent = torch.stack(
                 [
-                    tensordict.select(*self._selected_keys, strict=False).to(self.device)
+                    tensordict.select(*self._selected_keys, strict=False).to(
+                        self.device
+                    )
                     for tensordict in shared_tensordict_parent
                 ],
                 0,
@@ -578,7 +585,9 @@ class SerialEnv(_BatchedEnv):
                     self.shared_tensordicts[i].update_(_tensordict)
                 continue
             _td = _env._reset(tensordict=_tensordict, **kwargs)
-            self.shared_tensordicts[i].update_(_td.select(*self._selected_keys, strict=False))
+            self.shared_tensordicts[i].update_(
+                _td.select(*self._selected_keys, strict=False)
+            )
 
         return self.shared_tensordict_parent.select(*self._selected_reset_keys).clone()
 

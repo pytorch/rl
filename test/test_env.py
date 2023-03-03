@@ -949,10 +949,11 @@ def test_steptensordict(
     tensordict = TensorDict(
         {
             "ledzep": torch.randn(4, 2),
-            "next": {"ledzep": torch.randn(4, 2),
-                     "reward": torch.randn(4, 1),
-                     "done": torch.zeros(4, 1, dtype=torch.bool),
-                     },
+            "next": {
+                "ledzep": torch.randn(4, 2),
+                "reward": torch.randn(4, 1),
+                "done": torch.zeros(4, 1, dtype=torch.bool),
+            },
             "done": torch.zeros(4, 1, dtype=torch.bool),
             "beatles": torch.randn(4, 1),
             "action": torch.randn(4, 2),

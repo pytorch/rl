@@ -176,12 +176,8 @@ def _make_envs(
                 )
 
     env0 = create_env_fn()
-    env_parallel = ParallelEnv(
-        N, create_env_fn, create_env_kwargs=kwargs
-    )
-    env_serial = SerialEnv(
-        N, create_env_fn, create_env_kwargs=kwargs
-    )
+    env_parallel = ParallelEnv(N, create_env_fn, create_env_kwargs=kwargs)
+    env_serial = SerialEnv(N, create_env_fn, create_env_kwargs=kwargs)
 
     if transformed_out:
         t_out = get_transform_out(env_name, transformed_in)
