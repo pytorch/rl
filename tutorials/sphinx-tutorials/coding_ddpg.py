@@ -789,7 +789,7 @@ for i, tensordict in enumerate(collector):
     collector.update_policy_weights_()
 
     if r0 is None:
-        r0 = tensordict["reward"].mean().item()
+        r0 = tensordict["next", "reward"].mean().item()
     pbar.update(tensordict.numel())
 
     # extend the replay buffer with the new data
@@ -817,8 +817,8 @@ for i, tensordict in enumerate(collector):
                 next_value = next_tensordict["state_action_value"]
                 assert not next_value.requires_grad
             value_est = (
-                sampled_tensordict["reward"]
-                + gamma * (1 - sampled_tensordict["done"].float()) * next_value
+                sampled_tensordict["next", "reward"]
+                + gamma * (1 - sampled_tensordict["next", "done"].float()) * next_value
             )
             value = qnet(sampled_tensordict)["state_action_value"]
             value_loss = (value - value_est).pow(2).mean()
@@ -854,7 +854,7 @@ for i, tensordict in enumerate(collector):
                 replay_buffer.update_tensordict_priority(sampled_tensordict)
 
     rewards.append(
-        (i, tensordict["reward"].mean().item() / norm_factor_training / frame_skip)
+        (i, tensordict["next", "reward"].mean().item() / norm_factor_training / frame_skip)
     )
     td_record = recorder(None)
     if td_record is not None:
@@ -1039,7 +1039,7 @@ for i, tensordict in enumerate(collector):
     collector.update_policy_weights_()
 
     if r0 is None:
-        r0 = tensordict["reward"].mean().item()
+        r0 = tensordict["next", "reward"].mean().item()
 
     # extend the replay buffer with the new data
     current_frames = tensordict.numel()
@@ -1068,8 +1068,8 @@ for i, tensordict in enumerate(collector):
 
             # This is the crucial part: we'll compute the TD(lambda)
             # instead of a simple single step estimate
-            done = sampled_tensordict["done"]
-            reward = sampled_tensordict["reward"]
+            done = sampled_tensordict["next", "done"]
+            reward = sampled_tensordict["next", "reward"]
             value = qnet(sampled_tensordict.view(-1)).view(sampled_tensordict.shape)[
                 "state_action_value"
             ]
@@ -1114,7 +1114,7 @@ for i, tensordict in enumerate(collector):
                 replay_buffer.update_tensordict_priority(sampled_tensordict)
 
     rewards.append(
-        (i, tensordict["reward"].mean().item() / norm_factor_training / frame_skip)
+        (i, tensordict["next", "reward"].mean().item() / norm_factor_training / frame_skip)
     )
     td_record = recorder(None)
     if td_record is not None:
