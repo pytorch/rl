@@ -37,8 +37,12 @@ try:
     from torchvision.transforms.functional import center_crop
 
     try:
-        from torchvision.transforms.functional import resize
+        from torchvision.transforms.functional import resize, InterpolationMode
+        def interpolation_fn(interpolation):
+            return InterpolationMode(interpolation)
     except ImportError:
+        def interpolation_fn(interpolation):
+            return interpolation
         from torchvision.transforms.functional_tensor import resize
 
     _has_tv = True
@@ -1042,7 +1046,7 @@ class Resize(ObservationTransform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.w = int(w)
         self.h = int(h)
-        self.interpolation = interpolation
+        self.interpolation = interpolation_fn(interpolation)
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         # flatten if necessary
