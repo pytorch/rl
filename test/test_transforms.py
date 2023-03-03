@@ -1041,7 +1041,7 @@ class TestStepCounter(TransformBase):
         step_counter = Compose(StepCounter(max_steps))
         done = torch.zeros(*batch, 1, dtype=torch.bool)
         td = TensorDict({"done": done, ("next", "done"): done}, batch, device=device)
-        _reset = torch.zeros((), dtype=torch.bool)
+        _reset = torch.zeros((), dtype=torch.bool, device=device)
         while not _reset.any() and reset_workers:
             _reset = torch.randn(batch) < 0
             td.set("_reset", _reset)
