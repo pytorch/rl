@@ -847,13 +847,13 @@ class TestParallel:
                     {"action": action}, batch_size=env.batch_size, device=env.device
                 )
             )
-            assert (td["done"] == 0).all()
+            assert (td["next", "done"] == 0).all()
             assert (td["next"]["observation"] == i + 1).all()
 
         td = env.step(
             TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
         )
-        assert (td["done"] == 1).all()
+        assert (td["next", "done"] == 1).all()
         assert (td["next"]["observation"] == max_steps + 1).all()
 
         _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
@@ -865,9 +865,9 @@ class TestParallel:
         )
         env.close()
 
-        assert (td_reset["done"][_reset] == 0).all()
+        assert (td_reset["next", "done"][_reset] == 0).all()
         assert (td_reset["observation"][_reset] == 0).all()
-        assert (td_reset["done"][~_reset] == 1).all()
+        assert (td_reset["next", "done"][~_reset] == 1).all()
         assert (td_reset["observation"][~_reset] == max_steps + 1).all()
 
 
