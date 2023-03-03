@@ -1956,9 +1956,13 @@ class CompositeSpec(TensorSpec):
         return self.__class__(**kwargs, device=_device, shape=self.shape)
 
     def clone(self) -> CompositeSpec:
+        try:
+            device = self.device
+        except RuntimeError:
+            device = self._device
         return self.__class__(
             {key: item.clone() for key, item in self.items()},
-            device=self._device,
+            device=device,
             shape=self.shape,
         )
 
@@ -1968,6 +1972,10 @@ class CompositeSpec(TensorSpec):
     def zero(self, shape=None) -> TensorDictBase:
         if shape is None:
             shape = torch.Size([])
+        try:
+            device = self.device
+        except RuntimeError:
+            device = self._device
         return TensorDict(
             {
                 key: self[key].zero(shape)
@@ -1975,7 +1983,7 @@ class CompositeSpec(TensorSpec):
                 if isinstance(key, str) and self[key] is not None
             },
             torch.Size([*shape, *self.shape]),
-            device=self._device,
+            device=device,
         )
 
     def __eq__(self, other):
@@ -2018,13 +2026,17 @@ class CompositeSpec(TensorSpec):
                 f"The last {self.ndim} of the extended shape must match the"
                 f"shape of the CompositeSpec in CompositeSpec.extend."
             )
+        try:
+            device = self.device
+        except RuntimeError:
+            device = self._device
         out = CompositeSpec(
             {
                 key: value.expand((*shape, *value.shape[self.ndim :]))
                 for key, value in tuple(self.items())
             },
             shape=shape,
-            device=self._device,
+            device=device,
         )
         return out
 
