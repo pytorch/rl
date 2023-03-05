@@ -589,7 +589,9 @@ for j, data in enumerate(data_collector):
         logs_exp1["grad_vals"].append(float(gv))
         logs_exp1["losses"].append(error.item())
         logs_exp1["values"].append(action_value.mean().item())
-        logs_exp1["traj_count"].append(prev_traj_count + data["next", "done"].sum().item())
+        logs_exp1["traj_count"].append(
+            prev_traj_count + data["next", "done"].sum().item()
+        )
         prev_traj_count = logs_exp1["traj_count"][-1]
 
         if j % 10 == 0:
@@ -791,8 +793,8 @@ for j, data in enumerate(data_collector):
     else:
         logs_exp2["frames"].append(current_frames)
 
-    if data["next","done"].any():
-        done = data["next","done"].squeeze(-1)
+    if data["next", "done"].any():
+        done = data["next", "done"].squeeze(-1)
         logs_exp2["traj_lengths"].append(
             data["collector", "step_count"][done].float().mean().item()
         )
@@ -846,7 +848,9 @@ for j, data in enumerate(data_collector):
 
         logs_exp2["losses"].append(error.item())
         logs_exp2["values"].append(action_value.mean().item())
-        logs_exp2["traj_count"].append(prev_traj_count + data["next", "done"].sum().item())
+        logs_exp2["traj_count"].append(
+            prev_traj_count + data["next", "done"].sum().item()
+        )
         prev_traj_count = logs_exp2["traj_count"][-1]
         if j % 10 == 0:
             with set_exploration_mode("mode"), torch.no_grad():

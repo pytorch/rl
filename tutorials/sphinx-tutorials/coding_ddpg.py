@@ -854,7 +854,12 @@ for i, tensordict in enumerate(collector):
                 replay_buffer.update_tensordict_priority(sampled_tensordict)
 
     rewards.append(
-        (i, tensordict["next", "reward"].mean().item() / norm_factor_training / frame_skip)
+        (
+            i,
+            tensordict["next", "reward"].mean().item()
+            / norm_factor_training
+            / frame_skip,
+        )
     )
     td_record = recorder(None)
     if td_record is not None:
@@ -1114,7 +1119,12 @@ for i, tensordict in enumerate(collector):
                 replay_buffer.update_tensordict_priority(sampled_tensordict)
 
     rewards.append(
-        (i, tensordict["next", "reward"].mean().item() / norm_factor_training / frame_skip)
+        (
+            i,
+            tensordict["next", "reward"].mean().item()
+            / norm_factor_training
+            / frame_skip,
+        )
     )
     td_record = recorder(None)
     if td_record is not None:
