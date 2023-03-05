@@ -9,7 +9,12 @@ import sys
 import numpy as np
 import pytest
 import torch
-from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
+from _utils_internal import (
+    generate_seeds,
+    get_available_devices,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+)
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
@@ -152,14 +157,17 @@ def _is_consistent_device_type(
     reason="Windows Access Violation in torch.multiprocessing / BrokenPipeError in multiprocessing.connection",
 )
 @pytest.mark.parametrize("num_env", [1, 2])
-@pytest.mark.parametrize("device", ["cuda", "cpu", None])
-@pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
-@pytest.mark.parametrize("storing_device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("device", [*get_available_devices(), None])
+@pytest.mark.parametrize("policy_device", [*get_available_devices(), None])
+@pytest.mark.parametrize("storing_device", [*get_available_devices(), None])
 def test_output_device_consistency(
     num_env, device, policy_device, storing_device, seed=40
 ):
+    device_type = None if device is None else device.type
+    policy_device_type = None if policy_device_type is None else policy_device.type
+    storing_device_type = None if storing_device_type is None else storing_device.type
     if (
-        device == "cuda" or policy_device == "cuda" or storing_device == "cuda"
+        "cuda" in (device_type, policy_device_type, storing_device_type)
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
 
@@ -208,7 +216,7 @@ def test_output_device_consistency(
     )
     for _, d in enumerate(collector):
         assert _is_consistent_device_type(
-            device, policy_device, storing_device, d.device.type
+            device_type, policy_device_type, storing_device_type, d.device.type
         )
         break
 
@@ -228,7 +236,7 @@ def test_output_device_consistency(
 
     for _, d in enumerate(ccollector):
         assert _is_consistent_device_type(
-            device, policy_device, storing_device, d.device.type
+            device_type, policy_device_type, storing_device_type, d.device.type
         )
         break
 

@@ -1756,9 +1756,15 @@ class CompositeSpec(TensorSpec):
             for k, item in argdict.items():
                 if item is None:
                     continue
-                if self._device is None:
+                if self._device is None and hasattr(item, "device"):
                     self._device = item.device
                 self[k] = item
+                try:
+                    if self._device is None:
+                        self._device = self[k].device
+                except RuntimeError:
+                    # the item has no device
+                    pass
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -1806,6 +1812,13 @@ class CompositeSpec(TensorSpec):
         if key in {"shape", "device", "dtype", "space"}:
             raise AttributeError(f"CompositeSpec[{key}] cannot be set")
         try:
+            if isinstance(value, dict):
+                # if passing a dictionary, it must be converted to a spec first
+                try:
+                    device = self.device
+                except RuntimeError:
+                    device = None
+                value = CompositeSpec(value, device=device, shape=self.shape)
             if value is not None and value.device != self.device:
                 raise RuntimeError(
                     f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "

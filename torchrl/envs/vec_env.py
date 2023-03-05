@@ -348,45 +348,50 @@ class _BatchedEnv(EnvBase):
             self.env_input_keys = sorted(
                 self.input_spec.keys(nested_keys=True), key=_sort_keys
             )
-            self.env_output_keys = []
-            self.env_obs_keys = []
-            for key in self.output_spec["observation"].keys():
-                if isinstance(key, str):
-                    key = (key,)
-                self.env_output_keys.append(("next", *key))
-                self.env_obs_keys.append(key)
-            self.env_output_keys.append(("next", "reward"))
-            self.env_output_keys.append(("next", "done"))
+            env_output_keys = sorted(self.output_spec.keys(), key=_sort_keys)
+            self.env_output_keys = [
+                ("next", *key) if isinstance(key, tuple) else ("next", key)
+                for key in env_output_keys
+            ]
+            self.env_obs_keys = sorted(
+                CompositeSpec(observation=self.observation_spec).keys(), key=_sort_keys
+            )
         else:
             env_input_keys = set()
+            env_obs_keys = set()
+            env_output_keys = set()
             for meta_data in self.meta_data:
                 env_input_keys = env_input_keys.union(
                     meta_data.specs["input_spec"].keys()
                 )
-            env_output_keys = set()
-            env_obs_keys = set()
-            for meta_data in self.meta_data:
                 env_obs_keys = env_obs_keys.union(
-                    key for key in meta_data.specs["output_spec"]["observation"].keys()
+                    sorted(
+                        CompositeSpec(
+                            observation=meta_data.specs["output_spec"]["observation"]
+                        ).keys(),
+                        key=_sort_keys,
+                    )
+                )
+                _env_output_keys = sorted(
+                    meta_data.specs["output_spec"].keys(), key=_sort_keys
                 )
                 env_output_keys = env_output_keys.union(
-                    ("next", key) if isinstance(key, str) else ("next", *key)
-                    for key in meta_data.specs["output_spec"]["observation"].keys()
+                    [
+                        ("next", *key) if isinstance(key, tuple) else ("next", key)
+                        for key in _env_output_keys
+                    ]
                 )
-            env_output_keys = env_output_keys.union(
-                {("next", "reward"), ("next", "done")}
-            )
-            self.env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
+
             self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
+            self.env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
             self.env_output_keys = sorted(env_output_keys, key=_sort_keys)
         self._selected_keys = (
             set(self.env_output_keys)
             .union(self.env_input_keys)
             .union(self.env_obs_keys)
         )
-        self._selected_keys.add("done")
 
-        self._selected_reset_keys = self.env_obs_keys + ["done"]
+        self._selected_reset_keys = self.env_obs_keys
         self._selected_step_keys = self.env_output_keys
 
         if self._single_task:
@@ -826,7 +831,7 @@ class ParallelEnv(_BatchedEnv):
             if cmd_in != "reset_obs":
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
         check_count = 0
-        while self.shared_tensordict_parent.get("done")[_reset].any():
+        while self.shared_tensordict_parent.get(("next", "done"))[_reset].any():
             if check_count == 4:
                 raise RuntimeError(
                     "Envs have just been reset bur env is done on specified '_reset' dimensions."

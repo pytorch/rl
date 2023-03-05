@@ -173,9 +173,6 @@ class GymLikeEnv(_EnvWrapper):
                 # naming it 'state' will result in envs that have a different name for the state vector
                 # when queried with and without pixels
                 observations["observation"] = observations.pop("state")
-        if not isinstance(observations, (TensorDict, dict)):
-            (key,) = itertools.islice(self.observation_spec.keys(), 1)
-            observations = {key: observations}
         observations = self.observation_spec.encode(observations)
         return observations
 
@@ -228,11 +225,11 @@ class GymLikeEnv(_EnvWrapper):
         done = self._to_tensor(done, dtype=torch.bool)
 
         tensordict_out = TensorDict(
-            obs_dict, batch_size=tensordict.batch_size, device=self.device
+            {"observation": obs_dict, "reward": reward, "done": done},
+            batch_size=tensordict.batch_size,
+            device=self.device,
         )
 
-        tensordict_out.set("reward", reward)
-        tensordict_out.set("done", done)
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
 
@@ -250,7 +247,7 @@ class GymLikeEnv(_EnvWrapper):
             info = other
 
         tensordict_out = TensorDict(
-            source=self.read_obs(obs),
+            source={"observation": self.read_obs(obs)},
             batch_size=self.batch_size,
             device=self.device,
         )
@@ -262,10 +259,6 @@ class GymLikeEnv(_EnvWrapper):
                 if key not in tensordict_out.keys():
                     tensordict_out[key] = item.zero()
 
-        tensordict_out.setdefault(
-            "done",
-            self.done_spec.zero(),
-        )
         return tensordict_out
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:

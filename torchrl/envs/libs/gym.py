@@ -344,11 +344,6 @@ class GymWrapper(GymLikeEnv):
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
-        if not isinstance(observation_spec, CompositeSpec):
-            if self.from_pixels:
-                observation_spec = CompositeSpec(pixels=observation_spec)
-            else:
-                observation_spec = CompositeSpec(observation=observation_spec)
         self.observation_spec = observation_spec
         self.reward_spec = UnboundedContinuousTensorSpec(
             shape=[1],

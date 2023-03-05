@@ -337,12 +337,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @observation_spec.setter
     def observation_spec(self, value: TensorSpec) -> None:
-        if not isinstance(value, CompositeSpec):
-            raise TypeError("The type of an observation_spec must be Composite.")
-        elif value.shape[: len(self.batch_size)] != self.batch_size:
-            raise ValueError(
-                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
-            )
         if value.shape[: len(self.batch_size)] != self.batch_size:
             raise ValueError(
                 f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
@@ -484,33 +478,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             _reset = None
 
         tensordict_reset = self._reset(tensordict, **kwargs)
-        done = tensordict_reset.get("done", None)
-        if done is not None:
-            # TODO: refactor this using done_spec
-            # unsqueeze done if needed
-            # the input tensordict may have more leading dimensions than the batch_size
-            # e.g. in model-based contexts.
-            batch_size = self.batch_size
-            dims = len(batch_size)
-            leading_batch_size = (
-                tensordict_reset.batch_size[:-dims] if dims else tensordict_reset.shape
-            )
-            expected_done_shape = torch.Size([*leading_batch_size, *batch_size, 1])
-            actual_done_shape = done
-            if actual_done_shape != expected_done_shape:
-                done = done.view(expected_done_shape)
-                tensordict_reset.set("done", done)
-        else:
-            # TODO: refactor this using done_spec
-            tensordict_reset.set(
-                "done",
-                torch.zeros(
-                    *tensordict_reset.batch_size,
-                    1,
-                    dtype=torch.bool,
-                    device=self.device,
-                ),
-            )
 
         if tensordict_reset.device != self.device:
             tensordict_reset = tensordict_reset.to(self.device)
@@ -525,12 +492,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
 
-        if (_reset is None and tensordict_reset.get("done").any()) or (
-            _reset is not None and tensordict_reset.get("done")[_reset].any()
-        ):
-            raise RuntimeError(
-                f"Env {self} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
-            )
         if tensordict is not None:
             tensordict.update(tensordict_reset)
         else:
@@ -813,7 +774,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         fake_input = input_spec.zero()
         # the input and output key may match, but the output prevails
         # Hence we generate the input, and override using the output
-        fake_in_out = fake_input.clone().update(fake_obs)
+        fake_in_out = fake_input.update({"observation": fake_obs})
         reward_spec = self.reward_spec
         done_spec = self.done_spec
         fake_reward = reward_spec.zero()
@@ -828,8 +789,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         )
         fake_td = TensorDict(
             {
-                "observation": fake_in_out,
                 "next": next_output,
+                **fake_in_out,
             },
             batch_size=self.batch_size,
             device=self.device,

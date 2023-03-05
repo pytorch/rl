@@ -572,9 +572,9 @@ class SyncDataCollector(_DataCollector):
                 break
 
     def _step_and_maybe_reset(self) -> None:
+        done = self._tensordict.get(("next", "done"))
         self._tensordict = step_mdp(self._tensordict)
 
-        done = self._tensordict.get("done")
         if not self.reset_when_done:
             done = torch.zeros_like(done)
         steps = self._tensordict.get(("collector", "step_count"))

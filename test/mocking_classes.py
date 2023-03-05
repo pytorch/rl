@@ -180,9 +180,7 @@ class MockSerialEnv(EnvBase):
         n = torch.tensor(
             [self.counter], device=self.device, dtype=torch.get_default_dtype()
         )
-        done = self.counter >= self.max_val
-        done = torch.tensor([done], dtype=torch.bool, device=self.device)
-        return TensorDict({"done": done, "observation": n}, [])
+        return TensorDict({"observation": n}, [])
 
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
         return self.step(tensordict)
@@ -321,15 +319,8 @@ class MockBatchedLockedEnv(EnvBase):
             .to(self.device)
             .to(torch.get_default_dtype())
         )
-        done = self.counter >= self.max_val
-        done = torch.full(
-            (*leading_batch_size, *batch_size, 1),
-            done,
-            dtype=torch.bool,
-            device=self.device,
-        )
         return TensorDict(
-            {"reward": n, "done": done, "observation": n},
+            {"reward": n, "observation": n},
             [
                 *leading_batch_size,
                 *batch_size,
@@ -397,8 +388,10 @@ class DiscreteActionVecMockEnv(_MockEnv):
         if input_spec is None:
             cls._out_key = "observation_orig"
             input_spec = CompositeSpec(
-                **{
-                    cls._out_key: observation_spec["observation"],
+                {
+                    "observation": {
+                        cls._out_key: observation_spec["observation"],
+                    },
                     "action": action_spec,
                 }
             )
@@ -424,8 +417,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
             tensordict = TensorDict({}, self.batch_size, device=self.device)
         tensordict = tensordict.select().set(self.out_key, self._get_out_obs(state))
         tensordict = tensordict.set(self._out_key, self._get_out_obs(state))
-        tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
-        return tensordict
+        return tensordict.select().set("observation", tensordict)
 
     def _step(
         self,
@@ -437,11 +429,14 @@ class DiscreteActionVecMockEnv(_MockEnv):
         if not self.categorical_action_encoding:
             assert (a.sum(-1) == 1).all()
 
-        obs = self._get_in_obs(tensordict.get(self._out_key)) + a / self.maxstep
+        obs = (
+            self._get_in_obs(tensordict.get(("observation", self._out_key)))
+            + a / self.maxstep
+        )
         tensordict = tensordict.select()  # empty tensordict
 
-        tensordict.set(self.out_key, self._get_out_obs(obs))
-        tensordict.set(self._out_key, self._get_out_obs(obs))
+        tensordict.set(("observation", self.out_key), self._get_out_obs(obs))
+        tensordict.set(("observation", self._out_key), self._get_out_obs(obs))
 
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
         reward = done.any(-1).unsqueeze(-1)
@@ -495,8 +490,10 @@ class ContinuousActionVecMockEnv(_MockEnv):
         if input_spec is None:
             cls._out_key = "observation_orig"
             input_spec = CompositeSpec(
-                **{
-                    cls._out_key: observation_spec["observation"],
+                {
+                    "observation": {
+                        cls._out_key: observation_spec["observation"],
+                    },
                     "action": action_spec,
                 },
                 shape=batch_size,
@@ -522,10 +519,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         if tensordict is None:
             tensordict = TensorDict({}, self.batch_size, device=self.device)
         tensordict = tensordict.select()
-        tensordict.update(self.observation_spec.rand())
-        # tensordict.set("next_" + self.out_key, self._get_out_obs(state))
-        # tensordict.set("next_" + self._out_key, self._get_out_obs(state))
-        tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
+        tensordict.set("observation", self.observation_spec.rand())
         return tensordict
 
     def _step(
@@ -536,11 +530,13 @@ class ContinuousActionVecMockEnv(_MockEnv):
         tensordict = tensordict.to(self.device)
         a = tensordict.get("action")
 
-        obs = self._obs_step(self._get_in_obs(tensordict.get(self._out_key)), a)
+        obs = self._obs_step(
+            self._get_in_obs(tensordict.get(("observation", self._out_key))), a
+        )
         tensordict = tensordict.select()  # empty tensordict
 
-        tensordict.set(self.out_key, self._get_out_obs(obs))
-        tensordict.set(self._out_key, self._get_out_obs(obs))
+        tensordict.set(("observation", self.out_key), self._get_out_obs(obs))
+        tensordict.set(("observation", self._out_key), self._get_out_obs(obs))
 
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
         while done.shape != tensordict.shape:
@@ -555,7 +551,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
 
 
 class DiscreteActionVecPolicy:
-    in_keys = ["observation"]
+    in_keys = [("observation", "observation")]
     out_keys = ["action"]
 
     def _get_in_obs(self, tensordict):
@@ -607,8 +603,10 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
         if input_spec is None:
             cls._out_key = "pixels_orig"
             input_spec = CompositeSpec(
-                **{
-                    cls._out_key: observation_spec["pixels_orig"],
+                {
+                    "observation": {
+                        cls._out_key: observation_spec["pixels_orig"],
+                    },
                     "action": action_spec,
                 },
                 shape=batch_size,
@@ -667,8 +665,10 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
         if input_spec is None:
             cls._out_key = "pixels_orig"
             input_spec = CompositeSpec(
-                **{
-                    cls._out_key: observation_spec["pixels_orig"],
+                {
+                    "observation": {
+                        cls._out_key: observation_spec["pixels_orig"],
+                    },
                     "action": action_spec,
                 },
                 shape=batch_size,
@@ -736,7 +736,10 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
         if input_spec is None:
             cls._out_key = "pixels_orig"
             input_spec = CompositeSpec(
-                **{cls._out_key: observation_spec["pixels"], "action": action_spec},
+                {
+                    "observation": {cls._out_key: observation_spec["pixels"]},
+                    "action": action_spec,
+                },
                 shape=batch_size,
             )
         return super().__new__(
@@ -871,7 +874,9 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         td = TensorDict(
             {
-                "hidden_observation": self.input_spec["hidden_observation"].rand(),
+                "observation": {
+                    "hidden_observation": self.input_spec["hidden_observation"].rand(),
+                }
             },
             batch_size=self.batch_size,
             device=self.device,
@@ -936,7 +941,6 @@ class CountingEnv(EnvBase):
         return TensorDict(
             source={
                 "observation": self.count.clone(),
-                "done": self.count > self.max_steps,
             },
             batch_size=self.batch_size,
             device=self.device,
@@ -1021,7 +1025,6 @@ class CountingBatchedEnv(EnvBase):
         return TensorDict(
             source={
                 "observation": self.count.clone(),
-                "done": self.count > self.max_steps.unsqueeze(-1),
             },
             batch_size=self.batch_size,
             device=self.device,
