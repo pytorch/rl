@@ -25,7 +25,7 @@ def step_mdp(
     next_tensordict: TensorDictBase = None,
     keep_other: bool = True,
     exclude_reward: bool = True,
-    exclude_done: bool = False,
+    exclude_done: bool = True,
     exclude_action: bool = True,
     _run_check: bool = True,
 ) -> TensorDictBase:
@@ -43,11 +43,7 @@ def step_mdp(
             Default is ``True``.
         exclude_done (bool, optional): if True, the :obj:`"done"` key will be discarded
             from the resulting tensordict.
-            Default is ``False`` such that one can keep track of the done state
-            at t and t+1.
-            If ``True``, if a ``"done"`` key is present in the root TensorDict
-            it will be kept in the resulting tensordict (ie this argument only
-            affects the ``("next", "done")`` key).
+            Default is ``True``.
         exclude_action (bool, optional): if True, the :obj:`"action"` key will be discarded
             from the resulting tensordict.
             Default is ``True``.

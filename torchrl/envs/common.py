@@ -715,8 +715,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 tensordict,
                 keep_other=True,
                 exclude_action=False,
-                exclude_done=False,
-                exclude_reward=True,
             )
             if not break_when_any_done and tensordict.get("done").any():
                 _reset = tensordict.get(
@@ -820,18 +818,21 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         done_spec = self.done_spec
         fake_reward = reward_spec.zero()
         fake_done = done_spec.zero()
-        next_output = fake_obs.clone()
-        next_output["reward"] = fake_reward
-        next_output["done"] = fake_done
+        next_output = TensorDict(
+            {
+                "observation": fake_obs.clone(),
+                "reward": fake_reward,
+                "done": fake_done,
+            },
+            batch_size=self.batch_size,
+        )
         fake_td = TensorDict(
             {
-                **fake_in_out,
-                "done": fake_done.clone(),
+                "observation": fake_in_out,
                 "next": next_output,
             },
             batch_size=self.batch_size,
             device=self.device,
-            _run_checks=True,  # this method should not be run very often. This facilitates debugging
         )
         return fake_td
 
