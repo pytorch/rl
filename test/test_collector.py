@@ -96,7 +96,7 @@ class ParametricPolicy(Actor):
     def __init__(self):
         super().__init__(
             ParametricPolicyNet(),
-            in_keys=["observation", "observation"],
+            in_keys=[("observation", "observation")],
         )
 
 
