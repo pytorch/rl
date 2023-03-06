@@ -690,24 +690,21 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = self.step(tensordict)
 
             tensordicts.append(tensordict.clone())
-            if (
-                break_when_any_done and tensordict.get(("next", "done")).any()
-            ) or i == max_steps - 1:
+            done = tensordict.get(("next", "done"))
+            truncated = tensordict.get(
+                ("next", "truncated"),
+                torch.zeros((), device=done.device, dtype=torch.bool),
+            )
+            done = done | truncated
+            if (break_when_any_done and done.any()) or i == max_steps - 1:
                 break
             tensordict = step_mdp(
                 tensordict,
                 keep_other=True,
                 exclude_action=False,
             )
-            if not break_when_any_done and tensordict.get("done").any():
-                _reset = tensordict.get(
-                    "done",
-                    torch.ones(
-                        *tensordict.shape,
-                        1,
-                        dtype=torch.bool,
-                    ),
-                ).squeeze(-1)
+            if not break_when_any_done and done.any():
+                _reset = done.squeeze(-1)
                 tensordict.set("_reset", _reset)
                 self.reset(tensordict)
 

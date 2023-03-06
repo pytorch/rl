@@ -2965,18 +2965,25 @@ class StepCounter(Transform):
     """Counts the steps from a reset and sets the done state to True after a certain number of steps.
 
     Args:
-        max_steps (:obj:`int`, optional): a positive integer that indicates the maximum number of steps to take before
-        setting the done state to True. If set to None (the default value), the environment will run indefinitely until
-        the done state is manually set by the user or by the environment itself. However, the step count will still be
-        incremented on each call to step() into the `step_count` attribute.
+        max_steps (int, optional): a positive integer that indicates the
+            maximum number of steps to take before setting the ``truncated_key``
+            entry to ``True``.
+            However, the step count will still be
+            incremented on each call to step() into the `step_count` attribute.
+        truncated_key (str, optional): the key where the truncated key should
+            be written. Defaults to ``"truncated"``, which is recognised by
+            data collectors as a reset signal.
     """
 
     invertible = False
 
-    def __init__(self, max_steps: Optional[int] = None):
+    def __init__(
+        self, max_steps: Optional[int] = None, truncated_key: str = "truncated"
+    ):
         if max_steps is not None and max_steps < 1:
             raise ValueError("max_steps should have a value greater or equal to one.")
         self.max_steps = max_steps
+        self.truncated_key = truncated_key
         super().__init__([])
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -3007,11 +3014,14 @@ class StepCounter(Transform):
             "step_count",
             step_count,
         )
+        if self.max_steps is not None:
+            truncated = (step_count >= self.max_steps).unsqueeze(-1)
+        else:
+            truncated = torch.zeros_like(tensordict.get(("next", "done")))
+        tensordict[self.truncated_key] = truncated
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # We need to re-write the _step and not the _call since we look at "step_count"
-        # at `t` and update the value at `t+1`. _call only has access to info from `t+1`.
         tensordict = tensordict.clone(False)
         step_count = tensordict.get(
             "step_count",
@@ -3019,9 +3029,10 @@ class StepCounter(Transform):
         next_step_count = step_count + 1
         tensordict.set(("next", "step_count"), next_step_count)
         if self.max_steps is not None:
-            done = tensordict.get(("next", "done"))
-            done = done | (next_step_count >= self.max_steps).unsqueeze(-1)
-            tensordict.set_(("next", "done"), done)
+            truncated = (next_step_count >= self.max_steps).unsqueeze(-1)
+        else:
+            truncated = torch.zeros_like(tensordict.get(("next", "done")))
+        tensordict.set(("next", self.truncated_key), truncated)
         return tensordict
 
     def transform_observation_spec(
@@ -3039,6 +3050,8 @@ class StepCounter(Transform):
         observation_spec["step_count"].space.minimum = (
             observation_spec["step_count"].space.minimum * 0
         )
+        if self.truncated_key != "done":
+            observation_spec[self.truncated_key] = self.parent.done_spec.clone()
         return observation_spec
 
     def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:

@@ -35,9 +35,11 @@ def _get_terminal(
     terminal = done.clone()
     terminal[:, -1] = done[:, -1] | (done.sum(1) != 1)
     if not (terminal.sum(1) == 1).all():
-        raise RuntimeError(f"Got more or less than one terminal state per "
-                           f"episode (range of number of done: "
-                           f"{terminal.sum(1).min()} - {terminal.sum(1).max()}).")
+        raise RuntimeError(
+            f"Got more or less than one terminal state per "
+            f"episode (range of number of done: "
+            f"{terminal.sum(1).min()} - {terminal.sum(1).max()})."
+        )
     post_terminal = terminal.cumsum(1).cumsum(1) >= 2
     post_terminal = torch.cat(
         [

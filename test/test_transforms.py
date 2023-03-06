@@ -1065,7 +1065,7 @@ class TestStepCounter(TransformBase):
 
         if max_steps is not None:
             assert torch.all(td.get("step_count") == max_steps)
-            assert torch.all(td.get("done"))
+            assert torch.all(td.get("truncated"))
         td = step_counter.reset(td)
         if reset_workers:
             assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
@@ -1118,7 +1118,7 @@ class TestStepCounter(TransformBase):
 
         if max_steps is not None:
             assert torch.all(td.get("step_count") == max_steps)
-            assert torch.all(td.get("done"))
+            assert torch.all(td.get("truncated"))
         td = step_counter.reset(td)
         if reset_workers:
             assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
