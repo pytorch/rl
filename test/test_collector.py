@@ -434,8 +434,7 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
     for traj in d.unbind(0):
         assert traj["collector", "traj_ids"].unique().numel() == 1
         assert (
-            traj["next", "step_count"][1:] - traj["next", "step_count"][:-1]
-            == 1
+            traj["next", "step_count"][1:] - traj["next", "step_count"][:-1] == 1
         ).all()
 
     del collector
@@ -706,7 +705,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         create_env_kwargs={"seed": seed},
         policy=policy,
         frames_per_batch=10 * num_env,
-        max_frames_per_traj=20,
+        max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device="cpu",
         seed=seed,

@@ -147,10 +147,7 @@ class TestSplits:
         assert (
             split_trajs.shape[0] == split_trajs.get(("collector", "traj_ids")).max() + 1
         )
-        assert (
-            split_trajs.shape[1]
-            == split_trajs.get("step_count").max() + 1
-        )
+        assert split_trajs.shape[1] == split_trajs.get("step_count").max() + 1
 
         assert split_trajs.get(("collector", "mask")).sum() == num_workers * traj_len
 

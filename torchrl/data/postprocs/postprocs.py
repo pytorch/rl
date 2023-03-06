@@ -173,7 +173,9 @@ class MultiStep(nn.Module):
             raise RuntimeError("Expected a tensordict with B x T x ... dimensions")
 
         done = tensordict.get(("next", "done"))
-        truncated = tensordict.get(("next", "truncated"), torch.zeros((), dtype=done.dtype, device=done.device))
+        truncated = tensordict.get(
+            ("next", "truncated"), torch.zeros((), dtype=done.dtype, device=done.device)
+        )
         done = done | truncated
         if ("collector", "mask") in tensordict.keys(True):
             mask = tensordict.get(("collector", "mask")).view_as(done)
