@@ -572,12 +572,14 @@ class SyncDataCollector(_DataCollector):
                 break
 
     def _step_and_maybe_reset(self) -> None:
+        done = self._tensordict.get(("next", "done"))
+        steps = self._tensordict.get(("collector", "step_count"))
+        traj_ids = self._tensordict.get(("collector", "traj_ids")).clone()
+
         self._tensordict = step_mdp(self._tensordict)
 
-        done = self._tensordict.get("done")
         if not self.reset_when_done:
             done = torch.zeros_like(done)
-        steps = self._tensordict.get(("collector", "step_count"))
         done_or_terminated = done.squeeze(-1) | (steps == self.max_frames_per_traj)
         # keep track of envs that have been done at least once
         if self._has_been_done is None:
@@ -594,8 +596,6 @@ class SyncDataCollector(_DataCollector):
             done_or_terminated = done_or_terminated | _reset
 
         if done_or_terminated.any():
-
-            traj_ids = self._tensordict.get(("collector", "traj_ids")).clone()
             steps = steps.clone()
             if len(self.env.batch_size):
                 self._tensordict.masked_fill_(done_or_terminated, 0)
@@ -605,7 +605,7 @@ class SyncDataCollector(_DataCollector):
                 _reset = None
                 self._tensordict.zero_()
             self.env.reset(self._tensordict)
-
+            done = self._tensordict.get("done")
             if (_reset is None and done.any()) or (
                 _reset is not None and done[_reset].any()
             ):
