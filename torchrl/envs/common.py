@@ -584,6 +584,36 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"got {tensordict.batch_size} and {self.batch_size}"
             )
 
+    def rand_action(self, tensordict: Optional[TensorDictBase] = None):
+        """Performs a random action given the action_spec attribute.
+
+        Args:
+            tensordict (TensorDictBase, optional): tensordict where the resulting action should be written.
+
+        Returns:
+            a tensordict object with the "action" entry updated with a random
+            sample from the action-spec.
+
+        """
+        shape = torch.Size([])
+        if tensordict is None:
+            tensordict = TensorDict(
+                {}, device=self.device, batch_size=self.batch_size, _run_checks=False
+            )
+
+        if not self.batch_locked and not self.batch_size:
+            shape = tensordict.shape
+        elif not self.batch_locked and tensordict.shape != self.batch_size:
+            raise RuntimeError(
+                "The input tensordict and the env have a different batch size: "
+                f"env.batch_size={self.batch_size} and tensordict.batch_size={tensordict.shape}. "
+                f"Non batch-locked environment require the env batch-size to be either empty or to"
+                f" match the tensordict one."
+            )
+        action = self.action_spec.rand(shape)
+        tensordict.set("action", action)
+        return tensordict
+
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
         """Performs a random step in the environment given the action_spec attribute.
 
@@ -595,22 +625,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             be stored with the "action" key.
 
         """
-        shape = torch.Size([])
-        if tensordict is None:
-            tensordict = TensorDict(
-                {}, device=self.device, batch_size=self.batch_size, _run_checks=False
-            )
-        elif not self.batch_locked and not self.batch_size:
-            shape = tensordict.shape
-        elif not self.batch_locked and tensordict.shape != self.batch_size:
-            raise RuntimeError(
-                "The input tensordict and the env have a different batch size: "
-                f"env.batch_size={self.batch_size} and tensordict.batch_size={tensordict.shape}. "
-                f"Non batch-locked environment require the env batch-size to be either empty or to"
-                f" match the tensordict one."
-            )
-        action = self.action_spec.rand(shape)
-        tensordict.set("action", action)
+        tensordict = self.rand_action(tensordict)
         return self.step(tensordict)
 
     @property
@@ -680,7 +695,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if policy is None:
 
             def policy(td):
-                self.rand_step(td)
+                self.rand_action(td)
                 return td
 
         tensordicts = []
@@ -796,16 +811,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def fake_tensordict(self) -> TensorDictBase:
         """Returns a fake tensordict with key-value pairs that match in shape, device and dtype what can be expected during an environment rollout."""
         input_spec = self.input_spec
-        fake_input = input_spec.zero()
         observation_spec = self.observation_spec
         fake_obs = observation_spec.zero()
+        fake_input = input_spec.zero()
+        # the input and output key may match, but the output prevails
+        # Hence we generate the input, and override using the output
+        fake_in_out = fake_input.clone().update(fake_obs)
         reward_spec = self.reward_spec
         fake_reward = reward_spec.zero()
         fake_td = TensorDict(
             {
-                **fake_obs,
+                **fake_in_out,
                 "next": fake_obs.clone(),
-                **fake_input,
                 "reward": fake_reward,
                 "done": torch.zeros(
                     (*self.batch_size, 1), dtype=torch.bool, device=self.device
@@ -813,7 +830,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             },
             batch_size=self.batch_size,
             device=self.device,
-            _run_checks=True,  # this method should not be run very often. This facilitates debugging
         )
         return fake_td
 

@@ -343,8 +343,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
             within TensorDicts added to this ReplayBuffer.
     """
 
-    def __init__(self, priority_key: str = "td_error", **kw) -> None:
-        super().__init__(**kw)
+    def __init__(self, *args, priority_key: str = "td_error", **kw) -> None:
+        super().__init__(*args, **kw)
         self.priority_key = priority_key
 
     def _get_priority(self, tensordict: TensorDictBase) -> Optional[torch.Tensor]:

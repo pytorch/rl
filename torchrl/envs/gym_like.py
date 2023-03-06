@@ -194,6 +194,7 @@ class GymLikeEnv(_EnvWrapper):
             if len(info) == 2:
                 # gym 0.26
                 truncation, info = info
+                done = done | truncation
             elif len(info) == 1:
                 info = info[0]
             elif len(info) == 0:
@@ -260,7 +261,7 @@ class GymLikeEnv(_EnvWrapper):
             for key, item in self.observation_spec.items():
                 if key not in tensordict_out.keys():
                     tensordict_out[key] = item.zero()
-        tensordict_out.set_default(
+        tensordict_out.setdefault(
             "done",
             torch.zeros(*self.batch_size, 1, dtype=torch.bool, device=self.device),
         )
