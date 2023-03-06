@@ -537,7 +537,7 @@ for j, data in enumerate(data_collector):
     if data["next", "done"].any():
         done = data["next", "done"].squeeze(-1)
         logs_exp1["traj_lengths"].append(
-            data["collector", "step_count"][done].float().mean().item()
+            data["next", "step_count"][done].float().mean().item()
         )
 
     # check that we have enough data to start training
@@ -796,7 +796,7 @@ for j, data in enumerate(data_collector):
     if data["next", "done"].any():
         done = data["next", "done"].squeeze(-1)
         logs_exp2["traj_lengths"].append(
-            data["collector", "step_count"][done].float().mean().item()
+            data["next", "step_count"][done].float().mean().item()
         )
 
     if sum(logs_exp2["frames"]) > init_random_frames:
