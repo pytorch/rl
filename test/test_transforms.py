@@ -980,7 +980,7 @@ class TestR3M(TransformBase):
             list(transformed_env.input_spec.keys())
             + list(transformed_env.observation_spec.keys())
             + [("next", key) for key in transformed_env.observation_spec.keys()]
-            + [("next", "reward"), ("next", "done"), "done", "next"]
+            + [("next", "reward"), ("next", "done"), "done", "reward", "next"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 
@@ -5469,7 +5469,7 @@ class TestVIP(TransformBase):
             list(transformed_env.input_spec.keys())
             + list(transformed_env.observation_spec.keys())
             + [("next", key) for key in transformed_env.observation_spec.keys()]
-            + [("next", "reward"), ("next", "done"), "done", "next"]
+            + [("next", "reward"), ("next", "done"), "done", "reward", "next"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 
