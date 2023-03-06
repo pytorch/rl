@@ -5210,7 +5210,7 @@ class TestVIP(TransformBase):
         transformed_env = TransformedEnv(base_env, vip)
         td = transformed_env.reset()
         assert td.device == device
-        exp_keys = {"vec", "done", "pixels_orig"}
+        exp_keys = {"vec", "done", "pixels_orig", "reward"}
         if tensor_pixels_key:
             exp_keys.add(tensor_pixels_key[0])
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
