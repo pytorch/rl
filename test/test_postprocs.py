@@ -117,7 +117,7 @@ class TestSplits:
                 source={
                     ("collector", "traj_ids"): traj_ids,
                     "a": traj_ids.clone().unsqueeze(-1),
-                    ("collector", "step_count"): step_count,
+                    "step_count": step_count,
                     "workers": workers,
                     "done": done0,
                     ("next", "done"): done,
@@ -149,7 +149,7 @@ class TestSplits:
         )
         assert (
             split_trajs.shape[1]
-            == split_trajs.get(("collector", "step_count")).max() + 1
+            == split_trajs.get("step_count").max() + 1
         )
 
         assert split_trajs.get(("collector", "mask")).sum() == num_workers * traj_len

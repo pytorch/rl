@@ -218,7 +218,8 @@ def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
     for horizon in [20, 30, 40]:
         envs.append(
             lambda horizon=horizon: TransformedEnv(
-                GymEnv(env_name, frame_skip=frame_skip), StepCounter(horizon, truncated_key=truncated_key)
+                GymEnv(env_name, frame_skip=frame_skip),
+                StepCounter(horizon, truncated_key=truncated_key),
             )
         )
     if parallel:
@@ -228,7 +229,9 @@ def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
     env.set_seed(100)
     out = env.rollout(100, break_when_any_done=False)
     assert out.shape == torch.Size([3, 100])
-    assert (out["next", truncated_key].squeeze().sum(-1) == torch.tensor([5, 3, 2])).all()
+    assert (
+        out["next", truncated_key].squeeze().sum(-1) == torch.tensor([5, 3, 2])
+    ).all()
 
 
 class TestModelBasedEnvBase:

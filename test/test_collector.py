@@ -1004,7 +1004,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         ("next", "reward"),
         "next",
         "observation",
-        ("collector", "step_count"),
+        "step_count",
         ("collector", "traj_ids"),
     }
     b = next(iter(collector))
