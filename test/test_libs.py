@@ -352,7 +352,6 @@ class TestCollectorLib:
             devices=[device, device],
             storing_devices=[device, device],
             update_at_each_batch=False,
-            init_with_lag=False,
             exploration_mode="random",
         )
         for i, _data in enumerate(collector):
@@ -400,7 +399,9 @@ class TestJumanji:
             np.random.seed(0)
             final_seed.append(env.set_seed(0))
             tdreset.append(env.reset())
-            tdrollout.append(env.rollout(max_steps=50))
+            rollout = env.rollout(max_steps=50)
+            print("r", rollout)
+            tdrollout.append(rollout)
             env.close()
             del env
         assert final_seed[0] == final_seed[1]
