@@ -214,7 +214,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
                 actor(td.unsqueeze(0))
             else:
                 actor(td)
-        expected_keys = ["done", "action", "param"]
+        expected_keys = ["done", "action", "param", "reward"]
         if from_pixels:
             expected_keys += [
                 "pixels",
@@ -339,6 +339,7 @@ def test_ppo_maker(
         actor = actor_value.get_policy_operator()
         expected_keys = [
             "done",
+            "reward",
             "pixels" if len(from_pixels) else "observation_vector",
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
@@ -385,6 +386,7 @@ def test_ppo_maker(
         value = actor_value.get_value_operator()
         expected_keys = [
             "done",
+            "reward",
             "pixels" if len(from_pixels) else "observation_vector",
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
@@ -493,6 +495,7 @@ def test_a2c_maker(
         actor = actor_value.get_policy_operator()
         expected_keys = [
             "done",
+            "reward",
             "pixels" if len(from_pixels) else "observation_vector",
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
@@ -539,6 +542,7 @@ def test_a2c_maker(
         value = actor_value.get_value_operator()
         expected_keys = [
             "done",
+            "reward",
             "pixels" if len(from_pixels) else "observation_vector",
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
@@ -628,6 +632,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
 
         expected_keys = [
             "done",
+            "reward",
             "pixels" if len(from_pixels) else "observation_vector",
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
@@ -659,6 +664,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
 
         expected_keys = [
             "done",
+            "reward",
             "observation_vector",
             "observation_orig",
             "action",
@@ -682,6 +688,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             value(td)
         expected_keys = [
             "done",
+            "reward",
             "observation_vector",
             "observation_orig",
             "state_value",
@@ -751,6 +758,7 @@ def test_redq_make(device, from_pixels, gsde, exploration):
             actor(td)
         expected_keys = [
             "done",
+            "reward",
             "action",
             "sample_log_prob",
             "loc",
@@ -784,6 +792,7 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         qvalue(td)
         expected_keys = [
             "done",
+            "reward",
             "action",
             "sample_log_prob",
             "state_action_value",
@@ -857,6 +866,7 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "action",
             "belief",
             "done",
+            "reward",
             ("next", "done"),
             ("next", "reward"),
             ("next", "belief"),
@@ -881,6 +891,7 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "action",
             "belief",
             "done",
+            "reward",
             ("next", "done"),
             ("next", "reward"),
             ("next", "belief"),

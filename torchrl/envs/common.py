@@ -693,8 +693,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 tensordict,
                 keep_other=True,
                 exclude_action=False,
-                exclude_done=True,
-                exclude_reward=True,
             )
             if not break_when_any_done and tensordict.get("done").any():
                 _reset = tensordict.get(
