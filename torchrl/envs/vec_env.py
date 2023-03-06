@@ -573,12 +573,17 @@ class SerialEnv(_BatchedEnv):
 
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.get("_reset")
+            _reset = tensordict.pop("_reset")
         else:
             _reset = torch.ones(self.batch_size, dtype=torch.bool)
 
         for i, _env in enumerate(self._envs):
-            _tensordict = tensordict[i] if tensordict is not None else None
+            if tensordict is not None:
+                tensordict_ = tensordict[i]
+                if tensordict_.is_empty():
+                    tensordict_ = None
+            else:
+                tensordict_ = None
             if not _reset[i].any():
                 # We update the stored tensordict with the value of the "next"
                 # key as one may be surprised to receive data that is not up-to-date
@@ -587,13 +592,12 @@ class SerialEnv(_BatchedEnv):
                         *self._selected_reset_keys, strict=False
                     )
                 )
-                if _tensordict is not None:
-                    del _tensordict["_reset"]
+                if tensordict_ is not None:
                     self.shared_tensordicts[i].update_(
-                        _tensordict.select(*self._selected_reset_keys, strict=False)
+                        tensordict_.select(*self._selected_reset_keys, strict=False)
                     )
                 continue
-            _td = _env._reset(tensordict=_tensordict, **kwargs)
+            _td = _env._reset(tensordict=tensordict_, **kwargs)
             self.shared_tensordicts[i].update_(
                 _td.select(*self._selected_keys, strict=False)
             )
