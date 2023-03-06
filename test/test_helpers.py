@@ -145,6 +145,7 @@ def test_dqn_maker(
 
         expected_keys = [
             "done",
+            "reward",
             "action",
             "action_value",
         ]

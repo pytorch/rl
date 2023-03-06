@@ -992,6 +992,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     keys = {
         "action",
         "done",
+        "reward",
         "collector",
         "hidden1",
         "hidden2",
