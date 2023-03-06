@@ -81,7 +81,7 @@ from tensordict.nn import get_functional
 from torch import nn
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
-from torchrl.envs import EnvCreator, ParallelEnv, RewardScaling
+from torchrl.envs import EnvCreator, ParallelEnv, RewardScaling, StepCounter
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     CatFrames,
@@ -260,6 +260,7 @@ def make_env(parallel=False, observation_norm_state_dict=None):
     env = TransformedEnv(
         base_env,
         Compose(
+            StepCounter(),  # to count the steps of each trajectory
             ToTensorImage(),
             RewardScaling(loc=0.0, scale=0.1),
             GrayScale(),

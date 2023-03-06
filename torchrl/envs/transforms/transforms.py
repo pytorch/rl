@@ -3016,9 +3016,7 @@ class StepCounter(Transform):
         )
         if self.max_steps is not None:
             truncated = (step_count >= self.max_steps).unsqueeze(-1)
-        else:
-            truncated = torch.zeros_like(tensordict.get(("next", "done")))
-        tensordict.set(self.truncated_key, truncated)
+            tensordict.set(self.truncated_key, truncated)
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -3030,9 +3028,7 @@ class StepCounter(Transform):
         tensordict.set(("next", "step_count"), next_step_count)
         if self.max_steps is not None:
             truncated = (next_step_count >= self.max_steps).unsqueeze(-1)
-        else:
-            truncated = torch.zeros_like(tensordict.get(("next", "done")))
-        tensordict.set(("next", self.truncated_key), truncated)
+            tensordict.set(("next", self.truncated_key), truncated)
         return tensordict
 
     def transform_observation_spec(
@@ -3050,7 +3046,7 @@ class StepCounter(Transform):
         observation_spec["step_count"].space.minimum = (
             observation_spec["step_count"].space.minimum * 0
         )
-        if self.truncated_key != "done":
+        if self.max_steps is not None and self.truncated_key != "done":
             observation_spec[self.truncated_key] = self.parent.done_spec.clone()
         return observation_spec
 
