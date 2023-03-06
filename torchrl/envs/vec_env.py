@@ -573,7 +573,7 @@ class SerialEnv(_BatchedEnv):
 
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.pop("_reset")
+            _reset = tensordict.get("_reset")
         else:
             _reset = torch.ones(self.batch_size, dtype=torch.bool)
 
@@ -795,7 +795,7 @@ class ParallelEnv(_BatchedEnv):
         cmd_out = "reset"
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.pop("_reset")
+            _reset = tensordict.get("_reset")
         else:
             _reset = torch.ones(self.batch_size, dtype=torch.bool, device=self.device)
 
