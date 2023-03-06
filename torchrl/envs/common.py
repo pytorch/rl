@@ -484,33 +484,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             _reset = None
 
         tensordict_reset = self._reset(tensordict, **kwargs)
-        done = tensordict_reset.get("done", None)
-        if done is not None:
-            # TODO: refactor this using done_spec
-            # unsqueeze done if needed
-            # the input tensordict may have more leading dimensions than the batch_size
-            # e.g. in model-based contexts.
-            batch_size = self.batch_size
-            dims = len(batch_size)
-            leading_batch_size = (
-                tensordict_reset.batch_size[:-dims] if dims else tensordict_reset.shape
-            )
-            expected_done_shape = torch.Size([*leading_batch_size, *batch_size, 1])
-            actual_done_shape = done
-            if actual_done_shape != expected_done_shape:
-                done = done.view(expected_done_shape)
-                tensordict_reset.set("done", done)
-        else:
-            # TODO: refactor this using done_spec
-            tensordict_reset.set(
-                "done",
-                torch.zeros(
-                    *tensordict_reset.batch_size,
-                    1,
-                    dtype=torch.bool,
-                    device=self.device,
-                ),
-            )
 
         if tensordict_reset.device != self.device:
             tensordict_reset = tensordict_reset.to(self.device)
