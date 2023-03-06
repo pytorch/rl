@@ -804,7 +804,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         fake_td = TensorDict(
             {
                 **fake_in_out,
-                "done": done_spec.clone(),
+                "done": fake_done.clone(),
                 "reward": fake_reward.clone(),
                 "next": next_output,
             },
