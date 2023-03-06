@@ -59,7 +59,7 @@ import tqdm
 from matplotlib import pyplot as plt
 from tensordict.nn import TensorDictModule
 from torch import nn, optim
-from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import CompositeSpec, TensorDictReplayBuffer
 from torchrl.data.postprocs import MultiStep
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler

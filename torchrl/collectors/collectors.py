@@ -656,6 +656,7 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.zero_()
 
         self._tensordict.update(self.env.reset(**kwargs))
+        md["traj_ids"] = md["traj_ids"] - md["traj_ids"].min()
         self._tensordict["collector"] = md
 
     def shutdown(self) -> None:
