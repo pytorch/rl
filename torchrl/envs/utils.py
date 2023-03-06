@@ -27,7 +27,6 @@ def step_mdp(
     exclude_reward: bool = True,
     exclude_done: bool = True,
     exclude_action: bool = True,
-    _run_check: bool = True,
 ) -> TensorDictBase:
     """Creates a new tensordict that reflects a step in time of the input tensordict.
 
