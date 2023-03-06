@@ -688,7 +688,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 tensordict,
                 keep_other=True,
                 exclude_action=False,
-                exclude_done=False,
+                exclude_done=True,
                 exclude_reward=True,
             )
             if not break_when_any_done and tensordict.get("done").any():
@@ -799,7 +799,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         fake_td = TensorDict(
             {
                 **fake_in_out,
-                "done": fake_done.clone(),
                 "next": next_output,
             },
             batch_size=self.batch_size,
