@@ -805,7 +805,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             {
                 **fake_in_out,
                 "done": done_spec.clone(),
-                "reward": reward_spec.clone(),
+                "reward": fake_reward.clone(),
                 "next": next_output,
             },
             batch_size=self.batch_size,
