@@ -400,7 +400,6 @@ class TestJumanji:
             final_seed.append(env.set_seed(0))
             tdreset.append(env.reset())
             rollout = env.rollout(max_steps=50)
-            print("r", rollout)
             tdrollout.append(rollout)
             env.close()
             del env

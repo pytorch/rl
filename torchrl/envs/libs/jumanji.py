@@ -301,7 +301,7 @@ class JumanjiWrapper(GymLikeEnv):
         # collect outputs
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
-        done = torch.zeros(self.batch_size, dtype=torch.bool)
+        done = self.done_spec.zero()
 
         # build results
         tensordict_out = TensorDict(

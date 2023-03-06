@@ -5358,7 +5358,14 @@ class TestVIP(TransformBase):
         td = transformed_env.reset(tensordict_reset)
         assert td.device == device
         assert td.batch_size == torch.Size([4])
-        exp_keys = {"vec", "done", "pixels_orig", "goal_embedding", "goal_image", "reward"}
+        exp_keys = {
+            "vec",
+            "done",
+            "pixels_orig",
+            "goal_embedding",
+            "goal_image",
+            "reward",
+        }
         if tensor_pixels_key:
             exp_keys.add(tensor_pixels_key)
         assert set(td.keys()) == exp_keys
