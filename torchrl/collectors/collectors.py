@@ -409,6 +409,11 @@ class SyncDataCollector(_DataCollector):
             observation_spec=self.env.observation_spec,
         )
         self.env: EnvBase = self.env.to(self.device)
+        self.max_frames_per_traj = max_frames_per_traj
+        if self.max_frames_per_traj > 0:
+            env = self.env = TransformedEnv(
+                self.env, StepCounter(max_steps=self.max_frames_per_traj)
+            )
 
         if not total_frames > 0:
             total_frames = float("inf")
@@ -418,11 +423,6 @@ class SyncDataCollector(_DataCollector):
         self.postproc = postproc
         if self.postproc is not None:
             self.postproc.to(self.storing_device)
-        self.max_frames_per_traj = max_frames_per_traj
-        if self.max_frames_per_traj > 0:
-            self.env = TransformedEnv(
-                self.env, StepCounter(max_steps=self.max_frames_per_traj)
-            )
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.pin_memory = pin_memory
         self.exploration_mode = (
@@ -576,7 +576,6 @@ class SyncDataCollector(_DataCollector):
         else:
             self._has_been_done = self._has_been_done | done_or_terminated
         if done_or_terminated.any():
-            steps = steps.clone()
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
             if len(self.env.batch_size):
@@ -598,7 +597,6 @@ class SyncDataCollector(_DataCollector):
             traj_ids[done_or_terminated] = traj_ids.max() + torch.arange(
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
-            steps[done_or_terminated] = 0
             self._tensordict.set_(
                 ("collector", "traj_ids"), traj_ids
             )  # no ops if they already match

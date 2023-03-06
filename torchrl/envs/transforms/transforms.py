@@ -2999,10 +2999,7 @@ class StepCounter(Transform):
             # TODO: decide if using done here, or using a default `True` tensor
             default=torch.ones_like(done.squeeze(-1)),
         )
-        step_count = tensordict.get(
-            "step_count",
-            None,
-        )
+        step_count = tensordict.get("step_count", None,)
         if step_count is None:
             step_count = torch.zeros(
                 tensordict.batch_size,
@@ -3010,15 +3007,12 @@ class StepCounter(Transform):
                 device=tensordict.device,
             )
         step_count[_reset] = 0
-        tensordict.set(
-            "step_count",
-            step_count,
-        )
+        tensordict.set("step_count", step_count,)
         if self.max_steps is not None:
             truncated = (step_count >= self.max_steps).unsqueeze(-1)
         else:
             truncated = torch.zeros_like(tensordict.get(("next", "done")))
-        tensordict[self.truncated_key] = truncated
+        tensordict.set(self.truncated_key, truncated)
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
