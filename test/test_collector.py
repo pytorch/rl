@@ -32,7 +32,7 @@ from torchrl.collectors.collectors import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
+from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv, StepCounter
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
@@ -308,7 +308,7 @@ def test_collector_env_reset():
     torch.manual_seed(0)
 
     def make_env():
-        return GymEnv(PONG_VERSIONED, frame_skip=4)
+        return TransformedEnv(GymEnv(PONG_VERSIONED, frame_skip=4), StepCounter())
 
     env = SerialEnv(2, make_env)
     # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
