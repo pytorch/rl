@@ -814,7 +814,6 @@ class ParallelEnv(_BatchedEnv):
                     )
                 )
                 if kwargs["tensordict"] is not None:
-                    del kwargs["tensordict"]["_reset"]
                     self.shared_tensordicts[i].update_(
                         kwargs["tensordict"].select(
                             *self._selected_reset_keys, strict=False

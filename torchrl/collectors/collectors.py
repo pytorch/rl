@@ -607,7 +607,7 @@ class SyncDataCollector(_DataCollector):
                 _reset = None
                 td_reset = None
             td_reset = self.env.reset(td_reset)
-            self._tensordict.update_(td_reset)
+            self._tensordict.update(td_reset, inplace=True)
             done = self._tensordict.get("done")
             if (_reset is None and done.any()) or (
                 _reset is not None and done[_reset].any()
