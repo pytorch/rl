@@ -1220,7 +1220,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 )
 
                 if workers_frames[idx] >= self.total_frames:
-                    print(f"{idx} is done!")
                     dones[idx] = True
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
@@ -1381,10 +1380,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
             worker_frames = out.numel()
             if self.split_trajs:
-                print("out before", out)
                 out = split_trajectories(out)
-                print("out before", out)
-                print("traj ids", out["collector", "traj_ids"])
             self._frames += worker_frames
             workers_frames[idx] = workers_frames[idx] + worker_frames
             if self.postprocs:
@@ -1399,7 +1395,6 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                     msg = "continue"
                 self.pipes[idx].send((idx, msg))
             else:
-                print(f"{idx} is done!")
                 dones[idx] = True
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
@@ -1418,7 +1413,6 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     def reset(self, reset_idx: Optional[Sequence[bool]] = None) -> None:
         super().reset(reset_idx)
         if self.queue_out.full():
-            print("waiting")
             time.sleep(_TIMEOUT)  # wait until queue is empty
         if self.queue_out.full():
             raise Exception("self.queue_out is full")
