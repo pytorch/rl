@@ -693,7 +693,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             done = tensordict.get(("next", "done"))
             truncated = tensordict.get(
                 ("next", "truncated"),
-                torch.zeros((), device=done.device, dtype=torch.bool),
+                default=torch.zeros((), device=done.device, dtype=torch.bool),
             )
             done = done | truncated
             if (break_when_any_done and done.any()) or i == max_steps - 1:
