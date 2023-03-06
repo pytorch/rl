@@ -955,10 +955,6 @@ create_env_fn = parallel_env_constructor(
     transform_state_dict=transform_state_dict,
 )
 # Batch collector:
-if n_steps_forward > 0:
-    multistep = MultiStep(n_steps_max=n_steps_forward, gamma=gamma)
-else:
-    multistep = None
 collector = MultiaSyncDataCollector(
     create_env_fn=[create_env_fn, create_env_fn],
     policy=actor_model_explore,
@@ -967,7 +963,7 @@ collector = MultiaSyncDataCollector(
     frames_per_batch=frames_per_batch,
     init_random_frames=init_random_frames,
     reset_at_each_iter=False,
-    postproc=multistep,
+    postproc=None,
     split_trajs=False,
     devices=[device, device],  # device for execution
     storing_devices=[device, device],  # device where data will be stored and passed
