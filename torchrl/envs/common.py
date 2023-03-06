@@ -499,9 +499,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
 
         if self.done_spec is not None and "done" not in tensordict_reset.keys():
-            tensordict_reset.set("done", torch.zeros((*tensordict_reset.shape, 1), dtype=self.done_spec.dtype))
+            tensordict_reset.set(
+                "done",
+                torch.zeros((*tensordict_reset.shape, 1), dtype=self.done_spec.dtype),
+            )
         if self.reward_spec is not None and "reward" not in tensordict_reset.keys():
-            tensordict_reset.set("reward", torch.zeros((*tensordict_reset.shape, 1), dtype=self.reward_spec.dtype))
+            tensordict_reset.set(
+                "reward",
+                torch.zeros((*tensordict_reset.shape, 1), dtype=self.reward_spec.dtype),
+            )
 
         if (_reset is None and tensordict_reset.get("done").any()) or (
             _reset is not None and tensordict_reset.get("done")[_reset].any()

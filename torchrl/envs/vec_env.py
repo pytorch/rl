@@ -800,7 +800,7 @@ class ParallelEnv(_BatchedEnv):
             _reset = torch.ones(self.batch_size, dtype=torch.bool, device=self.device)
 
         for i, channel in enumerate(self.parent_channels):
-            if tensordict:
+            if tensordict is not None:
                 tensordict_ = tensordict[i]
                 if tensordict_.is_empty():
                     tensordict_ = None
