@@ -59,7 +59,7 @@ import tqdm
 from matplotlib import pyplot as plt
 from tensordict.nn import TensorDictModule
 from torch import nn, optim
-from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector
 from torchrl.data import CompositeSpec, TensorDictReplayBuffer
 from torchrl.data.postprocs import MultiStep
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
@@ -523,7 +523,8 @@ env_per_collector = 2
 # meaningful training
 total_frames = 5000 // frame_skip
 # Number of frames returned by the collector at each iteration of the outer loop
-frames_per_batch = 1000 // frame_skip
+frames_per_batch = env_per_collector * 1000 // frame_skip
+max_frames_per_traj = 1000 // frame_skip
 init_random_frames = 0
 # We'll be using the MultiStep class to have a less myopic representation of
 # upcoming states
@@ -677,7 +678,7 @@ collector = MultiaSyncDataCollector(
     create_env_fn=[create_env_fn, create_env_fn],
     policy=actor_model_explore,
     total_frames=total_frames,
-    max_frames_per_traj=1000,
+    max_frames_per_traj=max_frames_per_traj,
     frames_per_batch=frames_per_batch,
     init_random_frames=init_random_frames,
     reset_at_each_iter=False,
@@ -959,7 +960,7 @@ collector = MultiaSyncDataCollector(
     create_env_fn=[create_env_fn, create_env_fn],
     policy=actor_model_explore,
     total_frames=total_frames,
-    max_frames_per_traj=1000,
+    max_frames_per_traj=max_frames_per_traj,
     frames_per_batch=frames_per_batch,
     init_random_frames=init_random_frames,
     reset_at_each_iter=False,

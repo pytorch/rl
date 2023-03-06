@@ -637,6 +637,8 @@ class SyncDataCollector(_DataCollector):
 
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
+        # metadata
+        md = self._tensordict["collector"].clone()
         if index is not None:
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
@@ -653,7 +655,8 @@ class SyncDataCollector(_DataCollector):
             _reset = None
             self._tensordict.zero_()
 
-        self._tensordict.update(self.env.reset(**kwargs), inplace=True)
+        self._tensordict.update(self.env.reset(**kwargs))
+        self._tensordict["collector"] = md
 
     def shutdown(self) -> None:
         """Shuts down all workers and/or closes the local environment."""
@@ -1378,7 +1381,10 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
             worker_frames = out.numel()
             if self.split_trajs:
+                print("out before", out)
                 out = split_trajectories(out)
+                print("out before", out)
+                print("traj ids", out["collector", "traj_ids"])
             self._frames += worker_frames
             workers_frames[idx] = workers_frames[idx] + worker_frames
             if self.postprocs:
