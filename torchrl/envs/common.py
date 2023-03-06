@@ -498,6 +498,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
 
+        if self.done_spec is not None and "done" not in tensordict_reset.keys():
+            tensordict_reset.set("done", torch.zeros((*tensordict_reset.shape, 1), dtype=self.done_spec.dtype))
+        if self.reward_spec is not None and "reward" not in tensordict_reset.keys():
+            tensordict_reset.set("reward", torch.zeros((*tensordict_reset.shape, 1), dtype=self.reward_spec.dtype))
+
         if (_reset is None and tensordict_reset.get("done").any()) or (
             _reset is not None and tensordict_reset.get("done")[_reset].any()
         ):
@@ -799,6 +804,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         fake_td = TensorDict(
             {
                 **fake_in_out,
+                "done": done_spec.clone(),
+                "reward": reward_spec.clone(),
                 "next": next_output,
             },
             batch_size=self.batch_size,

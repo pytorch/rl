@@ -825,17 +825,6 @@ class ParallelEnv(_BatchedEnv):
             cmd_in, _ = channel.recv()
             if cmd_in != "reset_obs":
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
-        check_count = 0
-        while self.shared_tensordict_parent.get("done")[_reset].any():
-            if check_count == 4:
-                raise RuntimeError(
-                    "Envs have just been reset bur env is done on specified '_reset' dimensions."
-                )
-            else:
-                check_count += 1
-                # there might be some delay between writing the shared tensordict
-                # and reading the updated value on the main process
-                sleep(0.01)
         return self.shared_tensordict_parent.select(*self._selected_reset_keys).clone()
 
     def __reduce__(self):

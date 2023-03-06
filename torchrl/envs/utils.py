@@ -24,13 +24,17 @@ def step_mdp(
     tensordict: TensorDictBase,
     next_tensordict: TensorDictBase = None,
     keep_other: bool = True,
-    exclude_reward: bool = True,
-    exclude_done: bool = True,
+    exclude_reward: bool = False,
+    exclude_done: bool = False,
     exclude_action: bool = True,
 ) -> TensorDictBase:
     """Creates a new tensordict that reflects a step in time of the input tensordict.
 
     Given a tensordict retrieved after a step, returns the :obj:`"next"` indexed-tensordict.
+    THe arguments allow for a precise control over what should be kept and what
+    should be copied from the ``"next"`` entry. The default behaviour is:
+    move the observation entries, reward and done states to the root, exclude
+    the current action and keep all extra keys (non-action, non-done, non-reward).
 
     Args:
         tensordict (TensorDictBase): tensordict with keys to be renamed
@@ -38,13 +42,17 @@ def step_mdp(
         keep_other (bool, optional): if True, all keys that do not start with :obj:`'next_'` will be kept.
             Default is ``True``.
         exclude_reward (bool, optional): if True, the :obj:`"reward"` key will be discarded
-            from the resulting tensordict.
-            Default is ``True``.
+            from the resulting tensordict. If ``False``, it will be copied (and replaced)
+            from the ``"next"`` entry (if present).
+            Default is ``False``.
         exclude_done (bool, optional): if True, the :obj:`"done"` key will be discarded
-            from the resulting tensordict.
-            Default is ``True``.
-        exclude_action (bool, optional): if True, the :obj:`"action"` key will be discarded
-            from the resulting tensordict.
+            from the resulting tensordict. If ``False``, it will be copied (and replaced)
+            from the ``"next"`` entry (if present).
+            Default is ``False``.
+        exclude_action (bool, optional): if True, the :obj:`"action"` key will
+            be discarded from the resulting tensordict. If ``False``, it will
+            be kept in the root tensordict (since it should not be present in
+            the ``"next"`` entry).
             Default is ``True``.
 
     Returns:
@@ -52,18 +60,67 @@ def step_mdp(
 
     Examples:
     This funtion allows for this kind of loop to be used:
-        >>> td_out = []
-        >>> env = make_env()
-        >>> policy = make_policy()
-        >>> td = env.reset()
-        >>> for i in range(max_steps):
-        >>>     td = env.step(td)
-        >>>     next_td = step_mdp(td)
-        >>>     assert next_td is not td # make sure that keys are not overwritten
-        >>>     td_out.append(td)
-        >>>     td = next_td
-        >>> td_out = torch.stack(td_out, 0)
-        >>> print(td_out) # should contain keys 'observation', 'next_observation', 'action', 'reward', 'done' or similar
+        >>> from tensordict import TensorDict
+        >>> td = TensorDict({
+        ...     "done": torch.zeros((), dtype=torch.bool),
+        ...     "reward": torch.zeros(()),
+        ...     "extra": torch.zeros(()),
+        ...     "next": TensorDict({
+        ...         "done": torch.zeros((), dtype=torch.bool),
+        ...         "reward": torch.zeros(()),
+        ...         "obs": torch.zeros(()),
+        ...     }, []),
+        ...     "obs": torch.zeros(()),
+        ...     "action": torch.zeros(()),
+        ... }, [])
+        >>> print(step_mdp(td))
+        TensorDict(
+            fields={
+                done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),
+                extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                reward: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> print(step_mdp(td, exclude_done=True))  # "done" is dropped
+        TensorDict(
+            fields={
+                extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                reward: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> print(step_mdp(td, exclude_reward=True))  # "reward" is dropped
+        TensorDict(
+            fields={
+                done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),
+                extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> print(step_mdp(td, exclude_action=False))  # "action" persists at the root
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),
+                extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                reward: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> print(step_mdp(td, keep_other=False))  # "extra" is missing
+        TensorDict(
+            fields={
+                done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                reward: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
 
     """
     other_keys = []
@@ -72,6 +129,14 @@ def step_mdp(
         prohibited.add("action")
     else:
         other_keys.append("action")
+    if exclude_done:
+        prohibited.add("done")
+    else:
+        other_keys.append("done")
+    if exclude_reward:
+        prohibited.add("reward")
+    else:
+        other_keys.append("reward")
 
     prohibited.add("next")
     if keep_other:
