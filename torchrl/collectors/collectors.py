@@ -597,14 +597,17 @@ class SyncDataCollector(_DataCollector):
 
         if done_or_terminated.any():
             steps = steps.clone()
+            # collectors do not support passing other tensors than `"_reset"`
+            # to `reset()`.
             if len(self.env.batch_size):
                 self._tensordict.masked_fill_(done_or_terminated, 0)
                 _reset = done_or_terminated
-                self._tensordict.set("_reset", _reset)
+                td_reset = self._tensordict.select().set("_reset", _reset)
             else:
                 _reset = None
-                self._tensordict.zero_()
-            self.env.reset(self._tensordict)
+                td_reset = None
+            td_reset = self.env.reset(td_reset)
+            self._tensordict.update_(td_reset)
             done = self._tensordict.get("done")
             if (_reset is None and done.any()) or (
                 _reset is not None and done[_reset].any()

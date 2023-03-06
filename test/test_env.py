@@ -256,7 +256,7 @@ class TestModelBasedEnvBase:
             ("next", key) for key in (*mb_env.observation_spec.keys(), "reward", "done")
         }
         expected_keys = expected_keys.union(set(mb_env.input_spec.keys()))
-        expected_keys = expected_keys.union({"done", "next"})
+        expected_keys = expected_keys.union({"done", "next", "reward"})
         assert set(rollout.keys(True)) == expected_keys
         assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 

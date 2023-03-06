@@ -142,7 +142,7 @@ def step_mdp(
     if keep_other:
         # TODO: make this work with nested keys
         other_keys = [key for key in tensordict.keys() if key not in prohibited]
-    select_tensordict = tensordict.select(*other_keys)
+    select_tensordict = tensordict.select(*other_keys, strict=False)
     excluded = []
     if exclude_reward:
         excluded.append("reward")

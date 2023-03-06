@@ -397,19 +397,14 @@ class _BatchedEnv(EnvBase):
             self.shared_tensordict_parent = shared_tensordict_parent.to(self.device)
         else:
             # Multi-task: we share tensordict that *may* have different keys
-            print("selected keys", self._selected_keys)
-            print("parent td[0]", shared_tensordict_parent[0])
             shared_tensordict_parent = [
                 tensordict.select(*self._selected_keys, strict=False).to(self.device)
                 for tensordict in shared_tensordict_parent
             ]
-            print("second parent td[0]", shared_tensordict_parent[0])
             shared_tensordict_parent = torch.stack(
                 shared_tensordict_parent,
                 0,
             )
-            print("and now parent td[0]", shared_tensordict_parent[0])
-            print("parent td", shared_tensordict_parent)
             self.shared_tensordict_parent = shared_tensordict_parent
 
         if self.share_individual_td:
@@ -796,12 +791,18 @@ class ParallelEnv(_BatchedEnv):
         cmd_out = "reset"
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.get("_reset")
+            _reset = tensordict.pop("_reset")
         else:
             _reset = torch.ones(self.batch_size, dtype=torch.bool, device=self.device)
 
         for i, channel in enumerate(self.parent_channels):
-            kwargs["tensordict"] = tensordict[i] if tensordict is not None else None
+            if tensordict:
+                tensordict_ = tensordict[i]
+                if tensordict_.is_empty():
+                    tensordict_ = None
+            else:
+                tensordict_ = None
+            kwargs["tensordict"] = tensordict_
             if not _reset[i].any():
                 self.shared_tensordicts[i].update_(
                     self.shared_tensordicts[i]["next"].select(
