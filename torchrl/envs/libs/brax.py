@@ -219,7 +219,7 @@ class BraxWrapper(_EnvWrapper):
         # build result
         next_state.set("reward", next_state.get("reward").view(self.reward_spec.shape))
         next_state.set(
-            "done", next_state.get(("next", "done")).view(self.reward_spec.shape)
+            "done", next_state.get("done").view(self.reward_spec.shape)
         )
         done = next_state["done"].bool()
         reward = next_state["reward"]
