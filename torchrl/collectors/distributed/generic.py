@@ -156,7 +156,7 @@ class DistributedDataCollector(_DataCollector):
     Supports sync and async data collection.
 
     Args:
-        env_makers (list of callables or EnvBase instances): a list of the
+        create_env_fn (list of callables or EnvBase instances): a list of the
             same length as the number of nodes to be launched.
         policy (Callable[[TensorDict], TensorDict]): a callable that populates
             the tensordict with an `"action"` field.
@@ -219,7 +219,7 @@ class DistributedDataCollector(_DataCollector):
 
     def __init__(
         self,
-        env_makers,
+        create_env_fn,
         policy,
         frames_per_batch,
         total_frames,
@@ -242,14 +242,14 @@ class DistributedDataCollector(_DataCollector):
         elif collector_class == "single":
             collector_class = SyncDataCollector
         self.collector_class = collector_class
-        self.env_constructors = env_makers
+        self.env_constructors = create_env_fn
         self.policy = policy
         if isinstance(policy, nn.Module):
             policy_weights = TensorDict(dict(policy.named_parameters()), [])
         else:
             policy_weights = TensorDict({}, [])
         self.policy_weights = policy_weights
-        self.num_workers = len(env_makers)
+        self.num_workers = len(create_env_fn)
         self.frames_per_batch = frames_per_batch
         self.storing_device = storing_device
         # make private to avoid changes from users during collection
