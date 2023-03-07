@@ -84,7 +84,7 @@ def _rpc_init_collection_node_proc(
         _transports=["uv"],
         # Currently fails when nodes have more than 0 gpus avail,
         # even when no device is made visible
-        devices=[],
+        devices=list(range(torch.cuda.device_count())),
     )
     print("init rpc")
     rpc.init_rpc(
@@ -236,7 +236,7 @@ class RPCDataCollector(_DataCollector):
             _transports=["uv"],
             # Currently fails when nodes have more than 0 gpus avail,
             # even when no device is made visible
-            devices=[],
+            devices=list(range(torch.cuda.device_count())),
         )
         print("init rpc")
         rpc.init_rpc(
