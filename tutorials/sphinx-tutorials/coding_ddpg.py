@@ -1154,9 +1154,3 @@ plt.xlabel("iter")
 plt.ylabel("reward")
 plt.tight_layout()
 plt.title("TD-labmda DDPG results")
-
-# sphinx_gallery_start_ignore
-import time
-
-time.sleep(10)
-# sphinx_gallery_end_ignore

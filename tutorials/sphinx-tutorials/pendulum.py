@@ -902,9 +902,3 @@ plot()
 #   to write custom transformations;
 # * How to train a policy on a fully differentiable simulator.
 #
-
-# sphinx_gallery_start_ignore
-import time
-
-time.sleep(10)
-# sphinx_gallery_end_ignore
