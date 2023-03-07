@@ -232,7 +232,7 @@ class BraxWrapper(_EnvWrapper):
             device=self.device,
             _run_checks=False,
         )
-        return tensordict_out
+        return tensordict_out.select().set("next", tensordict_out)
 
     def _step_with_grad(self, tensordict: TensorDictBase):
 
@@ -271,7 +271,7 @@ class BraxWrapper(_EnvWrapper):
             device=self.device,
             _run_checks=False,
         )
-        return tensordict_out
+        return tensordict_out.select().set("next", tensordict_out)
 
     def _step(
         self,
