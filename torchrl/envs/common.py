@@ -367,7 +367,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # sanity check
         self._assert_tensordict_shape(tensordict)
 
-        tensordict.lock()  # make sure _step does not modify the tensordict
+        tensordict.lock_()  # make sure _step does not modify the tensordict
         tensordict_out = self._step(tensordict)
         # this tensordict should contain a "next" key
         next_tensordict_out = tensordict_out.get("next", None)
@@ -383,7 +383,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
-        tensordict.unlock()
+        tensordict.unlock_()
 
         # TODO: Refactor this using reward spec
         reward = next_tensordict_out.get("reward")

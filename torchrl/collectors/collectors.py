@@ -626,7 +626,7 @@ class SyncDataCollector(_DataCollector):
                     # unlock the output tensordict to allow for new keys to be written
                     # these will be missed during the sync but at least we won't get an error during the update
                     is_shared = self._tensordict_out.is_shared()
-                    self._tensordict_out.unlock()
+                    self._tensordict_out.unlock_()
                     self._tensordict_out[..., j] = self._tensordict
                     if is_shared:
                         self._tensordict_out.share_memory_()
