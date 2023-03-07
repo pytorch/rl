@@ -27,9 +27,6 @@ On the low-level end, torchrl comes with a set of highly re-usable functionals f
 
 TorchRL aims at (1) a high modularity and (2) good runtime performance.
 
-Here is an example of the [environment API](https://pytorch.org/rl/reference/envs.html) and how TorchRL implements rollouts.
-![Alt Text](docs/source/_static/img/rollout.gif)
-
 ## Documentation
 
 The TorchRL documentation can be found [here](https://pytorch.org/rl).
@@ -40,6 +37,13 @@ It contains tutorials and the API reference.
 TorchRL relies on [`TensorDict`](https://github.com/pytorch-labs/tensordict/),
 a convenient data structure<sup>(1)</sup> to pass data from
 one object to another without friction.
+
+
+Here is an example of how the [environment API](https://pytorch.org/rl/reference/envs.html)
+relies on tensordict to carry data from one function to another during a rollout
+execution:
+![Alt Text](docs/source/_static/img/rollout.gif)
+
 `TensorDict` makes it easy to re-use pieces of code across environments, models and
 algorithms. For instance, here's how to code a rollout in TorchRL:
   <details>
