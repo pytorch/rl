@@ -238,7 +238,7 @@ class VmasWrapper(_EnvWrapper):
                 device=self.device,
             )
 
-            if infos is not None:
+            if agent_info is not None:
                 agent_td.set("info", agent_info)
             if dones is not None:
                 agent_td.set("done", dones[i])
@@ -277,7 +277,7 @@ class VmasWrapper(_EnvWrapper):
                 device=self.device,
             )
 
-            if infos is not None:
+            if agent_info is not None:
                 agent_td.set("info", agent_info)
             agent_tds.append(agent_td)
 

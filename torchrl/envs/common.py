@@ -379,7 +379,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # sanity check
         self._assert_tensordict_shape(tensordict)
 
-        tensordict.lock()  # make sure _step does not modify the tensordict
+        tensordict.lock_()  # make sure _step does not modify the tensordict
         tensordict_out = self._step(tensordict)
         if tensordict_out is tensordict:
             raise RuntimeError(
@@ -387,7 +387,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
-        tensordict.unlock()
+        tensordict.unlock_()
 
         obs_keys = self.observation_spec.keys(nested_keys=False)
         # we deliberately do not update the input values, but we want to keep track of

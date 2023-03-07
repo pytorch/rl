@@ -36,8 +36,16 @@ try:
     from torchvision.transforms.functional import center_crop
 
     try:
-        from torchvision.transforms.functional import resize
+        from torchvision.transforms.functional import InterpolationMode, resize
+
+        def interpolation_fn(interpolation):  # noqa: D103
+            return InterpolationMode(interpolation)
+
     except ImportError:
+
+        def interpolation_fn(interpolation):  # noqa: D103
+            return interpolation
+
         from torchvision.transforms.functional_tensor import resize
 
     _has_tv = True
@@ -65,6 +73,14 @@ def _apply_to_composite(function):
 
 
 def _apply_to_composite_inv(function):
+    # Changes the input_spec following a transform function.
+    # The usage is: if an env expects a certain input (e.g. a double tensor)
+    # but the input has to be transformed (e.g. it is float), this function will
+    # modify the spec to get a spec that from the outside matches what is given
+    # (ie a float).
+    # Now since EnvBase.step ignores new inputs (ie the root level of the
+    # tensor is not updated) an out_key that does not match the in_key has
+    # no effect on the spec.
     def new_fun(self, input_spec):
         if isinstance(input_spec, CompositeSpec):
             d = input_spec._specs
@@ -996,7 +1012,7 @@ class Resize(ObservationTransform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.w = int(w)
         self.h = int(h)
-        self.interpolation = interpolation
+        self.interpolation = interpolation_fn(interpolation)
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         # flatten if necessary
