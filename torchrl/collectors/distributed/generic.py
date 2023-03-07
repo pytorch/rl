@@ -54,6 +54,9 @@ def _distributed_init_collection_node(
     collector_kwargs,
     verbose=False,
 ):
+    os.environ["MASTER_ADDR"] = str(rank0_ip)
+    os.environ["MASTER_PORT"] = str(tcpport)
+
     if verbose:
         print(f"node with rank {rank} -- creating collector of type {collector_class}")
     if not issubclass(collector_class, SyncDataCollector):
@@ -81,7 +84,7 @@ def _distributed_init_collection_node(
         rank=rank,
         world_size=world_size,
         timeout=timedelta(MAX_TIME_TO_CONNECT),
-        init_method=f"tcp://{rank0_ip}:{tcpport}",
+        # init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
     if verbose:
         print(f"node with rank {rank} -- creating store")
@@ -395,7 +398,7 @@ class DistributedDataCollector(_DataCollector):
         print("Server IP address:", IPAddr)
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
-        os.environ["MASTER_PORT"] = "29500"
+        os.environ["MASTER_PORT"] = str(self.tcp_port)
 
         self.jobs = []
         if self.launcher == "submitit":
