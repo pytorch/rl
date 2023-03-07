@@ -382,7 +382,7 @@ class DistributedDataCollector(_DataCollector):
                 self.env_constructors[i],
                 self.policy,
                 self._frames_per_batch_corrected,
-                self.collector_kwargs,
+                self.collector_kwargs[i],
             ),
         )
         job.start()
