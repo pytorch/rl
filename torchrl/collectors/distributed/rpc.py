@@ -119,8 +119,10 @@ class RPCDataCollector(_DataCollector):
             or a derived class of these. The strings "single", "sync" and
             "async" correspond to respective class.
             Defaults to :class:`torchrl.collectors.SyncDataCollector`.
-        collector_kwargs (dict, optional): a dictionary of parameters to be passed to the
-            remote data-collector.
+        collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
+            remote data-collector. If a list is provided, each element will
+            correspond to an individual set of keyword arguments for the
+            dedicated collector.
         num_workers_per_collector (int, optional): the number of copies of the
             env constructor that is to be used on the remote nodes.
             Defaults to 1 (a single env per collector).
@@ -304,7 +306,7 @@ class RPCDataCollector(_DataCollector):
                     "frames_per_batch": frames_per_batch,
                     "total_frames": -1,
                     "split_trajs": False,
-                    **collector_kwargs,
+                    **collector_kwargs[i],
                 },
             )
             collector_rrefs.append(collector_rref)
