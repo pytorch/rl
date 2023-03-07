@@ -171,8 +171,10 @@ class DistributedDataCollector(_DataCollector):
             or a derived class of these. The strings "single", "sync" and
             "async" correspond to respective class.
             Defaults to :class:`torchrl.collectors.SyncDataCollector`.
-        collector_kwargs (dict, optional): a dictionary of parameters to be passed to the
-            remote data-collector.
+        collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
+            remote data-collector. If a list is provided, each element will
+            correspond to an individual set of keyword arguments for the
+            dedicated collector.
         num_workers_per_collector (int, optional): the number of copies of the
             env constructor that is to be used on the remote nodes.
             Defaults to 1 (a single env per collector).
@@ -278,7 +280,12 @@ class DistributedDataCollector(_DataCollector):
         self.slurm_kwargs = (
             slurm_kwargs if slurm_kwargs is not None else DEFAULT_SLURM_CONF
         )
-        self.collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
+        collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
+        self.collector_kwargs = (
+            collector_kwargs
+            if isinstance(collector_kwargs, (list, tuple))
+            else [collector_kwargs] * self.num_workers
+        )
         self.backend = backend
 
         # os.environ['TP_SOCKET_IFNAME'] = 'lo'
@@ -355,7 +362,7 @@ class DistributedDataCollector(_DataCollector):
             self.env_constructors[i],
             self.policy,
             self._frames_per_batch_corrected,
-            self.collector_kwargs,
+            self.collector_kwargs[i],
         )
         return job
 

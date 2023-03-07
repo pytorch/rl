@@ -222,7 +222,12 @@ class RPCDataCollector(_DataCollector):
         self.slurm_kwargs = (
             slurm_kwargs if slurm_kwargs is not None else DEFAULT_SLURM_CONF
         )
-        self.collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
+        collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
+        self.collector_kwargs = (
+            collector_kwargs
+            if isinstance(collector_kwargs, (list, tuple))
+            else [collector_kwargs] * self.num_workers
+        )
 
         self._init_workers()
 
@@ -238,7 +243,9 @@ class RPCDataCollector(_DataCollector):
             # Currently fails when nodes have more than 0 gpus avail,
             # even when no device is made visible
             devices=list(range(torch.cuda.device_count())),
-            device_maps={f"COLLECTOR_NODE_{rank}": {0: 0} for rank in range(1, world_size)},
+            device_maps={
+                f"COLLECTOR_NODE_{rank}": {0: 0} for rank in range(1, world_size)
+            },
         )
         print("init rpc")
         rpc.init_rpc(
