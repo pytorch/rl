@@ -85,6 +85,7 @@ def _rpc_init_collection_node_proc(
         # Currently fails when nodes have more than 0 gpus avail,
         # even when no device is made visible
         devices=list(range(torch.cuda.device_count())),
+        device_maps={f"COLLECTOR_NODE_{rank}": {0: 0} for rank in range(1, world_size)},
     )
     print("init rpc")
     rpc.init_rpc(
@@ -237,6 +238,7 @@ class RPCDataCollector(_DataCollector):
             # Currently fails when nodes have more than 0 gpus avail,
             # even when no device is made visible
             devices=list(range(torch.cuda.device_count())),
+            device_maps={f"COLLECTOR_NODE_{rank}": {0: 0} for rank in range(1, world_size)},
         )
         print("init rpc")
         rpc.init_rpc(
