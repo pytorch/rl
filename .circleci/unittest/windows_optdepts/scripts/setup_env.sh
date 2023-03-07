@@ -37,3 +37,6 @@ conda activate "${env_dir}"
 # 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
 conda env update --file "${this_dir}/environment.yml" --prune
+
+# we don't use torchsnapshot
+conda env config vars set CKPT_BACKEND=torch
