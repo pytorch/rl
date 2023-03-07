@@ -31,7 +31,8 @@ from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs
 
-from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper
+from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, \
+    SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
 if _has_gym:
@@ -878,13 +879,17 @@ class TestBrax:
         del env
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
-    def test_brax_parallel(self, envname, batch_size, n=1):
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_brax_parallel(self, envname, batch_size, parallel, n=1):
         def make_brax():
             env = BraxEnv(envname, batch_size=batch_size, requires_grad=False)
             env.set_seed(1)
             return env
-
-        env = ParallelEnv(n, make_brax)
+        if parallel:
+            env = ParallelEnv(n, make_brax)
+        else:
+            env = SerialEnv(n, make_brax)
+        check_env_specs(env)
         tensordict = env.rollout(3)
         assert tensordict.shape == torch.Size([n, *batch_size, 3])
 
