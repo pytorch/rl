@@ -341,32 +341,40 @@ def _reset(self, tensordict):
 # actually querying the environment (which can be costly with real-world
 # physical systems for instance).
 #
-# TorchRL specs are organised in two general containers: ``input_spec`` which
-# contains the specs of the information that the step function reads, and
-# ``output_spec`` which encodes the specs that the step outputs.
-#
 # There are four specs that we must code in our environment:
 #
 # * :obj:`EnvBase.observation_spec`: This will be a :class:`torchrl.data.CompositeSpec`
-#   instance where each key is an observation.
-# * :obj:`EnvBase.action_spec`: It can be any type of spec, but it is required that it
-#   corresponds to the ``"action"`` entry in the input tensordict.
-# * :obj:`EnvBase.input_spec`: contains all the input entries,
-#   including the :obj:`EnvBase.action_spec` (which is just a pointer to
-#   :obj:`EnvBase.input_spec['action_spec']`. As for :obj:`EnvBase.ObservationSpec`,
-#   it is expected that this spec is of type :obj:`torchrl.data.CompositeSpec`.
-#   to accommodate environments where multiple inputs are expected.
-# * :obj:`EnvBase.reward_spec`: the reward spec have the particularity of
-#   having a singleton trailing dimension if the environment has an empty
-#   batch size. The reason is that we often pass observations in torch models
-#   that estimate a value estimate with non-empty shape:
+#   instance where each key is an observation (a :class:`CompositeSpec` can be
+#   viewed as a dictionary of specs).
+# * :obj:`EnvBase.action_spec`: It can be any type of spec, but it is required
+#   that it corresponds to the ``"action"`` entry in the input tensordict;
+# * :obj:`EnvBase.reward_spec`: provides information about the reward space;
+# * :obj:`EnvBase.done_spec`: provides information about the space of the done
+#   flag.
+#
+# TorchRL specs are organised in two general containers: ``input_spec`` which
+# contains the specs of the information that the step function reads (including
+# ``action_spec``), and ``output_spec`` which encodes the specs that the
+# step outputs (``observation_spec``, ``reward_spec`` and ``done_spec``).
+# Given this organisation, the following queries will return the same results:
 #
 #   .. code-block::
 #
-#     >>> next_value = reward + (1 - done) * fun(observation)
+#     >>> # observation
+#     >>> obs_spec = env.observation_spec
+#     >>> obs_spec = env.output_spec["observation"]
+#     >>> # reward
+#     >>> reward_spec = env.reward_spec
+#     >>> reward_spec = env.output_spec["reward"]
+#     >>> # done
+#     >>> done_spec = env.done_spec
+#     >>> done_spec = env.output_spec["done"]
+#     >>> # action
+#     >>> action_spec = env.action_spec
+#     >>> action_spec = env.input_spec["action"]
 #
-#   Working with *unsqueezed* rewards allows us to build algorithms that are
-#   not polluted by squeezing and unsqueezing operations.
+# In other words, the ``observation_spec`` and related properties are
+# convenient shortcuts to the content of the output and input spec containers.
 #
 # TorchRL offers multiple :class:`torchrl.data.TensorSpec`
 # `subclasses <https://pytorch.org/rl/reference/data.html#tensorspec>`_ to
@@ -387,6 +395,7 @@ def _reset(self, tensordict):
 
 
 def _make_spec(self, td_params):
+    # Under the hood, this will populate self.output_spec["observation"]
     self.observation_spec = CompositeSpec(
         th=BoundedTensorSpec(
             minimum=-torch.pi,
