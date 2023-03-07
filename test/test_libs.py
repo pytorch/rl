@@ -873,7 +873,7 @@ class TestBrax:
         action.requires_grad_(True)
         td1["action"] = action
         td2 = env.step(td1)
-        td2["reward"].mean().backward()
+        td2[("next", "reward")].mean().backward()
         env.close()
         del env
 
