@@ -27,6 +27,9 @@ On the low-level end, torchrl comes with a set of highly re-usable functionals f
 
 TorchRL aims at (1) a high modularity and (2) good runtime performance.
 
+Here is an example of the [environment API](https://pytorch.org/rl/reference/envs.html) and how TorchRL implements rollouts.
+![Alt Text](docs/source/_static/img/rollout.gif)
+
 ## Documentation
 
 The TorchRL documentation can be found [here](https://pytorch.org/rl).
@@ -351,6 +354,7 @@ The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py)
 
 If you feel a feature is missing from the library, please submit an issue!
 If you would like to contribute to new features, check our [call for contributions](https://github.com/pytorch/rl/issues/509) and our [contribution](CONTRIBUTING.md) page.
+
 
 ## Examples, tutorials and demos
 
