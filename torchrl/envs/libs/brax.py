@@ -250,7 +250,7 @@ class BraxWrapper(_EnvWrapper):
         )
 
         # extract done values: we assume a shape identical to reward
-        next_done = next_state_nograd.get(("next", "done")).view(
+        next_done = next_state_nograd.get("done").view(
             *self.reward_spec.shape
         )
         next_reward = next_reward.view(*self.reward_spec.shape)
