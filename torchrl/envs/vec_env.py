@@ -345,11 +345,11 @@ class _BatchedEnv(EnvBase):
 
         if self._single_task:
             self.env_input_keys = sorted(
-                self.input_spec.keys(nested_keys=True), key=_sort_keys
+                self.input_spec.keys(True, True), key=_sort_keys
             )
             self.env_output_keys = []
             self.env_obs_keys = []
-            for key in self.output_spec["observation"].keys():
+            for key in self.output_spec["observation"].keys(True, True):
                 if isinstance(key, str):
                     key = (key,)
                 self.env_output_keys.append(("next", *key))
@@ -360,17 +360,17 @@ class _BatchedEnv(EnvBase):
             env_input_keys = set()
             for meta_data in self.meta_data:
                 env_input_keys = env_input_keys.union(
-                    meta_data.specs["input_spec"].keys()
+                    meta_data.specs["input_spec"].keys(True, True)
                 )
             env_output_keys = set()
             env_obs_keys = set()
             for meta_data in self.meta_data:
                 env_obs_keys = env_obs_keys.union(
-                    key for key in meta_data.specs["output_spec"]["observation"].keys()
+                    key for key in meta_data.specs["output_spec"]["observation"].keys(True, True)
                 )
                 env_output_keys = env_output_keys.union(
                     ("next", key) if isinstance(key, str) else ("next", *key)
-                    for key in meta_data.specs["output_spec"]["observation"].keys()
+                    for key in meta_data.specs["output_spec"]["observation"].keys(True, True)
                 )
             env_output_keys = env_output_keys.union(
                 {("next", "reward"), ("next", "done")}
