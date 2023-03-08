@@ -9,7 +9,7 @@ import logging
 
 import os
 from collections import OrderedDict
-from copy import deepcopy
+from copy import deepcopy, copy
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
@@ -1079,6 +1079,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         reset_data = self._env.reset(reset_workers)
         tensordict_out = self._transform_reset_output(reset_data, reset_workers)
         self.is_closed = False
+        print("reset", tensordict_out)
         return tensordict_out
 
     @torch.no_grad()
@@ -1088,6 +1089,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         action = action.to(torch.device("cpu"))
         step_output = self._env.step(action.numpy())
         tensordict_out = self._transform_step_output(step_output)
+        print("step", tensordict_out)
         return tensordict_out.select().set("next", tensordict_out)
 
     def _get_input_spec(self) -> TensorSpec:
@@ -1178,8 +1180,11 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             # All workers were reset - rewrite the whole observation buffer
             self.obs = TensorDict(self._treevalue_or_numpy_to_tensor_or_dict(observation), self.batch_size)
 
+        obs = copy(self.obs)
+        obs.update({"done": self.done_spec.zero()})
+
         tensordict_out = TensorDict(
-            {**self.obs, "done": self.done_spec.zero()},
+            obs,
             batch_size=self.batch_size,
             device=self.device,
         )
@@ -1191,8 +1196,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         """Process output of envpool env.step."""
         obs, reward, done, *_ = envpool_output
 
-        obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
-
+        self.obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
+        obs = copy(self.obs)
         obs.update({"reward": torch.tensor(reward), "done": done})
         tensordict_out = TensorDict(
             obs,
