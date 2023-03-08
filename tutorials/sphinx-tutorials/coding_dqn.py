@@ -81,7 +81,7 @@ from tensordict.nn import get_functional
 from torch import nn
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
-from torchrl.envs import EnvCreator, ParallelEnv, RewardScaling
+from torchrl.envs import EnvCreator, ParallelEnv, RewardScaling, StepCounter
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     CatFrames,
@@ -260,6 +260,7 @@ def make_env(parallel=False, observation_norm_state_dict=None):
     env = TransformedEnv(
         base_env,
         Compose(
+            StepCounter(),  # to count the steps of each trajectory
             ToTensorImage(),
             RewardScaling(loc=0.0, scale=0.1),
             GrayScale(),
@@ -534,10 +535,10 @@ for j, data in enumerate(data_collector):
     else:
         logs_exp1["frames"].append(current_frames)
 
-    if data["done"].any():
-        done = data["done"].squeeze(-1)
+    if data["next", "done"].any():
+        done = data["next", "done"].squeeze(-1)
         logs_exp1["traj_lengths"].append(
-            data["collector", "step_count"][done].float().mean().item()
+            data["next", "step_count"][done].float().mean().item()
         )
 
     # check that we have enough data to start training
@@ -548,8 +549,8 @@ for j, data in enumerate(data_collector):
             sampled_data = sampled_data.to(device, non_blocking=True)
 
             # collect data from RB
-            reward = sampled_data["reward"].squeeze(-1)
-            done = sampled_data["done"].squeeze(-1).to(reward.dtype)
+            reward = sampled_data["next", "reward"].squeeze(-1)
+            done = sampled_data["next", "done"].squeeze(-1).to(reward.dtype)
             action = sampled_data["action"].clone()
 
             # Compute action value (of the action actually taken) at time t
@@ -589,7 +590,9 @@ for j, data in enumerate(data_collector):
         logs_exp1["grad_vals"].append(float(gv))
         logs_exp1["losses"].append(error.item())
         logs_exp1["values"].append(action_value.mean().item())
-        logs_exp1["traj_count"].append(prev_traj_count + data["done"].sum().item())
+        logs_exp1["traj_count"].append(
+            prev_traj_count + data["next", "done"].sum().item()
+        )
         prev_traj_count = logs_exp1["traj_count"][-1]
 
         if j % 10 == 0:
@@ -600,7 +603,7 @@ for j, data in enumerate(data_collector):
                     policy=actor,
                 ).cpu()
             logs_exp1["traj_lengths_eval"].append(eval_rollout.shape[-1])
-            logs_exp1["evals"].append(eval_rollout["reward"].sum().item())
+            logs_exp1["evals"].append(eval_rollout["next", "reward"].sum().item())
             if len(logs_exp1["mavgs"]):
                 logs_exp1["mavgs"].append(
                     logs_exp1["evals"][-1] * 0.05 + logs_exp1["mavgs"][-1] * 0.95
@@ -791,10 +794,10 @@ for j, data in enumerate(data_collector):
     else:
         logs_exp2["frames"].append(current_frames)
 
-    if data["done"].any():
-        done = data["done"].squeeze(-1)
+    if data["next", "done"].any():
+        done = data["next", "done"].squeeze(-1)
         logs_exp2["traj_lengths"].append(
-            data["collector", "step_count"][done].float().mean().item()
+            data["next", "step_count"][done].float().mean().item()
         )
 
     if sum(logs_exp2["frames"]) > init_random_frames:
@@ -802,8 +805,8 @@ for j, data in enumerate(data_collector):
             sampled_data = replay_buffer.sample(batch_size // max_size)
             sampled_data = sampled_data.clone().to(device, non_blocking=True)
 
-            reward = sampled_data["reward"]
-            done = sampled_data["done"].to(reward.dtype)
+            reward = sampled_data["next", "reward"]
+            done = sampled_data["next", "done"].to(reward.dtype)
             action = sampled_data["action"].clone()
 
             sampled_data_out = sampled_data.select(*actor.in_keys)
@@ -846,7 +849,9 @@ for j, data in enumerate(data_collector):
 
         logs_exp2["losses"].append(error.item())
         logs_exp2["values"].append(action_value.mean().item())
-        logs_exp2["traj_count"].append(prev_traj_count + data["done"].sum().item())
+        logs_exp2["traj_count"].append(
+            prev_traj_count + data["next", "done"].sum().item()
+        )
         prev_traj_count = logs_exp2["traj_count"][-1]
         if j % 10 == 0:
             with set_exploration_mode("mode"), torch.no_grad():
@@ -858,7 +863,7 @@ for j, data in enumerate(data_collector):
                     policy=actor,
                 ).cpu()
             logs_exp2["traj_lengths_eval"].append(eval_rollout.shape[-1])
-            logs_exp2["evals"].append(eval_rollout["reward"].sum().item())
+            logs_exp2["evals"].append(eval_rollout["next", "reward"].sum().item())
             if len(logs_exp2["mavgs"]):
                 logs_exp2["mavgs"].append(
                     logs_exp2["evals"][-1] * 0.05 + logs_exp2["mavgs"][-1] * 0.95
@@ -1031,9 +1036,3 @@ del test_env
 # - More fancy exploration techniques, such as NoisyLinear layers and such
 #   (check ``torchrl.modules.NoisyLinear``, which is fully compatible with the
 #   ``MLP`` class used in our Dueling DQN).
-
-# sphinx_gallery_start_ignore
-import time
-
-time.sleep(10)
-# sphinx_gallery_end_ignore

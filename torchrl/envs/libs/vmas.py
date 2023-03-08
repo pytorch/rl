@@ -283,7 +283,7 @@ class VmasWrapper(_EnvWrapper):
 
         tensordict_out = torch.stack(agent_tds, dim=0)
 
-        return tensordict_out
+        return tensordict_out.select().set("next", tensordict_out)
 
     def read_obs(self, observations: torch.Tensor) -> torch.Tensor:
         observations = _selective_unsqueeze(

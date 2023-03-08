@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
-from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
+from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.utils import expand_right
 
 from torchrl.data.utils import DEVICE_TYPING
@@ -95,6 +95,11 @@ class ReplayBuffer:
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
             To chain transforms use the :obj:`Compose` class.
+            Transforms should be used with :class:`tensordict.TensorDict`
+            content. If used with other structures, the transforms should be
+            encoded with a `"data"` leading key that will be used to
+            construct a tensordict from the non-tensordict content.
+
     """
 
     def __init__(
@@ -197,7 +202,11 @@ class ReplayBuffer:
         Returns:
             Indices of the data aded to the replay buffer.
         """
-        data = self._transform.inv(data)
+        if self._transform is not None and isinstance(data, TensorDictBase):
+            data = self._transform.inv(data)
+        elif self._transform is not None:
+            # Accepts transforms that act on "data" key
+            data = self._transform.inv(TensorDict({"data": data}, [])).get("data")
         with self._replay_lock:
             index = self._writer.extend(data)
             self._sampler.extend(index)
@@ -218,7 +227,15 @@ class ReplayBuffer:
             data = self._storage[index]
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
-        data = self._transform(data)
+        if self._transform is not None:
+            is_td = True
+            if not isinstance(data, TensorDictBase):
+                data = TensorDict({"data": data}, [])
+                is_td = False
+            data = self._transform(data)
+            if not is_td:
+                data = data["data"]
+
         return data, info
 
     def sample(self, batch_size: int, return_info: bool = False) -> Any:

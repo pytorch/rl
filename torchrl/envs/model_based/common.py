@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import warnings
 from typing import List, Optional, Union
 
 import numpy as np
@@ -164,11 +165,15 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
                 dtype=torch.bool,
                 device=tensordict_out.device,
             )
-        return tensordict_out
+        return tensordict_out.select().set(
+            "next",
+            tensordict_out.select(*self.observation_spec.keys(), "reward", "done"),
+        )
 
     @abc.abstractmethod
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         raise NotImplementedError
 
     def _set_seed(self, seed: Optional[int]) -> int:
-        raise Warning("Set seed isn't needed for model based environments")
+        warnings.warn("Set seed isn't needed for model based environments")
+        return seed

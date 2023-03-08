@@ -56,9 +56,11 @@ class _MockEnv(EnvBase):
         *args,
         **kwargs,
     ):
-        for key, item in list(cls._observation_spec.items()):
-            cls._observation_spec[key] = item.to(torch.get_default_dtype())
-        cls._reward_spec = cls._reward_spec.to(torch.get_default_dtype())
+        for key, item in list(cls._output_spec["observation"].items()):
+            cls._output_spec["observation"][key] = item.to(torch.get_default_dtype())
+        cls._output_spec["reward"] = cls._output_spec["reward"].to(
+            torch.get_default_dtype()
+        )
         return super().__new__(*args, **kwargs)
 
     def __init__(
@@ -107,6 +109,7 @@ class MockSerialEnv(EnvBase):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        done_spec=None,
         **kwargs,
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
@@ -134,10 +137,14 @@ class MockSerialEnv(EnvBase):
                     1,
                 )
             )
+        if done_spec is None:
+            done_spec = DiscreteTensorSpec(2, dtype=torch.bool, shape=(*batch_size, 1))
         if input_spec is None:
             input_spec = CompositeSpec(action=action_spec, shape=batch_size)
-        cls._reward_spec = reward_spec
-        cls._observation_spec = observation_spec
+        cls._output_spec = CompositeSpec(shape=batch_size)
+        cls._output_spec["reward"] = reward_spec
+        cls._output_spec["done"] = done_spec
+        cls._output_spec["observation"] = observation_spec
         cls._input_spec = input_spec
         return super().__new__(*args, **kwargs)
 
@@ -158,7 +165,14 @@ class MockSerialEnv(EnvBase):
         )
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
-        return TensorDict({"reward": n, "done": done, "observation": n.clone()}, [])
+        return TensorDict(
+            {
+                "next": TensorDict(
+                    {"reward": n, "done": done, "observation": n.clone()}, batch_size=[]
+                )
+            },
+            batch_size=[],
+        )
 
     def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
         self.max_val = max(self.counter + 100, self.counter * 2)
@@ -185,6 +199,7 @@ class MockBatchedLockedEnv(EnvBase):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        done_spec=None,
         **kwargs,
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
@@ -223,8 +238,12 @@ class MockBatchedLockedEnv(EnvBase):
                     1,
                 )
             )
-        cls._reward_spec = reward_spec
-        cls._observation_spec = observation_spec
+        if done_spec is None:
+            done_spec = DiscreteTensorSpec(2, dtype=torch.bool, shape=(*batch_size, 1))
+        cls._output_spec = CompositeSpec(shape=batch_size)
+        cls._output_spec["reward"] = reward_spec
+        cls._output_spec["done"] = done_spec
+        cls._output_spec["observation"] = observation_spec
         cls._input_spec = input_spec
         return super().__new__(
             cls,
@@ -271,8 +290,14 @@ class MockBatchedLockedEnv(EnvBase):
             device=self.device,
         )
         return TensorDict(
-            {"reward": n, "done": done, "observation": n},
-            tensordict.batch_size,
+            {
+                "next": TensorDict(
+                    {"reward": n, "done": done, "observation": n},
+                    tensordict.batch_size,
+                    device=self.device,
+                )
+            },
+            batch_size=tensordict.batch_size,
             device=self.device,
         )
 
@@ -339,6 +364,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        done_spec=None,
         from_pixels=False,
         categorical_action_encoding=False,
         **kwargs,
@@ -365,6 +391,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
             action_spec = action_spec_cls(n=7, shape=(*batch_size, 7))
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec(shape=(1,))
+        if done_spec is None:
+            done_spec = DiscreteTensorSpec(2, dtype=torch.bool, shape=(*batch_size, 1))
 
         if input_spec is None:
             cls._out_key = "observation_orig"
@@ -374,8 +402,10 @@ class DiscreteActionVecMockEnv(_MockEnv):
                     "action": action_spec,
                 }
             )
-        cls._reward_spec = reward_spec
-        cls._observation_spec = observation_spec
+        cls._output_spec = CompositeSpec(shape=batch_size)
+        cls._output_spec["reward"] = reward_spec
+        cls._output_spec["done"] = done_spec
+        cls._output_spec["observation"] = observation_spec
         cls._input_spec = input_spec
         cls.from_pixels = from_pixels
         cls.categorical_action_encoding = categorical_action_encoding
@@ -419,7 +449,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         done = torch.zeros_like(done).all(-1).unsqueeze(-1)
         tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
-        return tensordict
+        return tensordict.select().set("next", tensordict)
 
 
 class ContinuousActionVecMockEnv(_MockEnv):
@@ -431,6 +461,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        done_spec=None,
         from_pixels=False,
         **kwargs,
     ):
@@ -458,6 +489,8 @@ class ContinuousActionVecMockEnv(_MockEnv):
             )
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec(shape=(*batch_size, 1))
+        if done_spec is None:
+            done_spec = DiscreteTensorSpec(2, dtype=torch.bool, shape=(*batch_size, 1))
 
         if input_spec is None:
             cls._out_key = "observation_orig"
@@ -468,8 +501,10 @@ class ContinuousActionVecMockEnv(_MockEnv):
                 },
                 shape=batch_size,
             )
-        cls._reward_spec = reward_spec
-        cls._observation_spec = observation_spec
+        cls._output_spec = CompositeSpec(shape=batch_size)
+        cls._output_spec["reward"] = reward_spec
+        cls._output_spec["done"] = done_spec
+        cls._output_spec["observation"] = observation_spec
         cls._input_spec = input_spec
         cls.from_pixels = from_pixels
         return super().__new__(*args, **kwargs)
@@ -513,7 +548,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         done = reward = done.unsqueeze(-1)
         tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
-        return tensordict
+        return tensordict.select().set("next", tensordict)
 
     def _obs_step(self, obs, a):
         return obs + a / self.maxstep
@@ -546,6 +581,7 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        done_spec=None,
         from_pixels=True,
         **kwargs,
     ):
@@ -565,6 +601,8 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
             action_spec = OneHotDiscreteTensorSpec(7, shape=(*batch_size, 7))
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec(shape=(*batch_size, 1))
+        if done_spec is None:
+            done_spec = DiscreteTensorSpec(2, dtype=torch.bool, shape=(*batch_size, 1))
 
         if input_spec is None:
             cls._out_key = "pixels_orig"
@@ -602,6 +640,7 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        done_spec=None,
         from_pixels=True,
         categorical_action_encoding=False,
         **kwargs,
@@ -667,6 +706,7 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        done_spec=None,
         from_pixels=True,
         pixel_shape=None,
         **kwargs,
@@ -691,6 +731,8 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
 
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec(shape=(*batch_size, 1))
+        if done_spec is None:
+            done_spec = DiscreteTensorSpec(2, dtype=torch.bool, shape=(*batch_size, 1))
         if input_spec is None:
             cls._out_key = "pixels_orig"
             input_spec = CompositeSpec(
@@ -724,6 +766,7 @@ class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        done_spec=None,
         from_pixels=True,
         **kwargs,
     ):
@@ -905,15 +948,16 @@ class CountingEnv(EnvBase):
     ) -> TensorDictBase:
         action = tensordict.get("action")
         self.count += action.to(torch.int)
-        return TensorDict(
+        tensordict = TensorDict(
             source={
-                "observation": self.count,
+                "observation": self.count.clone(),
                 "done": self.count > self.max_steps,
                 "reward": torch.zeros_like(self.count, dtype=torch.float),
             },
             batch_size=self.batch_size,
             device=self.device,
         )
+        return tensordict.select().set("next", tensordict)
 
 
 class CountingBatchedEnv(EnvBase):
@@ -989,12 +1033,13 @@ class CountingBatchedEnv(EnvBase):
     ) -> TensorDictBase:
         action = tensordict.get("action")
         self.count += action.to(torch.int).unsqueeze(-1)
-        return TensorDict(
+        tensordict = TensorDict(
             source={
-                "observation": self.count,
+                "observation": self.count.clone(),
                 "done": self.count > self.max_steps.unsqueeze(-1),
                 "reward": torch.zeros_like(self.count, dtype=torch.float),
             },
             batch_size=self.batch_size,
             device=self.device,
         )
+        return tensordict.select().set("next", tensordict)
