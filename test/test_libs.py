@@ -586,7 +586,7 @@ class TestEnvPool:
             N=N,
         )
         if env_name == "CheetahRun-v1":
-            in_keys = [("observation", "velocity")]
+            in_keys = [("velocity")]
             dtype = torch.float64
         else:
             in_keys = ["observation"]
