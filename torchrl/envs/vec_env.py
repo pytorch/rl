@@ -1075,8 +1075,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         pass
 
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        reset_workers = self._parse_reset_workers(tensordict)
-        reset_data = self._env.reset(reset_workers)
+        reset_workers = tensordict.get("_reset", None)
+        reset_data = self._env.reset(np.where(reset_workers.cpu().numpy())[0])
         tensordict_out = self._transform_reset_output(reset_data, reset_workers)
         self.is_closed = False
         return tensordict_out
@@ -1161,7 +1161,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _transform_reset_output(
         self,
         envpool_output: Tuple[Union["treevalue.TreeValue", np.ndarray], Any],
-        reset_workers: Optional[List[int]],
+        reset_workers: Optional[torch.Tensor],
     ):
         """Process output of envpool env.reset."""
         observation, _ = envpool_output
@@ -1171,8 +1171,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
                 # If observation contain several fields, it will be returned as treevalue.TreeValue.
                 # Convert to treevalue.FastTreeValue to allow indexing
                 observation = treevalue.FastTreeValue(observation)
-            for i, worker in enumerate(reset_workers):
-                self.obs[worker] = self._treevalue_or_numpy_to_tensor_or_dict(observation[i])
+            self.obs[reset_workers] = self._treevalue_or_numpy_to_tensor_or_dict(observation)
         else:
             # All workers were reset - rewrite the whole observation buffer
             self.obs = TensorDict(
