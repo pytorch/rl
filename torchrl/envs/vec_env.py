@@ -1179,12 +1179,10 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             self.obs = TensorDict(self._treevalue_or_numpy_to_tensor_or_dict(observation), self.batch_size)
 
         tensordict_out = TensorDict(
-            self.obs,
+            {**self.obs, "done": self.done_spec.zero()},
             batch_size=self.batch_size,
             device=self.device,
         )
-        # self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
-        tensordict_out.set("done", self.done_spec.zero())
         return tensordict_out
 
     def _transform_step_output(
@@ -1196,12 +1194,12 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
 
         tensordict_out = TensorDict(
-            {**obs, "reward": torch.tensor(reward)},
+            {**obs, "reward": torch.tensor(reward), "done": done},
             batch_size=self.batch_size,
             device=self.device,
         )
-        self._is_done = done
-        tensordict_out.set("done", self._is_done)
+        assert self.reward_spec.is_in(tensordict_out["reward"])
+        assert self.done_spec.is_in(tensordict_out["done"])
         return tensordict_out
 
     def _treevalue_or_numpy_to_tensor_or_dict(
