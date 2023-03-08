@@ -1055,7 +1055,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         # It's a TensorDict when the observation consists of several variables, e.g. "position" and "velocity"
         self.obs: Union[torch.tensor, TensorDict] = self.observation_spec[
             "observation"
-        ].zero((self.num_workers,))
+        ].zero()
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -1110,7 +1110,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _get_output_spec(self) -> TensorSpec:
         return CompositeSpec(
-            observaiton=self._get_observation_spec(),
+            observation=self._get_observation_spec(),
             reward=self._get_reward_spec(),
             done=self._get_done_spec(),
             shape=(self.num_workers,),
