@@ -31,8 +31,7 @@ from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs
 
-from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, \
-    SerialEnv
+from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
 if _has_gym:
@@ -885,6 +884,7 @@ class TestBrax:
             env = BraxEnv(envname, batch_size=batch_size, requires_grad=False)
             env.set_seed(1)
             return env
+
         if parallel:
             env = ParallelEnv(n, make_brax)
         else:
@@ -1066,7 +1066,7 @@ class TestVmas:
         env = ParallelEnv(n_workers, make_vmas)
         tensordict = env.rollout(max_steps=n_rollout_samples)
 
-        assert tensordict["done"].squeeze(-1)[..., -1].all()
+        assert tensordict["next", "done"].squeeze(-1)[..., -1].all()
 
         _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
         while not _reset.any():

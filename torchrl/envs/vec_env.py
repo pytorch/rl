@@ -344,9 +344,7 @@ class _BatchedEnv(EnvBase):
             shared_tensordict_parent = self._env_tensordict.clone()
 
         if self._single_task:
-            self.env_input_keys = sorted(
-                self.input_spec.keys(True), key=_sort_keys
-            )
+            self.env_input_keys = sorted(self.input_spec.keys(True), key=_sort_keys)
             self.env_output_keys = []
             self.env_obs_keys = []
             for key in self.output_spec["observation"].keys(True):
@@ -366,7 +364,8 @@ class _BatchedEnv(EnvBase):
             env_obs_keys = set()
             for meta_data in self.meta_data:
                 env_obs_keys = env_obs_keys.union(
-                    key for key in meta_data.specs["output_spec"]["observation"].keys(True)
+                    key
+                    for key in meta_data.specs["output_spec"]["observation"].keys(True)
                 )
                 env_output_keys = env_output_keys.union(
                     ("next", key) if isinstance(key, str) else ("next", *key)
@@ -1091,7 +1090,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         action = action.to(torch.device("cpu"))
         step_output = self._env.step(action.numpy())
         tensordict_out = self._transform_step_output(step_output)
-        return tensordict_out
+        return tensordict_out.select().set("next", tensordict_out)
 
     def _get_input_spec(self) -> TensorSpec:
         # Envpool provides Gym-compatible specs as env.spec.action_space and
