@@ -1168,22 +1168,18 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
                 # If observation contain several fields, it will be returned as treevalue.TreeValue.
                 # Convert to treevalue.FastTreeValue to allow indexing
                 observation = treevalue.FastTreeValue(observation)
-            self.obs[reset_workers] = self._treevalue_or_numpy_to_tensor_or_dict(observation)
+            self.obs[reset_workers] = self._treevalue_or_numpy_to_tensor_or_dict(
+                observation
+            )
         else:
             # All workers were reset - rewrite the whole observation buffer
             self.obs = TensorDict(
                 self._treevalue_or_numpy_to_tensor_or_dict(observation), self.batch_size
             )
 
-        obs = copy(self.obs)
+        obs = self.obs.clone(False)
         obs.update({"done": self.done_spec.zero()})
-        print("obs", obs)
-        tensordict_out = TensorDict(
-            obs,
-            batch_size=self.batch_size,
-            device=self.device,
-        )
-        return tensordict_out
+        return obs
 
     def _transform_step_output(
         self, envpool_output: Tuple[Any, Any, Any, ...]
@@ -1191,10 +1187,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         """Process output of envpool env.step."""
         obs, reward, done, *_ = envpool_output
 
-        self.obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
-        obs = copy(self.obs)
+        obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
         obs.update({"reward": torch.tensor(reward), "done": done})
-        tensordict_out = TensorDict(
+        self.obs = tensordict_out = TensorDict(
             obs,
             batch_size=self.batch_size,
             device=self.device,
