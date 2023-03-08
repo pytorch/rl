@@ -1079,7 +1079,10 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             reset_workers = tensordict.get("_reset", None)
         else:
             reset_workers = None
-        reset_data = self._env.reset(np.where(reset_workers.cpu().numpy())[0])
+        if reset_workers is not None:
+            reset_data = self._env.reset(np.where(reset_workers.cpu().numpy())[0])
+        else:
+            reset_data = self._env.reset()
         tensordict_out = self._transform_reset_output(reset_data, reset_workers)
         self.is_closed = False
         return tensordict_out
