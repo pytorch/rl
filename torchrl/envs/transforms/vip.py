@@ -96,11 +96,11 @@ class _VIPNet(Transform):
         if not isinstance(observation_spec, CompositeSpec):
             raise ValueError("_VIPNet can only infer CompositeSpec")
 
-        keys = [key for key in observation_spec._specs.keys() if key in self.in_keys]
+        keys = [key for key in observation_spec.keys(True, True) if key in self.in_keys]
         device = observation_spec[keys[0]].device
         dim = observation_spec[keys[0]].shape[:-3]
 
-        observation_spec = CompositeSpec(observation_spec)
+        observation_spec = CompositeSpec(observation_spec, shape=observation_spec.shape)
         if self.del_keys:
             for in_key in keys:
                 del observation_spec[in_key]
@@ -375,13 +375,13 @@ class VIPRewardTransform(VIPTransform):
         last_embedding_key = self.out_keys[0]
         last_embedding = tensordict.get(last_embedding_key, None)
         tensordict = super()._step(tensordict)
-        cur_embedding = tensordict.get(self.out_keys[0])
+        cur_embedding = tensordict.get(("next", self.out_keys[0]))
         if last_embedding is not None:
             goal_embedding = tensordict["goal_embedding"]
             reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
                 -torch.norm(last_embedding - goal_embedding, dim=-1)
             )
-            tensordict.set("reward", reward)
+            tensordict.set(("next", "reward"), reward)
         return tensordict
 
     def forward(self, tensordict):

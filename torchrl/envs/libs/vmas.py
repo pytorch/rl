@@ -238,7 +238,7 @@ class VmasWrapper(_EnvWrapper):
                 device=self.device,
             )
 
-            if infos is not None:
+            if agent_info is not None:
                 agent_td.set("info", agent_info)
             if dones is not None:
                 agent_td.set("done", dones[i])
@@ -277,13 +277,13 @@ class VmasWrapper(_EnvWrapper):
                 device=self.device,
             )
 
-            if infos is not None:
+            if agent_info is not None:
                 agent_td.set("info", agent_info)
             agent_tds.append(agent_td)
 
         tensordict_out = torch.stack(agent_tds, dim=0)
 
-        return tensordict_out
+        return tensordict_out.select().set("next", tensordict_out)
 
     def read_obs(self, observations: torch.Tensor) -> torch.Tensor:
         observations = _selective_unsqueeze(

@@ -37,10 +37,13 @@ def test_multistep(n, key, device, T=11):
     tensordict = TensorDict(
         source={
             key: total_obs[:, :T] * mask.to(torch.float),
-            "next": {key: total_obs[:, 1:] * mask.to(torch.float)},
             "done": done,
-            "reward": torch.randn(1, T, 1, device=device).expand(b, T, 1)
-            * mask.to(torch.float),
+            "next": {
+                key: total_obs[:, 1:] * mask.to(torch.float),
+                "done": done,
+                "reward": torch.randn(1, T, 1, device=device).expand(b, T, 1)
+                * mask.to(torch.float),
+            },
             "collector": {"mask": mask},
         },
         batch_size=(b, T),
@@ -55,7 +58,9 @@ def test_multistep(n, key, device, T=11):
     assert ms_tensordict.get("done").max() == 1
 
     if n == 0:
-        assert_allclose_td(tensordict, ms_tensordict.select(*list(tensordict.keys())))
+        assert_allclose_td(
+            tensordict, ms_tensordict.select(*list(tensordict.keys(True, True)))
+        )
 
     # assert that done at last step is similar to unterminated traj
     assert (ms_tensordict.get("gamma")[4] == ms_tensordict.get("gamma")[0]).all()
@@ -81,11 +86,13 @@ def test_multistep(n, key, device, T=11):
     # test reward
     if n > 0:
         assert (
-            ms_tensordict.get("reward") != ms_tensordict.get("original_reward")
+            ms_tensordict.get(("next", "reward"))
+            != ms_tensordict.get(("next", "original_reward"))
         ).any()
     else:
         assert (
-            ms_tensordict.get("reward") == ms_tensordict.get("original_reward")
+            ms_tensordict.get(("next", "reward"))
+            == ms_tensordict.get(("next", "original_reward"))
         ).all()
 
 
@@ -102,24 +109,29 @@ class TestSplits:
         workers = torch.arange(num_workers)
 
         out = []
+        done0 = torch.zeros(num_workers, 1, dtype=torch.bool)
         for _ in range(traj_len):
             done = step_count == traj_ids  # traj_id 0 has 0 steps, 1 has 1 step etc.
-
+            done = done.unsqueeze(-1)
             td = TensorDict(
                 source={
                     ("collector", "traj_ids"): traj_ids,
                     "a": traj_ids.clone().unsqueeze(-1),
-                    ("collector", "step_count"): step_count,
+                    "step_count": step_count,
                     "workers": workers,
-                    "done": done.unsqueeze(-1),
+                    "done": done0,
+                    ("next", "done"): done,
                 },
                 batch_size=[num_workers],
             )
+            done0 = done
             out.append(td.clone())
             step_count += 1
 
-            traj_ids[done] = traj_ids.max() + torch.arange(1, done.sum() + 1)
-            step_count[done] = 0
+            traj_ids[done.squeeze(-1)] = traj_ids.max() + torch.arange(
+                1, done.sum() + 1
+            )
+            step_count[done.squeeze(-1)] = 0
 
         out = torch.stack(out, 1).contiguous()
         return out
@@ -135,14 +147,11 @@ class TestSplits:
         assert (
             split_trajs.shape[0] == split_trajs.get(("collector", "traj_ids")).max() + 1
         )
-        assert (
-            split_trajs.shape[1]
-            == split_trajs.get(("collector", "step_count")).max() + 1
-        )
+        assert split_trajs.shape[1] == split_trajs.get("step_count").max() + 1
 
         assert split_trajs.get(("collector", "mask")).sum() == num_workers * traj_len
 
-        assert split_trajs.get("done").sum(1).max() == 1
+        assert split_trajs.get(("next", "done")).sum(1).max() == 1
         out_mask = split_trajs[split_trajs.get(("collector", "mask"))]
         for i in range(split_trajs.shape[0]):
             traj_id_split = split_trajs[i].get(("collector", "traj_ids"))[
@@ -157,9 +166,9 @@ class TestSplits:
             idx_traj_id = out_mask.get(("collector", "traj_ids")) == i
             # (!=) == (xor)
             c1 = (idx_traj_id.sum() - 1 == i) and (
-                out_mask.get("done")[idx_traj_id].sum() == 1
+                out_mask.get(("next", "done"))[idx_traj_id].sum() == 1
             )  # option 1: trajectory is complete
-            c2 = out_mask.get("done")[idx_traj_id].sum() == 0
+            c2 = out_mask.get(("next", "done"))[idx_traj_id].sum() == 0
             assert c1 != c2, (
                 f"traj_len={traj_len}, "
                 f"num_workers={num_workers}, "

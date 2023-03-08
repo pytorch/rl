@@ -174,7 +174,7 @@ class GymLikeEnv(_EnvWrapper):
                 # when queried with and without pixels
                 observations["observation"] = observations.pop("state")
         if not isinstance(observations, (TensorDict, dict)):
-            (key,) = itertools.islice(self.observation_spec.keys(), 1)
+            (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
         observations = self.observation_spec.encode(observations)
         return observations
@@ -236,7 +236,7 @@ class GymLikeEnv(_EnvWrapper):
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
 
-        return tensordict_out
+        return tensordict_out.select().set("next", tensordict_out)
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
@@ -261,9 +261,10 @@ class GymLikeEnv(_EnvWrapper):
             for key, item in self.observation_spec.items():
                 if key not in tensordict_out.keys():
                     tensordict_out[key] = item.zero()
+
         tensordict_out.setdefault(
             "done",
-            torch.zeros(*self.batch_size, 1, dtype=torch.bool, device=self.device),
+            self.done_spec.zero(),
         )
         return tensordict_out
 
@@ -290,7 +291,8 @@ class GymLikeEnv(_EnvWrapper):
         Returns: the same environment with the dict_reader registered.
 
         Examples:
-            >>> from torchrl.envs import GymWrapper, default_info_dict_reader
+            >>> from torchrl.envs import default_info_dict_reader
+            >>> from torchrl.envs.libs.gym import GymWrapper
             >>> reader = default_info_dict_reader(["my_info_key"])
             >>> # assuming "some_env-v0" returns a dict with a key "my_info_key"
             >>> env = GymWrapper(gym.make("some_env-v0")).set_info_dict_reader(info_dict_reader=reader)

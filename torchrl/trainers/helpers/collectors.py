@@ -302,7 +302,6 @@ def make_collector_offpolicy(
         "pin_memory": cfg.pin_memory,
         "split_trajs": True,
         # trajectories must be separated if multi-step is used
-        "init_with_lag": cfg.init_with_lag,
         "exploration_mode": cfg.exploration_mode,
     }
 
@@ -356,7 +355,6 @@ def make_collector_onpolicy(
         "pin_memory": cfg.pin_memory,
         "split_trajs": True,
         # trajectories must be separated in online settings
-        "init_with_lag": cfg.init_with_lag,
         "exploration_mode": cfg.exploration_mode,
     }
 
@@ -375,10 +373,6 @@ class OnPolicyCollectorConfig:
     # weights of the collector policy are synchronized with collector.update_policy_weights_().
     pin_memory: bool = False
     # if True, the data collector will call pin_memory before dispatching tensordicts onto the passing device
-    init_with_lag: bool = False
-    # if True, the first trajectory will be truncated earlier at a random step. This is helpful
-    # to desynchronize the environments, such that steps do no match in all collected
-    # rollouts. Especially useful for online training, to prevent cyclic sample indices.
     frames_per_batch: int = 1000
     # number of steps executed in the environment per collection.
     # This value represents how many steps will the data collector execute and return in *each*

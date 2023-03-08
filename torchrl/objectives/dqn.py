@@ -66,8 +66,8 @@ class DQNLoss(LossModule):
             a priority to items in the tensordict.
 
         Args:
-            input_tensordict (TensorDictBase): a tensordict with keys ["done", "reward", "action"] and the in_keys of
-                the value network.
+            input_tensordict (TensorDictBase): a tensordict with keys ["action"] and the in_keys of
+                the value network (observations, "done", "reward" in a "next" tensordict).
 
         Returns:
             a tensor containing the DQN loss.
@@ -207,8 +207,8 @@ class DistributionalDQNLoss(LossModule):
         delta_z = (Vmax - Vmin) / (atoms - 1)
 
         action = tensordict.get("action")
-        reward = tensordict.get("reward")
-        done = tensordict.get("done")
+        reward = tensordict.get(("next", "reward"))
+        done = tensordict.get(("next", "done"))
 
         steps_to_next_obs = tensordict.get("steps_to_next_obs", 1)
         discount = self.gamma**steps_to_next_obs
