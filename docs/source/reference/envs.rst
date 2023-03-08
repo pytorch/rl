@@ -166,7 +166,7 @@ It is also possible to reset some but not all of the environments:
 .. note::
 
   *TorchRL requires precise specs*: Another thing to take in consideration is
-  that :class:`ParallelEnv`s (as well as data collectors)
+  that :class:`ParallelEnv` (as well as data collectors)
   will create data buffers based on the environment specs to pass data from one process
   to another. This means that a misspecified spec (input, observation or reward) will
   cause a breakage at runtime as the data can't be written on the preallocated buffer.
