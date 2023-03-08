@@ -389,7 +389,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
         tensordict.unlock_()
 
-        obs_keys = self.observation_spec.keys(nested_keys=False)
+        obs_keys = self.observation_spec.keys(True, True)
         # we deliberately do not update the input values, but we want to keep track of
         # new keys considered as "input" by inverse transforms.
         in_keys = self._get_in_keys_to_exclude(tensordict)

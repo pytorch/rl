@@ -430,12 +430,14 @@ class _BatchedEnv(EnvBase):
                 )
         else:
             if self._single_task:
-                self.env_input_keys = sorted(self.input_spec.keys(), key=_sort_keys)
+                self.env_input_keys = sorted(
+                    self.input_spec.keys(True, True), key=_sort_keys
+                )
             else:
                 env_input_keys = set()
                 for meta_data in self.meta_data:
                     env_input_keys = env_input_keys.union(
-                        meta_data.specs["input_spec"].keys()
+                        meta_data.specs["input_spec"].keys(True, True)
                     )
                 self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
             if not len(self.env_input_keys):
@@ -603,7 +605,7 @@ class SerialEnv(_BatchedEnv):
         tensordict_in = tensordict.clone(False)
         # update the shared tensordict to keep the input entries up-to-date
         self.shared_tensordict_parent.update_(
-            tensordict_in.select(*self.input_spec.keys(), strict=False)
+            tensordict_in.select(*self.input_spec.keys(True, True), strict=False)
         )
         # If a key is both in input and output spec, we should keep it because it has been modified
         input_keys = set(self.input_spec.keys(True)) - set(
@@ -788,7 +790,7 @@ class ParallelEnv(_BatchedEnv):
         self._assert_tensordict_shape(tensordict)
 
         self.shared_tensordict_parent.update_(
-            tensordict.select(*self.input_spec.keys(), strict=False)
+            tensordict.select(*self.input_spec.keys(True, True), strict=False)
         )
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
@@ -1051,7 +1053,7 @@ def _run_worker_pipe_shared_mem(
                 _td = tensordict.clone(recurse=False)
             _td = env._step(_td)
             if step_keys is None:
-                step_keys = set(env.observation_spec.keys()).union(
+                step_keys = set(env.observation_spec.keys(True, True)).union(
                     {"done", "terminated", "reward"}
                 )
             if pin_memory:

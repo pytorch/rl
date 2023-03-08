@@ -176,10 +176,10 @@ def _get_gym_envs():  # noqa: F811
 def _is_from_pixels(env):
     observation_spec = env.observation_space
     if isinstance(observation_spec, (Dict,)):
-        if "pixels" in set(observation_spec.keys()):
+        if "pixels" in set(observation_spec.keys(True, True)):
             return True
     if isinstance(observation_spec, (gym.spaces.dict.Dict,)):
-        if "pixels" in set(observation_spec.spaces.keys()):
+        if "pixels" in set(observation_spec.spaces.keys(True, True)):
             return True
     elif (
         isinstance(observation_spec, gym.spaces.Box)
