@@ -1075,7 +1075,10 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         pass
 
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        reset_workers = tensordict.get("_reset", None)
+        if tensordict is not None:
+            reset_workers = tensordict.get("_reset", None)
+        else:
+            reset_workers = None
         reset_data = self._env.reset(np.where(reset_workers.cpu().numpy())[0])
         tensordict_out = self._transform_reset_output(reset_data, reset_workers)
         self.is_closed = False
@@ -1148,15 +1151,6 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(num_workers={self.num_workers}, device={self.device})"
-
-    def _parse_reset_workers(self, tensordict):
-        """Convert worker information from mask to indices, e.g. (0, 1, 0, 0, 1) to  (1, 4)."""
-        if tensordict is None or "_reset" not in tensordict.keys():
-            return None
-        reset_workers = tensordict.get("_reset")
-        if reset_workers is None:
-            return None
-        return np.where(reset_workers)[0]
 
     def _transform_reset_output(
         self,
