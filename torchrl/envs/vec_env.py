@@ -1183,8 +1183,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             batch_size=self.batch_size,
             device=self.device,
         )
-        self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
-        tensordict_out.set("done", self._is_done)
+        # self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
+        tensordict_out.set("done", self.done_spec.zero())
         return tensordict_out
 
     def _transform_step_output(
