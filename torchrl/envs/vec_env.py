@@ -1134,14 +1134,14 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _get_reward_spec(self) -> TensorSpec:
         return UnboundedContinuousTensorSpec(
-            device=self.device, shape=(self.num_workers, 1)
+            device=self.device, shape=self.num_workers
         )
 
     def _get_done_spec(self) -> TensorSpec:
         return DiscreteTensorSpec(
             2,
             device=self.device,
-            shape=(self.num_workers, 1),
+            shape=self.num_workers,
             dtype=torch.bool,
         )
 
