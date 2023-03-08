@@ -1179,7 +1179,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             self.obs = TensorDict(self._treevalue_or_numpy_to_tensor_or_dict(observation), self.batch_size)
 
         tensordict_out = TensorDict(
-            {"observation": self.obs},
+            self.obs,
             batch_size=self.batch_size,
             device=self.device,
         )
