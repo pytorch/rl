@@ -1193,13 +1193,12 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
         obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
 
+        obs.update({"reward": torch.tensor(reward), "done": done})
         tensordict_out = TensorDict(
-            {**obs, "reward": torch.tensor(reward), "done": done},
+            obs,
             batch_size=self.batch_size,
             device=self.device,
         )
-        assert self.reward_spec.is_in(tensordict_out["reward"])
-        assert self.done_spec.is_in(tensordict_out["done"])
         return tensordict_out
 
     def _treevalue_or_numpy_to_tensor_or_dict(
