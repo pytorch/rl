@@ -497,15 +497,19 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
 
+        if len(self.batch_size):
+            leading_dim = tensordict_reset.shape[: -len(self.batch_size)]
+        else:
+            leading_dim = tensordict_reset.shape
         if self.done_spec is not None and "done" not in tensordict_reset.keys():
             tensordict_reset.set(
                 "done",
-                self.done_spec.zero(),
+                self.done_spec.zero(leading_dim),
             )
         if self.reward_spec is not None and "reward" not in tensordict_reset.keys():
             tensordict_reset.set(
                 "reward",
-                self.reward_spec.zero(),
+                self.reward_spec.zero(leading_dim),
             )
 
         if (_reset is None and tensordict_reset.get("done").any()) or (
