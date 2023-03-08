@@ -345,11 +345,11 @@ class _BatchedEnv(EnvBase):
 
         if self._single_task:
             self.env_input_keys = sorted(
-                self.input_spec.keys(True, True), key=_sort_keys
+                self.input_spec.keys(True), key=_sort_keys
             )
             self.env_output_keys = []
             self.env_obs_keys = []
-            for key in self.output_spec["observation"].keys(True, True):
+            for key in self.output_spec["observation"].keys(True):
                 if isinstance(key, str):
                     key = (key,)
                 self.env_output_keys.append(("next", *key))
@@ -360,17 +360,17 @@ class _BatchedEnv(EnvBase):
             env_input_keys = set()
             for meta_data in self.meta_data:
                 env_input_keys = env_input_keys.union(
-                    meta_data.specs["input_spec"].keys(True, True)
+                    meta_data.specs["input_spec"].keys(True)
                 )
             env_output_keys = set()
             env_obs_keys = set()
             for meta_data in self.meta_data:
                 env_obs_keys = env_obs_keys.union(
-                    key for key in meta_data.specs["output_spec"]["observation"].keys(True, True)
+                    key for key in meta_data.specs["output_spec"]["observation"].keys(True)
                 )
                 env_output_keys = env_output_keys.union(
                     ("next", key) if isinstance(key, str) else ("next", *key)
-                    for key in meta_data.specs["output_spec"]["observation"].keys(True, True)
+                    for key in meta_data.specs["output_spec"]["observation"].keys(True)
                 )
             env_output_keys = env_output_keys.union(
                 {("next", "reward"), ("next", "done")}
@@ -921,7 +921,6 @@ def _run_worker_pipe_shared_mem(
     # make sure that process can be closed
     tensordict = None
     _td = None
-    data = None
 
     reset_keys = None
 
@@ -962,15 +961,6 @@ def _run_worker_pipe_shared_mem(
 
             if "_reset" in _td.keys():
                 _td.del_("_reset")
-            # done = _td.get("done", None)
-            # if done is None:
-            #     _td["done"] = torch.zeros(
-            #         *_td.batch_size, 1, dtype=torch.bool, device=env.device
-            #     )
-            # elif done is not None and done.shape != torch.Size([*_td.batch_size, 1]):
-            #     _td.set("done", done.unsqueeze(-1))
-            # if reset_keys is None:
-            #     reset_keys = set(_td.keys())
             if pin_memory:
                 _td.pin_memory()
             tensordict.update_(_td.select(*tensordict.keys(True, True), strict=False))

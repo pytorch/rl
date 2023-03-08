@@ -442,7 +442,7 @@ class SyncDataCollector(_DataCollector):
             hasattr(self.policy, "spec")
             and self.policy.spec is not None
             and all(v is not None for v in self.policy.spec.values())
-            and set(self.policy.spec.keys()) == set(self.policy.out_keys)
+            and set(self.policy.spec.keys(True, True)) == set(self.policy.out_keys)
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information

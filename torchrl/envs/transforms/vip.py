@@ -96,7 +96,7 @@ class _VIPNet(Transform):
         if not isinstance(observation_spec, CompositeSpec):
             raise ValueError("_VIPNet can only infer CompositeSpec")
 
-        keys = [key for key in observation_spec._specs.keys() if key in self.in_keys]
+        keys = [key for key in observation_spec.keys(True, True) if key in self.in_keys]
         device = observation_spec[keys[0]].device
         dim = observation_spec[keys[0]].shape[:-3]
 

@@ -62,7 +62,7 @@ def _apply_to_composite(function):
         if isinstance(observation_spec, CompositeSpec):
             d = observation_spec._specs
             for in_key, out_key in zip(self.in_keys, self.out_keys):
-                if in_key in observation_spec.keys():
+                if in_key in observation_spec.keys(True, True):
                     d[out_key] = function(self, observation_spec[in_key].clone())
             return CompositeSpec(
                 d, shape=observation_spec.shape, device=observation_spec.device
@@ -86,7 +86,7 @@ def _apply_to_composite_inv(function):
         if isinstance(input_spec, CompositeSpec):
             d = input_spec._specs
             for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-                if in_key in input_spec.keys() and in_key == out_key:
+                if in_key in input_spec.keys(True, True) and in_key == out_key:
                     d[out_key] = function(self, input_spec[in_key].clone())
             return CompositeSpec(d, shape=input_spec.shape, device=input_spec.device)
         else:
@@ -2104,7 +2104,7 @@ class CatTensors(Transform):
             # by def, there must be only one key
             return observation_spec
 
-        keys = [key for key in observation_spec._specs.keys() if key in self.in_keys]
+        keys = [key for key in observation_spec.keys(True, True) if key in self.in_keys]
 
         sum_shape = sum(
             [
@@ -2901,7 +2901,7 @@ class RewardSum(Transform):
                         raise KeyError(
                             f"The key {in_key} was not found in the parent "
                             f"observation_spec with keys "
-                            f"{list(self.parent.observation_spec.keys())}. "
+                            f"{list(self.parent.observation_spec.keys(True))}. "
                         ) from err
 
         return tensordict
@@ -2925,7 +2925,7 @@ class RewardSum(Transform):
         episode_specs = {}
         if isinstance(reward_spec, CompositeSpec):
             # If reward_spec is a CompositeSpec, all in_keys should be keys of reward_spec
-            if not all(k in reward_spec.keys() for k in self.in_keys):
+            if not all(k in reward_spec.keys(True, True) for k in self.in_keys):
                 raise KeyError("Not all in_keys are present in ´reward_spec´")
 
             # Define episode specs for all out_keys
@@ -3102,7 +3102,7 @@ class ExcludeTransform(Transform):
         return tensordict.exclude(*self.excluded_keys)
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        if any(key in observation_spec.keys() for key in self.excluded_keys):
+        if any(key in observation_spec.keys(True, True) for key in self.excluded_keys):
             return CompositeSpec(
                 **{
                     key: value
@@ -3135,7 +3135,7 @@ class SelectTransform(Transform):
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.parent:
-            input_keys = self.parent.input_spec.keys()
+            input_keys = self.parent.input_spec.keys(True, True)
         else:
             input_keys = []
         return tensordict.select(
@@ -3146,7 +3146,7 @@ class SelectTransform(Transform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.parent:
-            input_keys = self.parent.input_spec.keys()
+            input_keys = self.parent.input_spec.keys(True, True)
         else:
             input_keys = []
         return tensordict.select(

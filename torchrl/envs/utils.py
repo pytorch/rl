@@ -307,14 +307,14 @@ def _check_isin(key, value, obs_spec, input_spec):
         for _key, _value in value.items():
             _check_isin(_key, _value, obs_spec, input_spec)
         return
-    elif key in input_spec.keys(yield_nesting_keys=True):
+    elif key in input_spec.keys(True):
         if not input_spec[key].is_in(value):
             raise AssertionError(
                 f"input_spec.is_in failed for key {key}. "
                 f"Got input_spec={input_spec[key]} and real={value}."
             )
         return
-    elif key in obs_spec.keys(yield_nesting_keys=True):
+    elif key in obs_spec.keys(True):
         if not obs_spec[key].is_in(value):
             raise AssertionError(
                 f"obs_spec.is_in failed for key {key}. "
@@ -322,7 +322,9 @@ def _check_isin(key, value, obs_spec, input_spec):
             )
         return
     else:
-        raise KeyError(key)
+        raise KeyError(
+            f"key {key} was not found in input spec with keys {input_spec.keys(True)} or obs spec with keys {obs_spec.keys(True)}"
+        )
 
 
 def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int = -1):

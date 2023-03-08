@@ -174,7 +174,7 @@ class GymLikeEnv(_EnvWrapper):
                 # when queried with and without pixels
                 observations["observation"] = observations.pop("state")
         if not isinstance(observations, (TensorDict, dict)):
-            (key,) = itertools.islice(self.observation_spec.keys(), 1)
+            (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
         observations = self.observation_spec.encode(observations)
         return observations
