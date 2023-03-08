@@ -628,8 +628,8 @@ class TestEnvPool:
 
         td1 = env_multithreaded.step(td)
         assert not td1.is_shared()
-        assert ("next", "done") in td1.keys()
-        assert ("next", "reward") in td1.keys()
+        assert ("next", "done") in td1.keys(True)
+        assert ("next", "reward") in td1.keys(True)
 
         with pytest.raises(RuntimeError):
             # number of actions does not match number of workers
