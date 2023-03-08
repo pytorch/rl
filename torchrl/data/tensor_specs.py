@@ -1862,13 +1862,10 @@ class CompositeSpec(TensorSpec):
                 self._specs[_key].type_check(value[_key], _key)
 
     def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
-        return all(
-            [
-                item.is_in(val.get(key))
-                for (key, item) in self._specs.items()
-                if item is not None
-            ]
-        )
+        for (key, item) in self._specs.items():
+            if not item.is_in(val.get(key)):
+                return False
+        return True
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
         for key, item in self.items():

@@ -392,7 +392,7 @@ class _BatchedEnv(EnvBase):
                 )
             raise_no_selected_keys = False
             if self.selected_keys is None:
-                self.selected_keys = list(shared_tensordict_parent.keys())
+                self.selected_keys = list(shared_tensordict_parent.keys(True))
                 if self.excluded_keys is not None:
                     self.selected_keys = set(self.selected_keys).difference(
                         self.excluded_keys
@@ -430,14 +430,12 @@ class _BatchedEnv(EnvBase):
                 )
         else:
             if self._single_task:
-                self.env_input_keys = sorted(
-                    self.input_spec.keys(True, True), key=_sort_keys
-                )
+                self.env_input_keys = sorted(self.input_spec.keys(True), key=_sort_keys)
             else:
                 env_input_keys = set()
                 for meta_data in self.meta_data:
                     env_input_keys = env_input_keys.union(
-                        meta_data.specs["input_spec"].keys(True, True)
+                        meta_data.specs["input_spec"].keys(True)
                     )
                 self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
             if not len(self.env_input_keys):
@@ -1053,7 +1051,7 @@ def _run_worker_pipe_shared_mem(
                 _td = tensordict.clone(recurse=False)
             _td = env._step(_td)
             if step_keys is None:
-                step_keys = set(env.observation_spec.keys(True, True)).union(
+                step_keys = set(env.observation_spec.keys(True)).union(
                     {"done", "terminated", "reward"}
                 )
             if pin_memory:
