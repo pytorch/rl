@@ -528,8 +528,8 @@ class TestEnvPool:
         )
         td1 = env_multithreaded.step(td)
         assert not td1.is_shared()
-        assert "done" in td1.keys()
-        assert "reward" in td1.keys()
+        assert ("next", "done") in td1.keys(True)
+        assert ("next", "reward") in td1.keys(True)
 
         with pytest.raises(RuntimeError):
             # number of actions does not match number of workers
@@ -537,13 +537,11 @@ class TestEnvPool:
                 source={"action": env_multithreaded.action_spec.rand()},
                 batch_size=[N - 1],
             )
-            td1 = env_multithreaded.step(td)
+            _ = env_multithreaded.step(td)
 
         td_reset = TensorDict(
             source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
-            batch_size=[
-                N,
-            ],
+            batch_size=[N],
         )
         env_multithreaded.reset(tensordict=td_reset)
 

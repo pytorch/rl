@@ -1079,7 +1079,6 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         reset_data = self._env.reset(reset_workers)
         tensordict_out = self._transform_reset_output(reset_data, reset_workers)
         self.is_closed = False
-        print("reset", tensordict_out)
         return tensordict_out
 
     @torch.no_grad()
@@ -1089,7 +1088,6 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         action = action.to(torch.device("cpu"))
         step_output = self._env.step(action.numpy())
         tensordict_out = self._transform_step_output(step_output)
-        print("step", tensordict_out)
         return tensordict_out.select().set("next", tensordict_out)
 
     def _get_input_spec(self) -> TensorSpec:
