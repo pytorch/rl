@@ -9,7 +9,7 @@ import logging
 
 import os
 from collections import OrderedDict
-from copy import copy, deepcopy
+from copy import deepcopy
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
