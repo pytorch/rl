@@ -408,7 +408,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # TODO: Refactor this using done spec
         done = next_tensordict_out.get("done")
         # unsqueeze done if needed
-        expected_done_shape = torch.Size([*leading_batch_size, *batch_size, 1])
+        expected_done_shape = torch.Size([*leading_batch_size, *self.done_spec.shape])
         actual_done_shape = done.shape
         if actual_done_shape != expected_done_shape:
             done = done.view(expected_done_shape)
@@ -500,12 +500,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if self.done_spec is not None and "done" not in tensordict_reset.keys():
             tensordict_reset.set(
                 "done",
-                torch.zeros((*tensordict_reset.shape, 1), dtype=self.done_spec.dtype),
+                self.done_spec.zero(),
             )
         if self.reward_spec is not None and "reward" not in tensordict_reset.keys():
             tensordict_reset.set(
                 "reward",
-                torch.zeros((*tensordict_reset.shape, 1), dtype=self.reward_spec.dtype),
+                self.reward_spec.zero(),
             )
 
         if (_reset is None and tensordict_reset.get("done").any()) or (
