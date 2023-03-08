@@ -1053,9 +1053,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
         # Buffer to keep the latest observation for each worker
         # It's a TensorDict when the observation consists of several variables, e.g. "position" and "velocity"
-        self.obs: Union[torch.tensor, TensorDict] = self.observation_spec[
-            "observation"
-        ].zero()
+        self.obs: Union[torch.tensor, TensorDict] = self.observation_spec.zero()
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -1124,6 +1122,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             categorical_action_encoding=True,
         )
         observation_spec = self._add_shape_to_spec(observation_spec)
+        if isinstance(observation_spec, CompositeSpec):
+            return observation_spec
         return CompositeSpec(
             observation=observation_spec,
             shape=(self.num_workers,),
@@ -1176,7 +1176,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
                 )
         else:
             # All workers were reset - rewrite the whole observation buffer
-            self.obs = self._treevalue_or_numpy_to_tensor_or_dict(observation)
+            self.obs = TensorDict(self._treevalue_or_numpy_to_tensor_or_dict(observation), self.batch_size)
 
         tensordict_out = TensorDict(
             {"observation": self.obs},
@@ -1196,7 +1196,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
 
         tensordict_out = TensorDict(
-            {"observation": obs, "reward": torch.tensor(reward)},
+            {**obs, "reward": torch.tensor(reward)},
             batch_size=self.batch_size,
             device=self.device,
         )
@@ -1216,7 +1216,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         if isinstance(x, treevalue.TreeValue):
             ret = self._treevalue_to_dict(x)
         else:
-            ret = torch.tensor(x)
+            ret = {"observation": torch.tensor(x)}
         return ret
 
     def _treevalue_to_dict(self, tv: "treevalue.TreeValue") -> Dict[str, Any]:
