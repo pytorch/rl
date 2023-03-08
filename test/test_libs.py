@@ -539,8 +539,9 @@ class TestEnvPool:
             )
             _ = env_multithreaded.step(td)
 
+        _reset = torch.zeros(N, dtype=torch.bool).bernoulli_()
         td_reset = TensorDict(
-            source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
+            source={"_reset": _reset},
             batch_size=[N],
         )
         env_multithreaded.reset(tensordict=td_reset)
@@ -636,13 +637,12 @@ class TestEnvPool:
                 source={"action": env_multithreaded.action_spec.rand()},
                 batch_size=[N - 1],
             )
-            td1 = env_multithreaded.step(td)
+            _ = env_multithreaded.step(td)
 
+        reset = torch.zeros(N, dtype=torch.bool).bernoulli_()
         td_reset = TensorDict(
-            source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
-            batch_size=[
-                N,
-            ],
+            source={"_reset": reset},
+            batch_size=[N],
         )
         env_multithreaded.reset(tensordict=td_reset)
         td = env_multithreaded.rollout(

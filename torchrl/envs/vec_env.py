@@ -9,7 +9,7 @@ import logging
 
 import os
 from collections import OrderedDict
-from copy import deepcopy, copy
+from copy import copy, deepcopy
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
@@ -1134,7 +1134,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _get_reward_spec(self) -> TensorSpec:
         return UnboundedContinuousTensorSpec(
-            device=self.device, shape=self.batch_size,
+            device=self.device,
+            shape=self.batch_size,
         )
 
     def _get_done_spec(self) -> TensorSpec:
@@ -1150,9 +1151,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _parse_reset_workers(self, tensordict):
         """Convert worker information from mask to indices, e.g. (0, 1, 0, 0, 1) to  (1, 4)."""
-        if tensordict is None or "reset_workers" not in tensordict.keys():
+        if tensordict is None or "_reset" not in tensordict.keys():
             return None
-        reset_workers = tensordict.get("reset_workers")
+        reset_workers = tensordict.get("_reset")
         if reset_workers is None:
             return None
         return np.where(reset_workers)[0]
@@ -1171,16 +1172,16 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
                 # Convert to treevalue.FastTreeValue to allow indexing
                 observation = treevalue.FastTreeValue(observation)
             for i, worker in enumerate(reset_workers):
-                self.obs[worker] = self._treevalue_or_numpy_to_tensor_or_dict(
-                    observation[i]
-                )
+                self.obs[worker] = self._treevalue_or_numpy_to_tensor_or_dict(observation[i])
         else:
             # All workers were reset - rewrite the whole observation buffer
-            self.obs = TensorDict(self._treevalue_or_numpy_to_tensor_or_dict(observation), self.batch_size)
+            self.obs = TensorDict(
+                self._treevalue_or_numpy_to_tensor_or_dict(observation), self.batch_size
+            )
 
         obs = copy(self.obs)
         obs.update({"done": self.done_spec.zero()})
-
+        print("obs", obs)
         tensordict_out = TensorDict(
             obs,
             batch_size=self.batch_size,
