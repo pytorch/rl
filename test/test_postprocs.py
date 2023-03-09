@@ -73,11 +73,11 @@ def test_multistep(n, key, device, T=11):
     ).all()
 
     # check that next obs is properly replaced, or that it is terminated
-    next_obs = ms_tensordict.get(key)[:, (1 + ms.n_steps_max) :]
-    true_next_obs = ms_tensordict.get(("next", key))[:, : -(1 + ms.n_steps_max)]
+    next_obs = ms_tensordict.get(key)[:, (1 + ms.n_steps) :]
+    true_next_obs = ms_tensordict.get(("next", key))[:, : -(1 + ms.n_steps)]
     terminated = ~ms_tensordict.get("nonterminal")
     assert (
-        (next_obs == true_next_obs).all(-1) | terminated[:, (1 + ms.n_steps_max) :]
+        (next_obs == true_next_obs).all(-1) | terminated[:, (1 + ms.n_steps) :]
     ).all()
 
     # test gamma computation
@@ -185,6 +185,51 @@ def test_mutistep_cattrajs(
             true_next_obs = true_next_obs.squeeze(-1)
         next_obs = torch.stack(next_obs, -1)
         assert (next_obs == true_next_obs).all()
+
+
+@pytest.mark.parametrize("unsq_reward", [True, False])
+def test_unusual_done(unsq_reward):
+    batch_size = [10, 3]
+    T = 10
+    obs_dim = [
+        1,
+    ]
+    last_done = True
+    device = torch.device("cpu")
+    n_steps = 3
+
+    obs = torch.randn(*batch_size, T + 1, 5, *obs_dim)
+    reward = torch.rand(*batch_size, T, 5)
+    action = torch.rand(*batch_size, T, 5)
+    done = torch.zeros(*batch_size, T + 1, 5, dtype=torch.bool)
+    done[..., T // 2, :] = 1
+    if last_done:
+        done[..., -1, :] = 1
+    if unsq_reward:
+        reward = reward.unsqueeze(-1)
+        done = done.unsqueeze(-1)
+
+    td = TensorDict(
+        {
+            "obs": obs[..., :-1, :] if not obs_dim else obs[..., :-1, :, :],
+            "action": action,
+            "done": done[..., :-1, :] if not unsq_reward else done[..., :-1, :, :],
+            "next": {
+                "obs": obs[..., 1:, :] if not obs_dim else obs[..., 1:, :, :],
+                "done": done[..., 1:, :] if not unsq_reward else done[..., 1:, :, :],
+                "reward": reward,
+            },
+        },
+        batch_size=[*batch_size, T],
+        device=device,
+    )
+    ms = MultiStep(0.98, n_steps)
+    if unsq_reward:
+        with pytest.raises(RuntimeError, match="tensordict shape must be compatible"):
+            _ = ms(td)
+    else:
+        # we just check that it runs
+        _ = ms(td)
 
 
 class TestSplits:

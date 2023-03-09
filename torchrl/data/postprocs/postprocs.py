@@ -5,13 +5,10 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import torch
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import expand_as_right, expand_right
+from tensordict.utils import expand_right
 from torch import nn
-from torch.nn import functional as F
 
 
 def _get_reward(
@@ -89,29 +86,33 @@ class MultiStep(nn.Module):
     predict by the methods of temporal differences. Machine learning 3(
     1):9–44.'
 
+    This module maps the "next" observation to the t + n "next" observation.
+    It is an identity transform whenever :attr:`n_steps` is 0.
+
     Args:
         gamma (float): Discount factor for return computation
-        n_steps_max (integer): maximum look-ahead steps.
+        n_steps (integer): maximum look-ahead steps.
 
     """
 
     def __init__(
         self,
         gamma: float,
-        n_steps_max: int,
+        n_steps: int,
     ):
         super().__init__()
-        if n_steps_max < 0:
-            raise ValueError("n_steps_max must be a null or positive integer")
+        if n_steps < 0:
+            raise ValueError("n_steps must be a non-negative integer.")
         if not (gamma > 0 and gamma <= 1):
             raise ValueError(f"got out-of-bounds gamma decay: gamma={gamma}")
+        from torch.nn import functional as F
 
         self.gamma = gamma
-        self.n_steps_max = n_steps_max
+        self.n_steps = n_steps
         self.register_buffer(
             "gammas",
             torch.tensor(
-                [gamma**i for i in range(n_steps_max + 1)],
+                [gamma**i for i in range(n_steps + 1)],
                 dtype=torch.float,
             ).reshape(1, 1, -1),
         )
@@ -120,25 +121,32 @@ class MultiStep(nn.Module):
         """Re-writes a tensordict following the multi-step transform.
 
         Args:
-            tensordict: TennsorDict instance with Batch x Time-steps x ...
-                dimensions.
-                The TensorDict must contain a "reward" and "done" key. All
-                keys that are contained within the "next" nested tensordict
-                will be shifted by (at most) :obj:`MultiStep.n_steps_max` frames.
+            tensordict: :class:`tensordict.TensorDictBase` instance with
+                ``[*Batch x Time-steps] shape.
+                The TensorDict must contain a ``("next", "reward")`` and
+                ``("next", "done")`` keys.
+                All keys that are contained within the "next" nested tensordict
+                will be shifted by (at most) :attr:`~.n_steps` frames.
                 The TensorDict will also be updated with new key-value pairs:
 
                 - gamma: indicating the discount to be used for the next
-                reward;
-
+                  reward;
                 - nonterminal: boolean value indicating whether a step is
-                non-terminal (not done or not last of trajectory);
-
+                  non-terminal (not done or not last of trajectory);
                 - original_reward: previous reward collected in the
-                environment (i.e. before multi-step);
-
+                  environment (i.e. before multi-step);
                 - The "reward" values will be replaced by the newly computed
-                rewards.
-
+                  rewards.
+                The ``"done"`` key can have either the shape of the tensordict
+                OR the shape of the tensordict followed by a singleton
+                dimension OR the shape of the tensordict followed by other
+                dimensions. In the latter case, the tensordict *must* be
+                compatible with a reshape that follows the done shape (ie. the
+                leading dimensions of every tensor it contains must match the
+                shape of the ``"done"`` entry).
+                The ``"reward"`` tensor can have either the shape of the
+                tensordict (or done state) or this shape followed by a singleton
+                dimension.
 
         Returns:
             in-place transformation of the input tensordict.
@@ -146,17 +154,10 @@ class MultiStep(nn.Module):
         """
         tensordict = tensordict.clone(False)
         done = tensordict.get(("next", "done"))
-        truncated = tensordict.get(
-            ("next", "truncated"), torch.zeros((), dtype=done.dtype, device=done.device)
-        )
-        done = done | truncated
-        mask = tensordict.get(("collector", "mask"), None)
-        reward = tensordict.get(("next", "reward"))
-
-        *batch, T = tensordict.batch_size
 
         # we'll be using the done states to index the tensordict.
         # if the shapes don't match we're in trouble.
+        ndim = tensordict.ndim
         if done.shape != tensordict.shape:
             if done.shape[-1] == 1 and done.shape[:-1] == tensordict.shape:
                 done = done.squeeze(-1)
@@ -164,15 +165,28 @@ class MultiStep(nn.Module):
                 try:
                     # let's try to reshape the tensordict
                     tensordict.batch_size = done.shape
+                    tensordict = tensordict.apply(
+                        lambda x: x.transpose(ndim - 1, tensordict.ndim - 1),
+                        batch_size=done.transpose(ndim - 1, tensordict.ndim - 1).shape,
+                    )
+                    done = tensordict.get(("next", "done"))
                 except Exception as err:
                     raise RuntimeError(
                         "tensordict shape must be compatible with the done's shape "
                         "(trailing singleton dimension excluded)."
                     ) from err
 
+        truncated = tensordict.get(
+            ("next", "truncated"), torch.zeros((), dtype=done.dtype, device=done.device)
+        )
+        done = done | truncated
+        mask = tensordict.get(("collector", "mask"), None)
+        reward = tensordict.get(("next", "reward"))
+        *batch, T = tensordict.batch_size
+
         # sum rewards
         summed_rewards, time_to_obs = _get_reward(
-            self.gamma, reward, done, self.n_steps_max
+            self.gamma, reward, done, self.n_steps
         )
         idx_to_gather = torch.arange(T).expand(*batch, T)
         idx_to_gather = idx_to_gather + time_to_obs
@@ -194,7 +208,11 @@ class MultiStep(nn.Module):
             mask = mask.view(*batch, T)
             nonterminal[~mask] = False
         tensordict.set("nonterminal", nonterminal)
-        if tensordict.batch_size != torch.Size([*batch, T]):
-            tensordict.batch_size = [*batch, T]
+        if tensordict.ndim != ndim:
+            tensordict = tensordict.apply(
+                lambda x: x.transpose(ndim - 1, tensordict.ndim - 1),
+                batch_size=done.transpose(ndim - 1, tensordict.ndim - 1).shape,
+            )
+            tensordict.batch_size = tensordict.batch_size[:ndim]
         # tensordict.set_(("next", "done"), done)
         return tensordict

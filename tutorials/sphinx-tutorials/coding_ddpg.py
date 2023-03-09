@@ -670,7 +670,7 @@ create_env_fn = parallel_env_constructor(
 # wide range of transforms to our collector.
 
 if n_steps_forward > 0:
-    multistep = MultiStep(n_steps_max=n_steps_forward, gamma=gamma)
+    multistep = MultiStep(n_steps=n_steps_forward, gamma=gamma)
 else:
     multistep = None
 

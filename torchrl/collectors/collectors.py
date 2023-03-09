@@ -254,13 +254,13 @@ class SyncDataCollector(_DataCollector):
             collector.
         create_env_kwargs (dict, optional): Dictionary of kwargs for create_env_fn.
         max_frames_per_traj (int, optional): Maximum steps per trajectory. Note that a trajectory can span over multiple batches
-            (unless reset_at_each_iter is set to True, see below). Once a trajectory reaches n_steps_max,
+            (unless reset_at_each_iter is set to True, see below). Once a trajectory reaches n_steps,
             the environment is reset. If the environment wraps multiple environments together, the number of steps
             is tracked for each environment independently. Negative values are allowed, in which case this argument
             is ignored.
             default: -1 (i.e. no maximum number of steps)
         frames_per_batch (int): Time-length of a batch.
-            reset_at_each_iter and frames_per_batch == n_steps_max are equivalent configurations.
+            reset_at_each_iter and frames_per_batch == n_steps are equivalent configurations.
             default: 200
         init_random_frames (int, optional): Number of frames for which the policy is ignored before it is called.
             This feature is mainly intended to be used in offline/model-based settings, where a batch of random
@@ -743,13 +743,13 @@ class _MultiDataCollector(_DataCollector):
             workers only once the total number of frames has been collected on the server.
         create_env_kwargs (dict, optional): A (list of) dictionaries with the arguments used to create an environment
         max_frames_per_traj: Maximum steps per trajectory. Note that a trajectory can span over multiple batches
-            (unless reset_at_each_iter is set to True, see below). Once a traje tory reaches n_steps_max,
+            (unless reset_at_each_iter is set to True, see below). Once a traje tory reaches n_steps,
             the environment is reset. If the environment wraps multiple environments together, the number of steps
             is tracked for each environment independently. Negative values are allowed, in which case this argument
             is ignored.
             default: -1 (i.e. no maximum number of steps)
         frames_per_batch (int): Time-length of a batch.
-            reset_at_each_iter and frames_per_batch == n_steps_max are equivalent configurations.
+            reset_at_each_iter and frames_per_batch == n_steps are equivalent configurations.
             default: 200
         init_random_frames (int): Number of frames for which the policy is ignored before it is called.
             This feature is mainly intended to be used in offline/model-based settings, where a batch of random
@@ -1444,13 +1444,13 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         max_frames_per_traj: Maximum steps per trajectory. Note that a
             trajectory can span over multiple batches (unless
             reset_at_each_iter is set to True, see below). Once a trajectory
-            reaches n_steps_max, the environment is reset. If the
+            reaches n_steps, the environment is reset. If the
             environment wraps multiple environments together, the number of
             steps is tracked for each environment independently. Negative
             values are allowed, in which case this argument is ignored.
             Default is -1 (i.e. no maximum number of steps)
         frames_per_batch (int): Time-length of a batch.
-            reset_at_each_iter and frames_per_batch == n_steps_max are equivalent configurations.
+            reset_at_each_iter and frames_per_batch == n_steps are equivalent configurations.
             default: 200
         init_random_frames (int): Number of frames for which the policy is ignored before it is called.
             This feature is mainly intended to be used in offline/model-based settings, where a batch of random
