@@ -35,7 +35,11 @@ def _get_terminal(
     terminal = done.clone()
     terminal[:, -1] = done[:, -1] | (done.sum(1) != 1)
     if not (terminal.sum(1) == 1).all():
-        raise RuntimeError("Got more or less than one terminal state per episode.")
+        raise RuntimeError(
+            f"Got more or less than one terminal state per "
+            f"episode (range of number of done: "
+            f"{terminal.sum(1).min()} - {terminal.sum(1).max()})."
+        )
     post_terminal = terminal.cumsum(1).cumsum(1) >= 2
     post_terminal = torch.cat(
         [
@@ -168,12 +172,16 @@ class MultiStep(nn.Module):
         if tensordict.batch_dims != 2:
             raise RuntimeError("Expected a tensordict with B x T x ... dimensions")
 
-        done = tensordict.get("done")
+        done = tensordict.get(("next", "done"))
+        truncated = tensordict.get(
+            ("next", "truncated"), torch.zeros((), dtype=done.dtype, device=done.device)
+        )
+        done = done | truncated
         if ("collector", "mask") in tensordict.keys(True):
             mask = tensordict.get(("collector", "mask")).view_as(done)
         else:
             mask = done.clone().flip(1).cumsum(1).flip(1).to(torch.bool)
-        reward = tensordict.get("reward")
+        reward = tensordict.get(("next", "reward"))
 
         b, T, *_ = mask.shape
 
@@ -189,7 +197,7 @@ class MultiStep(nn.Module):
         nonterminal = ~post_terminal[:, :T]
         steps_to_next_obs = _get_steps_to_next_obs(nonterminal, self.n_steps_max)
 
-        selected_td = tensordict.select("next", "done")
+        selected_td = tensordict.select("next", "done", strict=False)
 
         def _select_and_repeat_local(item):
             return _select_and_repeat(
@@ -205,8 +213,8 @@ class MultiStep(nn.Module):
         tensordict.set("gamma", gamma_masked)
         tensordict.set("steps_to_next_obs", steps_to_next_obs)
         tensordict.set("nonterminal", nonterminal)
-        tensordict.rename_key("reward", "original_reward")
-        tensordict.set("reward", partial_return)
+        tensordict.rename_key(("next", "reward"), ("next", "original_reward"))
+        tensordict.set(("next", "reward"), partial_return)
 
-        tensordict.set_("done", done)
+        tensordict.set_(("next", "done"), done)
         return tensordict

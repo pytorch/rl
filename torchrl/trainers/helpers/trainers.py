@@ -270,7 +270,7 @@ def make_trainer(
             record_interval=cfg.record_interval,
             exploration_mode="random",
             suffix="exploration",
-            out_keys={"reward": "r_evaluation_exploration"},
+            out_keys={("next", "reward"): "r_evaluation_exploration"},
         )
         trainer.register_op(
             "post_steps_log",

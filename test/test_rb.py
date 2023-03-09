@@ -168,7 +168,6 @@ class TestComposableBuffers:
         rb.extend(data)
         length = len(rb)
         for d in data[-length:]:
-            found_similar = False
             for b in rb._storage:
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())

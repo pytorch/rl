@@ -161,7 +161,23 @@ class DMControlWrapper(GymLikeEnv):
 
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         # specs are defined when first called
-        return
+        self.output_spec["observation"] = _dmcontrol_to_torchrl_spec_transform(
+            self._env.observation_spec(), device=self.device
+        )
+        reward_spec = _dmcontrol_to_torchrl_spec_transform(
+            self._env.reward_spec(), device=self.device
+        )
+        if len(reward_spec.shape) == 0:
+            reward_spec.shape = torch.Size([1])
+        self.output_spec["reward"] = reward_spec
+        # populate default done spec
+        _ = self.done_spec
+        input_spec = CompositeSpec(
+            action=_dmcontrol_to_torchrl_spec_transform(
+                self._env.action_spec(), device=self.device
+            )
+        )
+        self.__dict__["_input_spec"] = input_spec
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -218,59 +234,27 @@ class DMControlWrapper(GymLikeEnv):
 
     @property
     def input_spec(self) -> TensorSpec:
-        if self._input_spec is None:
-            self.__dict__["_input_spec"] = CompositeSpec(
-                action=_dmcontrol_to_torchrl_spec_transform(
-                    self._env.action_spec(), device=self.device
-                )
-            )
         return self._input_spec
 
     @input_spec.setter
     def input_spec(self, value: TensorSpec) -> None:
-        if not isinstance(value, CompositeSpec):
-            raise TypeError("The type of an input_spec must be Composite.")
-        self.__dict__["_input_spec"] = value
+        raise NotImplementedError(f"Cannot change {type(self)}.input_spec")
 
     @property
     def observation_spec(self) -> TensorSpec:
-        if self._observation_spec is None:
-            self.__dict__["_observation_spec"] = _dmcontrol_to_torchrl_spec_transform(
-                self._env.observation_spec(), device=self.device
-            )
-        return self._observation_spec
+        return self.output_spec["observation"]
 
     @observation_spec.setter
     def observation_spec(self, value: TensorSpec) -> None:
-        if not isinstance(value, CompositeSpec):
-            raise TypeError("The type of an observation_spec must be Composite.")
-        self.__dict__["_observation_spec"] = value
+        raise NotImplementedError(f"Cannot change {type(self)}.observation_spec")
 
     @property
     def reward_spec(self) -> TensorSpec:
-        if self._reward_spec is None:
-            reward_spec = _dmcontrol_to_torchrl_spec_transform(
-                self._env.reward_spec(), device=self.device
-            )
-            if len(reward_spec.shape) == 0:
-                reward_spec.shape = torch.Size([1])
-            self.__dict__["_reward_spec"] = reward_spec
-        return self._reward_spec
+        return self.output_spec["reward"]
 
     @reward_spec.setter
     def reward_spec(self, value: TensorSpec) -> None:
-        if not hasattr(value, "shape"):
-            raise TypeError(
-                f"reward_spec of type {type(value)} do not have a shape " f"attribute."
-            )
-        if len(value.shape) == 0:
-            raise RuntimeError(
-                "the reward_spec shape cannot be empty (this error"
-                " usually comes from trying to set a reward_spec"
-                " with a null number of dimensions. Try using a multidimensional"
-                " spec instead, for instance with a singleton dimension at the tail)."
-            )
-        self.__dict__["_reward_spec"] = value
+        raise NotImplementedError(f"Cannot change {type(self)}.reward_spec")
 
     def __repr__(self) -> str:
         return (

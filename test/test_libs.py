@@ -31,7 +31,7 @@ from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs
 
-from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper
+from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
 if _has_gym:
@@ -352,7 +352,6 @@ class TestCollectorLib:
             devices=[device, device],
             storing_devices=[device, device],
             update_at_each_batch=False,
-            init_with_lag=False,
             exploration_mode="random",
         )
         for i, _data in enumerate(collector):
@@ -400,7 +399,8 @@ class TestJumanji:
             np.random.seed(0)
             final_seed.append(env.set_seed(0))
             tdreset.append(env.reset())
-            tdrollout.append(env.rollout(max_steps=50))
+            rollout = env.rollout(max_steps=50)
+            tdrollout.append(rollout)
             env.close()
             del env
         assert final_seed[0] == final_seed[1]
@@ -528,8 +528,8 @@ class TestEnvPool:
         )
         td1 = env_multithreaded.step(td)
         assert not td1.is_shared()
-        assert "done" in td1.keys()
-        assert "reward" in td1.keys()
+        assert ("next", "done") in td1.keys(True)
+        assert ("next", "reward") in td1.keys(True)
 
         with pytest.raises(RuntimeError):
             # number of actions does not match number of workers
@@ -537,13 +537,12 @@ class TestEnvPool:
                 source={"action": env_multithreaded.action_spec.rand()},
                 batch_size=[N - 1],
             )
-            td1 = env_multithreaded.step(td)
+            _ = env_multithreaded.step(td)
 
+        _reset = torch.zeros(N, dtype=torch.bool).bernoulli_()
         td_reset = TensorDict(
-            source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
-            batch_size=[
-                N,
-            ],
+            source={"_reset": _reset},
+            batch_size=[N],
         )
         env_multithreaded.reset(tensordict=td_reset)
 
@@ -561,20 +560,11 @@ class TestEnvPool:
     @pytest.mark.parametrize("env_name", ENVPOOL_CLASSIC_CONTROL_ENVS + ENVPOOL_DM_ENVS)
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_out", [True, False])
-    @pytest.mark.parametrize(
-        "selected_keys",
-        [
-            ["action", "observation", "next_observation", "done", "reward"],
-            ["hidden", "action", "observation", "next_observation", "done", "reward"],
-            None,
-        ],
-    )
     def test_env_with_policy(
         self,
         env_name,
         frame_skip,
         transformed_out,
-        selected_keys,
         T=10,
         N=3,
     ):
@@ -594,10 +584,9 @@ class TestEnvPool:
             frame_skip,
             transformed_out=transformed_out,
             N=N,
-            selected_keys=selected_keys,
         )
         if env_name == "CheetahRun-v1":
-            in_keys = [("observation", "velocity")]
+            in_keys = [("velocity")]
             dtype = torch.float64
         else:
             in_keys = ["observation"]
@@ -639,8 +628,8 @@ class TestEnvPool:
 
         td1 = env_multithreaded.step(td)
         assert not td1.is_shared()
-        assert "done" in td1.keys()
-        assert "reward" in td1.keys()
+        assert ("next", "done") in td1.keys(True)
+        assert ("next", "reward") in td1.keys(True)
 
         with pytest.raises(RuntimeError):
             # number of actions does not match number of workers
@@ -648,13 +637,12 @@ class TestEnvPool:
                 source={"action": env_multithreaded.action_spec.rand()},
                 batch_size=[N - 1],
             )
-            td1 = env_multithreaded.step(td)
+            _ = env_multithreaded.step(td)
 
+        reset = torch.zeros(N, dtype=torch.bool).bernoulli_()
         td_reset = TensorDict(
-            source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
-            batch_size=[
-                N,
-            ],
+            source={"_reset": reset},
+            batch_size=[N],
         )
         env_multithreaded.reset(tensordict=td_reset)
         td = env_multithreaded.rollout(
@@ -883,18 +871,23 @@ class TestBrax:
         action.requires_grad_(True)
         td1["action"] = action
         td2 = env.step(td1)
-        td2["reward"].mean().backward()
+        td2[("next", "reward")].mean().backward()
         env.close()
         del env
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
-    def test_brax_parallel(self, envname, batch_size, n=1):
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_brax_parallel(self, envname, batch_size, parallel, n=1):
         def make_brax():
             env = BraxEnv(envname, batch_size=batch_size, requires_grad=False)
             env.set_seed(1)
             return env
 
-        env = ParallelEnv(n, make_brax)
+        if parallel:
+            env = ParallelEnv(n, make_brax)
+        else:
+            env = SerialEnv(n, make_brax)
+        check_env_specs(env)
         tensordict = env.rollout(3)
         assert tensordict.shape == torch.Size([n, *batch_size, 3])
 
@@ -961,6 +954,7 @@ class TestVmas:
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
     def test_vmas_batch_size(self, scenario_name, num_envs, n_agents):
+        torch.manual_seed(0)
         n_rollout_samples = 5
         env = VmasEnv(
             scenario_name=scenario_name,
@@ -1025,6 +1019,8 @@ class TestVmas:
         n_agents=5,
         n_rollout_samples=3,
     ):
+        torch.manual_seed(0)
+
         def make_vmas():
             env = VmasEnv(
                 scenario_name=scenario_name,
@@ -1053,6 +1049,8 @@ class TestVmas:
         n_rollout_samples=3,
         max_steps=3,
     ):
+        torch.manual_seed(0)
+
         def make_vmas():
             env = VmasEnv(
                 scenario_name=scenario_name,
@@ -1066,7 +1064,7 @@ class TestVmas:
         env = ParallelEnv(n_workers, make_vmas)
         tensordict = env.rollout(max_steps=n_rollout_samples)
 
-        assert tensordict["done"].squeeze(-1)[..., -1].all()
+        assert tensordict["next", "done"].squeeze(-1)[..., -1].all()
 
         _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
         while not _reset.any():
@@ -1075,14 +1073,15 @@ class TestVmas:
         tensordict = env.reset(
             TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
         )
-        assert tensordict["done"][_reset].all().item() is False
+        assert not tensordict["done"][_reset].all().item()
         # vmas resets all the agent dimension if only one of the agents needs resetting
         # thus, here we check that where we did not reset any agent, all agents are still done
-        assert tensordict["done"].all(dim=1)[~_reset.any(dim=1)].all().item() is True
+        assert tensordict["done"].all(dim=1)[~_reset.any(dim=1)].all().item()
 
     @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
     @pytest.mark.parametrize("first", [0, 1])
     def test_to_device(self, scenario_name: str, first: int):
+        torch.manual_seed(0)
         devices = get_available_devices()
 
         def make_vmas():

@@ -279,9 +279,11 @@ class BraxWrapper(_EnvWrapper):
     ) -> TensorDictBase:
 
         if self.requires_grad:
-            return self._step_with_grad(tensordict)
+            out = self._step_with_grad(tensordict)
         else:
-            return self._step_without_grad(tensordict)
+            out = self._step_without_grad(tensordict)
+        out = out.select().set("next", out)
+        return out
 
 
 class BraxEnv(BraxWrapper):

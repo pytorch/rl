@@ -32,7 +32,7 @@ from torchrl.collectors.utils import split_trajectories
 from torchrl.data import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-from torchrl.envs.transforms import TransformedEnv
+from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.envs.vec_env import _BatchedEnv
 
@@ -315,9 +315,6 @@ class SyncDataCollector(_DataCollector):
         exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
             "mode" or "mean".
             default = "random"
-        init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
-            This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
-            default = True
         return_same_td (bool, optional): if True, the same TensorDict will be returned at each iteration, with its values
             updated. This feature should be used cautiously: if the same tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
@@ -395,7 +392,6 @@ class SyncDataCollector(_DataCollector):
         seed: Optional[int] = None,
         pin_memory: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
-        init_with_lag: bool = False,
         return_same_td: bool = False,
         reset_when_done: bool = True,
     ):
@@ -447,6 +443,11 @@ class SyncDataCollector(_DataCollector):
             self.policy_weights = TensorDict({}, [])
 
         self.env: EnvBase = self.env.to(self.device)
+        self.max_frames_per_traj = max_frames_per_traj
+        if self.max_frames_per_traj > 0:
+            env = self.env = TransformedEnv(
+                self.env, StepCounter(max_steps=self.max_frames_per_traj)
+            )
 
         if not total_frames > 0:
             total_frames = float("inf")
@@ -456,20 +457,14 @@ class SyncDataCollector(_DataCollector):
         self.postproc = postproc
         if self.postproc is not None:
             self.postproc.to(self.storing_device)
-        self.max_frames_per_traj = max_frames_per_traj
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.pin_memory = pin_memory
         self.exploration_mode = (
             exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
         )
-        self.init_with_lag = init_with_lag and max_frames_per_traj > 0
         self.return_same_td = return_same_td
 
         self._tensordict = env.reset()
-        self._tensordict.set(
-            ("collector", "step_count"),
-            torch.zeros(self.env.batch_size, dtype=torch.int, device=env.device),
-        )
         n = self.env.batch_size.numel() if len(self.env.batch_size) else 1
         traj_ids = torch.arange(n, device=env.device).view(self.env.batch_size)
         self._tensordict.set(
@@ -481,7 +476,7 @@ class SyncDataCollector(_DataCollector):
             hasattr(self.policy, "spec")
             and self.policy.spec is not None
             and all(v is not None for v in self.policy.spec.values())
-            and set(self.policy.spec.keys()) == set(self.policy.out_keys)
+            and set(self.policy.spec.keys(True, True)) == set(self.policy.out_keys)
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
@@ -516,15 +511,6 @@ class SyncDataCollector(_DataCollector):
                 device=self.storing_device,
             ),
         )
-        self._tensordict_out.set(
-            ("collector", "step_count"),
-            torch.zeros(
-                *self._tensordict_out.batch_size,
-                dtype=torch.int64,
-                device=self.storing_device,
-            ),
-        )
-        self._tensordict_out.lock()
 
         if split_trajs is None:
             if not self.reset_when_done:
@@ -617,44 +603,37 @@ class SyncDataCollector(_DataCollector):
                 break
 
     def _step_and_maybe_reset(self) -> None:
-        done = self._tensordict.get("done")
+        done = self._tensordict.get(("next", "done"))
+        truncated = self._tensordict.get(("next", "truncated"), None)
+        if truncated is None:
+            truncated = torch.zeros_like(done)
+        traj_ids = self._tensordict.get(("collector", "traj_ids")).clone()
+
+        self._tensordict = step_mdp(self._tensordict)
+
         if not self.reset_when_done:
             done = torch.zeros_like(done)
-        steps = self._tensordict.get(("collector", "step_count"))
-        done_or_terminated = done.squeeze(-1) | (steps == self.max_frames_per_traj)
+        done_or_terminated = done.squeeze(-1) | truncated.squeeze(-1)
         # keep track of envs that have been done at least once
         if self._has_been_done is None:
             self._has_been_done = done_or_terminated
         else:
             self._has_been_done = self._has_been_done | done_or_terminated
-        # init_with_lag instructs to restart randomly envs after init to dephase them.
-        # Until all envs have been done, we'll reset randomly some envs.
-        if not self._has_been_done.all() and self.init_with_lag:
-            _reset = torch.zeros_like(done_or_terminated).bernoulli_(
-                1 / self.max_frames_per_traj
-            )
-            _reset[self._has_been_done] = False
-            done_or_terminated = done_or_terminated | _reset
-
         if done_or_terminated.any():
-            if not done_or_terminated.all():
-                self._tensordict[~done_or_terminated] = step_mdp(
-                    self._tensordict[~done_or_terminated]
-                )
-
-            traj_ids = self._tensordict.get(("collector", "traj_ids")).clone()
-            steps = steps.clone()
+            # collectors do not support passing other tensors than `"_reset"`
+            # to `reset()`.
             if len(self.env.batch_size):
                 self._tensordict.masked_fill_(done_or_terminated, 0)
                 _reset = done_or_terminated
-                self._tensordict.set("_reset", _reset)
+                td_reset = self._tensordict.select().set("_reset", _reset)
             else:
                 _reset = None
-                self._tensordict.zero_()
-            self.env.reset(self._tensordict)
-
-            if (_reset is None and self._tensordict.get("done").any()) or (
-                _reset is not None and self._tensordict.get("done")[_reset].any()
+                td_reset = None
+            td_reset = self.env.reset(td_reset)
+            self._tensordict.update(td_reset, inplace=True)
+            done = self._tensordict.get("done")
+            if (_reset is None and done.any()) or (
+                _reset is not None and done[_reset].any()
             ):
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
@@ -662,13 +641,9 @@ class SyncDataCollector(_DataCollector):
             traj_ids[done_or_terminated] = traj_ids.max() + torch.arange(
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
-            steps[done_or_terminated] = 0
             self._tensordict.set_(
                 ("collector", "traj_ids"), traj_ids
             )  # no ops if they already match
-            self._tensordict.set_(("collector", "step_count"), steps)
-        else:
-            self._tensordict.update(step_mdp(self._tensordict), inplace=True)
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
@@ -680,7 +655,6 @@ class SyncDataCollector(_DataCollector):
         """
         if self.reset_at_each_iter:
             self._tensordict.update(self.env.reset(), inplace=True)
-            self._tensordict.fill_(("collector", "step_count"), 0)
 
         with set_exploration_mode(self.exploration_mode):
             for j in range(self.frames_per_batch):
@@ -689,8 +663,6 @@ class SyncDataCollector(_DataCollector):
                 else:
                     self.env.step(self.policy(self._tensordict))
 
-                step_count = self._tensordict.get(("collector", "step_count"))
-                self._tensordict.set_(("collector", "step_count"), step_count + 1)
                 # we must clone all the values, since the step / traj_id updates are done in-place
                 try:
                     self._tensordict_out[..., j] = self._tensordict
@@ -711,6 +683,8 @@ class SyncDataCollector(_DataCollector):
 
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
+        # metadata
+        md = self._tensordict["collector"].clone()
         if index is not None:
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
@@ -727,14 +701,9 @@ class SyncDataCollector(_DataCollector):
             _reset = None
             self._tensordict.zero_()
 
-        self._tensordict.update(self.env.reset(**kwargs), inplace=True)
-        # self.env.reset(self._tensordict, **kwargs)
-        if _reset is not None:
-            step_count = self._tensordict[("collector", "step_count")]
-            step_count[_reset] = 0
-            self._tensordict.set(("collector", "step_count"), step_count)
-        else:
-            self._tensordict.fill_(("collector", "step_count"), 0)
+        self._tensordict.update(self.env.reset(**kwargs))
+        md["traj_ids"] = md["traj_ids"] - md["traj_ids"].min()
+        self._tensordict["collector"] = md
 
     def shutdown(self) -> None:
         """Shuts down all workers and/or closes the local environment."""
@@ -853,9 +822,6 @@ class _MultiDataCollector(_DataCollector):
         update_at_each_batch (bool): if True, the policy weights will be updated every time a batch of trajectories
             is collected.
             default=False
-        init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
-            This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
-            default = True
        exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
             "mode" or "mean".
             default = "random"
@@ -891,7 +857,6 @@ class _MultiDataCollector(_DataCollector):
         pin_memory: bool = False,
         storing_devices: Optional[Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]]] = None,
         update_at_each_batch: bool = False,
-        init_with_lag: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         reset_when_done: bool = True,
     ):
@@ -1012,7 +977,6 @@ class _MultiDataCollector(_DataCollector):
         self.pin_memory = pin_memory
         self.init_random_frames = init_random_frames
         self.update_at_each_batch = update_at_each_batch
-        self.init_with_lag = init_with_lag
         self.exploration_mode = exploration_mode
         self.frames_per_worker = np.inf
         self._run_processes()
@@ -1067,7 +1031,6 @@ class _MultiDataCollector(_DataCollector):
                 "storing_device": _storing_device,
                 "seed": self.seed,
                 "pin_memory": self.pin_memory,
-                "init_with_lag": self.init_with_lag,
                 "exploration_mode": self.exploration_mode,
                 "reset_when_done": self.reset_when_done,
                 "idx": i,
@@ -1228,9 +1191,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from torchrl.envs import StepCounter
         >>> from tensordict.nn import TensorDictModule
         >>> from torch import nn
-        >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        >>> env_maker = lambda: TransformedEnv(GymEnv("Pendulum-v1", device="cpu"), StepCounter(max_steps=50))
         >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
         >>> collector = MultiSyncDataCollector(
         ...     create_env_fn=[env_maker, env_maker],
@@ -1345,7 +1309,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 )
 
                 if workers_frames[idx] >= self.total_frames:
-                    print(f"{idx} is done!")
                     dones[idx] = True
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
@@ -1548,7 +1511,6 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                     msg = "continue"
                 self.pipes[idx].send((idx, msg))
             else:
-                print(f"{idx} is done!")
                 dones[idx] = True
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
@@ -1634,9 +1596,6 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         update_at_each_batch (bool): if True, the policy weights will be updated every time a batch of trajectories
             is collected.
             default=False
-        init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
-            This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
-            default = True
 
     """
 
@@ -1718,7 +1677,6 @@ def _main_async_collector(
     seed: Union[int, Sequence],
     pin_memory: bool,
     idx: int = 0,
-    init_with_lag: bool = False,
     exploration_mode: str = DEFAULT_EXPLORATION_MODE,
     reset_when_done: bool = True,
     verbose: bool = False,
@@ -1741,7 +1699,6 @@ def _main_async_collector(
         seed=seed,
         pin_memory=pin_memory,
         storing_device=storing_device,
-        init_with_lag=init_with_lag,
         exploration_mode=exploration_mode,
         reset_when_done=reset_when_done,
         return_same_td=True,
@@ -1832,7 +1789,6 @@ def _main_async_collector(
                     print(f"worker {idx} has timed out")
                 has_timed_out = True
                 continue
-            # pipe_child.send("done")
 
         elif msg == "update":
             dc.update_policy_weights_()
