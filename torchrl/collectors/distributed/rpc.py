@@ -44,30 +44,9 @@ TCP_PORT = os.environ.get("TCP_PORT", "10003")
 IDLE_TIMEOUT = os.environ.get("RCP_IDLE_TIMEOUT", 10)
 
 
+
+
 def _rpc_init_collection_node(
-    rank,
-    rank0_ip,
-    tcp_port,
-    world_size,
-):
-    """Sets up RPC on the distant node.
-
-    Args:
-        rank (int): the rank of the process;
-        rank0_ip (str): the IP address of the master process (rank 0)
-        tcp_port (str or int): the TCP port of the master process
-        world_size (int): the total number of nodes, including master.
-
-    """
-    proc = mp.Process(
-        target=_rpc_init_collection_node_proc,
-        args=(rank, rank0_ip, tcp_port, world_size),
-    )
-    proc.start()
-    proc.join()
-
-
-def _rpc_init_collection_node_proc(
     rank,
     rank0_ip,
     tcp_port,
