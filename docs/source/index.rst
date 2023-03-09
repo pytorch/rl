@@ -73,7 +73,7 @@ Knowledge Base
 ==============
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 1
 
    reference/knowledge_base
 

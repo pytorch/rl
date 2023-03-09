@@ -49,7 +49,7 @@ class EnvCreator:
         ...     tensordict = env.reset()
         ...     for _ in range(10):
         ...         env.rand_step(tensordict)
-        ...         if tensordict.get("done"):
+        ...         if tensordict.get(("next", "done")):
         ...             tensordict = env.reset(tensordict)
         ...     print("env 1: ", env.transform._td.get(("next", "observation_count")))
         >>>
@@ -127,7 +127,7 @@ class EnvCreator:
         if self._share_memory:
             self.share_memory(self._transform_state_dict)
         self.initialized = True
-        self.meta_data = EnvMetaData.build_metadata_from_env(shadow_env)
+        self.meta_data = EnvMetaData.metadata_from_env(shadow_env)
         shadow_env.close()
         del shadow_env
         return self
@@ -168,7 +168,7 @@ def get_env_metadata(
 ):
     """Retrieves a EnvMetaData object from an env."""
     if isinstance(env_or_creator, (EnvBase,)):
-        return EnvMetaData.build_metadata_from_env(env_or_creator)
+        return EnvMetaData.metadata_from_env(env_or_creator)
     elif not isinstance(env_or_creator, EnvBase) and not isinstance(
         env_or_creator, EnvCreator
     ):
@@ -176,7 +176,7 @@ def get_env_metadata(
         if kwargs is None:
             kwargs = {}
         env = env_or_creator(**kwargs)
-        return EnvMetaData.build_metadata_from_env(env)
+        return EnvMetaData.metadata_from_env(env)
     elif isinstance(env_or_creator, EnvCreator):
         if not (
             kwargs == env_or_creator.create_env_kwargs

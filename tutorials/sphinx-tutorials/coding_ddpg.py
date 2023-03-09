@@ -357,7 +357,7 @@ def make_ddpg_actor(
     proof_environment.transform[2].load_state_dict(transform_state_dict)
 
     env_specs = proof_environment.specs
-    out_features = env_specs["action_spec"].shape[0]
+    out_features = env_specs["input_spec"]["action"].shape[0]
 
     actor_net = MLP(
         num_cells=[num_cells] * num_layers,
@@ -374,12 +374,12 @@ def make_ddpg_actor(
     actor = ProbabilisticActor(
         module=actor_module,
         in_keys=["param"],
-        spec=CompositeSpec(action=env_specs["action_spec"]),
+        spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
         safe=True,
         distribution_class=TanhDelta,
         distribution_kwargs={
-            "min": env_specs["action_spec"].space.minimum,
-            "max": env_specs["action_spec"].space.maximum,
+            "min": env_specs["input_spec"]["action"].space.minimum,
+            "max": env_specs["input_spec"]["action"].space.maximum,
         },
     ).to(device)
 
@@ -523,7 +523,8 @@ env_per_collector = 2
 # meaningful training
 total_frames = 5000 // frame_skip
 # Number of frames returned by the collector at each iteration of the outer loop
-frames_per_batch = 1000 // frame_skip
+frames_per_batch = env_per_collector * 1000 // frame_skip
+max_frames_per_traj = 1000 // frame_skip
 init_random_frames = 0
 # We'll be using the MultiStep class to have a less myopic representation of
 # upcoming states
@@ -677,7 +678,7 @@ collector = MultiaSyncDataCollector(
     create_env_fn=[create_env_fn, create_env_fn],
     policy=actor_model_explore,
     total_frames=total_frames,
-    max_frames_per_traj=1000,
+    max_frames_per_traj=max_frames_per_traj,
     frames_per_batch=frames_per_batch,
     init_random_frames=init_random_frames,
     reset_at_each_iter=False,
@@ -789,7 +790,7 @@ for i, tensordict in enumerate(collector):
     collector.update_policy_weights_()
 
     if r0 is None:
-        r0 = tensordict["reward"].mean().item()
+        r0 = tensordict["next", "reward"].mean().item()
     pbar.update(tensordict.numel())
 
     # extend the replay buffer with the new data
@@ -817,8 +818,8 @@ for i, tensordict in enumerate(collector):
                 next_value = next_tensordict["state_action_value"]
                 assert not next_value.requires_grad
             value_est = (
-                sampled_tensordict["reward"]
-                + gamma * (1 - sampled_tensordict["done"].float()) * next_value
+                sampled_tensordict["next", "reward"]
+                + gamma * (1 - sampled_tensordict["next", "done"].float()) * next_value
             )
             value = qnet(sampled_tensordict)["state_action_value"]
             value_loss = (value - value_est).pow(2).mean()
@@ -854,7 +855,12 @@ for i, tensordict in enumerate(collector):
                 replay_buffer.update_tensordict_priority(sampled_tensordict)
 
     rewards.append(
-        (i, tensordict["reward"].mean().item() / norm_factor_training / frame_skip)
+        (
+            i,
+            tensordict["next", "reward"].mean().item()
+            / norm_factor_training
+            / frame_skip,
+        )
     )
     td_record = recorder(None)
     if td_record is not None:
@@ -950,19 +956,15 @@ create_env_fn = parallel_env_constructor(
     transform_state_dict=transform_state_dict,
 )
 # Batch collector:
-if n_steps_forward > 0:
-    multistep = MultiStep(n_steps_max=n_steps_forward, gamma=gamma)
-else:
-    multistep = None
 collector = MultiaSyncDataCollector(
     create_env_fn=[create_env_fn, create_env_fn],
     policy=actor_model_explore,
     total_frames=total_frames,
-    max_frames_per_traj=1000,
+    max_frames_per_traj=max_frames_per_traj,
     frames_per_batch=frames_per_batch,
     init_random_frames=init_random_frames,
     reset_at_each_iter=False,
-    postproc=multistep,
+    postproc=None,
     split_trajs=False,
     devices=[device, device],  # device for execution
     storing_devices=[device, device],  # device where data will be stored and passed
@@ -1039,7 +1041,7 @@ for i, tensordict in enumerate(collector):
     collector.update_policy_weights_()
 
     if r0 is None:
-        r0 = tensordict["reward"].mean().item()
+        r0 = tensordict["next", "reward"].mean().item()
 
     # extend the replay buffer with the new data
     current_frames = tensordict.numel()
@@ -1068,8 +1070,8 @@ for i, tensordict in enumerate(collector):
 
             # This is the crucial part: we'll compute the TD(lambda)
             # instead of a simple single step estimate
-            done = sampled_tensordict["done"]
-            reward = sampled_tensordict["reward"]
+            done = sampled_tensordict["next", "done"]
+            reward = sampled_tensordict["next", "reward"]
             value = qnet(sampled_tensordict.view(-1)).view(sampled_tensordict.shape)[
                 "state_action_value"
             ]
@@ -1114,7 +1116,12 @@ for i, tensordict in enumerate(collector):
                 replay_buffer.update_tensordict_priority(sampled_tensordict)
 
     rewards.append(
-        (i, tensordict["reward"].mean().item() / norm_factor_training / frame_skip)
+        (
+            i,
+            tensordict["next", "reward"].mean().item()
+            / norm_factor_training
+            / frame_skip,
+        )
     )
     td_record = recorder(None)
     if td_record is not None:
@@ -1147,9 +1154,3 @@ plt.xlabel("iter")
 plt.ylabel("reward")
 plt.tight_layout()
 plt.title("TD-labmda DDPG results")
-
-# sphinx_gallery_start_ignore
-import time
-
-time.sleep(10)
-# sphinx_gallery_end_ignore

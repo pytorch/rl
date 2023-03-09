@@ -32,7 +32,7 @@ from torchrl.collectors.collectors import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
+from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv, StepCounter
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
@@ -308,7 +308,7 @@ def test_collector_env_reset():
     torch.manual_seed(0)
 
     def make_env():
-        return GymEnv(PONG_VERSIONED, frame_skip=4)
+        return TransformedEnv(GymEnv(PONG_VERSIONED, frame_skip=4), StepCounter())
 
     env = SerialEnv(2, make_env)
     # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
@@ -318,8 +318,8 @@ def test_collector_env_reset():
     )
     for _data in collector:
         continue
-    steps = _data["collector", "step_count"][..., 1:]
-    done = _data["done"][..., :-1, :].squeeze(-1)
+    steps = _data["next", "step_count"][..., 1:]
+    done = _data["next", "done"][..., :-1, :].squeeze(-1)
     # we don't want just one done
     assert done.sum() > 3
     # check that after a done, the next step count is always 1
@@ -330,7 +330,7 @@ def test_collector_env_reset():
     assert (steps == 1)[done].all()
     # check that split traj has a minimum total reward of -21 (for pong only)
     _data = split_trajectories(_data)
-    assert _data["reward"].sum(-2).min() == -21
+    assert _data["next", "reward"].sum(-2).min() == -21
 
 
 @pytest.mark.parametrize("num_env", [1, 2])
@@ -429,13 +429,12 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 
     assert d.ndimension() == 2
     assert d["collector", "mask"].shape == d.shape
-    assert d["collector", "step_count"].shape == d.shape
+    assert d["next", "step_count"].shape == d.shape
     assert d["collector", "traj_ids"].shape == d.shape
     for traj in d.unbind(0):
         assert traj["collector", "traj_ids"].unique().numel() == 1
         assert (
-            traj["collector", "step_count"][1:] - traj["collector", "step_count"][:-1]
-            == 1
+            traj["next", "step_count"][1:] - traj["next", "step_count"][:-1] == 1
         ).all()
 
     del collector
@@ -586,6 +585,7 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
 @pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
+    """Tests that a rollout gathered with env.rollout matches one gathered with the collector."""
     if num_env == 1:
 
         def env_fn(seed):
@@ -642,7 +642,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
         rollout1a.batch_size == b1.batch_size
     ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
 
-    assert_allclose_td(rollout1a, b1.select(*rollout1a.keys()))
+    assert_allclose_td(rollout1a, b1.select(*rollout1a.keys(True, True)))
     collector.shutdown()
 
 
@@ -705,7 +705,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         create_env_kwargs={"seed": seed},
         policy=policy,
         frames_per_batch=10 * num_env,
-        max_frames_per_traj=20,
+        max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device="cpu",
         seed=seed,
@@ -991,6 +991,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     keys = {
         "action",
         "done",
+        "reward",
         "collector",
         "hidden1",
         "hidden2",
@@ -998,10 +999,10 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         ("next", "hidden1"),
         ("next", "hidden2"),
         ("next", "observation"),
+        ("next", "done"),
+        ("next", "reward"),
         "next",
         "observation",
-        "reward",
-        ("collector", "step_count"),
         ("collector", "traj_ids"),
     }
     b = next(iter(collector))
@@ -1185,6 +1186,7 @@ class TestAutoWrap:
 
 @pytest.mark.parametrize("env_class", [CountingEnv, CountingBatchedEnv])
 def test_initial_obs_consistency(env_class, seed=1):
+    # non regression test on #938
     torch.manual_seed(seed)
     start_val = 4
     if env_class == CountingEnv:
