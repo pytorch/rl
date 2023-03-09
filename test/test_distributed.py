@@ -23,7 +23,8 @@ from torchrl.collectors.collectors import (
     RandomPolicy,
     SyncDataCollector,
 )
-from torchrl.collectors.distributed import DistributedDataCollector, RPCDataCollector
+from torchrl.collectors.distributed import DistributedDataCollector, \
+    RPCDataCollector, DistributedSyncDataCollector
 
 
 class CountingPolicy(nn.Module):
@@ -301,6 +302,24 @@ class TestRPCCollector(DistributedCollectorBase):
     def _start_worker(cls):
         os.environ["RCP_IDLE_TIMEOUT"] = "10"
 
+class TestSyncCollector(DistributedCollectorBase):
+    @classmethod
+    def distributed_class(cls) -> type:
+        return DistributedSyncDataCollector
+
+    @classmethod
+    def distributed_kwargs(cls) -> dict:
+        return {"launcher": "mp", "tcp_port": "1234"}
+
+    @classmethod
+    def _start_worker(cls):
+        os.environ["RCP_IDLE_TIMEOUT"] = "10"
+
+    def test_distributed_collector_sync(self, *args):
+        raise pytest.skip("skipping as only sync is supported")
+
+    def test_distributed_collector_updatepolicy(self, *args):
+        raise pytest.skip("TODO")
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

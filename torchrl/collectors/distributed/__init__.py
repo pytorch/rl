@@ -4,3 +4,4 @@
 # LICENSE file in the root directory of this source tree.
 from .generic import DistributedDataCollector
 from .rpc import RPCDataCollector
+from .sync import DistributedSyncDataCollector
