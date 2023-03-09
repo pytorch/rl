@@ -690,12 +690,12 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     data1 = []
     for d in collector1:
         data1.append(d)
-        count += d.shape[1]
+        count += d.shape[-1]
         if count > max_frames_per_traj:
             break
 
-    data1 = torch.cat(data1, 1)
-    data1 = data1[:, :max_frames_per_traj]
+    data1 = torch.cat(data1, d.ndim - 1)
+    data1 = data1[..., :max_frames_per_traj]
 
     collector1.shutdown()
     del collector1
@@ -715,12 +715,12 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     data10 = []
     for d in collector10:
         data10.append(d)
-        count += d.shape[1]
+        count += d.shape[-1]
         if count > max_frames_per_traj:
             break
 
-    data10 = torch.cat(data10, 1)
-    data10 = data10[:, :max_frames_per_traj]
+    data10 = torch.cat(data10, data1.ndim - 1)
+    data10 = data10[..., :max_frames_per_traj]
 
     collector10.shutdown()
     del collector10
@@ -740,14 +740,14 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     data20 = []
     for d in collector20:
         data20.append(d)
-        count += d.shape[1]
+        count += d.shape[-1]
         if count > max_frames_per_traj:
             break
 
     collector20.shutdown()
     del collector20
-    data20 = torch.cat(data20, 1)
-    data20 = data20[:, :max_frames_per_traj]
+    data20 = torch.cat(data20, data1.ndim - 1)
+    data20 = data20[..., :max_frames_per_traj]
 
     assert_allclose_td(data1, data20)
     assert_allclose_td(data10, data20)
