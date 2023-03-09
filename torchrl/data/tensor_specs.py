@@ -13,6 +13,7 @@ from functools import wraps
 from textwrap import indent
 from typing import (
     Any,
+    Callable,
     Dict,
     Generic,
     ItemsView,
@@ -345,6 +346,24 @@ class TensorSpec:
         """
         raise NotImplementedError
 
+    def squeeze(self, dim: int | None = None):
+        """Returns a new Spec with all the dimensions of size ``1`` removed.
+
+        When ``dim`` is given, a squeeze operation is done only in that dimension.
+
+        Args:
+            dim (int or None): the dimension to apply the squeeze operation to
+
+        """
+        shape = _squeezed_shape(self.shape, dim)
+        if shape is None:
+            return self
+        return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
+
+    def unsqueeze(self, dim: int):
+        shape = _unsqueezed_shape(self.shape, dim)
+        return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
+
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
@@ -644,11 +663,6 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
     @property
     def space(self):
         return self._specs[0].space
-        if shape is not None:
-            dim = self.dim + len(shape)
-        else:
-            dim = self.dim
-        return torch.stack([spec.rand(shape) for spec in self._specs], dim)
 
     def __eq__(self, other):
         # requires unbind to be implemented
@@ -667,7 +681,9 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         pass
 
     def keys(
-        self, yield_nesting_keys: bool = False, nested_keys: bool = True
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
     ) -> KeysView:
         pass
 
@@ -835,6 +851,39 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             )
         return self.__class__(
             n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
+        )
+
+    def squeeze(self, dim=None):
+        if self.shape[-1] == 1 and dim in (len(self.shape), -1, None):
+            raise ValueError(
+                "Final dimension of OneHotDiscreteTensorSpec must remain unchanged"
+            )
+
+        shape = _squeezed_shape(self.shape, dim)
+        if shape is None:
+            return self
+
+        return self.__class__(
+            n=shape[-1],
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            use_register=self.use_register,
+        )
+
+    def unsqueeze(self, dim: int):
+        if dim in (len(self.shape), -1):
+            raise ValueError(
+                "Final dimension of OneHotDiscreteTensorSpec must remain unchanged"
+            )
+
+        shape = _unsqueezed_shape(self.shape, dim)
+        return self.__class__(
+            n=shape[-1],
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            use_register=self.use_register,
         )
 
     def rand(self, shape=None) -> torch.Tensor:
@@ -1047,6 +1096,36 @@ class BoundedTensorSpec(TensorSpec):
         return self.__class__(
             minimum=self.space.minimum.expand(shape).clone(),
             maximum=self.space.maximum.expand(shape).clone(),
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
+    def squeeze(self, dim: int | None = None):
+        shape = _squeezed_shape(self.shape, dim)
+        if shape is None:
+            return self
+
+        if dim is None:
+            minimum = self.space.minimum.squeeze().clone()
+            maximum = self.space.maximum.squeeze().clone()
+        else:
+            minimum = self.space.minimum.squeeze(dim).clone()
+            maximum = self.space.maximum.squeeze(dim).clone()
+
+        return self.__class__(
+            minimum=minimum,
+            maximum=maximum,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
+    def unsqueeze(self, dim: int):
+        shape = _unsqueezed_shape(self.shape, dim)
+        return self.__class__(
+            minimum=self.space.minimum.unsqueeze(dim).clone(),
+            maximum=self.space.maximum.unsqueeze(dim).clone(),
             shape=shape,
             device=self.device,
             dtype=self.dtype,
@@ -1379,6 +1458,28 @@ class BinaryDiscreteTensorSpec(TensorSpec):
             n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
         )
 
+    def squeeze(self, dim: int | None = None):
+        if self.shape[-1] == 1 and dim in (len(self.shape), -1, None):
+            raise ValueError(
+                "Final dimension of BinaryDiscreteTensorSpec must remain unchanged"
+            )
+        shape = _squeezed_shape(self.shape, dim)
+        if shape is None:
+            return self
+        return self.__class__(
+            n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
+        )
+
+    def unsqueeze(self, dim: int):
+        if dim in (len(self.shape), -1):
+            raise ValueError(
+                "Final dimension of BinaryDiscreteTensorSpec must remain unchanged"
+            )
+        shape = _unsqueezed_shape(self.shape, dim)
+        return self.__class__(
+            n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
+        )
+
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
@@ -1589,6 +1690,29 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             nvec=nvecs, shape=shape, device=self.device, dtype=self.dtype
         )
 
+    def squeeze(self, dim=None):
+        if self.shape[-1] == 1 and dim in (len(self.shape), -1, None):
+            raise ValueError(
+                "Final dimension of MultiOneHotDiscreteTensorSpec must remain unchanged"
+            )
+
+        shape = _squeezed_shape(self.shape, dim)
+        if shape is None:
+            return self
+        return self.__class__(
+            nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype
+        )
+
+    def unsqueeze(self, dim: int):
+        if dim in (len(self.shape), -1):
+            raise ValueError(
+                "Final dimension of MultiOneHotDiscreteTensorSpec must remain unchanged"
+            )
+        shape = _unsqueezed_shape(self.shape, dim)
+        return self.__class__(
+            nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype
+        )
+
 
 class DiscreteTensorSpec(TensorSpec):
     """A discrete tensor spec.
@@ -1701,6 +1825,20 @@ class DiscreteTensorSpec(TensorSpec):
                 f"The last {self.ndim} of the extended shape must match the"
                 f"shape of the CompositeSpec in CompositeSpec.extend."
             )
+        return self.__class__(
+            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+        )
+
+    def squeeze(self, dim=None):
+        shape = _squeezed_shape(self.shape, dim)
+        if shape is None:
+            return self
+        return self.__class__(
+            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+        )
+
+    def unsqueeze(self, dim: int):
+        shape = _unsqueezed_shape(self.shape, dim)
         return self.__class__(
             n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
         )
@@ -1908,6 +2046,36 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             )
         return self.__class__(
             nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype
+        )
+
+    def squeeze(self, dim: int | None = None):
+        if self.shape[-1] == 1 and dim in (len(self.shape), -1, None):
+            raise ValueError(
+                "Final dimension of MultiDiscreteTensorSpec must remain unchanged"
+            )
+
+        shape = _squeezed_shape(self.shape, dim)
+        if shape is None:
+            return self
+
+        if dim is None:
+            nvec = self.nvec.squeeze()
+        else:
+            nvec = self.nvec.squeeze(dim)
+
+        return self.__class__(
+            nvec=nvec, shape=shape, device=self.device, dtype=self.dtype
+        )
+
+    def unsqueeze(self, dim: int):
+        if dim in (len(self.shape), -1):
+            raise ValueError(
+                "Final dimension of MultiDiscreteTensorSpec must remain unchanged"
+            )
+        shape = _unsqueezed_shape(self.shape, dim)
+        nvec = self.nvec.unsqueeze(dim)
+        return self.__class__(
+            nvec=nvec, shape=shape, device=self.device, dtype=self.dtype
         )
 
 
@@ -2227,9 +2395,7 @@ class CompositeSpec(TensorSpec):
                 Default is ``False``.
         """
         return _CompositeSpecKeysView(
-            self,
-            include_nested=include_nested,
-            leaves_only=leaves_only,
+            self, include_nested=include_nested, leaves_only=leaves_only
         )
 
     def items(self) -> ItemsView:
@@ -2304,7 +2470,9 @@ class CompositeSpec(TensorSpec):
                 continue
             try:
                 if isinstance(item, TensorSpec) and item.device != self.device:
-                    item = deepcopy(item).to(self.device)
+                    item = deepcopy(item)
+                    if self.device is not None:
+                        item = item.to(self.device)
             except RuntimeError as err:
                 if DEVICE_ERR_MSG in str(err):
                     try:
@@ -2344,6 +2512,52 @@ class CompositeSpec(TensorSpec):
         )
         return out
 
+    def squeeze(self, dim: int | None = None):
+        if dim is not None:
+            if dim < 0:
+                dim += len(self.shape)
+
+            shape = _squeezed_shape(self.shape, dim)
+            if shape is None:
+                return self
+
+            try:
+                device = self.device
+            except RuntimeError:
+                device = self._device
+
+            return CompositeSpec(
+                {key: value.squeeze(dim) for key, value in self.items()},
+                shape=shape,
+                device=device,
+            )
+
+        if self.shape.count(1) == 0:
+            return self
+
+        # we can't just recursively apply squeeze with dim=None because we don't want
+        # to squeeze non-batch dims of the values. Instead we find the first dim in
+        # the batch dims with size 1, squeeze that, then recurse on the root spec
+        out = self.squeeze(self.shape.index(1))
+        return out.squeeze()
+
+    def unsqueeze(self, dim: int):
+        if dim < 0:
+            dim += len(self.shape)
+
+        shape = _unsqueezed_shape(self.shape, dim)
+
+        try:
+            device = self.device
+        except RuntimeError:
+            device = self._device
+
+        return CompositeSpec(
+            {key: value.unsqueeze(dim) for key, value in self.items()},
+            shape=shape,
+            device=device,
+        )
+
 
 class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
     """A lazy representation of a stack of composite specs.
@@ -2379,10 +2593,12 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             yield key, self[key]
 
     def keys(
-        self, yield_nesting_keys: bool = False, nested_keys: bool = True
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
     ) -> KeysView:
         return self._specs[0].keys(
-            yield_nesting_keys=yield_nesting_keys, nested_keys=nested_keys
+            include_nested=include_nested, leaves_only=leaves_only
         )
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
@@ -2405,7 +2621,9 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         device_str = f"device={self._specs[0].device}"
         shape_str = f"shape={self.shape}"
         sub_str = ", ".join([sub_str, device_str, shape_str])
-        return f"CompositeSpec(\n{', '.join([sub_str, device_str, shape_str])})"
+        return (
+            f"LazyStackedCompositeSpec(\n{', '.join([sub_str, device_str, shape_str])})"
+        )
 
     def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
         pass
@@ -2452,15 +2670,24 @@ def _stack_specs(list_of_spec, dim, out=None):
         )
     if not len(list_of_spec):
         raise ValueError("Cannot stack an empty list of specs.")
-    if isinstance(list_of_spec[0], TensorSpec):
-        device = list_of_spec[0].device
-        for spec in list_of_spec:
+    spec0 = list_of_spec[0]
+    if isinstance(spec0, TensorSpec):
+        device = spec0.device
+        all_equal = True
+        for spec in list_of_spec[1:]:
             if not isinstance(spec, TensorSpec):
                 raise RuntimeError(
                     "Stacking specs cannot occur: Found more than one type of specs in the list."
                 )
             if device != spec.device:
                 raise RuntimeError(f"Devices differ, got {device} and {spec.device}")
+            all_equal = all_equal and spec == spec0
+        if all_equal:
+            shape = list(spec0.shape)
+            if dim < 0:
+                dim += len(shape) + 1
+            shape.insert(dim, len(list_of_spec))
+            return spec0.clone().unsqueeze(dim).expand(shape)
         return LazyStackedTensorSpec(*list_of_spec, dim=dim)
     else:
         raise NotImplementedError
@@ -2475,9 +2702,11 @@ def _stack_composite_specs(list_of_spec, dim, out=None):
         )
     if not len(list_of_spec):
         raise ValueError("Cannot stack an empty list of specs.")
-    if isinstance(list_of_spec[0], CompositeSpec):
-        device = list_of_spec[0].device
-        for spec in list_of_spec:
+    spec0 = list_of_spec[0]
+    if isinstance(spec0, CompositeSpec):
+        device = spec0.device
+        all_equal = True
+        for spec in list_of_spec[1:]:
             if not isinstance(spec, CompositeSpec):
                 raise RuntimeError(
                     "Stacking specs cannot occur: Found more than one type of spec in "
@@ -2485,6 +2714,13 @@ def _stack_composite_specs(list_of_spec, dim, out=None):
                 )
             if device != spec.device:
                 raise RuntimeError(f"Devices differ, got {device} and {spec.device}")
+            all_equal = all_equal and spec == spec0
+        if all_equal:
+            shape = list(spec0.shape)
+            if dim < 0:
+                dim += len(shape) + 1
+            shape.insert(dim, len(list_of_spec))
+            return spec0.clone().unsqueeze(dim).expand(shape)
         return LazyStackedCompositeSpec(*list_of_spec, dim=dim)
     else:
         raise NotImplementedError
@@ -2512,6 +2748,37 @@ def _keys_to_empty_composite_spec(keys):
         else:
             c[key[0]] = _keys_to_empty_composite_spec(key[1:])
     return c
+
+
+def _squeezed_shape(shape: torch.Size, dim: int | None) -> torch.Size | None:
+    if dim is None:
+        if len(shape) == 1 or shape.count(1) == 0:
+            return None
+        new_shape = torch.Size([s for s in shape if s != 1])
+    else:
+        if dim < 0:
+            dim += len(shape)
+
+        if shape[dim] != 1:
+            return None
+
+        new_shape = torch.Size([s for i, s in enumerate(shape) if i != dim])
+    return new_shape
+
+
+def _unsqueezed_shape(shape: torch.Size, dim: int) -> torch.Size:
+    n = len(shape)
+    if dim < -(n + 1) or dim > n:
+        raise ValueError(
+            f"Dimension out of range, expected value in the range [{-(n+1)}, {n}], but "
+            f"got {dim}"
+        )
+    if dim < 0:
+        dim += n + 1
+
+    new_shape = list(shape)
+    new_shape.insert(dim, 1)
+    return torch.Size(new_shape)
 
 
 class _CompositeSpecKeysView:
