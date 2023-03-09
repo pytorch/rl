@@ -635,9 +635,9 @@ def test_collector_consistency(num_env, env_name, seed=100):
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
 
-    if num_env == 1:
-        # rollouts collected through DataCollector are padded using pad_sequence, which introduces a first dimension
-        rollout1a = rollout1a.unsqueeze(0)
+    # if num_env == 1:
+    #     # rollouts collected through DataCollector are padded using pad_sequence, which introduces a first dimension
+    #     rollout1a = rollout1a.unsqueeze(0)
     assert (
         rollout1a.batch_size == b1.batch_size
     ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"

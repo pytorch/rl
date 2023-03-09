@@ -197,11 +197,11 @@ class MultiStep(nn.Module):
             tensordict["next"].exclude("reward", "done").gather(-1, idx_to_gather)
         )
 
-        tensordict.set("steps_to_next_obs", time_to_obs)
-        tensordict.rename_key(("next", "reward"), ("next", "original_reward"))
+        tensordict.set("steps_to_next_obs", time_to_obs + 1)
+        tensordict.rename_key_(("next", "reward"), ("next", "original_reward"))
         tensordict["next"].update(tensordict_gather)
         tensordict.set(("next", "reward"), summed_rewards)
-        tensordict.set("gamma", self.gamma**time_to_obs)
+        tensordict.set("gamma", self.gamma ** (time_to_obs + 1))
         nonterminal = time_to_obs != 0
         if mask is not None:
             mask = mask.view(*batch, T)

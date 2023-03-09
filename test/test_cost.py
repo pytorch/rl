@@ -351,7 +351,7 @@ class TestDQN:
         with torch.no_grad():
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
+            assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (

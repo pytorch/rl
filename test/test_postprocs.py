@@ -92,10 +92,10 @@ def test_multistep(n, key, device, T=11):
             != ms_tensordict.get(("next", "original_reward"))
         ).any()
     else:
-        assert (
-            ms_tensordict.get(("next", "reward"))
-            == ms_tensordict.get(("next", "original_reward"))
-        ).all()
+        torch.testing.assert_close(
+            ms_tensordict.get(("next", "reward")),
+            ms_tensordict.get(("next", "original_reward")),
+        )
 
 
 @pytest.mark.parametrize("device", get_available_devices())
