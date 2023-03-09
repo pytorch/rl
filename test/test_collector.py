@@ -932,7 +932,10 @@ def test_excluded_keys(collector_class, exclude):
 )
 @pytest.mark.parametrize("init_random_frames", [0, 50])
 @pytest.mark.parametrize("explicit_spec", [True, False])
-def test_collector_output_keys(collector_class, init_random_frames, explicit_spec):
+@pytest.mark.parametrize("split_trajs", [True, False])
+def test_collector_output_keys(
+    collector_class, init_random_frames, explicit_spec, split_trajs
+):
     from torchrl.envs.libs.gym import GymEnv
 
     out_features = 1
@@ -979,6 +982,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "total_frames": total_frames,
         "frames_per_batch": frames_per_batch,
         "init_random_frames": init_random_frames,
+        "split_trajs": split_trajs,
     }
 
     if collector_class is not SyncDataCollector:
@@ -995,7 +999,6 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "collector",
         "hidden1",
         "hidden2",
-        ("collector", "mask"),
         ("next", "hidden1"),
         ("next", "hidden2"),
         ("next", "observation"),
@@ -1005,6 +1008,8 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "observation",
         ("collector", "traj_ids"),
     }
+    if split_trajs:
+        keys.add(("collector", "mask"))
     b = next(iter(collector))
 
     assert set(b.keys(True)) == keys

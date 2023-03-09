@@ -105,7 +105,6 @@ class MultiStep(nn.Module):
             raise ValueError("n_steps must be a non-negative integer.")
         if not (gamma > 0 and gamma <= 1):
             raise ValueError(f"got out-of-bounds gamma decay: gamma={gamma}")
-        from torch.nn import functional as F
 
         self.gamma = gamma
         self.n_steps = n_steps
