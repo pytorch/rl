@@ -46,8 +46,6 @@ TCP_PORT = os.environ.get("TCP_PORT", "10003")
 IDLE_TIMEOUT = os.environ.get("RCP_IDLE_TIMEOUT", 10)
 
 
-
-
 def _rpc_init_collection_node(
     rank,
     rank0_ip,

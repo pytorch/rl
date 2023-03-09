@@ -7,6 +7,7 @@ r"""Generic distributed data-collector using torch.distributed backend."""
 
 import os
 import socket
+from copy import deepcopy
 from datetime import timedelta
 from typing import OrderedDict
 
@@ -20,6 +21,8 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
+from torchrl.data.utils import CloudpickleWrapper
+from torchrl.envs import EnvBase, EnvCreator
 
 SUBMITIT_ERR = None
 try:
@@ -67,6 +70,21 @@ def _distributed_init_collection_node(
             raise RuntimeError(
                 "SyncDataCollector and subclasses can only support a single environment."
             )
+
+    if isinstance(policy, nn.Module):
+        policy_weights = TensorDict(dict(policy.named_parameters()), [])
+        # TODO: Do we want this?
+        # updates the policy weights to avoid them to be shared
+        if all(
+            param.device == torch.device("cpu") for param in policy_weights.values()
+        ):
+            policy = deepcopy(policy)
+            policy_weights = TensorDict(dict(policy.named_parameters()), [])
+
+        policy_weights = policy_weights.apply(lambda x: x.data)
+    else:
+        policy_weights = TensorDict({}, [])
+
     collector = collector_class(
         env_make,
         policy,
@@ -96,10 +114,6 @@ def _distributed_init_collection_node(
         is_master=False,
         timeout=timedelta(10),
     )
-    if isinstance(policy, nn.Module):
-        policy_weights = TensorDict(dict(policy.named_parameters()), [])
-    else:
-        policy_weights = TensorDict({}, [])
     collector_iter = iter(collector)
     if verbose:
         print(f"node with rank {rank} -- loop")
@@ -251,6 +265,7 @@ class DistributedDataCollector(_DataCollector):
         self.policy = policy
         if isinstance(policy, nn.Module):
             policy_weights = TensorDict(dict(policy.named_parameters()), [])
+            policy_weights = policy_weights.apply(lambda x: x.data)
         else:
             policy_weights = TensorDict({}, [])
         self.policy_weights = policy_weights
@@ -344,13 +359,18 @@ class DistributedDataCollector(_DataCollector):
                 .to(self.storing_device)
             )
         if self._sync:
-            self._tensordict_out.lock()
+            self._tensordict_out.lock_()
         else:
             self._tensordict_out = self._tensordict_out.unbind(0)
             for td in self._tensordict_out:
-                td.lock()
+                td.lock_()
+        pseudo_collector.shutdown()
+        del pseudo_collector
 
     def _init_worker_dist_submitit(self, executor, i):
+        env_make = self.env_constructors[i]
+        if not isinstance(env_make, (EnvBase, EnvCreator)):
+            env_make = CloudpickleWrapper(env_make)
         TCP_PORT = self.tcp_port
         job = executor.submit(
             _distributed_init_collection_node,
@@ -362,7 +382,7 @@ class DistributedDataCollector(_DataCollector):
             self.backend,
             self.collector_class,
             self.num_workers_per_collector,
-            self.env_constructors[i],
+            env_make,
             self.policy,
             self._frames_per_batch_corrected,
             self.collector_kwargs[i],
@@ -370,6 +390,9 @@ class DistributedDataCollector(_DataCollector):
         return job
 
     def _init_worker_dist_mp(self, i):
+        env_make = self.env_constructors[i]
+        if not isinstance(env_make, (EnvBase, EnvCreator)):
+            env_make = CloudpickleWrapper(env_make)
         TCP_PORT = self.tcp_port
         job = mp.Process(
             target=_distributed_init_collection_node,
@@ -382,7 +405,7 @@ class DistributedDataCollector(_DataCollector):
                 self.backend,
                 self.collector_class,
                 self.num_workers_per_collector,
-                self.env_constructors[i],
+                env_make,
                 self.policy,
                 self._frames_per_batch_corrected,
                 self.collector_kwargs[i],

@@ -7,6 +7,7 @@ r"""Generic distributed data-collector using torch.distributed backend."""
 
 import os
 import socket
+from copy import deepcopy
 from datetime import timedelta
 from typing import OrderedDict
 
@@ -20,6 +21,8 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
+from torchrl.data.utils import CloudpickleWrapper
+from torchrl.envs import EnvBase, EnvCreator
 
 SUBMITIT_ERR = None
 try:
@@ -51,7 +54,7 @@ def _distributed_init_collection_node(
     policy,
     frames_per_batch,
     collector_kwargs,
-    update_freq,
+    update_interval,
     total_frames,
     verbose=False,
 ):
@@ -68,6 +71,21 @@ def _distributed_init_collection_node(
             raise RuntimeError(
                 "SyncDataCollector and subclasses can only support a single environment."
             )
+
+    if isinstance(policy, nn.Module):
+        policy_weights = TensorDict(dict(policy.named_parameters()), [])
+        # TODO: Do we want this?
+        # updates the policy weights to avoid them to be shared
+        if all(
+            param.device == torch.device("cpu") for param in policy_weights.values()
+        ):
+            policy = deepcopy(policy)
+            policy_weights = TensorDict(dict(policy.named_parameters()), [])
+
+        policy_weights = policy_weights.apply(lambda x: x.data)
+    else:
+        policy_weights = TensorDict({}, [])
+
     collector = collector_class(
         env_make,
         policy,
@@ -89,16 +107,19 @@ def _distributed_init_collection_node(
     )
     if verbose:
         print(f"node with rank {rank} -- creating store")
-    if isinstance(policy, nn.Module):
-        policy_weights = TensorDict(dict(policy.named_parameters()), [])
-    else:
-        policy_weights = TensorDict({}, [])
     if verbose:
         print(f"node with rank {rank} -- loop")
+    policy_weights.recv(0)
+    frames = 0
     for i, data in enumerate(collector):
-        if i % update_freq == 0 and not policy_weights.is_empty():
-            policy_weights.recv(0)
         data.isend(dst=0)
+        frames += data.numel()
+        if (
+            frames < total_frames
+            and (i + 1) % update_interval == 0
+            and not policy_weights.is_empty()
+        ):
+            policy_weights.recv(0)
 
     if not collector.closed:
         collector.shutdown()
@@ -158,7 +179,7 @@ class DistributedSyncDataCollector(_DataCollector):
             parameters being updated for a certain time even if ``update_after_each_batch``
             is turned on.
             Defaults to -1 (no forced update).
-        update_freq (int, optional): the frequency at which the policy is
+        update_interval (int, optional): the frequency at which the policy is
             updated. Defaults to 1.
         launcher (str, optional): how jobs should be launched.
             Can be one of "submitit" or "mp" for multiprocessing. The former
@@ -185,7 +206,7 @@ class DistributedSyncDataCollector(_DataCollector):
         storing_device="cpu",
         update_after_each_batch=False,
         max_weight_update_interval=-1,
-        update_freq=1,
+        update_interval=1,
         launcher="submitit",
         tcp_port=None,
     ):
@@ -200,6 +221,7 @@ class DistributedSyncDataCollector(_DataCollector):
         self.policy = policy
         if isinstance(policy, nn.Module):
             policy_weights = TensorDict(dict(policy.named_parameters()), [])
+            policy_weights = policy_weights.apply(lambda x: x.data)
         else:
             policy_weights = TensorDict({}, [])
         self.policy_weights = policy_weights
@@ -207,7 +229,7 @@ class DistributedSyncDataCollector(_DataCollector):
         self.frames_per_batch = frames_per_batch
         self.storing_device = storing_device
         # make private to avoid changes from users during collection
-        self.update_freq = update_freq
+        self.update_interval = update_interval
         self.total_frames_per_collector = total_frames // self.num_workers
         if self.total_frames_per_collector * self.num_workers != total_frames:
             raise RuntimeError(
@@ -287,10 +309,15 @@ class DistributedSyncDataCollector(_DataCollector):
                 .to_tensordict()
                 .to(self.storing_device)
             )
-        self._tensordict_out.lock()
+        self._tensordict_out.lock_()
+        pseudo_collector.shutdown()
+        del pseudo_collector
 
     def _init_worker_dist_submitit(self, executor, i):
         TCP_PORT = self.tcp_port
+        env_make = self.env_constructors[i]
+        if not isinstance(env_make, (EnvBase, EnvCreator)):
+            env_make = CloudpickleWrapper(env_make)
         job = executor.submit(
             _distributed_init_collection_node,
             i + 1,
@@ -300,17 +327,20 @@ class DistributedSyncDataCollector(_DataCollector):
             self.backend,
             self.collector_class,
             self.num_workers_per_collector,
-            self.env_constructors[i],
+            env_make,
             self.policy,
             self._frames_per_batch_corrected,
             self.collector_kwargs[i],
-            self.update_freq,
+            self.update_interval,
             self.total_frames_per_collector,
         )
         return job
 
     def _init_worker_dist_mp(self, i):
         TCP_PORT = self.tcp_port
+        env_make = self.env_constructors[i]
+        if not isinstance(env_make, (EnvBase, EnvCreator)):
+            env_make = CloudpickleWrapper(env_make)
         job = mp.Process(
             target=_distributed_init_collection_node,
             args=(
@@ -321,11 +351,11 @@ class DistributedSyncDataCollector(_DataCollector):
                 self.backend,
                 self.collector_class,
                 self.num_workers_per_collector,
-                self.env_constructors[i],
+                env_make,
                 self.policy,
                 self._frames_per_batch_corrected,
                 self.collector_kwargs[i],
-                self.update_freq,
+                self.update_interval,
                 self.total_frames_per_collector,
             ),
         )
@@ -369,13 +399,13 @@ class DistributedSyncDataCollector(_DataCollector):
     def _iterator_dist(self):
 
         total_frames = 0
-        i = 0
+        j = -1
         while total_frames < self.total_frames:
-
-            if i % self.update_freq == 0:
+            j += 1
+            if j % self.update_interval == 0:
                 for i in range(self.num_workers):
                     rank = i + 1
-                    self.policy_weights.send(rank)
+                    self.policy_weights.isend(rank)
 
             trackers = []
             for i in range(self.num_workers):

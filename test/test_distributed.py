@@ -23,8 +23,11 @@ from torchrl.collectors.collectors import (
     RandomPolicy,
     SyncDataCollector,
 )
-from torchrl.collectors.distributed import DistributedDataCollector, \
-    RPCDataCollector, DistributedSyncDataCollector
+from torchrl.collectors.distributed import (
+    DistributedDataCollector,
+    DistributedSyncDataCollector,
+    RPCDataCollector,
+)
 
 
 class CountingPolicy(nn.Module):
@@ -282,7 +285,7 @@ class TestDistributedCollector(DistributedCollectorBase):
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
-        return {"launcher": "mp", "tcp_port": "1234"}
+        return {"launcher": "mp", "tcp_port": "4324"}
 
     @classmethod
     def _start_worker(cls):
@@ -296,11 +299,12 @@ class TestRPCCollector(DistributedCollectorBase):
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
-        return {"launcher": "mp", "tcp_port": "1234"}
+        return {"launcher": "mp", "tcp_port": "4324"}
 
     @classmethod
     def _start_worker(cls):
         os.environ["RCP_IDLE_TIMEOUT"] = "10"
+
 
 class TestSyncCollector(DistributedCollectorBase):
     @classmethod
@@ -309,7 +313,7 @@ class TestSyncCollector(DistributedCollectorBase):
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
-        return {"launcher": "mp", "tcp_port": "1234"}
+        return {"launcher": "mp", "tcp_port": "4324"}
 
     @classmethod
     def _start_worker(cls):
@@ -318,8 +322,68 @@ class TestSyncCollector(DistributedCollectorBase):
     def test_distributed_collector_sync(self, *args):
         raise pytest.skip("skipping as only sync is supported")
 
-    def test_distributed_collector_updatepolicy(self, *args):
-        raise pytest.skip("TODO")
+    @classmethod
+    def _test_distributed_collector_updatepolicy(
+        cls, queue, collector_class, update_interval
+    ):
+        frames_per_batch = 50
+        env = CountingEnv()
+        policy = CountingPolicy()
+        collector = cls.distributed_class()(
+            [env] * 2,
+            policy,
+            collector_class=collector_class,
+            total_frames=2000,
+            frames_per_batch=frames_per_batch,
+            update_interval=update_interval,
+            **cls.distributed_kwargs(),
+        )
+        total = 0
+        first_batch = None
+        last_batch = None
+        for i, data in enumerate(collector):
+            total += data.numel()
+            assert data.numel() == frames_per_batch
+            if i == 0:
+                first_batch = data
+                policy.weight.data += 1
+                print("done")
+            elif total == 2000 - frames_per_batch:
+                last_batch = data
+        assert (first_batch["action"] == 1).all(), first_batch["action"]
+        if update_interval == 1:
+            assert (last_batch["action"] == 2).all(), last_batch["action"]
+        else:
+            assert (last_batch["action"] == 1).all(), last_batch["action"]
+        collector.shutdown()
+        assert total == 2000
+        queue.put("passed")
+
+    @pytest.mark.parametrize(
+        "collector_class",
+        [
+            SyncDataCollector,
+            MultiSyncDataCollector,
+            MultiaSyncDataCollector,
+        ],
+    )
+    @pytest.mark.parametrize("update_interval", [1_000_000, 1])
+    def test_distributed_collector_updatepolicy(self, collector_class, update_interval):
+        """Testing various collector classes to be used in nodes."""
+        queue = mp.Queue(1)
+
+        proc = mp.Process(
+            target=self._test_distributed_collector_updatepolicy,
+            args=(queue, collector_class, update_interval),
+        )
+        proc.start()
+        try:
+            out = queue.get(timeout=100)
+            assert out == "passed"
+        finally:
+            proc.join()
+            queue.close()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
