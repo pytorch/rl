@@ -10,6 +10,8 @@ import socket
 import time
 from typing import OrderedDict
 
+from torchrl.data.utils import CloudpickleWrapper
+
 SUBMITIT_ERR = None
 try:
     import submitit
@@ -270,7 +272,7 @@ class RPCDataCollector(_DataCollector):
         for i in range(num_workers):
             env_make = env_constructors[i]
             if not isinstance(env_make, (EnvBase, EnvCreator)):
-                env_make = EnvCreator(env_make)
+                env_make = CloudpickleWrapper(env_make)
             print("Making collector in remote node")
             collector_rref = rpc.remote(
                 collector_infos[i],
