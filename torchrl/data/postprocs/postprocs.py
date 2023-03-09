@@ -35,9 +35,9 @@ def _get_reward(
     )
     num_traj = done_cumsum.max().item() + 1
     done_cumsum = done_cumsum.expand(num_traj, *done.shape)
-    traj_ids = done_cumsum == torch.arange(num_traj).view(
-        num_traj, *[1 for _ in range(done_cumsum.ndim - 1)]
-    )
+    traj_ids = done_cumsum == torch.arange(
+        num_traj, device=done.device, dtype=done_cumsum.dtype
+    ).view(num_traj, *[1 for _ in range(done_cumsum.ndim - 1)])
     # an expanded reward tensor where each index along dim 0 is a different trajectory
     # Note: rewards could have a different shape than done (e.g. multi-agent with a single
     # done per group).
