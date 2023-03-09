@@ -63,14 +63,16 @@ def test_multistep(n, key, device, T=11):
         )
 
     # assert that done at last step is similar to unterminated traj
-    assert (ms_tensordict.get("gamma")[4] == ms_tensordict.get("gamma")[0]).all()
-    assert (
-        ms_tensordict.get(("next", key))[4] == ms_tensordict.get(("next", key))[0]
-    ).all()
-    assert (
-        ms_tensordict.get("steps_to_next_obs")[4]
-        == ms_tensordict.get("steps_to_next_obs")[0]
-    ).all()
+    torch.testing.assert_close(
+        ms_tensordict.get("gamma")[4], ms_tensordict.get("gamma")[0]
+    )
+    torch.testing.assert_close(
+        ms_tensordict.get(("next", key))[4], ms_tensordict.get(("next", key))[0]
+    )
+    torch.testing.assert_close(
+        ms_tensordict.get("steps_to_next_obs")[4],
+        ms_tensordict.get("steps_to_next_obs")[0],
+    )
 
     # check that next obs is properly replaced, or that it is terminated
     next_obs = ms_tensordict.get(key)[:, (1 + ms.n_steps) :]
