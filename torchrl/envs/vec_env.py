@@ -22,7 +22,7 @@ from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     TensorSpec,
