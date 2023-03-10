@@ -22,6 +22,7 @@ from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
+from torchrl.data import D4RLExperienceReplay
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
@@ -33,6 +34,14 @@ from torchrl.envs.utils import check_env_specs
 
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
+
+try:
+    import d4rl
+    _has_d4rl = True
+    D4RL_ERR = None
+except ImportError as err:
+    _has_d4rl = False
+    D4RL_ERR = err
 
 if _has_gym:
     try:
@@ -1102,6 +1111,31 @@ class TestVmas:
 
         assert env.rollout(max_steps=3).device == devices[1 - first]
 
+@pytest.mark.skipif(not _has_d4rl, reason=f"D4RL not found: {D4RL_ERR}")
+class TestD4RL:
+    @pytest.mark.parametrize("split_trajs", [True, False])
+    @pytest.mark.parametrize("task", [
+        "maze2d-open-v0",
+        "maze2d-open-dense-v0",
+        "antmaze-medium-play-v0",
+        "hammer-cloned-v0/v1",
+        "relocate-human-v0/v1",
+        "walker2d-medium-replay-v0/v2",
+        "ant-medium-v0/v2",
+        "flow-merge-random-v0",
+        "kitchen-partial-v0",
+#        "carla-town-v0",
+    ])
+    def test_dataset_build(self, task, split_trajs):
+        data = D4RLExperienceReplay(task, split_trajs=split_trajs)
+        sample = data.sample(2)
+        env = GymEnv(task)
+        rollout = env.rollout(2)
+        for key in rollout.keys(True, True):
+            sim = rollout[key]
+            offline = sample[key]
+            assert sim.dtype == offline.dtype
+            assert sim.shape[-1] == offline.shape[-1]
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

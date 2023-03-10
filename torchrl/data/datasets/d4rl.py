@@ -91,10 +91,12 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset = make_tensordict(
             {k: torch.tensor(item) for k, item in env.get_dataset().items()}
         )
-        dataset.rename_key("terminals", "done")
         dataset.rename_key("observations", "observation")
+        dataset.rename_key("terminals", "done")
+        dataset["done"] = dataset["done"].unsqueeze(-1)
         # dataset.rename_key("next_observations", "next/observation")
         dataset.rename_key("rewards", "reward")
+        dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset.rename_key("actions", "action")
         dataset = (
             dataset[:-1]
