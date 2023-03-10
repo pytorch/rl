@@ -28,7 +28,6 @@ from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import Writer
 
 from torchrl.data.tensor_specs import CompositeSpec
-from torchrl.envs.libs.gym import GymWrapper
 
 
 class D4RLExperienceReplay(TensorDictReplayBuffer):
@@ -78,9 +77,12 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
         transform: Optional["Transform"] = None,  # noqa-F821
-        split_trajs:bool = False
+        split_trajs:bool = False,
         **env_kwargs,
     ):
+        # we do a local import to avoid circular import issues
+        from torchrl.envs.libs.gym import GymWrapper
+
         if not _has_gym:
             raise ImportError("Could not import gym") from GYM_ERR
         if not _has_d4rl:
