@@ -1,11 +1,16 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 from typing import Callable, Optional
 
 import numpy as np
 
-from torchrl.collectors.utils import split_trajectories
-
 import torch
 from tensordict.tensordict import make_tensordict
+
+from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -13,7 +18,7 @@ from torchrl.data.replay_buffers.writers import Writer
 
 D4RL_ERR = None
 try:
-    import gym, d4rl  # noqa
+    import d4rl, gym  # noqa
 
     _has_d4rl = True
 except ModuleNotFoundError as err:
