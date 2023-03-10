@@ -29,8 +29,6 @@ from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import Writer
 
-from torchrl.data.tensor_specs import CompositeSpec
-
 
 class D4RLExperienceReplay(TensorDictReplayBuffer):
     """An Experience replay class for D4RL.
@@ -224,12 +222,9 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["done"] = dataset["done"].unsqueeze(-1)
         # dataset.rename_key("next_observations", "next/observation")
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
-        dataset = (
-            dataset[:-1]
-            .set(
-                "next",
-                dataset.select("observation", "info", strict=False)[1:],
-            )
+        dataset = dataset[:-1].set(
+            "next",
+            dataset.select("observation", "info", strict=False)[1:],
         )
         dataset["next"].update(dataset.select("reward", "done"))
         self._shift_reward_done(dataset)
