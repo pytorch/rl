@@ -181,7 +181,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["next"].update(dataset.select("done", "reward"))
         self._shift_reward_done(dataset)
         # Fill unknown next states with 0
-        dataset["next", "observation"][dataset["next", "done"]] = 0.0
+        dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0.0
         self.specs = env.specs.clone()
         return dataset
 
@@ -244,7 +244,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["next"].update(dataset.select("reward", "done"))
         self._shift_reward_done(dataset)
         # Fill unknown next states with 0
-        dataset["next", "observation"][dataset["next", "done"]] = 0.0
+        dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0.0
         self.specs = env.specs.clone()
         return dataset
 
