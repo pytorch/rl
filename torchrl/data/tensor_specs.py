@@ -1934,11 +1934,39 @@ class CompositeSpec(TensorSpec):
             leaves_only=leaves_only,
         )
 
-    def items(self) -> ItemsView:
-        return self._specs.items()
+    def items(self,         include_nested: bool = False,
+        leaves_only: bool = False,
+) -> ItemsView:
+        """Items of the CompositeSpec.
+
+        Args:
+            include_nested (bool, optional): if ``False``, the returned keys will not be nested. They will
+                represent only the immediate children of the root, and not the whole nested sequence, i.e. a
+                :obj:`CompositeSpec(next=CompositeSpec(obs=None))` will lead to the keys
+                :obj:`["next"]. Default is ``False``, i.e. nested keys will not
+                be returned.
+            leaves_only (bool, optional): if :obj:`False`, the values returned
+                will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
+                will lead to the keys :obj:`["next", ("next", "obs")]`.
+                Default is ``False``.
+        """
+        yield from ((key, self[key]) for key in self.keys(include_nested=include_nested, leaves_only=leaves_only))
 
     def values(self) -> ValuesView:
-        return self._specs.values()
+        """Values of the CompositeSpec.
+
+        Args:
+            include_nested (bool, optional): if ``False``, the returned keys will not be nested. They will
+                represent only the immediate children of the root, and not the whole nested sequence, i.e. a
+                :obj:`CompositeSpec(next=CompositeSpec(obs=None))` will lead to the keys
+                :obj:`["next"]. Default is ``False``, i.e. nested keys will not
+                be returned.
+            leaves_only (bool, optional): if :obj:`False`, the values returned
+                will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
+                will lead to the keys :obj:`["next", ("next", "obs")]`.
+                Default is ``False``.
+        """
+        yield from (self[key] for key in self.keys(include_nested=include_nested, leaves_only=leaves_only))
 
     def __len__(self):
         return len(self.keys())
