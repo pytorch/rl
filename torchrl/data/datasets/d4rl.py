@@ -103,7 +103,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset = dataset.exclude("metadata")
             self.metadata = metadata
             # find batch size
-            dataset = make_tensordict(dataset.to_dict())
+            dataset = make_tensordict(dataset.flatten_keys("/").to_dict())
+            dataset = dataset.unflatten_keys("/")
         else:
             self.metadata = {}
 
