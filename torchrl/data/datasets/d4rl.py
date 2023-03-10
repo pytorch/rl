@@ -93,17 +93,26 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         )
         dataset.rename_key("observations", "observation")
         dataset.rename_key("terminals", "done")
+        dataset.rename_key("rewards", "reward")
+        dataset.rename_key("actions", "action")
+        dataset = dataset.unflatten_keys("/")
+
+        # let's make sure that the dtypes match what's expected
+        for key, spec in env.observation_spec.keys(True, True):
+            dataset[key] = dataset[key].to(spec.dtype)
+        for key, spec in env.input_spec.keys(True, True):
+            dataset[key] = dataset[key].to(spec.dtype)
+        dataset["reward"] = env.reward_spec.encode(dataset["reward"])
+        dataset["done"] = dataset["done"].bool()
+
         dataset["done"] = dataset["done"].unsqueeze(-1)
         # dataset.rename_key("next_observations", "next/observation")
-        dataset.rename_key("rewards", "reward")
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
-        dataset.rename_key("actions", "action")
         dataset = (
             dataset[:-1]
             .exclude("reward")
             .set("next", dataset.select("observation", "reward", "done")[1:])
         )
-        dataset = dataset.unflatten_keys("/")
         if split_trajs:
             dataset = split_trajectories(dataset)
         storage = LazyMemmapStorage(dataset.shape[0])
