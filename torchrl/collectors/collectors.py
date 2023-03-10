@@ -69,7 +69,7 @@ class RandomPolicy:
 
 class Interruptor:
     def __init__(self):
-        self._collect = False
+        self._collect = True
 
     def start_collection(self):
         self._collect = True
@@ -1263,8 +1263,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
             max_traj_idx = None
 
             # Stop collection in all workers as soon as 0.5 are done
+            preemption_ratio_completed = 0.5
             self.interruptor.start_collection()
-            while self.queue_out.qsize() < int(self.num_workers * 0.5):
+            while self.queue_out.qsize() < int(self.num_workers * preemption_ratio_completed):
                 continue
             self.interruptor.stop_collection()
 
