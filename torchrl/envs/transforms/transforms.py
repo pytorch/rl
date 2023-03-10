@@ -2807,7 +2807,7 @@ class VecNorm(Transform):
                     dtype=torch.float,
                 ),
             )
-            td_select.rename_key(key, key + "_sum")
+            td_select.rename_key_(key, key + "_sum")
         td_select.exclude(*keys).zero_()
         td_select = td_select.unflatten_keys(sep)
         if memmap:

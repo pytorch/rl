@@ -270,7 +270,7 @@ def make_collector_offpolicy(
     if cfg.multi_step:
         ms = MultiStep(
             gamma=cfg.gamma,
-            n_steps_max=cfg.n_steps_return,
+            n_steps=cfg.n_steps_return,
         )
     else:
         ms = None
