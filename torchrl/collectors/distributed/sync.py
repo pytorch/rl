@@ -109,7 +109,7 @@ def _distributed_init_collection_node(
         print(f"node with rank {rank} -- creating store")
     if verbose:
         print(f"node with rank {rank} -- loop")
-    policy_weights.recv(0)
+    policy_weights.irecv(0)
     frames = 0
     for i, data in enumerate(collector):
         data.isend(dst=0)
@@ -119,7 +119,7 @@ def _distributed_init_collection_node(
             and (i + 1) % update_interval == 0
             and not policy_weights.is_empty()
         ):
-            policy_weights.recv(0)
+            policy_weights.irecv(0)
 
     if not collector.closed:
         collector.shutdown()
@@ -309,6 +309,7 @@ class DistributedSyncDataCollector(_DataCollector):
                 .to_tensordict()
                 .to(self.storing_device)
             )
+        self._single_tds = self._tensordict_out.unbind(0)
         self._tensordict_out.lock_()
         pseudo_collector.shutdown()
         del pseudo_collector
@@ -411,7 +412,7 @@ class DistributedSyncDataCollector(_DataCollector):
             for i in range(self.num_workers):
                 rank = i + 1
                 trackers.append(
-                    self._tensordict_out[i].irecv(src=rank, return_premature=True)
+                    self._single_tds[i].irecv(src=rank, return_premature=True)
                 )
             for tracker in trackers:
                 for _tracker in tracker:

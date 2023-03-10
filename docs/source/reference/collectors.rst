@@ -11,7 +11,7 @@ TorchRL's data collectors accept two main arguments: an environment (or a list o
 environment constructors) and a policy. They will iteratively execute an environment
 step and a policy query over a defined number of steps before delivering a stack of
 the data collected to the user. Environments will be reset whenever they reach a done
-state, and/or after a predifined number of steps.
+state, and/or after a predefined number of steps.
 
 Because data collection is a potentially compute heavy process, it is crucial to
 configure the execution hyperparameters appropriately.
@@ -21,7 +21,7 @@ class will execute the data collection on the training worker. The :obj:`MultiSy
 will split the workload across an number of workers and aggregate the results that
 will be delivered to the training worker. Finally, the :obj:`MultiaSyncDataCollector` will
 execute the data collection on several workers and deliver the first batch of results
-that it can gather. This execution will occur continuously and concomittantly with
+that it can gather. This execution will occur continuously and concomitantly with
 the training of the networks: this implies that the weights of the policy that
 is used for the data collection may slightly lag the configuration of the policy
 on the training worker. Therefore, although this class may be the fastest to collect
@@ -35,7 +35,7 @@ by setting `update_at_each_batch=True` in the constructor.
 The second parameter to consider (in the remote settings) is the device where the
 data will be collected and the device where the environment and policy operations
 will be executed. For instance, a policy executed on CPU may be slower than one
-executed on CUDA. When multiple inference workers run concomittantly, dispatching
+executed on CUDA. When multiple inference workers run concomitantly, dispatching
 the compute workload across the available devices may speed up the collection or
 avoid OOM errors. Finally, the choice of the batch size and passing device (ie the
 device where the data will be stored while waiting to be passed to the collection
@@ -58,8 +58,8 @@ Besides those compute parameters, users may choose to configure the following pa
 - reset_when_done: whether environments should be reset when reaching a done state.
 
 
-Data collectors
----------------
+Single node data collectors
+---------------------------
 .. currentmodule:: torchrl.collectors.collectors
 
 .. autosummary::
@@ -71,6 +71,19 @@ Data collectors
     RandomPolicy
     SyncDataCollector
     aSyncDataCollector
+
+
+Distributed data collectors
+---------------------------
+.. currentmodule:: torchrl.collectors.distributed
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    DistributedDataCollector
+    RPCDataCollector
+    DistributedSyncDataCollector
 
 
 Helper functions
