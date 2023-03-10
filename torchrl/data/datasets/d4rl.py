@@ -129,7 +129,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
                 for k, item in dataset.items()
                 if isinstance(item, np.ndarray)
             }
-        )
+        ).clone()
         dataset = dataset.unflatten_keys("/")
         if "metadata" in dataset.keys():
             metadata = dataset.get("metadata")
