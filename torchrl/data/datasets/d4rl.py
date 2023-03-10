@@ -170,11 +170,6 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         # dataset.rename_key("next_observations", "next/observation")
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset["next"].update(dataset.select("done", "reward"))
-        dataset = dataset.clone()
-        dataset["reward"][1:] = dataset["reward"][:-1].clone()
-        dataset["done"][1:] = dataset["done"][:-1].clone()
-        dataset["reward"][0] = 0
-        dataset["done"][0] = 0
         self.specs = env.specs.clone()
         return dataset
 
@@ -230,13 +225,20 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset = (
             dataset[:-1]
-            # .exclude("reward")
             .set(
                 "next",
-                dataset.select("observation", "reward", "done", "info", strict=False)[
-                    1:
-                ],
+                dataset.select("observation", "info", strict=False)[1:],
             )
         )
+        dataset["next"].update(dataset.select("reward", "done"))
+        self._shift_reward_done(dataset)
         self.specs = env.specs.clone()
         return dataset
+
+    def _shift_reward_done(self, dataset):
+        dataset["reward"] = dataset["reward"].clone()
+        dataset["done"] = dataset["done"].clone()
+        dataset["reward"][1:] = dataset["reward"][:-1].clone()
+        dataset["done"][1:] = dataset["done"][:-1].clone()
+        dataset["reward"][0] = 0
+        dataset["done"][0] = 0
