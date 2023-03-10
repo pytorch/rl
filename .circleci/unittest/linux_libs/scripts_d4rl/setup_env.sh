@@ -40,19 +40,59 @@ fi
 conda activate "${env_dir}"
 
 
-# 3. Install Conda dependencies
+# 3. Install mujoco
+printf "* Installing mujoco and related\n"
+mkdir -p $root_dir/.mujoco
+cd $root_dir/.mujoco/
+#wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
+#tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
+#wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
+wget https://www.roboti.us/download/mujoco200_linux.zip
+unzip mujoco200_linux.zip
+wget https://www.roboti.us/file/mjkey.txt
+cp mjkey.txt ./mujoco200_linux/bin/
+# install mujoco-py locally
+git clone https://github.com/vmoens/mujoco-py.git
+cd $this_dir
+
+# 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
 pip install pip --upgrade
 
+# 5. env variables
+if [[ $OSTYPE == 'darwin'* ]]; then
+  PRIVATE_MUJOCO_GL=glfw
+elif [ "${CU_VERSION:-}" == cpu ]; then
+  PRIVATE_MUJOCO_GL=osmesa
+else
+  PRIVATE_MUJOCO_GL=osmesa
+fi
+
+export MUJOCO_GL=$PRIVATE_MUJOCO_GL
+conda env config vars set \
+  MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco200_linux \
+  DISPLAY=unix:0.0 \
+  MJLIB_PATH=$root_dir/.mujoco/mujoco200_linux/bin/libmujoco200.so \
+  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco200_linux/bin \
+  MUJOCO_PY_MJKEY_PATH=$root_dir/.mujoco/mjkey.txt \
+  SDL_VIDEODRIVER=dummy \
+  MUJOCO_GL=$PRIVATE_MUJOCO_GL \
+  PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
+
 conda env update --file "${this_dir}/environment.yml" --prune
 
-conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
-conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
-#conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-baselines
-conda run python -m pip install "gym[atari,accept-rom-license]" pygame
+git clone https://github.com/Farama-Foundation/d4rl.git
+cd d4rl
+pip install -e .
 
 # smoke test
-python -c "import habitat;import habitat.gym"
+python -c """import gym, d4rl"""
+
+cd ..
+git clone https://github.com/flow-project/flow.git
+cd flow
+pip install -e .
+cd ..

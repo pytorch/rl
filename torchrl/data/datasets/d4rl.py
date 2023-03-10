@@ -61,7 +61,13 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         split_trajs (bool, optional): if True, the trajectories will be split
             along the first dimension and padded to have a matching shape.
             Defaults to ``False``.
-        env_kwargs (key-value pairs): additional kwargs for the env.
+        from_env (bool, optional): if ``True``, :meth:`env.get_dataset` will
+            be used to retrieve the dataset. Otherwise :func:`d4rl.qlearning_dataset`
+            will be used. Defaults to ``True``.
+        env_kwargs (key-value pairs): additional kwargs for
+            :func:`d4rl.qlearning_dataset`. Supports ``terminate_on_end``
+            (``False`` by default) or other kwargs if defined by D4RL library.
+
 
     Examples:
         >>> from torchrl.data.datasets.d4rl import D4RLExperienceReplay
@@ -83,19 +89,101 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         prefetch: Optional[int] = None,
         transform: Optional["Transform"] = None,  # noqa-F821
         split_trajs: bool = False,
+        from_env: bool = True,
         **env_kwargs,
     ):
-        # we do a local import to avoid circular import issues
-        from torchrl.envs.libs.gym import GymWrapper
 
         if not _has_gym:
             raise ImportError("Could not import gym") from GYM_ERR
         if not _has_d4rl:
             raise ImportError("Could not import d4rl") from D4RL_ERR
-        env = GymWrapper(gym.make(name, **env_kwargs))
+        self.from_env = from_env
+        if from_env:
+            dataset = self._get_dataset_from_env(name, env_kwargs)
+        else:
+            dataset = self._get_dataset_direct(name, env_kwargs)
+
+        if split_trajs:
+            dataset = split_trajectories(dataset)
+        storage = LazyMemmapStorage(dataset.shape[0])
+        super().__init__(
+            storage=storage,
+            sampler=sampler,
+            writer=writer,
+            collate_fn=collate_fn,
+            pin_memory=pin_memory,
+            prefetch=prefetch,
+            transform=transform,
+        )
+        self.extend(dataset)
+
+    def _get_dataset_direct(self, name, env_kwargs):
+        from torchrl.envs.libs.gym import GymWrapper
+
+        env = GymWrapper(gym.make(name))
+        dataset = d4rl.qlearning_dataset(env._env, **env_kwargs)
 
         dataset = make_tensordict(
-            {k: torch.from_numpy(item) for k, item in env.get_dataset().items() if isinstance(item, np.ndarray)}
+            {
+                k: torch.from_numpy(item)
+                for k, item in dataset.items()
+                if isinstance(item, np.ndarray)
+            }
+        )
+        dataset = dataset.unflatten_keys("/")
+        if "metadata" in dataset.keys():
+            metadata = dataset.get("metadata")
+            dataset = dataset.exclude("metadata")
+            self.metadata = metadata
+            # find batch size
+            dataset = make_tensordict(dataset.flatten_keys("/").to_dict())
+            dataset = dataset.unflatten_keys("/")
+        else:
+            self.metadata = {}
+        dataset.rename_key("observations", "observation")
+        dataset.rename_key("next_observations", ("next", "observation"))
+        dataset.rename_key("terminals", "done")
+        dataset.rename_key("rewards", "reward")
+        dataset.rename_key("actions", "action")
+
+        # let's make sure that the dtypes match what's expected
+        for key, spec in env.observation_spec.items(True, True):
+            dataset[key] = dataset[key].to(spec.dtype)
+            dataset["next", key] = dataset["next", key].to(spec.dtype)
+        for key, spec in env.input_spec.items(True, True):
+            dataset[key] = dataset[key].to(spec.dtype)
+        dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
+        dataset["done"] = dataset["done"].bool()
+
+        dataset["done"] = dataset["done"].unsqueeze(-1)
+        # dataset.rename_key("next_observations", "next/observation")
+        dataset["reward"] = dataset["reward"].unsqueeze(-1)
+        dataset["next"].update(dataset.select("done", "reward"))
+        dataset["reward"][1:] = dataset["reward"][:-1]
+        dataset["done"][1:] = dataset["done"][:-1]
+        dataset["reward"][0] = 0
+        dataset["done"][0] = 0
+        self.specs = env.specs.clone()
+        return dataset
+
+    def _get_dataset_from_env(self, name, env_kwargs):
+        """Creates an environment and retrieves the dataset using env.get_dataset().
+
+        This method does not accept extra arguments.
+
+        """
+        if env_kwargs:
+            raise RuntimeError("env_kwargs cannot be passed with using from_env=True")
+        # we do a local import to avoid circular import issues
+        from torchrl.envs.libs.gym import GymWrapper
+
+        env = GymWrapper(gym.make(name))
+        dataset = make_tensordict(
+            {
+                k: torch.from_numpy(item)
+                for k, item in env.get_dataset().items()
+                if isinstance(item, np.ndarray)
+            }
         )
         dataset = dataset.unflatten_keys("/")
         if "metadata" in dataset.keys():
@@ -129,21 +217,5 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             # .exclude("reward")
             .set("next", dataset.select("observation", "reward", "done")[1:])
         )
-        if split_trajs:
-            dataset = split_trajectories(dataset)
-        storage = LazyMemmapStorage(dataset.shape[0])
-        super().__init__(
-            storage=storage,
-            sampler=sampler,
-            writer=writer,
-            collate_fn=collate_fn,
-            pin_memory=pin_memory,
-            prefetch=prefetch,
-            transform=transform,
-        )
-        self.extend(dataset)
-        self.specs = CompositeSpec(
-            input_spec=env.input_spec,
-            observation_spec=env.observation_spec,
-            reward_spec=env.reward_spec,
-        )
+        self.specs = env.specs.clone()
+        return dataset

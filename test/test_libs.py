@@ -1114,25 +1114,26 @@ class TestVmas:
 
 
 @pytest.mark.skipif(not _has_d4rl, reason=f"D4RL not found: {D4RL_ERR}")
+@pytest.mark.parametrize(
+    "task",
+    [
+        "hammer-cloned-v1",
+        "maze2d-open-v0",
+        "maze2d-open-dense-v0",
+        "antmaze-medium-play-v0",
+        "relocate-human-v1",
+        "walker2d-medium-replay-v2",
+        "ant-medium-v2",
+        "flow-merge-random-v0",
+        "kitchen-partial-v0",
+        #        "carla-town-v0",
+    ],
+)
 class TestD4RL:
     @pytest.mark.parametrize("split_trajs", [True, False])
-    @pytest.mark.parametrize(
-        "task",
-        [
-            "hammer-cloned-v1",
-            "maze2d-open-v0",
-            "maze2d-open-dense-v0",
-            "antmaze-medium-play-v0",
-            "relocate-human-v1",
-            "walker2d-medium-replay-v2",
-            "ant-medium-v2",
-            "flow-merge-random-v0",
-            "kitchen-partial-v0",
-            #        "carla-town-v0",
-        ],
-    )
-    def test_dataset_build(self, task, split_trajs):
-        data = D4RLExperienceReplay(task, split_trajs=split_trajs)
+    @pytest.mark.parametrize("from_env", [True, False])
+    def test_dataset_build(self, task, split_trajs, from_env):
+        data = D4RLExperienceReplay(task, split_trajs=split_trajs, from_env=from_env)
         sample = data.sample(2)
         env = GymWrapper(gym.make(task))
         rollout = env.rollout(2)
@@ -1142,6 +1143,14 @@ class TestD4RL:
             offline = sample[key]
             assert sim.dtype == offline.dtype, key
             assert sim.shape[-1] == offline.shape[-1], key
+
+    def test_terminate_on_end(self, task):
+        data_true = D4RLExperienceReplay(task, split_trajs=True, from_env=False, terminate_on_end=True)
+        print("t", data_true._storage._storage)
+        data_false = D4RLExperienceReplay(task, split_trajs=True, from_env=False, terminate_on_end=False)
+        print("f", data_false._storage._storage)
+        data_from_env = D4RLExperienceReplay(task, split_trajs=True, from_env=True)
+        print("fe", data_from_env._storage._storage)
 
 
 if __name__ == "__main__":
