@@ -110,7 +110,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset = (
             dataset[:-1]
-            .exclude("reward")
+            # .exclude("reward")
             .set("next", dataset.select("observation", "reward", "done")[1:])
         )
         if split_trajs:
