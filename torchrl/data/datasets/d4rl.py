@@ -89,7 +89,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             raise ImportError("Could not import d4rl") from D4RL_ERR
         env = GymWrapper(gym.make(name, **env_kwargs))
         dataset = make_tensordict(
-            {k: torch.tensor(item) for k, item in env.get_dataset().items()}
+            {k: torch.from_numpy(item).clone() for k, item in env.get_dataset().items()}
         )
         dataset.rename_key("observations", "observation")
         dataset.rename_key("terminals", "done")

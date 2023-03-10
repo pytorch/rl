@@ -1119,10 +1119,10 @@ class TestD4RL:
     @pytest.mark.parametrize(
         "task",
         [
+            "hammer-cloned-v1",
             "maze2d-open-v0",
             "maze2d-open-dense-v0",
             "antmaze-medium-play-v0",
-            "hammer-cloned-v1",
             "relocate-human-v1",
             "walker2d-medium-replay-v2",
             "ant-medium-v2",
