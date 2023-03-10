@@ -151,7 +151,9 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset.rename_key("observations", "observation")
         dataset.set("next", dataset.select())
         dataset.rename_key("next_observations", ("next", "observation"))
-        dataset.rename_key("terminals", "done")
+        dataset.rename_key("terminals", "terminal")
+        dataset.rename_key("timeouts", "timeout")
+        dataset.set("done", dataset.get("terminal") | dataset.get("timeout"))
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
 
@@ -169,6 +171,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset["next"].update(dataset.select("done", "reward"))
         self._shift_reward_done(dataset)
+        # Fill unknown next states with 0
+        dataset["next", "observation"][dataset["next", "done"]] = 0.0
         self.specs = env.specs.clone()
         return dataset
 
@@ -203,7 +207,9 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             self.metadata = {}
 
         dataset.rename_key("observations", "observation")
-        dataset.rename_key("terminals", "done")
+        dataset.rename_key("terminals", "terminal")
+        dataset.rename_key("timeouts", "timeout")
+        dataset.set("done", dataset.get("terminal") | dataset.get("timeout"))
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
         try:
@@ -228,6 +234,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         )
         dataset["next"].update(dataset.select("reward", "done"))
         self._shift_reward_done(dataset)
+        # Fill unknown next states with 0
+        dataset["next", "observation"][dataset["next", "done"]] = 0.0
         self.specs = env.specs.clone()
         return dataset
 
