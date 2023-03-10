@@ -98,9 +98,9 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset = dataset.unflatten_keys("/")
 
         # let's make sure that the dtypes match what's expected
-        for key, spec in env.observation_spec.keys(True, True):
+        for key, spec in env.observation_spec.items(True, True):
             dataset[key] = dataset[key].to(spec.dtype)
-        for key, spec in env.input_spec.keys(True, True):
+        for key, spec in env.input_spec.items(True, True):
             dataset[key] = dataset[key].to(spec.dtype)
         dataset["reward"] = env.reward_spec.encode(dataset["reward"])
         dataset["done"] = dataset["done"].bool()
