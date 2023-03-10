@@ -1134,7 +1134,7 @@ class TestD4RL:
     def test_dataset_build(self, task, split_trajs):
         data = D4RLExperienceReplay(task, split_trajs=split_trajs)
         sample = data.sample(2)
-        env = GymEnv(task)
+        env = GymWrapper(gym.make(task))
         rollout = env.rollout(2)
         for key in rollout.keys(True, True):
             sim = rollout[key]
