@@ -49,7 +49,8 @@ With these, the following methods are implemented:
 
 - :meth:`env.reset`: a reset method that may (but not necessarily requires to) take
   a :class:`tensordict.TensorDict` input. It return the first tensordict of a rollout, usually
-  containing a :obj:`"done"` state and a set of observations.
+  containing a :obj:`"done"` state and a set of observations. If not present,
+  a `"reward"` key will be instantiated with 0s and the appropriate shape.
 - :meth:`env.step`: a step method that takes a :class:`tensordict.TensorDict` input
   containing an input action as well as other inputs (for model-based or stateless
   environments, for instance).
@@ -87,6 +88,21 @@ function.
   ``StepCounter(max_steps=100, truncated_key="done")``).
   TorchRL's collectors and rollout methods will be looking for one of these
   keys when assessing if the env should be reset.
+
+.. note::
+
+  The `torchrl.collectors.utils.split_trajectories` function can be used to
+  slice adjacent trajectories. It relies on a ``"traj_ids"`` entry in the
+  input tensordict, or to the junction of ``"done"`` and ``"truncated"`` key
+  if the ``"traj_ids"`` is missing.
+
+
+.. note::
+
+  In some contexts, it can be useful to mark the first step of a trajectory.
+  TorchRL provides such functionality through the :class:`torchrl.envs.InitTracker`
+  transform.
+
 
 Our environment `tutorial <https://pytorch.org/rl/tutorials/pendulum.html>`_
 provides more information on how to design a custom environment from scratch.
@@ -309,6 +325,7 @@ to be able to create this other composition:
     FrameSkipTransform
     GrayScale
     gSDENoise
+    InitTracker
     NoopResetEnv
     ObservationNorm
     ObservationTransform

@@ -18,6 +18,7 @@ from .transforms import (
     FrameSkipTransform,
     GrayScale,
     gSDENoise,
+    InitTracker,
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,
