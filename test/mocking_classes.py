@@ -905,7 +905,8 @@ class CountingEnv(EnvBase):
                 (
                     *self.batch_size,
                     1,
-                )
+                ),
+                dtype=torch.int32,
             ),
             shape=self.batch_size,
         )
@@ -1024,7 +1025,10 @@ class CountingBatchedEnv(EnvBase):
         self.count = torch.zeros(
             (*self.batch_size, 1), device=self.device, dtype=torch.int
         )
-        self.start_val = start_val.expand_as(self.count)
+        if start_val.numel() == self.batch_size.numel():
+            self.start_val = start_val.view(*self.batch_size, 1)
+        elif self.start_val.numel() <= 1:
+            self.start_val = start_val.expand_as(self.count)
 
     def _set_seed(self, seed: Optional[int]):
         torch.manual_seed(seed)
