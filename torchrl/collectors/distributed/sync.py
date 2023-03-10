@@ -276,6 +276,7 @@ class DistributedSyncDataCollector(_DataCollector):
         backend,
     ):
         TCP_PORT = self.tcp_port
+        print("init master...", end="\t")
         torch.distributed.init_process_group(
             backend,
             rank=0,
@@ -283,6 +284,7 @@ class DistributedSyncDataCollector(_DataCollector):
             timeout=timedelta(MAX_TIME_TO_CONNECT),
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
+        print("done")
 
     def _make_container(self):
         env_constructor = self.env_constructors[0]
