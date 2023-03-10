@@ -141,6 +141,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         else:
             self.metadata = {}
         dataset.rename_key("observations", "observation")
+        dataset.set("next", dataset.select())
         dataset.rename_key("next_observations", ("next", "observation"))
         dataset.rename_key("terminals", "done")
         dataset.rename_key("rewards", "reward")
