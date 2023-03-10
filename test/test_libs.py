@@ -1137,6 +1137,7 @@ class TestD4RL:
         env = GymWrapper(gym.make(task))
         rollout = env.rollout(2)
         for key in rollout.keys(True, True):
+            print(key)
             sim = rollout[key]
             offline = sample[key]
             assert sim.dtype == offline.dtype, key
