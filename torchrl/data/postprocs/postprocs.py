@@ -187,7 +187,9 @@ class MultiStep(nn.Module):
         summed_rewards, time_to_obs = _get_reward(
             self.gamma, reward, done, self.n_steps
         )
-        idx_to_gather = torch.arange(T).expand(*batch, T)
+        idx_to_gather = torch.arange(
+            T, device=time_to_obs.device, dtype=time_to_obs.dtype
+        ).expand(*batch, T)
         idx_to_gather = idx_to_gather + time_to_obs
         # idx_to_gather looks like  tensor([[ 2,  3,  4,  5,  5,  5,  8,  9, 10, 10, 10]])
         # with a done state         tensor([[ 0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  1]])
@@ -213,5 +215,4 @@ class MultiStep(nn.Module):
                 batch_size=done.transpose(ndim - 1, tensordict.ndim - 1).shape,
             )
             tensordict.batch_size = tensordict.batch_size[:ndim]
-        # tensordict.set_(("next", "done"), done)
         return tensordict
