@@ -5,6 +5,7 @@
 
 import abc
 import os
+import warnings
 from collections import OrderedDict
 from copy import copy
 from typing import Any, Dict, Sequence, Union
@@ -333,6 +334,11 @@ class LazyMemmapStorage(LazyTensorStorage):
                 self._storage.load_state_dict(_storage)
                 self._storage.memmap_()
             elif self._storage is None:
+                warnings.warn(
+                    "Loading the storage on an uninitialized TensorDict."
+                    "It is preferable to load a storage onto a"
+                    "pre-allocated one whenever possible."
+                )
                 self._storage = TensorDict({}, []).load_state_dict(_storage)
                 self._storage.memmap_()
             else:
