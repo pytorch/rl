@@ -1151,7 +1151,8 @@ class TestD4RL:
         print("f", data_false._storage._storage)
         data_from_env = D4RLExperienceReplay(task, split_trajs=True, from_env=True)
         print("fe", data_from_env._storage._storage)
-
+        keys = data_from_env._storage._storage.keys(True)
+        assert_allclose_td(data_true._storage._storage.select(*keys), data_from_env._storage._storage)
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
