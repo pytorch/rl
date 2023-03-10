@@ -915,6 +915,14 @@ class CountingEnv(EnvBase):
                 1,
             )
         )
+        self.done_spec = DiscreteTensorSpec(
+            2,
+            dtype=torch.bool,
+            shape=(
+                *self.batch_size,
+                1,
+            ),
+        )
         self.input_spec = CompositeSpec(
             action=BinaryDiscreteTensorSpec(n=1, shape=[*self.batch_size, 1]),
             shape=self.batch_size,
@@ -978,19 +986,19 @@ class CountingBatchedEnv(EnvBase):
         if max_steps is None:
             max_steps = torch.tensor(5)
         if start_val is None:
-            start_val = torch.zeros(())
+            start_val = torch.zeros((), dtype=torch.int32)
         if not max_steps.shape == self.batch_size:
             raise RuntimeError("batch_size and max_steps shape must match.")
 
         self.max_steps = max_steps
-        self.start_val = start_val
 
         self.observation_spec = CompositeSpec(
             observation=UnboundedContinuousTensorSpec(
                 (
                     *self.batch_size,
                     1,
-                )
+                ),
+                dtype=torch.int32,
             ),
             shape=self.batch_size,
         )
@@ -1000,6 +1008,14 @@ class CountingBatchedEnv(EnvBase):
                 1,
             )
         )
+        self.done_spec = DiscreteTensorSpec(
+            2,
+            dtype=torch.bool,
+            shape=(
+                *self.batch_size,
+                1,
+            ),
+        )
         self.input_spec = CompositeSpec(
             action=BinaryDiscreteTensorSpec(n=1, shape=[*self.batch_size, 1]),
             shape=self.batch_size,
@@ -1008,6 +1024,7 @@ class CountingBatchedEnv(EnvBase):
         self.count = torch.zeros(
             (*self.batch_size, 1), device=self.device, dtype=torch.int
         )
+        self.start_val = start_val.expand_as(self.count)
 
     def _set_seed(self, seed: Optional[int]):
         torch.manual_seed(seed)
@@ -1015,13 +1032,13 @@ class CountingBatchedEnv(EnvBase):
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         if tensordict is not None and "_reset" in tensordict.keys():
             _reset = tensordict.get("_reset")
-            self.count[_reset] = self.start_val[_reset].unsqueeze(-1)
+            self.count[_reset] = self.start_val[_reset].view_as(self.count[_reset])
         else:
-            self.count[:] = self.start_val.unsqueeze(-1)
+            self.count[:] = self.start_val.view_as(self.count)
         return TensorDict(
             source={
                 "observation": self.count.clone(),
-                "done": self.count > self.max_steps.unsqueeze(-1),
+                "done": self.count > self.max_steps.view_as(self.count),
             },
             batch_size=self.batch_size,
             device=self.device,
@@ -1032,7 +1049,7 @@ class CountingBatchedEnv(EnvBase):
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         action = tensordict.get("action")
-        self.count += action.to(torch.int).unsqueeze(-1)
+        self.count += action.to(torch.int).view_as(self.count)
         tensordict = TensorDict(
             source={
                 "observation": self.count.clone(),

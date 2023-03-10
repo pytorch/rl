@@ -309,6 +309,7 @@ to be able to create this other composition:
     FrameSkipTransform
     GrayScale
     gSDENoise
+    InitTracker
     NoopResetEnv
     ObservationNorm
     ObservationTransform
