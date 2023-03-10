@@ -1,5 +1,7 @@
 from typing import Callable, Optional
 
+from torchrl.collectors.utils import split_trajectories
+
 GYM_ERR = None
 try:
     import gym  # noqa
@@ -39,8 +41,6 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
     Args:
         name (str): the name of the D4RL env to get the data from.
-        storage (Storage, optional): the storage to be used. If none is provided
-            a default ListStorage with max_size of 1_000 will be created.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
@@ -54,6 +54,9 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
             To chain transforms use the :obj:`Compose` class.
+        split_trajs (bool, optional): if True, the trajectories will be split
+            along the first dimension and padded to have a matching shape.
+            Defaults to ``False``.
         env_kwargs (key-value pairs): additional kwargs for the env.
 
     Examples:
@@ -75,6 +78,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
         transform: Optional["Transform"] = None,  # noqa-F821
+        split_trajs:bool = False
         **env_kwargs,
     ):
         if not _has_gym:
@@ -85,7 +89,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset = make_tensordict(
             {
                 k: torch.tensor(item)
-                for k, item in d4rl.qlearning_dataset(env._env).items()
+                for k, item in env.get_dataset().items()
             }
         )
         dataset.rename_key("terminals", "done")
@@ -93,7 +97,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         # dataset.rename_key("next_observations", "next/observation")
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
+        dataset = dataset[:-1].exclude("reward").set("next", dataset.select("observation", "reward", "done")[1:])
         dataset = dataset.unflatten_keys("/")
+        if split_trajs:
+            dataset = split_trajectories(dataset)
         storage = LazyMemmapStorage(dataset.shape[0])
         super().__init__(
             storage=storage,
