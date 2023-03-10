@@ -1,5 +1,7 @@
 from typing import Callable, Optional
 
+import numpy as np
+
 from torchrl.collectors.utils import split_trajectories
 
 GYM_ERR = None
@@ -88,8 +90,13 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         if not _has_d4rl:
             raise ImportError("Could not import d4rl") from D4RL_ERR
         env = GymWrapper(gym.make(name, **env_kwargs))
+        def from_numpy(array):
+            if not isinstance(array, np.ndarray):
+                array = np.array(array)
+            return torch.from_numpy(array).clone()
+
         dataset = make_tensordict(
-            {k: torch.from_numpy(item).clone() for k, item in env.get_dataset().items()}
+            {k: from_numpy(item) for k, item in env.get_dataset().items()}
         )
         dataset.rename_key("observations", "observation")
         dataset.rename_key("terminals", "done")
