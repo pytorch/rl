@@ -41,6 +41,9 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
     If present, metadata will be written in ``D4RLExperienceReplay.metadata``
     and excluded from the dataset.
 
+    The transitions are reconstructed using ``done = terminal | timeout`` and
+    the ``("next", "observation")`` of ``"done"`` states are zeroed.
+
     Args:
         name (str): the name of the D4RL env to get the data from.
         sampler (Sampler, optional): the sampler to be used. If none is provided
@@ -58,6 +61,12 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             To chain transforms use the :obj:`Compose` class.
         split_trajs (bool, optional): if True, the trajectories will be split
             along the first dimension and padded to have a matching shape.
+            To split the trajectories, the ``"done"`` signal will be used, which
+            is recovered via ``done = timeout | terminal``. In other words,
+            it is assumed that any ``timeout`` or ``terminal`` signal is
+            equivalent to the end of a trajectory. For some datasets from
+            ``D4RL``, this may not be true. It is up to the user to make
+            accurate choices regarding this usage of ``split_trajs``.
             Defaults to ``False``.
         from_env (bool, optional): if ``True``, :meth:`env.get_dataset` will
             be used to retrieve the dataset. Otherwise :func:`d4rl.qlearning_dataset`

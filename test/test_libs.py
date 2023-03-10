@@ -22,7 +22,7 @@ from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
-from torchrl.data.datasets import D4RLExperienceReplay
+from torchrl.data.datasets.d4rl import D4RLExperienceReplay, _has_d4rl, D4RL_ERR
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
@@ -34,15 +34,6 @@ from torchrl.envs.utils import check_env_specs
 
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
-
-try:
-    import d4rl  # noqa: F401
-
-    _has_d4rl = True
-    D4RL_ERR = None
-except ImportError as err:
-    _has_d4rl = False
-    D4RL_ERR = err
 
 if _has_gym:
     try:

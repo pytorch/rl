@@ -57,8 +57,11 @@ def split_trajectories(
         raise NotImplementedError(f"Unknown key type {type(prefix)}.")
 
     traj_ids = rollout_tensordict.get(traj_ids_key, None)
+    done = rollout_tensordict.get(("next", "done"))
+    truncated = rollout_tensordict.get(("next", "truncated"), torch.zeros((), device=done.device, dtype=torch.bool))
+    done = done | truncated
     if traj_ids is None:
-        traj_ids = rollout_tensordict.get(("next", "done")).cumsum(
+        traj_ids = done.cumsum(
             rollout_tensordict.ndim - 1
         )
         if rollout_tensordict.ndim > 1:
