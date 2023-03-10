@@ -40,6 +40,9 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
     The replay buffer contains the env specs under D4RLExperienceReplay.specs.
 
+    If present, metadata will be written in ``D4RLExperienceReplay.metadata``
+    and excluded from the dataset.
+
     Args:
         name (str): the name of the D4RL env to get the data from.
         sampler (Sampler, optional): the sampler to be used. If none is provided
@@ -94,11 +97,20 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset = make_tensordict(
             {k: torch.from_numpy(item) for k, item in env.get_dataset().items() if isinstance(item, np.ndarray)}
         )
+        dataset = dataset.unflatten_keys("/")
+        if "metadata" in dataset.keys():
+            metadata = dataset.get("metadata")
+            dataset = dataset.exclude("metadata")
+            self.metadata = metadata
+            # find batch size
+            dataset = make_tensordict(dataset)
+        else:
+            self.metadata = {}
+
         dataset.rename_key("observations", "observation")
         dataset.rename_key("terminals", "done")
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
-        dataset = dataset.unflatten_keys("/")
 
         # let's make sure that the dtypes match what's expected
         for key, spec in env.observation_spec.items(True, True):
