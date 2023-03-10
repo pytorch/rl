@@ -64,7 +64,17 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         from_env (bool, optional): if ``True``, :meth:`env.get_dataset` will
             be used to retrieve the dataset. Otherwise :func:`d4rl.qlearning_dataset`
             will be used. Defaults to ``True``.
-        env_kwargs (key-value pairs): additional kwargs for
+
+            .. note::
+
+              Using ``from_env=False`` will provide less data than ``from_env=True``.
+              For instance, the info keys will be left out.
+              Usually, ``from_env=False`` with ``terminate_on_end=True`` will
+              lead to the same result as ``from_env=True``, with the latter
+              containing meta-data and info entries that the former does
+              not possess.
+
+        **env_kwargs (key-value pairs): additional kwargs for
             :func:`d4rl.qlearning_dataset`. Supports ``terminate_on_end``
             (``False`` by default) or other kwargs if defined by D4RL library.
 
@@ -202,6 +212,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset.rename_key("terminals", "done")
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
+        try:
+            dataset.rename_key("infos", "info")
+        except KeyError:
+            pass
 
         # let's make sure that the dtypes match what's expected
         for key, spec in env.observation_spec.items(True, True):
@@ -217,7 +231,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset = (
             dataset[:-1]
             # .exclude("reward")
-            .set("next", dataset.select("observation", "reward", "done")[1:])
+            .set("next", dataset.select("observation", "reward", "done", "info", strict=False)[1:])
         )
         self.specs = env.specs.clone()
         return dataset
