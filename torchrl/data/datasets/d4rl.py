@@ -231,7 +231,12 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset = (
             dataset[:-1]
             # .exclude("reward")
-            .set("next", dataset.select("observation", "reward", "done", "info", strict=False)[1:])
+            .set(
+                "next",
+                dataset.select("observation", "reward", "done", "info", strict=False)[
+                    1:
+                ],
+            )
         )
         self.specs = env.specs.clone()
         return dataset
