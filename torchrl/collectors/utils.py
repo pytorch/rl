@@ -58,7 +58,7 @@ def split_trajectories(
 
     traj_ids = rollout_tensordict.get(traj_ids_key, None)
     if traj_ids is None:
-        traj_ids = rollout_tensordict.get(("next", "done")).sum(
+        traj_ids = rollout_tensordict.get(("next", "done")).cumsum(
             rollout_tensordict.ndim - 1
         )
         if rollout_tensordict.ndim > 1:
