@@ -282,7 +282,7 @@ class JumanjiWrapper(GymLikeEnv):
         tensordict_out.set("done", done)
         tensordict_out["state"] = state_dict
 
-        return tensordict_out
+        return tensordict_out.select().set("next", tensordict_out)
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
@@ -301,7 +301,7 @@ class JumanjiWrapper(GymLikeEnv):
         # collect outputs
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
-        done = torch.zeros(self.batch_size, dtype=torch.bool)
+        done = self.done_spec.zero()
 
         # build results
         tensordict_out = TensorDict(

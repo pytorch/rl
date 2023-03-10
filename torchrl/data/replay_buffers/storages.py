@@ -12,7 +12,7 @@ from typing import Any, Dict, Sequence, Union
 import torch
 from tensordict.memmap import MemmapTensor
 from tensordict.prototype import is_tensorclass
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
 from torchrl._utils import _CKPT_BACKEND
 from torchrl.data.replay_buffers.utils import INT_CLASSES
@@ -210,11 +210,7 @@ class LazyTensorStorage(Storage):
             if isinstance(self._storage, TensorDictBase):
                 self._storage.load_state_dict(_storage)
             elif self._storage is None:
-                batch_size = _storage.pop("__batch_size")
-                device = _storage.pop("__device")
-                self._storage = TensorDict(
-                    _storage, batch_size=batch_size, device=device
-                )
+                self._storage = TensorDict({}, []).load_state_dict(_storage)
             else:
                 raise RuntimeError(
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}"
@@ -333,15 +329,11 @@ class LazyMemmapStorage(LazyTensorStorage):
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}"
                 )
         elif isinstance(_storage, (dict, OrderedDict)):
-            if isinstance(self._storage, TensorDictBase):
+            if is_tensor_collection(self._storage):
                 self._storage.load_state_dict(_storage)
                 self._storage.memmap_()
             elif self._storage is None:
-                batch_size = _storage.pop("__batch_size")
-                device = _storage.pop("__device")
-                self._storage = TensorDict(
-                    _storage, batch_size=batch_size, device=device
-                )
+                self._storage = TensorDict({}, []).load_state_dict(_storage)
                 self._storage.memmap_()
             else:
                 raise RuntimeError(

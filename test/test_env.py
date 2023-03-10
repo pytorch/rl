@@ -41,7 +41,7 @@ from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
-from torchrl.envs.utils import step_mdp
+from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
@@ -122,7 +122,7 @@ def test_env_seed(env_name, frame_skip, seed=0):
     td1a = env.step(td0a.clone().set("action", action))
 
     env.set_seed(seed)
-    td0b = env.specs.build_tensordict()
+    td0b = env.fake_tensordict()
     td0b = env.reset(tensordict=td0b)
     td1b = env.step(td0b.clone().set("action", action))
 
@@ -190,7 +190,7 @@ def test_rollout_predictability(device):
     ).all()
     assert (
         torch.arange(first + 1, first + 101, device=device)
-        == td_out.get("reward").squeeze()
+        == td_out.get(("next", "reward")).squeeze()
     ).all()
     assert (
         torch.arange(first, first + 100, device=device)
@@ -211,13 +211,15 @@ def test_rollout_predictability(device):
         1,
     ],
 )
+@pytest.mark.parametrize("truncated_key", ["truncated", "done"])
 @pytest.mark.parametrize("parallel", [False, True])
-def test_rollout_reset(env_name, frame_skip, parallel, seed=0):
+def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
     envs = []
     for horizon in [20, 30, 40]:
         envs.append(
             lambda horizon=horizon: TransformedEnv(
-                GymEnv(env_name, frame_skip=frame_skip), StepCounter(horizon)
+                GymEnv(env_name, frame_skip=frame_skip),
+                StepCounter(horizon, truncated_key=truncated_key),
             )
         )
     if parallel:
@@ -227,7 +229,9 @@ def test_rollout_reset(env_name, frame_skip, parallel, seed=0):
     env.set_seed(100)
     out = env.rollout(100, break_when_any_done=False)
     assert out.shape == torch.Size([3, 100])
-    assert (out["done"].squeeze().sum(-1) == torch.tensor([5, 3, 2])).all()
+    assert (
+        out["next", truncated_key].squeeze().sum(-1) == torch.tensor([5, 3, 2])
+    ).all()
 
 
 class TestModelBasedEnvBase:
@@ -250,10 +254,13 @@ class TestModelBasedEnvBase:
         mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([10])
         )
+        check_env_specs(mb_env)
         rollout = mb_env.rollout(max_steps=100)
-        expected_keys = {("next", key) for key in mb_env.observation_spec.keys()}
+        expected_keys = {
+            ("next", key) for key in (*mb_env.observation_spec.keys(), "reward", "done")
+        }
         expected_keys = expected_keys.union(set(mb_env.input_spec.keys()))
-        expected_keys = expected_keys.union({"reward", "done", "next"})
+        expected_keys = expected_keys.union({"done", "next", "reward"})
         assert set(rollout.keys(True)) == expected_keys
         assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 
@@ -436,8 +443,8 @@ class TestParallel:
         )
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
-        assert "done" in td1.keys()
-        assert "reward" in td1.keys()
+        assert ("next", "done") in td1.keys(True)
+        assert ("next", "reward") in td1.keys(True)
 
         with pytest.raises(RuntimeError):
             # number of actions does not match number of workers
@@ -468,21 +475,12 @@ class TestParallel:
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [True, False])
     @pytest.mark.parametrize("transformed_out", [True, False])
-    @pytest.mark.parametrize(
-        "selected_keys",
-        [
-            ["action", "observation", "next_observation", "done", "reward"],
-            ["hidden", "action", "observation", "next_observation", "done", "reward"],
-            None,
-        ],
-    )
     def test_parallel_env_with_policy(
         self,
         env_name,
         frame_skip,
         transformed_in,
         transformed_out,
-        selected_keys,
         T=10,
         N=3,
     ):
@@ -492,7 +490,6 @@ class TestParallel:
             transformed_in=transformed_in,
             transformed_out=transformed_out,
             N=N,
-            selected_keys=selected_keys,
         )
 
         policy = ActorCriticOperator(
@@ -521,8 +518,8 @@ class TestParallel:
         )
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
-        assert "done" in td1.keys()
-        assert "reward" in td1.keys()
+        assert ("next", "done") in td1.keys(True)
+        assert ("next", "reward") in td1.keys(True)
 
         with pytest.raises(RuntimeError):
             # number of actions does not match number of workers
@@ -558,9 +555,27 @@ class TestParallel:
         ],
     )
     @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [False, True])
-    @pytest.mark.parametrize("transformed_out", [True, False])
-    @pytest.mark.parametrize("static_seed", [True, False])
+    @pytest.mark.parametrize(
+        "transformed_in",
+        [
+            True,
+            False,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "transformed_out",
+        [
+            False,
+            True,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "static_seed",
+        [
+            False,
+            True,
+        ],
+    )
     def test_parallel_env_seed(
         self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
@@ -838,8 +853,16 @@ class TestParallel:
         env1.close()
         env2.close()
 
-    @pytest.mark.parametrize("batch_size", [(), (1,), (4,), (32, 5)])
-    @pytest.mark.parametrize("n_workers", [1, 2])
+    @pytest.mark.parametrize(
+        "batch_size",
+        [
+            (32, 5),
+            (4,),
+            (1,),
+            (),
+        ],
+    )
+    @pytest.mark.parametrize("n_workers", [2, 1])
     def test_parallel_env_reset_flag(self, batch_size, n_workers, max_steps=3):
         torch.manual_seed(1)
         env = ParallelEnv(
@@ -854,13 +877,13 @@ class TestParallel:
                     {"action": action}, batch_size=env.batch_size, device=env.device
                 )
             )
-            assert (td["done"] == 0).all()
+            assert (td["next", "done"] == 0).all()
             assert (td["next"]["observation"] == i + 1).all()
 
         td = env.step(
             TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
         )
-        assert (td["done"] == 1).all()
+        assert (td["next", "done"] == 1).all()
         assert (td["next"]["observation"] == max_steps + 1).all()
 
         _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
@@ -890,14 +913,14 @@ def test_env_base_reset_flag(batch_size, max_steps=3):
         td = env.step(
             TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
         )
-        assert (td["done"] == 0).all()
-        assert (td["next"]["observation"] == i + 1).all()
+        assert (td["next", "done"] == 0).all()
+        assert (td["next", "observation"] == i + 1).all()
 
     td = env.step(
         TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
     )
-    assert (td["done"] == 1).all()
-    assert (td["next"]["observation"] == max_steps + 1).all()
+    assert (td["next", "done"] == 1).all()
+    assert (td["next", "observation"] == max_steps + 1).all()
 
     _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
     td_reset = env.reset(
@@ -956,9 +979,11 @@ def test_steptensordict(
     tensordict = TensorDict(
         {
             "ledzep": torch.randn(4, 2),
-            "next": {"ledzep": torch.randn(4, 2)},
-            "reward": torch.randn(4, 1),
-            "done": torch.zeros(4, 1, dtype=torch.bool),
+            "next": {
+                "ledzep": torch.randn(4, 2),
+                "reward": torch.randn(4, 1),
+                "done": torch.zeros(4, 1, dtype=torch.bool),
+            },
             "beatles": torch.randn(4, 1),
             "action": torch.randn(4, 2),
         },
@@ -982,7 +1007,7 @@ def test_steptensordict(
         assert "beatles" not in out.keys()
     if not exclude_reward:
         assert "reward" in out.keys()
-        assert out["reward"] is tensordict["reward"]
+        assert out["reward"] is tensordict["next", "reward"]
     else:
         assert "reward" not in out.keys()
     if not exclude_action:
@@ -992,7 +1017,7 @@ def test_steptensordict(
         assert "action" not in out.keys()
     if not exclude_done:
         assert "done" in out.keys()
-        assert out["done"] is tensordict["done"]
+        assert out["done"] is tensordict["next", "done"]
     else:
         assert "done" not in out.keys()
     if has_out:
@@ -1009,7 +1034,7 @@ def test_batch_locked(device):
     td = env.reset()
     td["action"] = env.action_spec.rand()
     td_expanded = td.expand(2).clone()
-    td = env.step(td)
+    _ = env.step(td)
 
     with pytest.raises(
         RuntimeError, match="Expected a tensordict with shape==env.shape, "

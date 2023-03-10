@@ -17,9 +17,6 @@ except ImportError:
 
 _init_extension()
 
-# if not HAS_OPS:
-#     print("could not load C++ libraries")
-
 try:
     mp.set_start_method("spawn")
 except RuntimeError as err:

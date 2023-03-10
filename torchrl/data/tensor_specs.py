@@ -508,6 +508,8 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
+        if dest_device == self.device and dest_dtype == self.dtype:
+            return self
         return self.__class__(
             n=self.space.n,
             shape=self.shape,
@@ -821,6 +823,8 @@ class BoundedTensorSpec(TensorSpec):
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
+        if dest_device == self.device and dest_dtype == self.dtype:
+            return self
         return self.__class__(
             minimum=self.space.minimum.to(dest),
             maximum=self.space.maximum.to(dest),
@@ -879,6 +883,8 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
+        if dest_device == self.device and dest_dtype == self.dtype:
+            return self
         return self.__class__(shape=self.shape, device=dest_device, dtype=dest_dtype)
 
     def clone(self) -> CompositeSpec:
@@ -958,6 +964,8 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
+        if dest_device == self.device and dest_dtype == self.dtype:
+            return self
         return self.__class__(shape=self.shape, device=dest_device, dtype=dest_dtype)
 
     def clone(self) -> CompositeSpec:
@@ -1076,6 +1084,8 @@ class BinaryDiscreteTensorSpec(TensorSpec):
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
+        if dest_device == self.device and dest_dtype == self.dtype:
+            return self
         return self.__class__(
             n=self.space.n, shape=self.shape, device=dest_device, dtype=dest_dtype
         )
@@ -1144,6 +1154,8 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
+        if dest_device == self.device and dest_dtype == self.dtype:
+            return self
         return self.__class__(
             nvec=deepcopy(self.nvec),
             shape=self.shape,
@@ -1394,6 +1406,8 @@ class DiscreteTensorSpec(TensorSpec):
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
+        if dest_device == self.device and dest_dtype == self.dtype:
+            return self
         return self.__class__(
             n=self.space.n, shape=self.shape, device=dest_device, dtype=dest_dtype
         )
@@ -1464,6 +1478,8 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
+        if dest_device == self.device and dest_dtype == self.dtype:
+            return self
         return self.__class__(
             n=self.nvec.to(dest), shape=None, device=dest_device, dtype=dest_dtype
         )
@@ -1862,13 +1878,12 @@ class CompositeSpec(TensorSpec):
                 self._specs[_key].type_check(value[_key], _key)
 
     def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
-        return all(
-            [
-                item.is_in(val.get(key))
-                for (key, item) in self._specs.items()
-                if item is not None
-            ]
-        )
+        for (key, item) in self._specs.items():
+            if item is None:
+                continue
+            if not item.is_in(val.get(key)):
+                return False
+        return True
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
         for key, item in self.items():
@@ -1894,22 +1909,29 @@ class CompositeSpec(TensorSpec):
         )
 
     def keys(
-        self, yield_nesting_keys: bool = False, nested_keys: bool = True
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
     ) -> KeysView:
         """Keys of the CompositeSpec.
 
+        The keys argument reflect those of :class:`tensordict.TensorDict`.
+
         Args:
-            yield_nesting_keys (bool, optional): if :obj:`True`, the values returned
-                will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
-                will lead to the keys :obj:`["next", ("next", "obs")]`. Default is :obj:`False`, i.e.
-                only nested keys will be returned.
-            nested_keys (bool, optional): if :obj:`False`, the returned keys will not be nested. They will
+            include_nested (bool, optional): if ``False``, the returned keys will not be nested. They will
                 represent only the immediate children of the root, and not the whole nested sequence, i.e. a
                 :obj:`CompositeSpec(next=CompositeSpec(obs=None))` will lead to the keys
-                :obj:`["next"]. Default is :obj:`True`, i.e. nested keys will be returned.
+                :obj:`["next"]. Default is ``False``, i.e. nested keys will not
+                be returned.
+            leaves_only (bool, optional): if :obj:`False`, the values returned
+                will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
+                will lead to the keys :obj:`["next", ("next", "obs")]`.
+                Default is ``False``.
         """
         return _CompositeSpecKeysView(
-            self, _yield_nesting_keys=yield_nesting_keys, nested_keys=nested_keys
+            self,
+            include_nested=include_nested,
+            leaves_only=leaves_only,
         )
 
     def items(self) -> ItemsView:
@@ -1927,7 +1949,7 @@ class CompositeSpec(TensorSpec):
                 "Only device casting is allowed with specs of type CompositeSpec."
             )
         if self._device and self._device == torch.device(dest):
-            return self.__class__(**self._specs, device=self._device, shape=self.shape)
+            return self
 
         _device = torch.device(dest)
         items = list(self.items())
@@ -1940,9 +1962,13 @@ class CompositeSpec(TensorSpec):
         return self.__class__(**kwargs, device=_device, shape=self.shape)
 
     def clone(self) -> CompositeSpec:
+        try:
+            device = self.device
+        except RuntimeError:
+            device = self._device
         return self.__class__(
-            **{key: item.clone() for key, item in self.items()},
-            device=self._device,
+            {key: item.clone() for key, item in self.items()},
+            device=device,
             shape=self.shape,
         )
 
@@ -1952,6 +1978,10 @@ class CompositeSpec(TensorSpec):
     def zero(self, shape=None) -> TensorDictBase:
         if shape is None:
             shape = torch.Size([])
+        try:
+            device = self.device
+        except RuntimeError:
+            device = self._device
         return TensorDict(
             {
                 key: self[key].zero(shape)
@@ -1959,7 +1989,7 @@ class CompositeSpec(TensorSpec):
                 if isinstance(key, str) and self[key] is not None
             },
             torch.Size([*shape, *self.shape]),
-            device=self._device,
+            device=device,
         )
 
     def __eq__(self, other):
@@ -2002,25 +2032,30 @@ class CompositeSpec(TensorSpec):
                 f"The last {self.ndim} of the extended shape must match the"
                 f"shape of the CompositeSpec in CompositeSpec.extend."
             )
+        try:
+            device = self.device
+        except RuntimeError:
+            device = self._device
         out = CompositeSpec(
             {
                 key: value.expand((*shape, *value.shape[self.ndim :]))
                 for key, value in tuple(self.items())
             },
             shape=shape,
-            device=self._device,
+            device=device,
         )
         return out
 
 
 def _keys_to_empty_composite_spec(keys):
+    """Given a list of keys, creates a CompositeSpec tree where each leaf is assigned a None value."""
     if not len(keys):
         return
     c = CompositeSpec()
     for key in keys:
         if isinstance(key, str):
             c[key] = None
-        elif key[0] in c.keys(yield_nesting_keys=True):
+        elif key[0] in c.keys():
             if c[key[0]] is None:
                 # if the value is None we just replace it
                 c[key[0]] = _keys_to_empty_composite_spec([key[1:]])
@@ -2042,28 +2077,34 @@ class _CompositeSpecKeysView:
     def __init__(
         self,
         composite: CompositeSpec,
-        nested_keys: bool = True,
-        _yield_nesting_keys: bool = False,
+        include_nested,
+        leaves_only,
     ):
         self.composite = composite
-        self._yield_nesting_keys = _yield_nesting_keys
-        self.nested_keys = nested_keys
+        self.leaves_only = leaves_only
+        self.include_nested = include_nested
 
     def __iter__(
         self,
     ):
         for key, item in self.composite.items():
-            if self.nested_keys and isinstance(item, CompositeSpec):
-                for subkey in item.keys():
-                    yield (key, *subkey) if isinstance(subkey, tuple) else (key, subkey)
-                if self._yield_nesting_keys:
+            if self.include_nested and isinstance(item, CompositeSpec):
+                for subkey in item.keys(
+                    include_nested=True, leaves_only=self.leaves_only
+                ):
+                    if not isinstance(subkey, tuple):
+                        subkey = (subkey,)
+                    yield (key, *subkey)
+                if not self.leaves_only:
                     yield key
-            else:
-                if not isinstance(item, CompositeSpec) or len(item):
-                    yield key
+            elif not isinstance(item, CompositeSpec) or not self.leaves_only:
+                yield key
 
     def __len__(self):
         i = 0
         for _ in self:
             i += 1
         return i
+
+    def __repr__(self):
+        return f"_CompositeSpecKeysView(keys={list(self)})"
