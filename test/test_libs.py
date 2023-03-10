@@ -22,7 +22,7 @@ from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
-from torchrl.data.datasets.d4rl import D4RLExperienceReplay, _has_d4rl, D4RL_ERR
+from torchrl.data.datasets.d4rl import _has_d4rl, D4RL_ERR, D4RLExperienceReplay
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper

@@ -58,12 +58,12 @@ def split_trajectories(
 
     traj_ids = rollout_tensordict.get(traj_ids_key, None)
     done = rollout_tensordict.get(("next", "done"))
-    truncated = rollout_tensordict.get(("next", "truncated"), torch.zeros((), device=done.device, dtype=torch.bool))
+    truncated = rollout_tensordict.get(
+        ("next", "truncated"), torch.zeros((), device=done.device, dtype=torch.bool)
+    )
     done = done | truncated
     if traj_ids is None:
-        traj_ids = done.cumsum(
-            rollout_tensordict.ndim - 1
-        )
+        traj_ids = done.cumsum(rollout_tensordict.ndim - 1)
         if rollout_tensordict.ndim > 1:
             for i in range(1, rollout_tensordict.shape[0]):
                 traj_ids[i] += traj_ids[i - 1].max()

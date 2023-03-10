@@ -4,6 +4,13 @@ import numpy as np
 
 from torchrl.collectors.utils import split_trajectories
 
+import torch
+from tensordict.tensordict import make_tensordict
+from torchrl.data.replay_buffers import TensorDictReplayBuffer
+from torchrl.data.replay_buffers.samplers import Sampler
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data.replay_buffers.writers import Writer
+
 GYM_ERR = None
 try:
     import gym  # noqa
@@ -18,16 +25,9 @@ try:
     import d4rl  # noqa
 
     _has_d4rl = True
-except ModuleNotFoundError as err:
+except ImportError as err:
     _has_d4rl = False
     D4RL_ERR = err
-
-import torch
-from tensordict.tensordict import make_tensordict
-from torchrl.data.replay_buffers import TensorDictReplayBuffer
-from torchrl.data.replay_buffers.samplers import Sampler
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.data.replay_buffers.writers import Writer
 
 
 class D4RLExperienceReplay(TensorDictReplayBuffer):
