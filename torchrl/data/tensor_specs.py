@@ -1952,7 +1952,9 @@ class CompositeSpec(TensorSpec):
         """
         yield from ((key, self[key]) for key in self.keys(include_nested=include_nested, leaves_only=leaves_only))
 
-    def values(self) -> ValuesView:
+    def values(self,        include_nested: bool = False,
+        leaves_only: bool = False,
+) -> ValuesView:
         """Values of the CompositeSpec.
 
         Args:
