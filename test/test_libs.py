@@ -37,6 +37,7 @@ from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
 try:
     import d4rl
+
     _has_d4rl = True
     D4RL_ERR = None
 except ImportError as err:
@@ -1111,21 +1112,25 @@ class TestVmas:
 
         assert env.rollout(max_steps=3).device == devices[1 - first]
 
+
 @pytest.mark.skipif(not _has_d4rl, reason=f"D4RL not found: {D4RL_ERR}")
 class TestD4RL:
     @pytest.mark.parametrize("split_trajs", [True, False])
-    @pytest.mark.parametrize("task", [
-        "maze2d-open-v0",
-        "maze2d-open-dense-v0",
-        "antmaze-medium-play-v0",
-        "hammer-cloned-v0/v1",
-        "relocate-human-v0/v1",
-        "walker2d-medium-replay-v0/v2",
-        "ant-medium-v0/v2",
-        "flow-merge-random-v0",
-        "kitchen-partial-v0",
-#        "carla-town-v0",
-    ])
+    @pytest.mark.parametrize(
+        "task",
+        [
+            "maze2d-open-v0",
+            "maze2d-open-dense-v0",
+            "antmaze-medium-play-v0",
+            "hammer-cloned-v1",
+            "relocate-human-v1",
+            "walker2d-medium-replay-v2",
+            "ant-medium-v2",
+            "flow-merge-random-v0",
+            "kitchen-partial-v0",
+            #        "carla-town-v0",
+        ],
+    )
     def test_dataset_build(self, task, split_trajs):
         data = D4RLExperienceReplay(task, split_trajs=split_trajs)
         sample = data.sample(2)
@@ -1134,8 +1139,9 @@ class TestD4RL:
         for key in rollout.keys(True, True):
             sim = rollout[key]
             offline = sample[key]
-            assert sim.dtype == offline.dtype
-            assert sim.shape[-1] == offline.shape[-1]
+            assert sim.dtype == offline.dtype, key
+            assert sim.shape[-1] == offline.shape[-1], key
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
