@@ -170,6 +170,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         # dataset.rename_key("next_observations", "next/observation")
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset["next"].update(dataset.select("done", "reward"))
+        self._shift_reward_done(dataset)
         self.specs = env.specs.clone()
         return dataset
 
