@@ -11,21 +11,12 @@ from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import Writer
 
-GYM_ERR = None
-try:
-    import gym  # noqa
-
-    _has_gym = True
-except ModuleNotFoundError as err:
-    _has_gym = False
-    GYM_ERR = err
-
 D4RL_ERR = None
 try:
-    import d4rl  # noqa
+    import gym, d4rl  # noqa
 
     _has_d4rl = True
-except ImportError as err:
+except ModuleNotFoundError as err:
     _has_d4rl = False
     D4RL_ERR = err
 
@@ -110,8 +101,6 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         **env_kwargs,
     ):
 
-        if not _has_gym:
-            raise ImportError("Could not import gym") from GYM_ERR
         if not _has_d4rl:
             raise ImportError("Could not import d4rl") from D4RL_ERR
         self.from_env = from_env
