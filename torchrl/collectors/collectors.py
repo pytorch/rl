@@ -977,6 +977,7 @@ class _MultiDataCollector(_DataCollector):
         self.frames_per_worker = np.inf
         self._run_processes()
         self._exclude_private_keys = True
+        self.interruptor = Interruptor()
 
     @property
     def frames_per_batch_worker(self):
@@ -1027,6 +1028,7 @@ class _MultiDataCollector(_DataCollector):
                 "exploration_mode": self.exploration_mode,
                 "reset_when_done": self.reset_when_done,
                 "idx": i,
+                "interruptor": self.interruptor
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
@@ -1259,6 +1261,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             i += 1
             max_traj_idx = None
+
+            # Stop collection in all workers as soon as 0.5 are done
+            self.interruptor.start_collection()
+            while self.queue_out.qsize() < int(self.num_workers * 0.5):
+                continue
+            self.interruptor.stop_collection()
+
             for _ in range(self.num_workers):
                 new_data, j = self.queue_out.get()
                 if j == 0:
@@ -1601,6 +1610,7 @@ def _main_async_collector(
     exploration_mode: str = DEFAULT_EXPLORATION_MODE,
     reset_when_done: bool = True,
     verbose: bool = False,
+    interruptor=None,
 ) -> None:
     pipe_parent.close()
     #  init variables that will be cleared when closing
@@ -1624,6 +1634,7 @@ def _main_async_collector(
         exploration_mode=exploration_mode,
         reset_when_done=reset_when_done,
         return_same_td=True,
+        interruptor=interruptor,
     )
     if verbose:
         print("Sync data collector created")
