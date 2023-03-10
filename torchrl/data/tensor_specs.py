@@ -1934,9 +1934,11 @@ class CompositeSpec(TensorSpec):
             leaves_only=leaves_only,
         )
 
-    def items(self,         include_nested: bool = False,
+    def items(
+        self,
+        include_nested: bool = False,
         leaves_only: bool = False,
-) -> ItemsView:
+    ) -> ItemsView:
         """Items of the CompositeSpec.
 
         Args:
@@ -1950,11 +1952,19 @@ class CompositeSpec(TensorSpec):
                 will lead to the keys :obj:`["next", ("next", "obs")]`.
                 Default is ``False``.
         """
-        yield from ((key, self[key]) for key in self.keys(include_nested=include_nested, leaves_only=leaves_only))
+        if not include_nested and not leaves_only:
+            yield from self._specs.items()
+        else:
+            yield from (
+                (key, self[key])
+                for key in self.keys(include_nested=include_nested, leaves_only=leaves_only)
+            )
 
-    def values(self,        include_nested: bool = False,
+    def values(
+        self,
+        include_nested: bool = False,
         leaves_only: bool = False,
-) -> ValuesView:
+    ) -> ValuesView:
         """Values of the CompositeSpec.
 
         Args:
@@ -1968,7 +1978,13 @@ class CompositeSpec(TensorSpec):
                 will lead to the keys :obj:`["next", ("next", "obs")]`.
                 Default is ``False``.
         """
-        yield from (self[key] for key in self.keys(include_nested=include_nested, leaves_only=leaves_only))
+        if not include_nested and not leaves_only:
+            yield from self._specs.values()
+        else:
+            yield from (
+                self[key]
+                for key in self.keys(include_nested=include_nested, leaves_only=leaves_only)
+            )
 
     def __len__(self):
         return len(self.keys())
