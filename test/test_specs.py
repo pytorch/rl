@@ -446,6 +446,14 @@ class TestComposite:
             r = ts.rand()
             assert ts.is_in(r)
 
+    def test_to_numpy(self, is_complete, device, dtype):
+        ts = self._composite_spec(is_complete, device, dtype)
+        for _ in range(100):
+            r = ts.rand()
+            for key, value in ts.to_numpy(r).items():
+                spec = ts[key]
+                assert (spec.to_numpy(r[key]) == value).all()
+
     @pytest.mark.parametrize("shape", [[], [3]])
     def test_project(self, is_complete, device, dtype, shape):
         ts = self._composite_spec(is_complete, device, dtype)
@@ -513,16 +521,24 @@ class TestComposite:
         assert set(ts.keys()) == {
             "obs",
             "act",
+            "nested_cp",
+        }
+        assert set(ts.keys(include_nested=True)) == {
+            "obs",
+            "act",
+            "nested_cp",
             ("nested_cp", "obs"),
             ("nested_cp", "act"),
         }
-        assert len(ts.keys()) == len(ts.keys(yield_nesting_keys=True)) - 1
-        assert set(ts.keys(yield_nesting_keys=True)) == {
+        assert set(ts.keys(include_nested=True, leaves_only=True)) == {
             "obs",
             "act",
             ("nested_cp", "obs"),
             ("nested_cp", "act"),
-            "nested_cp",
+        }
+        assert set(ts.keys(leaves_only=True)) == {
+            "obs",
+            "act",
         }
         td = ts.rand()
         assert isinstance(td["nested_cp"], TensorDictBase)
@@ -569,9 +585,10 @@ class TestComposite:
         ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
         td2 = CompositeSpec(new=None)
         ts.update(td2)
-        assert set(ts.keys()) == {
+        assert set(ts.keys(include_nested=True)) == {
             "obs",
             "act",
+            "nested_cp",
             ("nested_cp", "obs"),
             ("nested_cp", "act"),
             "new",
@@ -581,9 +598,10 @@ class TestComposite:
         ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
         td2 = CompositeSpec(nested_cp=CompositeSpec(new=None).to(device))
         ts.update(td2)
-        assert set(ts.keys()) == {
+        assert set(ts.keys(include_nested=True)) == {
             "obs",
             "act",
+            "nested_cp",
             ("nested_cp", "obs"),
             ("nested_cp", "act"),
             ("nested_cp", "new"),
@@ -593,9 +611,10 @@ class TestComposite:
         ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
         td2 = CompositeSpec(nested_cp=CompositeSpec(act=None).to(device))
         ts.update(td2)
-        assert set(ts.keys()) == {
+        assert set(ts.keys(include_nested=True)) == {
             "obs",
             "act",
+            "nested_cp",
             ("nested_cp", "obs"),
             ("nested_cp", "act"),
         }
@@ -609,9 +628,10 @@ class TestComposite:
             nested_cp=CompositeSpec(act=UnboundedContinuousTensorSpec(device=device))
         )
         ts.update(td2)
-        assert set(ts.keys()) == {
+        assert set(ts.keys(include_nested=True)) == {
             "obs",
             "act",
+            "nested_cp",
             ("nested_cp", "obs"),
             ("nested_cp", "act"),
         }
@@ -621,7 +641,7 @@ class TestComposite:
 def test_keys_to_empty_composite_spec():
     keys = [("key1", "out"), ("key1", "in"), "key2", ("key1", "subkey1", "subkey2")]
     composite = _keys_to_empty_composite_spec(keys)
-    assert set(composite.keys()) == set(keys)
+    assert set(composite.keys(True, True)) == set(keys)
 
 
 class TestEquality:

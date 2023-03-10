@@ -307,7 +307,7 @@ class SACLoss(LossModule):
 
     def _loss_qvalue_v2(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
-        tensordict = tensordict.select("reward", "done", "next", *obs_keys, "action")
+        tensordict = tensordict.select("next", *obs_keys, "action")
 
         with torch.no_grad():
             next_td = step_mdp(tensordict).select(

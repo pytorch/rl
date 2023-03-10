@@ -137,7 +137,7 @@ def make_dqn_actor(
     atoms = cfg.atoms if cfg.distributional else None
     linear_layer_class = torch.nn.Linear if not cfg.noisy else NoisyLinear
 
-    action_spec = env_specs["action_spec"]
+    action_spec = env_specs["input_spec"]["action"]
     if action_spec.domain != "discrete":
         raise ValueError(
             f"env {proof_environment} has an action domain "
@@ -167,7 +167,7 @@ def make_dqn_actor(
             "mlp_kwargs_output": {"num_cells": 512, "layer_class": linear_layer_class},
         }
         # automatically infer in key
-        (in_key,) = itertools.islice(env_specs["observation_spec"], 1)
+        (in_key,) = itertools.islice(env_specs["output_spec"]["observation"], 1)
 
     actor_class = QValueActor
     actor_kwargs = {}
@@ -176,7 +176,7 @@ def make_dqn_actor(
         # if action spec is modeled as categorical variable, we still need to have features equal
         # to the number of possible choices and also set categorical behavioural for actors.
         actor_kwargs.update({"action_space": "categorical"})
-        out_features = env_specs["action_spec"].space.n
+        out_features = env_specs["input_spec"]["action"].space.n
     else:
         out_features = action_spec.shape[0]
 
@@ -294,7 +294,7 @@ def make_ddpg_actor(
     linear_layer_class = torch.nn.Linear if not noisy else NoisyLinear
 
     env_specs = proof_environment.specs
-    out_features = env_specs["action_spec"].shape[0]
+    out_features = env_specs["input_spec"]["action"].shape[0]
 
     actor_net_default_kwargs = {
         "action_dim": out_features,
@@ -320,8 +320,8 @@ def make_ddpg_actor(
     actor_module = SafeModule(actor_net, in_keys=in_keys, out_keys=out_keys)
 
     if cfg.gSDE:
-        min = env_specs["action_spec"].space.minimum
-        max = env_specs["action_spec"].space.maximum
+        min = env_specs["input_spec"]["action"].space.minimum
+        max = env_specs["input_spec"]["action"].space.maximum
         transform = SafeTanhTransform()
         if (min != -1).any() or (max != 1).any():
             transform = d.ComposeTransform(
@@ -341,12 +341,12 @@ def make_ddpg_actor(
     actor = ProbabilisticActor(
         module=actor_module,
         in_keys=["param"],
-        spec=CompositeSpec(action=env_specs["action_spec"]),
+        spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
         safe=True,
         distribution_class=TanhDelta,
         distribution_kwargs={
-            "min": env_specs["action_spec"].space.minimum,
-            "max": env_specs["action_spec"].space.maximum,
+            "min": env_specs["input_spec"]["action"].space.minimum,
+            "max": env_specs["input_spec"]["action"].space.maximum,
         },
     )
 
@@ -492,7 +492,7 @@ def make_a2c_model(
     """
     # proof_environment.set_seed(cfg.seed)
     specs = proof_environment.specs  # TODO: use env.sepcs
-    action_spec = specs["action_spec"]
+    action_spec = specs["input_spec"]["action"]
 
     if in_keys_actor is None and proof_environment.from_pixels:
         in_keys_actor = ["pixels"]
@@ -787,7 +787,7 @@ def make_ppo_model(
     """
     # proof_environment.set_seed(cfg.seed)
     specs = proof_environment.specs  # TODO: use env.sepcs
-    action_spec = specs["action_spec"]
+    action_spec = specs["input_spec"]["action"]
 
     if in_keys_actor is None and proof_environment.from_pixels:
         in_keys_actor = ["pixels"]
@@ -1606,7 +1606,7 @@ def _dreamer_make_world_model(
     reward_model = SafeModule(
         reward_module,
         in_keys=[("next", "state"), ("next", "belief")],
-        out_keys=["reward"],
+        out_keys=[("next", "reward")],
     )
     world_model = WorldModelWrapper(
         transition_model,

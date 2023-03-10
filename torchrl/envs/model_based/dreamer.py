@@ -58,7 +58,7 @@ class DreamerEnv(ModelBasedEnvBase):
         batch_size = tensordict.batch_size if tensordict is not None else []
         device = tensordict.device if tensordict is not None else self.device
         td = self.input_spec.rand(shape=batch_size).to(device)
-        td["reward"] = self.reward_spec.rand(shape=batch_size).to(device)
+        td[("next", "reward")] = self.reward_spec.rand(shape=batch_size).to(device)
         td.update(self.observation_spec.rand(shape=batch_size).to(device))
         return td
 
