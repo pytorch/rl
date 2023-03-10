@@ -95,9 +95,7 @@ class TD3Loss(LossModule):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
-        tensordict_select = tensordict.select(
-            "reward", "done", "next", *obs_keys, "action"
-        )
+        tensordict_select = tensordict.select("next", *obs_keys, "action")
 
         actor_params = torch.stack(
             [self.actor_network_params, self.target_actor_network_params], 0

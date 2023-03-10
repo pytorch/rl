@@ -1,4 +1,4 @@
-## About MuJoCo
+# Working with MuJoCo-based environments
 
 From its [official repository](https://github.com/deepmind/mujoco/),
 > MuJoCo stands for Multi-Joint dynamics with Contact. It is a general purpose 

@@ -153,8 +153,8 @@ def make_env_transforms(
     if not from_pixels:
         selected_keys = [
             key
-            for key in env.observation_spec.keys()
-            if ("pixels" not in key) and (key not in env.input_spec.keys())
+            for key in env.observation_spec.keys(True, True)
+            if ("pixels" not in key) and (key not in env.input_spec.keys(True, True))
         ]
 
         # even if there is a single tensor, it'll be renamed in "observation_vector"
@@ -409,7 +409,7 @@ def get_stats_random_rollout(
     val_stats = torch.cat(val_stats, 0)
 
     if key is None:
-        keys = list(proof_environment.observation_spec.keys())
+        keys = list(proof_environment.observation_spec.keys(True, True))
         key = keys.pop()
         if len(keys):
             raise RuntimeError(
@@ -474,7 +474,7 @@ def initialize_observation_norm_transforms(
         return
 
     if key is None:
-        keys = list(proof_environment.base_env.observation_spec.keys())
+        keys = list(proof_environment.base_env.observation_spec.keys(True, True))
         key = keys.pop()
         if len(keys):
             raise RuntimeError(

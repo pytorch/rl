@@ -198,9 +198,3 @@ td_rollout[0]  # tensordict of the first env: the stand obs is present
 
 env.close()
 del env
-
-# sphinx_gallery_start_ignore
-import time
-
-time.sleep(10)
-# sphinx_gallery_end_ignore

@@ -622,7 +622,7 @@ for i, tensordict_data in enumerate(collector):
             optim.step()
             optim.zero_grad()
 
-    logs["reward"].append(tensordict_data["reward"].mean().item())
+    logs["reward"].append(tensordict_data["next", "reward"].mean().item())
     pbar.update(tensordict_data.numel() * frame_skip)
     cum_reward_str = (
         f"average reward={logs['reward'][-1]: 4.4f} (init={logs['reward'][0]: 4.4f})"
@@ -641,10 +641,16 @@ for i, tensordict_data in enumerate(collector):
         with set_exploration_mode("mean"), torch.no_grad():
             # execute a rollout with the trained policy
             eval_rollout = env.rollout(1000, policy_module)
-            logs["eval reward"].append(eval_rollout["reward"].mean().item())
-            logs["eval reward (sum)"].append(eval_rollout["reward"].sum().item())
+            logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
+            logs["eval reward (sum)"].append(
+                eval_rollout["next", "reward"].sum().item()
+            )
             logs["eval step_count"].append(eval_rollout["step_count"].max().item())
-            eval_str = f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} (init: {logs['eval reward (sum)'][0]: 4.4f}), eval step-count: {logs['eval step_count'][-1]}"
+            eval_str = (
+                f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} "
+                f"(init: {logs['eval reward (sum)'][0]: 4.4f}), "
+                f"eval step-count: {logs['eval step_count'][-1]}"
+            )
             del eval_rollout
     pbar.set_description(", ".join([eval_str, cum_reward_str, stepcount_str, lr_str]))
 

@@ -226,9 +226,11 @@ class TestDQN:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
                 "action_value": action_value,
             },
@@ -273,11 +275,11 @@ class TestDQN:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -350,7 +352,7 @@ class TestDQN:
         with torch.no_grad():
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (
@@ -477,9 +479,11 @@ class TestDDPG:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
             },
             device=device,
@@ -507,11 +511,11 @@ class TestDDPG:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
@@ -639,7 +643,7 @@ class TestDDPG:
         with torch.no_grad():
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (
@@ -707,9 +711,11 @@ class TestTD3:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
             },
             device=device,
@@ -736,10 +742,12 @@ class TestTD3:
             batch_size=(batch, T),
             source={
                 "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
-                "done": done,
+                "next": {
+                    "observation": next_obs * mask.to(obs.dtype),
+                    "reward": reward * mask.to(obs.dtype),
+                    "done": done,
+                },
                 "collector": {"mask": mask},
-                "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
             },
             device=device,
@@ -863,7 +871,7 @@ class TestTD3:
             np.random.seed(0)
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (
@@ -982,9 +990,11 @@ class TestSAC:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
             },
             device=device,
@@ -1012,11 +1022,11 @@ class TestSAC:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
@@ -1233,7 +1243,7 @@ class TestSAC:
             np.random.seed(0)
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (
@@ -1411,9 +1421,11 @@ class TestREDQ:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
             },
             device=device,
@@ -1441,11 +1453,11 @@ class TestREDQ:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
@@ -1723,7 +1735,7 @@ class TestREDQ:
             np.random.seed(0)
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (
@@ -1847,9 +1859,11 @@ class TestPPO:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
                 "sample_log_prob": torch.randn_like(action[..., 1]) / 10,
             },
@@ -1880,11 +1894,11 @@ class TestPPO:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "sample_log_prob": (torch.randn_like(action[..., 1]) / 10).masked_fill_(
                     ~mask, 0.0
@@ -2155,11 +2169,11 @@ class TestA2C:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
                     ~mask, 0.0
@@ -2361,10 +2375,12 @@ class TestReinforce:
 
         td = TensorDict(
             {
-                "reward": torch.randn(batch, 1),
                 "observation": torch.randn(batch, n_obs),
-                "next": {"observation": torch.randn(batch, n_obs)},
-                "done": torch.zeros(batch, 1, dtype=torch.bool),
+                "next": {
+                    "observation": torch.randn(batch, n_obs),
+                    "reward": torch.randn(batch, 1),
+                    "done": torch.zeros(batch, 1, dtype=torch.bool),
+                },
                 "action": torch.randn(batch, n_act),
             },
             [batch],
@@ -2413,10 +2429,12 @@ class TestDreamer:
                 "state": torch.zeros(batch_size, temporal_length, state_dim),
                 "belief": torch.zeros(batch_size, temporal_length, rssm_hidden_dim),
                 "pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
-                "next": {"pixels": torch.randn(batch_size, temporal_length, 3, 64, 64)},
+                "next": {
+                    "pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
+                    "reward": torch.randn(batch_size, temporal_length, 1),
+                    "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
+                },
                 "action": torch.randn(batch_size, temporal_length, 64),
-                "reward": torch.randn(batch_size, temporal_length, 1),
-                "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
             },
             [batch_size, temporal_length],
         )
@@ -2511,7 +2529,7 @@ class TestDreamer:
         reward_module = SafeModule(
             reward_module,
             in_keys=[("next", "state"), ("next", "belief")],
-            out_keys=["reward"],
+            out_keys=[("next", "reward")],
         )
         world_model = WorldModelWrapper(world_modeler, reward_module)
 
@@ -3875,8 +3893,8 @@ class TestAdv:
         )
         kwargs = {
             "obs": torch.randn(1, 10, 3),
-            "reward": torch.randn(1, 10, 1, requires_grad=True),
-            "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+            "next_reward": torch.randn(1, 10, 1, requires_grad=True),
+            "next_done": torch.zeros(1, 10, 1, dtype=torch.bool),
             "next_obs": torch.randn(1, 10, 3),
         }
         advantage, value_target = module(**kwargs)
@@ -3904,9 +3922,11 @@ class TestAdv:
         td = TensorDict(
             {
                 "obs": torch.randn(1, 10, 3),
-                "reward": torch.randn(1, 10, 1, requires_grad=True),
-                "done": torch.zeros(1, 10, 1, dtype=torch.bool),
-                "next": {"obs": torch.randn(1, 10, 3)},
+                "next": {
+                    "obs": torch.randn(1, 10, 3),
+                    "reward": torch.randn(1, 10, 1, requires_grad=True),
+                    "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                },
             },
             [1, 10],
         )
@@ -3916,7 +3936,7 @@ class TestAdv:
         for p in value_net.parameters():
             assert p.grad is None or (p.grad == 0).all()
         # check that rewards have a grad
-        assert td["reward"].grad.norm() > 0
+        assert td["next", "reward"].grad.norm() > 0
 
     @pytest.mark.parametrize(
         "adv,kwargs",
@@ -3935,9 +3955,11 @@ class TestAdv:
         td = TensorDict(
             {
                 "obs": torch.randn(1, 10, 3),
-                "reward": torch.randn(1, 10, 1, requires_grad=True),
-                "done": torch.zeros(1, 10, 1, dtype=torch.bool),
-                "next": {"obs": torch.randn(1, 10, 3)},
+                "next": {
+                    "obs": torch.randn(1, 10, 3),
+                    "reward": torch.randn(1, 10, 1, requires_grad=True),
+                    "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                },
             },
             [1, 10],
         )

@@ -2,6 +2,7 @@ from typing import Dict, List, Optional
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+
 from torchrl.data import CompositeSpec, DEVICE_TYPING, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
@@ -107,25 +108,6 @@ class VmasWrapper(_EnvWrapper):
                 raise TypeError("Env device is different from vmas device")
             kwargs["device"] = str(env.device)
         super().__init__(**kwargs)
-        if len(self.batch_size) == 0:
-            # Batch size not set
-            self.batch_size = torch.Size((self.num_envs,))
-        elif len(self.batch_size) == 1:
-            # Batch size is set
-            if not self.batch_size[0] == self.num_envs:
-                raise TypeError(
-                    "Batch size used in constructor does not match vmas batch size."
-                )
-        else:
-            raise TypeError(
-                "Batch size used in constructor is not compatible with vmas."
-            )
-        self.batch_size = torch.Size([self.n_agents, *self.batch_size])
-        self.input_spec = self.input_spec.expand(self.batch_size)
-        self.observation_spec = self.observation_spec.expand(self.batch_size)
-        self.reward_spec = self.reward_spec.expand(
-            [*self.batch_size, *self.reward_spec.shape]
-        )
 
     @property
     def lib(self):
@@ -143,6 +125,22 @@ class VmasWrapper(_EnvWrapper):
         # TODO pixels
         if self.from_pixels:
             raise NotImplementedError("vmas rendering not yet implemented")
+
+        # Adjust batch size
+        if len(self.batch_size) == 0:
+            # Batch size not set
+            self.batch_size = torch.Size((env.num_envs,))
+        elif len(self.batch_size) == 1:
+            # Batch size is set
+            if not self.batch_size[0] == env.num_envs:
+                raise TypeError(
+                    "Batch size used in constructor does not match vmas batch size."
+                )
+        else:
+            raise TypeError(
+                "Batch size used in constructor is not compatible with vmas."
+            )
+        self.batch_size = torch.Size([env.n_agents, *self.batch_size])
 
         return env
 
@@ -240,7 +238,7 @@ class VmasWrapper(_EnvWrapper):
                 device=self.device,
             )
 
-            if infos is not None:
+            if agent_info is not None:
                 agent_td.set("info", agent_info)
             if dones is not None:
                 agent_td.set("done", dones[i])
@@ -279,13 +277,13 @@ class VmasWrapper(_EnvWrapper):
                 device=self.device,
             )
 
-            if infos is not None:
+            if agent_info is not None:
                 agent_td.set("info", agent_info)
             agent_tds.append(agent_td)
 
         tensordict_out = torch.stack(agent_tds, dim=0)
 
-        return tensordict_out
+        return tensordict_out.select().set("next", tensordict_out)
 
     def read_obs(self, observations: torch.Tensor) -> torch.Tensor:
         observations = _selective_unsqueeze(
