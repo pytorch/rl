@@ -1157,12 +1157,12 @@ class TestD4RL:
         print("fe", data_from_env._storage._storage)
         keys = set(data_from_env._storage._storage.keys(True, True))
         keys = keys.intersection(data_true._storage._storage.keys(True, True))
-        # for key in keys:
-            # n = (data_true._storage._storage[key].float() - data_from_env._storage._storage[key].float()).norm()
-            # print(key, n)
-            # if n > 1.0:
-            #     print(data_from_env._storage._storage[key].view(-1)[:20]) #  [B, C]
-            #     print(data_true._storage._storage[key].view(-1)[:20])  # [A, B, C]
+        for key in keys:
+            n = (data_true._storage._storage[key].float() - data_from_env._storage._storage[key].float()).norm()
+            print(key, n)
+            if n > 1.0:
+                print(data_from_env._storage._storage[key].view(-1)[:20]) #  [B, C]
+                print(data_true._storage._storage[key].view(-1)[:20])  # [A, B, C]
         assert_allclose_td(
             data_true._storage._storage.select(*keys),
             data_from_env._storage._storage.select(*keys),
