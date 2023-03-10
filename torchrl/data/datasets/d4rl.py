@@ -77,7 +77,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
         transform: Optional["Transform"] = None,  # noqa-F821
-        split_trajs:bool = False,
+        split_trajs: bool = False,
         **env_kwargs,
     ):
         # we do a local import to avoid circular import issues
@@ -89,17 +89,18 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             raise ImportError("Could not import d4rl") from D4RL_ERR
         env = GymWrapper(gym.make(name, **env_kwargs))
         dataset = make_tensordict(
-            {
-                k: torch.tensor(item)
-                for k, item in env.get_dataset().items()
-            }
+            {k: torch.tensor(item) for k, item in env.get_dataset().items()}
         )
         dataset.rename_key("terminals", "done")
         dataset.rename_key("observations", "observation")
         # dataset.rename_key("next_observations", "next/observation")
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
-        dataset = dataset[:-1].exclude("reward").set("next", dataset.select("observation", "reward", "done")[1:])
+        dataset = (
+            dataset[:-1]
+            .exclude("reward")
+            .set("next", dataset.select("observation", "reward", "done")[1:])
+        )
         dataset = dataset.unflatten_keys("/")
         if split_trajs:
             dataset = split_trajectories(dataset)
