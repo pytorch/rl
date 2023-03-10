@@ -102,7 +102,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset[key] = dataset[key].to(spec.dtype)
         for key, spec in env.input_spec.items(True, True):
             dataset[key] = dataset[key].to(spec.dtype)
-        dataset["reward"] = env.reward_spec.encode(dataset["reward"])
+        dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
         dataset["done"] = dataset["done"].bool()
 
         dataset["done"] = dataset["done"].unsqueeze(-1)

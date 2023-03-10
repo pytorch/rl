@@ -1136,7 +1136,7 @@ class TestD4RL:
         sample = data.sample(2)
         env = GymWrapper(gym.make(task))
         rollout = env.rollout(2)
-        print(rollout)
+        print(task, rollout)
         for key in rollout.keys(True, True):
             sim = rollout[key]
             offline = sample[key]

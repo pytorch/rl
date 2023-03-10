@@ -1957,7 +1957,9 @@ class CompositeSpec(TensorSpec):
         else:
             yield from (
                 (key, self[key])
-                for key in self.keys(include_nested=include_nested, leaves_only=leaves_only)
+                for key in self.keys(
+                    include_nested=include_nested, leaves_only=leaves_only
+                )
             )
 
     def values(
@@ -1983,7 +1985,9 @@ class CompositeSpec(TensorSpec):
         else:
             yield from (
                 self[key]
-                for key in self.keys(include_nested=include_nested, leaves_only=leaves_only)
+                for key in self.keys(
+                    include_nested=include_nested, leaves_only=leaves_only
+                )
             )
 
     def __len__(self):
