@@ -405,7 +405,7 @@ class DistributedSyncDataCollector(_DataCollector):
         j = -1
         while total_frames < self.total_frames:
             j += 1
-            if j % self.update_interval == 0:
+            if j % self.update_interval == 0 and not self.policy_weights.is_empty():
                 for i in range(self.num_workers):
                     rank = i + 1
                     self.policy_weights.isend(rank)

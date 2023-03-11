@@ -318,7 +318,10 @@ class SyncDataCollector(_DataCollector):
         return_same_td (bool, optional): if True, the same TensorDict will be returned at each iteration, with its values
             updated. This feature should be used cautiously: if the same tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
-            Default is False.
+            Default is ``False``.
+        reset_when_done (bool, optional): If ``True``, envs that return a ``True`` ``"done"`` or ``"truncated"`` entry
+            will be reset.
+            Defaults to ``True``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
