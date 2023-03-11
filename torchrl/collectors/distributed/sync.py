@@ -112,7 +112,9 @@ def _distributed_init_collection_node(
     policy_weights.irecv(0)
     frames = 0
     for i, data in enumerate(collector):
+        print(f"sending {i}")
         data.isend(dst=0)
+        print(f"sent!")
         frames += data.numel()
         if (
             frames < total_frames
@@ -413,12 +415,13 @@ class DistributedSyncDataCollector(_DataCollector):
             trackers = []
             for i in range(self.num_workers):
                 rank = i + 1
-                trackers.append(
-                    self._single_tds[i].irecv(src=rank, return_premature=True)
-                )
-            for tracker in trackers:
-                for _tracker in tracker:
-                    _tracker.wait()
+                self._single_tds[i].recv(src=rank, )
+            #     trackers.append(
+            #         self._single_tds[i].irecv(src=rank, return_premature=True)
+            #     )
+            # for tracker in trackers:
+            #     for _tracker in tracker:
+            #         _tracker.wait()
 
             data = self._tensordict_out.clone()
             total_frames += data.numel()
