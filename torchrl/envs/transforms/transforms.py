@@ -3371,6 +3371,7 @@ class RandomCropTensorDict(Transform):
         idx = idx_0 + arange
         return tensordict.gather(dim=self.sample_dim, index=idx)
 
+
 class RenameTransform(Transform):
     """A transform to rename entries in the output tensordict.
 
@@ -3386,13 +3387,20 @@ class RenameTransform(Transform):
             renaming immutable entries such as ``"reward"`` and ``"done"``.
 
     """
-    def __init__(self, in_keys, out_keys, in_keys_inv=None, out_keys_inv=None, create_copy=False):
+
+    def __init__(
+        self, in_keys, out_keys, in_keys_inv=None, out_keys_inv=None, create_copy=False
+    ):
         if "done" in in_keys and not create_copy:
-            raise ValueError("Renaming 'done' is not allowed. Set `create_copy` to `True` "
-                               "to create a copy of the done state.")
+            raise ValueError(
+                "Renaming 'done' is not allowed. Set `create_copy` to `True` "
+                "to create a copy of the done state."
+            )
         if "reward" in in_keys and not create_copy:
-            raise ValueError("Renaming 'reward' is not allowed. Set `create_copy` to `True` "
-                               "to create a copy of the reward entry.")
+            raise ValueError(
+                "Renaming 'reward' is not allowed. Set `create_copy` to `True` "
+                "to create a copy of the reward entry."
+            )
         if in_keys_inv is None:
             in_keys_inv = []
         if out_keys_inv is None:
@@ -3408,9 +3416,11 @@ class RenameTransform(Transform):
                 f"The number of in_keys_inv ({len(self.in_keys_inv)}) should match the number of out_keys_inv ({len(self.out_keys)})."
             )
         if len(set(out_keys).intersection(in_keys)):
-            raise ValueError(f"Cannot have matching in and out_keys because order is unclear. "
-                             f"Please use separated transforms. "
-                             f"Got in_keys={in_keys} and out_keys={out_keys}.")
+            raise ValueError(
+                f"Cannot have matching in and out_keys because order is unclear. "
+                f"Please use separated transforms. "
+                f"Got in_keys={in_keys} and out_keys={out_keys}."
+            )
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.create_copy:
@@ -3460,7 +3470,17 @@ class RenameTransform(Transform):
             if out_key in ("done", "reward"):
                 output_spec[out_key] = output_spec["observation"][in_key].clone()
             else:
-                output_spec["observation"][out_key] = output_spec["observation"][in_key].clone()
+                output_spec["observation"][out_key] = output_spec["observation"][
+                    in_key
+                ].clone()
             if not self.create_copy:
                 del output_spec["observation"][in_key]
         return output_spec
+
+    def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
+        # we need to check whether there are special keys
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+            input_spec[in_key] = input_spec[out_key].clone()
+            if not self.create_copy:
+                del input_spec[out_key]
+        return input_spec
