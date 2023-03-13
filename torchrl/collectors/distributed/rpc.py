@@ -223,33 +223,28 @@ class RPCDataCollector(_DataCollector):
         self,
         world_size,
     ):
-        if torch.cuda.device_count():
-            if self.visible_devices:
-                device_maps = {}
-                for i in range(self.num_workers):
-                    rank = i + 1
-                    device_maps.update(
-                        {f"COLLECTOR_NODE_{rank}": {0: self.visible_devices[i]}}
-                    )
-            else:
-                device_maps = {}
-                for i in range(self.num_workers):
-                    rank = i + 1
-                    device_maps.update(
-                        {f"COLLECTOR_NODE_{rank}": {j: j for j in range(torch.cuda.device_count())}}
-                    )
-        else:
-            device_maps = None
         options = rpc.TensorPipeRpcBackendOptions(
             num_worker_threads=16,
             init_method=f"tcp://{self.IPAddr}:{self.tcp_port}",
             rpc_timeout=10_000,
             _transports=["uv"],
-            # Currently fails when nodes have more than 0 gpus avail,
-            # even when no device is made visible
-            devices=list(range(torch.cuda.device_count())),
-            device_maps=device_maps,
         )
+        if torch.cuda.device_count():
+            if self.visible_devices:
+                for i in range(self.num_workers):
+                    rank = i + 1
+                    options.set_device_map(
+                        f"COLLECTOR_NODE_{rank}",
+                        {0: self.visible_devices[i]}
+                    )
+            else:
+                for i in range(self.num_workers):
+                    rank = i + 1
+                    options.set_device_map(
+                        f"COLLECTOR_NODE_{rank}",
+                        {j: j for j in range(torch.cuda.device_count())}
+                    )
+
         print("init rpc")
         rpc.init_rpc(
             "TRAINER_NODE",
