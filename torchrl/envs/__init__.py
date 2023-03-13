@@ -28,6 +28,7 @@ from .transforms import (
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,
+    RenameTransform,
     Resize,
     RewardClipping,
     RewardScaling,
