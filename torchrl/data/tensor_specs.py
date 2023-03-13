@@ -674,30 +674,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
     def __len__(self):
         pass
 
-    def values(self) -> ValuesView:
-        pass
-
-    def items(self) -> ItemsView:
-        pass
-
-    def keys(
-        self,
-        include_nested: bool = False,
-        leaves_only: bool = False,
-    ) -> KeysView:
-        pass
-
     def project(self, val: TensorDictBase) -> TensorDictBase:
-        pass
-
-    def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
-        pass
-
-    def type_check(
-        self,
-        value: Union[torch.Tensor, TensorDictBase],
-        selected_keys: Union[str, Optional[Sequence[str]]] = None,
-    ):
         pass
 
     def __repr__(self):
@@ -711,12 +688,6 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         )
         string = f"{self.__class__.__name__}(\n     {sub_string})"
         return string
-
-    def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
-        pass
-
-    def __delitem__(self, key):
-        pass
 
     def __iter__(self):
         pass
