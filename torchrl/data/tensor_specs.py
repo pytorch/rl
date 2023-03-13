@@ -2651,7 +2651,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
 
     @property
     def device(self) -> DEVICE_TYPING:
-        pass
+        return self._specs[0].device
 
     @property
     def ndim(self):
