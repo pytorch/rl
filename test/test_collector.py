@@ -1213,12 +1213,8 @@ def test_collector_interruptor_mechanism(env_name, seed=100):
 
     interruptor.stop_collection()
     for batch in collector:
-        if env_name == "vec":
-            assert batch[0, 0]["observation"].sum() != 0
-            assert batch[0, 1:]["observation"].sum() == 0
-        else:
-            assert batch[0, 0]["pixels"].sum() != 0
-            assert batch[0, 1:]["pixels"].sum() == 0
+        assert batch["collector"]["traj_ids"][0, 0] != -1
+        assert batch["collector"]["traj_ids"][0, 1] == -1
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ import time
 from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
+from multiprocessing.managers import SyncManager
 from textwrap import indent
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
@@ -70,15 +71,26 @@ class RandomPolicy:
 class Interruptor:
     def __init__(self):
         self._collect = True
+        self._lock = mp.Lock()
 
     def start_collection(self):
-        self._collect = True
+        with self._lock:
+            self._collect = True
 
     def stop_collection(self):
-        self._collect = False
+        with self._lock:
+            self._collect = False
 
     def collection_stopped(self):
-        return self._collect is False
+        with self._lock:
+            return self._collect is False
+
+
+class InterruptorManager(SyncManager):
+    pass
+
+
+InterruptorManager.register('Interruptor', Interruptor)
 
 
 def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
@@ -307,6 +319,10 @@ class SyncDataCollector(_DataCollector):
             updated. This feature should be used cautiously: if the same tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
             Default is False.
+        interruptor : (Interruptor, optional)
+            An Interruptor object that can be used from outside the class to control rollout collection.
+            The Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
+            strategies such as preeptively stopping rollout collection.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -645,9 +661,7 @@ class SyncDataCollector(_DataCollector):
         if self.reset_at_each_iter:
             self._tensordict.update(self.env.reset(), inplace=True)
             self._tensordict.fill_(("collector", "step_count"), 0)
-
-        for key in self._tensordict_out.keys():
-            self._tensordict_out.fill_(key, 0.0)
+        self._tensordict_out.fill_(("collector", "traj_ids"), -1)
 
         with set_exploration_mode(self.exploration_mode):
             for j in range(self.frames_per_batch):
@@ -834,7 +848,8 @@ class _MultiDataCollector(_DataCollector):
             in other words, if the env is a multi-agent env, all agents will be
             reset once one of them is done.
             Defaults to `True`.
-
+        preemptive_threshold (float, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
+            that will be allowed to finished collecting their rollout before the rest are forced to end early.
     """
 
     def __init__(
@@ -862,6 +877,7 @@ class _MultiDataCollector(_DataCollector):
         init_with_lag: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         reset_when_done: bool = True,
+        preemptive_threshold: float = None,
     ):
         self.closed = True
         self.create_env_fn = create_env_fn
@@ -975,9 +991,16 @@ class _MultiDataCollector(_DataCollector):
         self.init_with_lag = init_with_lag
         self.exploration_mode = exploration_mode
         self.frames_per_worker = np.inf
+        self.preemptive_threshold = preemptive_threshold
+        if self.preemptive_threshold:
+            manager = InterruptorManager()
+            manager.start()
+            self.interruptor = manager.Interruptor()
+        else:
+            self.preemptive_threshold = 1.0
+            self.interruptor = None
         self._run_processes()
         self._exclude_private_keys = True
-        self.interruptor = Interruptor()
 
     @property
     def frames_per_batch_worker(self):
@@ -1028,7 +1051,7 @@ class _MultiDataCollector(_DataCollector):
                 "exploration_mode": self.exploration_mode,
                 "reset_when_done": self.reset_when_done,
                 "idx": i,
-                "interruptor": self.interruptor
+                "interruptor": self.interruptor,
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
@@ -1262,12 +1285,14 @@ class MultiSyncDataCollector(_MultiDataCollector):
             i += 1
             max_traj_idx = None
 
-            # Stop collection in all workers as soon as 0.5 are done
-            preemption_ratio_completed = 0.5
-            self.interruptor.start_collection()
-            while self.queue_out.qsize() < int(self.num_workers * preemption_ratio_completed):
-                continue
-            self.interruptor.stop_collection()
+            if self.interruptor:
+                self.interruptor.start_collection()
+                while self.queue_out.qsize() < int(self.num_workers * self.preemptive_threshold):
+                    continue
+                self.interruptor.stop_collection()
+                # Now wait for stragglers to return
+                while self.queue_out.qsize() < int(self.num_workers):
+                    continue
 
             for _ in range(self.num_workers):
                 new_data, j = self.queue_out.get()
@@ -1287,7 +1312,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             for idx in range(self.num_workers):
                 traj_ids = out_tensordicts_shared[idx].get(("collector", "traj_ids"))
                 if max_traj_idx is not None:
-                    traj_ids += max_traj_idx
+                    traj_ids[traj_ids != -1] += max_traj_idx
                     # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
                 max_traj_idx = traj_ids.max().item() + 1
                 # out = out_tensordicts_shared[idx]
@@ -1299,6 +1324,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                         prev_device = item.device
                     else:
                         same_device = same_device and (item.device == prev_device)
+
             if same_device:
                 out_buffer = torch.cat(
                     list(out_tensordicts_shared.values()), 0, out=out_buffer
