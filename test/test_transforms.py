@@ -21,6 +21,7 @@ from _utils_internal import (  # noqa
 )
 from mocking_classes import (
     ContinuousActionVecMockEnv,
+    CountingBatchedEnv,
     DiscreteActionConvMockEnvNumpy,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
@@ -71,11 +72,13 @@ from torchrl.envs import (
     TransformedEnv,
     UnsqueezeTransform,
     VIPTransform,
+RenameTransform,
+InitTracker,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
-from torchrl.envs.transforms.transforms import _has_tv, RenameTransform
+from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, step_mdp
 
@@ -6598,6 +6601,99 @@ class TestRenameTransform(TransformBase):
             assert "b" in tensordict.keys()
         else:
             assert "b" not in tensordict.keys()
+
+
+class TestInitTracker(TransformBase):
+    def test_single_trans_env_check(self):
+        env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+        env = TransformedEnv(env, InitTracker())
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+            env = TransformedEnv(env, InitTracker())
+            return env
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+            env = TransformedEnv(env, InitTracker())
+            return env
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        def make_env():
+            env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+            return env
+
+        env = SerialEnv(2, make_env)
+        env = TransformedEnv(env, InitTracker())
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        def make_env():
+            env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+            return env
+
+        env = ParallelEnv(2, make_env)
+        env = TransformedEnv(env, InitTracker())
+        check_env_specs(env)
+
+    def test_transform_no_env(self):
+        with pytest.raises(
+            NotImplementedError, match="InitTracker cannot be executed without a parent"
+        ):
+            InitTracker()(None)
+
+    def test_transform_compose(self):
+        with pytest.raises(
+            NotImplementedError, match="InitTracker cannot be executed without a parent"
+        ):
+            Compose(InitTracker())(None)
+
+    def test_transform_env(self):
+        policy = lambda tensordict: tensordict.set(
+            "action", torch.ones(tensordict.shape, dtype=torch.int32)
+        )
+        env = CountingBatchedEnv(max_steps=torch.tensor([3, 4]), batch_size=[2])
+        env = TransformedEnv(env, InitTracker())
+        r = env.rollout(100, policy, break_when_any_done=False)
+        assert (r["is_init"].sum(1) == torch.tensor([25, 20])).all()
+
+    def test_transform_model(self):
+        with pytest.raises(
+            NotImplementedError, match="InitTracker cannot be executed without a parent"
+        ):
+            td = TensorDict({}, [])
+            chain = nn.Sequential(InitTracker())
+            chain(td)
+
+    def test_transform_rb(self):
+        batch = [1]
+        device = "cpu"
+        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb.append_transform(InitTracker())
+        reward = torch.randn(*batch, 1, device=device)
+        misc = torch.randn(*batch, 1, device=device)
+        td = TensorDict(
+            {"misc": misc, "reward": reward},
+            batch,
+            device=device,
+        )
+        rb.extend(td)
+        with pytest.raises(
+            NotImplementedError, match="InitTracker cannot be executed without a parent"
+        ):
+            _ = rb.sample(20)
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse for InitTracker")
 
 
 if __name__ == "__main__":
