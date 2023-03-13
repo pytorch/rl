@@ -75,6 +75,7 @@ class Interruptor:
     whether collection has been stopped. The collection state is protected
     by a lock to ensure thread-safety.
     """
+
     def __init__(self):
         self._collect = True
         self._lock = mp.Lock()
@@ -98,6 +99,7 @@ class InterruptorManager(SyncManager):
     This class extends the SyncManager class and allows to share an Interruptor object
     between processes.
     """
+
     pass
 
 
