@@ -89,7 +89,7 @@ if __name__ == "__main__":
         collector_kwargs=collector_kwargs,
         slurm_kwargs=slurm_conf,
         sync=args.sync,
-        storing_device="cuda:0",
+        storing_device="cuda:0" if torch.cuda.device_count() else "cpu",
         launcher=launcher,
     )
 

@@ -73,7 +73,7 @@ if __name__ == "__main__":
         else MultiSyncDataCollector,
         collector_kwargs=collector_kwargs,
         sync=args.sync,
-        storing_device="cuda:0",
+        storing_device="cuda:0" if torch.cuda.device_count() else "cpu",
         launcher=launcher,
     )
 
