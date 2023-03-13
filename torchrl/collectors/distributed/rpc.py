@@ -228,12 +228,16 @@ class RPCDataCollector(_DataCollector):
                 device_maps = {}
                 for i in range(self.num_workers):
                     rank = i + 1
-                    device_maps.update({
-                        f"COLLECTOR_NODE_{rank}": {
-                            0 : self.visible_devices[i]
-                        }})
+                    device_maps.update(
+                        {f"COLLECTOR_NODE_{rank}": {0: self.visible_devices[i]}}
+                    )
             else:
-                device_maps = None
+                device_maps = {}
+                for i in range(self.num_workers):
+                    rank = i + 1
+                    device_maps.update(
+                        {f"COLLECTOR_NODE_{rank}": {j: j for j in range(torch.cuda.device_count())}}
+                    )
         else:
             device_maps = None
         options = rpc.TensorPipeRpcBackendOptions(
@@ -322,7 +326,9 @@ class RPCDataCollector(_DataCollector):
         self.collector_infos = collector_infos
 
     def _init_worker_rpc(self, executor, i):
-        visible_device = self.visible_devices[i] if self.visible_devices is not None else None
+        visible_device = (
+            self.visible_devices[i] if self.visible_devices is not None else None
+        )
         if self.launcher == "submitit":
             if not _has_submitit:
                 raise ImportError("submitit not found.") from SUBMITIT_ERR
@@ -339,7 +345,13 @@ class RPCDataCollector(_DataCollector):
         elif self.launcher == "mp":
             job = mp.Process(
                 target=_rpc_init_collection_node,
-                args=(i + 1, self.IPAddr, self.tcp_port, self.num_workers + 1, visible_device),
+                args=(
+                    i + 1,
+                    self.IPAddr,
+                    self.tcp_port,
+                    self.num_workers + 1,
+                    visible_device,
+                ),
             )
             job.start()
             return job
@@ -376,14 +388,14 @@ class RPCDataCollector(_DataCollector):
             self.num_workers + 1,
         )
         self._launch_workers(
-            self.num_workers + 1,
-            self.env_constructors,
-            self.collector_class,
-            self.num_workers_per_collector,
-            self.policy,
-            self._frames_per_batch_corrected,
-            self.total_frames,
-            self.collector_kwargs,
+            world_size=self.num_workers + 1,
+            env_constructors=self.env_constructors,
+            collector_class=self.collector_class,
+            num_workers_per_collector=self.num_workers_per_collector,
+            policy=self.policy,
+            frames_per_batch=self._frames_per_batch_corrected,
+            total_frames=self.total_frames,
+            collector_kwargs=self.collector_kwargs,
         )
 
     def iterator(self):
