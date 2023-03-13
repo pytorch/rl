@@ -1187,34 +1187,63 @@ def weight_reset(m):
         m.reset_parameters()
 
 
-@pytest.mark.parametrize("env_name", ["conv", "vec"])
-def test_collector_interruptor_mechanism(env_name, seed=100):
+class TestPreemptiveThreshold:
 
-    def env_fn(seed):
-        env = make_make_env(env_name)()
-        env.set_seed(seed)
-        return env
+    @pytest.mark.parametrize("env_name", ["conv", "vec"])
+    def test_sync_collector_interruptor_mechanism(self, env_name, seed=100):
 
-    policy = make_policy(env_name)
+        def env_fn(seed):
+            env = make_make_env(env_name)()
+            env.set_seed(seed)
+            return env
 
-    # 2. Define interruptor object
-    interruptor = Interruptor()
-    interruptor.start_collection()
+        policy = make_policy(env_name)
+        interruptor = Interruptor()
+        interruptor.start_collection()
 
-    collector = SyncDataCollector(
-        create_env_fn=env_fn,
-        create_env_kwargs={"seed": seed},
-        policy=policy,
-        frames_per_batch=50,
-        total_frames=200,
-        device="cpu",
-        interruptor=interruptor,
-    )
+        collector = SyncDataCollector(
+            create_env_fn=env_fn,
+            create_env_kwargs={"seed": seed},
+            policy=policy,
+            frames_per_batch=50,
+            total_frames=200,
+            device="cpu",
+            interruptor=interruptor,
+            split_trajs=False,
+        )
 
-    interruptor.stop_collection()
-    for batch in collector:
-        assert batch["collector"]["traj_ids"][0, 0] != -1
-        assert batch["collector"]["traj_ids"][0, 1] == -1
+        interruptor.stop_collection()
+        for batch in collector:
+            assert batch["collector"]["traj_ids"][0] != -1
+            assert batch["collector"]["traj_ids"][1] == -1
+
+    @pytest.mark.parametrize("env_name", ["conv", "vec"])
+    def test_multisync_collector_interruptor_mechanism(self, env_name, seed=100):
+
+        def env_fn(seed):
+            env = make_make_env(env_name)()
+            env.set_seed(seed)
+            return env
+
+        policy = make_policy(env_name)
+
+        collector = MultiSyncDataCollector(
+            create_env_fn=[env_fn, env_fn, env_fn, env_fn],
+            create_env_kwargs=[{"seed": seed}, {"seed": seed}, {"seed": seed}, {"seed": seed}],
+            policy=policy,
+            total_frames=800,
+            max_frames_per_traj=50,
+            frames_per_batch=800,
+            init_random_frames=-1,
+            reset_at_each_iter=False,
+            devices="cpu",
+            storing_devices="cpu",
+            split_trajs=False,
+            preemptive_threshold=0.25,
+        )
+
+        for batch in collector:
+            assert batch["collector"]["traj_ids"][batch["collector"]["traj_ids"] != -1].numel() < 800
 
 
 if __name__ == "__main__":

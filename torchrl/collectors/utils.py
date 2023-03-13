@@ -36,7 +36,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     rollout_tensordict = rollout_tensordict.flatten_keys(sep)
     traj_ids = rollout_tensordict.get(sep.join(["collector", "traj_ids"]))
     splits = traj_ids.view(-1)
-    splits = [(splits == i).sum().item() for i in splits.unique_consecutive() if i != -1]
+    splits = [(splits == i).sum().item() for i in splits.unique_consecutive()]
     # if all splits are identical then we can skip this function
     mask_key = sep.join(("collector", "mask"))
     if len(set(splits)) == 1 and splits[0] == traj_ids.shape[-1]:

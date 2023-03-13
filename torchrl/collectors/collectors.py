@@ -991,8 +991,8 @@ class _MultiDataCollector(_DataCollector):
         self.init_with_lag = init_with_lag
         self.exploration_mode = exploration_mode
         self.frames_per_worker = np.inf
-        self.preemptive_threshold = preemptive_threshold
-        if self.preemptive_threshold:
+        if preemptive_threshold:
+            self.preemptive_threshold = np.clip(preemptive_threshold, 0.0, 1.0)
             manager = InterruptorManager()
             manager.start()
             self.interruptor = manager.Interruptor()
