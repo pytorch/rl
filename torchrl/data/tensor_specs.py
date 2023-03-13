@@ -668,8 +668,16 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         # requires unbind to be implemented
         pass
 
-    def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
-        pass
+    def to_numpy(self, val: torch.Tensor, safe: bool = True) -> dict:
+        if safe:
+            if val.shape[self.dim] != len(self._specs):
+                raise ValueError(
+                    "Size of LazyStackedTensorSpec and val differ along the stacking "
+                    "dimension"
+                )
+            for spec, v in zip(self._specs, torch.unbind(val, dim=self.dim)):
+                spec.assert_is_in(v)
+        return val.detach().cpu().numpy()
 
     def __len__(self):
         pass
@@ -2562,7 +2570,15 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         pass
 
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
-        pass
+        if safe:
+            if val.shape[self.dim] != len(self._specs):
+                raise ValueError(
+                    "Size of LazyStackedCompositeSpec and val differ along the "
+                    "stacking dimension"
+                )
+            for spec, v in zip(self._specs, torch.unbind(val, dim=self.dim)):
+                spec.assert_is_in(v)
+        return {key: self[key].to_numpy(val) for key, val in val.items()}
 
     def __len__(self):
         pass
