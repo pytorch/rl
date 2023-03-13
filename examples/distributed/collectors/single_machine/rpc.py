@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from argparse import ArgumentParser
 
+import torch.cuda
 import tqdm
 
 from torchrl.collectors.collectors import (
@@ -49,10 +50,14 @@ if __name__ == "__main__":
     launcher = "mp"
 
     device_str = "device" if num_workers <= 1 else "devices"
-    collector_kwargs = [
+    if torch.cuda.device_count():
+        collector_kwargs = [
             {device_str: f"cuda:{i}", f"storing_{device_str}": f"cuda:{i}"}
             for i in range(1, num_nodes + 2)
         ]
+    else:
+        collector_kwargs = {device_str: f"cpu", f"storing_{device_str}": f"cpu"}
+
 
     make_env = EnvCreator(lambda: GymEnv("ALE/Pong-v5"))
     action_spec = make_env().action_spec

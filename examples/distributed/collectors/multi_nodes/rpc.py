@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from argparse import ArgumentParser
 
+import torch
 import tqdm
 
 from torchrl.collectors.collectors import (
@@ -67,7 +68,11 @@ if __name__ == "__main__":
         "slurm_gpus_per_task": args.slurm_gpus_per_task,
     }
     device_str = "device" if num_workers <= 1 else "devices"
-    collector_kwargs = {device_str: "cuda:0", f"storing_{device_str}": "cuda:0"}
+    if torch.cuda.device_count():
+        collector_kwargs = {device_str: "cuda:0", f"storing_{device_str}": "cuda:0"}
+    else:
+        collector_kwargs = {device_str: f"cpu", f"storing_{device_str}": f"cpu"}
+
 
     make_env = EnvCreator(lambda: GymEnv("ALE/Pong-v5"))
     action_spec = make_env().action_spec
