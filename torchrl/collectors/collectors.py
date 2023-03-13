@@ -241,7 +241,9 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         try:
             if self._iterator is None:
                 self._iterator = iter(self)
-            return next(self._iterator).to_tensordict().cpu()
+            out = next(self._iterator)
+            out.clear_device_()
+            return out
         except StopIteration:
             return None
 
