@@ -69,6 +69,12 @@ class RandomPolicy:
 
 
 class Interruptor:
+    """A class for managing the collection state of a process.
+
+    This class provides methods to start and stop collection, and to check
+    whether collection has been stopped. The collection state is protected
+    by a lock to ensure thread-safety.
+    """
     def __init__(self):
         self._collect = True
         self._lock = mp.Lock()
@@ -87,6 +93,11 @@ class Interruptor:
 
 
 class InterruptorManager(SyncManager):
+    """A custom SyncManager for managing the collection state of a process.
+
+    This class extends the SyncManager class and allows to share an Interruptor object
+    between processes.
+    """
     pass
 
 
