@@ -52,7 +52,7 @@ if __name__ == "__main__":
     device_str = "device" if num_workers <= 1 else "devices"
     if torch.cuda.device_count():
         collector_kwargs = [
-            {device_str: f"cuda:i", f"storing_{device_str}": f"cuda:i"}
+            {device_str: f"cuda:{i}", f"storing_{device_str}": f"cuda:{i}"}
             for i in range(1, num_nodes + 2)
         ]
     else:
