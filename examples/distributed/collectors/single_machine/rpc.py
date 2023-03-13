@@ -37,13 +37,6 @@ parser.add_argument(
     "divisible by the product of nodes and workers.",
 )
 parser.add_argument(
-    "--backend",
-    default="nccl",
-    help="backend for torch.distributed. Must be one of "
-    "'gloo', 'nccl' or 'mpi'. Use 'nccl' for cuda to cuda "
-    "data passing.",
-)
-parser.add_argument(
     "--sync",
     action="store_true",
     help="whether collection should be synchronous or not.",
@@ -53,21 +46,13 @@ if __name__ == "__main__":
     num_workers = args.num_workers
     num_nodes = args.num_nodes
     frames_per_batch = args.frames_per_batch
-    kwargs = {"backend": args.backend}
     launcher = "mp"
 
     device_str = "device" if num_workers <= 1 else "devices"
-    if args.backend == "nccl":
-        collector_kwargs = [
+    collector_kwargs = [
             {device_str: f"cuda:{i}", f"storing_{device_str}": f"cuda:{i}"}
             for i in range(1, num_nodes + 2)
         ]
-    elif args.backend == "gloo":
-        collector_kwargs = {device_str: "cpu", f"storing_{device_str}": "cpu"}
-    else:
-        raise NotImplementedError(
-            f"device assignment not implemented for backend {args.backend}"
-        )
 
     make_env = EnvCreator(lambda: GymEnv("ALE/Pong-v5"))
     action_spec = make_env().action_spec
@@ -83,9 +68,8 @@ if __name__ == "__main__":
         else MultiSyncDataCollector,
         collector_kwargs=collector_kwargs,
         sync=args.sync,
-        storing_device="cuda:0" if args.backend == "nccl" else "cpu",
+        storing_device="cuda:0",
         launcher=launcher,
-        **kwargs,
     )
 
     pbar = tqdm.tqdm(total=collector.total_frames)

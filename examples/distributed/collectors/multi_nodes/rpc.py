@@ -37,13 +37,6 @@ parser.add_argument(
     "divisible by the product of nodes and workers.",
 )
 parser.add_argument(
-    "--backend",
-    default="nccl",
-    help="backend for torch.distributed. Must be one of "
-    "'gloo', 'nccl' or 'mpi'. Use 'nccl' for cuda to cuda "
-    "data passing.",
-)
-parser.add_argument(
     "--slurm_partition", default="train", help="Slurm partition to be used."
 )
 parser.add_argument(
@@ -65,7 +58,6 @@ if __name__ == "__main__":
     num_workers = args.num_workers
     num_nodes = args.num_nodes
     frames_per_batch = args.frames_per_batch
-    kwargs = {"backend": args.backend}
     launcher = "submitit"
 
     slurm_conf = {
@@ -75,14 +67,7 @@ if __name__ == "__main__":
         "slurm_gpus_per_task": args.slurm_gpus_per_task,
     }
     device_str = "device" if num_workers <= 1 else "devices"
-    if args.backend == "nccl":
-        collector_kwargs = {device_str: "cuda:0", f"storing_{device_str}": "cuda:0"}
-    elif args.backend == "gloo":
-        collector_kwargs = {device_str: "cpu", f"storing_{device_str}": "cpu"}
-    else:
-        raise NotImplementedError(
-            f"device assignment not implemented for backend {args.backend}"
-        )
+    collector_kwargs = {device_str: "cuda:0", f"storing_{device_str}": "cuda:0"}
 
     make_env = EnvCreator(lambda: GymEnv("ALE/Pong-v5"))
     action_spec = make_env().action_spec
@@ -99,9 +84,8 @@ if __name__ == "__main__":
         collector_kwargs=collector_kwargs,
         slurm_kwargs=slurm_conf,
         sync=args.sync,
-        storing_device="cuda:0" if args.backend == "nccl" else "cpu",
+        storing_device="cuda:0",
         launcher=launcher,
-        **kwargs,
     )
 
     pbar = tqdm.tqdm(total=collector.total_frames)
