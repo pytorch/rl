@@ -24,10 +24,10 @@ from torch import nn
 from torchrl._utils import seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
+    Interruptor,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
     RandomPolicy,
-    Interruptor,
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
@@ -1188,10 +1188,8 @@ def weight_reset(m):
 
 
 class TestPreemptiveThreshold:
-
     @pytest.mark.parametrize("env_name", ["conv", "vec"])
     def test_sync_collector_interruptor_mechanism(self, env_name, seed=100):
-
         def env_fn(seed):
             env = make_make_env(env_name)()
             env.set_seed(seed)
@@ -1219,7 +1217,6 @@ class TestPreemptiveThreshold:
 
     @pytest.mark.parametrize("env_name", ["conv", "vec"])
     def test_multisync_collector_interruptor_mechanism(self, env_name, seed=100):
-
         def env_fn(seed):
             env = make_make_env(env_name)()
             env.set_seed(seed)
@@ -1229,7 +1226,12 @@ class TestPreemptiveThreshold:
 
         collector = MultiSyncDataCollector(
             create_env_fn=[env_fn, env_fn, env_fn, env_fn],
-            create_env_kwargs=[{"seed": seed}, {"seed": seed}, {"seed": seed}, {"seed": seed}],
+            create_env_kwargs=[
+                {"seed": seed},
+                {"seed": seed},
+                {"seed": seed},
+                {"seed": seed},
+            ],
             policy=policy,
             total_frames=800,
             max_frames_per_traj=50,
@@ -1243,7 +1245,12 @@ class TestPreemptiveThreshold:
         )
 
         for batch in collector:
-            assert batch["collector"]["traj_ids"][batch["collector"]["traj_ids"] != -1].numel() < 800
+            assert (
+                batch["collector"]["traj_ids"][
+                    batch["collector"]["traj_ids"] != -1
+                ].numel()
+                < 800
+            )
 
 
 if __name__ == "__main__":

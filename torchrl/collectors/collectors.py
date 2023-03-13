@@ -90,7 +90,7 @@ class InterruptorManager(SyncManager):
     pass
 
 
-InterruptorManager.register('Interruptor', Interruptor)
+InterruptorManager.register("Interruptor", Interruptor)
 
 
 def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
@@ -1287,7 +1287,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             if self.interruptor:
                 self.interruptor.start_collection()
-                while self.queue_out.qsize() < int(self.num_workers * self.preemptive_threshold):
+                while self.queue_out.qsize() < int(
+                    self.num_workers * self.preemptive_threshold
+                ):
                     continue
                 self.interruptor.stop_collection()
                 # Now wait for stragglers to return
