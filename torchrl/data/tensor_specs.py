@@ -697,7 +697,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
 
     @property
     def device(self) -> DEVICE_TYPING:
-        pass
+        return self._specs[0].device
 
     @property
     def ndim(self):
