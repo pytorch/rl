@@ -227,7 +227,7 @@ class RPCDataCollector(_DataCollector):
                     rank = i + 1
                     device_maps.update({
                         f"COLLECTOR_NODE_{rank}": {
-                            0 : self.visible_devices[i] for i in range(torch.cuda.device_count())
+                            0 : self.visible_devices[i]
                         }})
             else:
                 device_maps = None
