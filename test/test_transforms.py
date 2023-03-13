@@ -52,12 +52,14 @@ from torchrl.envs import (
     FrameSkipTransform,
     GrayScale,
     gSDENoise,
+    InitTracker,
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,
+    RenameTransform,
     Resize,
     RewardClipping,
     RewardScaling,
@@ -72,8 +74,6 @@ from torchrl.envs import (
     TransformedEnv,
     UnsqueezeTransform,
     VIPTransform,
-RenameTransform,
-InitTracker,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm
