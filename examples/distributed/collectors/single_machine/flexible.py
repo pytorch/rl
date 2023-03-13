@@ -11,7 +11,7 @@ from torchrl.collectors.collectors import (
     RandomPolicy,
     SyncDataCollector,
 )
-from torchrl.collectors.distributed import DistributedSyncDataCollector
+from torchrl.collectors.distributed import DistributedDataCollector
 from torchrl.envs import EnvCreator
 from torchrl.envs.libs.gym import GymEnv
 
@@ -46,7 +46,7 @@ parser.add_argument(
 parser.add_argument(
     "--sync",
     action="store_true",
-    help="whether collection should be synchronous or not."
+    help="whether collection should be synchronous or not.",
 )
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -81,6 +81,7 @@ if __name__ == "__main__":
         if num_workers == 1
         else MultiSyncDataCollector,
         collector_kwargs=collector_kwargs,
+        sync=args.sync,
         storing_device="cuda:0" if args.backend == "nccl" else "cpu",
         launcher=launcher,
         **kwargs,

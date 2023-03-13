@@ -11,7 +11,7 @@ from torchrl.collectors.collectors import (
     RandomPolicy,
     SyncDataCollector,
 )
-from torchrl.collectors.distributed import DistributedSyncDataCollector
+from torchrl.collectors.distributed import DistributedDataCollector
 from torchrl.envs import EnvCreator
 from torchrl.envs.libs.gym import GymEnv
 
@@ -58,7 +58,7 @@ parser.add_argument(
 parser.add_argument(
     "--sync",
     action="store_true",
-    help="whether collection should be synchronous or not."
+    help="whether collection should be synchronous or not.",
 )
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     make_env = EnvCreator(lambda: GymEnv("ALE/Pong-v5"))
     action_spec = make_env().action_spec
 
-    collector = DistributedSyncDataCollector(
+    collector = DistributedDataCollector(
         [make_env] * num_nodes,
         RandomPolicy(action_spec),
         num_workers_per_collector=num_workers,
