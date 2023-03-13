@@ -53,8 +53,6 @@ def _rpc_init_collection_node(
     world_size,
     visible_device,
 ):
-    device_maps = None
-
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = "29500"
     # os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
@@ -66,8 +64,7 @@ def _rpc_init_collection_node(
         _transports=["uv"],
         # Currently fails when nodes have more than 0 gpus avail,
         # even when no device is made visible
-        devices=visible_device,
-        device_maps=device_maps,
+        devices=[visible_device],
     )
     print("init rpc")
     rpc.init_rpc(
