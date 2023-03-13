@@ -55,20 +55,18 @@ def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
 
     """
     # Adapt all frame counts wrt frame_skip
-    if cfg.frame_skip != 1:
-        fields = [
-            "max_frames_per_traj",
-            "total_frames",
-            "frames_per_batch",
-            "record_frames",
-            "annealing_frames",
-            "init_random_frames",
-            "init_env_steps",
-            "noops",
-        ]
-        for field in fields:
-            if hasattr(cfg, field):
-                setattr(cfg, field, getattr(cfg, field) // cfg.frame_skip)
+
+    frame_skip = cfg.env.frame_skip
+
+    if frame_skip != 1:
+        cfg.collector.max_frames_per_traj //= frame_skip
+        cfg.collector.total_frames //= frame_skip
+        cfg.collector.frames_per_batch //= frame_skip
+        cfg.collector.init_random_frames //= frame_skip
+        cfg.collector.init_env_steps //= frame_skip
+        cfg.recorder.record_frames //= frame_skip
+        cfg.model.annealing_frames //= frame_skip
+        cfg.env.noops //= frame_skip
     return cfg
 
 
