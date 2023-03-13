@@ -57,14 +57,20 @@ def _rpc_init_collection_node(
     os.environ["MASTER_PORT"] = "29500"
     # os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
     # os.environ['TP_SOCKET_IFNAME']='lo'
+    if isinstance(visible_device, list):
+        pass
+    elif isinstance(visible_device, (str, int, torch.device)):
+        visible_device = [visible_device]
+    elif visible_device is None:
+        pass
+    else:
+        raise RuntimeError(f"unrecognised dtype {type(visible_device)}")
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
         init_method=f"tcp://{rank0_ip}:{tcp_port}",
         rpc_timeout=MAX_TIME_TO_CONNECT,
         _transports=["uv"],
-        # Currently fails when nodes have more than 0 gpus avail,
-        # even when no device is made visible
-        devices=[visible_device],
+        devices=visible_device,
     )
     print("init rpc")
     rpc.init_rpc(

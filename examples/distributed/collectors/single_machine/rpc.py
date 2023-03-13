@@ -74,7 +74,7 @@ if __name__ == "__main__":
         sync=args.sync,
         storing_device="cuda:0" if torch.cuda.device_count() else "cpu",
         launcher=launcher,
-        visible_devices=[i+1 for i in range(num_nodes)] if torch.cuda.device_count() else None,
+        visible_devices=None,
     )
 
     pbar = tqdm.tqdm(total=collector.total_frames)
