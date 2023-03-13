@@ -2273,6 +2273,7 @@ class TestStackComposite:
         assert (r["a"] == 0).all()
 
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
     def test_to(self, stack_dim):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
         c2 = c1.clone()

@@ -2213,12 +2213,13 @@ class CompositeSpec(TensorSpec):
                     else:
                         raise err
 
-                if _device is not None and item_device != _device:
+                if _device is None:
+                    _device = item_device
+                elif item_device != _device:
                     raise RuntimeError(
-                        f"Setting a new attribute ({key}) on another device ("
-                        f"{item.device} against {_device}). If the device of "
-                        "CompositeSpec has been defined, then all devices of its "
-                        "entries must match that device."
+                        f"Setting a new attribute ({key}) on another device "
+                        f"({item.device} against {_device}). All devices of "
+                        "CompositeSpec must match."
                     )
         self._device = _device
         if len(args):
@@ -2233,10 +2234,25 @@ class CompositeSpec(TensorSpec):
                 )
             for k, item in argdict.items():
                 if item is not None:
+                    if self._device is None:
+                        self._device = item.device
                     self[k] = item
 
     @property
     def device(self) -> DEVICE_TYPING:
+        if self._device is None:
+            # try to replace device by the true device
+            _device = None
+            for value in self.values():
+                if value is not None:
+                    _device = value.device
+            if _device is None:
+                raise RuntimeError(
+                    "device of empty CompositeSpec is not defined. "
+                    "You can set it directly by calling "
+                    "`spec.device = device`."
+                )
+            self._device = _device
         return self._device
 
     @device.setter
@@ -2268,11 +2284,7 @@ class CompositeSpec(TensorSpec):
         if key in {"shape", "device", "dtype", "space"}:
             raise AttributeError(f"CompositeSpec[{key}] cannot be set")
         try:
-            if (
-                value is not None
-                and self.device is not None
-                and value.device != self.device
-            ):
+            if value is not None and value.device != self.device:
                 raise RuntimeError(
                     f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
                     f"All devices of CompositeSpec must match."
