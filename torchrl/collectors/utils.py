@@ -51,7 +51,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
         if rollout_tensordict.ndimension() == 1:
             rollout_tensordict = rollout_tensordict.unsqueeze(0).to_tensordict()
         return rollout_tensordict.unflatten_keys(sep)
-    out_splits = rollout_tensordict.view(-1)[traj_ids != -1].split(splits, 0)
+    out_splits = rollout_tensordict.view(-1).split(splits, 0)
 
     for out_split in out_splits:
         out_split.set(
