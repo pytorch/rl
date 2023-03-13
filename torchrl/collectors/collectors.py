@@ -241,7 +241,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         try:
             if self._iterator is None:
                 self._iterator = iter(self)
-            return next(self._iterator).cpu()
+            return next(self._iterator)
         except StopIteration:
             return None
 

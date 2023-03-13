@@ -52,6 +52,11 @@ def _rpc_init_collection_node(
     tcp_port,
     world_size,
 ):
+    if torch.cuda.device_count():
+        device_maps = {f"COLLECTOR_NODE_{rank}": {0: 0} for rank in range(1, world_size)}
+    else:
+        device_maps = None
+
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = "29500"
     # os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
@@ -64,7 +69,7 @@ def _rpc_init_collection_node(
         # Currently fails when nodes have more than 0 gpus avail,
         # even when no device is made visible
         devices=list(range(torch.cuda.device_count())),
-        device_maps={f"COLLECTOR_NODE_{rank}": {0: 0} for rank in range(1, world_size)},
+        device_maps=device_maps,
     )
     print("init rpc")
     rpc.init_rpc(
@@ -216,6 +221,13 @@ class RPCDataCollector(_DataCollector):
         self,
         world_size,
     ):
+        if torch.cuda.device_count():
+            device_maps = {
+                f"COLLECTOR_NODE_{rank}": {0: 0} for rank in
+                range(1, world_size)
+            }
+        else:
+            device_maps = None
         options = rpc.TensorPipeRpcBackendOptions(
             num_worker_threads=16,
             init_method=f"tcp://{self.IPAddr}:{self.tcp_port}",
@@ -224,9 +236,7 @@ class RPCDataCollector(_DataCollector):
             # Currently fails when nodes have more than 0 gpus avail,
             # even when no device is made visible
             devices=list(range(torch.cuda.device_count())),
-            device_maps={
-                f"COLLECTOR_NODE_{rank}": {0: 0} for rank in range(1, world_size)
-            },
+            device_maps=device_maps,
         )
         print("init rpc")
         rpc.init_rpc(
@@ -334,7 +344,10 @@ class RPCDataCollector(_DataCollector):
             executor = None
 
         hostname = socket.gethostname()
-        IPAddr = socket.gethostbyname(hostname)
+        if self.launcher != "mp":
+            IPAddr = socket.gethostbyname(hostname)
+        else:
+            IPAddr = 'localhost'
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = "29500"

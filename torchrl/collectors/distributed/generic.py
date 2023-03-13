@@ -417,7 +417,10 @@ class DistributedDataCollector(_DataCollector):
     def _init_workers(self):
 
         hostname = socket.gethostname()
-        IPAddr = socket.gethostbyname(hostname)
+        if self.launcher != "mp":
+            IPAddr = socket.gethostbyname(hostname)
+        else:
+            IPAddr = "localhost"
         print("Server IP address:", IPAddr)
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
