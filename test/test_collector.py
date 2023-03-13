@@ -635,9 +635,9 @@ def test_collector_consistency(num_env, env_name, seed=100):
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
 
-    if num_env == 1:
-        # rollouts collected through DataCollector are padded using pad_sequence, which introduces a first dimension
-        rollout1a = rollout1a.unsqueeze(0)
+    # if num_env == 1:
+    #     # rollouts collected through DataCollector are padded using pad_sequence, which introduces a first dimension
+    #     rollout1a = rollout1a.unsqueeze(0)
     assert (
         rollout1a.batch_size == b1.batch_size
     ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
@@ -690,12 +690,12 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     data1 = []
     for d in collector1:
         data1.append(d)
-        count += d.shape[1]
+        count += d.shape[-1]
         if count > max_frames_per_traj:
             break
 
-    data1 = torch.cat(data1, 1)
-    data1 = data1[:, :max_frames_per_traj]
+    data1 = torch.cat(data1, d.ndim - 1)
+    data1 = data1[..., :max_frames_per_traj]
 
     collector1.shutdown()
     del collector1
@@ -715,12 +715,12 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     data10 = []
     for d in collector10:
         data10.append(d)
-        count += d.shape[1]
+        count += d.shape[-1]
         if count > max_frames_per_traj:
             break
 
-    data10 = torch.cat(data10, 1)
-    data10 = data10[:, :max_frames_per_traj]
+    data10 = torch.cat(data10, data1.ndim - 1)
+    data10 = data10[..., :max_frames_per_traj]
 
     collector10.shutdown()
     del collector10
@@ -740,14 +740,14 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     data20 = []
     for d in collector20:
         data20.append(d)
-        count += d.shape[1]
+        count += d.shape[-1]
         if count > max_frames_per_traj:
             break
 
     collector20.shutdown()
     del collector20
-    data20 = torch.cat(data20, 1)
-    data20 = data20[:, :max_frames_per_traj]
+    data20 = torch.cat(data20, data1.ndim - 1)
+    data20 = data20[..., :max_frames_per_traj]
 
     assert_allclose_td(data1, data20)
     assert_allclose_td(data10, data20)
@@ -932,7 +932,10 @@ def test_excluded_keys(collector_class, exclude):
 )
 @pytest.mark.parametrize("init_random_frames", [0, 50])
 @pytest.mark.parametrize("explicit_spec", [True, False])
-def test_collector_output_keys(collector_class, init_random_frames, explicit_spec):
+@pytest.mark.parametrize("split_trajs", [True, False])
+def test_collector_output_keys(
+    collector_class, init_random_frames, explicit_spec, split_trajs
+):
     from torchrl.envs.libs.gym import GymEnv
 
     out_features = 1
@@ -979,6 +982,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "total_frames": total_frames,
         "frames_per_batch": frames_per_batch,
         "init_random_frames": init_random_frames,
+        "split_trajs": split_trajs,
     }
 
     if collector_class is not SyncDataCollector:
@@ -995,7 +999,6 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "collector",
         "hidden1",
         "hidden2",
-        ("collector", "mask"),
         ("next", "hidden1"),
         ("next", "hidden2"),
         ("next", "observation"),
@@ -1005,6 +1008,8 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "observation",
         ("collector", "traj_ids"),
     }
+    if split_trajs:
+        keys.add(("collector", "mask"))
     b = next(iter(collector))
 
     assert set(b.keys(True)) == keys
@@ -1218,17 +1223,17 @@ def test_initial_obs_consistency(env_class, seed=1):
     if env_class == CountingEnv:
         arange_0 = start_val + torch.arange(max_steps - 3)
         arange = start_val + torch.arange(2)
-        expected = torch.cat([arange_0, arange_0, arange]).float()
+        expected = torch.cat([arange_0, arange_0, arange])
     else:
         # the first env has a shorter horizon than the second
         arange_0 = start_val + torch.arange(max_steps - 3 - 1)
         arange = start_val + torch.arange(start_val)
-        expected_0 = torch.cat([arange_0, arange_0, arange]).float()
+        expected_0 = torch.cat([arange_0, arange_0, arange])
         arange_0 = start_val + torch.arange(max_steps - 3)
         arange = start_val + torch.arange(2)
-        expected_1 = torch.cat([arange_0, arange_0, arange]).float()
+        expected_1 = torch.cat([arange_0, arange_0, arange])
         expected = torch.stack([expected_0, expected_1])
-    assert torch.allclose(obs, expected)
+    assert torch.allclose(obs, expected.to(obs.dtype))
 
 
 def weight_reset(m):

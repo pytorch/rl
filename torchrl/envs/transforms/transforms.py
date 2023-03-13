@@ -23,6 +23,7 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     ContinuousBox,
     DEVICE_TYPING,
+    DiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
@@ -55,6 +56,8 @@ except ImportError:
 
 IMAGE_KEYS = ["pixels"]
 _MAX_NOOPS_TRIALS = 10
+
+FORWARD_NOT_IMPLEMENTED = "class {} cannot be executed without a parent" "environment."
 
 
 def _apply_to_composite(function):
@@ -2807,7 +2810,7 @@ class VecNorm(Transform):
                     dtype=torch.float,
                 ),
             )
-            td_select.rename_key(key, key + "_sum")
+            td_select.rename_key_(key, key + "_sum")
         td_select.exclude(*keys).zero_()
         td_select = td_select.unflatten_keys(sep)
         if memmap:
@@ -2959,6 +2962,11 @@ class RewardSum(Transform):
             )
         observation_spec.update(episode_specs)
         return observation_spec
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError(
+            FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
+        )
 
 
 class StepCounter(Transform):
@@ -3370,3 +3378,63 @@ class RandomCropTensorDict(Transform):
         arange = arange.view(arange_shape)
         idx = idx_0 + arange
         return tensordict.gather(dim=self.sample_dim, index=idx)
+
+
+class InitTracker(Transform):
+    """Reset tracker.
+
+    This transform populates the step/reset tensordict with a reset tracker entry
+    that is set to ``True`` whenever :meth:`~.reset` is called.
+
+    Args:
+         init_key (str, optional): the key to be used for the tracker entry.
+
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
+        >>> td = env.reset()
+        >>> print(td["is_init"])
+        tensor(True)
+        >>> td = env.rand_step(td)
+        >>> print(td["next", "is_init"])
+        tensor(False)
+
+    """
+
+    def __init__(self, init_key: bool = "is_init"):
+        super().__init__(in_keys=[], out_keys=[init_key])
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.out_keys[0] not in tensordict.keys():
+            device = tensordict.device
+            if device is None:
+                device = torch.device("cpu")
+            tensordict.set(
+                self.out_keys[0],
+                torch.zeros(tensordict.shape, device=device, dtype=torch.bool),
+            )
+        return tensordict
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        device = tensordict.device
+        if device is None:
+            device = torch.device("cpu")
+        _reset = tensordict.get("_reset", None)
+        if _reset is None:
+            _reset = torch.ones(tensordict.shape, device=device, dtype=torch.bool)
+        tensordict.set(self.out_keys[0], _reset.clone())
+        return tensordict
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        observation_spec[self.out_keys[0]] = DiscreteTensorSpec(
+            2,
+            dtype=torch.bool,
+            device=self.parent.device,
+            shape=self.parent.batch_size,
+        )
+        return observation_spec
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError(
+            FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
+        )

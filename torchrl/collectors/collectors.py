@@ -254,13 +254,13 @@ class SyncDataCollector(_DataCollector):
             collector.
         create_env_kwargs (dict, optional): Dictionary of kwargs for create_env_fn.
         max_frames_per_traj (int, optional): Maximum steps per trajectory. Note that a trajectory can span over multiple batches
-            (unless reset_at_each_iter is set to True, see below). Once a trajectory reaches n_steps_max,
+            (unless reset_at_each_iter is set to True, see below). Once a trajectory reaches n_steps,
             the environment is reset. If the environment wraps multiple environments together, the number of steps
             is tracked for each environment independently. Negative values are allowed, in which case this argument
             is ignored.
             default: -1 (i.e. no maximum number of steps)
         frames_per_batch (int): Time-length of a batch.
-            reset_at_each_iter and frames_per_batch == n_steps_max are equivalent configurations.
+            reset_at_each_iter and frames_per_batch == n_steps are equivalent configurations.
             default: 200
         init_random_frames (int, optional): Number of frames for which the policy is ignored before it is called.
             This feature is mainly intended to be used in offline/model-based settings, where a batch of random
@@ -270,8 +270,9 @@ class SyncDataCollector(_DataCollector):
             default=False.
         postproc (Callable, optional): A Batcher is an object that will read a batch of data and return it in a useful format for training.
             default: None.
-        split_trajs (bool): Boolean indicating whether the resulting TensorDict should be split according to the trajectories.
+        split_trajs (bool, optional): Boolean indicating whether the resulting TensorDict should be split according to the trajectories.
             See utils.split_trajectories for more information.
+            Defaults to False.
         device (int, str or torch.device, optional): The device on which the policy will be placed.
             If it differs from the input policy device, the update_policy_weights_() method should be queried
             at appropriate times during the training loop to accommodate for the lag between parameter configuration
@@ -479,10 +480,7 @@ class SyncDataCollector(_DataCollector):
         )
 
         if split_trajs is None:
-            if not self.reset_when_done:
-                split_trajs = False
-            else:
-                split_trajs = True
+            split_trajs = False
         elif not self.reset_when_done and split_trajs:
             raise RuntimeError(
                 "Cannot split trajectories when reset_when_done is False."
@@ -745,13 +743,13 @@ class _MultiDataCollector(_DataCollector):
             workers only once the total number of frames has been collected on the server.
         create_env_kwargs (dict, optional): A (list of) dictionaries with the arguments used to create an environment
         max_frames_per_traj: Maximum steps per trajectory. Note that a trajectory can span over multiple batches
-            (unless reset_at_each_iter is set to True, see below). Once a traje tory reaches n_steps_max,
+            (unless reset_at_each_iter is set to True, see below). Once a traje tory reaches n_steps,
             the environment is reset. If the environment wraps multiple environments together, the number of steps
             is tracked for each environment independently. Negative values are allowed, in which case this argument
             is ignored.
             default: -1 (i.e. no maximum number of steps)
         frames_per_batch (int): Time-length of a batch.
-            reset_at_each_iter and frames_per_batch == n_steps_max are equivalent configurations.
+            reset_at_each_iter and frames_per_batch == n_steps are equivalent configurations.
             default: 200
         init_random_frames (int): Number of frames for which the policy is ignored before it is called.
             This feature is mainly intended to be used in offline/model-based settings, where a batch of random
@@ -762,8 +760,9 @@ class _MultiDataCollector(_DataCollector):
         postproc (callable, optional): A PostProcessor is an object that will read a batch of data and process it in a
             useful format for training.
             default: None.
-        split_trajs (bool): Boolean indicating whether the resulting TensorDict should be split according to the trajectories.
+        split_trajs (bool, optional): Boolean indicating whether the resulting TensorDict should be split according to the trajectories.
             See utils.split_trajectories for more information.
+            Defaults to False.
         devices (int, str, torch.device or sequence of such, optional): The devices on which the policy will be placed.
             If it differs from the input policy device, the update_policy_weights_() method should be queried
             at appropriate times during the training loop to accommodate for the lag between parameter configuration
@@ -911,10 +910,7 @@ class _MultiDataCollector(_DataCollector):
         self.seed = seed
         self.reset_when_done = reset_when_done
         if split_trajs is None:
-            if not self.reset_when_done:
-                split_trajs = False
-            else:
-                split_trajs = True
+            split_trajs = False
         elif not self.reset_when_done and split_trajs:
             raise RuntimeError(
                 "Cannot split trajectories when reset_when_done is False."
@@ -1448,13 +1444,13 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         max_frames_per_traj: Maximum steps per trajectory. Note that a
             trajectory can span over multiple batches (unless
             reset_at_each_iter is set to True, see below). Once a trajectory
-            reaches n_steps_max, the environment is reset. If the
+            reaches n_steps, the environment is reset. If the
             environment wraps multiple environments together, the number of
             steps is tracked for each environment independently. Negative
             values are allowed, in which case this argument is ignored.
             Default is -1 (i.e. no maximum number of steps)
         frames_per_batch (int): Time-length of a batch.
-            reset_at_each_iter and frames_per_batch == n_steps_max are equivalent configurations.
+            reset_at_each_iter and frames_per_batch == n_steps are equivalent configurations.
             default: 200
         init_random_frames (int): Number of frames for which the policy is ignored before it is called.
             This feature is mainly intended to be used in offline/model-based settings, where a batch of random
