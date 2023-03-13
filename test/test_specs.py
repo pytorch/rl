@@ -18,7 +18,6 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     LazyStackedCompositeSpec,
-    LazyStackedTensorSpec,
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
@@ -1716,7 +1715,7 @@ class TestStack:
         c1 = BinaryDiscreteTensorSpec(n=n, shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], stack_dim)
-        assert isinstance(c, LazyStackedTensorSpec)
+        assert isinstance(c, BinaryDiscreteTensorSpec)
         shape = list(shape)
         if stack_dim < 0:
             stack_dim = len(shape) + stack_dim + 1
@@ -1761,7 +1760,7 @@ class TestStack:
         c1 = BoundedTensorSpec(mini, maxi, shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], stack_dim)
-        assert isinstance(c, LazyStackedTensorSpec)
+        assert isinstance(c, BoundedTensorSpec)
         shape = list(shape)
         if stack_dim < 0:
             stack_dim = len(shape) + stack_dim + 1
@@ -1808,7 +1807,7 @@ class TestStack:
         c1 = DiscreteTensorSpec(n, shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], stack_dim)
-        assert isinstance(c, LazyStackedTensorSpec)
+        assert isinstance(c, DiscreteTensorSpec)
         shape = list(shape)
         if stack_dim < 0:
             stack_dim = len(shape) + stack_dim + 1
@@ -1852,7 +1851,7 @@ class TestStack:
         c1 = MultiDiscreteTensorSpec(nvec, shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], stack_dim)
-        assert isinstance(c, LazyStackedTensorSpec)
+        assert isinstance(c, MultiDiscreteTensorSpec)
         shape = list(shape)
         if stack_dim < 0:
             stack_dim = len(shape) + stack_dim + 1
@@ -1896,7 +1895,7 @@ class TestStack:
         c1 = MultiOneHotDiscreteTensorSpec(nvec, shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], stack_dim)
-        assert isinstance(c, LazyStackedTensorSpec)
+        assert isinstance(c, MultiOneHotDiscreteTensorSpec)
         shape = list(shape)
         if stack_dim < 0:
             stack_dim = len(shape) + stack_dim + 1
@@ -1940,7 +1939,7 @@ class TestStack:
         c1 = OneHotDiscreteTensorSpec(n, shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], stack_dim)
-        assert isinstance(c, LazyStackedTensorSpec)
+        assert isinstance(c, OneHotDiscreteTensorSpec)
         shape = list(shape)
         if stack_dim < 0:
             stack_dim = len(shape) + stack_dim + 1
@@ -1983,7 +1982,7 @@ class TestStack:
         c1 = UnboundedContinuousTensorSpec(shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], stack_dim)
-        assert isinstance(c, LazyStackedTensorSpec)
+        assert isinstance(c, UnboundedContinuousTensorSpec)
         shape = list(shape)
         if stack_dim < 0:
             stack_dim = len(shape) + stack_dim + 1
@@ -2023,7 +2022,7 @@ class TestStack:
         c1 = UnboundedDiscreteTensorSpec(shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], stack_dim)
-        assert isinstance(c, LazyStackedTensorSpec)
+        assert isinstance(c, UnboundedDiscreteTensorSpec)
         shape = list(shape)
         if stack_dim < 0:
             stack_dim = len(shape) + stack_dim + 1
@@ -2064,11 +2063,13 @@ class TestStackComposite:
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec())
         c2 = c1.clone()
         c = torch.stack([c1, c2], 0)
-        assert isinstance(c, LazyStackedCompositeSpec)
+        assert isinstance(c, CompositeSpec)
 
     def test_stack_index(self):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec())
-        c2 = c1.clone()
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(), b=UnboundedDiscreteTensorSpec()
+        )
         c = torch.stack([c1, c2], 0)
         assert c.shape == torch.Size([2])
         assert c[0] is c1
@@ -2082,7 +2083,11 @@ class TestStackComposite:
     @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
     def test_stack_index_multdim(self, stack_dim):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
-        c2 = c1.clone()
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
         c = torch.stack([c1, c2], stack_dim)
         if stack_dim in (0, -3):
             assert isinstance(c[:], LazyStackedCompositeSpec)
@@ -2147,35 +2152,13 @@ class TestStackComposite:
             assert c[:, :, 1, ...] is c2
 
     @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
-    def test_stack_expand_one(self, stack_dim):
-        c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
-        c = torch.stack([c1], stack_dim)
-        if stack_dim in (0, -3):
-            c_expand = c.expand([4, 2, 1, 3])
-            assert c_expand.shape == torch.Size([4, 2, 1, 3])
-            assert c_expand.dim == 1
-        elif stack_dim in (1, -2):
-            c_expand = c.expand([4, 1, 2, 3])
-            assert c_expand.shape == torch.Size([4, 1, 2, 3])
-            assert c_expand.dim == 2
-        elif stack_dim in (2, -1):
-            c_expand = c.expand(
-                [
-                    4,
-                    1,
-                    3,
-                    2,
-                ]
-            )
-            assert c_expand.shape == torch.Size([4, 1, 3, 2])
-            assert c_expand.dim == 3
-        else:
-            raise NotImplementedError
-
-    @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
     def test_stack_expand_multi(self, stack_dim):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
-        c2 = c1.clone()
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
         c = torch.stack([c1, c2], stack_dim)
         if stack_dim in (0, -3):
             c_expand = c.expand([4, 2, 1, 3])
@@ -2202,7 +2185,11 @@ class TestStackComposite:
     @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
     def test_stack_rand(self, stack_dim):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
-        c2 = c1.clone()
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
         c = torch.stack([c1, c2], stack_dim)
         r = c.rand()
         assert isinstance(r, LazyStackedTensorDict)
@@ -2220,7 +2207,11 @@ class TestStackComposite:
     @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
     def test_stack_rand_shape(self, stack_dim):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
-        c2 = c1.clone()
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
         c = torch.stack([c1, c2], stack_dim)
         shape = [5, 6]
         r = c.rand(shape)
@@ -2239,7 +2230,11 @@ class TestStackComposite:
     @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
     def test_stack_zero(self, stack_dim):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
-        c2 = c1.clone()
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
         c = torch.stack([c1, c2], stack_dim)
         r = c.zero()
         assert isinstance(r, LazyStackedTensorDict)
@@ -2257,7 +2252,11 @@ class TestStackComposite:
     @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
     def test_stack_zero_shape(self, stack_dim):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
-        c2 = c1.clone()
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
         c = torch.stack([c1, c2], stack_dim)
         shape = [5, 6]
         r = c.zero(shape)
@@ -2274,18 +2273,31 @@ class TestStackComposite:
         assert (r["a"] == 0).all()
 
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
-    def test_to(self):
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
+    def test_to(self, stack_dim):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
-        c2 = c1.clone()
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
         c = torch.stack([c1, c2], stack_dim)
+        assert isinstance(c, LazyStackedCompositeSpec)
         cdevice = c.to("cuda:0")
         assert cdevice.device != c.device
         assert cdevice.device == torch.device("cuda:0")
-        assert cdevice[0].device == torch.device("cuda:0")
+        if stack_dim < 0:
+            stack_dim += 3
+        index = (slice(None),) * stack_dim + (0,)
+        assert cdevice[index].device == torch.device("cuda:0")
 
     def test_clone(self):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
-        c2 = c1.clone()
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
         c = torch.stack([c1, c2], 0)
         cclone = c.clone()
         assert cclone[0] is not c[0]
