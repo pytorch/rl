@@ -2726,6 +2726,26 @@ def _stack_composite_specs(list_of_spec, dim, out=None):
         raise NotImplementedError
 
 
+@TensorSpec.implements_for_spec(torch.squeeze)
+def _squeeze_spec(spec: TensorSpec, *args, **kwargs) -> TensorSpec:
+    return spec.squeeze(*args, **kwargs)
+
+
+@CompositeSpec.implements_for_spec(torch.squeeze)
+def _squeeze_composite_spec(spec: CompositeSpec, *args, **kwargs) -> CompositeSpec:
+    return spec.squeeze(*args, **kwargs)
+
+
+@TensorSpec.implements_for_spec(torch.unsqueeze)
+def _unsqueeze_spec(spec: TensorSpec, *args, **kwargs) -> TensorSpec:
+    return spec.unsqueeze(*args, **kwargs)
+
+
+@CompositeSpec.implements_for_spec(torch.unsqueeze)
+def _unsqueeze_composite_spec(spec: CompositeSpec, *args, **kwargs) -> CompositeSpec:
+    return spec.unsqueeze(*args, **kwargs)
+
+
 def _keys_to_empty_composite_spec(keys):
     """Given a list of keys, creates a CompositeSpec tree where each leaf is assigned a None value."""
     if not len(keys):
