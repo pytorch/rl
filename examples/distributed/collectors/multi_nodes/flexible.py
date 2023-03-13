@@ -74,10 +74,11 @@ if __name__ == "__main__":
         "slurm_cpus_per_gpu": args.slurm_cpus_per_gpu,
         "slurm_gpus_per_task": args.slurm_gpus_per_task,
     }
+    device_str = "device" if num_workers <= 1 else "devices"
     if args.backend == "nccl":
-        collector_kwargs = {"device": "cuda:0", "storing_device": "cuda:0"}
+        collector_kwargs = {device_str: "cuda:0", f"storing_{device_str}": "cuda:0"}
     elif args.backend == "gloo":
-        collector_kwargs = {"device": "cpu", "storing_device": "cpu"}
+        collector_kwargs = {device_str: "cpu", f"storing_{device_str}": "cpu"}
     else:
         raise NotImplementedError(
             f"device assignment not implemented for backend {args.backend}"

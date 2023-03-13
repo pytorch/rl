@@ -56,13 +56,14 @@ if __name__ == "__main__":
     kwargs = {"backend": args.backend}
     launcher = "mp"
 
+    device_str = "device" if num_workers <= 1 else "devices"
     if args.backend == "nccl":
         collector_kwargs = [
-            {"device": f"cuda:{i}", "storing_device": f"cuda:{i}"}
+            {device_str: f"cuda:{i}", f"storing_{device_str}": f"cuda:{i}"}
             for i in range(1, num_nodes + 2)
         ]
     elif args.backend == "gloo":
-        collector_kwargs = {"device": "cpu", "storing_device": "cpu"}
+        collector_kwargs = {device_str: "cpu", f"storing_{device_str}": "cpu"}
     else:
         raise NotImplementedError(
             f"device assignment not implemented for backend {args.backend}"
