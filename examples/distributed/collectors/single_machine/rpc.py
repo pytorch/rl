@@ -52,12 +52,11 @@ if __name__ == "__main__":
     device_str = "device" if num_workers <= 1 else "devices"
     if torch.cuda.device_count():
         collector_kwargs = [
-            {device_str: f"cuda:{i}", f"storing_{device_str}": f"cuda:{i}"}
-            for i in range(1, num_nodes + 2)
+            {device_str: f"cuda:0", f"storing_{device_str}": f"cuda:0"}
+            for _ in range(1, num_nodes + 2)
         ]
     else:
         collector_kwargs = {device_str: f"cpu", f"storing_{device_str}": f"cpu"}
-
 
     make_env = EnvCreator(lambda: GymEnv("ALE/Pong-v5"))
     action_spec = make_env().action_spec
@@ -75,6 +74,7 @@ if __name__ == "__main__":
         sync=args.sync,
         storing_device="cuda:0" if torch.cuda.device_count() else "cpu",
         launcher=launcher,
+        visible_devices=[i+1 for i in range(num_nodes)] if torch.cuda.device_count() else None,
     )
 
     pbar = tqdm.tqdm(total=collector.total_frames)

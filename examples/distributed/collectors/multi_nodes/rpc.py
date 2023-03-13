@@ -73,7 +73,6 @@ if __name__ == "__main__":
     else:
         collector_kwargs = {device_str: f"cpu", f"storing_{device_str}": f"cpu"}
 
-
     make_env = EnvCreator(lambda: GymEnv("ALE/Pong-v5"))
     action_spec = make_env().action_spec
 

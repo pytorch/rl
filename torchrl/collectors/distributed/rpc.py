@@ -51,11 +51,9 @@ def _rpc_init_collection_node(
     rank0_ip,
     tcp_port,
     world_size,
+    visible_device,
 ):
-    if torch.cuda.device_count():
-        device_maps = {f"COLLECTOR_NODE_{rank}": {i: i for i in range(torch.cuda.device_count())} for rank in range(1, world_size)}
-    else:
-        device_maps = None
+    device_maps = None
 
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = "29500"
@@ -68,7 +66,7 @@ def _rpc_init_collection_node(
         _transports=["uv"],
         # Currently fails when nodes have more than 0 gpus avail,
         # even when no device is made visible
-        devices=list(range(torch.cuda.device_count())),
+        devices=visible_device,
         device_maps=device_maps,
     )
     print("init rpc")
@@ -164,6 +162,7 @@ class RPCDataCollector(_DataCollector):
         max_weight_update_interval=-1,
         launcher="submitit",
         tcp_port=None,
+        visible_devices=None,
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -192,7 +191,7 @@ class RPCDataCollector(_DataCollector):
             self.tcp_port = os.environ.get("TCP_PORT", "10003")
         else:
             self.tcp_port = str(tcp_port)
-
+        self.visible_devices = visible_devices
         if self._sync:
             if self.frames_per_batch % self.num_workers != 0:
                 raise RuntimeError(
@@ -222,10 +221,16 @@ class RPCDataCollector(_DataCollector):
         world_size,
     ):
         if torch.cuda.device_count():
-            device_maps = {
-                f"COLLECTOR_NODE_{rank}": {i: i for i in range(torch.cuda.device_count())} for rank in
-                range(1, world_size)
-            }
+            if self.visible_devices:
+                device_maps = {}
+                for i in range(self.num_workers):
+                    rank = i + 1
+                    device_maps.update({
+                        f"COLLECTOR_NODE_{rank}": {
+                            0 : self.visible_devices[i] for i in range(torch.cuda.device_count())
+                        }})
+            else:
+                device_maps = None
         else:
             device_maps = None
         options = rpc.TensorPipeRpcBackendOptions(
@@ -317,12 +322,14 @@ class RPCDataCollector(_DataCollector):
         if self.launcher == "submitit":
             if not _has_submitit:
                 raise ImportError("submitit not found.") from SUBMITIT_ERR
+            visible_device = self.visible_devices[i] if self.visible_devices is not None else None
             job = executor.submit(
                 _rpc_init_collection_node,
                 i + 1,
                 self.IPAddr,
                 self.tcp_port,
                 self.num_workers + 1,
+                visible_device,
             )
             print("job id", job.job_id)  # ID of your job
             return job
@@ -347,7 +354,7 @@ class RPCDataCollector(_DataCollector):
         if self.launcher != "mp":
             IPAddr = socket.gethostbyname(hostname)
         else:
-            IPAddr = 'localhost'
+            IPAddr = "localhost"
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = "29500"
