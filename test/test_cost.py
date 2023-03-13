@@ -3063,7 +3063,7 @@ class TestIQL:
             loss_function="l2",
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+        ms = MultiStep(gamma=gamma, n_steps=n).to(device)
 
         td_clone = td.clone()
         ms_td = ms(td_clone)
