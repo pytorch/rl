@@ -2872,9 +2872,11 @@ class TestIQL:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
             },
             device=device,
@@ -2902,11 +2904,11 @@ class TestIQL:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
@@ -3077,7 +3079,7 @@ class TestIQL:
             np.random.seed(0)
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (
