@@ -3386,6 +3386,42 @@ class RenameTransform(Transform):
             with a different name rather than being renamed. This allows for
             renaming immutable entries such as ``"reward"`` and ``"done"``.
 
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> env = TransformedEnv(
+        ...     GymEnv("Pendulum-v1"),
+        ...     RenameTransform(["observation", ], ["stuff",], create_copy=False),
+        ... )
+        >>> tensordict = env.rollout(3)
+        >>> print(tensordict)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        stuff: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=cpu,
+                    is_shared=False),
+                reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                stuff: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=cpu,
+            is_shared=False)
+        >>> # if the output is also an input, we need to rename if both ways:
+        >>> from torchrl.envs.libs.brax import BraxEnv
+        >>> env = TransformedEnv(
+        ...     BraxEnv("fast"),
+        ...     RenameTransform(["state"], ["newname"], ["state"], ["newname"])
+        ... )
+        >>> _ = env.set_seed(1)
+        >>> tensordict = env.rollout(3)
+        >>> assert "newname" in tensordict.keys()
+        >>> assert "state" not in tensordict.keys()
+
     """
 
     def __init__(
@@ -3435,30 +3471,30 @@ class RenameTransform(Transform):
 
     forward = _call
 
-    def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # no in-place modif
-        tensordict = tensordict.clone(False)
         if self.create_copy:
-            out = tensordict.select(*self.in_keys)
+            out = tensordict.select(*self.out_keys_inv)
             for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-                out.rename_key_(in_key, out_key)
+                out.rename_key_(out_key, in_key)
             tensordict = tensordict.update(out)
         else:
             for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-                tensordict.rename_key_(in_key, out_key)
+                tensordict.rename_key_(out_key, in_key)
         return tensordict
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
         # we need to check whether there are special keys
+        output_spec = output_spec.clone()
         if "done" in self.in_keys:
-            for i, out_key in enumerate(self.out_keys):
+            for i, out_key in enumerate(self.out_keys):  # noqa: B007
                 if self.in_keys[i] == "done":
                     break
             else:
                 raise RuntimeError("Expected one key to be 'done'")
             output_spec["observation"][out_key] = output_spec["done"].clone()
         if "reward" in self.in_keys:
-            for i, out_key in enumerate(self.out_keys):
+            for i, out_key in enumerate(self.out_keys):  # noqa: B007
                 if self.in_keys[i] == "reward":
                     break
             else:
@@ -3479,8 +3515,9 @@ class RenameTransform(Transform):
 
     def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
         # we need to check whether there are special keys
+        input_spec = input_spec.clone()
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-            input_spec[in_key] = input_spec[out_key].clone()
+            input_spec[out_key] = input_spec[in_key].clone()
             if not self.create_copy:
-                del input_spec[out_key]
+                del input_spec[in_key]
         return input_spec

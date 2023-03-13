@@ -315,6 +315,7 @@ to be able to create this other composition:
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
+    RenameTransform
     Resize
     RewardClipping
     RewardScaling
