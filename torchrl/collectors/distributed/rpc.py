@@ -53,7 +53,7 @@ def _rpc_init_collection_node(
     world_size,
 ):
     if torch.cuda.device_count():
-        device_maps = {f"COLLECTOR_NODE_{rank}": {0: 0} for rank in range(1, world_size)}
+        device_maps = {f"COLLECTOR_NODE_{rank}": {i: i for i in range(torch.cuda.device_count())} for rank in range(1, world_size)}
     else:
         device_maps = None
 
@@ -223,7 +223,7 @@ class RPCDataCollector(_DataCollector):
     ):
         if torch.cuda.device_count():
             device_maps = {
-                f"COLLECTOR_NODE_{rank}": {0: 0} for rank in
+                f"COLLECTOR_NODE_{rank}": {i: i for i in range(torch.cuda.device_count())} for rank in
                 range(1, world_size)
             }
         else:
