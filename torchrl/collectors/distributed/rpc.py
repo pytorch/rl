@@ -319,10 +319,10 @@ class RPCDataCollector(_DataCollector):
         self.collector_infos = collector_infos
 
     def _init_worker_rpc(self, executor, i):
+        visible_device = self.visible_devices[i] if self.visible_devices is not None else None
         if self.launcher == "submitit":
             if not _has_submitit:
                 raise ImportError("submitit not found.") from SUBMITIT_ERR
-            visible_device = self.visible_devices[i] if self.visible_devices is not None else None
             job = executor.submit(
                 _rpc_init_collection_node,
                 i + 1,
@@ -336,7 +336,7 @@ class RPCDataCollector(_DataCollector):
         elif self.launcher == "mp":
             job = mp.Process(
                 target=_rpc_init_collection_node,
-                args=(i + 1, self.IPAddr, self.tcp_port, self.num_workers + 1),
+                args=(i + 1, self.IPAddr, self.tcp_port, self.num_workers + 1, visible_device),
             )
             job.start()
             return job
