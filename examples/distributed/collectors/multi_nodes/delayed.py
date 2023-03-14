@@ -16,8 +16,9 @@ DEFAULT_SLURM_CONF["slurm_partition"] = args.partition
 DEFAULT_SLURM_CONF_MAIN["slurm_partition"] = args.partition
 
 num_jobs=2
+tcp_port=4321
 
-@submitit_delayed_launcher(num_jobs=num_jobs)
+@submitit_delayed_launcher(num_jobs=num_jobs, tcpport=tcp_port)
 def main():
     from torchrl.envs.libs.gym import GymEnv
     from torchrl.collectors.collectors import RandomPolicy
@@ -28,6 +29,7 @@ def main():
         launcher="submitit_delayed",
         frames_per_batch=200,
         total_frames=10_000,
+        tcp_port=tcp_port,
     )
     for data in collector:
         print(data)

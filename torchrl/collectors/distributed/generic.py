@@ -63,7 +63,7 @@ class submitit_delayed_launcher():
     Args:
         num_jobs (int): the number of collection jobs to be launched.
         backend (str, optional): torch.distributed backend. Defaults to 'gloo'.
-        tcpport (int or str, optional): the TCP port to use. Defaults to ``1234``.
+        tcpport (int or str, optional): the TCP port to use. Defaults to ``10003``.
         submitit_collection_conf (dict, optional): the configuration to be passed to submitit.
             Defaults to :obj:`torchrl.collectors.distributed.generic.DEFAULT_SLURM_CONF`
 
@@ -86,7 +86,7 @@ class submitit_delayed_launcher():
         ...     main()
         ...
     """
-    def __init__(self, num_jobs, backend="gloo", tcpport=1234, submitit_main_conf: dict=DEFAULT_SLURM_CONF_MAIN, submitit_collection_conf: dict=DEFAULT_SLURM_CONF):
+    def __init__(self, num_jobs, backend="gloo", tcpport=10003, submitit_main_conf: dict=DEFAULT_SLURM_CONF_MAIN, submitit_collection_conf: dict=DEFAULT_SLURM_CONF):
         self.num_jobs = num_jobs
         self.backend = backend
         self.submitit_collection_conf = submitit_collection_conf
