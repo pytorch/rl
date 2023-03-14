@@ -16,21 +16,27 @@ from torchrl.envs import EnvCreator
 
 parser = ArgumentParser()
 parser.add_argument("--partition", help="slurm partition to use")
+parser.add_argument("--num_jobs", type=int, default=8, help="Number of jobs")
+parser.add_argument("--tcp_port", type=int, default=1234, help="TCP port")
+parser.add_argument("--num_workers", type=int, default=1, help="Number of workers per node")
+
 args = parser.parse_args()
 
 DEFAULT_SLURM_CONF["slurm_partition"] = args.partition
 DEFAULT_SLURM_CONF_MAIN["slurm_partition"] = args.partition
 
-num_jobs = 8
-tcp_port = 4321
-
+num_jobs = args.num_jobs
+tcp_port = args.tcp_port
+num_workers = args.num_workers
 
 @submitit_delayed_launcher(num_jobs=num_jobs, tcpport=tcp_port)
 def main():
     from torchrl.collectors.collectors import RandomPolicy
     from torchrl.data import BoundedTensorSpec
     from torchrl.envs.libs.gym import GymEnv
+    from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 
+    collector_class = SyncDataCollector if num_workers == 1 else MultiSyncDataCollector
     collector = DistributedDataCollector(
         [EnvCreator(lambda: GymEnv("ALE/Pong-v5"))] * num_jobs,
         policy=RandomPolicy(BoundedTensorSpec(-1, 1, shape=(1,))),
@@ -38,6 +44,8 @@ def main():
         frames_per_batch=800,
         total_frames=1_000_000,
         tcp_port=tcp_port,
+        collector_class=collector_class,
+        num_workers_per_collector=args.num_workers,
     )
     pbar = tqdm.tqdm(total=1_000_000)
     for data in collector:
