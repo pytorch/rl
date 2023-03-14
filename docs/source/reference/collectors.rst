@@ -75,6 +75,16 @@ Single node data collectors
 
 Distributed data collectors
 ---------------------------
+TorchRL provides a set of distributed data collectors. These tools support
+multiple backends (``'gloo'``, ``'nccl'``, ``'mpi'`` with the :class:`~.DistributedDataCollector`
+or PyTorch RPC with :class:`~.RPCDataCollector`) and launchers (``'ray'``,
+``submitit`` or ``torch.multiprocessing``).
+They can be efficiently used in synchronous or asynchronous mode, on a single
+node or across multiple nodes.
+
+*Resources*: Find examples for these collectors in the
+`dedicated folder <https://github.com/pytorch/rl/examples/distributed/collectors>`_.
+
 .. currentmodule:: torchrl.collectors.distributed
 
 .. autosummary::
@@ -84,6 +94,7 @@ Distributed data collectors
     DistributedDataCollector
     RPCDataCollector
     DistributedSyncDataCollector
+    submitit_delayed_launcher
 
 
 Helper functions

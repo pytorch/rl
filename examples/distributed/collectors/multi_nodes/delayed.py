@@ -38,9 +38,23 @@ parser.add_argument(
     help="Number of CPUs per node.",
 )
 parser.add_argument(
-    "--sync",
-    action="store_true",
-    help="Use --sync to collect data synchronously."
+    "--sync", action="store_true", help="Use --sync to collect data synchronously."
+)
+parser.add_argument(
+    "--frames_per_batch",
+    "--frames-per-batch",
+    default=800,
+    type=int,
+    help="Number of frames in each batch of data. Must be "
+    "divisible by the product of nodes and workers if sync, by the number of "
+    "workers otherwise.",
+)
+parser.add_argument(
+    "--total_frames",
+    "--total-frames",
+    default=10_000_000,
+    type=int,
+    help="Total number of frames collected by the collector.",
 )
 
 args = parser.parse_args()
@@ -55,7 +69,9 @@ DEFAULT_SLURM_CONF_MAIN["slurm_partition"] = args.partition
 num_jobs = args.num_jobs
 tcp_port = args.tcp_port
 num_workers = args.num_workers
-sync=args.sync
+sync = args.sync
+total_frames = args.total_frames
+frames_per_batch = args.frames_per_batch
 
 
 @submitit_delayed_launcher(
@@ -75,8 +91,8 @@ def main():
         [EnvCreator(lambda: GymEnv("ALE/Pong-v5"))] * num_jobs,
         policy=RandomPolicy(BoundedTensorSpec(-1, 1, shape=(1,))),
         launcher="submitit_delayed",
-        frames_per_batch=800,
-        total_frames=1_000_000,
+        frames_per_batch=frames_per_batch,
+        total_frames=total_frames,
         tcp_port=tcp_port,
         collector_class=collector_class,
         num_workers_per_collector=args.num_workers,
@@ -88,7 +104,10 @@ def main():
     pbar = tqdm.tqdm(total=1_000_000)
     for data in collector:
         pbar.update(data.numel())
-        pbar.set_description(f"data shape: {data.shape}, data stat: {data['pixels'].float().mean()}")
+        pbar.set_description(
+            f"data shape: {data.shape}, data stat: {data['pixels'].float().mean()}"
+        )
+
 
 if __name__ == "__main__":
     main()
