@@ -101,7 +101,7 @@ class submitit_delayed_launcher():
             executor.update_parameters(**self.submitit_main_conf)
             main_job = executor.submit(main_func)
             # listen to output file looking for IP address
-            print("job id", main_job.job_id)
+            print("job id: {main_job.job_id}")
             time.sleep(2.0)
             node = None
             while not node:
@@ -113,7 +113,7 @@ class submitit_delayed_launcher():
                 except ValueError:
                     time.sleep(0.5)
                     continue
-            print("node", node)
+            print(f"node: {node}")
             cmd = f'sinfo -n {node} -O nodeaddr | tail -1'
             rank0_ip = subprocess.check_output(
                 cmd,
@@ -131,7 +131,9 @@ class submitit_delayed_launcher():
                 rank = i+1
                 job = executor.submit(_distributed_init_delayed, rank, self.backend, rank0_ip, self.tcpport, world_size, )
                 jobs.append(job)
-
+            for job in jobs:
+                job.result()
+            main_func.result()
         return exec_fun
 
 def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
