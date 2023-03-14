@@ -689,10 +689,12 @@ class DistributedDataCollector(_DataCollector):
                     )
                 for tracker in trackers:
                     for i, _tracker in enumerate(tracker):
-                        print(f"waiting for rank {i+1}")
+                        print(f"waiting for {i+1}")
                         _tracker.wait()
+                        print("got it!")
                 data = self._tensordict_out.clone()
                 total_frames += data.numel()
+                print(f"total frames: {total_frames}")
                 yield data
 
             else:
@@ -730,6 +732,7 @@ class DistributedDataCollector(_DataCollector):
             rank = i + 1
             print("shutting down")
             self._store.set(f"NODE_{rank}_in", b"shutdown")
+        raise StopIteration
 
     def update_policy_weights_(self, worker_rank=None) -> None:
         """Updates the weights of the worker nodes.

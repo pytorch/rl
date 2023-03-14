@@ -2,6 +2,28 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+"""Multi-node distributed data collection with submitit in contexts where jobs can't launch other jobs.
+
+The default configuration will ask for 8 nodes with 1 GPU each and 32 procs / node.
+
+It should reach a collection speed of roughly 15-25K fps, or better depending
+on the cluster specs.
+
+The logic of the script is the following: we create a `main()` function that
+executes or code (in this case just a data collection but in practice a training
+loop should be present).
+
+Since this `main()` function cannot launch sub-jobs by design, we launch the script
+from the jump host and pass the slurm specs to submitit.
+
+*Note*:
+
+  Although we don't go in much details into this in this script, the specs of the training
+  node and the specs of the inference nodes can differ (look at the DEFAULT_SLURM_CONF
+  and DEFAULT_SLURM_CONF_MAIN dictionaries below).
+
+"""
+
 from argparse import ArgumentParser
 
 import tqdm
@@ -19,14 +41,14 @@ parser.add_argument("--partition", "-p", help="slurm partition to use")
 parser.add_argument("--num_jobs", type=int, default=8, help="Number of jobs")
 parser.add_argument("--tcp_port", type=int, default=1234, help="TCP port")
 parser.add_argument(
-    "--num_workers", type=int, default=1, help="Number of workers per node"
+    "--num_workers", type=int, default=8, help="Number of workers per node"
 )
 parser.add_argument(
     "--gpus_per_node",
     "--gpus-per-node",
     "-G",
     type=int,
-    default=0,
+    default=1,
     help="Number of GPUs per node. If greater than 0, the backend used will be NCCL.",
 )
 parser.add_argument(
@@ -43,7 +65,7 @@ parser.add_argument(
 parser.add_argument(
     "--frames_per_batch",
     "--frames-per-batch",
-    default=800,
+    default=4000,
     type=int,
     help="Number of frames in each batch of data. Must be "
     "divisible by the product of nodes and workers if sync, by the number of "
