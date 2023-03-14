@@ -17,41 +17,41 @@ The default task is `Pong-v5` but a different one can be picked through the
 `--env` flag. Any available gym env will work.
 
 """
+
 from argparse import ArgumentParser
 
 import torch.cuda
 import tqdm
 
-from torchrl.collectors.collectors import (
-    MultiSyncDataCollector,
-    RandomPolicy,
-    SyncDataCollector,
-)
+from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.distributed import RPCDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
 
 parser = ArgumentParser()
 parser.add_argument(
-    "--num_workers", default=1, type=int, help="Number of workers in each node."
+    "--num_workers", default=8, type=int, help="Number of workers in each node."
 )
 parser.add_argument(
-    "--num_nodes", default=3, type=int, help="Number of nodes for the collector (the main "
-                                             "worker being excluded from this count)."
+    "--num_nodes",
+    default=3,
+    type=int,
+    help="Number of nodes for the collector (the main "
+    "worker being excluded from this count).",
 )
 parser.add_argument(
     "--frames_per_batch",
-    default=300,
+    default=800,
     type=int,
     help="Number of frames in each batch of data. Must be "
-    "divisible by the product of nodes and workers.",
+    "divisible by the product of nodes and workers if sync, by the number of "
+    "workers otherwise.",
 )
 parser.add_argument(
     "--total_frames",
     default=1_200_000,
     type=int,
-    help="Total number of frames collected by the collector. Must be "
-    "divisible by the product of nodes and workers.",
+    help="Total number of frames collected by the collector.",
 )
 parser.add_argument(
     "--sync",
@@ -72,19 +72,18 @@ if __name__ == "__main__":
 
     device_count = torch.cuda.device_count()
 
-    device_str = "device"
     if device_count:
-        if num_nodes > device_count-1:
+        if num_nodes > device_count - 1:
             raise RuntimeError(
                 "Expected at most as many workers as GPU devices (excluded cuda:0 which "
                 f"will be used by the main worker). Got {num_workers} workers for {device_count} GPUs."
             )
         collector_kwargs = [
-            {device_str: f"cuda:{i}", f"storing_{device_str}": f"cuda:{i}"}
+            {"device": f"cuda:{i}", f"storing_device": f"cuda:{i}"}
             for i in range(1, num_nodes + 2)
         ]
     else:
-        collector_kwargs = {device_str: "cpu", f"storing_{device_str}": "cpu"}
+        collector_kwargs = {"device": "cpu", "storing_device": "cpu"}
 
     make_env = EnvCreator(lambda: GymEnv(args.env))
     if num_workers == 1:
@@ -112,3 +111,4 @@ if __name__ == "__main__":
         pbar.update(data.numel())
         pbar.set_description(f"data shape: {data.shape}, data device: {data.device}")
     collector.shutdown()
+    exit()

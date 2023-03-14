@@ -54,6 +54,11 @@ parser.add_argument(
     action="store_true",
     help="whether collection should be synchronous or not.",
 )
+parser.add_argument(
+    "--env",
+    default="ALE/Pong-v5",
+    help="Gym environment to be run.",
+)
 if __name__ == "__main__":
     args = parser.parse_args()
     num_workers = args.num_workers
@@ -73,7 +78,7 @@ if __name__ == "__main__":
     else:
         collector_kwargs = {device_str: "cpu", "storing_{device_str}": "cpu"}
 
-    make_env = EnvCreator(lambda: GymEnv("ALE/Pong-v5"))
+    make_env = EnvCreator(lambda: GymEnv(args.env))
     action_spec = make_env().action_spec
 
     collector = RPCDataCollector(

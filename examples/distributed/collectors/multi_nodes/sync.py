@@ -55,6 +55,11 @@ parser.add_argument(
 parser.add_argument(
     "--slurm_gpus_per_task", default=1, type=int, help="Number of GPUs per node."
 )
+parser.add_argument(
+    "--env",
+    default="ALE/Pong-v5",
+    help="Gym environment to be run.",
+)
 if __name__ == "__main__":
     args = parser.parse_args()
     num_workers = args.num_workers
@@ -79,7 +84,7 @@ if __name__ == "__main__":
             f"device assignment not implemented for backend {args.backend}"
         )
 
-    make_env = EnvCreator(lambda: GymEnv("ALE/Pong-v5"))
+    make_env = EnvCreator(lambda: GymEnv(args.env))
     action_spec = make_env().action_spec
 
     collector = DistributedSyncDataCollector(
