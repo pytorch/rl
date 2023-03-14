@@ -37,7 +37,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--frames_per_batch",
-    default=800,
+    default=1800,
     type=int,
     help="Number of frames in each batch of data. Must be "
     "divisible by the product of nodes and workers.",
