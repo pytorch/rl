@@ -26,6 +26,8 @@ def main():
         [EnvCreator(lambda: GymEnv("Pendulum-v1"))] * num_jobs,
         policy=RandomPolicy(BoundedTensorSpec(-1, 1, shape=(1,))),
         launcher="submitit_delayed",
+        frames_per_batch=200,
+        total_frames=10_000,
     )
     for data in collector:
         print(data)
