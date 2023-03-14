@@ -242,6 +242,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             if self._iterator is None:
                 self._iterator = iter(self)
             out = next(self._iterator)
+            # if any, we don't want the device ref to be passed in distributed settings
             out.clear_device_()
             return out
         except StopIteration:

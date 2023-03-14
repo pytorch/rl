@@ -13,7 +13,7 @@ from torchrl.collectors.collectors import (
     SyncDataCollector,
 )
 from torchrl.collectors.distributed import RPCDataCollector
-from torchrl.envs import EnvCreator
+from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
 
 parser = ArgumentParser()
@@ -49,27 +49,29 @@ if __name__ == "__main__":
     frames_per_batch = args.frames_per_batch
     launcher = "mp"
 
-    device_str = "device" if num_workers <= 1 else "devices"
+    device_str = "device"
     if torch.cuda.device_count():
         collector_kwargs = [
             {device_str: f"cuda:{i}", f"storing_{device_str}": f"cuda:{i}"}
             for i in range(1, num_nodes + 2)
         ]
     else:
-        collector_kwargs = {device_str: f"cpu", f"storing_{device_str}": f"cpu"}
+        collector_kwargs = {device_str: "cpu", "storing_{device_str}": "cpu"}
 
     make_env = EnvCreator(lambda: GymEnv("ALE/Pong-v5"))
-    action_spec = make_env().action_spec
+    if num_workers == 1:
+        action_spec = make_env().action_spec
+    else:
+        make_env = ParallelEnv(num_workers, make_env)
+        action_spec = make_env.action_spec
 
     collector = RPCDataCollector(
         [make_env] * num_nodes,
         RandomPolicy(action_spec),
-        num_workers_per_collector=num_workers,
+        num_workers_per_collector=1,
         frames_per_batch=frames_per_batch,
         total_frames=args.total_frames,
-        collector_class=SyncDataCollector
-        if num_workers == 1
-        else MultiSyncDataCollector,
+        collector_class=SyncDataCollector,
         collector_kwargs=collector_kwargs,
         sync=args.sync,
         storing_device="cuda:0" if torch.cuda.device_count() else "cpu",
