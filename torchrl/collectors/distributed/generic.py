@@ -549,6 +549,8 @@ class DistributedDataCollector(_DataCollector):
             if not isinstance(env_make, (EnvBase, EnvCreator)):
                 env_make = CloudpickleWrapper(env_make)
             return env_make
+
+        self._init_master_dist(self.num_workers + 1, self.backend)
         objects = [{"sync": self._sync,
                 "collector_class": self.collector_class,
                 "num_workers": self.num_workers,
@@ -618,7 +620,7 @@ class DistributedDataCollector(_DataCollector):
                     )
                     print("job launched")
                 self.jobs.append(job)
-        self._init_master_dist(self.num_workers + 1, self.backend)
+            self._init_master_dist(self.num_workers + 1, self.backend)
 
     def iterator(self):
         yield from self._iterator_dist()
