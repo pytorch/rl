@@ -101,14 +101,13 @@ class submitit_delayed_launcher():
             executor.update_parameters(**self.submitit_main_conf)
             main_job = executor.submit(main_func)
             # listen to output file looking for IP address
-            print("job id: {main_job.job_id}")
+            print(f"job id: {main_job.job_id}")
             time.sleep(2.0)
             node = None
             while not node:
                 cmd = f"squeue -j {main_job.job_id} -o %N | tail -1"
                 node = subprocess.check_output(cmd, shell=True, text=True).strip()
                 try:
-                    print("node", node)
                     node = int(node)
                 except ValueError:
                     time.sleep(0.5)
@@ -120,7 +119,7 @@ class submitit_delayed_launcher():
                 shell=True,
                 text=True
                 ).strip()
-
+            print(f"IP: {rank0_ip}")
             world_size = self.num_jobs + 1
 
             # submit jobs
