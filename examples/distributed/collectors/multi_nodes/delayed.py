@@ -37,7 +37,11 @@ parser.add_argument(
     default=32,
     help="Number of CPUs per node.",
 )
-
+parser.add_argument(
+    "--sync",
+    action="store_true",
+    help="Use --sync to collect data synchronously."
+)
 
 args = parser.parse_args()
 
@@ -51,6 +55,7 @@ DEFAULT_SLURM_CONF_MAIN["slurm_partition"] = args.partition
 num_jobs = args.num_jobs
 tcp_port = args.tcp_port
 num_workers = args.num_workers
+sync=args.sync
 
 
 @submitit_delayed_launcher(
@@ -78,11 +83,12 @@ def main():
         collector_kwargs={device_str: "cuda:0" if slurm_gpus_per_node else "cpu"},
         storing_device="cuda:0" if slurm_gpus_per_node else "cpu",
         backend="nccl" if slurm_gpus_per_node else "gloo",
+        sync=sync,
     )
     pbar = tqdm.tqdm(total=1_000_000)
     for data in collector:
         pbar.update(data.numel())
-
+        pbar.set_description(f"data shape: {data.shape}, data stat: {data['pixels'].float().mean()}")
 
 if __name__ == "__main__":
     main()
