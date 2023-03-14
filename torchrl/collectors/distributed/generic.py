@@ -289,6 +289,7 @@ def _run_collector(
         **collector_kwargs,
     )
     collector_iter = iter(collector)
+    total_frames = 0
     if verbose:
         print(f"node with rank {rank} -- loop")
     while True:
@@ -301,7 +302,9 @@ def _run_collector(
             if verbose:
                 print(f"node with rank {rank} -- new data")
             data = next(collector_iter)
+            total_frames += data.numel()
             if verbose:
+                print(f"got data, total frames = {total_frames}")
                 print(f"node with rank {rank} -- sending {data}")
             if _store.get("TRAINER_status") == b"alive":
                 data.isend(dst=0)
