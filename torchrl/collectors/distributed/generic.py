@@ -139,8 +139,8 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = str(tcpport)
 
-    print("IP address:", rank0_ip, "\ttcp port:", tcpport)
     if verbose:
+        print("Rank0 IP address:", rank0_ip, "\ttcp port:", tcpport)
         print(f"node with rank {rank} -- launching distributed")
     torch.distributed.init_process_group(
         backend,
@@ -150,7 +150,7 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
         # init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
     if verbose:
-        print(f"node with rank {rank} -- creating store")
+        print(f"Connected!\nNode with rank {rank} -- creating store")
     # The store carries instructions for the node
     _store = torch.distributed.TCPStore(
         host_name=rank0_ip,
@@ -167,7 +167,7 @@ def _distributed_init_delayed(
     rank0_ip,
     tcpport,
     world_size,
-    verbose=False,
+    verbose=True,
 ):
     """Initializer for contexts where jobs cannot be launched from main node.
 
@@ -210,7 +210,7 @@ def _distributed_init_collection_node(
     policy,
     frames_per_batch,
     collector_kwargs,
-    verbose=False,
+    verbose=True,
 ):
     _store = _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose)
     _run_collector(
