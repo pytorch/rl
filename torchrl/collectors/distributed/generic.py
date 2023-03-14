@@ -50,7 +50,8 @@ DEFAULT_SLURM_CONF_MAIN = {
     "slurm_gpus_per_node": 1,
 }  #: Default value of the SLURM main job
 
-class submitit_delayed_launcher():
+
+class submitit_delayed_launcher:
     """Delayed launcher for submitit.
 
     In some cases, launched jobs cannot spawn other jobs on their own and this
@@ -86,7 +87,15 @@ class submitit_delayed_launcher():
         ...     main()
         ...
     """
-    def __init__(self, num_jobs, backend="gloo", tcpport=10003, submitit_main_conf: dict=DEFAULT_SLURM_CONF_MAIN, submitit_collection_conf: dict=DEFAULT_SLURM_CONF):
+
+    def __init__(
+        self,
+        num_jobs,
+        backend="gloo",
+        tcpport=10003,
+        submitit_main_conf: dict = DEFAULT_SLURM_CONF_MAIN,
+        submitit_collection_conf: dict = DEFAULT_SLURM_CONF,
+    ):
         self.num_jobs = num_jobs
         self.backend = backend
         self.submitit_collection_conf = submitit_collection_conf
@@ -94,7 +103,6 @@ class submitit_delayed_launcher():
         self.tcpport = tcpport
 
     def __call__(self, main_func):
-
         def exec_fun():
             # submit main
             executor = submitit.AutoExecutor(folder="log_test")
@@ -113,12 +121,8 @@ class submitit_delayed_launcher():
                     time.sleep(0.5)
                     continue
             print(f"node: {node}")
-            cmd = f'sinfo -n {node} -O nodeaddr | tail -1'
-            rank0_ip = subprocess.check_output(
-                cmd,
-                shell=True,
-                text=True
-                ).strip()
+            cmd = f"sinfo -n {node} -O nodeaddr | tail -1"
+            rank0_ip = subprocess.check_output(cmd, shell=True, text=True).strip()
             print(f"IP: {rank0_ip}")
             world_size = self.num_jobs + 1
 
@@ -127,13 +131,22 @@ class submitit_delayed_launcher():
             executor.update_parameters(**self.submitit_collection_conf)
             jobs = []
             for i in range(self.num_jobs):
-                rank = i+1
-                job = executor.submit(_distributed_init_delayed, rank, self.backend, rank0_ip, self.tcpport, world_size, )
+                rank = i + 1
+                job = executor.submit(
+                    _distributed_init_delayed,
+                    rank,
+                    self.backend,
+                    rank0_ip,
+                    self.tcpport,
+                    world_size,
+                )
                 jobs.append(job)
             for job in jobs:
                 job.result()
             main_func.result()
+
         return exec_fun
+
 
 def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
@@ -161,6 +174,7 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
     )
     return _store
 
+
 def _distributed_init_delayed(
     rank,
     backend,
@@ -175,7 +189,9 @@ def _distributed_init_delayed(
     """
     _store = _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose)
     # wait...
-    objects = [None, ] * world_size
+    objects = [
+        None,
+    ] * world_size
     output_list = [None]
     torch.distributed.scatter_object_list(output_list, objects, src=0)
     output = output_list[0]
@@ -194,8 +210,9 @@ def _distributed_init_delayed(
         env_make,
         policy,
         frames_per_batch,
-        collector_kwargs
+        collector_kwargs,
     )
+
 
 def _distributed_init_collection_node(
     rank,
@@ -221,8 +238,9 @@ def _distributed_init_collection_node(
         env_make,
         policy,
         frames_per_batch,
-        collector_kwargs
+        collector_kwargs,
     )
+
 
 def _run_collector(
     _store,
@@ -320,6 +338,7 @@ def _run_collector(
         collector.shutdown()
     del collector
     return
+
 
 class DistributedDataCollector(_DataCollector):
     """A distributed data collector with torch.distributed backend.
@@ -551,13 +570,18 @@ class DistributedDataCollector(_DataCollector):
             return env_make
 
         self._init_master_dist(self.num_workers + 1, self.backend)
-        objects = [{"sync": self._sync,
+        objects = [
+            {
+                "sync": self._sync,
                 "collector_class": self.collector_class,
                 "num_workers": self.num_workers_per_collector,
                 "env_make": get_env_make(i),
                 "policy": self.policy,
                 "frames_per_batch": self.frames_per_batch,
-                "collector_kwargs": self.collector_kwargs[i],} for i in range(self.num_workers)]
+                "collector_kwargs": self.collector_kwargs[i],
+            }
+            for i in range(self.num_workers)
+        ]
         objects = [None] + objects
         torch.distributed.scatter_object_list([None], objects, src=0)
 

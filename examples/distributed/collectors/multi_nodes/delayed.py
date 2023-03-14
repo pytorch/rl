@@ -4,8 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 from argparse import ArgumentParser
 
-from torchrl.collectors.distributed.generic import submitit_delayed_launcher, \
-    DistributedDataCollector, DEFAULT_SLURM_CONF, DEFAULT_SLURM_CONF_MAIN
+import tqdm
+
+from torchrl.collectors.distributed.generic import (
+    DEFAULT_SLURM_CONF,
+    DEFAULT_SLURM_CONF_MAIN,
+    DistributedDataCollector,
+    submitit_delayed_launcher,
+)
 from torchrl.envs import EnvCreator
 
 parser = ArgumentParser()
@@ -15,24 +21,28 @@ args = parser.parse_args()
 DEFAULT_SLURM_CONF["slurm_partition"] = args.partition
 DEFAULT_SLURM_CONF_MAIN["slurm_partition"] = args.partition
 
-num_jobs=2
-tcp_port=4321
+num_jobs = 8
+tcp_port = 4321
+
 
 @submitit_delayed_launcher(num_jobs=num_jobs, tcpport=tcp_port)
 def main():
-    from torchrl.envs.libs.gym import GymEnv
     from torchrl.collectors.collectors import RandomPolicy
     from torchrl.data import BoundedTensorSpec
+    from torchrl.envs.libs.gym import GymEnv
+
     collector = DistributedDataCollector(
-        [EnvCreator(lambda: GymEnv("Pendulum-v1"))] * num_jobs,
+        [EnvCreator(lambda: GymEnv("ALE/Pong-v5"))] * num_jobs,
         policy=RandomPolicy(BoundedTensorSpec(-1, 1, shape=(1,))),
         launcher="submitit_delayed",
-        frames_per_batch=200,
-        total_frames=10_000,
+        frames_per_batch=800,
+        total_frames=1_000_000,
         tcp_port=tcp_port,
     )
+    pbar = tqdm.tqdm(total=1_000_000)
     for data in collector:
-        print(data)
+        pbar.update(data.numel())
+
 
 if __name__ == "__main__":
     main()
