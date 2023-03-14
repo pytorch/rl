@@ -104,10 +104,11 @@ if __name__ == "__main__":
         sync=args.sync,
         storing_device="cuda:0" if device_count else "cpu",
         launcher=launcher,
-        visible_devices=list(range(device_count)) if device_count else None,
+        visible_devices=list(range(1, device_count)) if device_count else None,
     )
 
     pbar = tqdm.tqdm(total=collector.total_frames)
     for data in collector:
         pbar.update(data.numel())
+        pbar.set_description(f"data shape: {data.shape}, data device: {data.device}")
     collector.shutdown()

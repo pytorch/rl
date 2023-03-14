@@ -95,4 +95,5 @@ if __name__ == "__main__":
     pbar = tqdm.tqdm(total=collector.total_frames)
     for data in collector:
         pbar.update(data.numel())
+        pbar.set_description(f"data shape: {data.shape}, data device: {data.device}")
     collector.shutdown()
