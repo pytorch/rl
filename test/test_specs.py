@@ -2045,7 +2045,7 @@ class TestStack:
         shape = (*shape,)
         c1 = UnboundedDiscreteTensorSpec(shape=shape)
         c2 = c1.clone()
-        c = torch.stack([c1, c2], 0)
+        c = torch.stack([c1, c2], stack_dim)
         r = c.rand()
         assert r.shape == c.shape
 
@@ -2053,9 +2053,27 @@ class TestStack:
         shape = (*shape,)
         c1 = UnboundedDiscreteTensorSpec(shape=shape)
         c2 = c1.clone()
-        c = torch.stack([c1, c2], 0)
+        c = torch.stack([c1, c2], stack_dim)
         r = c.zero()
         assert r.shape == c.shape
+
+    def test_to_numpy(self, shape, stack_dim):
+        c1 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float64)
+        c2 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float32)
+        c = torch.stack([c1, c2], stack_dim)
+
+        shape = list(shape)
+        shape.insert(stack_dim, 2)
+        shape = tuple(shape)
+
+        val = 2 * torch.rand(torch.Size(shape)) - 1
+
+        val_np = c.to_numpy(val)
+        assert isinstance(val_np, np.ndarray)
+        assert (val.numpy() == val_np).all()
+
+        with pytest.raises(AssertionError):
+            c.to_numpy(val + 1)
 
 
 class TestStackComposite:
@@ -2302,6 +2320,24 @@ class TestStackComposite:
         cclone = c.clone()
         assert cclone[0] is not c[0]
         assert cclone[0] == c[0]
+
+    def test_to_numpy(self):
+        c1 = CompositeSpec(a=BoundedTensorSpec(-1, 1, shape=(1, 3)), shape=(1, 3))
+        c2 = CompositeSpec(
+            a=BoundedTensorSpec(-1, 1, shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
+        c = torch.stack([c1, c2], 0)
+        for _ in range(100):
+            r = c.rand()
+            for key, value in c.to_numpy(r).items():
+                spec = c[key]
+                assert (spec.to_numpy(r[key]) == value).all()
+
+        td_fail = TensorDict({"a": torch.rand((2, 1, 3)) + 1}, [2, 1, 3])
+        with pytest.raises(AssertionError):
+            c.to_numpy(td_fail)
 
 
 if __name__ == "__main__":
