@@ -553,7 +553,7 @@ class DistributedDataCollector(_DataCollector):
         self._init_master_dist(self.num_workers + 1, self.backend)
         objects = [{"sync": self._sync,
                 "collector_class": self.collector_class,
-                "num_workers": self.num_workers,
+                "num_workers": self.num_workers_per_collector,
                 "env_make": get_env_make(i),
                 "policy": self.policy,
                 "frames_per_batch": self.frames_per_batch,
