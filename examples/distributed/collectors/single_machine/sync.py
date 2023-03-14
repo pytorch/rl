@@ -2,6 +2,17 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
+"""Distributed synchronous data collection on a single node.
+
+The default configuration works fine on machines equipped with 4 GPUs, but can
+be scaled up or down depending on the available configuration.
+
+The number of nodes should not be greater than the number of GPUs minus 1, as
+each node will be assigned one GPU to work with, while the main worker will
+keep its own GPU (presumably for model training).
+
+"""
 from argparse import ArgumentParser
 
 import tqdm
