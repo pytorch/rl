@@ -116,6 +116,8 @@ def main():
         pbar.set_description(
             f"data shape: {data.shape}, data stat: {data['pixels'].float().mean(): 4.4f}"
         )
+    collector.shutdown()
+    exit()
 
 
 if __name__ == "__main__":
