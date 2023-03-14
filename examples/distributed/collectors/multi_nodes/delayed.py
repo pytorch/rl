@@ -12,8 +12,8 @@ parser = ArgumentParser()
 parser.add_argument("--partition", help="slurm partition to use")
 args = parser.parse_args()
 
-DEFAULT_SLURM_CONF["partition"] = args.partition
-DEFAULT_SLURM_CONF_MAIN["partition"] = args.partition
+DEFAULT_SLURM_CONF["slurm_partition"] = args.partition
+DEFAULT_SLURM_CONF_MAIN["slurm_partition"] = args.partition
 
 num_jobs=2
 @submitit_delayed_launcher(num_jobs=num_jobs)
