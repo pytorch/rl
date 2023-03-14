@@ -210,6 +210,7 @@ def _distributed_init_delayed(
         policy,
         frames_per_batch,
         collector_kwargs,
+        verbose=verbose,
     )
 
 
@@ -238,6 +239,7 @@ def _distributed_init_collection_node(
         policy,
         frames_per_batch,
         collector_kwargs,
+        verbose=verbose,
     )
 
 
@@ -250,7 +252,7 @@ def _run_collector(
     policy,
     frames_per_batch,
     collector_kwargs,
-    verbose=False,
+    verbose=True,
 ):
     rank = torch.distributed.get_rank()
     if verbose:
@@ -681,7 +683,8 @@ class DistributedDataCollector(_DataCollector):
                         self._tensordict_out[i].irecv(src=rank, return_premature=True)
                     )
                 for tracker in trackers:
-                    for _tracker in tracker:
+                    for i, _tracker in enumerate(tracker):
+                        print(f"waiting for rank {i+1}")
                         _tracker.wait()
                 data = self._tensordict_out.clone()
                 total_frames += data.numel()
