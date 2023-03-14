@@ -21,18 +21,19 @@ parser.add_argument(
     "--num_workers", default=1, type=int, help="Number of workers in each node."
 )
 parser.add_argument(
-    "--num_nodes", default=4, type=int, help="Number of nodes for the collector."
+    "--num_nodes", default=3, type=int, help="Number of nodes for the collector (the main "
+                                             "worker being excluded from this count)."
 )
 parser.add_argument(
     "--frames_per_batch",
-    default=800,
+    default=300,
     type=int,
     help="Number of frames in each batch of data. Must be "
     "divisible by the product of nodes and workers.",
 )
 parser.add_argument(
     "--total_frames",
-    default=2_000_000,
+    default=1_200_000,
     type=int,
     help="Total number of frames collected by the collector. Must be "
     "divisible by the product of nodes and workers.",
@@ -49,8 +50,15 @@ if __name__ == "__main__":
     frames_per_batch = args.frames_per_batch
     launcher = "mp"
 
+    device_count = torch.cuda.device_count()
+
     device_str = "device"
-    if torch.cuda.device_count():
+    if device_count:
+        if num_nodes > device_count-1:
+            raise RuntimeError(
+                "Expected at most as many workers as GPU devices (excluded cuda:0 which "
+                f"will be used by the main worker). Got {num_workers} workers for {device_count} GPUs."
+            )
         collector_kwargs = [
             {device_str: f"cuda:{i}", f"storing_{device_str}": f"cuda:{i}"}
             for i in range(1, num_nodes + 2)
@@ -74,9 +82,9 @@ if __name__ == "__main__":
         collector_class=SyncDataCollector,
         collector_kwargs=collector_kwargs,
         sync=args.sync,
-        storing_device="cuda:0" if torch.cuda.device_count() else "cpu",
+        storing_device="cuda:0" if device_count else "cpu",
         launcher=launcher,
-        visible_devices=None,
+        visible_devices=list(range(device_count)) if device_count else None,
     )
 
     pbar = tqdm.tqdm(total=collector.total_frames)

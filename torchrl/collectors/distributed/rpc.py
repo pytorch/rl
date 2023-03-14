@@ -104,6 +104,15 @@ class RPCDataCollector(_DataCollector):
             or a derived class of these. The strings "single", "sync" and
             "async" correspond to respective class.
             Defaults to :class:`torchrl.collectors.SyncDataCollector`.
+
+            .. note::
+
+              Support for :class:`MultiSyncDataCollector` and :class:`MultiaSyncDataCollector`
+              is experimental, and :class:`torchrl.collectors.SyncDataCollector`
+              should always be preferred. If multiple simultaneous environment
+              need to be executed on a single node, consider using a
+              :class:`torchrl.envs.ParallelEnv` instance.
+
         collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
             remote data-collector. If a list is provided, each element will
             correspond to an individual set of keyword arguments for the
