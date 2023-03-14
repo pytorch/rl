@@ -108,8 +108,10 @@ class submitit_delayed_launcher():
                 cmd = f"squeue -j {main_job.job_id} -o %N | tail -1"
                 node = subprocess.check_output(cmd, shell=True, text=True).strip()
                 try:
+                    print("node", node)
                     node = int(node)
                 except ValueError:
+                    time.sleep(0.5)
                     continue
             print("node", node)
             cmd = f'sinfo -n {node} -O nodeaddr | tail -1'

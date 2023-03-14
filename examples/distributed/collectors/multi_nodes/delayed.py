@@ -16,6 +16,7 @@ DEFAULT_SLURM_CONF["slurm_partition"] = args.partition
 DEFAULT_SLURM_CONF_MAIN["slurm_partition"] = args.partition
 
 num_jobs=2
+
 @submitit_delayed_launcher(num_jobs=num_jobs)
 def main():
     from torchrl.envs.libs.gym import GymEnv
