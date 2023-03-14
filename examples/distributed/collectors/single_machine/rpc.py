@@ -11,6 +11,11 @@ The number of nodes should not be greater than the number of GPUs minus 1, as
 each node will be assigned one GPU to work with, while the main worker will
 keep its own GPU (presumably for model training).
 
+Each node can support multiple workers through the usage of `ParallelEnv`.
+
+The default task is `Pong-v5` but a different one can be picked through the
+`--env` flag. Any available gym env will work.
+
 """
 from argparse import ArgumentParser
 
@@ -53,6 +58,11 @@ parser.add_argument(
     action="store_true",
     help="whether collection should be synchronous or not.",
 )
+parser.add_argument(
+    "--env",
+    default="ALE/Pong-v5",
+    help="Gym environment to be run.",
+)
 if __name__ == "__main__":
     args = parser.parse_args()
     num_workers = args.num_workers
@@ -76,7 +86,7 @@ if __name__ == "__main__":
     else:
         collector_kwargs = {device_str: "cpu", f"storing_{device_str}": "cpu"}
 
-    make_env = EnvCreator(lambda: GymEnv("ALE/Pong-v5"))
+    make_env = EnvCreator(lambda: GymEnv(args.env))
     if num_workers == 1:
         action_spec = make_env().action_spec
     else:
