@@ -668,36 +668,21 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         # requires unbind to be implemented
         pass
 
-    def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
-        pass
+    def to_numpy(self, val: torch.Tensor, safe: bool = True) -> dict:
+        if safe:
+            if val.shape[self.dim] != len(self._specs):
+                raise ValueError(
+                    "Size of LazyStackedTensorSpec and val differ along the stacking "
+                    "dimension"
+                )
+            for spec, v in zip(self._specs, torch.unbind(val, dim=self.dim)):
+                spec.assert_is_in(v)
+        return val.detach().cpu().numpy()
 
     def __len__(self):
         pass
 
-    def values(self) -> ValuesView:
-        pass
-
-    def items(self) -> ItemsView:
-        pass
-
-    def keys(
-        self,
-        include_nested: bool = False,
-        leaves_only: bool = False,
-    ) -> KeysView:
-        pass
-
     def project(self, val: TensorDictBase) -> TensorDictBase:
-        pass
-
-    def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
-        pass
-
-    def type_check(
-        self,
-        value: Union[torch.Tensor, TensorDictBase],
-        selected_keys: Union[str, Optional[Sequence[str]]] = None,
-    ):
         pass
 
     def __repr__(self):
@@ -712,12 +697,6 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         string = f"{self.__class__.__name__}(\n     {sub_string})"
         return string
 
-    def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
-        pass
-
-    def __delitem__(self, key):
-        pass
-
     def __iter__(self):
         pass
 
@@ -726,7 +705,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
 
     @property
     def device(self) -> DEVICE_TYPING:
-        pass
+        return self._specs[0].device
 
     @property
     def ndim(self):
@@ -2591,7 +2570,15 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         pass
 
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
-        pass
+        if safe:
+            if val.shape[self.dim] != len(self._specs):
+                raise ValueError(
+                    "Size of LazyStackedCompositeSpec and val differ along the "
+                    "stacking dimension"
+                )
+            for spec, v in zip(self._specs, torch.unbind(val, dim=self.dim)):
+                spec.assert_is_in(v)
+        return {key: self[key].to_numpy(val) for key, val in val.items()}
 
     def __len__(self):
         pass
