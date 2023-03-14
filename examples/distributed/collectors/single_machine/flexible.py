@@ -33,7 +33,7 @@ parser.add_argument(
     "--num_workers", default=8, type=int, help="Number of workers in each node."
 )
 parser.add_argument(
-    "--num_nodes", default=4, type=int, help="Number of nodes for the collector."
+    "--num_nodes", default=3, type=int, help="Number of nodes for the collector."
 )
 parser.add_argument(
     "--frames_per_batch",
