@@ -110,11 +110,11 @@ def main():
         backend="nccl" if slurm_gpus_per_node else "gloo",
         sync=sync,
     )
-    pbar = tqdm.tqdm(total=1_000_000)
+    pbar = tqdm.tqdm(total=total_frames)
     for data in collector:
         pbar.update(data.numel())
         pbar.set_description(
-            f"data shape: {data.shape}, data stat: {data['pixels'].float().mean()}"
+            f"data shape: {data.shape}, data stat: {data['pixels'].float().mean(): 4.4f}"
         )
 
 

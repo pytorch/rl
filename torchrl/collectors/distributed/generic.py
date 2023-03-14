@@ -723,6 +723,7 @@ class DistributedDataCollector(_DataCollector):
 
         for i in range(self.num_workers):
             rank = i + 1
+            print("shutting down")
             self._store.set(f"NODE_{rank}_in", b"shutdown")
 
     def update_policy_weights_(self, worker_rank=None) -> None:
