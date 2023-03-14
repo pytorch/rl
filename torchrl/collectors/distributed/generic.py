@@ -7,8 +7,11 @@ r"""Generic distributed data-collector using torch.distributed backend."""
 
 import os
 import socket
+import subprocess
+import time
 from copy import deepcopy
 from datetime import timedelta
+from functools import wraps
 from typing import OrderedDict
 
 import torch.cuda
@@ -39,8 +42,157 @@ DEFAULT_SLURM_CONF = {
     "slurm_partition": "train",
     "slurm_cpus_per_task": 32,
     "slurm_gpus_per_node": 0,
-}
+}  #: Default value of the SLURM jobs
+DEFAULT_SLURM_CONF_MAIN = {
+    "timeout_min": 10,
+    "slurm_partition": "train",
+    "slurm_cpus_per_task": 32,
+    "slurm_gpus_per_node": 1,
+}  #: Default value of the SLURM main job
 
+class submitit_delayed_launcher():
+    """Delayed launcher for submitit.
+
+    In some cases, launched jobs cannot spawn other jobs on their own and this
+    can only be done at the jump-host level.
+
+    In these cases, the :func:`submitit_delayed_launcher` can be used to
+    pre-launch collector nodes that will wait for the main worker to provide
+    the launching instruction.
+
+    Args:
+        num_jobs (int): the number of collection jobs to be launched.
+        backend (str, optional): torch.distributed backend. Defaults to 'gloo'.
+        tcpport (int or str, optional): the TCP port to use. Defaults to ``1234``.
+        submitit_collection_conf (dict, optional): the configuration to be passed to submitit.
+            Defaults to :obj:`torchrl.collectors.distributed.generic.DEFAULT_SLURM_CONF`
+
+    Examples:
+        >>> num_jobs=2
+        >>> @submitit_delayed_launcher(num_jobs=num_jobs)
+        ... def main():
+        ...     from torchrl.envs.libs.gym import GymEnv
+        ...     from torchrl.collectors.collectors import RandomPolicy
+        ...     from torchrl.data import BoundedTensorSpec
+        ...     collector = DistributedDataCollector(
+        ...         [EnvCreator(lambda: GymEnv("Pendulum-v1"))] * num_jobs,
+        ...         policy=RandomPolicy(BoundedTensorSpec(-1, 1, shape=(1,)))
+        ...         launcher="submitit_delayed",
+        ...     )
+        ...     for data in collector:
+        ...         print(data)
+        ...
+        >>> if __name__ == "__main__":
+        ...     main()
+        ...
+    """
+    def __init__(self, num_jobs, backend="gloo", tcpport=1234, submitit_main_conf: dict=DEFAULT_SLURM_CONF_MAIN, submitit_collection_conf: dict=DEFAULT_SLURM_CONF):
+        self.num_jobs = num_jobs
+        self.backend = backend
+        self.submitit_collection_conf = submitit_collection_conf
+        self.submitit_main_conf = submitit_main_conf
+        self.tcpport = tcpport
+
+    def __call__(self, main_func):
+
+        def exec_fun():
+            # submit main
+            executor = submitit.AutoExecutor(folder="log_test")
+            executor.update_parameters(**self.submitit_main_conf)
+            main_job = executor.submit(main_func)
+            # listen to output file looking for IP address
+            print("job id", main_job.job_id)
+            time.sleep(2.0)
+            node = None
+            while not node:
+                cmd = f"squeue -j {main_job.job_id} -o %N | tail -1"
+                node = subprocess.check_output(cmd, shell=True, text=True).strip()
+                try:
+                    node = int(node)
+                except ValueError:
+                    continue
+            print("node", node)
+            cmd = f'sinfo -n {node} -O nodeaddr | tail -1'
+            rank0_ip = subprocess.check_output(
+                cmd,
+                shell=True,
+                text=True
+                ).strip()
+
+            world_size = self.num_jobs + 1
+
+            # submit jobs
+            executor = submitit.AutoExecutor(folder="log_test")
+            executor.update_parameters(**self.submitit_collection_conf)
+            jobs = []
+            for i in range(self.num_jobs):
+                rank = i+1
+                job = executor.submit(_distributed_init_delayed, rank, self.backend, rank0_ip, self.tcpport, world_size, )
+                jobs.append(job)
+
+        return exec_fun
+
+def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
+    os.environ["MASTER_ADDR"] = str(rank0_ip)
+    os.environ["MASTER_PORT"] = str(tcpport)
+
+    print("IP address:", rank0_ip, "\ttcp port:", tcpport)
+    if verbose:
+        print(f"node with rank {rank} -- launching distributed")
+    torch.distributed.init_process_group(
+        backend,
+        rank=rank,
+        world_size=world_size,
+        timeout=timedelta(MAX_TIME_TO_CONNECT),
+        # init_method=f"tcp://{rank0_ip}:{tcpport}",
+    )
+    if verbose:
+        print(f"node with rank {rank} -- creating store")
+    # The store carries instructions for the node
+    _store = torch.distributed.TCPStore(
+        host_name=rank0_ip,
+        port=tcpport + 1,
+        world_size=world_size,
+        is_master=False,
+        timeout=timedelta(10),
+    )
+    return _store
+
+def _distributed_init_delayed(
+    rank,
+    backend,
+    rank0_ip,
+    tcpport,
+    world_size,
+    verbose=False,
+):
+    """Initializer for contexts where jobs cannot be launched from main node.
+
+    This function will wait for the main worker to send the launch command.
+    """
+    _store = _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose)
+    # wait...
+    objects = [None, ] * world_size
+    output_list = [None]
+    torch.distributed.scatter_object_list(output_list, objects, src=0)
+    output = output_list[0]
+    sync = output["sync"]
+    collector_class = output["collector_class"]
+    num_workers = output["num_workers"]
+    env_make = output["env_make"]
+    policy = output["policy"]
+    frames_per_batch = output["frames_per_batch"]
+    collector_kwargs = output["collector_kwargs"]
+    _run_collector(
+        _store,
+        sync,
+        collector_class,
+        num_workers,
+        env_make,
+        policy,
+        frames_per_batch,
+        collector_kwargs
+    )
 
 def _distributed_init_collection_node(
     rank,
@@ -57,9 +209,30 @@ def _distributed_init_collection_node(
     collector_kwargs,
     verbose=False,
 ):
-    os.environ["MASTER_ADDR"] = str(rank0_ip)
-    os.environ["MASTER_PORT"] = str(tcpport)
+    _store = _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose)
+    _run_collector(
+        _store,
+        sync,
+        collector_class,
+        num_workers,
+        env_make,
+        policy,
+        frames_per_batch,
+        collector_kwargs
+    )
 
+def _run_collector(
+    _store,
+    sync,
+    collector_class,
+    num_workers,
+    env_make,
+    policy,
+    frames_per_batch,
+    collector_kwargs,
+    verbose=False,
+):
+    rank = torch.distributed.get_rank()
     if verbose:
         print(f"node with rank {rank} -- creating collector of type {collector_class}")
     if not issubclass(collector_class, SyncDataCollector):
@@ -92,27 +265,6 @@ def _distributed_init_collection_node(
         total_frames=-1,
         split_trajs=False,
         **collector_kwargs,
-    )
-
-    print("IP address:", rank0_ip, "\ttcp port:", tcpport)
-    if verbose:
-        print(f"node with rank {rank} -- launching distributed")
-    torch.distributed.init_process_group(
-        backend,
-        rank=rank,
-        world_size=world_size,
-        timeout=timedelta(MAX_TIME_TO_CONNECT),
-        # init_method=f"tcp://{rank0_ip}:{tcpport}",
-    )
-    if verbose:
-        print(f"node with rank {rank} -- creating store")
-    # The store carries instructions for the node
-    _store = torch.distributed.TCPStore(
-        host_name=rank0_ip,
-        port=tcpport + 1,
-        world_size=world_size,
-        is_master=False,
-        timeout=timedelta(10),
     )
     collector_iter = iter(collector)
     if verbose:
@@ -165,7 +317,6 @@ def _distributed_init_collection_node(
         collector.shutdown()
     del collector
     return
-
 
 class DistributedDataCollector(_DataCollector):
     """A distributed data collector with torch.distributed backend.
@@ -389,6 +540,21 @@ class DistributedDataCollector(_DataCollector):
         )
         return job
 
+    def _init_worker_dist_submitit_delayed(self):
+        def get_env_make(i):
+            env_make = self.env_constructors[i]
+            if not isinstance(env_make, (EnvBase, EnvCreator)):
+                env_make = CloudpickleWrapper(env_make)
+            return env_make
+        objects = [{"sync": self._sync,
+                "collector_class": self.collector_class,
+                "num_workers": self.num_workers,
+                "env_make": get_env_make(i),
+                "policy": self.policy,
+                "frames_per_batch": self.frames_per_batch,
+                "collector_kwargs": self.collector_kwargs[i],} for i in range(self.num_workers)]
+        torch.distributed.scatter_object_list([None], objects, src=0)
+
     def _init_worker_dist_mp(self, i):
         env_make = self.env_constructors[i]
         if not isinstance(env_make, (EnvBase, EnvCreator)):
@@ -432,20 +598,23 @@ class DistributedDataCollector(_DataCollector):
                 raise ImportError("submitit not found.") from SUBMITIT_ERR
             executor = submitit.AutoExecutor(folder="log_test")
             executor.update_parameters(**self.slurm_kwargs)
-        for i in range(self.num_workers):
-            print("Submitting job")
-            if self.launcher == "submitit":
-                job = self._init_worker_dist_submitit(
-                    executor,
-                    i,
-                )
-                print("job id", job.job_id)  # ID of your job
-            elif self.launcher == "mp":
-                job = self._init_worker_dist_mp(
-                    i,
-                )
-                print("job launched")
-            self.jobs.append(job)
+        if self.launcher == "submitit_delayed":
+            self._init_worker_dist_submitit_delayed()
+        else:
+            for i in range(self.num_workers):
+                print("Submitting job")
+                if self.launcher == "submitit":
+                    job = self._init_worker_dist_submitit(
+                        executor,
+                        i,
+                    )
+                    print("job id", job.job_id)  # ID of your job
+                elif self.launcher == "mp":
+                    job = self._init_worker_dist_mp(
+                        i,
+                    )
+                    print("job launched")
+                self.jobs.append(job)
         self._init_master_dist(self.num_workers + 1, self.backend)
 
     def iterator(self):
@@ -585,6 +754,8 @@ class DistributedDataCollector(_DataCollector):
                 if not self.jobs[i].is_alive():
                     continue
                 self.jobs[i].join(timeout=10)
-            else:
+            elif self.launcher == "submitit":
                 self.jobs[i].result()
+            elif self.launcher == "submitit_delayed":
+                pass
         print("collector shut down")

@@ -79,7 +79,7 @@ if __name__ == "__main__":
                 f"will be used by the main worker). Got {num_workers} workers for {device_count} GPUs."
             )
         collector_kwargs = [
-            {"device": f"cuda:{i}", f"storing_device": f"cuda:{i}"}
+            {"device": f"cuda:{i}", "storing_device": f"cuda:{i}"}
             for i in range(1, num_nodes + 2)
         ]
     else:

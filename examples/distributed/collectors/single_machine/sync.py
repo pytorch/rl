@@ -23,8 +23,11 @@ from argparse import ArgumentParser
 import torch
 import tqdm
 
-from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector, \
-    MultiSyncDataCollector
+from torchrl.collectors.collectors import (
+    MultiSyncDataCollector,
+    RandomPolicy,
+    SyncDataCollector,
+)
 from torchrl.collectors.distributed import DistributedSyncDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
