@@ -2,9 +2,18 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from argparse import ArgumentParser
+
 from torchrl.collectors.distributed.generic import submitit_delayed_launcher, \
-    DistributedDataCollector
+    DistributedDataCollector, DEFAULT_SLURM_CONF, DEFAULT_SLURM_CONF_MAIN
 from torchrl.envs import EnvCreator
+
+parser = ArgumentParser()
+parser.add_argument("--partition", help="slurm partition to use")
+args = parser.parse_args()
+
+DEFAULT_SLURM_CONF["partition"] = args.partition
+DEFAULT_SLURM_CONF_MAIN["partition"] = args.partition
 
 num_jobs=2
 @submitit_delayed_launcher(num_jobs=num_jobs)
