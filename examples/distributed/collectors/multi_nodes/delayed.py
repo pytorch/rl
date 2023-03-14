@@ -56,15 +56,24 @@ parser.add_argument(
     type=int,
     help="Total number of frames collected by the collector.",
 )
+parser.add_argument(
+    "--time",
+    "-t",
+    default="1:00:00",
+    help="Timeout for the nodes",
+)
 
 args = parser.parse_args()
 
 slurm_gpus_per_node = args.gpus_per_node
+slurm_time = args.time
 
 DEFAULT_SLURM_CONF["slurm_gpus_per_node"] = slurm_gpus_per_node
+DEFAULT_SLURM_CONF["time"] = slurm_time
 DEFAULT_SLURM_CONF["slurm_cpus_per_task"] = args.cpus_per_task
 DEFAULT_SLURM_CONF["slurm_partition"] = args.partition
 DEFAULT_SLURM_CONF_MAIN["slurm_partition"] = args.partition
+DEFAULT_SLURM_CONF_MAIN["slurm_time"] = slurm_time
 
 num_jobs = args.num_jobs
 tcp_port = args.tcp_port
