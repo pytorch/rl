@@ -558,7 +558,8 @@ class DistributedDataCollector(_DataCollector):
                 "policy": self.policy,
                 "frames_per_batch": self.frames_per_batch,
                 "collector_kwargs": self.collector_kwargs[i],} for i in range(self.num_workers)]
-        torch.distributed.scatter_object_list([None], [] + objects, src=0)
+        objects = [None] + objects
+        torch.distributed.scatter_object_list([None], objects, src=0)
 
     def _init_worker_dist_mp(self, i):
         env_make = self.env_constructors[i]
