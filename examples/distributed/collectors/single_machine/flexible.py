@@ -23,8 +23,12 @@ from argparse import ArgumentParser
 import torch
 import tqdm
 
-from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector, \
-    MultiSyncDataCollector
+from torchrl.collectors.collectors import (
+    MultiaSyncDataCollector,
+    MultiSyncDataCollector,
+    RandomPolicy,
+    SyncDataCollector,
+)
 from torchrl.collectors.distributed import DistributedDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
@@ -67,9 +71,9 @@ parser.add_argument(
     choices=["env", "collector"],
     default="collector",
     help="Source of parallelism for the nodes' multiprocessing. Can be 'env'"
-         " (ie. envs are executed in parallel) or 'collector' (ie each node handles"
-         " a multiprocessed data collector). In this example, the former is slower"
-         " due to a higher IO throughput."
+    " (ie. envs are executed in parallel) or 'collector' (ie each node handles"
+    " a multiprocessed data collector). In this example, the former is slower"
+    " due to a higher IO throughput.",
 )
 parser.add_argument(
     "--env",
@@ -93,7 +97,9 @@ if __name__ == "__main__":
         action_spec = make_env.action_spec
 
     if args.worker_parallelism == "collector" and num_workers > 1:
-        sub_collector_class = MultiSyncDataCollector
+        sub_collector_class = (
+            MultiSyncDataCollector if args.sync else MultiaSyncDataCollector
+        )
         num_workers_per_collector = num_workers
         device_str = "devices"  # MultiSyncDataCollector expects a devices kwarg
     else:
