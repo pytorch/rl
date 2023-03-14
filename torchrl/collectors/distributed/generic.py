@@ -578,7 +578,7 @@ class DistributedDataCollector(_DataCollector):
                 "num_workers": self.num_workers_per_collector,
                 "env_make": get_env_make(i),
                 "policy": self.policy,
-                "frames_per_batch": self.frames_per_batch,
+                "frames_per_batch": self._frames_per_batch_corrected,
                 "collector_kwargs": self.collector_kwargs[i],
             }
             for i in range(self.num_workers)
