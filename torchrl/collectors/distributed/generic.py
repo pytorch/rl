@@ -450,6 +450,11 @@ class DistributedDataCollector(_DataCollector):
         self._sync = sync
         self.update_after_each_batch = update_after_each_batch
         self.max_weight_update_interval = max_weight_update_interval
+        if self.update_after_each_batch and self.max_weight_update_interval > -1:
+            raise RuntimeError(
+                "Got conflicting udpate instructions: `update_after_each_batch` "
+                "`max_weight_update_interval` are incompatible."
+            )
         self.launcher = launcher
         self._batches_since_weight_update = [0 for _ in range(self.num_workers)]
         if tcp_port is None:
