@@ -23,7 +23,8 @@ from argparse import ArgumentParser
 import torch
 import tqdm
 
-from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
+from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector, \
+    MultiSyncDataCollector
 from torchrl.collectors.distributed import DistributedSyncDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
@@ -57,6 +58,15 @@ parser.add_argument(
     "data passing.",
 )
 parser.add_argument(
+    "--worker_parallelism",
+    choices=["env", "collector"],
+    default="collector",
+    help="Source of parallelism for the nodes' multiprocessing. Can be 'env'"
+    " (ie. envs are executed in parallel) or 'collector' (ie each node handles"
+    " a multiprocessed data collector). In this example, the former is slower"
+    " due to a higher IO throughput.",
+)
+parser.add_argument(
     "--env",
     default="ALE/Pong-v5",
     help="Gym environment to be run.",
@@ -70,6 +80,22 @@ if __name__ == "__main__":
 
     device_count = torch.cuda.device_count()
 
+    make_env = EnvCreator(lambda: GymEnv(args.env))
+    if args.worker_parallelism == "collector" or num_workers == 1:
+        action_spec = make_env().action_spec
+    else:
+        make_env = ParallelEnv(num_workers, make_env)
+        action_spec = make_env.action_spec
+
+    if args.worker_parallelism == "collector" and num_workers > 1:
+        sub_collector_class = MultiSyncDataCollector
+        num_workers_per_collector = num_workers
+        device_str = "devices"  # MultiSyncDataCollector expects a devices kwarg
+    else:
+        sub_collector_class = SyncDataCollector
+        num_workers_per_collector = 1
+        device_str = "device"  # SyncDataCollector expects a device kwarg
+
     if args.backend == "nccl":
         if num_nodes > device_count - 1:
             raise RuntimeError(
@@ -77,30 +103,23 @@ if __name__ == "__main__":
                 f"will be used by the main worker). Got {num_workers} workers for {device_count} GPUs."
             )
         collector_kwargs = [
-            {"device": f"cuda:{i}", "storing_device": f"cuda:{i}"}
+            {device_str: f"cuda:{i}", f"storing_{device_str}": f"cuda:{i}"}
             for i in range(1, num_nodes + 2)
         ]
     elif args.backend == "gloo":
-        collector_kwargs = {"device": "cpu", "storing_device": "cpu"}
+        collector_kwargs = {device_str: "cpu", f"storing_{device_str}": "cpu"}
     else:
         raise NotImplementedError(
             f"device assignment not implemented for backend {args.backend}"
         )
 
-    make_env = EnvCreator(lambda: GymEnv(args.env))
-    if num_workers == 1:
-        action_spec = make_env().action_spec
-    else:
-        make_env = ParallelEnv(num_workers, make_env)
-        action_spec = make_env.action_spec
-
     collector = DistributedSyncDataCollector(
         [make_env] * num_nodes,
         RandomPolicy(action_spec),
-        num_workers_per_collector=num_workers,
+        num_workers_per_collector=num_workers_per_collector,
         frames_per_batch=frames_per_batch,
         total_frames=args.total_frames,
-        collector_class=SyncDataCollector,
+        collector_class=sub_collector_class,
         collector_kwargs=collector_kwargs,
         storing_device="cuda:0" if args.backend == "nccl" else "cpu",
         launcher=launcher,

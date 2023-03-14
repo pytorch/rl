@@ -104,7 +104,7 @@ if __name__ == "__main__":
         device_str = "devices"  # MultiSyncDataCollector expects a devices kwarg
     else:
         sub_collector_class = SyncDataCollector
-        num_workers_per_collector = num_workers
+        num_workers_per_collector = 1
         device_str = "device"  # SyncDataCollector expects a device kwarg
 
     if args.backend == "nccl":

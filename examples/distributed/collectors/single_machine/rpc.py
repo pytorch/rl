@@ -23,8 +23,7 @@ from argparse import ArgumentParser
 import torch.cuda
 import tqdm
 
-from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector, \
-    MultiSyncDataCollector, MultiaSyncDataCollector
+from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.distributed import RPCDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
@@ -73,46 +72,33 @@ if __name__ == "__main__":
 
     device_count = torch.cuda.device_count()
 
-    make_env = EnvCreator(lambda: GymEnv(args.env))
-    if args.worker_parallelism == "collector" or num_workers == 1:
-        action_spec = make_env().action_spec
-    else:
-        make_env = ParallelEnv(num_workers, make_env)
-        action_spec = make_env.action_spec
-
-    if args.worker_parallelism == "collector" and num_workers > 1:
-        sub_collector_class = MultiSyncDataCollector
-        num_workers_per_collector = num_workers
-        device_str = "devices"  # MultiSyncDataCollector expects a devices kwarg
-    else:
-        sub_collector_class = SyncDataCollector
-        num_workers_per_collector = num_workers
-        device_str = "device"  # SyncDataCollector expects a device kwarg
-
-    if args.backend == "nccl":
+    if device_count:
         if num_nodes > device_count - 1:
             raise RuntimeError(
                 "Expected at most as many workers as GPU devices (excluded cuda:0 which "
                 f"will be used by the main worker). Got {num_workers} workers for {device_count} GPUs."
             )
         collector_kwargs = [
-            {device_str: f"cuda:{i}", f"storing_{device_str}": f"cuda:{i}"}
+            {"device": f"cuda:{i}", f"storing_device": f"cuda:{i}"}
             for i in range(1, num_nodes + 2)
         ]
-    elif args.backend == "gloo":
-        collector_kwargs = {device_str: "cpu", f"storing_{device_str}": "cpu"}
     else:
-        raise NotImplementedError(
-            f"device assignment not implemented for backend {args.backend}"
-        )
+        collector_kwargs = {"device": "cpu", "storing_device": "cpu"}
+
+    make_env = EnvCreator(lambda: GymEnv(args.env))
+    if num_workers == 1:
+        action_spec = make_env().action_spec
+    else:
+        make_env = ParallelEnv(num_workers, make_env)
+        action_spec = make_env.action_spec
 
     collector = RPCDataCollector(
         [make_env] * num_nodes,
         RandomPolicy(action_spec),
-        num_workers_per_collector=num_workers_per_collector,
+        num_workers_per_collector=1,
         frames_per_batch=frames_per_batch,
         total_frames=args.total_frames,
-        collector_class=sub_collector_class,
+        collector_class=SyncDataCollector,
         collector_kwargs=collector_kwargs,
         sync=args.sync,
         storing_device="cuda:0" if device_count else "cpu",
