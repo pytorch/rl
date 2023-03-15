@@ -34,7 +34,7 @@ def sync_async_collector(
 
 
             +----------------------------------------------------------------------+
-            |           "MultiConcurrentCollector"                |                |
+            |           "MultiaSyncDataCollector"                 |                |
             |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
             |  "Collector 1"  |  "Collector 2"  |  "Collector 3"  |     "Main"     |
             |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|
@@ -95,7 +95,7 @@ def sync_sync_collector(
     .. aafig::
 
             +----------------------------------------------------------------------+
-            |            "MultiConcurrentCollector"               |                |
+            |            "MultiSyncDataCollector"                 |                |
             |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
             |   "Collector 1" |  "Collector 2"  |  "Collector 3"  |     Main       |
             |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|
@@ -141,10 +141,10 @@ def sync_sync_collector(
 
     """
     if num_collectors == 1:
-        if "devices" in kwargs:
-            kwargs["device"] = kwargs.pop("devices")
-        if "storing_devices" in kwargs:
-            kwargs["storing_device"] = kwargs.pop("storing_devices")
+        if "device" in kwargs:
+            kwargs["device"] = kwargs.pop("device")
+        if "storing_device" in kwargs:
+            kwargs["storing_device"] = kwargs.pop("storing_device")
         return _make_collector(
             SyncDataCollector,
             env_fns=env_fns,
@@ -270,7 +270,7 @@ def make_collector_offpolicy(
     if cfg.multi_step:
         ms = MultiStep(
             gamma=cfg.gamma,
-            n_steps_max=cfg.n_steps_return,
+            n_steps=cfg.n_steps_return,
         )
     else:
         ms = None
@@ -296,10 +296,9 @@ def make_collector_offpolicy(
         "num_env_per_collector": 1,
         # we already took care of building the make_parallel_env function
         "num_collectors": -cfg.num_workers // -cfg.env_per_collector,
-        "devices": cfg.collector_devices,
-        "storing_devices": cfg.collector_devices,
+        "device": cfg.collector_devices,
+        "storing_device": cfg.collector_devices,
         "init_random_frames": cfg.init_random_frames,
-        "pin_memory": cfg.pin_memory,
         "split_trajs": True,
         # trajectories must be separated if multi-step is used
         "exploration_mode": cfg.exploration_mode,
@@ -350,9 +349,8 @@ def make_collector_onpolicy(
         "num_env_per_collector": 1,
         # we already took care of building the make_parallel_env function
         "num_collectors": -cfg.num_workers // -cfg.env_per_collector,
-        "devices": cfg.collector_devices,
-        "storing_devices": cfg.collector_devices,
-        "pin_memory": cfg.pin_memory,
+        "device": cfg.collector_devices,
+        "storing_device": cfg.collector_devices,
         "split_trajs": True,
         # trajectories must be separated in online settings
         "exploration_mode": cfg.exploration_mode,

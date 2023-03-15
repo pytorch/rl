@@ -50,6 +50,7 @@ gSDE: 0
 
 # Logging
 logger: wandb
+mode: online
 
 # Extra
 batch_transform: 1

@@ -63,20 +63,24 @@ def test_multistep(n, key, device, T=11):
         )
 
     # assert that done at last step is similar to unterminated traj
-    assert (ms_tensordict.get("gamma")[4] == ms_tensordict.get("gamma")[0]).all()
-    assert (
-        ms_tensordict.get(("next", key))[4] == ms_tensordict.get(("next", key))[0]
-    ).all()
-    assert (
-        ms_tensordict.get("steps_to_next_obs")[4]
-        == ms_tensordict.get("steps_to_next_obs")[0]
-    ).all()
+    torch.testing.assert_close(
+        ms_tensordict.get("gamma")[4], ms_tensordict.get("gamma")[0]
+    )
+    torch.testing.assert_close(
+        ms_tensordict.get(("next", key))[4], ms_tensordict.get(("next", key))[0]
+    )
+    torch.testing.assert_close(
+        ms_tensordict.get("steps_to_next_obs")[4],
+        ms_tensordict.get("steps_to_next_obs")[0],
+    )
 
     # check that next obs is properly replaced, or that it is terminated
-    next_obs = ms_tensordict.get(key)[:, (1 + ms.n_steps_max) :]
-    true_next_obs = ms_tensordict.get(("next", key))[:, : -(1 + ms.n_steps_max)]
+    next_obs = ms_tensordict.get(key)[:, (1 + ms.n_steps) :]
+    true_next_obs = ms_tensordict.get(("next", key))[:, : -(1 + ms.n_steps)]
     terminated = ~ms_tensordict.get("nonterminal")
-    assert ((next_obs == true_next_obs) | terminated[:, (1 + ms.n_steps_max) :]).all()
+    assert (
+        (next_obs == true_next_obs).all(-1) | terminated[:, (1 + ms.n_steps) :]
+    ).all()
 
     # test gamma computation
     torch.testing.assert_close(
@@ -90,10 +94,144 @@ def test_multistep(n, key, device, T=11):
             != ms_tensordict.get(("next", "original_reward"))
         ).any()
     else:
-        assert (
-            ms_tensordict.get(("next", "reward"))
-            == ms_tensordict.get(("next", "original_reward"))
-        ).all()
+        torch.testing.assert_close(
+            ms_tensordict.get(("next", "reward")),
+            ms_tensordict.get(("next", "original_reward")),
+        )
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize(
+    "batch_size",
+    [
+        [
+            4,
+        ],
+        [],
+        [
+            1,
+        ],
+        [2, 3],
+    ],
+)
+@pytest.mark.parametrize(
+    "T",
+    [
+        10,
+        1,
+        2,
+    ],
+)
+@pytest.mark.parametrize(
+    "obs_dim",
+    [
+        [
+            1,
+        ],
+        [],
+    ],
+)
+@pytest.mark.parametrize("unsq_reward", [True, False])
+@pytest.mark.parametrize("last_done", [True, False])
+@pytest.mark.parametrize("n_steps", [3, 1, 0])
+def test_mutistep_cattrajs(
+    batch_size, T, obs_dim, unsq_reward, last_done, device, n_steps
+):
+    # tests multi-step in the presence of consecutive trajectories.
+    obs = torch.randn(*batch_size, T + 1, *obs_dim)
+    reward = torch.rand(*batch_size, T)
+    action = torch.rand(*batch_size, T)
+    done = torch.zeros(*batch_size, T + 1, dtype=torch.bool)
+    done[..., T // 2] = 1
+    if last_done:
+        done[..., -1] = 1
+    if unsq_reward:
+        reward = reward.unsqueeze(-1)
+        done = done.unsqueeze(-1)
+
+    td = TensorDict(
+        {
+            "obs": obs[..., :-1] if not obs_dim else obs[..., :-1, :],
+            "action": action,
+            "done": done[..., :-1] if not unsq_reward else done[..., :-1, :],
+            "next": {
+                "obs": obs[..., 1:] if not obs_dim else obs[..., 1:, :],
+                "done": done[..., 1:] if not unsq_reward else done[..., 1:, :],
+                "reward": reward,
+            },
+        },
+        batch_size=[*batch_size, T],
+        device=device,
+    )
+    ms = MultiStep(0.98, n_steps)
+    tdm = ms(td)
+    if n_steps == 0:
+        # n_steps = 0 has no effect
+        for k in td["next"].keys():
+            assert (tdm["next", k] == td["next", k]).all()
+    else:
+        next_obs = []
+        obs = td["next", "obs"]
+        done = td["next", "done"]
+        if obs_dim:
+            obs = obs.squeeze(-1)
+        if unsq_reward:
+            done = done.squeeze(-1)
+        for t in range(T):
+            idx = t + n_steps
+            while (done[..., t:idx].any() and idx > t) or idx > done.shape[-1] - 1:
+                idx = idx - 1
+            next_obs.append(obs[..., idx])
+        true_next_obs = tdm.get(("next", "obs"))
+        if obs_dim:
+            true_next_obs = true_next_obs.squeeze(-1)
+        next_obs = torch.stack(next_obs, -1)
+        assert (next_obs == true_next_obs).all()
+
+
+@pytest.mark.parametrize("unsq_reward", [True, False])
+def test_unusual_done(unsq_reward):
+    batch_size = [10, 3]
+    T = 10
+    obs_dim = [
+        1,
+    ]
+    last_done = True
+    device = torch.device("cpu")
+    n_steps = 3
+
+    obs = torch.randn(*batch_size, T + 1, 5, *obs_dim)
+    reward = torch.rand(*batch_size, T, 5)
+    action = torch.rand(*batch_size, T, 5)
+    done = torch.zeros(*batch_size, T + 1, 5, dtype=torch.bool)
+    done[..., T // 2, :] = 1
+    if last_done:
+        done[..., -1, :] = 1
+    if unsq_reward:
+        reward = reward.unsqueeze(-1)
+        done = done.unsqueeze(-1)
+
+    td = TensorDict(
+        {
+            "obs": obs[..., :-1, :] if not obs_dim else obs[..., :-1, :, :],
+            "action": action,
+            "done": done[..., :-1, :] if not unsq_reward else done[..., :-1, :, :],
+            "next": {
+                "obs": obs[..., 1:, :] if not obs_dim else obs[..., 1:, :, :],
+                "done": done[..., 1:, :] if not unsq_reward else done[..., 1:, :, :],
+                "reward": reward,
+            },
+        },
+        batch_size=[*batch_size, T],
+        device=device,
+    )
+    ms = MultiStep(0.98, n_steps)
+    if unsq_reward:
+        with pytest.raises(RuntimeError, match="tensordict shape must be compatible"):
+            _ = ms(td)
+    else:
+        # we just check that it runs
+        _ = ms(td)
 
 
 class TestSplits:
