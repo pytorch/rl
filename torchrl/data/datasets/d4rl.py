@@ -42,6 +42,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
     Args:
         name (str): the name of the D4RL env to get the data from.
+        batch_size (int): the batch size to use during sampling.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
@@ -95,6 +96,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
     def __init__(
         self,
         name,
+        batch_size: int,
         sampler: Optional[Sampler] = None,
         writer: Optional[Writer] = None,
         collate_fn: Optional[Callable] = None,
@@ -118,6 +120,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset = split_trajectories(dataset)
         storage = LazyMemmapStorage(dataset.shape[0])
         super().__init__(
+            batch_size=batch_size,
             storage=storage,
             sampler=sampler,
             writer=writer,

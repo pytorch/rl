@@ -114,8 +114,8 @@ Here's an example:
   >>> from torchrl.data.datasets import D4RLExperienceReplay
   >>> from torchrl.data.replay_buffers import SamplerWithoutReplacement
   >>> from torchrl.envs.transforms import RenameTransform
-  >>> dataset = D4RLExperienceReplay('kitchen-complete-v0', split_trajs=True)
-  >>> print(dataset.sample(10))  # will sample 10 trajectories since split_trajs is set to True
+  >>> dataset = D4RLExperienceReplay('kitchen-complete-v0', split_trajs=True, batch_size=10)
+  >>> print(dataset.sample())  # will sample 10 trajectories since split_trajs is set to True
   TensorDict(
       fields={
           action: Tensor(shape=torch.Size([10, 207, 9]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -138,7 +138,7 @@ Here's an example:
       device=cpu,
       is_shared=False)
   >>> dataset.append_transform(RenameTransform(["done", ("next", "done")], ["terminal", ("next", "terminal")]))
-  >>> print(dataset.sample(10))  # The "done" has been renamed to "terminal"
+  >>> print(dataset.sample())  # The "done" has been renamed to "terminal"
   TensorDict(
       fields={
           action: Tensor(shape=torch.Size([10, 207, 9]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -160,7 +160,15 @@ Here's an example:
       batch_size=torch.Size([10, 207]),
       device=cpu,
       is_shared=False)
-  >>> dataset = D4RLExperienceReplay('kitchen-complete-v0', sampler=SamplerWithoutReplacement())
+  >>> # we can also use a `SamplerWithoutReplacement` to iterate over the dataset with random samples:
+  >>> dataset = D4RLExperienceReplay(
+  ...   'kitchen-complete-v0',
+  ...   sampler=SamplerWithoutReplacement(drop_last=True),
+  ...   split_trajs=True,
+  ...   batch_size=3)
+  >>> for data in dataset:
+  ...    print(data)
+  ...
 
 .. note::
 

@@ -1124,8 +1124,10 @@ class TestD4RL:
     @pytest.mark.parametrize("split_trajs", [True, False])
     @pytest.mark.parametrize("from_env", [True, False])
     def test_dataset_build(self, task, split_trajs, from_env):
-        data = D4RLExperienceReplay(task, split_trajs=split_trajs, from_env=from_env)
-        sample = data.sample(2)
+        data = D4RLExperienceReplay(
+            task, split_trajs=split_trajs, from_env=from_env, batch_size=2
+        )
+        sample = data.sample()
         env = GymWrapper(gym.make(task))
         rollout = env.rollout(2)
         print(task, rollout)
@@ -1137,11 +1139,19 @@ class TestD4RL:
 
     def test_terminate_on_end(self, task):
         data_true = D4RLExperienceReplay(
-            task, split_trajs=True, from_env=False, terminate_on_end=True
+            task,
+            split_trajs=True,
+            from_env=False,
+            terminate_on_end=True,
+            batch_size=2,
         )
         print("t", data_true._storage._storage)
         data_false = D4RLExperienceReplay(
-            task, split_trajs=True, from_env=False, terminate_on_end=False
+            task,
+            split_trajs=True,
+            from_env=False,
+            terminate_on_end=False,
+            batch_size=2,
         )
         print("f", data_false._storage._storage)
         data_from_env = D4RLExperienceReplay(task, split_trajs=True, from_env=True)
