@@ -11,9 +11,9 @@
 
 # TorchRL
 
-[**Documentation**](#documentation) | [**TensorDict**](#tensordict-as-a-common-data-carrier-for-rl) |
-[**Features**](#features) | [**Examples, tutorials and demos**](#examples-tutorials-and-demos) |
-[**Running examples**](#running-examples) | [**Upcoming features**](#upcoming-features) | [**Contributing**](#contributing)
+[**Documentation**](#documentation-and-knowledge-base) | [**TensorDict**](#writing-simplified-and-portable-rl-codebase-with-tensordict) |
+[**Features**](#features) | [**Examples, tutorials and demos**](#examples-tutorials-and-demos) | [**Installation**](#installation) |
+[**Asking a question**](#asking-a-question) | [**More resources**](#more-resources) | [**Contributing**](#contributing)
 
 **TorchRL** is an open-source Reinforcement Learning (RL) library for PyTorch.
 
@@ -27,20 +27,25 @@ On the low-level end, torchrl comes with a set of highly re-usable functionals f
 
 TorchRL aims at (1) a high modularity and (2) good runtime performance.
 
-## Documentation
+## Documentation and knowledge base
 
 The TorchRL documentation can be found [here](https://pytorch.org/rl).
 It contains tutorials and the API reference.
+TorchRL also provides a RL knowledge base to help you debug your code, or simply
+learn the basics of RL. Check it out [here](https://pytorch.org/rl/reference/knowledge_base.html).
 
 ## Writing simplified and portable RL codebase with `TensorDict`
 
-TorchRL relies on [`TensorDict`](https://github.com/pytorch-labs/tensordict/),
-a convenient data structure<sup>(1)</sup> to pass data from
-one object to another without friction.
+RL algorithms are very heterogeneous, and it can be hard to recycle a codebase
+across settings (e.g. from online to offline, from state-based to pixel-based 
+learning).
+TorchRL solves this problem through [`TensorDict`](https://github.com/pytorch-labs/tensordict/),
+a convenient data structure<sup>(1)</sup> that can be used to streamline one's
+RL codebase.
 With this tool, one can write a *complete PPO training script in less than 100
 lines of code*!
 
-  <detail>
+  <details>
     <summary>Code</summary>
 
   ```python
@@ -62,6 +67,7 @@ lines of code*!
       nn.Sequential(
           nn.Linear(3, 128), nn.Tanh(),
           nn.Linear(128, 128), nn.Tanh(),
+          nn.Linear(128, 128), nn.Tanh(),
           nn.Linear(128, 2),
           NormalParamExtractor()
       ),
@@ -72,6 +78,7 @@ lines of code*!
       nn.Sequential(
           nn.Linear(3, 128), nn.Tanh(),
           nn.Linear(128, 128), nn.Tanh(),
+          nn.Linear(128, 128), nn.Tanh(),
           nn.Linear(128, 1),
       ),
       in_keys=["observation"],
@@ -80,7 +87,7 @@ lines of code*!
       model,
       in_keys=["loc", "scale"],
       distribution_class=TanhNormal,
-      distribution_kwargs={"min": -1, "max": 1.0},
+      distribution_kwargs={"min": -1.0, "max": 1.0},
       return_log_prob=True
       )
   buffer = TensorDictReplayBuffer(
@@ -95,7 +102,7 @@ lines of code*!
       )
   loss_fn = ClipPPOLoss(actor, critic, gamma=0.99)
   optim = torch.optim.Adam(loss_fn.parameters(), lr=2e-4)
-  adv_fn = GAE(value_network=critic, gamma=0.99, lmbda=0.95)
+  adv_fn = GAE(value_network=critic, gamma=0.99, lmbda=0.95, average_gae=True)
   for data in collector:  # collect data
       for epoch in range(10):
           adv_fn(data)  # compute advantage
@@ -112,6 +119,7 @@ lines of code*!
               optim.zero_grad()
       print(f"avg reward: {data['next', 'reward'].mean().item(): 4.4f}")
   ```
+  </details>
 
 Here is an example of how the [environment API](https://pytorch.org/rl/reference/envs.html)
 relies on tensordict to carry data from one function to another during a rollout
@@ -119,9 +127,11 @@ execution:
 ![Alt Text](docs/source/_static/img/rollout.gif)
 
 `TensorDict` makes it easy to re-use pieces of code across environments, models and
-algorithms. For instance, here's how to code a rollout in TorchRL:
+algorithms.
   <details>
     <summary>Code</summary>
+  
+  For instance, here's how to code a rollout in TorchRL:
 
   ```diff
   - obs, done = env.reset()
@@ -146,13 +156,16 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
   ```
   </details>
 
-TensorDict abstracts away the input / output signatures of the modules, env, collectors, replay buffers and losses of the library, allowing its primitives
+TensorDict abstracts away the input / output signatures of the modules, env, 
+collectors, replay buffers and losses of the library, allowing its primitives
 to be easily recycled across settings.
-Here's another example of an off-policy training loop in TorchRL (assuming that a data collector, a replay buffer, a loss and an optimizer have been instantiated):
 
   <details>
     <summary>Code</summary>
 
+  Here's another example of an off-policy training loop in TorchRL (assuming 
+  that a data collector, a replay buffer, a loss and an optimizer have been instantiated):
+  
   ```diff
   - for i, (obs, next_obs, action, hidden_state, reward, done) in enumerate(collector):
   + for i, tensordict in enumerate(collector):
@@ -167,7 +180,7 @@ Here's another example of an off-policy training loop in TorchRL (assuming that 
           optim.step()
           optim.zero_grad()
   ```
-  Again, this training loop can be re-used across algorithms as it makes a minimal number of assumptions about the structure of the data.
+  This training loop can be re-used across algorithms as it makes a minimal number of assumptions about the structure of the data.
   </details>
 
   TensorDict supports multiple tensor operations on its device and shape
@@ -195,7 +208,9 @@ Here's another example of an off-policy training loop in TorchRL (assuming that 
   ```
   </details>
 
-The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py) is functorch-compatible!
+TensorDict comes with a dedicated [`tensordict.nn`](https://pytorch-labs.github.io/tensordict/reference/nn.html)
+module that contains everything you might need to write your model with it.
+And it is functorch and torch.compile compatible!
 
   <details>
     <summary>Code</summary>
@@ -211,27 +226,27 @@ The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py)
   + out = tensordict["out"]
   ```
 
-  The `SafeSequential` class allows to branch sequences of `nn.Module` instances in a highly modular way.
+  The `TensorDictSequential` class allows to branch sequences of `nn.Module` instances in a highly modular way.
   For instance, here is an implementation of a transformer using the encoder and decoder blocks:
   ```python
   encoder_module = TransformerEncoder(...)
-  encoder = SafeModule(encoder_module, in_keys=["src", "src_mask"], out_keys=["memory"])
+  encoder = TensorDictSequential(encoder_module, in_keys=["src", "src_mask"], out_keys=["memory"])
   decoder_module = TransformerDecoder(...)
-  decoder = SafeModule(decoder_module, in_keys=["tgt", "memory"], out_keys=["output"])
-  transformer = SafeSequential(encoder, decoder)
+  decoder = TensorDictModule(decoder_module, in_keys=["tgt", "memory"], out_keys=["output"])
+  transformer = TensorDictSequential(encoder, decoder)
   assert transformer.in_keys == ["src", "src_mask", "tgt"]
   assert transformer.out_keys == ["memory", "output"]
   ```
 
-  `SafeSequential` allows to isolate subgraphs by querying a set of desired input / output keys:
+  `TensorDictSequential` allows to isolate subgraphs by querying a set of desired input / output keys:
   ```python
   transformer.select_subsequence(out_keys=["memory"])  # returns the encoder
   transformer.select_subsequence(in_keys=["tgt", "memory"])  # returns the decoder
   ```
   </details>
 
-  The corresponding [tutorial](https://pytorch.org/rl/tutorials/tensordict_module.html) provides more context about its features.
-
+  Check [TensorDict tutorials](https://pytorch-labs.github.io/tensordict/) to
+  learn more!
 
 
 ## Features
@@ -442,6 +457,8 @@ If you would like to contribute to new features, check our [call for contributio
 A series of [examples](examples/) are provided with an illustrative purpose:
 - [DQN (and add-ons up to Rainbow)](examples/dqn/dqn.py)
 - [DDPG](examples/ddpg/ddpg.py)
+- [IQL](examples/iql/iql.py)
+- [TD3](examples/td3/td3.py)
 - [A2C](examples/a2c/a2c.py)
 - [PPO](examples/ppo/ppo.py)
 - [SAC](examples/sac/sac.py)
@@ -450,7 +467,10 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 
 and many more to come!
 
-We also provide [tutorials and demos](tutorials/README.md) that give a sense of
+Check the [examples markdown](examples/EXAMPLES.md) directory for more details 
+about handling the various configuration settings.
+
+We also provide [tutorials and demos](https://pytorch.org/rl/#tutorials) that give a sense of
 what the library can do.
 
 ## Installation
@@ -461,36 +481,12 @@ conda create --name torch_rl python=3.9
 conda activate torch_rl
 ```
 
-Depending on the use of functorch that you want to make, you may want to install the latest (nightly) pytorch release or the latest stable version of pytorch.
-See [here](https://pytorch.org/get-started/locally/) for a more detailed list of commands, including `pip3` or windows/OSX compatible installation commands:
+**PyTorch**
 
-**Stable**
-
-```
-# For CUDA 11.3
-conda install pytorch torchvision cudatoolkit=11.3 -c pytorch
-# For CUDA 11.6
-conda install pytorch torchvision torchaudio cudatoolkit=11.6 -c pytorch -c conda-forge
-# For CPU-only build
-conda install pytorch torchvision cpuonly -c pytorch
-
-# For torch 1.12 (and not above), one should install functorch separately:
-pip3 install functorch
-```
-
-**Nightly**
-```
-# For CUDA 11.6
-conda install pytorch torchvision torchaudio pytorch-cuda=11.6 -c pytorch-nightly -c nvidia
-# For CUDA 11.7
-conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
-# For CPU-only build
-conda install pytorch torchvision torchaudio cpuonly -c pytorch-nightly
-```
-
-`functorch` is included in the nightly PyTorch package, so no need to install it separately.
-
-For M1 Mac users, if the above commands do not work, you can build torch from source by following [this guide](https://github.com/pytorch/pytorch#from-source).
+Depending on the use of functorch that you want to make, you may want to 
+install the latest (nightly) pytorch release or the latest stable version of pytorch.
+See [here](https://pytorch.org/get-started/locally/) for a detailed list of commands, 
+including `pip3` or windows/OSX compatible installation commands.
 
 **Torchrl**
 
@@ -601,22 +597,17 @@ OS: macOS **** (x86_64)
 Versioning issues can cause error message of the type ```undefined symbol``` and such. For these, refer to the [versioning issues document](knowledge_base/VERSIONING_ISSUES.md) for a complete explanation and proposed workarounds.
 
 
-## Running examples
-Examples are coded in a very similar way but the configuration may change from one algorithm to another (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
+## Asking a question
 
-Check the [examples markdown](examples/EXAMPLES.md) directory for more details about handling the various configuration settings.
+If you spot a bug in the library, please raise an issue in this repo.
+If you have a more generic question regarding RL in PyTorch, post it on
+the [PyTorch forum](https://discuss.pytorch.org/c/reinforcement-learning/6).
 
+## More resources
 
-## Upcoming features
-
-In the near future, we plan to:
-- provide tutorials on how to design new actors or environment wrappers;
-- implement IMPALA (as a distributed RL example) and Meta-RL algorithms;
-- improve the tests, documentation and nomenclature.
-
-We welcome any contribution, should you want to contribute to these new features
-or any other, lister or not, in the issues section of this repository.
-
+We have some introductory videos for you to get to know the library better, check them out:
+[TorchRL intro at PyTorch day 2022](https://youtu.be/cIKMhZoykEE)
+[PyTorch 2.0 Q&A: TorchRL](https://www.youtube.com/live/myEfUoYrbts?feature=share)
 
 ## Contributing
 
