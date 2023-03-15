@@ -107,7 +107,7 @@ frames_per_batch = args.frames_per_batch
 @submitit_delayed_launcher(
     num_jobs=num_jobs,
     tcpport=tcp_port,
-    backend="rpc",
+    framework="rpc",
 )
 def main():
     from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
