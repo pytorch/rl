@@ -2,14 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import warnings
-
 import _pickle
 import abc
 import inspect
 import os
 import queue
 import time
+import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
@@ -883,20 +882,21 @@ class _MultiDataCollector(_DataCollector):
         # processes their copy of the policy.
         if devices is not None:
             if device is not None:
-                raise ValueError(
-                    "Cannot pass both devices and device"
-                )
-            warnings.warn("`devices` keyword argument will soon be deprecated from multiprocessed collectors. "
-                          "Please use `device` instead.")
+                raise ValueError("Cannot pass both devices and device")
+            warnings.warn(
+                "`devices` keyword argument will soon be deprecated from multiprocessed collectors. "
+                "Please use `device` instead."
+            )
             device = devices
         if storing_devices is not None:
             if storing_device is not None:
-                raise ValueError(
-                    "Cannot pass both storing_devices and storing_device"
-                )
-            warnings.warn("`storing_devices` keyword argument will soon be deprecated from multiprocessed collectors. "
-                          "Please use `storing_device` instead.")
+                raise ValueError("Cannot pass both storing_devices and storing_device")
+            warnings.warn(
+                "`storing_devices` keyword argument will soon be deprecated from multiprocessed collectors. "
+                "Please use `storing_device` instead."
+            )
             storing_device = storing_devices
+
         def device_err_msg(device_name, devices_list):
             return (
                 f"The length of the {device_name} argument should match the "
@@ -1183,6 +1183,43 @@ also that the state dict is synchronised across processes if needed."""
 class MultiSyncDataCollector(_MultiDataCollector):
     """Runs a given number of DataCollectors on separate processes synchronously.
 
+    .. aafig::
+
+            +----------------------------------------------------------------------+
+            |            "MultiSyncDataCollector"                 |                |
+            |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
+            |   "Collector 1" |  "Collector 2"  |  "Collector 3"  |     Main       |
+            |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|
+            | "env1" | "env2" | "env3" | "env4" | "env5" | "env6" |                |
+            |~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~~~~~~~~~|
+            |"reset" |"reset" |"reset" |"reset" |"reset" |"reset" |                |
+            |        |        |        |        |        |        |                |
+            |       "actor"   |        |        |       "actor"   |                |
+            |                 |        |        |                 |                |
+            | "step" | "step" |       "actor"   |                 |                |
+            |        |        |                 |                 |                |
+            |        |        |                 | "step" | "step" |                |
+            |        |        |                 |        |        |                |
+            |       "actor"   | "step" | "step" |       "actor"   |                |
+            |                 |        |        |                 |                |
+            |                 |       "actor"   |                 |                |
+            |                 |                 |                 |                |
+            |                       "yield batch of traj 1"------->"collect, train"|
+            |                                                     |                |
+            | "step" | "step" | "step" | "step" | "step" | "step" |                |
+            |        |        |        |        |        |        |                |
+            |       "actor"   |       "actor"   |        |        |                |
+            |                 | "step" | "step" |       "actor"   |                |
+            |                 |        |        |                 |                |
+            | "step" | "step" |       "actor"   | "step" | "step" |                |
+            |        |        |                 |        |        |                |
+            |       "actor"   |                 |       "actor"   |                |
+            |                       "yield batch of traj 2"------->"collect, train"|
+            |                                                     |                |
+            +----------------------------------------------------------------------+
+
+    Envs can be identical or different.
+
     The collection starts when the next item of the collector is queried,
     and no environment step is computed in between the reception of a batch of
     trajectory and the start of the next collection.
@@ -1334,6 +1371,36 @@ class MultiSyncDataCollector(_MultiDataCollector):
 class MultiaSyncDataCollector(_MultiDataCollector):
     """Runs a given number of DataCollectors on separate processes asynchronously.
 
+    .. aafig::
+
+
+            +----------------------------------------------------------------------+
+            |           "MultiConcurrentCollector"                |                |
+            |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
+            |  "Collector 1"  |  "Collector 2"  |  "Collector 3"  |     "Main"     |
+            |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|
+            | "env1" | "env2" | "env3" | "env4" | "env5" | "env6" |                |
+            |~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~~~~~~~~~|
+            |"reset" |"reset" |"reset" |"reset" |"reset" |"reset" |                |
+            |        |        |        |        |        |        |                |
+            |       "actor"   |        |        |       "actor"   |                |
+            |                 |        |        |                 |                |
+            | "step" | "step" |       "actor"   |                 |                |
+            |        |        |                 |                 |                |
+            |        |        |                 | "step" | "step" |                |
+            |        |        |                 |        |        |                |
+            |       "actor    | "step" | "step" |       "actor"   |                |
+            |                 |        |        |                 |                |
+            | "yield batch 1" |       "actor"   |                 |"collect, train"|
+            |                 |                 |                 |                |
+            | "step" | "step" |                 | "yield batch 2" |"collect, train"|
+            |        |        |                 |                 |                |
+            |        |        | "yield batch 3" |                 |"collect, train"|
+            |        |        |                 |                 |                |
+            +----------------------------------------------------------------------+
+
+    Environment types can be identical or different.
+
     The collection keeps on occuring on all processes even between the time
     the batch of rollouts is collected and the next call to the iterator.
     This class can be safely used with offline RL algorithms.
@@ -1433,7 +1500,6 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         i = -1
         self._frames = 0
 
-        dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         while self._frames < self.total_frames:
             _check_for_faulty_process(self.procs)
