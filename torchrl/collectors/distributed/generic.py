@@ -7,8 +7,6 @@ r"""Generic distributed data-collector using torch.distributed backend."""
 
 import os
 import socket
-import subprocess
-import time
 from copy import deepcopy
 from datetime import timedelta
 from typing import OrderedDict
@@ -48,103 +46,6 @@ DEFAULT_SLURM_CONF_MAIN = {
     "slurm_cpus_per_task": 32,
     "slurm_gpus_per_node": 1,
 }  #: Default value of the SLURM main job
-
-
-class submitit_delayed_launcher:
-    """Delayed launcher for submitit.
-
-    In some cases, launched jobs cannot spawn other jobs on their own and this
-    can only be done at the jump-host level.
-
-    In these cases, the :func:`submitit_delayed_launcher` can be used to
-    pre-launch collector nodes that will wait for the main worker to provide
-    the launching instruction.
-
-    Args:
-        num_jobs (int): the number of collection jobs to be launched.
-        backend (str, optional): torch.distributed backend. Defaults to 'gloo'.
-        tcpport (int or str, optional): the TCP port to use. Defaults to ``10003``.
-        submitit_collection_conf (dict, optional): the configuration to be passed to submitit.
-            Defaults to :obj:`torchrl.collectors.distributed.generic.DEFAULT_SLURM_CONF`
-
-    Examples:
-        >>> num_jobs=2
-        >>> @submitit_delayed_launcher(num_jobs=num_jobs)
-        ... def main():
-        ...     from torchrl.envs.libs.gym import GymEnv
-        ...     from torchrl.collectors.collectors import RandomPolicy
-        ...     from torchrl.data import BoundedTensorSpec
-        ...     collector = DistributedDataCollector(
-        ...         [EnvCreator(lambda: GymEnv("Pendulum-v1"))] * num_jobs,
-        ...         policy=RandomPolicy(BoundedTensorSpec(-1, 1, shape=(1,))),
-        ...         launcher="submitit_delayed",
-        ...     )
-        ...     for data in collector:
-        ...         print(data)
-        ...
-        >>> if __name__ == "__main__":
-        ...     main()
-        ...
-    """
-
-    def __init__(
-        self,
-        num_jobs,
-        backend="gloo",
-        tcpport=10003,
-        submitit_main_conf: dict = DEFAULT_SLURM_CONF_MAIN,
-        submitit_collection_conf: dict = DEFAULT_SLURM_CONF,
-    ):
-        self.num_jobs = num_jobs
-        self.backend = backend
-        self.submitit_collection_conf = submitit_collection_conf
-        self.submitit_main_conf = submitit_main_conf
-        self.tcpport = tcpport
-
-    def __call__(self, main_func):
-        def exec_fun():
-            # submit main
-            executor = submitit.AutoExecutor(folder="log_test")
-            executor.update_parameters(**self.submitit_main_conf)
-            main_job = executor.submit(main_func)
-            # listen to output file looking for IP address
-            print(f"job id: {main_job.job_id}")
-            time.sleep(2.0)
-            node = None
-            while not node:
-                cmd = f"squeue -j {main_job.job_id} -o %N | tail -1"
-                node = subprocess.check_output(cmd, shell=True, text=True).strip()
-                try:
-                    node = int(node)
-                except ValueError:
-                    time.sleep(0.5)
-                    continue
-            print(f"node: {node}")
-            cmd = f"sinfo -n {node} -O nodeaddr | tail -1"
-            rank0_ip = subprocess.check_output(cmd, shell=True, text=True).strip()
-            print(f"IP: {rank0_ip}")
-            world_size = self.num_jobs + 1
-
-            # submit jobs
-            executor = submitit.AutoExecutor(folder="log_test")
-            executor.update_parameters(**self.submitit_collection_conf)
-            jobs = []
-            for i in range(self.num_jobs):
-                rank = i + 1
-                job = executor.submit(
-                    _distributed_init_delayed,
-                    rank,
-                    self.backend,
-                    rank0_ip,
-                    self.tcpport,
-                    world_size,
-                )
-                jobs.append(job)
-            for job in jobs:
-                job.result()
-            main_job.result()
-
-        return exec_fun
 
 
 def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):

@@ -8,6 +8,7 @@ r"""Generic distributed data-collector using torch.distributed.rpc backend."""
 import os
 import socket
 import time
+from copy import copy
 from typing import OrderedDict
 
 from torchrl.data.utils import CloudpickleWrapper
@@ -35,7 +36,6 @@ from torchrl.collectors.collectors import (
 from torchrl.envs import EnvBase, EnvCreator
 
 SLEEP_INTERVAL = 1e-6
-MAX_TIME_TO_CONNECT = 1000
 DEFAULT_SLURM_CONF = {
     "timeout_min": 10,
     "slurm_partition": "train",
@@ -45,6 +45,12 @@ DEFAULT_SLURM_CONF = {
 TCP_PORT = os.environ.get("TCP_PORT", "10003")
 IDLE_TIMEOUT = os.environ.get("RCP_IDLE_TIMEOUT", 10)
 
+DEFAULT_TENSORPIPE_OPTIONS = {
+    "num_worker_threads": 16,
+    "rpc_timeout": 10_000,
+    "_transports": ["uv"],
+}
+
 
 def _rpc_init_collection_node(
     rank,
@@ -52,11 +58,11 @@ def _rpc_init_collection_node(
     tcp_port,
     world_size,
     visible_device,
+    tensorpipe_options,
 ):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
-    os.environ["MASTER_PORT"] = "29500"
-    # os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-    # os.environ['TP_SOCKET_IFNAME']='lo'
+    os.environ["MASTER_PORT"] = str(tcp_port)
+
     if isinstance(visible_device, list):
         pass
     elif isinstance(visible_device, (str, int, torch.device)):
@@ -65,12 +71,10 @@ def _rpc_init_collection_node(
         pass
     else:
         raise RuntimeError(f"unrecognised dtype {type(visible_device)}")
+
     options = rpc.TensorPipeRpcBackendOptions(
-        num_worker_threads=16,
-        init_method=f"tcp://{rank0_ip}:{tcp_port}",
-        rpc_timeout=MAX_TIME_TO_CONNECT,
-        _transports=["uv"],
         devices=visible_device,
+        **tensorpipe_options,
     )
     print("init rpc")
     rpc.init_rpc(
@@ -155,6 +159,11 @@ class RPCDataCollector(_DataCollector):
             https://github.com/facebookincubator/submitit
             Defaults to "submitit".
         tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
+        visible_devices (list of Union[int, torch.device, str], optional): a
+            list of the same length as the number of nodes containing the
+            device used to pass data to main.
+        tensorpipe_options (dict, optional): a dictionary of keyword argument
+            to pass to :class:`torch.distributed.rpc.TensorPipeRpcBackendOption`.
 
     """
 
@@ -175,6 +184,7 @@ class RPCDataCollector(_DataCollector):
         launcher="submitit",
         tcp_port=None,
         visible_devices=None,
+        tensorpipe_options=None,
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -225,19 +235,20 @@ class RPCDataCollector(_DataCollector):
             if isinstance(collector_kwargs, (list, tuple))
             else [collector_kwargs] * self.num_workers
         )
-
+        if tensorpipe_options is None:
+            self.tensorpipe_options = copy(DEFAULT_TENSORPIPE_OPTIONS)
+        else:
+            self.tensorpipe_options = copy(DEFAULT_TENSORPIPE_OPTIONS).update(
+                tensorpipe_options
+            )
         self._init_workers()
 
     def _init_master_rpc(
         self,
         world_size,
     ):
-        options = rpc.TensorPipeRpcBackendOptions(
-            num_worker_threads=16,
-            init_method=f"tcp://{self.IPAddr}:{self.tcp_port}",
-            rpc_timeout=10_000,
-            _transports=["uv"],
-        )
+        """Init RPC on main node."""
+        options = rpc.TensorPipeRpcBackendOptions(**self.tensorpipe_options)
         if torch.cuda.device_count():
             if self.visible_devices:
                 for i in range(self.num_workers):
@@ -262,7 +273,7 @@ class RPCDataCollector(_DataCollector):
             world_size=world_size,
         )
 
-    def _launch_workers(
+    def _start_workers(
         self,
         world_size,
         env_constructors,
@@ -273,6 +284,7 @@ class RPCDataCollector(_DataCollector):
         total_frames,
         collector_kwargs,
     ):
+        """Instantiate remote collectors."""
         num_workers = world_size - 1
         time_interval = 1.0
         collector_infos = []
@@ -286,7 +298,7 @@ class RPCDataCollector(_DataCollector):
                     collector_info = rpc.get_worker_info(f"COLLECTOR_NODE_{i + 1}")
                     break
                 except RuntimeError as err:
-                    if counter * time_interval > MAX_TIME_TO_CONNECT:
+                    if counter * time_interval > self.tensorpipe_options["rpc_timeout"]:
                         raise RuntimeError("Could not connect to remote node") from err
                     continue
             collector_infos.append(collector_info)
@@ -329,6 +341,7 @@ class RPCDataCollector(_DataCollector):
         self.collector_infos = collector_infos
 
     def _init_worker_rpc(self, executor, i):
+        """Init RPC node if necessary."""
         visible_device = (
             self.visible_devices[i] if self.visible_devices is not None else None
         )
@@ -342,6 +355,7 @@ class RPCDataCollector(_DataCollector):
                 self.tcp_port,
                 self.num_workers + 1,
                 visible_device,
+                self.tensorpipe_options,
             )
             print("job id", job.job_id)  # ID of your job
             return job
@@ -354,10 +368,14 @@ class RPCDataCollector(_DataCollector):
                     self.tcp_port,
                     self.num_workers + 1,
                     visible_device,
+                    self.tensorpipe_options,
                 ),
             )
             job.start()
             return job
+        elif self.launcher == "submitit_delayed":
+            # job is already launched
+            return None
         else:
             raise NotImplementedError(f"Unknown launcher {self.launcher}")
 
@@ -374,9 +392,9 @@ class RPCDataCollector(_DataCollector):
         else:
             IPAddr = "localhost"
         self.IPAddr = IPAddr
+
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
-        os.environ["MASTER_PORT"] = "29500"
-        # os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
+        os.environ["MASTER_PORT"] = str(self.tcp_port)
 
         self.jobs = []
         for i in range(self.num_workers):
@@ -390,7 +408,7 @@ class RPCDataCollector(_DataCollector):
         self._init_master_rpc(
             self.num_workers + 1,
         )
-        self._launch_workers(
+        self._start_workers(
             world_size=self.num_workers + 1,
             env_constructors=self.env_constructors,
             collector_class=self.collector_class,
@@ -402,7 +420,6 @@ class RPCDataCollector(_DataCollector):
         )
 
     def iterator(self):
-        print("Iterating")
         self._collected_frames = 0
         while self._collected_frames < self.total_frames:
             if self._sync:
@@ -487,5 +504,7 @@ class RPCDataCollector(_DataCollector):
         elif self.launcher == "submitit":
             for job in self.jobs:
                 _ = job.result()
+        elif self.launcher == "submitit_delayed":
+            pass
         else:
             raise NotImplementedError(f"Unknown launcher {self.launcher}")

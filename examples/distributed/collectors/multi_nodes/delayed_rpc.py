@@ -27,12 +27,11 @@ import time
 from argparse import ArgumentParser
 
 import tqdm
-from torchrl.collectors.distributed import submitit_delayed_launcher
 
+from torchrl.collectors.distributed import RPCDataCollector, submitit_delayed_launcher
 from torchrl.collectors.distributed.generic import (
     DEFAULT_SLURM_CONF,
     DEFAULT_SLURM_CONF_MAIN,
-    DistributedDataCollector,
 )
 from torchrl.envs import EnvCreator
 
@@ -107,8 +106,8 @@ frames_per_batch = args.frames_per_batch
 
 @submitit_delayed_launcher(
     num_jobs=num_jobs,
-    backend="nccl" if slurm_gpus_per_node else "gloo",
     tcpport=tcp_port,
+    backend="rpc",
 )
 def main():
     from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
@@ -118,7 +117,7 @@ def main():
 
     collector_class = SyncDataCollector if num_workers == 1 else MultiSyncDataCollector
     device_str = "device" if num_workers == 1 else "devices"
-    collector = DistributedDataCollector(
+    collector = RPCDataCollector(
         [EnvCreator(lambda: GymEnv("ALE/Pong-v5"))] * num_jobs,
         policy=RandomPolicy(BoundedTensorSpec(-1, 1, shape=(1,))),
         launcher="submitit_delayed",
@@ -129,7 +128,6 @@ def main():
         num_workers_per_collector=args.num_workers,
         collector_kwargs={device_str: "cuda:0" if slurm_gpus_per_node else "cpu"},
         storing_device="cuda:0" if slurm_gpus_per_node else "cpu",
-        backend="nccl" if slurm_gpus_per_node else "gloo",
         sync=sync,
     )
     counter = 0
