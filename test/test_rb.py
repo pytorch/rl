@@ -865,6 +865,28 @@ def test_samplerwithoutrep(size, samples, drop_last):
         assert not visited
 
 
+@pytest.mark.parametrize("size", [10, 15, 20])
+@pytest.mark.parametrize("drop_last", [True, False])
+def test_replay_buffer_iter(size, drop_last):
+    torch.manual_seed(0)
+    storage = ListStorage(size)
+    sampler = SamplerWithoutReplacement(drop_last=drop_last)
+    writer = RoundRobinWriter()
+
+    rb = ReplayBuffer(storage=storage, sampler=sampler, writer=writer, batch_size=3)
+    rb.extend([torch.randint(100, (1,)) for _ in range(size)])
+
+    for i, _ in enumerate(rb):
+        if i == 20:
+            # guard against infinite loop if error is introduced
+            raise RuntimeError("Iteration didn't terminate")
+
+    if drop_last:
+        assert i == size // 3 - 1
+    else:
+        assert i == (size - 1) // 3
+
+
 class TestStateDict:
     @pytest.mark.parametrize("storage_in", ["tensor", "memmap"])
     @pytest.mark.parametrize("storage_out", ["tensor", "memmap"])
