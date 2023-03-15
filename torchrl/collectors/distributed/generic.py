@@ -142,7 +142,7 @@ class submitit_delayed_launcher:
                 jobs.append(job)
             for job in jobs:
                 job.result()
-            main_func.result()
+            main_job.result()
 
         return exec_fun
 
