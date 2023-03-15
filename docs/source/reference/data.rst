@@ -30,15 +30,16 @@ We also give users the ability to compose a replay buffer using the following co
 
     .. currentmodule:: torchrl.data.replay_buffers
 
-    torchrl.data.replay_buffers.samplers.Sampler
-    torchrl.data.replay_buffers.samplers.RandomSampler
-    torchrl.data.replay_buffers.samplers.PrioritizedSampler
-    torchrl.data.replay_buffers.storages.Storage
-    torchrl.data.replay_buffers.storages.ListStorage
-    torchrl.data.replay_buffers.storages.LazyTensorStorage
-    torchrl.data.replay_buffers.storages.LazyMemmapStorage
-    torchrl.data.replay_buffers.writers.Writer
-    torchrl.data.replay_buffers.writers.RoundRobinWriter
+    Sampler
+    PrioritizedSampler
+    RandomSampler
+    SamplerWithoutReplacement
+    Storage
+    ListStorage
+    LazyTensorStorage
+    LazyMemmapStorage
+    Writer
+    RoundRobinWriter
 
 Storage choice is very influential on replay buffer sampling latency, especially in distributed reinforcement learning settings with larger data volumes.
 :class:`LazyMemmapStorage` is highly advised in distributed settings with shared storage due to the lower serialisation cost of MemmapTensors as well as the ability to specify file storage locations for improved node failure recovery.
@@ -111,6 +112,7 @@ Here's an example:
 .. code::Python
 
   >>> from torchrl.data.datasets import D4RLExperienceReplay
+  >>> from torchrl.data.replay_buffers import SamplerWithoutReplacement
   >>> from torchrl.envs.transforms import RenameTransform
   >>> dataset = D4RLExperienceReplay('kitchen-complete-v0', split_trajs=True)
   >>> print(dataset.sample(10))  # will sample 10 trajectories since split_trajs is set to True
@@ -158,6 +160,7 @@ Here's an example:
       batch_size=torch.Size([10, 207]),
       device=cpu,
       is_shared=False)
+  >>> dataset = D4RLExperienceReplay('kitchen-complete-v0', sampler=SamplerWithoutReplacement())
 
 .. note::
 
