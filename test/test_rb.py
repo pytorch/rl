@@ -872,10 +872,11 @@ def test_samplerwithoutrep(size, samples, drop_last):
                 idx, _ = sampler.sample(storage, samples)
             break
         idx, _ = sampler.sample(storage, samples)
-        assert idx.numel() == samples
         if drop_last or _n_left >= samples:
+            assert idx.numel() == samples
             assert idx.unique().numel() == idx.numel()
         else:
+            assert idx.numel() == _n_left
             visited = True
     if not drop_last and (size % samples > 0):
         assert visited
