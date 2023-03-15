@@ -66,7 +66,7 @@ def _rpc_init_collection_node(
         devices=visible_device,
         **tensorpipe_options,
     )
-    print("init rpc")
+    print(f"init rpc with master addr: {os.environ['MASTER_ADDR']}:{os.environ['MASTER_PORT']}")
     rpc.init_rpc(
         f"COLLECTOR_NODE_{rank}",
         rank=rank,
