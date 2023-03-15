@@ -888,6 +888,7 @@ def test_excluded_keys(collector_class, exclude):
         "create_env_fn": make_env,
         "policy": policy_explore,
         "frames_per_batch": 30,
+        "total_frames": -1,
     }
     if collector_class is not SyncDataCollector:
         collector_kwargs["create_env_fn"] = [
@@ -1100,7 +1101,12 @@ class TestAutoWrap:
         return lambda: GymEnv(PENDULUM_VERSIONED)
 
     def _create_collector_kwargs(self, env_maker, collector_class, policy):
-        collector_kwargs = {"create_env_fn": env_maker, "policy": policy}
+        collector_kwargs = {
+            "create_env_fn": env_maker,
+            "policy": policy,
+            "frames_per_batch": 200,
+            "total_frames": -1,
+        }
 
         if collector_class is not SyncDataCollector:
             collector_kwargs["create_env_fn"] = [
