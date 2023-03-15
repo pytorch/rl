@@ -88,6 +88,8 @@ git clone https://github.com/Farama-Foundation/d4rl.git
 cd d4rl
 pip install -e .
 
+conda deactivate && conda activate ./env
+
 # smoke test
 python -c """import gym, d4rl"""
 
