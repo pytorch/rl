@@ -7,6 +7,7 @@ r"""Generic distributed data-collector using torch.distributed backend."""
 
 import os
 import socket
+import warnings
 from copy import copy, deepcopy
 from datetime import timedelta
 from typing import OrderedDict
@@ -18,6 +19,7 @@ from torch import multiprocessing as mp, nn
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     _DataCollector,
+    DEFAULT_EXPLORATION_MODE,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
@@ -26,6 +28,7 @@ from torchrl.collectors.distributed.default_configs import (
     MAX_TIME_TO_CONNECT,
     TCP_PORT,
 )
+from torchrl.collectors.utils import split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvBase, EnvCreator
 
@@ -72,7 +75,7 @@ def _distributed_init_delayed(
     rank0_ip,
     tcpport,
     world_size,
-    verbose=False,
+    verbose=True,
 ):
     """Initializer for contexts where jobs cannot be launched from main node.
 
@@ -119,7 +122,7 @@ def _distributed_init_collection_node(
     policy,
     frames_per_batch,
     collector_kwargs,
-    verbose=False,
+    verbose=True,
 ):
     _store = _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose)
     _run_collector(
@@ -144,7 +147,7 @@ def _run_collector(
     policy,
     frames_per_batch,
     collector_kwargs,
-    verbose=False,
+    verbose=True,
 ):
     rank = torch.distributed.get_rank()
     if verbose:
@@ -241,14 +244,52 @@ class DistributedDataCollector(_DataCollector):
     Supports sync and async data collection.
 
     Args:
-        create_env_fn (list of callables or EnvBase instances): a list of the
-            same length as the number of nodes to be launched.
-        policy (Callable[[TensorDict], TensorDict]): a callable that populates
-            the tensordict with an `"action"` field.
-        frames_per_batch (int): the number of frames to be gathered in each
-            batch.
-        total_frames (int): the total number of frames to be collected from the
-            distributed collector.
+        create_env_fn (Callable): a callable that returns an instance of
+            :class:`torchrl.envs.EnvBase` class.
+        policy (Callable): Policy to be executed in the environment.
+            Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
+            If ``None`` is provided, the policy used will be a
+            :class:`RandomPolicy` instance with the environment
+            ``action_spec``.
+        frames_per_batch (int): A keyword-only argument representing the total
+            number of elements in a batch.
+        total_frames (int): A keyword-only argument representing the total
+            number of frames returned by the collector
+            during its lifespan. If the ``total_frames`` is not divisible by
+            ``frames_per_batch``, an exception is raised.
+             Endless collectors can be created by passing ``total_frames=-1``.
+        max_frames_per_traj (int, optional): Maximum steps per trajectory.
+            Note that a trajectory can span over multiple batches (unless
+            ``reset_at_each_iter`` is set to ``True``, see below).
+            Once a trajectory reaches ``n_steps``, the environment is reset.
+            If the environment wraps multiple environments together, the number
+            of steps is tracked for each environment independently. Negative
+            values are allowed, in which case this argument is ignored.
+            Defaults to ``-1`` (i.e. no maximum number of steps).
+        init_random_frames (int, optional): Number of frames for which the
+            policy is ignored before it is called. This feature is mainly
+            intended to be used in offline/model-based settings, where a
+            batch of random trajectories can be used to initialize training.
+            Defaults to ``-1`` (i.e. no random frames).
+        reset_at_each_iter (bool, optional): Whether environments should be reset
+            at the beginning of a batch collection.
+            Defaults to ``False``.
+        postproc (Callable, optional): A post-processing transform, such as
+            a :class:`torchrl.envs.Transform` or a :class:`torchrl.data.postprocs.MultiStep`
+            instance.
+            Defaults to ``None``.
+        split_trajs (bool, optional): Boolean indicating whether the resulting
+            TensorDict should be split according to the trajectories.
+            See :func:`torchrl.collectors.utils.split_trajectories` for more
+            information.
+            Defaults to ``False``.
+        exploration_mode (str, optional): interaction mode to be used when
+            collecting data. Must be one of ``"random"``, ``"mode"`` or
+            ``"mean"``.
+            Defaults to ``"random"``
+        reset_when_done (bool, optional): if ``True`` (default), an environment
+            that return a ``True`` value in its ``"done"`` or ``"truncated"``
+            entry will be reset at the corresponding indices.
         collector_class (type or str, optional): a collector class for the remote node. Can be
             :class:`torchrl.collectors.SyncDataCollector`,
             :class:`torchrl.collectors.MultiSyncDataCollector`,
@@ -277,6 +318,9 @@ class DistributedDataCollector(_DataCollector):
             <distributed_backed> is one of "gloo", "mpi", "nccl" or "ucc". See
             the torch.distributed documentation for more information.
             Defaults to "gloo".
+        storing_device (int, str or torch.device, optional): the device where
+            data will be stored and delivered by the iterator. Defaults to
+            ``"cpu"``.
         update_after_each_batch (bool, optional): if ``True``, the weights will
             be updated after each collection. For ``sync=True``, this means that
             all workers will see their weights updated. For ``sync=False``,
@@ -294,15 +338,20 @@ class DistributedDataCollector(_DataCollector):
             is turned on.
             Defaults to -1 (no forced update).
         launcher (str, optional): how jobs should be launched.
-            Can be one of "submitit" or "mp" for multiprocessing. The former
-            can launch jobs across multiple nodes, whilst the latter will only
+            Can be one of "submitit" or "mp" for multiprocessing.
+            Use "submitit_delayed" if your cluster does not support spawning
+            jobs from existing jobs.
+            The former can launch jobs across multiple nodes, whilst the latter will only
             launch jobs on a single machine. "submitit" requires the homonymous
             library to be installed.
             To find more about submitit, visit
-            https://github.com/facebookincubator/submitit
-            Defaults to "submitit".
+            https://github.com/facebookincubator/submitit and check our examples
+            to learn more.
+            Defaults to ``"submitit"``.
         tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
     """
+
+    _VERBOSE = True  # for debugging
 
     def __init__(
         self,
@@ -310,6 +359,13 @@ class DistributedDataCollector(_DataCollector):
         policy,
         frames_per_batch,
         total_frames,
+        max_frames_per_traj=-1,
+        init_random_frames=-1,
+        reset_at_each_iter=False,
+        postproc=None,
+        split_trajs=False,
+        exploration_mode=DEFAULT_EXPLORATION_MODE,
+        reset_when_done=True,
         collector_class=SyncDataCollector,
         collector_kwargs=None,
         num_workers_per_collector=1,
@@ -374,10 +430,34 @@ class DistributedDataCollector(_DataCollector):
             self.slurm_kwargs = copy(DEFAULT_SLURM_CONF).update(slurm_kwargs)
         collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
         self.collector_kwargs = (
-            collector_kwargs
+            deepcopy(collector_kwargs)
             if isinstance(collector_kwargs, (list, tuple))
-            else [collector_kwargs] * self.num_workers
+            else [copy(collector_kwargs) for _ in range(self.num_workers)]
         )
+
+        # update collector kwargs
+        for collector_kwarg in self.collector_kwargs:
+            collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
+            collector_kwarg["init_random_frames"] = (
+                init_random_frames // self.num_workers
+            )
+            if not self._sync and init_random_frames > 0:
+                warnings.warn(
+                    "async distributed data collection with init_random_frames > 0 "
+                    "may have unforeseen consequences as we do not control that once "
+                    "non-random data is being collected all nodes are returning non-random data. "
+                    "If this is a feature that you feel should be fixed, please raise an issue on "
+                    "torchrl's repo."
+                )
+            collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
+            collector_kwarg["exploration_mode"] = exploration_mode
+            collector_kwarg["reset_when_done"] = reset_when_done
+
+        if postproc is not None and hasattr(postproc, "to"):
+            self.postproc = postproc.to(self.storing_device)
+        else:
+            self.postproc = postproc
+        self.split_trajs = split_trajs
         self.backend = backend
 
         # os.environ['TP_SOCKET_IFNAME'] = 'lo'
@@ -438,6 +518,9 @@ class DistributedDataCollector(_DataCollector):
             self._tensordict_out = self._tensordict_out.unbind(0)
             for td in self._tensordict_out:
                 td.lock_()
+        self._individual_tensordicts = self._tensordict_out.unbind(0)
+        for tensordict in self._individual_tensordicts:
+            tensordict.lock_()
         pseudo_collector.shutdown()
         del pseudo_collector
 
@@ -460,6 +543,7 @@ class DistributedDataCollector(_DataCollector):
             self.policy,
             self._frames_per_batch_corrected,
             self.collector_kwargs[i],
+            self._VERBOSE,
         )
         return job
 
@@ -506,6 +590,7 @@ class DistributedDataCollector(_DataCollector):
                 self.policy,
                 self._frames_per_batch_corrected,
                 self.collector_kwargs[i],
+                self._VERBOSE,
             ),
         )
         job.start()
@@ -552,10 +637,14 @@ class DistributedDataCollector(_DataCollector):
         yield from self._iterator_dist()
 
     def _iterator_dist(self):
+        if self._VERBOSE:
+            print("iterating...")
 
         total_frames = 0
         if not self._sync:
             for rank in range(1, self.num_workers + 1):
+                if self._VERBOSE:
+                    print(f"sending 'continue' to {rank}")
                 self._store.set(f"NODE_{rank}_in", b"continue")
             trackers = []
             for i in range(self.num_workers):
@@ -575,19 +664,26 @@ class DistributedDataCollector(_DataCollector):
 
                 if total_frames < self.total_frames:
                     for rank in range(1, self.num_workers + 1):
+                        if self._VERBOSE:
+                            print(f"sending 'continue' to {rank}")
                         self._store.set(f"NODE_{rank}_in", b"continue")
                 trackers = []
                 for i in range(self.num_workers):
                     rank = i + 1
                     trackers.append(
-                        self._tensordict_out[i].irecv(src=rank, return_premature=True)
+                        self._individual_tensordicts[i].irecv(
+                            src=rank, return_premature=True
+                        )
                     )
                 for tracker in trackers:
                     for _tracker in tracker:
                         _tracker.wait()
+                for i in range(1, self.num_workers):
+                    self._individual_tensordicts[i][
+                        "collector", "traj_ids"
+                    ] += self._tensordict_out[i - 1]["collector", "traj_ids"].max()
                 data = self._tensordict_out.clone()
                 total_frames += data.numel()
-                yield data
 
             else:
                 data = None
@@ -597,20 +693,25 @@ class DistributedDataCollector(_DataCollector):
                         if self._store.get(f"NODE_{rank}_status") == b"done":
                             for _tracker in trackers[i]:
                                 _tracker.wait()
-                            data = self._tensordict_out[i].clone()
+                            data = self._individual_tensordicts[i].clone()
                             if self.update_after_each_batch:
                                 self.update_policy_weights_(rank)
                             total_frames += data.numel()
                             if total_frames < self.total_frames:
+                                if self._VERBOSE:
+                                    print(f"sending 'continue' to {rank}")
                                 self._store.set(f"NODE_{rank}_in", b"continue")
-                            trackers[i] = self._tensordict_out[i].irecv(
+                            trackers[i] = self._individual_tensordicts[i].irecv(
                                 src=i + 1, return_premature=True
                             )
                             for j in range(self.num_workers):
                                 self._batches_since_weight_update[j] += j != i
                             break
-                yield data
-
+            if self.split_trajs:
+                data = split_trajectories(data)
+            if self.postproc is not None:
+                data = self.postproc(data)
+            yield data
             if self.max_weight_update_interval > -1:
                 for j in range(self.num_workers):
                     rank = j + 1
@@ -636,6 +737,8 @@ class DistributedDataCollector(_DataCollector):
         workers = range(self.num_workers) if worker_rank is None else [worker_rank - 1]
         for i in workers:
             rank = i + 1
+            if self._VERBOSE:
+                print(f"updating weights of {rank}")
             self._store.set(f"NODE_{rank}_in", b"update_weights")
             if self._sync:
                 self.policy_weights.send(rank)
