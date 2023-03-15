@@ -247,13 +247,6 @@ class RPCDataCollector(_DataCollector):
                     options.set_device_map(
                         f"COLLECTOR_NODE_{rank}", {0: self.visible_devices[i]}
                     )
-            # else:
-            #     for i in range(self.num_workers):
-            #         rank = i + 1
-            #         options.set_device_map(
-            #             f"COLLECTOR_NODE_{rank}",
-            #             {j: j for j in range(torch.cuda.device_count())},
-            #         )
 
         print("init rpc")
         rpc.init_rpc(

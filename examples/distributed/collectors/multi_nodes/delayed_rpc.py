@@ -47,8 +47,8 @@ parser.add_argument(
     "--gpus-per-node",
     "-G",
     type=int,
-    default=1,
-    help="Number of GPUs per node. If greater than 0, the backend used will be NCCL.",
+    default=0,
+    help="Number of GPUs per node. ",
 )
 parser.add_argument(
     "--cpus_per_task",

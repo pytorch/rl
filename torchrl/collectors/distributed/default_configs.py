@@ -24,5 +24,5 @@ DEFAULT_SLURM_CONF_MAIN = {
 DEFAULT_TENSORPIPE_OPTIONS = {
     "num_worker_threads": 16,
     "rpc_timeout": 10_000,
-    # "_transports": ["uv"],
+    "_transports": ["uv"],
 }
