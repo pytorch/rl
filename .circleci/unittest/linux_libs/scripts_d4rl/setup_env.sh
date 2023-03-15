@@ -89,7 +89,7 @@ cd d4rl
 pip install -e .
 cd ..
 
-git clone https://github.com/flow-project/flow.git
-cd flow
-pip install -e .
-cd ..
+#git clone https://github.com/flow-project/flow.git
+#cd flow
+#pip install -e .
+#cd ..
