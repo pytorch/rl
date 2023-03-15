@@ -8,7 +8,8 @@ r"""Generic distributed data-collector using torch.distributed.rpc backend."""
 import os
 import socket
 import time
-from copy import copy
+import warnings
+from copy import copy, deepcopy
 from typing import OrderedDict
 
 from torchrl.collectors.distributed import DEFAULT_SLURM_CONF
@@ -36,6 +37,7 @@ from torch.distributed import rpc
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     _DataCollector,
+    DEFAULT_EXPLORATION_MODE,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
@@ -85,14 +87,52 @@ class RPCDataCollector(_DataCollector):
     Supports sync and async data collection.
 
     Args:
-        create_env_fn (list of callables or EnvBase instances): a list of the
-            same length as the number of nodes to be launched.
-        policy (Callable[[TensorDict], TensorDict]): a callable that populates
-            the tensordict with an `"action"` field.
-        frames_per_batch (int): the number of frames to be gathered in each
-            batch.
-        total_frames (int): the total number of frames to be collected from the
-            distributed collector.
+        create_env_fn (Callable or List[Callabled]): list of Callables, each returning an
+            instance of :class:`torchrl.envs.EnvBase`.
+        policy (Callable, optional): Instance of TensorDictModule class.
+            Must accept TensorDictBase object as input.
+            If ``None`` is provided, the policy used will be a
+            :class:`RandomPolicy` instance with the environment
+            ``action_spec``.
+        frames_per_batch (int): A keyword-only argument representing the
+            total number of elements in a batch.
+        total_frames (int): A keyword-only argument representing the
+            total number of frames returned by the collector
+            during its lifespan. If the ``total_frames`` is not divisible by
+            ``frames_per_batch``, an exception is raised.
+             Endless collectors can be created by passing ``total_frames=-1``.
+        max_frames_per_traj (int, optional): Maximum steps per trajectory.
+            Note that a trajectory can span over multiple batches (unless
+            ``reset_at_each_iter`` is set to ``True``, see below).
+            Once a trajectory reaches ``n_steps``, the environment is reset.
+            If the environment wraps multiple environments together, the number
+            of steps is tracked for each environment independently. Negative
+            values are allowed, in which case this argument is ignored.
+            Defaults to ``-1`` (i.e. no maximum number of steps).
+        init_random_frames (int, optional): Number of frames for which the
+            policy is ignored before it is called. This feature is mainly
+            intended to be used in offline/model-based settings, where a
+            batch of random trajectories can be used to initialize training.
+            Defaults to ``-1`` (i.e. no random frames).
+        reset_at_each_iter (bool, optional): Whether environments should be reset
+            at the beginning of a batch collection.
+            Defaults to ``False``.
+        postproc (Callable, optional): A post-processing transform, such as
+            a :class:`torchrl.envs.Transform` or a :class:`torchrl.data.postprocs.MultiStep`
+            instance.
+            Defaults to ``None``.
+        split_trajs (bool, optional): Boolean indicating whether the resulting
+            TensorDict should be split according to the trajectories.
+            See :func:`torchrl.collectors.utils.split_trajectories` for more
+            information.
+            Defaults to ``False``.
+        exploration_mode (str, optional): interaction mode to be used when
+            collecting data. Must be one of ``"random"``, ``"mode"`` or
+            ``"mean"``.
+            Defaults to ``"random"``
+        reset_when_done (bool, optional): if ``True`` (default), an environment
+            that return a ``True`` value in its ``"done"`` or ``"truncated"``
+            entry will be reset at the corresponding indices.
         collector_class (type or str, optional): a collector class for the remote node. Can be
             :class:`torchrl.collectors.SyncDataCollector`,
             :class:`torchrl.collectors.MultiSyncDataCollector`,
@@ -126,6 +166,9 @@ class RPCDataCollector(_DataCollector):
             first-served" fashion.
         slurm_kwargs (dict): a dictionary of parameters to be passed to the
             submitit executor.
+        storing_device (int, str or torch.device, optional): the device where
+            data will be stored and delivered by the iterator. Defaults to
+            ``"cpu"``.
         update_after_each_batch (bool, optional): if ``True``, the weights will
             be updated after each collection. For ``sync=True``, this means that
             all workers will see their weights updated. For ``sync=False``,
@@ -159,12 +202,22 @@ class RPCDataCollector(_DataCollector):
 
     """
 
+    _VERBOSE = True  # for debugging
+
     def __init__(
         self,
         create_env_fn,
         policy,
+        *,
         frames_per_batch,
         total_frames,
+        max_frames_per_traj=-1,
+        init_random_frames=-1,
+        reset_at_each_iter=False,
+        postproc=None,
+        split_trajs=False,
+        exploration_mode=DEFAULT_EXPLORATION_MODE,
+        reset_when_done=True,
         collector_class=SyncDataCollector,
         collector_kwargs=None,
         num_workers_per_collector=1,
@@ -224,10 +277,35 @@ class RPCDataCollector(_DataCollector):
             self.slurm_kwargs = copy(DEFAULT_SLURM_CONF).update(slurm_kwargs)
         collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
         self.collector_kwargs = (
-            collector_kwargs
+            deepcopy(collector_kwargs)
             if isinstance(collector_kwargs, (list, tuple))
-            else [collector_kwargs] * self.num_workers
+            else [copy(collector_kwargs) for _ in range(self.num_workers)]
         )
+
+        # update collector kwargs
+        for collector_kwarg in self.collector_kwargs:
+            collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
+            collector_kwarg["init_random_frames"] = (
+                init_random_frames // self.num_workers
+            )
+            if not self._sync and init_random_frames > 0:
+                warnings.warn(
+                    "async distributed data collection with init_random_frames > 0 "
+                    "may have unforeseen consequences as we do not control that once "
+                    "non-random data is being collected all nodes are returning non-random data. "
+                    "If this is a feature that you feel should be fixed, please raise an issue on "
+                    "torchrl's repo."
+                )
+            collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
+            collector_kwarg["exploration_mode"] = exploration_mode
+            collector_kwarg["reset_when_done"] = reset_when_done
+
+        if postproc is not None and hasattr(postproc, "to"):
+            self.postproc = postproc.to(self.storing_device)
+        else:
+            self.postproc = postproc
+        self.split_trajs = split_trajs
+
         if tensorpipe_options is None:
             self.tensorpipe_options = copy(DEFAULT_TENSORPIPE_OPTIONS)
         else:
@@ -458,6 +536,11 @@ class RPCDataCollector(_DataCollector):
                         args=(self.collector_rrefs[i],),
                     )
         data = torch.cat(data).to(self.storing_device)
+        traj_ids = data.get(("collector", "traj_ids"), None)
+        if traj_ids is not None:
+            for i in range(1, self.num_workers):
+                traj_ids[i] += traj_ids[i - 1].max()
+            data.set_(("collector", "traj_ids"), traj_ids)
         self._collected_frames += data.numel()
         return data
 

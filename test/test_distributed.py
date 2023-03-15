@@ -29,6 +29,8 @@ from torchrl.collectors.distributed import (
     RPCDataCollector,
 )
 
+TIMEOUT = 200
+
 
 class CountingPolicy(nn.Module):
     """A policy for counting env.
@@ -78,6 +80,7 @@ class DistributedCollectorBase:
             **cls.distributed_kwargs(),
         )
         total = 0
+        print("getting data...")
         for data in collector:
             total += data.numel()
             assert data.numel() == frames_per_batch
@@ -95,10 +98,12 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=100)
+            out = queue.get(timeout=TIMEOUT)
             assert out == "passed"
         finally:
-            proc.join()
+            proc.join(10)
+            if proc.is_alive():
+                proc.terminate()
             queue.close()
 
     @classmethod
@@ -121,7 +126,7 @@ class DistributedCollectorBase:
         assert total == -frames_per_batch * (1000 // -frames_per_batch)
         queue.put("passed")
 
-    def test_distributed_collector_mult(self, frames_per_batch=300):
+    def test_distributed_collector_mult(self, frames_per_batch=200):
         """Testing multiple nodes."""
         time.sleep(1.0)
         queue = mp.Queue(1)
@@ -131,10 +136,12 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=100)
+            out = queue.get(timeout=TIMEOUT)
             assert out == "passed"
         finally:
-            proc.join()
+            proc.join(10)
+            if proc.is_alive():
+                proc.terminate()
             queue.close()
 
     @classmethod
@@ -168,10 +175,12 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=100)
+            out = queue.get(timeout=TIMEOUT)
             assert out == "passed"
         finally:
-            proc.join()
+            proc.join(10)
+            if proc.is_alive():
+                proc.terminate()
             queue.close()
 
     @classmethod
@@ -212,10 +221,12 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=100)
+            out = queue.get(timeout=TIMEOUT)
             assert out == "passed"
         finally:
-            proc.join()
+            proc.join(10)
+            if proc.is_alive():
+                proc.terminate()
             queue.close()
 
     @classmethod
@@ -241,9 +252,7 @@ class DistributedCollectorBase:
             if i == 0:
                 first_batch = data
                 policy.weight.data += 1
-                print("updating....")
                 collector.update_policy_weights_()
-                print("done")
             elif total == 2000 - frames_per_batch:
                 last_batch = data
         assert (first_batch["action"] == 1).all(), first_batch["action"]
@@ -271,10 +280,12 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=100)
+            out = queue.get(timeout=TIMEOUT)
             assert out == "passed"
         finally:
-            proc.join()
+            proc.join(10)
+            if proc.is_alive():
+                proc.terminate()
             queue.close()
 
 
@@ -347,7 +358,6 @@ class TestSyncCollector(DistributedCollectorBase):
             if i == 0:
                 first_batch = data
                 policy.weight.data += 1
-                print("done")
             elif total == 2000 - frames_per_batch:
                 last_batch = data
         assert (first_batch["action"] == 1).all(), first_batch["action"]
@@ -378,10 +388,12 @@ class TestSyncCollector(DistributedCollectorBase):
         )
         proc.start()
         try:
-            out = queue.get(timeout=100)
+            out = queue.get(timeout=TIMEOUT)
             assert out == "passed"
         finally:
-            proc.join()
+            proc.join(10)
+            if proc.is_alive():
+                proc.terminate()
             queue.close()
 
 

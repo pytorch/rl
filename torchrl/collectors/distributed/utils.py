@@ -64,6 +64,8 @@ class submitit_delayed_launcher:
         ...
     """
 
+    _VERBOSE = False  # for debugging
+
     def __init__(
         self,
         num_jobs,
@@ -126,6 +128,7 @@ class submitit_delayed_launcher:
                         rank0_ip,
                         self.tcpport,
                         world_size,
+                        self._VERBOSE,
                     )
                 elif self.framework == "rpc":
                     job = executor.submit(
