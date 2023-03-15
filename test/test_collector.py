@@ -204,7 +204,6 @@ def test_output_device_consistency(
         total_frames=20000,
         device=_device,
         storing_device=_storing_device,
-        pin_memory=False,
     )
     for _, d in enumerate(collector):
         assert _is_consistent_device_type(
@@ -223,7 +222,6 @@ def test_output_device_consistency(
         total_frames=20000,
         device=_device,
         storing_device=_storing_device,
-        pin_memory=False,
     )
 
     for _, d in enumerate(ccollector):
@@ -265,7 +263,6 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
         max_frames_per_traj=2000,
         total_frames=20000,
         device="cpu",
-        pin_memory=False,
     )
     for i, d in enumerate(collector):
         if i == 0:
@@ -285,7 +282,6 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
         frames_per_batch=20,
         max_frames_per_traj=2000,
         total_frames=20000,
-        pin_memory=False,
     )
     for i, d in enumerate(ccollector):
         if i == 0:
@@ -314,7 +310,7 @@ def test_collector_env_reset():
     # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
     env.set_seed(0)
     collector = SyncDataCollector(
-        env, total_frames=10000, frames_per_batch=10000, split_trajs=False
+        env, policy=None, total_frames=10000, frames_per_batch=10000, split_trajs=False
     )
     for _data in collector:
         continue
@@ -370,7 +366,6 @@ def test_collector_done_persist(num_env, env_name, seed=5):
         max_frames_per_traj=2000,
         total_frames=20000,
         device="cpu",
-        pin_memory=False,
         reset_when_done=False,
     )
     for _, d in enumerate(collector):  # noqa
@@ -420,7 +415,6 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
         max_frames_per_traj=2000,
         total_frames=20000,
         device="cpu",
-        pin_memory=False,
         reset_when_done=True,
         split_trajs=True,
     )
@@ -460,7 +454,6 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 #         frames_per_batch=20,
 #         max_frames_per_traj=2000,
 #         total_frames=20000,
-#         pin_memory=False,
 #     )
 #     for i, d in enumerate(ccollector):
 #         if i == 0:
@@ -507,7 +500,6 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         frames_per_batch=frames_per_batch,
         max_frames_per_traj=1000,
         total_frames=frames_per_batch * 100,
-        pin_memory=False,
     )
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
@@ -522,7 +514,6 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         frames_per_batch=frames_per_batch,
         max_frames_per_traj=1000,
         total_frames=frames_per_batch * 100,
-        pin_memory=False,
     )
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
@@ -563,7 +554,6 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
         frames_per_batch=20,
         max_frames_per_traj=20,
         total_frames=300,
-        pin_memory=False,
     )
     ccollector.set_seed(seed)
     for i, data in enumerate(ccollector):
@@ -627,7 +617,6 @@ def test_collector_consistency(num_env, env_name, seed=100):
         max_frames_per_traj=20,
         total_frames=200,
         device="cpu",
-        pin_memory=False,
     )
     collector_iter = iter(collector)
     b1 = next(collector_iter)
@@ -683,9 +672,8 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device="cpu",
-        seed=seed,
-        pin_memory=False,
     )
+    collector1.set_seed(seed)
     count = 0
     data1 = []
     for d in collector1:
@@ -708,9 +696,8 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device="cpu",
-        seed=seed,
-        pin_memory=False,
     )
+    collector10.set_seed(seed)
     count = 0
     data10 = []
     for d in collector10:
@@ -733,9 +720,8 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device="cpu",
-        seed=seed,
-        pin_memory=False,
     )
+    collector20.set_seed(seed)
     count = 0
     data20 = []
     for d in collector20:
@@ -902,6 +888,7 @@ def test_excluded_keys(collector_class, exclude):
         "create_env_fn": make_env,
         "policy": policy_explore,
         "frames_per_batch": 30,
+        "total_frames": -1,
     }
     if collector_class is not SyncDataCollector:
         collector_kwargs["create_env_fn"] = [
@@ -1045,7 +1032,6 @@ def test_collector_device_combinations(device, storing_device):
         total_frames=20000,
         device=device,
         storing_device=storing_device,
-        pin_memory=False,
     )
     batch = next(collector.iterator())
     assert batch.device == torch.device(storing_device)
@@ -1068,7 +1054,6 @@ def test_collector_device_combinations(device, storing_device):
         storing_devices=[
             storing_device,
         ],
-        pin_memory=False,
     )
     batch = next(collector.iterator())
     assert batch.device == torch.device(storing_device)
@@ -1091,7 +1076,6 @@ def test_collector_device_combinations(device, storing_device):
         storing_devices=[
             storing_device,
         ],
-        pin_memory=False,
     )
     batch = next(collector.iterator())
     assert batch.device == torch.device(storing_device)
@@ -1117,7 +1101,12 @@ class TestAutoWrap:
         return lambda: GymEnv(PENDULUM_VERSIONED)
 
     def _create_collector_kwargs(self, env_maker, collector_class, policy):
-        collector_kwargs = {"create_env_fn": env_maker, "policy": policy}
+        collector_kwargs = {
+            "create_env_fn": env_maker,
+            "policy": policy,
+            "frames_per_batch": 200,
+            "total_frames": -1,
+        }
 
         if collector_class is not SyncDataCollector:
             collector_kwargs["create_env_fn"] = [
@@ -1216,6 +1205,7 @@ def test_initial_obs_consistency(env_class, seed=1):
         policy=policy,
         frames_per_batch=((max_steps - 3) * 2 + 2) * num_envs,  # at least two episodes
         split_trajs=False,
+        total_frames=-1,
     )
     for _d in collector:
         break
