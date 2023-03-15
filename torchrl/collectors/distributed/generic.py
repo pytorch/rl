@@ -288,7 +288,6 @@ def _run_collector(
         split_trajs=False,
         **collector_kwargs,
     )
-    collector_iter = iter(collector)
     total_frames = 0
     if verbose:
         print(f"node with rank {rank} -- loop")
@@ -301,7 +300,7 @@ def _run_collector(
             _store.set(f"NODE_{rank}_status", b"busy")
             if verbose:
                 print(f"node with rank {rank} -- new data")
-            data = next(collector_iter)
+            data = collector.next()
             total_frames += data.numel()
             if verbose:
                 print(f"got data, total frames = {total_frames}")
