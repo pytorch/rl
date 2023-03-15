@@ -13,7 +13,7 @@
 
 [**Documentation**](#documentation-and-knowledge-base) | [**TensorDict**](#writing-simplified-and-portable-rl-codebase-with-tensordict) |
 [**Features**](#features) | [**Examples, tutorials and demos**](#examples-tutorials-and-demos) | [**Installation**](#installation) |
-[**Asking a question**](#asking-a-question) | [**More resources**](#more-resources) | [**Contributing**](#contributing)
+[**Asking a question**](#asking-a-question) | [**Citation**](#citation) | [**Contributing**](#contributing)
 
 **TorchRL** is an open-source Reinforcement Learning (RL) library for PyTorch.
 
@@ -31,8 +31,14 @@ TorchRL aims at (1) a high modularity and (2) good runtime performance.
 
 The TorchRL documentation can be found [here](https://pytorch.org/rl).
 It contains tutorials and the API reference.
+
 TorchRL also provides a RL knowledge base to help you debug your code, or simply
 learn the basics of RL. Check it out [here](https://pytorch.org/rl/reference/knowledge_base.html).
+
+We have some introductory videos for you to get to know the library better, check them out:
+
+- [TorchRL intro at PyTorch day 2022](https://youtu.be/cIKMhZoykEE)
+- [PyTorch 2.0 Q&A: TorchRL](https://www.youtube.com/live/myEfUoYrbts?feature=share)
 
 ## Writing simplified and portable RL codebase with `TensorDict`
 
@@ -156,8 +162,8 @@ algorithms.
   ```
   </details>
 
-TensorDict abstracts away the input / output signatures of the modules, env, 
-collectors, replay buffers and losses of the library, allowing its primitives
+Using this, TorchRL abstracts away the input / output signatures of the modules, env, 
+collectors, replay buffers and losses of the library, allowing all primitives
 to be easily recycled across settings.
 
   <details>
@@ -210,7 +216,7 @@ to be easily recycled across settings.
 
 TensorDict comes with a dedicated [`tensordict.nn`](https://pytorch-labs.github.io/tensordict/reference/nn.html)
 module that contains everything you might need to write your model with it.
-And it is functorch and torch.compile compatible!
+And it is `functorch` and `torch.compile` compatible!
 
   <details>
     <summary>Code</summary>
@@ -600,14 +606,22 @@ Versioning issues can cause error message of the type ```undefined symbol``` and
 ## Asking a question
 
 If you spot a bug in the library, please raise an issue in this repo.
+
 If you have a more generic question regarding RL in PyTorch, post it on
 the [PyTorch forum](https://discuss.pytorch.org/c/reinforcement-learning/6).
 
-## More resources
+## Citation
 
-We have some introductory videos for you to get to know the library better, check them out:
-[TorchRL intro at PyTorch day 2022](https://youtu.be/cIKMhZoykEE)
-[PyTorch 2.0 Q&A: TorchRL](https://www.youtube.com/live/myEfUoYrbts?feature=share)
+If you're using TorchRL, please refer to this BibTeX entry to cite this work:
+```
+@software{TorchRL,
+  author = {Moens, Vincent},
+  title = {{TorchRL: an open-source Reinforcement Learning (RL) library for PyTorch}},
+  url = {https://github.com/pytorch/rl},
+  version = {0.0.5},
+  year = {2023}
+}
+```
 
 ## Contributing
 
