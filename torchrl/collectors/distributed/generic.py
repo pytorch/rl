@@ -180,7 +180,7 @@ def _distributed_init_delayed(
     rank0_ip,
     tcpport,
     world_size,
-    verbose=True,
+    verbose=False,
 ):
     """Initializer for contexts where jobs cannot be launched from main node.
 
@@ -227,7 +227,7 @@ def _distributed_init_collection_node(
     policy,
     frames_per_batch,
     collector_kwargs,
-    verbose=True,
+    verbose=False,
 ):
     _store = _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose)
     _run_collector(
@@ -252,7 +252,7 @@ def _run_collector(
     policy,
     frames_per_batch,
     collector_kwargs,
-    verbose=True,
+    verbose=False,
 ):
     rank = torch.distributed.get_rank()
     if verbose:
@@ -692,12 +692,9 @@ class DistributedDataCollector(_DataCollector):
                     )
                 for tracker in trackers:
                     for i, _tracker in enumerate(tracker):
-                        print(f"waiting for {i+1}")
                         _tracker.wait()
-                        print("got it!")
                 data = self._tensordict_out.clone()
                 total_frames += data.numel()
-                print(f"total frames: {total_frames}")
                 yield data
 
             else:
@@ -733,9 +730,7 @@ class DistributedDataCollector(_DataCollector):
 
         for i in range(self.num_workers):
             rank = i + 1
-            print("shutting down")
             self._store.set(f"NODE_{rank}_in", b"shutdown")
-        raise StopIteration
 
     def update_policy_weights_(self, worker_rank=None) -> None:
         """Updates the weights of the worker nodes.
