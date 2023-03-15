@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Multi-node distributed data collection with submitit in contexts where jobs can't launch other jobs.
+"""Multi-node RPC-based distributed data collection with submitit in contexts where jobs can't launch other jobs.
 
 The default configuration will ask for 8 nodes with 1 GPU each and 32 procs / node.
 

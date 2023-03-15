@@ -11,6 +11,12 @@ import time
 from copy import copy
 from typing import OrderedDict
 
+from torchrl.collectors.distributed import DEFAULT_SLURM_CONF
+from torchrl.collectors.distributed.default_configs import (
+    DEFAULT_TENSORPIPE_OPTIONS,
+    IDLE_TIMEOUT,
+    TCP_PORT,
+)
 from torchrl.data.utils import CloudpickleWrapper
 
 SUBMITIT_ERR = None
@@ -34,22 +40,6 @@ from torchrl.collectors.collectors import (
     SyncDataCollector,
 )
 from torchrl.envs import EnvBase, EnvCreator
-
-SLEEP_INTERVAL = 1e-6
-DEFAULT_SLURM_CONF = {
-    "timeout_min": 10,
-    "slurm_partition": "train",
-    "slurm_cpus_per_task": 32,
-    "slurm_gpus_per_node": 0,
-}
-TCP_PORT = os.environ.get("TCP_PORT", "10003")
-IDLE_TIMEOUT = os.environ.get("RCP_IDLE_TIMEOUT", 10)
-
-DEFAULT_TENSORPIPE_OPTIONS = {
-    "num_worker_threads": 16,
-    "rpc_timeout": 10_000,
-    "_transports": ["uv"],
-}
 
 
 def _rpc_init_collection_node(
@@ -210,7 +200,7 @@ class RPCDataCollector(_DataCollector):
         self.launcher = launcher
         self._batches_since_weight_update = [0 for _ in range(self.num_workers)]
         if tcp_port is None:
-            self.tcp_port = os.environ.get("TCP_PORT", "10003")
+            self.tcp_port = os.environ.get("TCP_PORT", TCP_PORT)
         else:
             self.tcp_port = str(tcp_port)
         self.visible_devices = visible_devices
@@ -226,9 +216,10 @@ class RPCDataCollector(_DataCollector):
 
         self.num_workers_per_collector = num_workers_per_collector
         self.total_frames = total_frames
-        self.slurm_kwargs = (
-            slurm_kwargs if slurm_kwargs is not None else DEFAULT_SLURM_CONF
-        )
+        if slurm_kwargs is None:
+            self.slurm_kwargs = copy(DEFAULT_SLURM_CONF)
+        else:
+            self.slurm_kwargs = copy(DEFAULT_SLURM_CONF).update(slurm_kwargs)
         collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
         self.collector_kwargs = (
             collector_kwargs

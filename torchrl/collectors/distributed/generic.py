@@ -7,7 +7,7 @@ r"""Generic distributed data-collector using torch.distributed backend."""
 
 import os
 import socket
-from copy import deepcopy
+from copy import copy, deepcopy
 from datetime import timedelta
 from typing import OrderedDict
 
@@ -21,6 +21,11 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
+from torchrl.collectors.distributed.default_configs import (
+    DEFAULT_SLURM_CONF,
+    MAX_TIME_TO_CONNECT,
+    TCP_PORT,
+)
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvBase, EnvCreator
 
@@ -32,20 +37,6 @@ try:
 except ModuleNotFoundError as err:
     _has_submitit = False
     SUBMITIT_ERR = err
-
-MAX_TIME_TO_CONNECT = 1000
-DEFAULT_SLURM_CONF = {
-    "timeout_min": 10,
-    "slurm_partition": "train",
-    "slurm_cpus_per_task": 32,
-    "slurm_gpus_per_node": 0,
-}  #: Default value of the SLURM jobs
-DEFAULT_SLURM_CONF_MAIN = {
-    "timeout_min": 10,
-    "slurm_partition": "train",
-    "slurm_cpus_per_task": 32,
-    "slurm_gpus_per_node": 1,
-}  #: Default value of the SLURM main job
 
 
 def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
@@ -361,7 +352,7 @@ class DistributedDataCollector(_DataCollector):
         self.launcher = launcher
         self._batches_since_weight_update = [0 for _ in range(self.num_workers)]
         if tcp_port is None:
-            self.tcp_port = os.environ.get("TCP_PORT", "10003")
+            self.tcp_port = os.environ.get("TCP_PORT", TCP_PORT)
         else:
             self.tcp_port = str(tcp_port)
 
@@ -377,9 +368,10 @@ class DistributedDataCollector(_DataCollector):
 
         self.num_workers_per_collector = num_workers_per_collector
         self.total_frames = total_frames
-        self.slurm_kwargs = (
-            slurm_kwargs if slurm_kwargs is not None else DEFAULT_SLURM_CONF
-        )
+        if slurm_kwargs is None:
+            self.slurm_kwargs = copy(DEFAULT_SLURM_CONF)
+        else:
+            self.slurm_kwargs = copy(DEFAULT_SLURM_CONF).update(slurm_kwargs)
         collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
         self.collector_kwargs = (
             collector_kwargs
