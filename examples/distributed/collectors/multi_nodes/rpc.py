@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import time
 from argparse import ArgumentParser
 
 import torch
@@ -97,8 +98,16 @@ if __name__ == "__main__":
         launcher=launcher,
     )
 
+    counter = 0
     pbar = tqdm.tqdm(total=collector.total_frames)
-    for data in collector:
+    for i, data in enumerate(collector):
         pbar.update(data.numel())
         pbar.set_description(f"data shape: {data.shape}, data device: {data.device}")
+        if i >= 10:
+            counter += data.numel()
+        if i == 10:
+            t0 = time.time()
     collector.shutdown()
+    t1 = time.time()
+    print(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    exit()

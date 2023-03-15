@@ -23,7 +23,7 @@ from the jump host and pass the slurm specs to submitit.
   and DEFAULT_SLURM_CONF_MAIN dictionaries below).
 
 """
-
+import time
 from argparse import ArgumentParser
 
 import tqdm
@@ -132,13 +132,18 @@ def main():
         backend="nccl" if slurm_gpus_per_node else "gloo",
         sync=sync,
     )
-    pbar = tqdm.tqdm(total=total_frames)
-    for data in collector:
+    counter = 0
+    pbar = tqdm.tqdm(total=collector.total_frames)
+    for i, data in enumerate(collector):
         pbar.update(data.numel())
-        pbar.set_description(
-            f"data shape: {data.shape}, data stat: {data['pixels'].float().mean(): 4.4f}"
-        )
+        pbar.set_description(f"data shape: {data.shape}, data device: {data.device}")
+        if i >= 10:
+            counter += data.numel()
+        if i == 10:
+            t0 = time.time()
     collector.shutdown()
+    t1 = time.time()
+    print(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
     exit()
 
 

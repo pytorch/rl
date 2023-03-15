@@ -690,7 +690,7 @@ class DistributedDataCollector(_DataCollector):
                         self._tensordict_out[i].irecv(src=rank, return_premature=True)
                     )
                 for tracker in trackers:
-                    for i, _tracker in enumerate(tracker):
+                    for _tracker in tracker:
                         _tracker.wait()
                 data = self._tensordict_out.clone()
                 total_frames += data.numel()
