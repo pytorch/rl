@@ -52,6 +52,7 @@ class Sampler(ABC):
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         return
 
+    @property
     def ran_out(self) -> bool:
         # by default, samplers never run out
         return False
@@ -127,10 +128,14 @@ class SamplerWithoutReplacement(Sampler):
         self.len_storage = len_storage
         index = self._single_sample(len_storage, batch_size)
         # we 'always' return the indices. The 'drop_last' just instructs the
-        # sampler to turn to 'ran_out() = True` whenever the next sample
+        # sampler to turn to 'ran_out = True` whenever the next sample
         # will be too short. This will be read by the replay buffer
         # as a signal for an early break of the __iter__().
         return index, {}
+
+    @property
+    def ran_out(self):
+        return self._ran_out
 
 
 class PrioritizedSampler(Sampler):

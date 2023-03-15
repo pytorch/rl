@@ -325,12 +325,12 @@ class ReplayBuffer:
         self._transform.insert(index, transform)
 
     def __iter__(self):
-        batch_size = self._sampler.batch_size
-        while True:
+        if self._batch_size is None:
+            raise RuntimeError(
+                "batch_size was not specified during construction of the replay buffer"
+            )
+        while not self._sampler.ran_out:
             data = self.sample()
-            if self._sampler.ran_out() and len(data) < batch_size:
-                # do not yield result if ran out
-                break
             yield data
 
 
