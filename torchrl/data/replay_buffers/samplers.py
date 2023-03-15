@@ -5,7 +5,7 @@
 
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Tuple, Union
 
 import numpy as np
 import torch
@@ -52,6 +52,7 @@ class Sampler(ABC):
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         return
 
+    @property
     def ran_out(self) -> bool:
         # by default, samplers never run out
         return False
@@ -66,9 +67,6 @@ class RandomSampler(Sampler):
 
     """
 
-    def __init__(self, batch_size: Optional[int] = None):
-        self.batch_size = batch_size
-
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
         index = torch.randint(0, len(storage), (batch_size,))
         return index, {}
@@ -78,8 +76,6 @@ class SamplerWithoutReplacement(Sampler):
     """A data-consuming sampler that ensures that the same sample is not present in consecutive batches.
 
     Args:
-        batch_size (int, optional): if provided, the batch size to be used by
-            the replay buffer when calling :meth:`~.ReplayBuffer.sample`.
         drop_last (bool, optional): if True, the last incomplete sample (if any) will be dropped.
             If False, this last sample will be kept and (unlike with torch dataloaders)
             completed with other samples from a fresh indices permutation.
@@ -96,11 +92,10 @@ class SamplerWithoutReplacement(Sampler):
 
     """
 
-    def __init__(self, batch_size: Optional[int] = None, drop_last: bool = False):
+    def __init__(self, drop_last: bool = False):
         self._sample_list = None
         self.len_storage = 0
         self.drop_last = drop_last
-        self.batch_size = batch_size
         self._ran_out = False
 
     def _single_sample(self, len_storage, batch_size):
@@ -108,14 +103,10 @@ class SamplerWithoutReplacement(Sampler):
         self._sample_list = self._sample_list[batch_size:]
 
         # check if we have enough elements for one more batch, assuming same batch size
-        # or self.batch_size
-        _batch_size = self.batch_size
-        if not _batch_size:
-            _batch_size = batch_size
-        if len(self._sample_list) < _batch_size and self.drop_last:
-            self._ran_out = True
-            self._sample_list = torch.randperm(len_storage)
-        elif not self._sample_list.numel():
+        # will be used each time sample is called
+        if self._sample_list.numel() == 0 or (
+            self.drop_last and len(self._sample_list) < batch_size
+        ):
             self._ran_out = True
             self._sample_list = torch.randperm(len_storage)
         else:
@@ -137,10 +128,14 @@ class SamplerWithoutReplacement(Sampler):
         self.len_storage = len_storage
         index = self._single_sample(len_storage, batch_size)
         # we 'always' return the indices. The 'drop_last' just instructs the
-        # sampler to turn to 'ran_out() = True` whenever the next sample
+        # sampler to turn to 'ran_out = True` whenever the next sample
         # will be too short. This will be read by the replay buffer
         # as a signal for an early break of the __iter__().
         return index, {}
+
+    @property
+    def ran_out(self):
+        return self._ran_out
 
 
 class PrioritizedSampler(Sampler):
@@ -159,8 +154,6 @@ class PrioritizedSampler(Sampler):
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectories). Can be one of "max", "min",
             "median" or "mean".
-        batch_size (int, optional): if provided, the batch size to be used by
-            the replay buffer when calling :meth:`~.ReplayBuffer.sample`.
 
     """
 
@@ -172,7 +165,6 @@ class PrioritizedSampler(Sampler):
         eps: float = 1e-8,
         dtype: torch.dtype = torch.float,
         reduction: str = "max",
-        batch_size: Optional[int] = None,
     ) -> None:
         if alpha <= 0:
             raise ValueError(
@@ -186,7 +178,6 @@ class PrioritizedSampler(Sampler):
         self._beta = beta
         self._eps = eps
         self.reduction = reduction
-        self.batch_size = batch_size
         if dtype in (torch.float, torch.FloatType, torch.float32):
             self._sum_tree = SumSegmentTreeFp32(self._max_capacity)
             self._min_tree = MinSegmentTreeFp32(self._max_capacity)

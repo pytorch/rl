@@ -5,6 +5,7 @@
 
 import collections
 import threading
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -99,6 +100,7 @@ class ReplayBuffer:
             content. If used with other structures, the transforms should be
             encoded with a `"data"` leading key that will be used to
             construct a tensordict from the non-tensordict content.
+        batch_size (int, optional): the batch size to be used when sample() is called.
 
     """
 
@@ -111,6 +113,7 @@ class ReplayBuffer:
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
         transform: Optional["Transform"] = None,  # noqa-F821
+        batch_size: Optional[int] = None,
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)
@@ -142,6 +145,13 @@ class ReplayBuffer:
         transform.eval()
         self._transform = transform
 
+        if batch_size is None:
+            warnings.warn(
+                "Constructing replay buffer without specifying behaviour is no longer "
+                "recommended, and will be deprecated in the future."
+            )
+        self._batch_size = batch_size
+
     def __len__(self) -> int:
         with self._replay_lock:
             return len(self._storage)
@@ -171,12 +181,14 @@ class ReplayBuffer:
             "_storage": self._storage.state_dict(),
             "_sampler": self._sampler.state_dict(),
             "_writer": self._writer.state_dict(),
+            "_batch_size": self._batch_size,
         }
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         self._storage.load_state_dict(state_dict["_storage"])
         self._sampler.load_state_dict(state_dict["_sampler"])
         self._writer.load_state_dict(state_dict["_writer"])
+        self._batch_size = state_dict["_batch_size"]
 
     def add(self, data: Any) -> int:
         """Add a single element to the replay buffer.
@@ -256,8 +268,18 @@ class ReplayBuffer:
             A batch of data selected in the replay buffer.
             A tuple containing this batch and info if return_info flag is set to True.
         """
-        if batch_size is None:
-            batch_size = self._sampler.batch_size
+        if batch_size is not None:
+            warnings.warn(
+                "batch_size argument in sample has been deprecated. Set the batch_size "
+                "when constructing the replay buffer instead."
+            )
+        elif self._batch_size is not None:
+            batch_size = self._batch_size
+        else:
+            raise RuntimeError(
+                "batch_size not specified. You can specify the batch_size when "
+                "constructing the replay buffer"
+            )
         if not self._prefetch:
             ret = self._sample(batch_size)
         else:
@@ -303,12 +325,12 @@ class ReplayBuffer:
         self._transform.insert(index, transform)
 
     def __iter__(self):
-        batch_size = self._sampler.batch_size
-        while True:
+        if self._batch_size is None:
+            raise RuntimeError(
+                "batch_size was not specified during construction of the replay buffer"
+            )
+        while not self._sampler.ran_out:
             data = self.sample()
-            if self._sampler.ran_out() and len(data) < batch_size:
-                # do not yield result if ran out
-                break
             yield data
 
 
@@ -351,6 +373,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
         transform: Optional["Transform"] = None,  # noqa-F821
+        batch_size: Optional[int] = None,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -362,6 +385,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             pin_memory=pin_memory,
             prefetch=prefetch,
             transform=transform,
+            batch_size=batch_size,
         )
 
 
@@ -482,8 +506,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
             A tensordict containing a batch of data selected in the replay buffer.
             A tuple containing this tensordict and info if return_info flag is set to True.
         """
-        if batch_size is None:
-            batch_size = self._sampler.batch_size
         data, info = super().sample(batch_size, return_info=True)
         if include_info:
             for k, v in info.items():
@@ -550,6 +572,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         prefetch: Optional[int] = None,
         transform: Optional["Transform"] = None,  # noqa-F821
         reduction: Optional[str] = "max",
+        batch_size: Optional[int] = None,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -564,6 +587,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             pin_memory=pin_memory,
             prefetch=prefetch,
             transform=transform,
+            batch_size=batch_size,
         )
 
 
@@ -575,7 +599,10 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
         super().__init__(*args, **kwargs)
 
     def sample(
-        self, batch_size: int, include_info: bool = False, return_info: bool = False
+        self,
+        batch_size: Optional[int] = None,
+        include_info: bool = False,
+        return_info: bool = False,
     ) -> TensorDictBase:
         return super().sample(batch_size, include_info, return_info)
 
