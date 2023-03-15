@@ -37,10 +37,10 @@ from torchrl.envs import EnvCreator
 
 parser = ArgumentParser()
 parser.add_argument("--partition", "-p", help="slurm partition to use")
-parser.add_argument("--num_jobs", type=int, default=8, help="Number of jobs")
+parser.add_argument("--num_jobs", type=int, default=32, help="Number of jobs")
 parser.add_argument("--tcp_port", type=int, default=1234, help="TCP port")
 parser.add_argument(
-    "--num_workers", type=int, default=8, help="Number of workers per node"
+    "--num_workers", type=int, default=1, help="Number of workers per node"
 )
 parser.add_argument(
     "--gpus_per_node",
@@ -55,7 +55,7 @@ parser.add_argument(
     "--cpus-per-task",
     "-c",
     type=int,
-    default=32,
+    default=8,
     help="Number of CPUs per node.",
 )
 parser.add_argument(
