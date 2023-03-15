@@ -11,6 +11,7 @@ from torchrl.collectors.distributed.rpc import _rpc_init_collection_node
 
 try:
     import submitit
+
     _has_submitit = True
 except ModuleNotFoundError as err:
     _has_submitit = False

@@ -31,10 +31,9 @@ from torchrl.collectors.distributed import submitit_delayed_launcher
 
 from torchrl.collectors.distributed.default_configs import (
     DEFAULT_SLURM_CONF,
-    DEFAULT_SLURM_CONF_MAIN,)
-from torchrl.collectors.distributed.generic import (
-    DistributedDataCollector,
+    DEFAULT_SLURM_CONF_MAIN,
 )
+from torchrl.collectors.distributed.generic import DistributedDataCollector
 from torchrl.envs import EnvCreator
 
 parser = ArgumentParser()
