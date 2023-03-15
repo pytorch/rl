@@ -29,7 +29,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_
 
 # With batched environments
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -41,7 +41,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   record_frames=4 \
   buffer_size=120
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c.py \
-  total_frames=48 \
+  total_frames=200 \
   batch_size=10 \
   frames_per_batch=16 \
   num_workers=4 \
@@ -52,7 +52,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c.py \
   record_frames=4 \
   logger=csv
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -64,7 +64,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   record_frames=4 \
   buffer_size=120
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -76,7 +76,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py
   record_frames=4 \
   buffer_size=120
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -88,7 +88,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   record_frames=4 \
   buffer_size=120
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
-  total_frames=48 \
+  total_frames=200 \
   batch_size=10 \
   frames_per_batch=16 \
   num_workers=4 \
@@ -99,7 +99,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   record_frames=4 \
   lr_scheduler=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=200 \
@@ -112,7 +112,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/drea
   buffer_size=120 \
   rssm_hidden_dim=17
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -121,7 +121,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector_devices=cuda:0 \
   mode=offline 
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
-  total_frames=48 \
+  total_frames=200 \
   batch_size=10 \
   frames_per_batch=16 \
   num_workers=4 \
@@ -131,7 +131,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_onli
 
 # With single envs
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -143,7 +143,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   record_frames=4 \
   buffer_size=120
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c.py \
-  total_frames=48 \
+  total_frames=200 \
   batch_size=10 \
   frames_per_batch=16 \
   num_workers=2 \
@@ -154,7 +154,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c.py \
   record_frames=4 \
   logger=csv
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -166,7 +166,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   record_frames=4 \
   buffer_size=120
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -178,7 +178,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py
   record_frames=4 \
   buffer_size=120
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -190,7 +190,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   record_frames=4 \
   buffer_size=120
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
-  total_frames=48 \
+  total_frames=200 \
   batch_size=10 \
   frames_per_batch=16 \
   num_workers=2 \
@@ -201,7 +201,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   record_frames=4 \
   lr_scheduler=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=200 \
@@ -214,7 +214,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/drea
   buffer_size=120 \
   rssm_hidden_dim=17
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=16 \
@@ -223,7 +223,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   mode=offline \
   collector_devices=cuda:0 
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
-  total_frames=48 \
+  total_frames=200 \
   batch_size=10 \
   frames_per_batch=16 \
   num_workers=2 \
