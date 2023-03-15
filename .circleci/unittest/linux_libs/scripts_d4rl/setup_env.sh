@@ -94,7 +94,6 @@ conda deactivate && conda activate ./env
 # smoke test
 python -c """import gym, d4rl"""
 
-cd ..
 git clone https://github.com/flow-project/flow.git
 cd flow
 pip install -e .
