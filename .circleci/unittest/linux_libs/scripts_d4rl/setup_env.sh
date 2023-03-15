@@ -89,11 +89,6 @@ cd d4rl
 pip install -e .
 cd ..
 
-conda deactivate && conda activate ./env
-
-# smoke test
-python -c """import gym, d4rl"""
-
 git clone https://github.com/flow-project/flow.git
 cd flow
 pip install -e .
