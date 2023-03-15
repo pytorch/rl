@@ -32,12 +32,86 @@ TorchRL aims at (1) a high modularity and (2) good runtime performance.
 The TorchRL documentation can be found [here](https://pytorch.org/rl).
 It contains tutorials and the API reference.
 
-## TensorDict as a common data carrier for RL
+## Writing simplified and portable RL codebase with `TensorDict`
 
 TorchRL relies on [`TensorDict`](https://github.com/pytorch-labs/tensordict/),
 a convenient data structure<sup>(1)</sup> to pass data from
 one object to another without friction.
+With this tool, one can write a *complete PPO training script in less than 100
+lines of code*!
 
+  <detail>
+    <summary>Code</summary>
+
+  ```python
+  import torch
+  from tensordict.nn import TensorDictModule
+  from tensordict.nn.distributions import NormalParamExtractor
+  from torch import nn
+  
+  from torchrl.collectors import SyncDataCollector
+  from torchrl.data.replay_buffers import TensorDictReplayBuffer, \
+      LazyTensorStorage, SamplerWithoutReplacement
+  from torchrl.envs.libs.gym import GymEnv
+  from torchrl.modules import ProbabilisticActor, ValueOperator, TanhNormal
+  from torchrl.objectives import ClipPPOLoss
+  from torchrl.objectives.value import GAE
+  
+  env = GymEnv("Pendulum-v1")
+  model = TensorDictModule(
+      nn.Sequential(
+          nn.Linear(3, 128), nn.Tanh(),
+          nn.Linear(128, 128), nn.Tanh(),
+          nn.Linear(128, 2),
+          NormalParamExtractor()
+      ),
+      in_keys=["observation"],
+      out_keys=["loc", "scale"]
+  )
+  critic = ValueOperator(
+      nn.Sequential(
+          nn.Linear(3, 128), nn.Tanh(),
+          nn.Linear(128, 128), nn.Tanh(),
+          nn.Linear(128, 1),
+      ),
+      in_keys=["observation"],
+  )
+  actor = ProbabilisticActor(
+      model,
+      in_keys=["loc", "scale"],
+      distribution_class=TanhNormal,
+      distribution_kwargs={"min": -1, "max": 1.0},
+      return_log_prob=True
+      )
+  buffer = TensorDictReplayBuffer(
+      LazyTensorStorage(1000),
+      SamplerWithoutReplacement()
+      )
+  collector = SyncDataCollector(
+      env,
+      actor,
+      frames_per_batch=1000,
+      total_frames=1_000_000
+      )
+  loss_fn = ClipPPOLoss(actor, critic, gamma=0.99)
+  optim = torch.optim.Adam(loss_fn.parameters(), lr=2e-4)
+  adv_fn = GAE(value_network=critic, gamma=0.99, lmbda=0.95)
+  for data in collector:  # collect data
+      for epoch in range(10):
+          adv_fn(data)  # compute advantage
+          buffer.extend(data.view(-1))
+          for i in range(20):  # consume data
+              sample = buffer.sample(50)  # mini-batch
+              loss_vals = loss_fn(sample)
+              loss_val = sum(
+                  value for key, value in loss_vals.items() if
+                  key.startswith("loss")
+                  )
+              loss_val.backward()
+              optim.step()
+              optim.zero_grad()
+      print(f"avg reward: {data['next', 'reward'].mean().item(): 4.4f}")
+  ```
 
 Here is an example of how the [environment API](https://pytorch.org/rl/reference/envs.html)
 relies on tensordict to carry data from one function to another during a rollout
@@ -71,6 +145,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
   + out = torch.stack(out, 0)  # TensorDict supports multiple tensor operations
   ```
   </details>
+
 TensorDict abstracts away the input / output signatures of the modules, env, collectors, replay buffers and losses of the library, allowing its primitives
 to be easily recycled across settings.
 Here's another example of an off-policy training loop in TorchRL (assuming that a data collector, a replay buffer, a loss and an optimizer have been instantiated):
@@ -120,9 +195,7 @@ Here's another example of an off-policy training loop in TorchRL (assuming that 
   ```
   </details>
 
-Check our TorchRL-specific [TensorDict tutorial](https://pytorch.org/rl/tutorials/tensordict_tutorial.html) for more information.
-
-The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible!
+The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py) is functorch-compatible!
 
   <details>
     <summary>Code</summary>
@@ -328,9 +401,9 @@ The associated [`SafeModule` class](torchrl/modules/tensordict_module/common.py)
   ```
   </details>
 
-- A series of efficient [loss modules](https://github.com/pytorch/rl/blob/main/torchrl/objectives/costs)
+- A series of efficient [loss modules](https://github.com/pytorch/rl/tree/main/torchrl/objectives)
   and highly vectorized
-  [functional return and advantage](https://github.com/pytorch/rl/blob/main/torchrl/objectives/returns/functional.py)
+  [functional return and advantage](https://github.com/pytorch/rl/blob/main/torchrl/objectives/value/functional.py)
   computation.
 
   <details>

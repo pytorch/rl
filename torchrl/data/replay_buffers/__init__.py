@@ -11,3 +11,5 @@ from .replay_buffers import (
     TensorDictReplayBuffer,
 )
 from .storages import LazyMemmapStorage, LazyTensorStorage, ListStorage, Storage
+from .samplers import Sampler, SamplerWithoutReplacement, PrioritizedSampler, RandomSampler
+from .writers import Writer, RoundRobinWriter
