@@ -21,6 +21,7 @@ from _utils_internal import (  # noqa
 )
 from mocking_classes import (
     ContinuousActionVecMockEnv,
+    CountingBatchedEnv,
     DiscreteActionConvMockEnvNumpy,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
@@ -51,12 +52,14 @@ from torchrl.envs import (
     FrameSkipTransform,
     GrayScale,
     gSDENoise,
+    InitTracker,
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,
+    RenameTransform,
     Resize,
     RewardClipping,
     RewardScaling,
@@ -6312,6 +6315,385 @@ class TestCroSeq:
         tensordict_crop = t(tensordict)
         assert tensordict_crop.shape == torch.Size([3, 4, 13, 2])
         assert tensordict_crop[mask_key].all()
+
+
+@pytest.mark.parametrize("create_copy", [True, False])
+class TestRenameTransform(TransformBase):
+    def test_single_trans_env_check(self, create_copy):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            RenameTransform(
+                [
+                    "observation",
+                ],
+                [
+                    "stuff",
+                ],
+                create_copy=create_copy,
+            ),
+        )
+        check_env_specs(env)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            RenameTransform(
+                ["observation_orig"],
+                ["stuff"],
+                ["observation_orig"],
+                [
+                    "stuff",
+                ],
+                create_copy=create_copy,
+            ),
+        )
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self, create_copy):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                RenameTransform(
+                    [
+                        "observation",
+                    ],
+                    [
+                        "stuff",
+                    ],
+                    create_copy=create_copy,
+                ),
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                RenameTransform(
+                    ["observation_orig"],
+                    ["stuff"],
+                    ["observation_orig"],
+                    [
+                        "stuff",
+                    ],
+                    create_copy=create_copy,
+                ),
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self, create_copy):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                RenameTransform(
+                    [
+                        "observation",
+                    ],
+                    [
+                        "stuff",
+                    ],
+                    create_copy=create_copy,
+                ),
+            )
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                RenameTransform(
+                    ["observation_orig"],
+                    ["stuff"],
+                    ["observation_orig"],
+                    [
+                        "stuff",
+                    ],
+                    create_copy=create_copy,
+                ),
+            )
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self, create_copy):
+        def make_env():
+            return ContinuousActionVecMockEnv()
+
+        env = TransformedEnv(
+            SerialEnv(2, make_env),
+            RenameTransform(
+                [
+                    "observation",
+                ],
+                [
+                    "stuff",
+                ],
+                create_copy=create_copy,
+            ),
+        )
+        check_env_specs(env)
+        env = TransformedEnv(
+            SerialEnv(2, make_env),
+            RenameTransform(
+                ["observation_orig"],
+                ["stuff"],
+                ["observation_orig"],
+                [
+                    "stuff",
+                ],
+                create_copy=create_copy,
+            ),
+        )
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self, create_copy):
+        def make_env():
+            return ContinuousActionVecMockEnv()
+
+        env = TransformedEnv(
+            ParallelEnv(2, make_env),
+            RenameTransform(
+                [
+                    "observation",
+                ],
+                [
+                    "stuff",
+                ],
+                create_copy=create_copy,
+            ),
+        )
+        check_env_specs(env)
+        env = TransformedEnv(
+            ParallelEnv(2, make_env),
+            RenameTransform(
+                ["observation_orig"],
+                ["stuff"],
+                ["observation_orig"],
+                [
+                    "stuff",
+                ],
+                create_copy=create_copy,
+            ),
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("mode", ["forward", "_call"])
+    def test_transform_no_env(self, create_copy, mode):
+        t = RenameTransform(["a"], ["b"], create_copy=create_copy)
+        tensordict = TensorDict({"a": torch.randn(())}, [])
+        if mode == "forward":
+            t(tensordict)
+        elif mode == "_call":
+            t._call(tensordict)
+        else:
+            raise NotImplementedError
+        assert "b" in tensordict.keys()
+        if create_copy:
+            assert "a" in tensordict.keys()
+        else:
+            assert "a" not in tensordict.keys()
+
+    @pytest.mark.parametrize("mode", ["forward", "_call"])
+    def test_transform_compose(self, create_copy, mode):
+        t = Compose(RenameTransform(["a"], ["b"], create_copy=create_copy))
+        tensordict = TensorDict({"a": torch.randn(())}, [])
+        if mode == "forward":
+            t(tensordict)
+        elif mode == "_call":
+            t._call(tensordict)
+        else:
+            raise NotImplementedError
+        assert "b" in tensordict.keys()
+        if create_copy:
+            assert "a" in tensordict.keys()
+        else:
+            assert "a" not in tensordict.keys()
+
+    def test_transform_env(self, create_copy):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            RenameTransform(
+                [
+                    "observation",
+                ],
+                [
+                    "stuff",
+                ],
+                create_copy=create_copy,
+            ),
+        )
+        r = env.rollout(3)
+        if create_copy:
+            assert "observation" in r.keys()
+            assert ("next", "observation") in r.keys(True)
+        else:
+            assert "observation" not in r.keys()
+            assert ("next", "observation") not in r.keys(True)
+        assert "stuff" in r.keys()
+        assert ("next", "stuff") in r.keys(True)
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            RenameTransform(
+                ["observation_orig"],
+                ["stuff"],
+                ["observation_orig"],
+                [
+                    "stuff",
+                ],
+                create_copy=create_copy,
+            ),
+        )
+        r = env.rollout(3)
+        if create_copy:
+            assert "observation_orig" in r.keys()
+            assert ("next", "observation_orig") in r.keys(True)
+        else:
+            assert "observation_orig" not in r.keys()
+            assert ("next", "observation_orig") not in r.keys(True)
+        assert "stuff" in r.keys()
+        assert ("next", "stuff") in r.keys(True)
+
+    def test_transform_model(self, create_copy):
+        t = RenameTransform(["a"], ["b"], create_copy=create_copy)
+        tensordict = TensorDict({"a": torch.randn(())}, [])
+        model = nn.Sequential(t)
+        model(tensordict)
+        assert "b" in tensordict.keys()
+        if create_copy:
+            assert "a" in tensordict.keys()
+        else:
+            assert "a" not in tensordict.keys()
+
+    @pytest.mark.parametrize(
+        "inverse",
+        [
+            False,
+            True,
+        ],
+    )
+    def test_transform_rb(self, create_copy, inverse):
+        if not inverse:
+            t = RenameTransform(["a"], ["b"], create_copy=create_copy)
+            tensordict = TensorDict({"a": torch.randn(())}, []).expand(10)
+        else:
+            t = RenameTransform(["a"], ["b"], ["a"], ["b"], create_copy=create_copy)
+            tensordict = TensorDict({"b": torch.randn(())}, []).expand(10)
+        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb.append_transform(t)
+        rb.extend(tensordict)
+        assert "a" in rb._storage._storage.keys()
+        sample = rb.sample(2)
+        if create_copy:
+            assert "a" in sample.keys()
+        else:
+            assert "a" not in sample.keys()
+        assert "b" in sample.keys()
+
+    def test_transform_inverse(self, create_copy):
+        t = RenameTransform(["a"], ["b"], ["a"], ["b"], create_copy=create_copy)
+        tensordict = TensorDict({"b": torch.randn(())}, []).expand(10)
+        tensordict = t.inv(tensordict)
+        assert "a" in tensordict.keys()
+        if create_copy:
+            assert "b" in tensordict.keys()
+        else:
+            assert "b" not in tensordict.keys()
+
+
+class TestInitTracker(TransformBase):
+    def test_single_trans_env_check(self):
+        env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+        env = TransformedEnv(env, InitTracker())
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+            env = TransformedEnv(env, InitTracker())
+            return env
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+            env = TransformedEnv(env, InitTracker())
+            return env
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        def make_env():
+            env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+            return env
+
+        env = SerialEnv(2, make_env)
+        env = TransformedEnv(env, InitTracker())
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        def make_env():
+            env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+            return env
+
+        env = ParallelEnv(2, make_env)
+        env = TransformedEnv(env, InitTracker())
+        check_env_specs(env)
+
+    def test_transform_no_env(self):
+        with pytest.raises(
+            NotImplementedError, match="InitTracker cannot be executed without a parent"
+        ):
+            InitTracker()(None)
+
+    def test_transform_compose(self):
+        with pytest.raises(
+            NotImplementedError, match="InitTracker cannot be executed without a parent"
+        ):
+            Compose(InitTracker())(None)
+
+    def test_transform_env(self):
+        policy = lambda tensordict: tensordict.set(
+            "action", torch.ones(tensordict.shape, dtype=torch.int32)
+        )
+        env = CountingBatchedEnv(max_steps=torch.tensor([3, 4]), batch_size=[2])
+        env = TransformedEnv(env, InitTracker())
+        r = env.rollout(100, policy, break_when_any_done=False)
+        assert (r["is_init"].sum(1) == torch.tensor([25, 20])).all()
+
+    def test_transform_model(self):
+        with pytest.raises(
+            NotImplementedError, match="InitTracker cannot be executed without a parent"
+        ):
+            td = TensorDict({}, [])
+            chain = nn.Sequential(InitTracker())
+            chain(td)
+
+    def test_transform_rb(self):
+        batch = [1]
+        device = "cpu"
+        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb.append_transform(InitTracker())
+        reward = torch.randn(*batch, 1, device=device)
+        misc = torch.randn(*batch, 1, device=device)
+        td = TensorDict(
+            {"misc": misc, "reward": reward},
+            batch,
+            device=device,
+        )
+        rb.extend(td)
+        with pytest.raises(
+            NotImplementedError, match="InitTracker cannot be executed without a parent"
+        ):
+            _ = rb.sample(20)
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse for InitTracker")
 
 
 if __name__ == "__main__":

@@ -40,6 +40,15 @@ REDQ
 
     REDQLoss
 
+IQL
+----
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    IQLLoss
+
 PPO
 ---
 

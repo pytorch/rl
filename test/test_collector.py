@@ -1223,17 +1223,17 @@ def test_initial_obs_consistency(env_class, seed=1):
     if env_class == CountingEnv:
         arange_0 = start_val + torch.arange(max_steps - 3)
         arange = start_val + torch.arange(2)
-        expected = torch.cat([arange_0, arange_0, arange]).float()
+        expected = torch.cat([arange_0, arange_0, arange])
     else:
         # the first env has a shorter horizon than the second
         arange_0 = start_val + torch.arange(max_steps - 3 - 1)
         arange = start_val + torch.arange(start_val)
-        expected_0 = torch.cat([arange_0, arange_0, arange]).float()
+        expected_0 = torch.cat([arange_0, arange_0, arange])
         arange_0 = start_val + torch.arange(max_steps - 3)
         arange = start_val + torch.arange(2)
-        expected_1 = torch.cat([arange_0, arange_0, arange]).float()
+        expected_1 = torch.cat([arange_0, arange_0, arange])
         expected = torch.stack([expected_0, expected_1])
-    assert torch.allclose(obs, expected)
+    assert torch.allclose(obs, expected.to(obs.dtype))
 
 
 def weight_reset(m):
