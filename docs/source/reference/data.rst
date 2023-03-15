@@ -102,9 +102,68 @@ Datasets
 --------
 
 TorchRL provides wrappers around offline RL datasets.
-These data are presented a :class:`torchrl.data.ReplayBuffer` instances.
-Installing dependencies is the responsibility of the user (for D4RL, a clone of
-the repository is needed as the wheels are not published on PyPI).
+These data are presented a :class:`torchrl.data.ReplayBuffer` instances, which
+means that they can be customized at will with transforms, samplers and storages.
+By default, datasets are stored as memory mapped tensors, allowing them to be
+promptly sampled with virtually no memory footprint.
+Here's an example:
+
+.. code::Python
+
+  >>> from torchrl.data.datasets import D4RLExperienceReplay
+  >>> from torchrl.envs.transforms import RenameTransform
+  >>> dataset = D4RLExperienceReplay('kitchen-complete-v0', split_trajs=True)
+  >>> print(dataset.sample(10))  # will sample 10 trajectories since split_trajs is set to True
+  TensorDict(
+      fields={
+          action: Tensor(shape=torch.Size([10, 207, 9]), device=cpu, dtype=torch.float32, is_shared=False),
+          done: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+          index: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.int32, is_shared=False),
+          infos: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.int64, is_shared=False),
+          mask: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+          next: TensorDict(
+              fields={
+                  done: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+                  observation: Tensor(shape=torch.Size([10, 207, 60]), device=cpu, dtype=torch.float32, is_shared=False),
+                  reward: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.float32, is_shared=False)},
+              batch_size=torch.Size([10, 207]),
+              device=cpu,
+              is_shared=False),
+          observation: Tensor(shape=torch.Size([10, 207, 60]), device=cpu, dtype=torch.float32, is_shared=False),
+          timeouts: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+          traj_ids: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.int64, is_shared=False)},
+      batch_size=torch.Size([10, 207]),
+      device=cpu,
+      is_shared=False)
+  >>> dataset.append_transform(RenameTransform(["done", ("next", "done")], ["terminal", ("next", "terminal")]))
+  >>> print(dataset.sample(10))  # The "done" has been renamed to "terminal"
+  TensorDict(
+      fields={
+          action: Tensor(shape=torch.Size([10, 207, 9]), device=cpu, dtype=torch.float32, is_shared=False),
+          terminal: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+          index: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.int32, is_shared=False),
+          infos: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.int64, is_shared=False),
+          mask: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+          next: TensorDict(
+              fields={
+                  terminal: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+                  observation: Tensor(shape=torch.Size([10, 207, 60]), device=cpu, dtype=torch.float32, is_shared=False),
+                  reward: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.float32, is_shared=False)},
+              batch_size=torch.Size([10, 207]),
+              device=cpu,
+              is_shared=False),
+          observation: Tensor(shape=torch.Size([10, 207, 60]), device=cpu, dtype=torch.float32, is_shared=False),
+          timeouts: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+          traj_ids: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.int64, is_shared=False)},
+      batch_size=torch.Size([10, 207]),
+      device=cpu,
+      is_shared=False)
+
+.. note::
+
+  Installing dependencies is the responsibility of the user. For D4RL, a clone of
+  `the repository <https://github.com/Farama-Foundation/D4RL>`_ is needed as
+  the latest wheels are not published on PyPI.
 
 .. autosummary::
     :toctree: generated/
