@@ -1205,6 +1205,7 @@ def test_initial_obs_consistency(env_class, seed=1):
         policy=policy,
         frames_per_batch=((max_steps - 3) * 2 + 2) * num_envs,  # at least two episodes
         split_trajs=False,
+        total_frames=-1,
     )
     for _d in collector:
         break
