@@ -1144,6 +1144,7 @@ class TestAutoWrap:
         policy = TensorDictCompatiblePolicy(
             out_features=env_maker().action_spec.shape[-1]
         )
+        policy(env_maker().reset())
 
         collector = collector_class(
             **self._create_collector_kwargs(env_maker, collector_class, policy)

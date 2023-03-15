@@ -202,7 +202,7 @@ class RPCDataCollector(_DataCollector):
 
     """
 
-    _VERBOSE = True  # for debugging
+    _VERBOSE = False  # for debugging
 
     def __init__(
         self,
@@ -327,8 +327,8 @@ class RPCDataCollector(_DataCollector):
                     options.set_device_map(
                         f"COLLECTOR_NODE_{rank}", {0: self.visible_devices[i]}
                     )
-
-        print("init rpc")
+        if self._VERBOSE:
+            print("init rpc")
         rpc.init_rpc(
             "TRAINER_NODE",
             rank=0,
@@ -358,7 +358,8 @@ class RPCDataCollector(_DataCollector):
                 counter += 1
                 time.sleep(time_interval)
                 try:
-                    print(f"trying to connect to collector node {i + 1}")
+                    if self._VERBOSE:
+                        print(f"trying to connect to collector node {i + 1}")
                     collector_info = rpc.get_worker_info(f"COLLECTOR_NODE_{i + 1}")
                     break
                 except RuntimeError as err:
@@ -372,7 +373,8 @@ class RPCDataCollector(_DataCollector):
             env_make = env_constructors[i]
             if not isinstance(env_make, (EnvBase, EnvCreator)):
                 env_make = CloudpickleWrapper(env_make)
-            print("Making collector in remote node")
+            if self._VERBOSE:
+                print("Making collector in remote node")
             collector_rref = rpc.remote(
                 collector_infos[i],
                 collector_class,
@@ -393,7 +395,8 @@ class RPCDataCollector(_DataCollector):
 
         futures = []
         for i in range(num_workers):
-            print("Asking for the first batch")
+            if self._VERBOSE:
+                print("Asking for the first batch")
             future = rpc.rpc_async(
                 collector_infos[i],
                 collector_class.next,
@@ -421,7 +424,8 @@ class RPCDataCollector(_DataCollector):
                 visible_device,
                 self.tensorpipe_options,
             )
-            print("job id", job.job_id)  # ID of your job
+            if self._VERBOSE:
+                print("job id", job.job_id)  # ID of your job
             return job
         elif self.launcher == "mp":
             job = mp.Process(
@@ -462,7 +466,8 @@ class RPCDataCollector(_DataCollector):
 
         self.jobs = []
         for i in range(self.num_workers):
-            print("Submitting job")
+            if self._VERBOSE:
+                print(f"Submitting job {i}")
             job = self._init_worker_rpc(
                 executor,
                 i,
@@ -495,7 +500,8 @@ class RPCDataCollector(_DataCollector):
     def update_policy_weights_(self) -> None:
         futures = []
         for i in range(self.num_workers):
-            print(f"calling update on worker {i}")
+            if self._VERBOSE:
+                print(f"calling update on worker {i}")
             futures.append(
                 rpc.rpc_async(
                     self.collector_infos[i],
@@ -504,7 +510,8 @@ class RPCDataCollector(_DataCollector):
                 )
             )
         for i in range(self.num_workers):
-            print(f"waiting for worker {i}")
+            if self._VERBOSE:
+                print(f"waiting for worker {i}")
             self.futures[i].wait()
 
     def _next_async_rpc(self):

@@ -351,7 +351,7 @@ class DistributedDataCollector(_DataCollector):
         tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
     """
 
-    _VERBOSE = True  # for debugging
+    _VERBOSE = False  # for debugging
 
     def __init__(
         self,
