@@ -6,6 +6,18 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 apt-get update && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3
 
+# we install d4rl here bc env variables have been updated
+git clone https://github.com/Farama-Foundation/d4rl.git
+cd d4rl
+pip3 install -U 'mujoco-py<2.1,>=2.0'
+pip install -e .
+cd ..
+
+#git clone https://github.com/flow-project/flow.git
+#cd flow
+#pip install -e .
+#cd ..
+
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
