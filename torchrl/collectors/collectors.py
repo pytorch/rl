@@ -23,7 +23,7 @@ from tensordict.tensordict import TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
-from torchrl._utils import _check_for_faulty_process, prod
+from torchrl._utils import _check_for_faulty_process, prod, VERBOSE
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -1662,7 +1662,7 @@ def _main_async_collector(
     idx: int = 0,
     exploration_mode: str = DEFAULT_EXPLORATION_MODE,
     reset_when_done: bool = True,
-    verbose: bool = False,
+    verbose: bool = VERBOSE,
 ) -> None:
     pipe_parent.close()
     #  init variables that will be cleared when closing

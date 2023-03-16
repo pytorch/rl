@@ -15,7 +15,7 @@ from tensordict.memmap import MemmapTensor
 from tensordict.prototype import is_tensorclass
 from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
-from torchrl._utils import _CKPT_BACKEND
+from torchrl._utils import _CKPT_BACKEND, VERBOSE
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 
 try:
@@ -224,7 +224,8 @@ class LazyTensorStorage(Storage):
         self._len = state_dict["_len"]
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
-        print("Creating a TensorStorage...")
+        if VERBOSE:
+            print("Creating a TensorStorage...")
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             out = torch.empty(
@@ -353,16 +354,18 @@ class LazyMemmapStorage(LazyTensorStorage):
         self._len = state_dict["_len"]
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
-        print("Creating a MemmapStorage...")
+        if VERBOSE:
+            print("Creating a MemmapStorage...")
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             out = MemmapTensor(
                 self.max_size, *data.shape, device=self.device, dtype=data.dtype
             )
             filesize = os.path.getsize(out.filename) / 1024 / 1024
-            print(
-                f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
-            )
+            if VERBOSE:
+                print(
+                    f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
+                )
         elif is_tensorclass(data):
             out = (
                 data.clone()
@@ -374,12 +377,13 @@ class LazyMemmapStorage(LazyTensorStorage):
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
                 filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                print(
-                    f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
-                )
+                if VERBOSE:
+                    print(
+                        f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
+                    )
         else:
-            # out = TensorDict({}, [self.max_size, *data.shape])
-            print("The storage is being created: ")
+            if VERBOSE:
+                print("The storage is being created: ")
             out = (
                 data.clone()
                 .expand(self.max_size, *data.shape)
@@ -390,9 +394,10 @@ class LazyMemmapStorage(LazyTensorStorage):
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
                 filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                print(
-                    f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
-                )
+                if VERBOSE:
+                    print(
+                        f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
+                    )
         self._storage = out
         self.initialized = True
 
