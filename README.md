@@ -618,7 +618,7 @@ If you're using TorchRL, please refer to this BibTeX entry to cite this work:
   author = {Moens, Vincent},
   title = {{TorchRL: an open-source Reinforcement Learning (RL) library for PyTorch}},
   url = {https://github.com/pytorch/rl},
-  version = {0.0.5},
+  version = {0.1.0},
   year = {2023}
 }
 ```
