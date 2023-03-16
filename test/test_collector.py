@@ -24,7 +24,7 @@ from torch import nn
 from torchrl._utils import seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
-    Interruptor,
+    _Interruptor,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
     RandomPolicy,
@@ -1196,7 +1196,7 @@ class TestPreemptiveThreshold:
             return env
 
         policy = make_policy(env_name)
-        interruptor = Interruptor()
+        interruptor =_Interruptor()
         interruptor.start_collection()
 
         collector = SyncDataCollector(

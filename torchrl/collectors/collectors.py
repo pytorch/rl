@@ -103,7 +103,7 @@ class _InterruptorManager(SyncManager):
     pass
 
 
-_InterruptorManager.register("Interruptor", Interruptor)
+_InterruptorManager.register("_Interruptor", _Interruptor)
 
 
 def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
@@ -332,9 +332,9 @@ class SyncDataCollector(_DataCollector):
             updated. This feature should be used cautiously: if the same tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
             Default is False.
-        interruptor : (Interruptor, optional)
-            An Interruptor object that can be used from outside the class to control rollout collection.
-            The Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
+        interruptor : (_Interruptor, optional)
+            An _Interruptor object that can be used from outside the class to control rollout collection.
+            The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
             strategies such as preeptively stopping rollout collection.
 
     Examples:
@@ -1004,7 +1004,7 @@ class _MultiDataCollector(_DataCollector):
         self.init_with_lag = init_with_lag
         self.exploration_mode = exploration_mode
         self.frames_per_worker = np.inf
-        if preemptive_threshold:
+        if preemptive_threshold is not None:
             self.preemptive_threshold = np.clip(preemptive_threshold, 0.0, 1.0)
             manager = _InterruptorManager()
             manager.start()
