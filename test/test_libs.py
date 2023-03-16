@@ -1131,7 +1131,6 @@ class TestD4RL:
         sample = data.sample()
         env = GymWrapper(gym.make(task))
         rollout = env.rollout(2)
-        print(task, rollout)
         for key in rollout.keys(True, True):
             sim = rollout[key]
             offline = sample[key]
@@ -1146,7 +1145,6 @@ class TestD4RL:
             terminate_on_end=True,
             batch_size=2,
         )
-        print("t", data_true._storage._storage)
         data_false = D4RLExperienceReplay(
             task,
             split_trajs=True,
@@ -1154,9 +1152,7 @@ class TestD4RL:
             terminate_on_end=False,
             batch_size=2,
         )
-        print("f", data_false._storage._storage)
         data_from_env = D4RLExperienceReplay(task, split_trajs=True, from_env=True)
-        print("fe", data_from_env._storage._storage)
         keys = set(data_from_env._storage._storage.keys(True, True))
         keys = keys.intersection(data_true._storage._storage.keys(True, True))
         assert_allclose_td(
