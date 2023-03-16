@@ -1196,7 +1196,7 @@ class TestPreemptiveThreshold:
             return env
 
         policy = make_policy(env_name)
-        interruptor =_Interruptor()
+        interruptor = _Interruptor()
         interruptor.start_collection()
 
         collector = SyncDataCollector(
