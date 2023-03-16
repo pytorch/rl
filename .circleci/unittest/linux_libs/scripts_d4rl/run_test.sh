@@ -35,11 +35,7 @@ conda env config vars set LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
 conda deactivate && conda activate ./env
 
 # this workflow only tests the libs
-python -c "import habitat;import habitat.gym"
-python -c """from torchrl.envs.libs.habitat import HabitatEnv
-env = HabitatEnv('HabitatRenderPick-v0')
-env.reset()
-"""
+python -c "import gym, d4rl"
 
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 --capture no -k TestD4RL
 coverage combine

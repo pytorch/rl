@@ -23,6 +23,7 @@ from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
 from torchrl.data.datasets.d4rl import _has_d4rl, D4RL_ERR, D4RLExperienceReplay
+from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
@@ -1162,6 +1163,22 @@ class TestD4RL:
             data_true._storage._storage.select(*keys),
             data_from_env._storage._storage.select(*keys),
         )
+
+    @pytest.mark.parametrize("split_trajs", [True, False])
+    def test_d4rl_iteration(self, task, split_trajs):
+        batch_size = 3
+        data = D4RLExperienceReplay(
+            task,
+            split_trajs=split_trajs,
+            from_env=False,
+            terminate_on_end=True,
+            batch_size=batch_size,
+            sampler=SamplerWithoutReplacement(drop_last=True),
+        )
+        i = 0
+        for sample in data:  # noqa: B007
+            i += 1
+        assert len(data) // i == batch_size
 
 
 if __name__ == "__main__":
