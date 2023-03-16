@@ -77,7 +77,7 @@ class DistributedCollectorBase:
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         collector = cls.distributed_class()(
-            [env],
+            [env] * 2,
             policy,
             total_frames=1000,
             frames_per_batch=frames_per_batch,
@@ -154,7 +154,7 @@ class DistributedCollectorBase:
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         collector = cls.distributed_class()(
-            [env],
+            [env] * 2,
             policy,
             total_frames=200,
             frames_per_batch=frames_per_batch,
@@ -193,7 +193,7 @@ class DistributedCollectorBase:
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         collector = cls.distributed_class()(
-            [env],
+            [env] * 2,
             policy,
             collector_class=collector_class,
             total_frames=200,
@@ -236,13 +236,14 @@ class DistributedCollectorBase:
     @classmethod
     def _test_distributed_collector_updatepolicy(cls, queue, collector_class, sync):
         frames_per_batch = 50
+        total_frames = 300
         env = CountingEnv()
         policy = CountingPolicy()
         collector = cls.distributed_class()(
             [env] * 2,
             policy,
             collector_class=collector_class,
-            total_frames=2000,
+            total_frames=total_frames,
             frames_per_batch=frames_per_batch,
             sync=sync,
             **cls.distributed_kwargs(),
@@ -257,12 +258,12 @@ class DistributedCollectorBase:
                 first_batch = data
                 policy.weight.data += 1
                 collector.update_policy_weights_()
-            elif total == 2000 - frames_per_batch:
+            elif total == total_frames - frames_per_batch:
                 last_batch = data
         assert (first_batch["action"] == 1).all(), first_batch["action"]
         assert (last_batch["action"] == 2).all(), last_batch["action"]
         collector.shutdown()
-        assert total == 2000
+        assert total == total_frames
         queue.put("passed")
 
     @pytest.mark.parametrize(
@@ -342,13 +343,14 @@ class TestSyncCollector(DistributedCollectorBase):
         cls, queue, collector_class, update_interval
     ):
         frames_per_batch = 50
+        total_frames = 300
         env = CountingEnv()
         policy = CountingPolicy()
         collector = cls.distributed_class()(
             [env] * 2,
             policy,
             collector_class=collector_class,
-            total_frames=2000,
+            total_frames=total_frames,
             frames_per_batch=frames_per_batch,
             update_interval=update_interval,
             **cls.distributed_kwargs(),
@@ -362,7 +364,7 @@ class TestSyncCollector(DistributedCollectorBase):
             if i == 0:
                 first_batch = data
                 policy.weight.data += 1
-            elif total == 2000 - frames_per_batch:
+            elif total == total_frames - frames_per_batch:
                 last_batch = data
         assert (first_batch["action"] == 1).all(), first_batch["action"]
         if update_interval == 1:

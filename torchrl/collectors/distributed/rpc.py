@@ -397,11 +397,14 @@ class RPCDataCollector(_DataCollector):
         for i in range(num_workers):
             if self._VERBOSE:
                 print("Asking for the first batch")
-            future = rpc.rpc_async(
-                collector_infos[i],
-                collector_class.next,
-                args=(collector_rrefs[i],),
-            )
+            if not self._sync:
+                future = rpc.rpc_async(
+                    collector_infos[i],
+                    collector_class.next,
+                    args=(collector_rrefs[i],),
+                )
+            else:
+                future = None
             futures.append(future)
         self.futures = futures
         self.collector_rrefs = collector_rrefs
@@ -531,17 +534,20 @@ class RPCDataCollector(_DataCollector):
                     return data.to(self.storing_device)
 
     def _next_sync_rpc(self):
+        if self.update_after_each_batch:
+            self.update_policy_weights_()
+        for i in range(self.num_workers):
+            self.futures[i] = rpc.rpc_async(
+                self.collector_infos[i],
+                self.collector_class.next,
+                args=(self.collector_rrefs[i],),
+            )
         data = []
         while len(data) < self.num_workers:
             for i, future in enumerate(self.futures):
                 # the order is NOT guaranteed: should we change that?
                 if future.done():
                     data += [future.value()]
-                    self.futures[i] = rpc.rpc_async(
-                        self.collector_infos[i],
-                        self.collector_class.next,
-                        args=(self.collector_rrefs[i],),
-                    )
         data = torch.cat(data).to(self.storing_device)
         traj_ids = data.get(("collector", "traj_ids"), None)
         if traj_ids is not None:
