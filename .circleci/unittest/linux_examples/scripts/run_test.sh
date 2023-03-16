@@ -99,7 +99,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   record_frames=4 \
   lr_scheduler=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=200 \
@@ -201,7 +201,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   record_frames=4 \
   lr_scheduler=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
-  total_frames=48 \
+  total_frames=200 \
   init_random_frames=10 \
   batch_size=10 \
   frames_per_batch=200 \

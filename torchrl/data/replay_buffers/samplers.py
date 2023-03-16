@@ -52,9 +52,20 @@ class Sampler(ABC):
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         return
 
+    @property
+    def ran_out(self) -> bool:
+        # by default, samplers never run out
+        return False
+
 
 class RandomSampler(Sampler):
-    """A uniformly random sampler for composable replay buffers."""
+    """A uniformly random sampler for composable replay buffers.
+
+    Args:
+        batch_size (int, optional): if provided, the batch size to be used by
+            the replay buffer when calling :meth:`~.ReplayBuffer.sample`.
+
+    """
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
         index = torch.randint(0, len(storage), (batch_size,))
@@ -85,12 +96,21 @@ class SamplerWithoutReplacement(Sampler):
         self._sample_list = None
         self.len_storage = 0
         self.drop_last = drop_last
+        self._ran_out = False
 
     def _single_sample(self, len_storage, batch_size):
         index = self._sample_list[:batch_size]
         self._sample_list = self._sample_list[batch_size:]
-        if not self._sample_list.numel():
+
+        # check if we have enough elements for one more batch, assuming same batch size
+        # will be used each time sample is called
+        if self._sample_list.numel() == 0 or (
+            self.drop_last and len(self._sample_list) < batch_size
+        ):
+            self._ran_out = True
             self._sample_list = torch.randperm(len_storage)
+        else:
+            self._ran_out = False
         return index
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
@@ -107,18 +127,15 @@ class SamplerWithoutReplacement(Sampler):
             )
         self.len_storage = len_storage
         index = self._single_sample(len_storage, batch_size)
-        while index.numel() < batch_size:
-            if self.drop_last:
-                index = self._single_sample(len_storage, batch_size)
-            else:
-                index = torch.cat(
-                    [
-                        index,
-                        self._single_sample(len_storage, batch_size - index.numel()),
-                    ],
-                    0,
-                )
+        # we 'always' return the indices. The 'drop_last' just instructs the
+        # sampler to turn to 'ran_out = True` whenever the next sample
+        # will be too short. This will be read by the replay buffer
+        # as a signal for an early break of the __iter__().
         return index, {}
+
+    @property
+    def ran_out(self):
+        return self._ran_out
 
 
 class PrioritizedSampler(Sampler):
