@@ -4,13 +4,15 @@ set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
-apt-get update && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0
+
+apt-get update && apt-get remove swig -y && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0
+ln -s /usr/bin/swig3.0 /usr/bin/swig
 
 # we install d4rl here bc env variables have been updated
 git clone https://github.com/Farama-Foundation/d4rl.git
 cd d4rl
 pip3 install -U 'mujoco-py<2.1,>=2.0'
-pip3 install -U "gym[classic_control,box2d,atari,accept-rom-license]"==0.23
+pip3 install -U "gym[classic_control,atari,accept-rom-license]"==0.23
 pip install -e .
 cd ..
 
