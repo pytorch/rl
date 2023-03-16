@@ -517,7 +517,6 @@ class RPCDataCollector(_DataCollector):
 
             if self.max_weight_update_interval > -1 and not self._sync:
                 for j in range(self.num_workers):
-                    rank = j + 1
                     if (
                         self._batches_since_weight_update[j]
                         > self.max_weight_update_interval
