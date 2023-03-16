@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 r"""Generic distributed data-collector using torch.distributed.rpc backend."""
-
+import collections
 import os
 import socket
 import time
@@ -51,6 +51,7 @@ def _rpc_init_collection_node(
     world_size,
     visible_device,
     tensorpipe_options,
+    verbose=False,
 ):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = str(tcp_port)
@@ -68,9 +69,10 @@ def _rpc_init_collection_node(
         devices=visible_device,
         **tensorpipe_options,
     )
-    print(
-        f"init rpc with master addr: {os.environ['MASTER_ADDR']}:{os.environ['MASTER_PORT']}"
-    )
+    if verbose:
+        print(
+            f"init rpc with master addr: {os.environ['MASTER_ADDR']}:{os.environ['MASTER_PORT']}"
+        )
     rpc.init_rpc(
         f"COLLECTOR_NODE_{rank}",
         rank=rank,
@@ -312,7 +314,7 @@ class RPCDataCollector(_DataCollector):
             self.tensorpipe_options = copy(DEFAULT_TENSORPIPE_OPTIONS).update(
                 tensorpipe_options
             )
-        self._init_workers()
+        self._init()
 
     def _init_master_rpc(
         self,
@@ -393,19 +395,18 @@ class RPCDataCollector(_DataCollector):
             )
             collector_rrefs.append(collector_rref)
 
-        futures = []
-        for i in range(num_workers):
-            if self._VERBOSE:
-                print("Asking for the first batch")
-            if not self._sync:
+        futures = collections.deque(maxlen=self.num_workers)
+
+        if not self._sync:
+            for i in range(num_workers):
+                if self._VERBOSE:
+                    print("Asking for the first batch")
                 future = rpc.rpc_async(
                     collector_infos[i],
                     collector_class.next,
                     args=(collector_rrefs[i],),
                 )
-            else:
-                future = None
-            futures.append(future)
+                futures.append((future, i))
         self.futures = futures
         self.collector_rrefs = collector_rrefs
         self.collector_infos = collector_infos
@@ -426,6 +427,7 @@ class RPCDataCollector(_DataCollector):
                 self.num_workers + 1,
                 visible_device,
                 self.tensorpipe_options,
+                self._VERBOSE,
             )
             if self._VERBOSE:
                 print("job id", job.job_id)  # ID of your job
@@ -440,6 +442,7 @@ class RPCDataCollector(_DataCollector):
                     self.num_workers + 1,
                     visible_device,
                     self.tensorpipe_options,
+                    self._VERBOSE,
                 ),
             )
             job.start()
@@ -450,7 +453,8 @@ class RPCDataCollector(_DataCollector):
         else:
             raise NotImplementedError(f"Unknown launcher {self.launcher}")
 
-    def _init_workers(self):
+    def _init(self):
+        self._shutdown = False
         if self.launcher == "submitit":
             executor = submitit.AutoExecutor(folder="log_test")
             executor.update_parameters(**self.slurm_kwargs)
@@ -515,39 +519,58 @@ class RPCDataCollector(_DataCollector):
         for i in range(self.num_workers):
             if self._VERBOSE:
                 print(f"waiting for worker {i}")
-            self.futures[i].wait()
+            futures[i].wait()
+            if self._VERBOSE:
+                print("got it!")
 
     def _next_async_rpc(self):
+        if self._VERBOSE:
+            print("next async")
+        if not len(self.futures):
+            raise StopIteration(
+                f"The queue is empty, the collector has ran out of data after {self._collected_frames} collected frames."
+            )
         while True:
-            for i, future in enumerate(self.futures):
-                if future.done():
-                    data = future.value()
-                    self._collected_frames += data.numel()
-                    if self._collected_frames < self.total_frames:
-                        self.futures[i] = rpc.rpc_async(
-                            self.collector_infos[i],
-                            self.collector_class.next,
-                            args=(self.collector_rrefs[i],),
-                        )
-                    else:
-                        self.futures[i] = None
-                    return data.to(self.storing_device)
+            future, i = self.futures.popleft()
+            if future.done():
+                if self._VERBOSE:
+                    print(f"future {i} is done")
+                data = future.value()
+                self._collected_frames += data.numel()
+                if self._collected_frames < self.total_frames:
+                    future = rpc.rpc_async(
+                        self.collector_infos[i],
+                        self.collector_class.next,
+                        args=(self.collector_rrefs[i],),
+                    )
+                    self.futures.append((future, i))
+                return data.to(self.storing_device)
+            self.futures.append((future, i))
 
     def _next_sync_rpc(self):
+        if self._VERBOSE:
+            print("next sync: futures")
         if self.update_after_each_batch:
             self.update_policy_weights_()
         for i in range(self.num_workers):
-            self.futures[i] = rpc.rpc_async(
+            future = rpc.rpc_async(
                 self.collector_infos[i],
                 self.collector_class.next,
                 args=(self.collector_rrefs[i],),
             )
+            self.futures.append((future, i))
         data = []
-        while len(data) < self.num_workers:
-            for i, future in enumerate(self.futures):
-                # the order is NOT guaranteed: should we change that?
-                if future.done():
-                    data += [future.value()]
+        while len(self.futures):
+            future, i = self.futures.popleft()
+            # the order is NOT guaranteed: should we change that?
+            if future.done():
+                data += [future.value()]
+                if self._VERBOSE:
+                    print(
+                        f"got data from {i} // data has len {len(data)} / {self.num_workers}"
+                    )
+            else:
+                self.futures.append((future, i))
         data = torch.cat(data).to(self.storing_device)
         traj_ids = data.get(("collector", "traj_ids"), None)
         if traj_ids is not None:
@@ -568,17 +591,29 @@ class RPCDataCollector(_DataCollector):
         raise NotImplementedError
 
     def shutdown(self):
-        for future in self.futures:
+        if not hasattr(self, "_shutdown"):
+            warnings.warn("shutdown has no effect has `_init` has not been called yet.")
+            return
+        if self._shutdown:
+            return
+        if self._VERBOSE:
+            print("shutting down")
+        for future, i in self.futures:
             # clear the futures
             while future is not None and not future.done():
-                continue
+                print(f"waiting for proc {i} to clear")
+                future.wait()
         for i in range(self.num_workers):
+            if self._VERBOSE:
+                print(f"shutting down {i}")
             rpc.rpc_sync(
                 self.collector_infos[i],
                 self.collector_class.shutdown,
                 args=(self.collector_rrefs[i],),
                 timeout=int(IDLE_TIMEOUT),
             )
+        if self._VERBOSE:
+            print("rpc shutdown")
         rpc.shutdown(timeout=int(IDLE_TIMEOUT))
         if self.launcher == "mp":
             for job in self.jobs:
@@ -590,3 +625,4 @@ class RPCDataCollector(_DataCollector):
             pass
         else:
             raise NotImplementedError(f"Unknown launcher {self.launcher}")
+        self._shutdown = True

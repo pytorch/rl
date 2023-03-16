@@ -274,7 +274,13 @@ class DistributedCollectorBase:
             MultiaSyncDataCollector,
         ],
     )
-    @pytest.mark.parametrize("sync", [False, True])
+    @pytest.mark.parametrize(
+        "sync",
+        [
+            False,
+            True,
+        ],
+    )
     def test_distributed_collector_updatepolicy(self, collector_class, sync):
         """Testing various collector classes to be used in nodes."""
         queue = mp.Queue(1)
