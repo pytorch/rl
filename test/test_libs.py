@@ -1116,9 +1116,9 @@ class TestVmas:
         "relocate-human-v1",
         "walker2d-medium-replay-v2",
         "ant-medium-v2",
-        "flow-merge-random-v0",
+        # "flow-merge-random-v0",
         "kitchen-partial-v0",
-        #        "carla-town-v0",
+        # "carla-town-v0",
     ],
 )
 class TestD4RL:

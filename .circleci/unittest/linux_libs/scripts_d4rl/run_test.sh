@@ -16,10 +16,11 @@ pip3 install -U "gym[classic_control,atari,accept-rom-license]"==0.23
 pip install -e .
 cd ..
 
-git clone https://github.com/flow-project/flow.git
-cd flow
-python setup.py develop
-cd ..
+#flow is a dependency disaster of biblical scale
+#git clone https://github.com/flow-project/flow.git
+#cd flow
+#python setup.py develop
+#cd ..
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
