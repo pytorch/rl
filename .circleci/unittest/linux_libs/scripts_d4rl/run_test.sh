@@ -4,7 +4,7 @@ set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
-apt-get update && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3
+apt-get update && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0
 
 # we install d4rl here bc env variables have been updated
 git clone https://github.com/Farama-Foundation/d4rl.git
