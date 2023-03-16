@@ -10,7 +10,7 @@ from importlib import import_module
 
 import numpy as np
 
-VERBOSE = strtobool(os.environ("VERBOSE", "0"))
+VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 
 
 class timeit:
