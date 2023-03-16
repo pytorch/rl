@@ -18,6 +18,7 @@ from torchrl.collectors.distributed.default_configs import (
     IDLE_TIMEOUT,
     TCP_PORT,
 )
+from torchrl.collectors.utils import split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
 
 SUBMITIT_ERR = None
@@ -254,6 +255,11 @@ class RPCDataCollector(_DataCollector):
         self._sync = sync
         self.update_after_each_batch = update_after_each_batch
         self.max_weight_update_interval = max_weight_update_interval
+        if self.update_after_each_batch and self.max_weight_update_interval > -1:
+            raise RuntimeError(
+                "Got conflicting udpate instructions: `update_after_each_batch` "
+                "`max_weight_update_interval` are incompatible."
+            )
         self.launcher = launcher
         self._batches_since_weight_update = [0 for _ in range(self.num_workers)]
         if tcp_port is None:
@@ -502,7 +508,29 @@ class RPCDataCollector(_DataCollector):
                 data = self._next_sync_rpc()
             else:
                 data = self._next_async_rpc()
+
+            if self.split_trajs:
+                data = split_trajectories(data)
+            if self.postproc is not None:
+                data = self.postproc(data)
             yield data
+
+            if self.max_weight_update_interval > -1 and not self._sync:
+                for j in range(self.num_workers):
+                    rank = j + 1
+                    if (
+                        self._batches_since_weight_update[j]
+                        > self.max_weight_update_interval
+                    ):
+                        self.update_policy_weights_([j], wait=False)
+            elif self.max_weight_update_interval > -1:
+                ranks = [
+                    1
+                    for j in range(self.num_workers)
+                    if self._batches_since_weight_update[j]
+                    > self.max_weight_update_interval
+                ]
+                self.update_policy_weights_(ranks, wait=True)
 
     def update_policy_weights_(self, workers=None, wait=True) -> None:
         if workers is None:

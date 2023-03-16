@@ -378,7 +378,7 @@ class TestSyncCollector(DistributedCollectorBase):
         else:
             assert (last_batch["action"] == 1).all(), last_batch["action"]
         collector.shutdown()
-        assert total == 2000
+        assert total == total_frames
         queue.put("passed")
 
     @pytest.mark.parametrize(

@@ -219,11 +219,11 @@ def _run_collector(
             if sync:
                 policy_weights.recv(0)
             else:
-                # wthout further arguments, irecv blocks until weights have
+                # without further arguments, irecv blocks until weights have
                 # been updated
                 policy_weights.irecv(0)
             # the policy has been updated: we can simply update the weights
-            collector.update_policy_weights_()
+            collector.update_policy_weights_(policy_weights)
             _store.set(f"NODE_{rank}_out", b"updated")
         elif instruction.startswith(b"seeding"):
             seed = int(instruction.split(b"seeding_"))
@@ -682,64 +682,16 @@ class DistributedDataCollector(_DataCollector):
 
         while total_frames < self.total_frames:
             if self._sync:
-                # in the 'sync' case we should update before collecting the data
-                if self.update_after_each_batch:
-                    self.update_policy_weights_()
-                else:
-                    for j in range(self.num_workers):
-                        self._batches_since_weight_update[j] += 1
-
-                if total_frames < self.total_frames:
-                    for rank in range(1, self.num_workers + 1):
-                        if self._VERBOSE:
-                            print(f"sending 'continue' to {rank}")
-                        self._store.set(f"NODE_{rank}_in", b"continue")
-                trackers = []
-                for i in range(self.num_workers):
-                    rank = i + 1
-                    trackers.append(
-                        self._tensordict_out_unbind[i].irecv(
-                            src=rank, return_premature=True
-                        )
-                    )
-                for tracker in trackers:
-                    for _tracker in tracker:
-                        _tracker.wait()
-                data = self._tensordict_out.clone()
-                traj_ids = data.get(("collector", "traj_ids"), None)
-                if traj_ids is not None:
-                    for i in range(1, self.num_workers):
-                        traj_ids[i] += traj_ids[i - 1].max()
-                    data.set_(("collector", "traj_ids"), traj_ids)
-                total_frames += data.numel()
-
+                data, total_frames = self._next_sync(total_frames)
             else:
-                data = None
-                while data is None:
-                    for i in range(self.num_workers):
-                        rank = i + 1
-                        if self._store.get(f"NODE_{rank}_status") == b"done":
-                            for _tracker in trackers[i]:
-                                _tracker.wait()
-                            data = self._tensordict_out[i].clone()
-                            if self.update_after_each_batch:
-                                self.update_policy_weights_(rank)
-                            total_frames += data.numel()
-                            if total_frames < self.total_frames:
-                                if self._VERBOSE:
-                                    print(f"sending 'continue' to {rank}")
-                                self._store.set(f"NODE_{rank}_in", b"continue")
-                            trackers[i] = self._tensordict_out[i].irecv(
-                                src=i + 1, return_premature=True
-                            )
-                            for j in range(self.num_workers):
-                                self._batches_since_weight_update[j] += j != i
-                            break
+                data, total_frames = self._next_async(total_frames, trackers)
+
             if self.split_trajs:
                 data = split_trajectories(data)
             if self.postproc is not None:
                 data = self.postproc(data)
             yield data
+
             if self.max_weight_update_interval > -1:
                 for j in range(self.num_workers):
                     rank = j + 1
@@ -752,6 +704,61 @@ class DistributedDataCollector(_DataCollector):
         for i in range(self.num_workers):
             rank = i + 1
             self._store.set(f"NODE_{rank}_in", b"shutdown")
+
+    def _next_sync(self, total_frames):
+        # in the 'sync' case we should update before collecting the data
+        if self.update_after_each_batch:
+            self.update_policy_weights_()
+        else:
+            for j in range(self.num_workers):
+                self._batches_since_weight_update[j] += 1
+
+        if total_frames < self.total_frames:
+            for rank in range(1, self.num_workers + 1):
+                if self._VERBOSE:
+                    print(f"sending 'continue' to {rank}")
+                self._store.set(f"NODE_{rank}_in", b"continue")
+        trackers = []
+        for i in range(self.num_workers):
+            rank = i + 1
+            trackers.append(
+                self._tensordict_out_unbind[i].irecv(src=rank, return_premature=True)
+            )
+        for tracker in trackers:
+            for _tracker in tracker:
+                _tracker.wait()
+        data = self._tensordict_out.clone()
+        traj_ids = data.get(("collector", "traj_ids"), None)
+        if traj_ids is not None:
+            for i in range(1, self.num_workers):
+                traj_ids[i] += traj_ids[i - 1].max()
+            data.set_(("collector", "traj_ids"), traj_ids)
+        total_frames += data.numel()
+        return data, total_frames
+
+    def _next_async(self, total_frames, trackers):
+        data = None
+        while data is None:
+            for i in range(self.num_workers):
+                rank = i + 1
+                if self._store.get(f"NODE_{rank}_status") == b"done":
+                    for _tracker in trackers[i]:
+                        _tracker.wait()
+                    data = self._tensordict_out[i].clone()
+                    if self.update_after_each_batch:
+                        self.update_policy_weights_(rank)
+                    total_frames += data.numel()
+                    if total_frames < self.total_frames:
+                        if self._VERBOSE:
+                            print(f"sending 'continue' to {rank}")
+                        self._store.set(f"NODE_{rank}_in", b"continue")
+                    trackers[i] = self._tensordict_out[i].irecv(
+                        src=i + 1, return_premature=True
+                    )
+                    for j in range(self.num_workers):
+                        self._batches_since_weight_update[j] += j != i
+                    break
+        return data, total_frames
 
     def update_policy_weights_(self, worker_rank=None) -> None:
         """Updates the weights of the worker nodes.
@@ -772,7 +779,7 @@ class DistributedDataCollector(_DataCollector):
                 self.policy_weights.send(rank)
             else:
                 self.policy_weights.isend(rank)
-            self._batches_since_weight_update[rank - 1] = 0
+            self._batches_since_weight_update[i] = 0
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"updated":
                 raise RuntimeError(f"Expected 'updated' but got status {status}.")
