@@ -158,8 +158,13 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset.set("next", dataset.select())
         dataset.rename_key("next_observations", ("next", "observation"))
         dataset.rename_key("terminals", "terminal")
-        dataset.rename_key("timeouts", "timeout")
-        dataset.set("done", dataset.get("terminal") | dataset.get("timeout"))
+        if "timeouts" in dataset.keys():
+            dataset.rename_key("timeouts", "timeout")
+        dataset.set(
+            "done",
+            dataset.get("terminal")
+            | dataset.get("timeout", torch.zeros((), dtype=torch.bool)),
+        )
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
 
@@ -175,10 +180,12 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["done"] = dataset["done"].unsqueeze(-1)
         # dataset.rename_key("next_observations", "next/observation")
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
-        dataset["next"].update(dataset.select("done", "reward"))
+        dataset["next"].update(
+            dataset.select("reward", "done", "terminal", "timeout", strict=False)
+        )
         self._shift_reward_done(dataset)
         # Fill unknown next states with 0
-        dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0.0
+        dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0
         self.specs = env.specs.clone()
         return dataset
 
@@ -214,8 +221,13 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
         dataset.rename_key("observations", "observation")
         dataset.rename_key("terminals", "terminal")
-        dataset.rename_key("timeouts", "timeout")
-        dataset.set("done", dataset.get("terminal") | dataset.get("timeout"))
+        if "timeouts" in dataset.keys():
+            dataset.rename_key("timeouts", "timeout")
+        dataset.set(
+            "done",
+            dataset.get("terminal")
+            | dataset.get("timeout", torch.zeros((), dtype=torch.bool)),
+        )
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
         try:
@@ -238,10 +250,12 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             "next",
             dataset.select("observation", "info", strict=False)[1:],
         )
-        dataset["next"].update(dataset.select("reward", "done"))
+        dataset["next"].update(
+            dataset.select("reward", "done", "terminal", "timeout", strict=False)
+        )
         self._shift_reward_done(dataset)
         # Fill unknown next states with 0
-        dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0.0
+        dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0
         self.specs = env.specs.clone()
         return dataset
 

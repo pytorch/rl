@@ -10,13 +10,14 @@ apt-get update && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa
 git clone https://github.com/Farama-Foundation/d4rl.git
 cd d4rl
 pip3 install -U 'mujoco-py<2.1,>=2.0'
+pip3 install -U "gym[all]"==0.23
 pip install -e .
 cd ..
 
-#git clone https://github.com/flow-project/flow.git
-#cd flow
-#pip install -e .
-#cd ..
+git clone https://github.com/flow-project/flow.git
+cd flow
+python setup.py develop
+cd ..
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
