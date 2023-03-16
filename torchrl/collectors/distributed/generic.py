@@ -315,12 +315,11 @@ class DistributedDataCollector(_DataCollector):
         slurm_kwargs (dict): a dictionary of parameters to be passed to the
             submitit executor.
         backend (str, optional): must a string "<distributed_backed>" where
-            <distributed_backed> is one of "gloo", "mpi", "nccl" or "ucc". See
+            <distributed_backed> is one of ``"gloo"``, ``"mpi"``, ``"nccl"`` or ``"ucc"``. See
             the torch.distributed documentation for more information.
-            Defaults to "gloo".
-        storing_device (int, str or torch.device, optional): the device where
-            data will be stored and delivered by the iterator. Defaults to
-            ``"cpu"``.
+            Defaults to ``"gloo"``.
+        storing_device (torch.device or compatible, optional): the device where the
+            data will be delivered. Defaults to ``"cpu"``.
         update_after_each_batch (bool, optional): if ``True``, the weights will
             be updated after each collection. For ``sync=True``, this means that
             all workers will see their weights updated. For ``sync=False``,
