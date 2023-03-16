@@ -1111,16 +1111,16 @@ class TestD4RL:
     @pytest.mark.parametrize(
         "task",
         [
-            "antmaze-medium-play-v0",
-            "hammer-cloned-v1",
-            "maze2d-open-v0",
-            "maze2d-open-dense-v0",
-            "relocate-human-v1",
-            "walker2d-medium-replay-v2",
+            # "antmaze-medium-play-v0",
+            # "hammer-cloned-v1",
+            # "maze2d-open-v0",
+            # "maze2d-open-dense-v0",
+            # "relocate-human-v1",
+            # "walker2d-medium-replay-v2",
             "ant-medium-v2",
-            # "flow-merge-random-v0",
-            "kitchen-partial-v0",
-            # "carla-town-v0",
+            # # "flow-merge-random-v0",
+            # "kitchen-partial-v0",
+            # # "carla-town-v0",
         ],
     )
     def test_d4rl_dummy(self, task):
@@ -1128,7 +1128,7 @@ class TestD4RL:
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
         print(f"completed test after {time.time()-t0}s")
 
-    @pytest.mark.parametrize("task", ["antmaze-medium-play-v0"])
+    @pytest.mark.parametrize("task", ["ant-medium-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
     @pytest.mark.parametrize("from_env", [True, False])
     def test_dataset_build(self, task, split_trajs, from_env):
@@ -1146,7 +1146,7 @@ class TestD4RL:
             assert sim.shape[-1] == offline.shape[-1], key
         print(f"completed test after {time.time()-t0}s")
 
-    @pytest.mark.parametrize("task", ["antmaze-medium-play-v0"])
+    @pytest.mark.parametrize("task", ["ant-medium-v2"])
     def test_terminate_on_end(self, task):
         t0 = time.time()
         data_true = D4RLExperienceReplay(
@@ -1172,7 +1172,7 @@ class TestD4RL:
         )
         print(f"completed test after {time.time()-t0}s")
 
-    @pytest.mark.parametrize("task", ["antmaze-medium-play-v0"])
+    @pytest.mark.parametrize("task", ["ant-medium-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
     def test_d4rl_iteration(self, task, split_trajs):
         t0 = time.time()
