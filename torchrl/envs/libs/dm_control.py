@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import numpy as np
 import torch
 
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     TensorSpec,

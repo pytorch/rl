@@ -325,7 +325,7 @@ def test_collector_env_reset():
     # check that if step is 1, then the env was done before
     assert (steps == 1)[done].all()
     # check that split traj has a minimum total reward of -21 (for pong only)
-    _data = split_trajectories(_data)
+    _data = split_trajectories(_data, prefix="collector")
     assert _data["next", "reward"].sum(-2).min() == -21
 
 

@@ -37,7 +37,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDictBase
 from torch import nn
 
-from torchrl.data import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 
 
 def _check_all_str(list_of_str, first_level=True):

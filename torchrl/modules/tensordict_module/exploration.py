@@ -11,7 +11,7 @@ from tensordict.nn import TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import expand_as_right
 
-from torchrl.data import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.tensordict_module.common import (
     _forward_hook_safe_action,

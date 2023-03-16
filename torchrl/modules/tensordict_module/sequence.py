@@ -8,7 +8,7 @@ from __future__ import annotations
 from tensordict.nn import TensorDictSequential
 from torch import nn
 
-from torchrl.data import CompositeSpec
+from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.modules.tensordict_module.common import SafeModule
 
 

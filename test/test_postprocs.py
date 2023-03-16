@@ -281,7 +281,7 @@ class TestSplits:
         trajs = TestSplits.create_fake_trajs(num_workers, traj_len)
         assert trajs.shape[0] == num_workers
         assert trajs.shape[1] == traj_len
-        split_trajs = split_trajectories(trajs)
+        split_trajs = split_trajectories(trajs, prefix="collector")
         assert (
             split_trajs.shape[0] == split_trajs.get(("collector", "traj_ids")).max() + 1
         )
