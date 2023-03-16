@@ -1163,7 +1163,9 @@ class TestD4RL:
             terminate_on_end=False,
             batch_size=2,
         )
-        data_from_env = D4RLExperienceReplay(task, split_trajs=True, from_env=True)
+        data_from_env = D4RLExperienceReplay(
+            task, split_trajs=True, from_env=True, batch_size=2
+        )
         keys = set(data_from_env._storage._storage.keys(True, True))
         keys = keys.intersection(data_true._storage._storage.keys(True, True))
         assert_allclose_td(
