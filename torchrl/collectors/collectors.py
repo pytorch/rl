@@ -23,11 +23,11 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
-from torchrl._utils import _check_for_faulty_process, prod, VERBOSE
 from torchrl._utils import (
     _check_for_faulty_process,
     accept_remote_rref_udf_invocation,
     prod,
+    VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import TensorSpec

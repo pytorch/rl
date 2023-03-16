@@ -2,6 +2,7 @@ import collections
 
 import math
 import os
+import sys
 import time
 import warnings
 from distutils.util import strtobool
@@ -12,6 +13,7 @@ import numpy as np
 import torch
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
+_os_is_windows = sys.platform == "win32"
 
 
 class timeit:
@@ -280,11 +282,16 @@ class implement_for:
 
 
 def accept_remote_rref_invocation(func):
-    """Object method decorator that allows a method to be invoked remotely by passing the `rpc.RRef` associated with the remote object construction as first argument in place of the object reference."""
+    """Decorator that allows a method to be invoked remotely.
+
+    Passes the `rpc.RRef` associated with the remote object construction as first argument in place of the object reference.
+
+    """
 
     @wraps(func)
     def unpack_rref_and_invoke_function(self, *args, **kwargs):
-        if isinstance(self, torch._C._distributed_rpc.PyRRef):
+        # windows does not know torch._C._distributed_rpc.PyRRef
+        if not _os_is_windows and isinstance(self, torch._C._distributed_rpc.PyRRef):
             self = self.local_value()
         return func(self, *args, **kwargs)
 

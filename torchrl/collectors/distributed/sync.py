@@ -7,7 +7,6 @@ r"""Generic distributed data-collector using torch.distributed backend."""
 
 import os
 import socket
-import warnings
 from copy import copy, deepcopy
 from datetime import timedelta
 from typing import OrderedDict
@@ -300,14 +299,6 @@ class DistributedSyncDataCollector(_DataCollector):
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_workers
             )
-            if not self._sync and init_random_frames > 0:
-                warnings.warn(
-                    "async distributed data collection with init_random_frames > 0 "
-                    "may have unforeseen consequences as we do not control that once "
-                    "non-random data is being collected all nodes are returning non-random data. "
-                    "If this is a feature that you feel should be fixed, please raise an issue on "
-                    "torchrl's repo."
-                )
             collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
             collector_kwarg["exploration_mode"] = exploration_mode
             collector_kwarg["reset_when_done"] = reset_when_done
