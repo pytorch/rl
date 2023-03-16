@@ -19,11 +19,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
-from torchrl._utils import _check_for_faulty_process, prod, VERBOSE
+from torchrl._utils import (
+    _check_for_faulty_process,
+    accept_remote_rref_udf_invocation,
+    prod,
+    VERBOSE,
+)
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -112,6 +117,8 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
 
 
 class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
+    _iterator = None
+
     def _get_policy_and_device(
         self,
         policy: Optional[
@@ -213,13 +220,38 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                 policy.share_memory()
         return policy, device, get_weights_fn
 
-    def update_policy_weights_(self) -> None:
-        """Update the policy weights if the policy of the data collector and the trained policy live on different devices."""
-        if self.get_weights_fn is not None:
+    def update_policy_weights_(
+        self, policy_weights: Optional[TensorDictBase] = None
+    ) -> None:
+        """Updates the policy weights if the policy of the data collector and the trained policy live on different devices.
+
+        Args:
+            policy_weights (TensorDictBase, optional): if provided, a TensorDict containing
+                the weights of the policy to be used for the udpdate.
+
+        """
+        if policy_weights is not None:
+            self.policy_weights.apply(lambda x: x.data).update_(policy_weights)
+        elif self.get_weights_fn is not None:
             self.policy.load_state_dict(self.get_weights_fn())
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()
+
+    def next(self):
+        try:
+            if self._iterator is None:
+                self._iterator = iter(self)
+            out = next(self._iterator)
+            # if any, we don't want the device ref to be passed in distributed settings
+            out.clear_device_()
+            return out
+        except StopIteration:
+            return None
+
+    @abc.abstractmethod
+    def shutdown(self):
+        raise NotImplementedError
 
     @abc.abstractmethod
     def iterator(self) -> Iterator[TensorDictBase]:
@@ -242,6 +274,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         return string
 
 
+@accept_remote_rref_udf_invocation
 class SyncDataCollector(_DataCollector):
     """Generic data collector for RL problems. Requires and environment constructor and a policy.
 
@@ -419,13 +452,18 @@ class SyncDataCollector(_DataCollector):
         self.env: EnvBase = env
         self.closed = False
         self.reset_when_done = reset_when_done
-        self.n_env = self.env.numel()
+        self.n_env = self.env.batch_size.numel()
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
             device=device,
             observation_spec=self.env.observation_spec,
         )
+        if isinstance(self.policy, nn.Module):
+            self.policy_weights = TensorDict(dict(self.policy.named_parameters()), [])
+        else:
+            self.policy_weights = TensorDict({}, [])
+
         self.env: EnvBase = self.env.to(self.device)
         self.max_frames_per_traj = max_frames_per_traj
         if self.max_frames_per_traj > 0:
@@ -509,6 +547,16 @@ class SyncDataCollector(_DataCollector):
         self.split_trajs = split_trajs
         self._has_been_done = None
         self._exclude_private_keys = True
+
+    # for RPC
+    def next(self):
+        return super().next()
+
+    # for RPC
+    def update_policy_weights_(
+        self, policy_weights: Optional[TensorDictBase] = None
+    ) -> None:
+        super().update_policy_weights_(policy_weights)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -649,6 +697,8 @@ class SyncDataCollector(_DataCollector):
                     self._tensordict_out[..., j] = self._tensordict
                     if is_shared:
                         self._tensordict_out.share_memory_()
+                    else:
+                        self._tensordict_out.lock()
 
                 self._step_and_maybe_reset()
 
@@ -920,6 +970,7 @@ class _MultiDataCollector(_DataCollector):
                 f"Found {type(device)} instead."
             )
         self._policy_dict = {}
+        self._policy_weights_dict = {}
         self._get_weights_fn_dict = {}
 
         for i, (_device, create_env, kwargs) in enumerate(
@@ -941,6 +992,13 @@ class _MultiDataCollector(_DataCollector):
                 policy=policy, device=_device, observation_spec=observation_spec
             )
             self._policy_dict[_device] = _policy
+            if isinstance(_policy, nn.Module):
+                self._policy_weights_dict[_device] = TensorDict(
+                    dict(_policy.named_parameters()), []
+                )
+            else:
+                self._policy_weights_dict[_device] = TensorDict({}, [])
+
             self._get_weights_fn_dict[_device] = _get_weight_fn
             device[i] = _device
         self.device = device
@@ -996,9 +1054,13 @@ class _MultiDataCollector(_DataCollector):
     def frames_per_batch_worker(self):
         raise NotImplementedError
 
-    def update_policy_weights_(self) -> None:
+    def update_policy_weights_(self, policy_weights=None) -> None:
         for _device in self._policy_dict:
-            if self._get_weights_fn_dict[_device] is not None:
+            if policy_weights is not None:
+                self._policy_weights_dict[_device].apply(lambda x: x.data).update_(
+                    policy_weights
+                )
+            elif self._get_weights_fn_dict[_device] is not None:
                 self._policy_dict[_device].load_state_dict(
                     self._get_weights_fn_dict[_device]()
                 )
@@ -1084,12 +1146,15 @@ also that the state dict is synchronised across processes if needed."""
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "close"))
 
-            msg = self.pipes[idx].recv()
-            if msg != "closed":
-                raise RuntimeError(f"got {msg} but expected 'close'")
+            if self.pipes[idx].poll(10.0):
+                msg = self.pipes[idx].recv()
+                if msg != "closed":
+                    raise RuntimeError(f"got {msg} but expected 'close'")
+            else:
+                continue
 
         for proc in self.procs:
-            proc.join()
+            proc.join(10.0)
 
         self.queue_out.close()
         for pipe in self.pipes:
@@ -1180,6 +1245,7 @@ also that the state dict is synchronised across processes if needed."""
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
 
 
+@accept_remote_rref_udf_invocation
 class MultiSyncDataCollector(_MultiDataCollector):
     """Runs a given number of DataCollectors on separate processes synchronously.
 
@@ -1277,6 +1343,32 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     __doc__ += _MultiDataCollector.__doc__
 
+    # for RPC
+    def next(self):
+        return super().next()
+
+    # for RPC
+    def shutdown(self):
+        return super().shutdown()
+
+    # for RPC
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+        return super().set_seed(seed, static_seed)
+
+    # for RPC
+    def state_dict(self) -> OrderedDict:
+        return super().state_dict()
+
+    # for RPC
+    def load_state_dict(self, state_dict: OrderedDict) -> None:
+        return super().load_state_dict(state_dict)
+
+    # for RPC
+    def update_policy_weights_(
+        self, policy_weights: Optional[TensorDictBase] = None
+    ) -> None:
+        super().update_policy_weights_(policy_weights)
+
     @property
     def frames_per_batch_worker(self):
         return -(-self.frames_per_batch // self.num_workers)
@@ -1368,6 +1460,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         # self._shutdown_main()
 
 
+@accept_remote_rref_udf_invocation
 class MultiaSyncDataCollector(_MultiDataCollector):
     """Runs a given number of DataCollectors on separate processes asynchronously.
 
@@ -1468,6 +1561,32 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 if _device not in self.postprocs:
                     self.postprocs[_device] = deepcopy(postproc).to(_device)
 
+    # for RPC
+    def next(self):
+        return super().next()
+
+    # for RPC
+    def shutdown(self):
+        return super().shutdown()
+
+    # for RPC
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+        return super().set_seed(seed, static_seed)
+
+    # for RPC
+    def state_dict(self) -> OrderedDict:
+        return super().state_dict()
+
+    # for RPC
+    def load_state_dict(self, state_dict: OrderedDict) -> None:
+        return super().load_state_dict(state_dict)
+
+    # for RPC
+    def update_policy_weights_(
+        self, policy_weights: Optional[TensorDictBase] = None
+    ) -> None:
+        super().update_policy_weights_(policy_weights)
+
     @property
     def frames_per_batch_worker(self):
         return self.frames_per_batch
@@ -1549,6 +1668,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                     self.pipes[idx].send((idx, "continue"))
 
 
+@accept_remote_rref_udf_invocation
 class aSyncDataCollector(MultiaSyncDataCollector):
     """Runs a single DataCollector on a separate process.
 
@@ -1645,6 +1765,26 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             storing_devices=[storing_device] if storing_device is not None else None,
             **kwargs,
         )
+
+    # for RPC
+    def next(self):
+        return super().next()
+
+    # for RPC
+    def shutdown(self):
+        return super().shutdown()
+
+    # for RPC
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+        return super().set_seed(seed, static_seed)
+
+    # for RPC
+    def state_dict(self) -> OrderedDict:
+        return super().state_dict()
+
+    # for RPC
+    def load_state_dict(self, state_dict: OrderedDict) -> None:
+        return super().load_state_dict(state_dict)
 
 
 def _main_async_collector(

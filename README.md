@@ -277,8 +277,10 @@ And it is `functorch` and `torch.compile` compatible!
   ```
   </details>
 
-- multiprocess [data collectors](torchrl/collectors/collectors.py)<sup>(2)</sup> that work synchronously or asynchronously.
-  Through the use of TensorDict, TorchRL's training loops are made very similar to regular training loops in supervised
+- multiprocess and distributed [data collectors](torchrl/collectors/collectors.py)<sup>(2)</sup>
+  that work synchronously or asynchronously.
+  Through the use of TensorDict, TorchRL's training loops are made very similar
+  to regular training loops in supervised
   learning (although the "dataloader" -- read data collector -- is modified on-the-fly):
   <details>
     <summary>Code</summary>
@@ -301,6 +303,9 @@ And it is `functorch` and `torch.compile` compatible!
       collector.update_policy_weights_()
   ```
   </details>
+
+  Check our [distributed collector examples](examples/distributed/collectors) to
+  learn more about ultra-fast data collection with TorchRL.
 
 - efficient<sup>(2)</sup> and generic<sup>(1)</sup> [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) with modularized storage:
   <details>
