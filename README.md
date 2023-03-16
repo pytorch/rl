@@ -322,6 +322,25 @@ And it is `functorch` and `torch.compile` compatible!
   ```
   </details>
 
+  Replay buffers are also offered as wrappers around common datasets for *offline RL*:
+  <details>
+    <summary>Code</summary>
+
+  ```python
+  from torchrl.data.replay_buffers import SamplerWithoutReplacement
+  from torchrl.data.datasets.d4rl import D4RLExperienceReplay
+  data = D4RLExperienceReplay(
+      "maze2d-open-v0",
+      split_trajs=True,
+      batch_size=128,
+      sampler=SamplerWithoutReplacement(drop_last=True),
+  )
+  for sample in data:  # or alternatively sample = data.sample()
+      fun(sample)
+  ```
+  </details>
+
+
 - cross-library [environment transforms](torchrl/envs/transforms/transforms.py)<sup>(1)</sup>,
   executed on device and in a vectorized fashion<sup>(2)</sup>,
   which process and prepare the data coming out of the environments to be used by the agent:
