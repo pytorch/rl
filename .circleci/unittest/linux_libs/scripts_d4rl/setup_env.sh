@@ -86,6 +86,7 @@ conda env update --file "${this_dir}/environment.yml" --prune
 
 git clone https://github.com/Farama-Foundation/d4rl.git
 cd d4rl
+pip3 install -U 'mujoco-py<2.1,>=2.0'
 pip install -e .
 cd ..
 
