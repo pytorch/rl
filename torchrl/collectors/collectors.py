@@ -805,7 +805,7 @@ class _MultiDataCollector(_DataCollector):
     """Runs a given number of DataCollectors on separate processes.
 
     Args:
-        create_env_fn (Callable or List[Callabled]): list of Callables, each returning an
+        create_env_fn (List[Callabled]): list of Callables, each returning an
             instance of :class:`torchrl.envs.EnvBase`.
         policy (Callable, optional): Instance of TensorDictModule class.
             Must accept TensorDictBase object as input.
@@ -886,7 +886,7 @@ class _MultiDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Union[Callable, Sequence[Callable[[], EnvBase]]],
+        create_env_fn: Sequence[Callable[[], EnvBase]],
         policy: Optional[
             Union[
                 TensorDictModule,
