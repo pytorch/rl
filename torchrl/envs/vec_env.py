@@ -21,7 +21,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
-from torchrl._utils import _check_for_faulty_process
+from torchrl._utils import _check_for_faulty_process, VERBOSE
 from torchrl.data import (
     CompositeSpec,
     DiscreteTensorSpec,
@@ -126,7 +126,7 @@ class _BatchedEnv(EnvBase):
 
     """
 
-    _verbose: bool = False
+    _verbose: bool = VERBOSE
     _excluded_wrapped_keys = [
         "is_closed",
         "parent_channels",
