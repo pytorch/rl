@@ -23,6 +23,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
+from torchrl._utils import _check_for_faulty_process, prod, VERBOSE
 from torchrl._utils import (
     _check_for_faulty_process,
     accept_remote_rref_udf_invocation,
@@ -1801,7 +1802,7 @@ def _main_async_collector(
     idx: int = 0,
     exploration_mode: str = DEFAULT_EXPLORATION_MODE,
     reset_when_done: bool = True,
-    verbose: bool = False,
+    verbose: bool = VERBOSE,
 ) -> None:
     pipe_parent.close()
     #  init variables that will be cleared when closing

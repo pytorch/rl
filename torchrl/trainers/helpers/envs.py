@@ -8,6 +8,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import torch
 
+from torchrl._utils import VERBOSE
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
@@ -394,7 +395,8 @@ def get_stats_random_rollout(
             cfg=cfg, use_env_creator=False, stats={"loc": 0.0, "scale": 1.0}
         )()
 
-    print("computing state stats")
+    if VERBOSE:
+        print("computing state stats")
     if not hasattr(cfg, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
@@ -426,11 +428,12 @@ def get_stats_random_rollout(
     m[s == 0] = 0.0
     s[s == 0] = 1.0
 
-    print(
-        f"stats computed for {val_stats.numel()} steps. Got: \n"
-        f"loc = {m}, \n"
-        f"scale = {s}"
-    )
+    if VERBOSE:
+        print(
+            f"stats computed for {val_stats.numel()} steps. Got: \n"
+            f"loc = {m}, \n"
+            f"scale = {s}"
+        )
     if not torch.isfinite(m).all():
         raise RuntimeError("non-finite values found in mean")
     if not torch.isfinite(s).all():

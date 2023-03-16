@@ -1,13 +1,17 @@
 import collections
+
 import math
 import os
 import time
 import warnings
+from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
 
 import numpy as np
 import torch
+
+VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 
 
 class timeit:
