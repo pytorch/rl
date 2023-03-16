@@ -20,7 +20,7 @@ try:
 
     _has_functorch = True
 except ImportError:
-    print(
+    warnings.warn(
         "failed to import functorch. TorchRL's features that do not require "
         "functional programming should work, but functionality and performance "
         "may be affected. Consider installing functorch and/or upgrating pytorch."
