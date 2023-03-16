@@ -9,6 +9,7 @@ Contains distributed tests which are expected to be a considerable burden for th
 import abc
 import argparse
 import os
+import sys
 import time
 
 import pytest
@@ -30,6 +31,9 @@ from torchrl.collectors.distributed import (
 )
 
 TIMEOUT = 200
+
+if sys.platform.startswith("win"):
+    pytest.skip("skipping windows tests in windows", allow_module_level=True)
 
 
 class CountingPolicy(nn.Module):
