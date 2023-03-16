@@ -178,7 +178,7 @@ class RPCDataCollector(_DataCollector):
             updated.
             Defaults to ``False``, ie. updates have to be executed manually
             through
-            ``torchrl.collectors.distributed.DistributedDataCollector.update_policy_weights_()``
+            :meth:`torchrl.collectors.distributed.DistributedDataCollector.update_policy_weights_`.
         max_weight_update_interval (int, optional): the maximum number of
             batches that can be collected before the policy weights of a worker
             is updated.
@@ -504,9 +504,11 @@ class RPCDataCollector(_DataCollector):
                 data = self._next_async_rpc()
             yield data
 
-    def update_policy_weights_(self) -> None:
+    def update_policy_weights_(self, workers=None, wait=True) -> None:
+        if workers is None:
+            workers = list(range(self.num_workers))
         futures = []
-        for i in range(self.num_workers):
+        for i in workers:
             if self._VERBOSE:
                 print(f"calling update on worker {i}")
             futures.append(
@@ -516,12 +518,13 @@ class RPCDataCollector(_DataCollector):
                     args=(self.collector_rrefs[i], self.policy_weights.detach()),
                 )
             )
-        for i in range(self.num_workers):
-            if self._VERBOSE:
-                print(f"waiting for worker {i}")
-            futures[i].wait()
-            if self._VERBOSE:
-                print("got it!")
+        if wait:
+            for i in workers:
+                if self._VERBOSE:
+                    print(f"waiting for worker {i}")
+                futures[i].wait()
+                if self._VERBOSE:
+                    print("got it!")
 
     def _next_async_rpc(self):
         if self._VERBOSE:
@@ -533,6 +536,8 @@ class RPCDataCollector(_DataCollector):
         while True:
             future, i = self.futures.popleft()
             if future.done():
+                if self.update_after_each_batch:
+                    self.update_policy_weights_(workers=(i,), wait=False)
                 if self._VERBOSE:
                     print(f"future {i} is done")
                 data = future.value()

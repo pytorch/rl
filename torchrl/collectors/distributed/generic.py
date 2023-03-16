@@ -328,7 +328,7 @@ class DistributedDataCollector(_DataCollector):
             updated.
             Defaults to ``False``, ie. updates have to be executed manually
             through
-            ``torchrl.collectors.distributed.DistributedDataCollector.update_policy_weights_()``
+            :meth:`torchrl.collectors.distributed.DistributedDataCollector.update_policy_weights_`.
         max_weight_update_interval (int, optional): the maximum number of
             batches that can be collected before the policy weights of a worker
             is updated.
