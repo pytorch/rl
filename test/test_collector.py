@@ -1217,6 +1217,9 @@ class TestPreemptiveThreshold:
 
     @pytest.mark.parametrize("env_name", ["conv", "vec"])
     def test_multisync_collector_interruptor_mechanism(self, env_name, seed=100):
+
+        frames_per_batch = 800
+
         def env_fn(seed):
             env = make_make_env(env_name)()
             env.set_seed(seed)
@@ -1225,32 +1228,24 @@ class TestPreemptiveThreshold:
         policy = make_policy(env_name)
 
         collector = MultiSyncDataCollector(
-            create_env_fn=[env_fn, env_fn, env_fn, env_fn],
-            create_env_kwargs=[
-                {"seed": seed},
-                {"seed": seed},
-                {"seed": seed},
-                {"seed": seed},
-            ],
+            create_env_fn=[env_fn] * 4,
+            create_env_kwargs=[{"seed": seed}] * 4,
             policy=policy,
             total_frames=800,
             max_frames_per_traj=50,
-            frames_per_batch=800,
+            frames_per_batch=frames_per_batch,
             init_random_frames=-1,
             reset_at_each_iter=False,
             devices="cpu",
             storing_devices="cpu",
             split_trajs=False,
-            preemptive_threshold=0.25,
+            preemptive_threshold=0.0,  # stop after one iteration
         )
 
         for batch in collector:
-            assert (
-                batch["collector"]["traj_ids"][
-                    batch["collector"]["traj_ids"] != -1
-                ].numel()
-                < 800
-            )
+            trajectory_ids = batch["collector"]["traj_ids"]
+            trajectory_ids_mask = trajectory_ids != -1  # valid frames mask
+            assert trajectory_ids[trajectory_ids_mask].numel() < frames_per_batch
 
 
 if __name__ == "__main__":

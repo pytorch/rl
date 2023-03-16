@@ -68,7 +68,7 @@ class RandomPolicy:
         return td.set("action", self.action_spec.rand())
 
 
-class Interruptor:
+class _Interruptor:
     """A class for managing the collection state of a process.
 
     This class provides methods to start and stop collection, and to check
@@ -93,7 +93,7 @@ class Interruptor:
             return self._collect is False
 
 
-class InterruptorManager(SyncManager):
+class _InterruptorManager(SyncManager):
     """A custom SyncManager for managing the collection state of a process.
 
     This class extends the SyncManager class and allows to share an Interruptor object
@@ -103,7 +103,7 @@ class InterruptorManager(SyncManager):
     pass
 
 
-InterruptorManager.register("Interruptor", Interruptor)
+_InterruptorManager.register("Interruptor", Interruptor)
 
 
 def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
@@ -1006,9 +1006,9 @@ class _MultiDataCollector(_DataCollector):
         self.frames_per_worker = np.inf
         if preemptive_threshold:
             self.preemptive_threshold = np.clip(preemptive_threshold, 0.0, 1.0)
-            manager = InterruptorManager()
+            manager = _InterruptorManager()
             manager.start()
-            self.interruptor = manager.Interruptor()
+            self.interruptor = manager._Interruptor()
         else:
             self.preemptive_threshold = 1.0
             self.interruptor = None
