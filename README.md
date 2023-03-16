@@ -9,7 +9,7 @@
 [![Downloads](https://static.pepy.tech/personalized-badge/torchrl?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads)](https://pepy.tech/project/torchrl)
 [![Downloads](https://static.pepy.tech/personalized-badge/torchrl-nightly?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads%20(nightly))](https://pepy.tech/project/torchrl-nightly)
 
-# TorchRL [Beta]
+# TorchRL
 
 [**Documentation**](#documentation-and-knowledge-base) | [**TensorDict**](#writing-simplified-and-portable-rl-codebase-with-tensordict) |
 [**Features**](#features) | [**Examples, tutorials and demos**](#examples-tutorials-and-demos) | [**Installation**](#installation) |
@@ -261,7 +261,7 @@ And it is `functorch` and `torch.compile` compatible!
   which supports common libraries (OpenAI gym, deepmind control lab, etc.)<sup>(1)</sup> and state-less execution 
   (e.g. Model-based environments).
   The [batched environments](torchrl/envs/vec_env.py) containers allow parallel execution<sup>(2)</sup>.
-  A common pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py) is also provided.
+  A common PyTorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py) is also provided.
   TorchRL's environments API is simple but stringent and specific. Check the 
   [documentation](https://pytorch.org/rl/reference/envs.html)
   and [tutorial](https://pytorch.org/rl/tutorials/pendulum.html) to learn more!
@@ -461,7 +461,7 @@ If you would like to contribute to new features, check our [call for contributio
 ## Examples, tutorials and demos
 
 A series of [examples](examples/) are provided with an illustrative purpose:
-- [DQN (and add-ons up to Rainbow)](examples/dqn/dqn.py)
+- [DQN and Rainbow](examples/dqn/dqn.py)
 - [DDPG](examples/ddpg/ddpg.py)
 - [IQL](examples/iql/iql.py)
 - [TD3](examples/td3/td3.py)
@@ -490,7 +490,7 @@ conda activate torch_rl
 **PyTorch**
 
 Depending on the use of functorch that you want to make, you may want to 
-install the latest (nightly) pytorch release or the latest stable version of pytorch.
+install the latest (nightly) PyTorch release or the latest stable version of PyTorch.
 See [here](https://pytorch.org/get-started/locally/) for a detailed list of commands, 
 including `pip3` or windows/OSX compatible installation commands.
 
@@ -634,9 +634,9 @@ Contributors are recommended to install [pre-commit hooks](https://pre-commit.co
 
 ## Disclaimer
 
-This library is not officially released yet and is subject to change.
-
-The features are available before an official release so that users and collaborators can get early access and provide feedback. No guarantee of stability, robustness or backward compatibility is provided.
+This library is released as a PyTorch beta feature.
+BC-breaking changes are likely to happen but they will be introduced with a deprecation
+warranty after a few release cycles.
 
 # License
 TorchRL is licensed under the MIT License. See [LICENSE](LICENSE) for details.
