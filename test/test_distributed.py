@@ -239,8 +239,14 @@ class DistributedCollectorBase:
         total_frames = 300
         env = CountingEnv()
         policy = CountingPolicy()
+        if collector_class is MultiaSyncDataCollector:
+            # otherwise we may collect data from a collector that has not yet been
+            # updated
+            n_collectors = 1
+        else:
+            n_collectors = 2
         collector = cls.distributed_class()(
-            [env] * 2,
+            [env] * n_collectors,
             policy,
             collector_class=collector_class,
             total_frames=total_frames,
