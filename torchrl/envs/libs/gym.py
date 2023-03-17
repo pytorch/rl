@@ -8,7 +8,7 @@ from typing import Dict, List
 from warnings import warn
 
 import torch
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,

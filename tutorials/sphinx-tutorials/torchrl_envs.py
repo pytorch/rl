@@ -50,13 +50,14 @@ GymEnv.available_envs[:10]
 # Env Specs
 # ------------------------------
 # Like other frameworks, TorchRL envs have attributes that indicate what
-# space is for the observations, action and reward. Because it often happens
+# space is for the observations, action, done and reward. Because it often happens
 # that more than one observation is retrieved, we expect the observation spec
 # to be of type ``CompositeSpec``. Reward and action do not have this restriction:
 
 print("Env observation_spec: \n", env.observation_spec)
 print("Env action_spec: \n", env.action_spec)
 print("Env reward_spec: \n", env.reward_spec)
+print("Env done_spec: \n", env.done_spec)
 
 ###############################################################################
 # Those spec come with a series of useful tools: one can assert whether a
@@ -671,9 +672,3 @@ print(
 
 env.close()
 del env
-
-# sphinx_gallery_start_ignore
-import time
-
-time.sleep(10)
-# sphinx_gallery_end_ignore

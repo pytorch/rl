@@ -12,6 +12,8 @@ import torch
 from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
 from mocking_classes import (
     ContinuousActionVecMockEnv,
+    CountingBatchedEnv,
+    CountingEnv,
     DiscreteActionConvMockEnv,
     DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
@@ -31,7 +33,7 @@ from torchrl.collectors.collectors import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
+from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv, StepCounter
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
@@ -203,7 +205,6 @@ def test_output_device_consistency(
         total_frames=20000,
         device=_device,
         storing_device=_storing_device,
-        pin_memory=False,
     )
     for _, d in enumerate(collector):
         assert _is_consistent_device_type(
@@ -222,7 +223,6 @@ def test_output_device_consistency(
         total_frames=20000,
         device=_device,
         storing_device=_storing_device,
-        pin_memory=False,
     )
 
     for _, d in enumerate(ccollector):
@@ -264,7 +264,6 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
         max_frames_per_traj=2000,
         total_frames=20000,
         device="cpu",
-        pin_memory=False,
     )
     for i, d in enumerate(collector):
         if i == 0:
@@ -284,7 +283,6 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
         frames_per_batch=20,
         max_frames_per_traj=2000,
         total_frames=20000,
-        pin_memory=False,
     )
     for i, d in enumerate(ccollector):
         if i == 0:
@@ -307,18 +305,18 @@ def test_collector_env_reset():
     torch.manual_seed(0)
 
     def make_env():
-        return GymEnv(PONG_VERSIONED, frame_skip=4)
+        return TransformedEnv(GymEnv(PONG_VERSIONED, frame_skip=4), StepCounter())
 
     env = SerialEnv(2, make_env)
     # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
     env.set_seed(0)
     collector = SyncDataCollector(
-        env, total_frames=10000, frames_per_batch=10000, split_trajs=False
+        env, policy=None, total_frames=10000, frames_per_batch=10000, split_trajs=False
     )
     for _data in collector:
         continue
-    steps = _data["collector", "step_count"][..., 1:]
-    done = _data["done"][..., :-1, :].squeeze(-1)
+    steps = _data["next", "step_count"][..., 1:]
+    done = _data["next", "done"][..., :-1, :].squeeze(-1)
     # we don't want just one done
     assert done.sum() > 3
     # check that after a done, the next step count is always 1
@@ -328,8 +326,8 @@ def test_collector_env_reset():
     # check that if step is 1, then the env was done before
     assert (steps == 1)[done].all()
     # check that split traj has a minimum total reward of -21 (for pong only)
-    _data = split_trajectories(_data)
-    assert _data["reward"].sum(-2).min() == -21
+    _data = split_trajectories(_data, prefix="collector")
+    assert _data["next", "reward"].sum(-2).min() == -21
 
 
 @pytest.mark.parametrize("num_env", [1, 2])
@@ -369,7 +367,6 @@ def test_collector_done_persist(num_env, env_name, seed=5):
         max_frames_per_traj=2000,
         total_frames=20000,
         device="cpu",
-        pin_memory=False,
         reset_when_done=False,
     )
     for _, d in enumerate(collector):  # noqa
@@ -419,7 +416,6 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
         max_frames_per_traj=2000,
         total_frames=20000,
         device="cpu",
-        pin_memory=False,
         reset_when_done=True,
         split_trajs=True,
     )
@@ -428,13 +424,12 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 
     assert d.ndimension() == 2
     assert d["collector", "mask"].shape == d.shape
-    assert d["collector", "step_count"].shape == d.shape
+    assert d["next", "step_count"].shape == d.shape
     assert d["collector", "traj_ids"].shape == d.shape
     for traj in d.unbind(0):
         assert traj["collector", "traj_ids"].unique().numel() == 1
         assert (
-            traj["collector", "step_count"][1:] - traj["collector", "step_count"][:-1]
-            == 1
+            traj["next", "step_count"][1:] - traj["next", "step_count"][:-1] == 1
         ).all()
 
     del collector
@@ -460,7 +455,6 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 #         frames_per_batch=20,
 #         max_frames_per_traj=2000,
 #         total_frames=20000,
-#         pin_memory=False,
 #     )
 #     for i, d in enumerate(ccollector):
 #         if i == 0:
@@ -507,7 +501,6 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         frames_per_batch=frames_per_batch,
         max_frames_per_traj=1000,
         total_frames=frames_per_batch * 100,
-        pin_memory=False,
     )
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
@@ -522,7 +515,6 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         frames_per_batch=frames_per_batch,
         max_frames_per_traj=1000,
         total_frames=frames_per_batch * 100,
-        pin_memory=False,
     )
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
@@ -563,7 +555,6 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
         frames_per_batch=20,
         max_frames_per_traj=20,
         total_frames=300,
-        pin_memory=False,
     )
     ccollector.set_seed(seed)
     for i, data in enumerate(ccollector):
@@ -585,6 +576,7 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
 @pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
+    """Tests that a rollout gathered with env.rollout matches one gathered with the collector."""
     if num_env == 1:
 
         def env_fn(seed):
@@ -626,7 +618,6 @@ def test_collector_consistency(num_env, env_name, seed=100):
         max_frames_per_traj=20,
         total_frames=200,
         device="cpu",
-        pin_memory=False,
     )
     collector_iter = iter(collector)
     b1 = next(collector_iter)
@@ -634,14 +625,14 @@ def test_collector_consistency(num_env, env_name, seed=100):
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
 
-    if num_env == 1:
-        # rollouts collected through DataCollector are padded using pad_sequence, which introduces a first dimension
-        rollout1a = rollout1a.unsqueeze(0)
+    # if num_env == 1:
+    #     # rollouts collected through DataCollector are padded using pad_sequence, which introduces a first dimension
+    #     rollout1a = rollout1a.unsqueeze(0)
     assert (
         rollout1a.batch_size == b1.batch_size
     ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
 
-    assert_allclose_td(rollout1a, b1.select(*rollout1a.keys()))
+    assert_allclose_td(rollout1a, b1.select(*rollout1a.keys(True, True)))
     collector.shutdown()
 
 
@@ -682,19 +673,18 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device="cpu",
-        seed=seed,
-        pin_memory=False,
     )
+    collector1.set_seed(seed)
     count = 0
     data1 = []
     for d in collector1:
         data1.append(d)
-        count += d.shape[1]
+        count += d.shape[-1]
         if count > max_frames_per_traj:
             break
 
-    data1 = torch.cat(data1, 1)
-    data1 = data1[:, :max_frames_per_traj]
+    data1 = torch.cat(data1, d.ndim - 1)
+    data1 = data1[..., :max_frames_per_traj]
 
     collector1.shutdown()
     del collector1
@@ -704,22 +694,21 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         create_env_kwargs={"seed": seed},
         policy=policy,
         frames_per_batch=10 * num_env,
-        max_frames_per_traj=20,
+        max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device="cpu",
-        seed=seed,
-        pin_memory=False,
     )
+    collector10.set_seed(seed)
     count = 0
     data10 = []
     for d in collector10:
         data10.append(d)
-        count += d.shape[1]
+        count += d.shape[-1]
         if count > max_frames_per_traj:
             break
 
-    data10 = torch.cat(data10, 1)
-    data10 = data10[:, :max_frames_per_traj]
+    data10 = torch.cat(data10, data1.ndim - 1)
+    data10 = data10[..., :max_frames_per_traj]
 
     collector10.shutdown()
     del collector10
@@ -732,21 +721,20 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device="cpu",
-        seed=seed,
-        pin_memory=False,
     )
+    collector20.set_seed(seed)
     count = 0
     data20 = []
     for d in collector20:
         data20.append(d)
-        count += d.shape[1]
+        count += d.shape[-1]
         if count > max_frames_per_traj:
             break
 
     collector20.shutdown()
     del collector20
-    data20 = torch.cat(data20, 1)
-    data20 = data20[:, :max_frames_per_traj]
+    data20 = torch.cat(data20, data1.ndim - 1)
+    data20 = data20[..., :max_frames_per_traj]
 
     assert_allclose_td(data1, data20)
     assert_allclose_td(data10, data20)
@@ -901,6 +889,7 @@ def test_excluded_keys(collector_class, exclude):
         "create_env_fn": make_env,
         "policy": policy_explore,
         "frames_per_batch": 30,
+        "total_frames": -1,
     }
     if collector_class is not SyncDataCollector:
         collector_kwargs["create_env_fn"] = [
@@ -931,7 +920,10 @@ def test_excluded_keys(collector_class, exclude):
 )
 @pytest.mark.parametrize("init_random_frames", [0, 50])
 @pytest.mark.parametrize("explicit_spec", [True, False])
-def test_collector_output_keys(collector_class, init_random_frames, explicit_spec):
+@pytest.mark.parametrize("split_trajs", [True, False])
+def test_collector_output_keys(
+    collector_class, init_random_frames, explicit_spec, split_trajs
+):
     from torchrl.envs.libs.gym import GymEnv
 
     out_features = 1
@@ -978,6 +970,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "total_frames": total_frames,
         "frames_per_batch": frames_per_batch,
         "init_random_frames": init_random_frames,
+        "split_trajs": split_trajs,
     }
 
     if collector_class is not SyncDataCollector:
@@ -990,19 +983,21 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     keys = {
         "action",
         "done",
+        "reward",
         "collector",
         "hidden1",
         "hidden2",
-        ("collector", "mask"),
         ("next", "hidden1"),
         ("next", "hidden2"),
         ("next", "observation"),
+        ("next", "done"),
+        ("next", "reward"),
         "next",
         "observation",
-        "reward",
-        ("collector", "step_count"),
         ("collector", "traj_ids"),
     }
+    if split_trajs:
+        keys.add(("collector", "mask"))
     b = next(iter(collector))
 
     assert set(b.keys(True)) == keys
@@ -1038,7 +1033,6 @@ def test_collector_device_combinations(device, storing_device):
         total_frames=20000,
         device=device,
         storing_device=storing_device,
-        pin_memory=False,
     )
     batch = next(collector.iterator())
     assert batch.device == torch.device(storing_device)
@@ -1061,7 +1055,6 @@ def test_collector_device_combinations(device, storing_device):
         storing_devices=[
             storing_device,
         ],
-        pin_memory=False,
     )
     batch = next(collector.iterator())
     assert batch.device == torch.device(storing_device)
@@ -1084,7 +1077,6 @@ def test_collector_device_combinations(device, storing_device):
         storing_devices=[
             storing_device,
         ],
-        pin_memory=False,
     )
     batch = next(collector.iterator())
     assert batch.device == torch.device(storing_device)
@@ -1110,7 +1102,12 @@ class TestAutoWrap:
         return lambda: GymEnv(PENDULUM_VERSIONED)
 
     def _create_collector_kwargs(self, env_maker, collector_class, policy):
-        collector_kwargs = {"create_env_fn": env_maker, "policy": policy}
+        collector_kwargs = {
+            "create_env_fn": env_maker,
+            "policy": policy,
+            "frames_per_batch": 200,
+            "total_frames": -1,
+        }
 
         if collector_class is not SyncDataCollector:
             collector_kwargs["create_env_fn"] = [
@@ -1148,6 +1145,7 @@ class TestAutoWrap:
         policy = TensorDictCompatiblePolicy(
             out_features=env_maker().action_spec.shape[-1]
         )
+        policy(env_maker().reset())
 
         collector = collector_class(
             **self._create_collector_kwargs(env_maker, collector_class, policy)
@@ -1180,6 +1178,54 @@ class TestAutoWrap:
             collector_class(
                 **self._create_collector_kwargs(env_maker, collector_class, policy)
             )
+
+
+@pytest.mark.parametrize("env_class", [CountingEnv, CountingBatchedEnv])
+def test_initial_obs_consistency(env_class, seed=1):
+    # non regression test on #938
+    torch.manual_seed(seed)
+    start_val = 4
+    if env_class == CountingEnv:
+        num_envs = 1
+        env = CountingEnv(device="cpu", max_steps=8, start_val=start_val)
+        max_steps = 8
+    elif env_class == CountingBatchedEnv:
+        num_envs = 2
+        env = CountingBatchedEnv(
+            device="cpu",
+            batch_size=[num_envs],
+            max_steps=torch.arange(num_envs) + 17,
+            start_val=torch.ones([num_envs]) * start_val,
+        )
+        max_steps = env.max_steps.max().item()
+    env.set_seed(seed)
+    policy = lambda tensordict: tensordict.set(
+        "action", torch.ones(tensordict.shape, dtype=torch.int)
+    )
+    collector = SyncDataCollector(
+        create_env_fn=env,
+        policy=policy,
+        frames_per_batch=((max_steps - 3) * 2 + 2) * num_envs,  # at least two episodes
+        split_trajs=False,
+        total_frames=-1,
+    )
+    for _d in collector:
+        break
+    obs = _d["observation"].squeeze()
+    if env_class == CountingEnv:
+        arange_0 = start_val + torch.arange(max_steps - 3)
+        arange = start_val + torch.arange(2)
+        expected = torch.cat([arange_0, arange_0, arange])
+    else:
+        # the first env has a shorter horizon than the second
+        arange_0 = start_val + torch.arange(max_steps - 3 - 1)
+        arange = start_val + torch.arange(start_val)
+        expected_0 = torch.cat([arange_0, arange_0, arange])
+        arange_0 = start_val + torch.arange(max_steps - 3)
+        arange = start_val + torch.arange(2)
+        expected_1 = torch.cat([arange_0, arange_0, arange])
+        expected = torch.stack([expected_0, expected_1])
+    assert torch.allclose(obs, expected.to(obs.dtype))
 
 
 def weight_reset(m):

@@ -60,12 +60,12 @@ In the process, we will touch three crucial components of TorchRL:
 # This tutorial will be structured as follows:
 #
 # * We will first get acquainted with the environment properties:
-#   its shape (``batch_size``), its methods (mainly :func:`EnvBase.step`,
-#   :func:`EnvBase.reset` and :func:`EnvBase.set_seed`)
+#   its shape (``batch_size``), its methods (mainly :meth:`EnvBase.step`,
+#   :meth:`EnvBase.reset` and :meth:`EnvBase.set_seed`)
 #   and finally its specs.
 # * After having coded our simulator, we will demonstrate how it can be used
 #   during training with transforms.
-# * We will explore surprising new avenues that follow from the TorchRL's API,
+# * We will explore new avenues that follow from the TorchRL's API,
 #   including: the possibility of transforming inputs, the vectorized execution
 #   of the simulation and the possibility of backpropagating through the
 #   simulation graph.
@@ -97,10 +97,13 @@ DEFAULT_Y = 1.0
 
 ######################################################################
 # There are four things one must take care of when designing a new environment
-# class: :func:`EnvBase._reset`, which codes for the resetting of the simulator
-# at a (potentially random) initial state, :func:`EnvBase._step` which codes
-# for the state transition dynamic, :func:`EnvBase._set_seed`` which
-# implements the seeding mechanism and, finally, the environment specs.
+# class:
+#
+# * :meth:`EnvBase._reset`, which codes for the resetting of the simulator
+#   at a (potentially random) initial state;
+# * :meth:`EnvBase._step` which codes for the state transition dynamic;
+# * :meth:`EnvBase._set_seed`` which implements the seeding mechanism;
+# * the environment specs.
 #
 # Let us first describe the problem at hand: we would like to model a simple
 # pendulum, over which we can control the torque applied on its fixed point.
@@ -140,13 +143,13 @@ DEFAULT_Y = 1.0
 #
 # The step method is the first thing to consider, as it will encode
 # the simulation that is of interest to us. In TorchRL, the
-# :class:`torchrl.envs.EnvBase` class has a :func:`EnvBase.step`
+# :class:`torchrl.envs.EnvBase` class has a :meth:`EnvBase.step`
 # method that receives a :class:`tensordict.TensorDict`
 # instance with an ``"action"`` entry indicating what action is to be taken.
 #
 # To facilitate the reading and writing from that tensordict and to make sure
 # that the keys are consistent with what's expected from the library, the
-# simulation part has been delegated to a private abstract method :func:`_step`
+# simulation part has been delegated to a private abstract method :meth:`_step`
 # which reads input data from a tensordict, and writes a *new*  tensordict
 # with the output data.
 #
@@ -158,11 +161,9 @@ DEFAULT_Y = 1.0
 #   3. write the set of observation value along with the reward and done state
 #      at the corresponding entries in a new :class:`TensorDict`.
 #
-# Next, the :func:`torchrl.envs.EnvBase.step` method will rearrange this
-# output and move the key-pair values of the observation in a new entry
-# named ``"next"`` and leave the ``"reward"`` and ``"done"`` state at the
-# root level. It will also run some sanity checks on the shapes of the
-# tensordict content.
+# Next, the :meth:`torchrl.envs.EnvBase.step` method will merge the output
+# of :meth:`torchrl.envs.EnvBase.step` in the input tensordict to enforce
+# input/output consistency.
 #
 # Typically, for stateful environments, this will look like
 #
@@ -174,7 +175,7 @@ DEFAULT_Y = 1.0
 #       fields={
 #           action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
 #           done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
-#           observation: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+#           observation: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
 #       batch_size=torch.Size([]),
 #       device=cpu,
 #       is_shared=False)
@@ -186,22 +187,26 @@ DEFAULT_Y = 1.0
 #           done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
 #           next: TensorDict(
 #               fields={
+#                   done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
 #                   observation: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+#                   reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False)},
 #               batch_size=torch.Size([]),
 #               device=cpu,
 #               is_shared=False),
-#           reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
-#           observation: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+#           observation: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
 #       batch_size=torch.Size([]),
 #       device=cpu,
 #       is_shared=False)
 #
-# In the Pendulum example, our :func:`_step` method will read the relevant entries
-# from the input tensordict and compute the position and velocity of the
-# pendulum after the force encoded by the ``"action"`` key has been applied
+# Notice that the root tensordict has not changed, the only modification is the
+# appearance of a new ``"next"`` entry that contains the new information.
+#
+# In the Pendulum example, our :meth:`_step` method will read the relevant
+# entries from the input tensordict and compute the position and velocity of
+# the pendulum after the force encoded by the ``"action"`` key has been applied
 # onto it. We compute the new angular position of the pendulum
-# ``new_th`` as the result of the previous position ``th`` plus the new
-# velocity ``new_thdot`` over a time interval ``dt``.
+# ``"new_th"`` as the result of the previous position ``"th"`` plus the new
+# velocity ``"new_thdot"`` over a time interval ``dt``.
 #
 # Since our goal is to turn the pendulum up and maintain it still in that
 # position, our ``cost`` (negative reward) function is lower for positions
@@ -209,7 +214,7 @@ DEFAULT_Y = 1.0
 # Indeed, we want to discourage positions that are far from being "upward"
 # and/or speeds that are far from 0.
 #
-# In our example, :func:`EnvBase._step` is encoded as a static method since our
+# In our example, :meth:`EnvBase._step` is encoded as a static method since our
 # environment is stateless. In stateful settings, the ``self`` argument is
 # needed as the state needs to be read from the environment.
 #
@@ -236,13 +241,16 @@ def _step(tensordict):
     new_th = th + new_thdot * dt
     reward = -costs.view(*tensordict.shape, 1)
     done = torch.zeros_like(reward, dtype=torch.bool)
+    # The output must be written in a ``"next"`` entry
     out = TensorDict(
         {
-            "th": new_th,
-            "thdot": new_thdot,
-            "params": tensordict["params"],
-            "reward": reward,
-            "done": done,
+            "next": {
+                "th": new_th,
+                "thdot": new_thdot,
+                "params": tensordict["params"],
+                "reward": reward,
+                "done": done,
+            }
         },
         tensordict.shape,
     )
@@ -258,29 +266,29 @@ def angle_normalize(x):
 # ------------------------------------------------------------
 #
 # The second method we need to care about is the
-# :func:`torchrl.envs.EnvBase._reset` method. Like
-# :func:`torchrl.envs.EnvBase._step`, it should write the observation entries
+# :meth:`torchrl.envs.EnvBase._reset` method. Like
+# :meth:`torchrl.envs.EnvBase._step`, it should write the observation entries
 # and possibly a done state in the tensordict it outputs (if the done state is
 # omitted, it will be filled as ``False`` by the parent method
-# :func:`torchrl.envs.EnvBase.reset`). In some contexts, it is required that
-# the `_reset` method receives a command from the function that called
+# :meth:`torchrl.envs.EnvBase.reset`). In some contexts, it is required that
+# the ``_reset`` method receives a command from the function that called
 # it (e.g. in multi-agent settings we may want to indicate which agents need
-# to be reset). This is why the :func:`torchrl.envs.EnvBase._reset` method
+# to be reset). This is why the :meth:`torchrl.envs.EnvBase._reset` method
 # also expects a tensordict as input, albeit it may perfectly be empty or
 # ``None``.
 #
-# The parent :class:`EnvBase.reset` does some simple checks like the
-# :class:`EnvBase.step` does, such as making sure that a ``"done"`` state
+# The parent :meth:`EnvBase.reset` does some simple checks like the
+# :meth:`EnvBase.step` does, such as making sure that a ``"done"`` state
 # is returned in the output tensordict and that the shapes match what is
 # expected from the specs.
 #
 # For us, the only important thing to consider is whether
-# :class:`EnvBase._reset` contains all the expected observations. Once more,
+# :meth:`EnvBase._reset` contains all the expected observations. Once more,
 # since we are working with a stateless environment, we pass the configuration
 # of the pendulum in a nested tensordict named ``"params"``.
 #
 # In this example, we do not pass a done state as this is not mandatory
-# for :func:`_reset` and our environment is non-terminating so we always
+# for :meth:`_reset` and our environment is non-terminating, so we always
 # expect it to be ``False``.
 #
 
@@ -336,25 +344,37 @@ def _reset(self, tensordict):
 # There are four specs that we must code in our environment:
 #
 # * :obj:`EnvBase.observation_spec`: This will be a :class:`torchrl.data.CompositeSpec`
-#   instance where each key is an observation.
-# * :obj:`EnvBase.action_spec`: It can be any type of spec, but it is required that it
-#   corresponds to the ``"action"`` entry in the input tensordict.
-# * :obj:`EnvBase.input_spec`: contains all the input entries,
-#   including the :obj:`EnvBase.action_spec` (which is just a pointer to
-#   :obj:`EnvBase.input_spec['action_spec']`. As for :obj:`EnvBase.ObservationSpec`,
-#   it is expected that this spec is of type :obj:`torchrl.data.CompositeSpec`.
-#   to accommodate environments where multiple inputs are expected.
-# * :obj:`EnvBase.reward_spec`: the reward spec have the particularity of
-#   having a singleton trailing dimension if the environment has an empty
-#   batch size. The reason is that we often pass observations in torch models
-#   that estimate a value estimate with non-empty shape:
+#   instance where each key is an observation (a :class:`CompositeSpec` can be
+#   viewed as a dictionary of specs).
+# * :obj:`EnvBase.action_spec`: It can be any type of spec, but it is required
+#   that it corresponds to the ``"action"`` entry in the input tensordict;
+# * :obj:`EnvBase.reward_spec`: provides information about the reward space;
+# * :obj:`EnvBase.done_spec`: provides information about the space of the done
+#   flag.
+#
+# TorchRL specs are organised in two general containers: ``input_spec`` which
+# contains the specs of the information that the step function reads (including
+# ``action_spec``), and ``output_spec`` which encodes the specs that the
+# step outputs (``observation_spec``, ``reward_spec`` and ``done_spec``).
+# Given this organisation, the following queries will return the same results:
 #
 #   .. code-block::
 #
-#     >>> next_value = reward + (1 - done) * fun(observation)
+#     >>> # observation
+#     >>> obs_spec = env.observation_spec
+#     >>> obs_spec = env.output_spec["observation"]
+#     >>> # reward
+#     >>> reward_spec = env.reward_spec
+#     >>> reward_spec = env.output_spec["reward"]
+#     >>> # done
+#     >>> done_spec = env.done_spec
+#     >>> done_spec = env.output_spec["done"]
+#     >>> # action
+#     >>> action_spec = env.action_spec
+#     >>> action_spec = env.input_spec["action"]
 #
-#   Working with *unsqueezed* rewards allows us to build algorithms that are
-#   not polluted by squeezing and unsqueezing operations.
+# In other words, the ``observation_spec`` and related properties are
+# convenient shortcuts to the content of the output and input spec containers.
 #
 # TorchRL offers multiple :class:`torchrl.data.TensorSpec`
 # `subclasses <https://pytorch.org/rl/reference/data.html#tensorspec>`_ to
@@ -375,6 +395,7 @@ def _reset(self, tensordict):
 
 
 def _make_spec(self, td_params):
+    # Under the hood, this will populate self.output_spec["observation"]
     self.observation_spec = CompositeSpec(
         th=BoundedTensorSpec(
             minimum=-torch.pi,
@@ -881,9 +902,3 @@ plot()
 #   to write custom transformations;
 # * How to train a policy on a fully differentiable simulator.
 #
-
-# sphinx_gallery_start_ignore
-import time
-
-time.sleep(10)
-# sphinx_gallery_end_ignore

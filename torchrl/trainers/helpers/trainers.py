@@ -12,6 +12,7 @@ from tensordict.nn import TensorDictModuleWrapper
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
+from torchrl._utils import VERBOSE
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
@@ -168,16 +169,17 @@ def make_trainer(
     else:
         raise NotImplementedError(f"lr scheduler {cfg.lr_scheduler}")
 
-    print(
-        f"collector = {collector}; \n"
-        f"loss_module = {loss_module}; \n"
-        f"recorder = {recorder}; \n"
-        f"target_net_updater = {target_net_updater}; \n"
-        f"policy_exploration = {policy_exploration}; \n"
-        f"replay_buffer = {replay_buffer}; \n"
-        f"logger = {logger}; \n"
-        f"cfg = {cfg}; \n"
-    )
+    if VERBOSE:
+        print(
+            f"collector = {collector}; \n"
+            f"loss_module = {loss_module}; \n"
+            f"recorder = {recorder}; \n"
+            f"target_net_updater = {target_net_updater}; \n"
+            f"policy_exploration = {policy_exploration}; \n"
+            f"replay_buffer = {replay_buffer}; \n"
+            f"logger = {logger}; \n"
+            f"cfg = {cfg}; \n"
+        )
 
     if logger is not None:
         # log hyperparams
@@ -270,7 +272,7 @@ def make_trainer(
             record_interval=cfg.record_interval,
             exploration_mode="random",
             suffix="exploration",
-            out_keys={"reward": "r_evaluation_exploration"},
+            out_keys={("next", "reward"): "r_evaluation_exploration"},
         )
         trainer.register_op(
             "post_steps_log",
