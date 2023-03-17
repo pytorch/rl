@@ -1108,6 +1108,36 @@ class TestVmas:
 
 @pytest.mark.skipif(not _has_d4rl, reason=f"D4RL not found: {D4RL_ERR}")
 class TestD4RL:
+    @pytest.mark.parametrize("task", ["ant-medium-v2"])
+    def test_terminate_on_end(self, task):
+        t0 = time.time()
+        data_true = D4RLExperienceReplay(
+            task,
+            split_trajs=True,
+            from_env=False,
+            terminate_on_end=True,
+            batch_size=2,
+        )
+        _ = D4RLExperienceReplay(
+            task,
+            split_trajs=True,
+            from_env=False,
+            terminate_on_end=False,
+            batch_size=2,
+        )
+        data_from_env = D4RLExperienceReplay(
+            task, split_trajs=True, from_env=True, batch_size=2
+        )
+        keys = set(data_from_env._storage._storage.keys(True, True))
+        keys = keys.intersection(data_true._storage._storage.keys(True, True))
+        print(data_true._storage._storage)
+        print(data_from_env._storage._storage)
+        assert_allclose_td(
+            data_true._storage._storage.select(*keys),
+            data_from_env._storage._storage.select(*keys),
+        )
+        print(f"completed test after {time.time()-t0}s")
+
     @pytest.mark.parametrize(
         "task",
         [
@@ -1144,34 +1174,6 @@ class TestD4RL:
             offline = sample[key]
             assert sim.dtype == offline.dtype, key
             assert sim.shape[-1] == offline.shape[-1], key
-        print(f"completed test after {time.time()-t0}s")
-
-    @pytest.mark.parametrize("task", ["ant-medium-v2"])
-    def test_terminate_on_end(self, task):
-        t0 = time.time()
-        data_true = D4RLExperienceReplay(
-            task,
-            split_trajs=True,
-            from_env=False,
-            terminate_on_end=True,
-            batch_size=2,
-        )
-        _ = D4RLExperienceReplay(
-            task,
-            split_trajs=True,
-            from_env=False,
-            terminate_on_end=False,
-            batch_size=2,
-        )
-        data_from_env = D4RLExperienceReplay(
-            task, split_trajs=True, from_env=True, batch_size=2
-        )
-        keys = set(data_from_env._storage._storage.keys(True, True))
-        keys = keys.intersection(data_true._storage._storage.keys(True, True))
-        assert_allclose_td(
-            data_true._storage._storage.select(*keys),
-            data_from_env._storage._storage.select(*keys),
-        )
         print(f"completed test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["ant-medium-v2"])
