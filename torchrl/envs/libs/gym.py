@@ -8,7 +8,7 @@ from typing import Dict, List
 from warnings import warn
 
 import torch
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
@@ -68,6 +68,12 @@ __all__ = ["GymWrapper", "GymEnv"]
 def _gym_to_torchrl_spec_transform(
     spec, dtype=None, device="cpu", categorical_action_encoding=False
 ) -> TensorSpec:
+    """Maps the gym specs to the TorchRL specs.
+
+    By convention, 'state' keys of Dict specs will be renamed "observation" to match the
+    default TorchRL keys.
+
+    """
     if isinstance(spec, gym.spaces.tuple.Tuple):
         raise NotImplementedError("gym.spaces.tuple.Tuple mapping not yet implemented")
     if isinstance(spec, gym.spaces.discrete.Discrete):
@@ -120,7 +126,14 @@ def _gym_to_torchrl_spec_transform(
     elif isinstance(spec, (Dict,)):
         spec_out = {}
         for k in spec.keys():
-            spec_out[k] = _gym_to_torchrl_spec_transform(
+            key = k
+            if k == "state" and "observation" not in spec.keys():
+                # we rename "state" in "observation" as "observation" is the conventional name
+                # for single observation in torchrl.
+                # naming it 'state' will result in envs that have a different name for the state vector
+                # when queried with and without pixels
+                key = "observation"
+            spec_out[key] = _gym_to_torchrl_spec_transform(
                 spec[k],
                 device=device,
                 categorical_action_encoding=categorical_action_encoding,
@@ -447,9 +460,10 @@ class GymEnv(GymWrapper):
                 made_env = True
             except TypeError as err:
                 if ACCEPTED_TYPE_ERRORS["frame_skip"] in str(err):
-                    warn(
-                        "Discarding frameskip arg. This will be taken care of by TorchRL env wrapper."
-                    )
+                    # we can disable this, not strictly indispensable to know
+                    # warn(
+                    #     "Discarding frameskip arg. This will be taken care of by TorchRL env wrapper."
+                    # )
                     self.wrapper_frame_skip = kwargs.pop("frameskip")
                 elif ACCEPTED_TYPE_ERRORS["render_mode"] in str(err):
                     warn("Discarding render_mode from the env constructor.")

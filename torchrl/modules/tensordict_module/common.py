@@ -20,7 +20,7 @@ try:
 
     _has_functorch = True
 except ImportError:
-    print(
+    warnings.warn(
         "failed to import functorch. TorchRL's features that do not require "
         "functional programming should work, but functionality and performance "
         "may be affected. Consider installing functorch and/or upgrating pytorch."
@@ -37,7 +37,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDictBase
 from torch import nn
 
-from torchrl.data import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 
 
 def _check_all_str(list_of_str, first_level=True):
@@ -67,7 +67,7 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
             keys = [out_key]
             values = [spec]
         else:
-            keys = list(spec.keys())
+            keys = list(spec.keys(True, True))
             values = [spec[key] for key in keys]
         for _spec, _key in zip(values, keys):
             if _spec is None:
@@ -207,15 +207,15 @@ class SafeModule(TensorDictModule):
         elif spec is None:
             spec = CompositeSpec()
 
-        if set(spec.keys()) != set(self.out_keys):
+        if set(spec.keys(True, True)) != set(self.out_keys):
             # then assume that all the non indicated specs are None
             for key in self.out_keys:
                 if key not in spec:
                     spec[key] = None
 
-        if set(spec.keys()) != set(self.out_keys):
+        if set(spec.keys(True, True)) != set(self.out_keys):
             raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {set(spec.keys())} and {set(self.out_keys)} respectively"
+                f"spec keys and out_keys do not match, got: {set(spec.keys(True))} and {set(self.out_keys)} respectively"
             )
 
         self._spec = spec

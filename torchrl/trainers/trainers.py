@@ -19,7 +19,7 @@ from tensordict.tensordict import pad, TensorDictBase
 from tensordict.utils import expand_right
 from torch import nn, optim
 
-from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict
+from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict, VERBOSE
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
@@ -54,6 +54,7 @@ LOGGER_METHODS = {
 }
 
 TYPE_DESCR = {float: "4.4f", int: ""}
+REWARD_KEY = ("next", "reward")
 
 
 class TrainerHookBase:
@@ -450,7 +451,8 @@ class Trainer:
         self.collector.shutdown()
 
     def shutdown(self):
-        print("shutting down collector")
+        if VERBOSE:
+            print("shutting down collector")
         self.collector.shutdown()
 
     def optim_steps(self, batch: TensorDictBase) -> None:
@@ -658,7 +660,6 @@ class ReplayBufferTrainer(TrainerHookBase):
                     )
                     pads += [0, pad_value]
                 batch = pad(batch, pads)
-        # reward_training = batch.get("reward").mean().item()
         batch = batch.cpu()
         if self.memmap:
             # We can already place the tensords on the device if they're memmap,
@@ -793,27 +794,39 @@ class LogReward(TrainerHookBase):
         logname (str, optional): name of the rewards to be logged. Default is :obj:`"r_training"`.
         log_pbar (bool, optional): if True, the reward value will be logged on
             the progression bar. Default is :obj:`False`.
+        reward_key (str or tuple, optional): the key where to find the reward
+            in the input batch. Defaults to ``("next", "reward")``
 
     Examples:
-        >>> log_reward = LogReward("reward")
+        >>> log_reward = LogReward(("next", "reward"))
         >>> trainer.register_op("pre_steps_log", log_reward)
 
     """
 
-    def __init__(self, logname="r_training", log_pbar: bool = False):
+    def __init__(
+        self,
+        logname="r_training",
+        log_pbar: bool = False,
+        reward_key: Union[str, tuple] = None,
+    ):
         self.logname = logname
         self.log_pbar = log_pbar
+        if reward_key is None:
+            reward_key = REWARD_KEY
+        self.reward_key = reward_key
 
     def __call__(self, batch: TensorDictBase) -> Dict:
         if ("collector", "mask") in batch.keys(True):
             return {
-                self.logname: batch.get("reward")[batch.get(("collector", "mask"))]
+                self.logname: batch.get(self.reward_key)[
+                    batch.get(("collector", "mask"))
+                ]
                 .mean()
                 .item(),
                 "log_pbar": self.log_pbar,
             }
         return {
-            self.logname: batch.get("reward").mean().item(),
+            self.logname: batch.get(self.reward_key).mean().item(),
             "log_pbar": self.log_pbar,
         }
 
@@ -828,6 +841,13 @@ class RewardNormalizer(TrainerHookBase):
     Args:
         decay (float, optional): exponential moving average decay parameter.
             Default is 0.999
+        scale (float, optional): the scale used to multiply the reward once
+            normalized. Defaults to 1.0.
+        eps (float, optional): the epsilon jitter used to prevent numerical
+            underflow. Defaults to ``torch.finfo(DEFAULT_DTYPE).eps``
+            where ``DEFAULT_DTYPE=torch.get_default_dtype()``.
+        reward_key (str or tuple, optional): the key where to find the reward
+            in the input batch. Defaults to ``("next", "reward")``
 
     Examples:
         >>> reward_normalizer = RewardNormalizer()
@@ -840,19 +860,25 @@ class RewardNormalizer(TrainerHookBase):
         self,
         decay: float = 0.999,
         scale: float = 1.0,
-        eps: float = 1e-4,
+        eps: float = None,
         log_pbar: bool = False,
+        reward_key=None,
     ):
         self._normalize_has_been_called = False
         self._update_has_been_called = False
         self._reward_stats = OrderedDict()
         self._reward_stats["decay"] = decay
         self.scale = scale
+        if eps is None:
+            eps = torch.finfo(torch.get_default_dtype()).eps
         self.eps = eps
+        if reward_key is None:
+            reward_key = REWARD_KEY
+        self.reward_key = reward_key
 
     @torch.no_grad()
     def update_reward_stats(self, batch: TensorDictBase) -> None:
-        reward = batch.get("reward")
+        reward = batch.get(self.reward_key)
         if ("collector", "mask") in batch.keys(True):
             reward = reward[batch.get(("collector", "mask"))]
         if self._update_has_been_called and not self._normalize_has_been_called:
@@ -884,7 +910,7 @@ class RewardNormalizer(TrainerHookBase):
 
     def normalize_reward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.to_tensordict()  # make sure it is not a SubTensorDict
-        reward = tensordict.get("reward")
+        reward = tensordict.get(self.reward_key)
 
         if reward.device is not None:
             reward = reward - self._reward_stats["mean"].to(reward.device)
@@ -893,7 +919,7 @@ class RewardNormalizer(TrainerHookBase):
             reward = reward - self._reward_stats["mean"]
             reward = reward / self._reward_stats["std"]
 
-        tensordict.set("reward", reward * self.scale)
+        tensordict.set(self.reward_key, reward * self.scale)
         self._normalize_has_been_called = True
         return tensordict
 
@@ -1126,10 +1152,10 @@ class Recorder(TrainerHookBase):
         self.record_interval = record_interval
         self.exploration_mode = exploration_mode
         if log_keys is None:
-            log_keys = ["reward"]
+            log_keys = [("next", "reward")]
         if out_keys is None:
             out_keys = KeyDependentDefaultDict(lambda x: x)
-            out_keys["reward"] = "r_evaluation"
+            out_keys[("next", "reward")] = "r_evaluation"
         self.log_keys = log_keys
         self.out_keys = out_keys
         self.suffix = suffix
@@ -1158,7 +1184,7 @@ class Recorder(TrainerHookBase):
                 out = {}
                 for key in self.log_keys:
                     value = td_record.get(key).float()
-                    if key == "reward":
+                    if key == ("next", "reward"):
                         mean_value = value.mean() / self.frame_skip
                         total_value = value.sum()
                         out[self.out_keys[key]] = mean_value

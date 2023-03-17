@@ -240,9 +240,9 @@ def test_mult_onehot(shape, ns):
         for _r, _n in zip(rsplit, ns):
             assert (_r.sum(-1) == 1).all()
             assert _r.shape[-1] == _n
-        np_r = ts.to_numpy(r)
-        assert not ts.is_in(torch.tensor(np_r))
-        assert (ts.encode(np_r) == r).all()
+        categorical = ts.to_categorical(r)
+        assert not ts.is_in(categorical)
+        assert (ts.encode(categorical) == r).all()
 
 
 @pytest.mark.parametrize(
@@ -327,8 +327,11 @@ def test_discrete_conversion(n, device, shape):
     one_hot = OneHotDiscreteTensorSpec(n, device=device, shape=shape_one_hot)
 
     assert categorical != one_hot
-    assert categorical.to_onehot() == one_hot
-    assert one_hot.to_categorical() == categorical
+    assert categorical.to_one_hot_spec() == one_hot
+    assert one_hot.to_categorical_spec() == categorical
+
+    assert categorical.is_in(one_hot.to_categorical(one_hot.rand(shape)))
+    assert one_hot.is_in(categorical.to_one_hot(categorical.rand(shape)))
 
 
 @pytest.mark.parametrize(
@@ -341,14 +344,24 @@ def test_discrete_conversion(n, device, shape):
         [4, 5, 1, 3],
     ],
 )
+@pytest.mark.parametrize(
+    "shape",
+    [
+        torch.Size([3]),
+        torch.Size([4, 5]),
+    ],
+)
 @pytest.mark.parametrize("device", get_available_devices())
-def test_multi_discrete_conversion(ns, device):
+def test_multi_discrete_conversion(ns, shape, device):
     categorical = MultiDiscreteTensorSpec(ns, device=device)
     one_hot = MultiOneHotDiscreteTensorSpec(ns, device=device)
 
     assert categorical != one_hot
-    assert categorical.to_onehot() == one_hot
-    assert one_hot.to_categorical() == categorical
+    assert categorical.to_one_hot_spec() == one_hot
+    assert one_hot.to_categorical_spec() == categorical
+
+    assert categorical.is_in(one_hot.to_categorical(one_hot.rand(shape)))
+    assert one_hot.is_in(categorical.to_one_hot(categorical.rand(shape)))
 
 
 @pytest.mark.parametrize("is_complete", [True, False])
@@ -433,6 +446,14 @@ class TestComposite:
             r = ts.rand()
             assert ts.is_in(r)
 
+    def test_to_numpy(self, is_complete, device, dtype):
+        ts = self._composite_spec(is_complete, device, dtype)
+        for _ in range(100):
+            r = ts.rand()
+            for key, value in ts.to_numpy(r).items():
+                spec = ts[key]
+                assert (spec.to_numpy(r[key]) == value).all()
+
     @pytest.mark.parametrize("shape", [[], [3]])
     def test_project(self, is_complete, device, dtype, shape):
         ts = self._composite_spec(is_complete, device, dtype)
@@ -500,16 +521,24 @@ class TestComposite:
         assert set(ts.keys()) == {
             "obs",
             "act",
+            "nested_cp",
+        }
+        assert set(ts.keys(include_nested=True)) == {
+            "obs",
+            "act",
+            "nested_cp",
             ("nested_cp", "obs"),
             ("nested_cp", "act"),
         }
-        assert len(ts.keys()) == len(ts.keys(yield_nesting_keys=True)) - 1
-        assert set(ts.keys(yield_nesting_keys=True)) == {
+        assert set(ts.keys(include_nested=True, leaves_only=True)) == {
             "obs",
             "act",
             ("nested_cp", "obs"),
             ("nested_cp", "act"),
-            "nested_cp",
+        }
+        assert set(ts.keys(leaves_only=True)) == {
+            "obs",
+            "act",
         }
         td = ts.rand()
         assert isinstance(td["nested_cp"], TensorDictBase)
@@ -556,9 +585,10 @@ class TestComposite:
         ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
         td2 = CompositeSpec(new=None)
         ts.update(td2)
-        assert set(ts.keys()) == {
+        assert set(ts.keys(include_nested=True)) == {
             "obs",
             "act",
+            "nested_cp",
             ("nested_cp", "obs"),
             ("nested_cp", "act"),
             "new",
@@ -568,9 +598,10 @@ class TestComposite:
         ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
         td2 = CompositeSpec(nested_cp=CompositeSpec(new=None).to(device))
         ts.update(td2)
-        assert set(ts.keys()) == {
+        assert set(ts.keys(include_nested=True)) == {
             "obs",
             "act",
+            "nested_cp",
             ("nested_cp", "obs"),
             ("nested_cp", "act"),
             ("nested_cp", "new"),
@@ -580,9 +611,10 @@ class TestComposite:
         ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
         td2 = CompositeSpec(nested_cp=CompositeSpec(act=None).to(device))
         ts.update(td2)
-        assert set(ts.keys()) == {
+        assert set(ts.keys(include_nested=True)) == {
             "obs",
             "act",
+            "nested_cp",
             ("nested_cp", "obs"),
             ("nested_cp", "act"),
         }
@@ -596,9 +628,10 @@ class TestComposite:
             nested_cp=CompositeSpec(act=UnboundedContinuousTensorSpec(device=device))
         )
         ts.update(td2)
-        assert set(ts.keys()) == {
+        assert set(ts.keys(include_nested=True)) == {
             "obs",
             "act",
+            "nested_cp",
             ("nested_cp", "obs"),
             ("nested_cp", "act"),
         }
@@ -608,7 +641,7 @@ class TestComposite:
 def test_keys_to_empty_composite_spec():
     keys = [("key1", "out"), ("key1", "in"), "key2", ("key1", "subkey1", "subkey2")]
     composite = _keys_to_empty_composite_spec(keys)
-    assert set(composite.keys()) == set(keys)
+    assert set(composite.keys(True, True)) == set(keys)
 
 
 class TestEquality:
@@ -1019,21 +1052,22 @@ class TestSpec:
         action_spec = MultiOneHotDiscreteTensorSpec((10, 5))
 
         actions_tensors = [action_spec.rand() for _ in range(10)]
-        actions_numpy = [action_spec.to_numpy(a) for a in actions_tensors]
-        actions_tensors_2 = [action_spec.encode(a) for a in actions_numpy]
+        actions_categorical = [action_spec.to_categorical(a) for a in actions_tensors]
+        actions_tensors_2 = [action_spec.encode(a) for a in actions_categorical]
         assert all(
             [(a1 == a2).all() for a1, a2 in zip(actions_tensors, actions_tensors_2)]
         )
 
-        actions_numpy = [
-            np.concatenate(
-                [np.random.randint(0, 10, (1,)), np.random.randint(0, 5, (1,))], 0
-            )
+        actions_categorical = [
+            torch.cat((torch.randint(0, 10, (1,)), torch.randint(0, 5, (1,))), 0)
             for a in actions_tensors
         ]
-        actions_tensors = [action_spec.encode(a) for a in actions_numpy]
-        actions_numpy_2 = [action_spec.to_numpy(a) for a in actions_tensors]
-        assert all((a1 == a2).all() for a1, a2 in zip(actions_numpy, actions_numpy_2))
+        actions_tensors = [action_spec.encode(a) for a in actions_categorical]
+        actions_categorical_2 = [action_spec.to_categorical(a) for a in actions_tensors]
+        assert all(
+            (a1 == a2).all()
+            for a1, a2 in zip(actions_categorical, actions_categorical_2)
+        )
 
     def test_one_hot_discrete_action_spec_rand(self):
         torch.manual_seed(0)
@@ -1070,14 +1104,14 @@ class TestSpec:
         action_spec = MultiOneHotDiscreteTensorSpec((10, 5))
 
         actions_tensors = [action_spec.rand() for _ in range(10)]
-        actions_numpy = [action_spec.to_numpy(a) for a in actions_tensors]
-        actions_tensors_2 = [action_spec.encode(a) for a in actions_numpy]
+        actions_categorical = [action_spec.to_categorical(a) for a in actions_tensors]
+        actions_tensors_2 = [action_spec.encode(a) for a in actions_categorical]
         assert all(
             [(a1 == a2).all() for a1, a2 in zip(actions_tensors, actions_tensors_2)]
         )
 
-        sample = np.stack(
-            [action_spec.to_numpy(action_spec.rand()) for _ in range(N)], 0
+        sample = torch.stack(
+            [action_spec.to_categorical(action_spec.rand()) for _ in range(N)], 0
         )
         assert sample.shape[0] == N
         assert sample.shape[1] == 2

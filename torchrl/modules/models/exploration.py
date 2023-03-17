@@ -2,8 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import math
+import warnings
 from typing import Optional, Sequence, Union
 
 import torch
@@ -390,7 +390,7 @@ class gSDEModule(nn.Module):
 
         sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
         if not torch.isfinite(sigma).all():
-            print("inf sigma")
+            warnings.warn("inf sigma")
 
         if self.transform is not None:
             action = self.transform(action)

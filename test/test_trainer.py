@@ -16,7 +16,7 @@ from torch import nn
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
-    from torchrl.record.loggers import TensorboardLogger
+    from torchrl.record.loggers.tensorboard import TensorboardLogger
 
     _has_tb = True
 except ImportError:
@@ -42,6 +42,7 @@ from torchrl.trainers.trainers import (
     mask_batch,
     OptimizerHook,
     ReplayBufferTrainer,
+    REWARD_KEY,
     RewardNormalizer,
     SelectKeys,
     UpdateWeights,
@@ -634,7 +635,7 @@ class TestLogReward:
 
         log_reward = LogReward(logname, log_pbar=pbar)
         trainer.register_op("pre_steps_log", log_reward)
-        td = TensorDict({"reward": torch.ones(3)}, [3])
+        td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
         trainer._pre_steps_log_hook(td)
         if _has_tqdm and pbar:
             assert trainer._pbar_str[logname] == 1
@@ -650,7 +651,7 @@ class TestLogReward:
 
         log_reward = LogReward(logname, log_pbar=pbar)
         log_reward.register(trainer)
-        td = TensorDict({"reward": torch.ones(3)}, [3])
+        td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
         trainer._pre_steps_log_hook(td)
         if _has_tqdm and pbar:
             assert trainer._pbar_str[logname] == 1
@@ -669,15 +670,15 @@ class TestRewardNorm:
 
         batch = 10
         reward = torch.randn(batch, 1)
-        td = TensorDict({"reward": reward.clone()}, [batch])
+        td = TensorDict({REWARD_KEY: reward.clone()}, [batch])
         td_out = trainer._process_batch_hook(td)
-        assert (td_out.get("reward") == reward).all()
+        assert (td_out.get(REWARD_KEY) == reward).all()
         assert not reward_normalizer._normalize_has_been_called
 
         td_norm = trainer._process_optim_batch_hook(td)
         assert reward_normalizer._normalize_has_been_called
-        torch.testing.assert_close(td_norm.get("reward").mean(), torch.zeros([]))
-        torch.testing.assert_close(td_norm.get("reward").std(), torch.ones([]))
+        torch.testing.assert_close(td_norm.get(REWARD_KEY).mean(), torch.zeros([]))
+        torch.testing.assert_close(td_norm.get(REWARD_KEY).std(), torch.ones([]))
 
     def test_reward_norm_state_dict(self):
         torch.manual_seed(0)
@@ -688,7 +689,7 @@ class TestRewardNorm:
 
         batch = 10
         reward = torch.randn(batch, 1)
-        td = TensorDict({"reward": reward.clone()}, [batch])
+        td = TensorDict({REWARD_KEY: reward.clone()}, [batch])
         trainer._process_batch_hook(td)
         trainer._process_optim_batch_hook(td)
         state_dict = trainer.state_dict()
@@ -740,7 +741,7 @@ class TestRewardNorm:
 
             batch = 10
             reward = torch.randn(batch, 1)
-            td = TensorDict({"reward": reward.clone()}, [batch])
+            td = TensorDict({REWARD_KEY: reward.clone()}, [batch])
             trainer._process_batch_hook(td)
             trainer._process_optim_batch_hook(td)
             trainer.save_trainer(True)

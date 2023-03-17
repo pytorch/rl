@@ -27,7 +27,7 @@ except ImportError as err:
     except ImportError as err:
         IMPORT_ERROR = err
 
-STATE_KEY = "state"
+STATE_KEY = "observation"
 
 
 class GymPixelObservationWrapper(ObservationWrapper):

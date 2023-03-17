@@ -30,14 +30,33 @@ TorchRL aims at a high modularity and good runtime performance.
 Tutorials
 =========
 
-.. toctree::
-   :maxdepth: 2
+Basics
+------
 
-   tutorials/torchrl_demo
-   tutorials/pretrained_models
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/coding_ppo
+   tutorials/pendulum
    tutorials/tensordict_tutorial
    tutorials/tensordict_module
+   tutorials/torchrl_demo
+
+Intermediate
+------------
+
+.. toctree::
+   :maxdepth: 1
+
    tutorials/torch_envs
+   tutorials/pretrained_models
+
+Advanced
+--------
+
+.. toctree::
+   :maxdepth: 1
+
    tutorials/multi_task
    tutorials/coding_ddpg
    tutorials/coding_dqn
@@ -54,7 +73,7 @@ Knowledge Base
 ==============
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 1
 
    reference/knowledge_base
 

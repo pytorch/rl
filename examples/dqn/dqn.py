@@ -112,10 +112,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_env=create_env_fn,
         actor_model_explore=model_explore,
         cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device} if device >= 0 else {}
-        #     for device in args.env_rendering_devices
-        # ],
     )
 
     replay_buffer = make_replay_buffer(device, cfg)
@@ -126,24 +122,19 @@ def main(cfg: "DictConfig"):  # noqa: F821
         norm_obs_only=True,
         obs_norm_state_dict=obs_norm_state_dict,
         logger=logger,
+        use_env_creator=False,
     )()
-
-    # remove video recorder from recorder to have matching state_dict keys
-    if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env)
-        for transform in recorder.transform:
-            if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform.clone())
-    else:
-        recorder_rm = recorder
-
     if isinstance(create_env_fn, ParallelEnv):
-        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-        create_env_fn.close()
+        raise NotImplementedError("This behaviour is deprecated")
     elif isinstance(create_env_fn, EnvCreator):
-        recorder_rm.load_state_dict(create_env_fn().state_dict())
+        recorder.transform[1:].load_state_dict(create_env_fn().transform.state_dict())
+    elif isinstance(create_env_fn, TransformedEnv):
+        recorder.transform = create_env_fn.transform.clone()
     else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
+        raise NotImplementedError(f"Unsupported env type {type(create_env_fn)}")
+    if logger is not None and video_tag:
+        recorder.insert_transform(0, VideoRecorder(logger=logger, tag=video_tag))
+
     # reset reward scaling
     for t in recorder.transform:
         if isinstance(t, RewardScaling):

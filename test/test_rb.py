@@ -75,7 +75,7 @@ _os_is_windows = sys.platform == "win32"
 @pytest.mark.parametrize("writer", [writers.RoundRobinWriter])
 @pytest.mark.parametrize("storage", [ListStorage, LazyTensorStorage, LazyMemmapStorage])
 @pytest.mark.parametrize("size", [3, 5, 100])
-class TestPrototypeBuffers:
+class TestComposableBuffers:
     def _get_rb(self, rb_type, size, sampler, writer, storage):
 
         if storage is not None:
@@ -87,7 +87,7 @@ class TestPrototypeBuffers:
 
         sampler = sampler(**sampler_args)
         writer = writer()
-        rb = rb_type(storage=storage, sampler=sampler, writer=writer)
+        rb = rb_type(storage=storage, sampler=sampler, writer=writer, batch_size=3)
         return rb
 
     def _get_datum(self, rb_type):
@@ -168,7 +168,6 @@ class TestPrototypeBuffers:
         rb.extend(data)
         length = len(rb)
         for d in data[-length:]:
-            found_similar = False
             for b in rb._storage:
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())
@@ -195,7 +194,7 @@ class TestPrototypeBuffers:
         )
         data = self._get_data(rb_type, size=5)
         rb.extend(data)
-        new_data = rb.sample(3)
+        new_data = rb.sample()
         if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
             new_data = new_data[0]
 
@@ -319,6 +318,7 @@ def test_prototype_prb(priority_key, contiguous, device):
     rb = TensorDictReplayBuffer(
         sampler=samplers.PrioritizedSampler(5, alpha=0.7, beta=0.9),
         priority_key=priority_key,
+        batch_size=5,
     )
     td1 = TensorDict(
         source={
@@ -329,12 +329,8 @@ def test_prototype_prb(priority_key, contiguous, device):
         batch_size=[3],
     ).to(device)
     rb.extend(td1)
-    s = rb.sample(2)
-    assert s.batch_size == torch.Size(
-        [
-            2,
-        ]
-    )
+    s = rb.sample()
+    assert s.batch_size == torch.Size([5])
     assert (td1[s.get("_idx").squeeze()].get("a") == s.get("a")).all()
     assert_allclose_td(td1[s.get("_idx").squeeze()].select("a"), s.select("a"))
 
@@ -348,7 +344,7 @@ def test_prototype_prb(priority_key, contiguous, device):
         batch_size=[5],
     ).to(device)
     rb.extend(td2)
-    s = rb.sample(5)
+    s = rb.sample()
     assert s.batch_size == torch.Size([5])
     assert (td2[s.get("_idx").squeeze()].get("a") == s.get("a")).all()
     assert_allclose_td(td2[s.get("_idx").squeeze()].select("a"), s.select("a"))
@@ -359,30 +355,26 @@ def test_prototype_prb(priority_key, contiguous, device):
     idx_match = (idx == idx[0]).nonzero()[:, 0]
     s.set_at_(
         priority_key,
-        torch.ones(
-            idx_match.numel(),
-            1,
-            device=device,
-        )
-        * 100000000,
+        torch.ones(idx_match.numel(), 1, device=device) * 100000000,
         idx_match,
     )
     val = s.get("a")[0]
 
     idx0 = s.get("_idx")[0]
     rb.update_tensordict_priority(s)
-    s = rb.sample(5)
+    s = rb.sample()
     assert (val == s.get("a")).sum() >= 1
     torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
     # test updating values of original td
     td2.set_("a", torch.ones_like(td2.get("a")))
-    s = rb.sample(5)
+    s = rb.sample()
     torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
 
 @pytest.mark.parametrize("stack", [False, True])
-def test_replay_buffer_trajectories(stack):
+@pytest.mark.parametrize("reduction", ["min", "max", "median", "mean"])
+def test_replay_buffer_trajectories(stack, reduction):
     traj_td = TensorDict(
         {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
         batch_size=[3, 4],
@@ -395,22 +387,24 @@ def test_replay_buffer_trajectories(stack):
             5,
             alpha=0.7,
             beta=0.9,
+            reduction=reduction,
         ),
         priority_key="td_error",
+        batch_size=3,
     )
     rb.extend(traj_td)
-    sampled_td = rb.sample(3)
-    sampled_td.set("td_error", torch.rand(3))
+    sampled_td = rb.sample()
+    sampled_td.set("td_error", torch.rand(sampled_td.shape))
     rb.update_tensordict_priority(sampled_td)
-    sampled_td = rb.sample(3, include_info=True)
+    sampled_td = rb.sample(include_info=True)
     assert (sampled_td.get("_weight") > 0).all()
-    assert sampled_td.batch_size == torch.Size([3])
+    assert sampled_td.batch_size == torch.Size([3, 4])
 
-    # set back the trajectory length
-    sampled_td_filtered = sampled_td.to_tensordict().exclude(
-        "_weight", "index", "td_error"
-    )
-    sampled_td_filtered.batch_size = [3, 4]
+    # # set back the trajectory length
+    # sampled_td_filtered = sampled_td.to_tensordict().exclude(
+    #     "_weight", "index", "td_error"
+    # )
+    # sampled_td_filtered.batch_size = [3, 4]
 
 
 @pytest.mark.parametrize(
@@ -451,7 +445,7 @@ class TestBuffers:
             params = self._default_params_td_prb
         else:
             raise NotImplementedError(rbtype)
-        rb = rbtype(storage=storage, prefetch=prefetch, **params)
+        rb = rbtype(storage=storage, prefetch=prefetch, batch_size=3, **params)
         return rb
 
     def _get_datum(self, rbtype):
@@ -550,7 +544,7 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
         rb.extend(data)
-        new_data = rb.sample(3)
+        new_data = rb.sample()
         if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
             new_data = new_data[0]
 
@@ -597,6 +591,7 @@ def test_prb(priority_key, contiguous, device):
         beta=0.9,
         priority_key=priority_key,
         storage=ListStorage(5),
+        batch_size=5,
     )
     td1 = TensorDict(
         source={
@@ -607,12 +602,8 @@ def test_prb(priority_key, contiguous, device):
         batch_size=[3],
     ).to(device)
     rb.extend(td1)
-    s = rb.sample(2)
-    assert s.batch_size == torch.Size(
-        [
-            2,
-        ]
-    )
+    s = rb.sample()
+    assert s.batch_size == torch.Size([5])
     assert (td1[s.get("_idx").squeeze()].get("a") == s.get("a")).all()
     assert_allclose_td(td1[s.get("_idx").squeeze()].select("a"), s.select("a"))
 
@@ -626,7 +617,7 @@ def test_prb(priority_key, contiguous, device):
         batch_size=[5],
     ).to(device)
     rb.extend(td2)
-    s = rb.sample(5)
+    s = rb.sample()
     assert s.batch_size == torch.Size([5])
     assert (td2[s.get("_idx").squeeze()].get("a") == s.get("a")).all()
     assert_allclose_td(td2[s.get("_idx").squeeze()].select("a"), s.select("a"))
@@ -637,30 +628,26 @@ def test_prb(priority_key, contiguous, device):
     idx_match = (idx == idx[0]).nonzero()[:, 0]
     s.set_at_(
         priority_key,
-        torch.ones(
-            idx_match.numel(),
-            1,
-            device=device,
-        )
-        * 100000000,
+        torch.ones(idx_match.numel(), 1, device=device) * 100000000,
         idx_match,
     )
     val = s.get("a")[0]
 
     idx0 = s.get("_idx")[0]
     rb.update_tensordict_priority(s)
-    s = rb.sample(5)
+    s = rb.sample()
     assert (val == s.get("a")).sum() >= 1
     torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
     # test updating values of original td
     td2.set_("a", torch.ones_like(td2.get("a")))
-    s = rb.sample(5)
+    s = rb.sample()
     torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
 
 @pytest.mark.parametrize("stack", [False, True])
-def test_rb_trajectories(stack):
+@pytest.mark.parametrize("reduction", ["min", "max", "mean", "median"])
+def test_rb_trajectories(stack, reduction):
     traj_td = TensorDict(
         {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
         batch_size=[3, 4],
@@ -673,14 +660,15 @@ def test_rb_trajectories(stack):
         beta=0.9,
         priority_key="td_error",
         storage=ListStorage(5),
+        batch_size=3,
     )
     rb.extend(traj_td)
-    sampled_td = rb.sample(3)
-    sampled_td.set("td_error", torch.rand(3))
+    sampled_td = rb.sample()
+    sampled_td.set("td_error", torch.rand(3, 4))
     rb.update_tensordict_priority(sampled_td)
-    sampled_td = rb.sample(3, include_info=True)
+    sampled_td = rb.sample(include_info=True)
     assert (sampled_td.get("_weight") > 0).all()
-    assert sampled_td.batch_size == torch.Size([3])
+    assert sampled_td.batch_size == torch.Size([3, 4])
 
     # set back the trajectory length
     sampled_td_filtered = sampled_td.to_tensordict().exclude(
@@ -690,7 +678,6 @@ def test_rb_trajectories(stack):
 
 
 def test_shared_storage_prioritized_sampler():
-
     n = 100
 
     storage = LazyMemmapStorage(n)
@@ -698,16 +685,8 @@ def test_shared_storage_prioritized_sampler():
     sampler0 = RandomSampler()
     sampler1 = PrioritizedSampler(max_capacity=n, alpha=0.7, beta=1.1)
 
-    rb0 = ReplayBuffer(
-        storage=storage,
-        writer=writer,
-        sampler=sampler0,
-    )
-    rb1 = ReplayBuffer(
-        storage=storage,
-        writer=writer,
-        sampler=sampler1,
-    )
+    rb0 = ReplayBuffer(storage=storage, writer=writer, sampler=sampler0, batch_size=10)
+    rb1 = ReplayBuffer(storage=storage, writer=writer, sampler=sampler1, batch_size=10)
 
     data = TensorDict({"a": torch.arange(50)}, [50])
 
@@ -718,8 +697,8 @@ def test_shared_storage_prioritized_sampler():
     assert len(storage) == 50
     assert len(rb1) == 50
 
-    rb0.sample(10)
-    rb1.sample(10)
+    rb0.sample()
+    rb1.sample()
 
     assert rb1._sampler._sum_tree.query(0, 10) == 10
     assert rb1._sampler._sum_tree.query(0, 50) == 50
@@ -727,7 +706,7 @@ def test_shared_storage_prioritized_sampler():
 
 
 def test_append_transform():
-    rb = ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0))
+    rb = ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0), batch_size=1)
     td = TensorDict(
         {
             "observation": torch.randn(2, 4, 3, 16),
@@ -742,7 +721,7 @@ def test_append_transform():
 
     rb.append_transform(flatten)
 
-    sampled = rb.sample(1)
+    sampled = rb.sample()
     assert sampled.get("observation_cat").shape[-1] == 32
 
 
@@ -751,11 +730,13 @@ def test_init_transform():
         -2, -1, in_keys=["observation"], out_keys=["flattened"]
     )
 
-    rb = ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0), transform=flatten)
+    rb = ReplayBuffer(
+        collate_fn=lambda x: torch.stack(x, 0), transform=flatten, batch_size=1
+    )
 
     td = TensorDict({"observation": torch.randn(2, 4, 3, 16)}, [])
     rb.add(td)
-    sampled = rb.sample(1)
+    sampled = rb.sample()
     assert sampled.get("flattened").shape[-1] == 48
 
 
@@ -763,13 +744,15 @@ def test_insert_transform():
     flatten = FlattenObservation(
         -2, -1, in_keys=["observation"], out_keys=["flattened"]
     )
-    rb = ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0), transform=flatten)
+    rb = ReplayBuffer(
+        collate_fn=lambda x: torch.stack(x, 0), transform=flatten, batch_size=1
+    )
     td = TensorDict({"observation": torch.randn(2, 4, 3, 16, 1)}, [])
     rb.add(td)
 
     rb.insert_transform(0, SqueezeTransform(-1, in_keys=["observation"]))
 
-    sampled = rb.sample(1)
+    sampled = rb.sample()
     assert sampled.get("flattened").shape[-1] == 48
 
     with pytest.raises(ValueError):
@@ -807,21 +790,19 @@ transforms = [
 
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform(transform):
-    rb = ReplayBuffer(
-        transform=transform(in_keys="observation"),
-    )
+    rb = ReplayBuffer(transform=transform(in_keys="observation"), batch_size=1)
 
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
     rb.add(td)
     if not isinstance(rb._transform[0], (CatFrames,)):
-        rb.sample(1)
+        rb.sample()
     else:
         with pytest.raises(NotImplementedError):
-            rb.sample(1)
+            rb.sample()
         return
 
     rb._transform = mock.MagicMock()
-    rb.sample(1)
+    rb.sample()
     assert rb._transform.called
 
 
@@ -837,14 +818,16 @@ transforms = [
 def test_smoke_replay_buffer_transform_no_inkeys(transform):
     if PinMemoryTransform is PinMemoryTransform and not torch.cuda.is_available():
         raise pytest.skip("No CUDA device detected, skipping PinMemory")
-    rb = ReplayBuffer(collate_fn=lambda x: torch.stack(x, 0), transform=transform())
+    rb = ReplayBuffer(
+        collate_fn=lambda x: torch.stack(x, 0), transform=transform(), batch_size=1
+    )
 
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
     rb.add(td)
-    rb.sample(1)
+    rb.sample()
 
     rb._transform = mock.MagicMock()
-    rb.sample(1)
+    rb.sample()
     assert rb._transform.called
 
 
@@ -870,15 +853,86 @@ def test_samplerwithoutrep(size, samples, drop_last):
                 idx, _ = sampler.sample(storage, samples)
             break
         idx, _ = sampler.sample(storage, samples)
-        assert idx.numel() == samples
         if drop_last or _n_left >= samples:
+            assert idx.numel() == samples
             assert idx.unique().numel() == idx.numel()
         else:
+            assert idx.numel() == _n_left
             visited = True
     if not drop_last and (size % samples > 0):
         assert visited
     else:
         assert not visited
+
+
+@pytest.mark.parametrize("size", [10, 15, 20])
+@pytest.mark.parametrize("drop_last", [True, False])
+def test_replay_buffer_iter(size, drop_last):
+    torch.manual_seed(0)
+    storage = ListStorage(size)
+    sampler = SamplerWithoutReplacement(drop_last=drop_last)
+    writer = RoundRobinWriter()
+
+    rb = ReplayBuffer(storage=storage, sampler=sampler, writer=writer, batch_size=3)
+    rb.extend([torch.randint(100, (1,)) for _ in range(size)])
+
+    for i, _ in enumerate(rb):
+        if i == 20:
+            # guard against infinite loop if error is introduced
+            raise RuntimeError("Iteration didn't terminate")
+
+    if drop_last:
+        assert i == size // 3 - 1
+    else:
+        assert i == (size - 1) // 3
+
+
+class TestStateDict:
+    @pytest.mark.parametrize("storage_in", ["tensor", "memmap"])
+    @pytest.mark.parametrize("storage_out", ["tensor", "memmap"])
+    @pytest.mark.parametrize("init_out", [True, False])
+    def test_load_state_dict(self, storage_in, storage_out, init_out):
+        buffer_size = 100
+        if storage_in == "memmap":
+            storage_in = LazyMemmapStorage(buffer_size, device="cpu")
+        elif storage_in == "tensor":
+            storage_in = LazyTensorStorage(buffer_size, device="cpu")
+        if storage_out == "memmap":
+            storage_out = LazyMemmapStorage(buffer_size, device="cpu")
+        elif storage_out == "tensor":
+            storage_out = LazyTensorStorage(buffer_size, device="cpu")
+
+        replay_buffer = TensorDictReplayBuffer(
+            pin_memory=False, prefetch=3, storage=storage_in, batch_size=3
+        )
+        # fill replay buffer with random data
+        transition = TensorDict(
+            {
+                "observation": torch.ones(1, 4),
+                "action": torch.ones(1, 2),
+                "reward": torch.ones(1, 1),
+                "dones": torch.ones(1, 1),
+                "next": {"observation": torch.ones(1, 4)},
+            },
+            batch_size=1,
+        )
+        for _ in range(3):
+            replay_buffer.extend(transition)
+
+        state_dict = replay_buffer.state_dict()
+
+        new_replay_buffer = TensorDictReplayBuffer(
+            pin_memory=False,
+            prefetch=3,
+            storage=storage_out,
+            batch_size=state_dict["_batch_size"],
+        )
+        if init_out:
+            new_replay_buffer.extend(transition)
+
+        new_replay_buffer.load_state_dict(state_dict)
+        s = new_replay_buffer.sample()
+        assert (s.exclude("index") == 1).all()
 
 
 if __name__ == "__main__":

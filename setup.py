@@ -204,7 +204,7 @@ def _main(argv):
             "numpy",
             "packaging",
             "cloudpickle",
-            "tensordict",
+            "tensordict>=0.0.3",
         ],
         extras_require={
             "atari": [
@@ -231,10 +231,13 @@ def _main(argv):
         },
         zip_safe=False,
         classifiers=[
-            "Programming Language :: Python :: 3",
+            "Programming Language :: Python :: 3.7",
+            "Programming Language :: Python :: 3.8",
+            "Programming Language :: Python :: 3.9",
+            "Programming Language :: Python :: 3.10",
             "License :: OSI Approved :: MIT License",
             "Operating System :: OS Independent",
-            "Development Status :: 3 - Alpha",
+            "Development Status :: 4 - Beta",
             "Intended Audience :: Developers",
             "Intended Audience :: Science/Research",
             "License :: OSI Approved :: BSD License",
