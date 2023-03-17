@@ -12,6 +12,7 @@ import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
+from multiprocessing.managers import SyncManager
 from textwrap import indent
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
@@ -70,6 +71,44 @@ class RandomPolicy:
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
         return td.set("action", self.action_spec.rand())
+
+
+class _Interruptor:
+    """A class for managing the collection state of a process.
+
+    This class provides methods to start and stop collection, and to check
+    whether collection has been stopped. The collection state is protected
+    by a lock to ensure thread-safety.
+    """
+
+    def __init__(self):
+        self._collect = True
+        self._lock = mp.Lock()
+
+    def start_collection(self):
+        with self._lock:
+            self._collect = True
+
+    def stop_collection(self):
+        with self._lock:
+            self._collect = False
+
+    def collection_stopped(self):
+        with self._lock:
+            return self._collect is False
+
+
+class _InterruptorManager(SyncManager):
+    """A custom SyncManager for managing the collection state of a process.
+
+    This class extends the SyncManager class and allows to share an Interruptor object
+    between processes.
+    """
+
+    pass
+
+
+_InterruptorManager.register("_Interruptor", _Interruptor)
 
 
 def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
@@ -341,6 +380,11 @@ class SyncDataCollector(_DataCollector):
             updated. This feature should be used cautiously: if the same
             tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
+            Default is False.
+        interruptor : (_Interruptor, optional)
+            An _Interruptor object that can be used from outside the class to control rollout collection.
+            The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
+            strategies such as preeptively stopping rollout collection.
             Default is ``False``.
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
@@ -419,6 +463,7 @@ class SyncDataCollector(_DataCollector):
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         return_same_td: bool = False,
         reset_when_done: bool = True,
+        interruptor=None,
     ):
         self.closed = True
 
@@ -547,6 +592,7 @@ class SyncDataCollector(_DataCollector):
         self.split_trajs = split_trajs
         self._has_been_done = None
         self._exclude_private_keys = True
+        self.interruptor = interruptor
 
     # for RPC
     def next(self):
@@ -679,6 +725,9 @@ class SyncDataCollector(_DataCollector):
         if self.reset_at_each_iter:
             self._tensordict.update(self.env.reset(), inplace=True)
 
+        # self._tensordict.fill_(("collector", "step_count"), 0)
+        self._tensordict_out.fill_(("collector", "traj_ids"), -1)
+
         with set_exploration_mode(self.exploration_mode):
             for j in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
@@ -701,6 +750,8 @@ class SyncDataCollector(_DataCollector):
                         self._tensordict_out.lock()
 
                 self._step_and_maybe_reset()
+                if self.interruptor is not None and self.interruptor.collection_stopped():
+                    break
 
         return self._tensordict_out
 
@@ -882,7 +933,8 @@ class _MultiDataCollector(_DataCollector):
         update_at_each_batch (boolm optional): if ``True``, :meth:`~.update_policy_weight_()`
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
-
+        preemptive_threshold (float, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
+            that will be allowed to finished collecting their rollout before the rest are forced to end early.
     """
 
     def __init__(
@@ -907,6 +959,7 @@ class _MultiDataCollector(_DataCollector):
         split_trajs: Optional[bool] = None,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         reset_when_done: bool = True,
+        preemptive_threshold: float = None,
         update_at_each_batch: bool = False,
         devices=None,
         storing_devices=None,
@@ -1047,6 +1100,15 @@ class _MultiDataCollector(_DataCollector):
         self.init_random_frames = init_random_frames
         self.update_at_each_batch = update_at_each_batch
         self.exploration_mode = exploration_mode
+        self.frames_per_worker = np.inf
+        if preemptive_threshold is not None:
+            self.preemptive_threshold = np.clip(preemptive_threshold, 0.0, 1.0)
+            manager = _InterruptorManager()
+            manager.start()
+            self.interruptor = manager._Interruptor()
+        else:
+            self.preemptive_threshold = 1.0
+            self.interruptor = None
         self._run_processes()
         self._exclude_private_keys = True
 
@@ -1099,6 +1161,7 @@ class _MultiDataCollector(_DataCollector):
                 "exploration_mode": self.exploration_mode,
                 "reset_when_done": self.reset_when_done,
                 "idx": i,
+                "interruptor": self.interruptor,
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
@@ -1399,6 +1462,18 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             i += 1
             max_traj_idx = None
+
+            if self.interruptor is not None:
+                self.interruptor.start_collection()
+                while self.queue_out.qsize() < int(
+                    self.num_workers * self.preemptive_threshold
+                ):
+                    continue
+                self.interruptor.stop_collection()
+                # Now wait for stragglers to return
+                while self.queue_out.qsize() < int(self.num_workers):
+                    continue
+
             for _ in range(self.num_workers):
                 new_data, j = self.queue_out.get()
                 if j == 0:
@@ -1416,7 +1491,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             for idx in range(self.num_workers):
                 traj_ids = out_tensordicts_shared[idx].get(("collector", "traj_ids"))
                 if max_traj_idx is not None:
-                    traj_ids += max_traj_idx
+                    traj_ids[traj_ids != -1] += max_traj_idx
                     # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
                 max_traj_idx = traj_ids.max().item() + 1
                 # out = out_tensordicts_shared[idx]
@@ -1428,6 +1503,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                         prev_device = item.device
                     else:
                         same_device = same_device and (item.device == prev_device)
+
             if same_device:
                 out_buffer = torch.cat(
                     list(out_tensordicts_shared.values()), 0, out=out_buffer
@@ -1803,6 +1879,7 @@ def _main_async_collector(
     exploration_mode: str = DEFAULT_EXPLORATION_MODE,
     reset_when_done: bool = True,
     verbose: bool = VERBOSE,
+    interruptor=None,
 ) -> None:
     pipe_parent.close()
     #  init variables that will be cleared when closing
@@ -1823,6 +1900,7 @@ def _main_async_collector(
         exploration_mode=exploration_mode,
         reset_when_done=reset_when_done,
         return_same_td=True,
+        interruptor=interruptor,
     )
     if verbose:
         print("Sync data collector created")

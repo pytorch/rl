@@ -26,6 +26,7 @@ from torch import nn
 from torchrl._utils import seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
+    _Interruptor,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
     RandomPolicy,
@@ -1230,6 +1231,67 @@ def test_initial_obs_consistency(env_class, seed=1):
 def weight_reset(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
         m.reset_parameters()
+
+
+class TestPreemptiveThreshold:
+    @pytest.mark.parametrize("env_name", ["conv", "vec"])
+    def test_sync_collector_interruptor_mechanism(self, env_name, seed=100):
+        def env_fn(seed):
+            env = make_make_env(env_name)()
+            env.set_seed(seed)
+            return env
+
+        policy = make_policy(env_name)
+        interruptor = _Interruptor()
+        interruptor.start_collection()
+
+        collector = SyncDataCollector(
+            create_env_fn=env_fn,
+            create_env_kwargs={"seed": seed},
+            policy=policy,
+            frames_per_batch=50,
+            total_frames=200,
+            device="cpu",
+            interruptor=interruptor,
+            split_trajs=False,
+        )
+
+        interruptor.stop_collection()
+        for batch in collector:
+            assert batch["collector"]["traj_ids"][0] != -1
+            assert batch["collector"]["traj_ids"][1] == -1
+
+    @pytest.mark.parametrize("env_name", ["conv", "vec"])
+    def test_multisync_collector_interruptor_mechanism(self, env_name, seed=100):
+
+        frames_per_batch = 800
+
+        def env_fn(seed):
+            env = make_make_env(env_name)()
+            env.set_seed(seed)
+            return env
+
+        policy = make_policy(env_name)
+
+        collector = MultiSyncDataCollector(
+            create_env_fn=[env_fn] * 4,
+            create_env_kwargs=[{"seed": seed}] * 4,
+            policy=policy,
+            total_frames=800,
+            max_frames_per_traj=50,
+            frames_per_batch=frames_per_batch,
+            init_random_frames=-1,
+            reset_at_each_iter=False,
+            devices="cpu",
+            storing_devices="cpu",
+            split_trajs=False,
+            preemptive_threshold=0.0,  # stop after one iteration
+        )
+
+        for batch in collector:
+            trajectory_ids = batch["collector"]["traj_ids"]
+            trajectory_ids_mask = trajectory_ids != -1  # valid frames mask
+            assert trajectory_ids[trajectory_ids_mask].numel() < frames_per_batch
 
 
 if __name__ == "__main__":
