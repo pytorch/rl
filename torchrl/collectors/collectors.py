@@ -750,7 +750,7 @@ class SyncDataCollector(_DataCollector):
                         self._tensordict_out.lock()
 
                 self._step_and_maybe_reset()
-                if self.interruptor and self.interruptor.collection_stopped():
+                if self.interruptor is not None and self.interruptor.collection_stopped():
                     break
 
         return self._tensordict_out
@@ -1463,7 +1463,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             i += 1
             max_traj_idx = None
 
-            if self.interruptor:
+            if self.interruptor is not None:
                 self.interruptor.start_collection()
                 while self.queue_out.qsize() < int(
                     self.num_workers * self.preemptive_threshold
