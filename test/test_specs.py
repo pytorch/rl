@@ -10,13 +10,14 @@ import torch
 import torchrl.data.tensor_specs
 from _utils_internal import get_available_devices, set_global_var
 from scipy.stats import chisquare
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import (
     _keys_to_empty_composite_spec,
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
+    LazyStackedCompositeSpec,
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
@@ -1701,6 +1702,642 @@ class TestClone:
         spec = UnboundedDiscreteTensorSpec(shape=shape1, device="cpu", dtype=torch.long)
         assert spec == spec.clone()
         assert spec is not spec.clone()
+
+
+@pytest.mark.parametrize(
+    "shape,stack_dim",
+    [[(), 0], [(2,), 0], [(2,), 1], [(2, 3), 0], [(2, 3), 1], [(2, 3), 2]],
+)
+class TestStack:
+    def test_stack_binarydiscrete(self, shape, stack_dim):
+        n = 5
+        shape = (*shape, n)
+        c1 = BinaryDiscreteTensorSpec(n=n, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        assert isinstance(c, BinaryDiscreteTensorSpec)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        assert c.shape == torch.Size(shape)
+
+    def test_stack_binarydiscrete_expand(self, shape, stack_dim):
+        n = 5
+        shape = (*shape, n)
+        c1 = BinaryDiscreteTensorSpec(n=n, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        cexpand = c.expand(3, 2, *shape)
+        assert cexpand.shape == torch.Size([3, 2, *shape])
+
+    def test_stack_binarydiscrete_rand(self, shape, stack_dim):
+        n = 5
+        shape = (*shape, n)
+        c1 = BinaryDiscreteTensorSpec(n=n, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.rand()
+        assert r.shape == c.shape
+
+    def test_stack_binarydiscrete_zero(self, shape, stack_dim):
+        n = 5
+        shape = (*shape, n)
+        c1 = BinaryDiscreteTensorSpec(n=n, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.zero()
+        assert r.shape == c.shape
+
+    def test_stack_bounded(self, shape, stack_dim):
+        mini = -1
+        maxi = 1
+        shape = (*shape,)
+        c1 = BoundedTensorSpec(mini, maxi, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        assert isinstance(c, BoundedTensorSpec)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        assert c.shape == torch.Size(shape)
+
+    def test_stack_bounded_expand(self, shape, stack_dim):
+        mini = -1
+        maxi = 1
+        shape = (*shape,)
+        c1 = BoundedTensorSpec(mini, maxi, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        cexpand = c.expand(3, 2, *shape)
+        assert cexpand.shape == torch.Size([3, 2, *shape])
+
+    def test_stack_bounded_rand(self, shape, stack_dim):
+        mini = -1
+        maxi = 1
+        shape = (*shape,)
+        c1 = BoundedTensorSpec(mini, maxi, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.rand()
+        assert r.shape == c.shape
+
+    def test_stack_bounded_zero(self, shape, stack_dim):
+        mini = -1
+        maxi = 1
+        shape = (*shape,)
+        c1 = BoundedTensorSpec(mini, maxi, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.zero()
+        assert r.shape == c.shape
+
+    def test_stack_discrete(self, shape, stack_dim):
+        n = 4
+        shape = (*shape,)
+        c1 = DiscreteTensorSpec(n, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        assert isinstance(c, DiscreteTensorSpec)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        assert c.shape == torch.Size(shape)
+
+    def test_stack_discrete_expand(self, shape, stack_dim):
+        n = 4
+        shape = (*shape,)
+        c1 = DiscreteTensorSpec(n, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        cexpand = c.expand(3, 2, *shape)
+        assert cexpand.shape == torch.Size([3, 2, *shape])
+
+    def test_stack_discrete_rand(self, shape, stack_dim):
+        n = 4
+        shape = (*shape,)
+        c1 = DiscreteTensorSpec(n, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.rand()
+        assert r.shape == c.shape
+
+    def test_stack_discrete_zero(self, shape, stack_dim):
+        n = 4
+        shape = (*shape,)
+        c1 = DiscreteTensorSpec(n, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.zero()
+        assert r.shape == c.shape
+
+    def test_stack_multidiscrete(self, shape, stack_dim):
+        nvec = [4, 5]
+        shape = (*shape, 2)
+        c1 = MultiDiscreteTensorSpec(nvec, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        assert isinstance(c, MultiDiscreteTensorSpec)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        assert c.shape == torch.Size(shape)
+
+    def test_stack_multidiscrete_expand(self, shape, stack_dim):
+        nvec = [4, 5]
+        shape = (*shape, 2)
+        c1 = MultiDiscreteTensorSpec(nvec, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        cexpand = c.expand(3, 2, *shape)
+        assert cexpand.shape == torch.Size([3, 2, *shape])
+
+    def test_stack_multidiscrete_rand(self, shape, stack_dim):
+        nvec = [4, 5]
+        shape = (*shape, 2)
+        c1 = MultiDiscreteTensorSpec(nvec, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.rand()
+        assert r.shape == c.shape
+
+    def test_stack_multidiscrete_zero(self, shape, stack_dim):
+        nvec = [4, 5]
+        shape = (*shape, 2)
+        c1 = MultiDiscreteTensorSpec(nvec, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.zero()
+        assert r.shape == c.shape
+
+    def test_stack_multionehot(self, shape, stack_dim):
+        nvec = [4, 5]
+        shape = (*shape, 9)
+        c1 = MultiOneHotDiscreteTensorSpec(nvec, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        assert isinstance(c, MultiOneHotDiscreteTensorSpec)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        assert c.shape == torch.Size(shape)
+
+    def test_stack_multionehot_expand(self, shape, stack_dim):
+        nvec = [4, 5]
+        shape = (*shape, 9)
+        c1 = MultiOneHotDiscreteTensorSpec(nvec, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        cexpand = c.expand(3, 2, *shape)
+        assert cexpand.shape == torch.Size([3, 2, *shape])
+
+    def test_stack_multionehot_rand(self, shape, stack_dim):
+        nvec = [4, 5]
+        shape = (*shape, 9)
+        c1 = MultiOneHotDiscreteTensorSpec(nvec, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.rand()
+        assert r.shape == c.shape
+
+    def test_stack_multionehot_zero(self, shape, stack_dim):
+        nvec = [4, 5]
+        shape = (*shape, 9)
+        c1 = MultiOneHotDiscreteTensorSpec(nvec, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.zero()
+        assert r.shape == c.shape
+
+    def test_stack_onehot(self, shape, stack_dim):
+        n = 5
+        shape = (*shape, 5)
+        c1 = OneHotDiscreteTensorSpec(n, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        assert isinstance(c, OneHotDiscreteTensorSpec)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        assert c.shape == torch.Size(shape)
+
+    def test_stack_onehot_expand(self, shape, stack_dim):
+        n = 5
+        shape = (*shape, 5)
+        c1 = OneHotDiscreteTensorSpec(n, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        cexpand = c.expand(3, 2, *shape)
+        assert cexpand.shape == torch.Size([3, 2, *shape])
+
+    def test_stack_onehot_rand(self, shape, stack_dim):
+        n = 5
+        shape = (*shape, 5)
+        c1 = OneHotDiscreteTensorSpec(n, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.rand()
+        assert r.shape == c.shape
+
+    def test_stack_onehot_zero(self, shape, stack_dim):
+        n = 5
+        shape = (*shape, 5)
+        c1 = OneHotDiscreteTensorSpec(n, shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.zero()
+        assert r.shape == c.shape
+
+    def test_stack_unboundedcont(self, shape, stack_dim):
+        shape = (*shape,)
+        c1 = UnboundedContinuousTensorSpec(shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        assert isinstance(c, UnboundedContinuousTensorSpec)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        assert c.shape == torch.Size(shape)
+
+    def test_stack_unboundedcont_expand(self, shape, stack_dim):
+        shape = (*shape,)
+        c1 = UnboundedContinuousTensorSpec(shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        cexpand = c.expand(3, 2, *shape)
+        assert cexpand.shape == torch.Size([3, 2, *shape])
+
+    def test_stack_unboundedcont_rand(self, shape, stack_dim):
+        shape = (*shape,)
+        c1 = UnboundedContinuousTensorSpec(shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.rand()
+        assert r.shape == c.shape
+
+    def test_stack_unboundedcont_zero(self, shape, stack_dim):
+        shape = (*shape,)
+        c1 = UnboundedDiscreteTensorSpec(shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        r = c.zero()
+        assert r.shape == c.shape
+
+    def test_stack_unboundeddiscrete(self, shape, stack_dim):
+        shape = (*shape,)
+        c1 = UnboundedDiscreteTensorSpec(shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        assert isinstance(c, UnboundedDiscreteTensorSpec)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        assert c.shape == torch.Size(shape)
+
+    def test_stack_unboundeddiscrete_expand(self, shape, stack_dim):
+        shape = (*shape,)
+        c1 = UnboundedDiscreteTensorSpec(shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        shape = list(shape)
+        if stack_dim < 0:
+            stack_dim = len(shape) + stack_dim + 1
+        shape.insert(stack_dim, 2)
+        cexpand = c.expand(3, 2, *shape)
+        assert cexpand.shape == torch.Size([3, 2, *shape])
+
+    def test_stack_unboundeddiscrete_rand(self, shape, stack_dim):
+        shape = (*shape,)
+        c1 = UnboundedDiscreteTensorSpec(shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        r = c.rand()
+        assert r.shape == c.shape
+
+    def test_stack_unboundeddiscrete_zero(self, shape, stack_dim):
+        shape = (*shape,)
+        c1 = UnboundedDiscreteTensorSpec(shape=shape)
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], stack_dim)
+        r = c.zero()
+        assert r.shape == c.shape
+
+    def test_to_numpy(self, shape, stack_dim):
+        c1 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float64)
+        c2 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float32)
+        c = torch.stack([c1, c2], stack_dim)
+
+        shape = list(shape)
+        shape.insert(stack_dim, 2)
+        shape = tuple(shape)
+
+        val = 2 * torch.rand(torch.Size(shape)) - 1
+
+        val_np = c.to_numpy(val)
+        assert isinstance(val_np, np.ndarray)
+        assert (val.numpy() == val_np).all()
+
+        with pytest.raises(AssertionError):
+            c.to_numpy(val + 1)
+
+
+class TestStackComposite:
+    def test_stack(self):
+        c1 = CompositeSpec(a=UnboundedContinuousTensorSpec())
+        c2 = c1.clone()
+        c = torch.stack([c1, c2], 0)
+        assert isinstance(c, CompositeSpec)
+
+    def test_stack_index(self):
+        c1 = CompositeSpec(a=UnboundedContinuousTensorSpec())
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(), b=UnboundedDiscreteTensorSpec()
+        )
+        c = torch.stack([c1, c2], 0)
+        assert c.shape == torch.Size([2])
+        assert c[0] is c1
+        assert c[1] is c2
+        assert c[..., 0] is c1
+        assert c[..., 1] is c2
+        assert c[0, ...] is c1
+        assert c[1, ...] is c2
+        assert isinstance(c[:], LazyStackedCompositeSpec)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
+    def test_stack_index_multdim(self, stack_dim):
+        c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
+        c = torch.stack([c1, c2], stack_dim)
+        if stack_dim in (0, -3):
+            assert isinstance(c[:], LazyStackedCompositeSpec)
+            assert c.shape == torch.Size([2, 1, 3])
+            assert c[0] is c1
+            assert c[1] is c2
+            with pytest.raises(
+                IndexError,
+                match="only permitted if the stack dimension is the last dimension",
+            ):
+                assert c[..., 0] is c1
+            with pytest.raises(
+                IndexError,
+                match="only permitted if the stack dimension is the last dimension",
+            ):
+                assert c[..., 1] is c2
+            assert c[0, ...] is c1
+            assert c[1, ...] is c2
+        elif stack_dim == (1, -2):
+            assert isinstance(c[:, :], LazyStackedCompositeSpec)
+            assert c.shape == torch.Size([1, 2, 3])
+            assert c[:, 0] is c1
+            assert c[:, 1] is c2
+            with pytest.raises(
+                IndexError, match="along dimension 0 when the stack dimension is 1."
+            ):
+                assert c[0] is c1
+            with pytest.raises(
+                IndexError, match="along dimension 0 when the stack dimension is 1."
+            ):
+                assert c[1] is c1
+            with pytest.raises(
+                IndexError,
+                match="only permitted if the stack dimension is the last dimension",
+            ):
+                assert c[..., 0] is c1
+            with pytest.raises(
+                IndexError,
+                match="only permitted if the stack dimension is the last dimension",
+            ):
+                assert c[..., 1] is c2
+            assert c[..., 0, :] is c1
+            assert c[..., 1, :] is c2
+            assert c[:, 0, ...] is c1
+            assert c[:, 1, ...] is c2
+        elif stack_dim == (2, -1):
+            assert isinstance(c[:, :, :], LazyStackedCompositeSpec)
+            with pytest.raises(
+                IndexError, match="along dimension 0 when the stack dimension is 2."
+            ):
+                assert c[0] is c1
+            with pytest.raises(
+                IndexError, match="along dimension 0 when the stack dimension is 2."
+            ):
+                assert c[1] is c1
+            assert c.shape == torch.Size([1, 3, 2])
+            assert c[:, :, 0] is c1
+            assert c[:, :, 1] is c2
+            assert c[..., 0] is c1
+            assert c[..., 1] is c2
+            assert c[:, :, 0, ...] is c1
+            assert c[:, :, 1, ...] is c2
+
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
+    def test_stack_expand_multi(self, stack_dim):
+        c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
+        c = torch.stack([c1, c2], stack_dim)
+        if stack_dim in (0, -3):
+            c_expand = c.expand([4, 2, 1, 3])
+            assert c_expand.shape == torch.Size([4, 2, 1, 3])
+            assert c_expand.dim == 1
+        elif stack_dim in (1, -2):
+            c_expand = c.expand([4, 1, 2, 3])
+            assert c_expand.shape == torch.Size([4, 1, 2, 3])
+            assert c_expand.dim == 2
+        elif stack_dim in (2, -1):
+            c_expand = c.expand(
+                [
+                    4,
+                    1,
+                    3,
+                    2,
+                ]
+            )
+            assert c_expand.shape == torch.Size([4, 1, 3, 2])
+            assert c_expand.dim == 3
+        else:
+            raise NotImplementedError
+
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
+    def test_stack_rand(self, stack_dim):
+        c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
+        c = torch.stack([c1, c2], stack_dim)
+        r = c.rand()
+        assert isinstance(r, LazyStackedTensorDict)
+        if stack_dim in (0, -3):
+            assert r.shape == torch.Size([2, 1, 3])
+            assert r["a"].shape == torch.Size([2, 1, 3])  # access tensor
+        elif stack_dim in (1, -2):
+            assert r.shape == torch.Size([1, 2, 3])
+            assert r["a"].shape == torch.Size([1, 2, 3])  # access tensor
+        elif stack_dim in (2, -1):
+            assert r.shape == torch.Size([1, 3, 2])
+            assert r["a"].shape == torch.Size([1, 3, 2])  # access tensor
+        assert (r["a"] != 0).all()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
+    def test_stack_rand_shape(self, stack_dim):
+        c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
+        c = torch.stack([c1, c2], stack_dim)
+        shape = [5, 6]
+        r = c.rand(shape)
+        assert isinstance(r, LazyStackedTensorDict)
+        if stack_dim in (0, -3):
+            assert r.shape == torch.Size([*shape, 2, 1, 3])
+            assert r["a"].shape == torch.Size([*shape, 2, 1, 3])  # access tensor
+        elif stack_dim in (1, -2):
+            assert r.shape == torch.Size([*shape, 1, 2, 3])
+            assert r["a"].shape == torch.Size([*shape, 1, 2, 3])  # access tensor
+        elif stack_dim in (2, -1):
+            assert r.shape == torch.Size([*shape, 1, 3, 2])
+            assert r["a"].shape == torch.Size([*shape, 1, 3, 2])  # access tensor
+        assert (r["a"] != 0).all()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
+    def test_stack_zero(self, stack_dim):
+        c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
+        c = torch.stack([c1, c2], stack_dim)
+        r = c.zero()
+        assert isinstance(r, LazyStackedTensorDict)
+        if stack_dim in (0, -3):
+            assert r.shape == torch.Size([2, 1, 3])
+            assert r["a"].shape == torch.Size([2, 1, 3])  # access tensor
+        elif stack_dim in (1, -2):
+            assert r.shape == torch.Size([1, 2, 3])
+            assert r["a"].shape == torch.Size([1, 2, 3])  # access tensor
+        elif stack_dim in (2, -1):
+            assert r.shape == torch.Size([1, 3, 2])
+            assert r["a"].shape == torch.Size([1, 3, 2])  # access tensor
+        assert (r["a"] == 0).all()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
+    def test_stack_zero_shape(self, stack_dim):
+        c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
+        c = torch.stack([c1, c2], stack_dim)
+        shape = [5, 6]
+        r = c.zero(shape)
+        assert isinstance(r, LazyStackedTensorDict)
+        if stack_dim in (0, -3):
+            assert r.shape == torch.Size([*shape, 2, 1, 3])
+            assert r["a"].shape == torch.Size([*shape, 2, 1, 3])  # access tensor
+        elif stack_dim in (1, -2):
+            assert r.shape == torch.Size([*shape, 1, 2, 3])
+            assert r["a"].shape == torch.Size([*shape, 1, 2, 3])  # access tensor
+        elif stack_dim in (2, -1):
+            assert r.shape == torch.Size([*shape, 1, 3, 2])
+            assert r["a"].shape == torch.Size([*shape, 1, 3, 2])  # access tensor
+        assert (r["a"] == 0).all()
+
+    @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, -3, -2, -1])
+    def test_to(self, stack_dim):
+        c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
+        c = torch.stack([c1, c2], stack_dim)
+        assert isinstance(c, LazyStackedCompositeSpec)
+        cdevice = c.to("cuda:0")
+        assert cdevice.device != c.device
+        assert cdevice.device == torch.device("cuda:0")
+        if stack_dim < 0:
+            stack_dim += 3
+        index = (slice(None),) * stack_dim + (0,)
+        assert cdevice[index].device == torch.device("cuda:0")
+
+    def test_clone(self):
+        c1 = CompositeSpec(a=UnboundedContinuousTensorSpec(shape=(1, 3)), shape=(1, 3))
+        c2 = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
+        c = torch.stack([c1, c2], 0)
+        cclone = c.clone()
+        assert cclone[0] is not c[0]
+        assert cclone[0] == c[0]
+
+    def test_to_numpy(self):
+        c1 = CompositeSpec(a=BoundedTensorSpec(-1, 1, shape=(1, 3)), shape=(1, 3))
+        c2 = CompositeSpec(
+            a=BoundedTensorSpec(-1, 1, shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
+        c = torch.stack([c1, c2], 0)
+        for _ in range(100):
+            r = c.rand()
+            for key, value in c.to_numpy(r).items():
+                spec = c[key]
+                assert (spec.to_numpy(r[key]) == value).all()
+
+        td_fail = TensorDict({"a": torch.rand((2, 1, 3)) + 1}, [2, 1, 3])
+        with pytest.raises(AssertionError):
+            c.to_numpy(td_fail)
 
 
 if __name__ == "__main__":
