@@ -1,81 +1,34 @@
-import numpy as np
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, UnboundedDiscreteTensorSpec
-from torchrl.envs import EnvBase
-from sklearn.datasets import fetch_openml
-from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler, LabelEncoder
-import torch
+from torchrl.data import (
+    CompositeSpec,
+    DiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
+)
+from torchrl.data.datasets.openml import OpenMLExperienceReplay
+from torchrl.data.replay_buffers import SamplerWithoutReplacement
+from torchrl.envs import Compose, DoubleToFloat, EnvBase, RenameTransform
 
-X, y = fetch_openml('adult', version=1, return_X_y=True)
 
-def _get_data(dataset_name):
-    if dataset_name in ['adult_num', 'adult_onehot']:
-        X, y = fetch_openml('adult', version=1, return_X_y=True)
-        is_NaN = X.isna()
-        row_has_NaN = is_NaN.any(axis=1)
-        X = X[~row_has_NaN]
-        # y = y[~row_has_NaN]
-        y = X["occupation"]
-        X = X.drop(["occupation"],axis=1)
-        cat_ix = X.select_dtypes(include=['category']).columns
-        num_ix = X.select_dtypes(include=['int64', 'float64']).columns
-        encoder = LabelEncoder()
-        # now apply the transformation to all the columns:
-        for col in cat_ix:
-            X[col] = encoder.fit_transform(X[col])
-        y = encoder.fit_transform(y)
-        if dataset_name == 'adult_onehot':
-            cat_features = OneHotEncoder(sparse=False).fit_transform(X[cat_ix])
-            num_features = StandardScaler().fit_transform(X[num_ix])
-            X = np.concatenate((num_features, cat_features), axis=1)
-        else:
-            X = StandardScaler().fit_transform(X)
-    elif dataset_name in ['mushroom_num', 'mushroom_onehot']:
-        X, y = fetch_openml('mushroom', version=1, return_X_y=True)
-        encoder = LabelEncoder()
-        # now apply the transformation to all the columns:
-        for col in X.columns:
-            X[col] = encoder.fit_transform(X[col])
-        # X = X.drop(["veil-type"],axis=1)
-        y = encoder.fit_transform(y)
-        if dataset_name == 'mushroom_onehot':
-            X = OneHotEncoder(sparse=False).fit_transform(X)
-        else:
-            X = StandardScaler().fit_transform(X)
-    elif dataset_name == 'covertype':
-        # https://www.openml.org/d/150
-        # there are some 0/1 features -> consider just numeric
-        X, y = fetch_openml('covertype', version=3, return_X_y=True)
-        X = StandardScaler().fit_transform(X)
-        y = LabelEncoder().fit_transform(y)
-    elif dataset_name == 'shuttle':
-        # https://www.openml.org/d/40685
-        # all numeric, no missing values
-        X, y = fetch_openml('shuttle', version=1, return_X_y=True)
-        X = StandardScaler().fit_transform(X)
-        y = LabelEncoder().fit_transform(y)
-    elif dataset_name == 'magic':
-        # https://www.openml.org/d/1120
-        # all numeric, no missing values
-        X, y = fetch_openml('MagicTelescope', version=1, return_X_y=True)
-        X = StandardScaler().fit_transform(X)
-        y = LabelEncoder().fit_transform(y)
-    else:
-        raise RuntimeError('Dataset does not exist')
-    return TensorDict({"X": X, "y": y}, X.shape[:1])
-
-def make_composite_from_td(td):
+def _make_composite_from_td(td):
     # custom funtion to convert a tensordict in a similar spec structure
     # of unbounded values.
     composite = CompositeSpec(
         {
-            key: make_composite_from_td(tensor)
+            key: _make_composite_from_td(tensor)
             if isinstance(tensor, TensorDictBase)
             else UnboundedContinuousTensorSpec(
                 dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
-            ) if tensor.dtype in (torch.float16, torch.float32, torch.float64) else
-            UnboundedDiscreteTensorSpec(
+            )
+            if tensor.dtype in (torch.float16, torch.float32, torch.float64)
+            else UnboundedDiscreteTensorSpec(
                 dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
             )
             for key, tensor in td.items()
@@ -86,34 +39,95 @@ def make_composite_from_td(td):
 
 
 class OpenMLEnv(EnvBase):
+    """An environment interface to OpenML data to be used in bandits contexts.
+
+    Args:
+        dataset_name (str): the following datasets are supported:
+            ``"adult_num"``, ``"adult_onehot"``, ``"mushroom_num"``, ``"mushroom_onehot"``,
+            ``"covertype"``, ``"shuttle"`` and ``"magic"``.
+        device (torch.device or compatible, optional): the device where the input
+            and output data is to be expected. Defaults to ``"cpu"``.
+        batch_size (torch.Size or compatible, optional): the batch size of the environment,
+            ie. the number of elements samples and returned when a :meth:`~.reset` is
+            called. Defaults to an empty batch size, ie. one element is sampled
+            at a time.
+
+    Examples:
+        >>> env = OpenMLEnv("adult_onehot", batch_size=[2, 3])
+        >>> print(env.reset())
+        TensorDict(
+            fields={
+                done: Tensor(shape=torch.Size([2, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                observation: Tensor(shape=torch.Size([2, 3, 106]), device=cpu, dtype=torch.float32, is_shared=False),
+                reward: Tensor(shape=torch.Size([2, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                y: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([2, 3]),
+            device=cpu,
+            is_shared=False)
+
+    """
+
     def __init__(self, dataset_name, device="cpu", batch_size=None):
         if batch_size is None:
-            batch_size = [1]
+            batch_size = torch.Size([])
+        else:
+            batch_size = torch.Size(batch_size)
         self.dataset_name = dataset_name
-        self._data = _get_data(dataset_name)
+        self._data = OpenMLExperienceReplay(
+            dataset_name,
+            batch_size=batch_size.numel(),
+            sampler=SamplerWithoutReplacement(drop_last=True),
+            transform=Compose(
+                RenameTransform(["X"], ["observation"]),
+                DoubleToFloat(["observation"]),
+            ),
+        )
         super().__init__(device=device, batch_size=batch_size)
-        self.observation_spec = make_composite_from_td(self._data[:self.batch_size.numel()])
-        self.action_spec = self.observation_spec["y"].clone()
+        self.observation_spec = _make_composite_from_td(
+            self._data[: self.batch_size.numel()]
+            .reshape(self.batch_size)
+            .exclude("index")
+        )
+        self.action_spec = DiscreteTensorSpec(
+            self._data.max_outcome_val + 1, shape=self.batch_size, device=self.device
+        )
         self.reward_spec = UnboundedContinuousTensorSpec(shape=(*self.batch_size, 1))
 
     def _reset(self, tensordict):
-        r_id = torch.randint(self._data.shape[0], (self.batch_size.numel(),))
-        data = self._data[r_id]
+        data = self._data.sample()
+        data = data.exclude("index")
+        data = data.reshape(self.batch_size).to(self.device)
         return data
 
     def _step(
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-        action = tensordict["action"]
+        action = tensordict.get("action")
+        y = tensordict.get("y", None)
+        if y is None:
+            raise KeyError(
+                "did not find the 'y' key in the input tensordict. "
+                "Make sure you call env.step() on a tensordict that results "
+                "from env.reset()."
+            )
+
+        if action.shape != y.shape:
+            raise RuntimeError(
+                f"Action and outcome shape differ: {action.shape} vs {y.shape}."
+            )
         reward = (action == tensordict["y"]).float().unsqueeze(-1)
         done = torch.ones_like(reward, dtype=torch.bool)
-        return TensorDict({
-            "done": done,
-            "reward": reward,
-            "X": tensordict["X"],
-            "y": tensordict["y"],
-        }, self.batch_size)
+        td = TensorDict(
+            {
+                "done": done,
+                "reward": reward,
+                **tensordict.select(*self.observation_spec.keys()),
+            },
+            self.batch_size,
+            device=self.device,
+        )
+        return td.select().set("next", td)
 
     def _set_seed(self, seed):
         self.rng = torch.random.manual_seed(seed)

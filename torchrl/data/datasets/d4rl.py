@@ -5,6 +5,8 @@
 
 from typing import Callable, Optional
 
+import gym  # noqa
+
 import numpy as np
 
 import torch
@@ -15,15 +17,6 @@ from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import Writer
-
-D4RL_ERR = None
-try:
-    import d4rl, gym  # noqa
-
-    _has_d4rl = True
-except ModuleNotFoundError as err:
-    _has_d4rl = False
-    D4RL_ERR = err
 
 
 class D4RLExperienceReplay(TensorDictReplayBuffer):
@@ -93,6 +86,18 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
     """
 
+    D4RL_ERR = None
+
+    @classmethod
+    def _import_d4rl(cls):
+        try:
+            import d4rl  # noqa
+
+            cls._has_d4rl = True
+        except ModuleNotFoundError as err:
+            cls._has_d4rl = False
+            cls.D4RL_ERR = err
+
     def __init__(
         self,
         name,
@@ -108,8 +113,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         **env_kwargs,
     ):
 
-        if not _has_d4rl:
-            raise ImportError("Could not import d4rl") from D4RL_ERR
+        type(self)._import_d4rl()
+
+        if not self._has_d4rl:
+            raise ImportError("Could not import d4rl") from self.D4RL_ERR
         self.from_env = from_env
         if from_env:
             dataset = self._get_dataset_from_env(name, env_kwargs)
@@ -133,6 +140,13 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
     def _get_dataset_direct(self, name, env_kwargs):
         from torchrl.envs.libs.gym import GymWrapper
+
+        try:
+            import d4rl
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError(
+                "d4rl not found or not importable"
+            ) from self.D4RL_ERR
 
         env = GymWrapper(gym.make(name))
         dataset = d4rl.qlearning_dataset(env._env, **env_kwargs)

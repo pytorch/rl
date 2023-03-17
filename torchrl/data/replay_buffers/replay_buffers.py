@@ -176,6 +176,15 @@ class ReplayBuffer:
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
 
+        if self._transform is not None:
+            is_td = True
+            if not isinstance(data, TensorDictBase):
+                data = TensorDict({"data": data}, [])
+                is_td = False
+            data = self._transform(data)
+            if not is_td:
+                data = data["data"]
+
         return data
 
     def state_dict(self) -> Dict[str, Any]:

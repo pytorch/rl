@@ -124,9 +124,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
             if spec is not None:
                 if isinstance(spec, CompositeSpec):
                     spec = spec[self.action_key]
-                out = (
-                    cond * spec.rand(tensordict.shape).to(out.device) + (1 - cond) * out
-                )
+                out = cond * spec.rand().to(out.device) + (1 - cond) * out
             else:
                 raise RuntimeError(
                     "spec must be provided by the policy or directly to the exploration wrapper."
