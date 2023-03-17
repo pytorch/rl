@@ -197,7 +197,7 @@ class REDQLoss_deprecated(LossModule):
         tensordict_save = tensordict
 
         obs_keys = self.actor_network.in_keys
-        tensordict = tensordict.select("reward", "done", "next", *obs_keys, "action")
+        tensordict = tensordict.select("next", *obs_keys, "action")
 
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len

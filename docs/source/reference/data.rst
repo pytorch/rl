@@ -20,7 +20,7 @@ widely used replay buffers:
     TensorDictPrioritizedReplayBuffer
 
 Composable Replay Buffers
--------------------------------------
+-------------------------
 
 We also give users the ability to compose a replay buffer using the following components:
 
@@ -30,15 +30,16 @@ We also give users the ability to compose a replay buffer using the following co
 
     .. currentmodule:: torchrl.data.replay_buffers
 
-    torchrl.data.replay_buffers.samplers.Sampler
-    torchrl.data.replay_buffers.samplers.RandomSampler
-    torchrl.data.replay_buffers.samplers.PrioritizedSampler
-    torchrl.data.replay_buffers.storages.Storage
-    torchrl.data.replay_buffers.storages.ListStorage
-    torchrl.data.replay_buffers.storages.LazyTensorStorage
-    torchrl.data.replay_buffers.storages.LazyMemmapStorage
-    torchrl.data.replay_buffers.writers.Writer
-    torchrl.data.replay_buffers.writers.RoundRobinWriter
+    Sampler
+    PrioritizedSampler
+    RandomSampler
+    SamplerWithoutReplacement
+    Storage
+    ListStorage
+    LazyTensorStorage
+    LazyMemmapStorage
+    Writer
+    RoundRobinWriter
 
 Storage choice is very influential on replay buffer sampling latency, especially in distributed reinforcement learning settings with larger data volumes.
 :class:`LazyMemmapStorage` is highly advised in distributed settings with shared storage due to the lower serialisation cost of MemmapTensors as well as the ability to specify file storage locations for improved node failure recovery.
@@ -55,10 +56,10 @@ The following mean sampling latency improvements over using ListStorage were fou
 | :class:`LazyMemmapStorage`    | 3.44x     |
 +-------------------------------+-----------+
 
-Sotring trajectories
+Storing trajectories
 ~~~~~~~~~~~~~~~~~~~~
 
-It is not too difficult to store trajecotries in the replay buffer.
+It is not too difficult to store trajectories in the replay buffer.
 One element to pay attention to is that the size of the replay buffer is always
 the size of the leading dimension of the storage: in other words, creating a
 replay buffer with a storage of size 1M when storing multidimensional data
@@ -70,7 +71,118 @@ To do this, we provide a custom :class:`torchrl.envs.Transform` class named
 :class:`torchrl.envs.RandomCropTensorDict`. Here is an example of how this class
 can be used:
 
+.. code-block::Python
+
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+    >>> from torchrl.envs import RandomCropTensorDict
     >>>
+    >>> obs = torch.randn(100, 50, 1)
+    >>> data = TensorDict({"obs": obs[:-1], "next": {"obs": obs[1:]}}, [99])
+    >>> rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(1000))
+    >>> rb.extend(data)
+    >>> # subsample trajectories of length 10
+    >>> rb.append_transform(RandomCropTensorDict(sub_seq_len=10))
+    >>> print(rb.sample(128))
+    TensorDict(
+        fields={
+            index: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int32, is_shared=False),
+            next: TensorDict(
+                fields={
+                    obs: Tensor(shape=torch.Size([10, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([10]),
+                device=None,
+                is_shared=False),
+            obs: Tensor(shape=torch.Size([10, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([10]),
+        device=None,
+        is_shared=False)
+
+Datasets
+--------
+
+TorchRL provides wrappers around offline RL datasets.
+These data are presented a :class:`torchrl.data.ReplayBuffer` instances, which
+means that they can be customized at will with transforms, samplers and storages.
+By default, datasets are stored as memory mapped tensors, allowing them to be
+promptly sampled with virtually no memory footprint.
+Here's an example:
+
+.. code::Python
+
+  >>> from torchrl.data.datasets import D4RLExperienceReplay
+  >>> from torchrl.data.replay_buffers import SamplerWithoutReplacement
+  >>> from torchrl.envs.transforms import RenameTransform
+  >>> dataset = D4RLExperienceReplay('kitchen-complete-v0', split_trajs=True, batch_size=10)
+  >>> print(dataset.sample())  # will sample 10 trajectories since split_trajs is set to True
+  TensorDict(
+      fields={
+          action: Tensor(shape=torch.Size([10, 207, 9]), device=cpu, dtype=torch.float32, is_shared=False),
+          done: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+          index: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.int32, is_shared=False),
+          infos: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.int64, is_shared=False),
+          mask: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+          next: TensorDict(
+              fields={
+                  done: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+                  observation: Tensor(shape=torch.Size([10, 207, 60]), device=cpu, dtype=torch.float32, is_shared=False),
+                  reward: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.float32, is_shared=False)},
+              batch_size=torch.Size([10, 207]),
+              device=cpu,
+              is_shared=False),
+          observation: Tensor(shape=torch.Size([10, 207, 60]), device=cpu, dtype=torch.float32, is_shared=False),
+          timeouts: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+          traj_ids: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.int64, is_shared=False)},
+      batch_size=torch.Size([10, 207]),
+      device=cpu,
+      is_shared=False)
+  >>> dataset.append_transform(RenameTransform(["done", ("next", "done")], ["terminal", ("next", "terminal")]))
+  >>> print(dataset.sample())  # The "done" has been renamed to "terminal"
+  TensorDict(
+      fields={
+          action: Tensor(shape=torch.Size([10, 207, 9]), device=cpu, dtype=torch.float32, is_shared=False),
+          terminal: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+          index: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.int32, is_shared=False),
+          infos: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.int64, is_shared=False),
+          mask: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+          next: TensorDict(
+              fields={
+                  terminal: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+                  observation: Tensor(shape=torch.Size([10, 207, 60]), device=cpu, dtype=torch.float32, is_shared=False),
+                  reward: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.float32, is_shared=False)},
+              batch_size=torch.Size([10, 207]),
+              device=cpu,
+              is_shared=False),
+          observation: Tensor(shape=torch.Size([10, 207, 60]), device=cpu, dtype=torch.float32, is_shared=False),
+          timeouts: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.bool, is_shared=False),
+          traj_ids: Tensor(shape=torch.Size([10, 207]), device=cpu, dtype=torch.int64, is_shared=False)},
+      batch_size=torch.Size([10, 207]),
+      device=cpu,
+      is_shared=False)
+  >>> # we can also use a `SamplerWithoutReplacement` to iterate over the dataset with random samples:
+  >>> dataset = D4RLExperienceReplay(
+  ...   'kitchen-complete-v0',
+  ...   sampler=SamplerWithoutReplacement(drop_last=True),
+  ...   split_trajs=True,
+  ...   batch_size=3)
+  >>> for data in dataset:
+  ...    print(data)
+  ...
+
+.. note::
+
+  Installing dependencies is the responsibility of the user. For D4RL, a clone of
+  `the repository <https://github.com/Farama-Foundation/D4RL>`_ is needed as
+  the latest wheels are not published on PyPI.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    .. currentmodule:: torchrl.data.datasets
+
+    D4RLExperienceReplay
 
 TensorSpec
 ----------

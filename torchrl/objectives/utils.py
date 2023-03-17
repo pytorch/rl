@@ -332,8 +332,8 @@ def next_state_value(
     else:
         steps_to_next_obs = 1
 
-    rewards = tensordict.get("reward").squeeze(-1)
-    done = tensordict.get("done").squeeze(-1)
+    rewards = tensordict.get(("next", "reward")).squeeze(-1)
+    done = tensordict.get(("next", "done")).squeeze(-1)
 
     if pred_next_val is None:
         next_td = step_mdp(tensordict)  # next_observation -> observation

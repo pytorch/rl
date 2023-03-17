@@ -5,6 +5,7 @@
 
 import abc
 import os
+import warnings
 from collections import OrderedDict
 from copy import copy
 from typing import Any, Dict, Sequence, Union
@@ -12,9 +13,9 @@ from typing import Any, Dict, Sequence, Union
 import torch
 from tensordict.memmap import MemmapTensor
 from tensordict.prototype import is_tensorclass
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
-from torchrl._utils import _CKPT_BACKEND
+from torchrl._utils import _CKPT_BACKEND, VERBOSE
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 
 try:
@@ -210,11 +211,7 @@ class LazyTensorStorage(Storage):
             if isinstance(self._storage, TensorDictBase):
                 self._storage.load_state_dict(_storage)
             elif self._storage is None:
-                batch_size = _storage.pop("__batch_size")
-                device = _storage.pop("__device")
-                self._storage = TensorDict(
-                    _storage, batch_size=batch_size, device=device
-                )
+                self._storage = TensorDict({}, []).load_state_dict(_storage)
             else:
                 raise RuntimeError(
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}"
@@ -227,7 +224,8 @@ class LazyTensorStorage(Storage):
         self._len = state_dict["_len"]
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
-        print("Creating a TensorStorage...")
+        if VERBOSE:
+            print("Creating a TensorStorage...")
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             out = torch.empty(
@@ -333,15 +331,16 @@ class LazyMemmapStorage(LazyTensorStorage):
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}"
                 )
         elif isinstance(_storage, (dict, OrderedDict)):
-            if isinstance(self._storage, TensorDictBase):
+            if is_tensor_collection(self._storage):
                 self._storage.load_state_dict(_storage)
                 self._storage.memmap_()
             elif self._storage is None:
-                batch_size = _storage.pop("__batch_size")
-                device = _storage.pop("__device")
-                self._storage = TensorDict(
-                    _storage, batch_size=batch_size, device=device
+                warnings.warn(
+                    "Loading the storage on an uninitialized TensorDict."
+                    "It is preferable to load a storage onto a"
+                    "pre-allocated one whenever possible."
                 )
+                self._storage = TensorDict({}, []).load_state_dict(_storage)
                 self._storage.memmap_()
             else:
                 raise RuntimeError(
@@ -355,48 +354,50 @@ class LazyMemmapStorage(LazyTensorStorage):
         self._len = state_dict["_len"]
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
-        print("Creating a MemmapStorage...")
+        if VERBOSE:
+            print("Creating a MemmapStorage...")
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             out = MemmapTensor(
                 self.max_size, *data.shape, device=self.device, dtype=data.dtype
             )
             filesize = os.path.getsize(out.filename) / 1024 / 1024
-            print(
-                f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
-            )
+            if VERBOSE:
+                print(
+                    f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
+                )
         elif is_tensorclass(data):
             out = (
-                data.expand(self.max_size, *data.shape)
-                .clone()
-                .zero_()
-                .memmap_(prefix=self.scratch_dir)
+                data.clone()
+                .expand(self.max_size, *data.shape)
+                .memmap_like(prefix=self.scratch_dir)
                 .to(self.device)
             )
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
                 filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                print(
-                    f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
-                )
+                if VERBOSE:
+                    print(
+                        f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
+                    )
         else:
-            # out = TensorDict({}, [self.max_size, *data.shape])
-            print("The storage is being created: ")
+            if VERBOSE:
+                print("The storage is being created: ")
             out = (
-                data.expand(self.max_size, *data.shape)
-                .to_tensordict()
-                .zero_()
-                .memmap_(prefix=self.scratch_dir)
+                data.clone()
+                .expand(self.max_size, *data.shape)
+                .memmap_like(prefix=self.scratch_dir)
                 .to(self.device)
             )
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
                 filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                print(
-                    f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
-                )
+                if VERBOSE:
+                    print(
+                        f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
+                    )
         self._storage = out
         self.initialized = True
 

@@ -76,6 +76,7 @@ from torchrl.objectives import (
     DreamerActorLoss,
     DreamerModelLoss,
     DreamerValueLoss,
+    IQLLoss,
     KLPENPPOLoss,
     PPOLoss,
     SACLoss,
@@ -225,9 +226,11 @@ class TestDQN:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
                 "action_value": action_value,
             },
@@ -272,11 +275,11 @@ class TestDQN:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -339,7 +342,7 @@ class TestDQN:
             actor, gamma=gamma, loss_function="l2", delay_value=delay_value
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+        ms = MultiStep(gamma=gamma, n_steps=n).to(device)
         ms_td = ms(td.clone())
 
         with _check_td_steady(ms_td):
@@ -349,7 +352,7 @@ class TestDQN:
         with torch.no_grad():
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (
@@ -476,9 +479,11 @@ class TestDDPG:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
             },
             device=device,
@@ -506,11 +511,11 @@ class TestDDPG:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
@@ -631,14 +636,14 @@ class TestDDPG:
             delay_value=delay_value,
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+        ms = MultiStep(gamma=gamma, n_steps=n).to(device)
         ms_td = ms(td.clone())
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
         with torch.no_grad():
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (
@@ -706,9 +711,11 @@ class TestTD3:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
             },
             device=device,
@@ -735,10 +742,12 @@ class TestTD3:
             batch_size=(batch, T),
             source={
                 "observation": obs * mask.to(obs.dtype),
-                "next": {"observation": next_obs * mask.to(obs.dtype)},
-                "done": done,
+                "next": {
+                    "observation": next_obs * mask.to(obs.dtype),
+                    "reward": reward * mask.to(obs.dtype),
+                    "done": done,
+                },
                 "collector": {"mask": mask},
-                "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
             },
             device=device,
@@ -845,7 +854,7 @@ class TestTD3:
             delay_actor=delay_actor,
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+        ms = MultiStep(gamma=gamma, n_steps=n).to(device)
 
         td_clone = td.clone()
         ms_td = ms(td_clone)
@@ -862,7 +871,7 @@ class TestTD3:
             np.random.seed(0)
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (
@@ -981,9 +990,11 @@ class TestSAC:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
             },
             device=device,
@@ -1011,11 +1022,11 @@ class TestSAC:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
@@ -1216,7 +1227,7 @@ class TestSAC:
             **kwargs,
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+        ms = MultiStep(gamma=gamma, n_steps=n).to(device)
 
         td_clone = td.clone()
         ms_td = ms(td_clone)
@@ -1232,7 +1243,7 @@ class TestSAC:
             np.random.seed(0)
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (
@@ -1410,9 +1421,11 @@ class TestREDQ:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
             },
             device=device,
@@ -1440,11 +1453,11 @@ class TestREDQ:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
@@ -1705,7 +1718,7 @@ class TestREDQ:
             delay_qvalue=delay_qvalue,
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+        ms = MultiStep(gamma=gamma, n_steps=n).to(device)
 
         td_clone = td.clone()
         ms_td = ms(td_clone)
@@ -1722,7 +1735,7 @@ class TestREDQ:
             np.random.seed(0)
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (
@@ -1846,9 +1859,11 @@ class TestPPO:
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
                 "sample_log_prob": torch.randn_like(action[..., 1]) / 10,
             },
@@ -1879,11 +1894,11 @@ class TestPPO:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "sample_log_prob": (torch.randn_like(action[..., 1]) / 10).masked_fill_(
                     ~mask, 0.0
@@ -2154,11 +2169,11 @@ class TestA2C:
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
                 "collector": {"mask": mask},
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
                     ~mask, 0.0
@@ -2360,10 +2375,12 @@ class TestReinforce:
 
         td = TensorDict(
             {
-                "reward": torch.randn(batch, 1),
                 "observation": torch.randn(batch, n_obs),
-                "next": {"observation": torch.randn(batch, n_obs)},
-                "done": torch.zeros(batch, 1, dtype=torch.bool),
+                "next": {
+                    "observation": torch.randn(batch, n_obs),
+                    "reward": torch.randn(batch, 1),
+                    "done": torch.zeros(batch, 1, dtype=torch.bool),
+                },
                 "action": torch.randn(batch, n_act),
             },
             [batch],
@@ -2412,10 +2429,12 @@ class TestDreamer:
                 "state": torch.zeros(batch_size, temporal_length, state_dim),
                 "belief": torch.zeros(batch_size, temporal_length, rssm_hidden_dim),
                 "pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
-                "next": {"pixels": torch.randn(batch_size, temporal_length, 3, 64, 64)},
+                "next": {
+                    "pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
+                    "reward": torch.randn(batch_size, temporal_length, 1),
+                    "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
+                },
                 "action": torch.randn(batch_size, temporal_length, 64),
-                "reward": torch.randn(batch_size, temporal_length, 1),
-                "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
             },
             [batch_size, temporal_length],
         )
@@ -2510,7 +2529,7 @@ class TestDreamer:
         reward_module = SafeModule(
             reward_module,
             in_keys=[("next", "state"), ("next", "belief")],
-            out_keys=["reward"],
+            out_keys=[("next", "reward")],
         )
         world_model = WorldModelWrapper(world_modeler, reward_module)
 
@@ -2788,6 +2807,321 @@ class TestDreamer:
         if grad_is_zero:
             raise ValueError("Gradients are zero")
         loss_module.zero_grad()
+
+
+class TestIQL:
+    seed = 0
+
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # Actor
+        action_spec = BoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        actor = ProbabilisticActor(
+            module=module,
+            in_keys=["loc", "scale"],
+            spec=action_spec,
+            distribution_class=TanhNormal,
+        )
+        return actor.to(device)
+
+    def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        class ValueClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(obs_dim + action_dim, 1)
+
+            def forward(self, obs, act):
+                return self.linear(torch.cat([obs, act], -1))
+
+        module = ValueClass()
+        qvalue = ValueOperator(
+            module=module,
+            in_keys=["observation", "action"],
+        )
+        return qvalue.to(device)
+
+    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        module = nn.Linear(obs_dim, 1)
+        value = ValueOperator(
+            module=module,
+            in_keys=["observation"],
+        )
+        return value.to(device)
+
+    def _create_mock_distributional_actor(
+        self, batch=2, obs_dim=3, action_dim=4, atoms=5, vmin=1, vmax=5
+    ):
+        raise NotImplementedError
+
+    def _create_mock_data_iql(
+        self, batch=16, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
+        # create a tensordict
+        obs = torch.randn(batch, obs_dim, device=device)
+        next_obs = torch.randn(batch, obs_dim, device=device)
+        if atoms:
+            raise NotImplementedError
+        else:
+            action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
+        reward = torch.randn(batch, 1, device=device)
+        done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        td = TensorDict(
+            batch_size=(batch,),
+            source={
+                "observation": obs,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
+                "action": action,
+            },
+            device=device,
+        )
+        return td
+
+    def _create_seq_mock_data_iql(
+        self, batch=8, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
+        # create a tensordict
+        total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
+        obs = total_obs[:, :T]
+        next_obs = total_obs[:, 1:]
+        if atoms:
+            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+                -1, 1
+            )
+        else:
+            action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+        reward = torch.randn(batch, T, 1, device=device)
+        done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = torch.ones(batch, T, dtype=torch.bool, device=device)
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                },
+                "collector": {"mask": mask},
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+            },
+            device=device,
+        )
+        return td
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+    )
+    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
+    @pytest.mark.parametrize("expectile", [0.1, 0.5, 1.0])
+    def test_iql(
+        self,
+        num_qvalue,
+        device,
+        temperature,
+        expectile,
+    ):
+
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_iql(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        value = self._create_mock_value(device=device)
+
+        loss_fn = IQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            gamma=0.9,
+            temperature=temperature,
+            expectile=expectile,
+            loss_function="l2",
+        )
+
+        with _check_td_steady(td):
+            loss = loss_fn(td)
+        assert loss_fn.priority_key in td.keys()
+
+        # check that losses are independent
+        for k in loss.keys():
+            if not k.startswith("loss"):
+                continue
+            loss[k].sum().backward(retain_graph=True)
+            if k == "loss_actor":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            elif k == "loss_value":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            elif k == "loss_qvalue":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            else:
+                raise NotImplementedError(k)
+            loss_fn.zero_grad()
+
+        sum([item for _, item in loss.items()]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+    )
+    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
+    @pytest.mark.parametrize("expectile", [0.1, 0.5, 1.0])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_iql_batcher(
+        self,
+        n,
+        num_qvalue,
+        temperature,
+        expectile,
+        device,
+        gamma=0.9,
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_iql(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        value = self._create_mock_value(device=device)
+
+        loss_fn = IQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            gamma=0.9,
+            temperature=temperature,
+            expectile=expectile,
+            loss_function="l2",
+        )
+
+        ms = MultiStep(gamma=gamma, n_steps=n).to(device)
+
+        td_clone = td.clone()
+        ms_td = ms(td_clone)
+
+        torch.manual_seed(0)
+        np.random.seed(0)
+        with _check_td_steady(ms_td):
+            loss_ms = loss_fn(ms_td)
+        assert loss_fn.priority_key in ms_td.keys()
+
+        with torch.no_grad():
+            torch.manual_seed(0)  # log-prob is computed with a random action
+            np.random.seed(0)
+            loss = loss_fn(td)
+        if n == 0:
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
+            _loss = sum([item for _, item in loss.items()])
+            _loss_ms = sum([item for _, item in loss_ms.items()])
+            assert (
+                abs(_loss - _loss_ms) < 1e-3
+            ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
+        else:
+            with pytest.raises(AssertionError):
+                assert_allclose_td(loss, loss_ms)
+        sum([item for _, item in loss_ms.items()]).backward()
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+
+        # Check param update effect on targets
+        target_qvalue = [
+            p.clone()
+            for p in loss_fn.target_qvalue_network_params.values(
+                include_nested=True, leaves_only=True
+            )
+        ]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_qvalue2 = [
+            p.clone()
+            for p in loss_fn.target_qvalue_network_params.values(
+                include_nested=True, leaves_only=True
+            )
+        ]
+        if loss_fn.delay_qvalue:
+            assert all(
+                (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+            )
+        else:
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
+            )
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 
 def test_hold_out():
@@ -3561,8 +3895,8 @@ class TestAdv:
         )
         kwargs = {
             "obs": torch.randn(1, 10, 3),
-            "reward": torch.randn(1, 10, 1, requires_grad=True),
-            "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+            "next_reward": torch.randn(1, 10, 1, requires_grad=True),
+            "next_done": torch.zeros(1, 10, 1, dtype=torch.bool),
             "next_obs": torch.randn(1, 10, 3),
         }
         advantage, value_target = module(**kwargs)
@@ -3590,9 +3924,11 @@ class TestAdv:
         td = TensorDict(
             {
                 "obs": torch.randn(1, 10, 3),
-                "reward": torch.randn(1, 10, 1, requires_grad=True),
-                "done": torch.zeros(1, 10, 1, dtype=torch.bool),
-                "next": {"obs": torch.randn(1, 10, 3)},
+                "next": {
+                    "obs": torch.randn(1, 10, 3),
+                    "reward": torch.randn(1, 10, 1, requires_grad=True),
+                    "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                },
             },
             [1, 10],
         )
@@ -3602,7 +3938,7 @@ class TestAdv:
         for p in value_net.parameters():
             assert p.grad is None or (p.grad == 0).all()
         # check that rewards have a grad
-        assert td["reward"].grad.norm() > 0
+        assert td["next", "reward"].grad.norm() > 0
 
     @pytest.mark.parametrize(
         "adv,kwargs",
@@ -3621,9 +3957,11 @@ class TestAdv:
         td = TensorDict(
             {
                 "obs": torch.randn(1, 10, 3),
-                "reward": torch.randn(1, 10, 1, requires_grad=True),
-                "done": torch.zeros(1, 10, 1, dtype=torch.bool),
-                "next": {"obs": torch.randn(1, 10, 3)},
+                "next": {
+                    "obs": torch.randn(1, 10, 3),
+                    "reward": torch.randn(1, 10, 1, requires_grad=True),
+                    "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                },
             },
             [1, 10],
         )
