@@ -725,7 +725,7 @@ class SyncDataCollector(_DataCollector):
         if self.reset_at_each_iter:
             self._tensordict.update(self.env.reset(), inplace=True)
 
-        self._tensordict.fill_(("collector", "step_count"), 0)
+        # self._tensordict.fill_(("collector", "step_count"), 0)
         self._tensordict_out.fill_(("collector", "traj_ids"), -1)
 
         with set_exploration_mode(self.exploration_mode):
