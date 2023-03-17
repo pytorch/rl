@@ -1117,6 +1117,7 @@ class TestD4RL:
             from_env=False,
             terminate_on_end=True,
             batch_size=2,
+            use_timeout_as_done=False,
         )
         _ = D4RLExperienceReplay(
             task,
@@ -1124,9 +1125,10 @@ class TestD4RL:
             from_env=False,
             terminate_on_end=False,
             batch_size=2,
+            use_timeout_as_done=False,
         )
         data_from_env = D4RLExperienceReplay(
-            task, split_trajs=True, from_env=True, batch_size=2
+            task, split_trajs=True, from_env=True, batch_size=2, use_timeout_as_done=False,
         )
         keys = set(data_from_env._storage._storage.keys(True, True))
         keys = keys.intersection(data_true._storage._storage.keys(True, True))

@@ -78,6 +78,15 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
               containing meta-data and info entries that the former does
               not possess.
 
+            .. note::
+
+              The keys in ``from_env=True`` and ``from_env=False`` *may* unexpectedly
+              differ. In particular, the ``"timeout"`` key (used to determine the
+              end of an episode) may be absent when ``from_env=False`` but present
+              otherwise, leading to a different slicing when ``traj_splits`` is enabled.
+
+        use_timeout_as_done (bool, optional): if ``True``, ``done = terminal | timeout``.
+            Otherwise, only the ``terminal`` key is used. Defaults to ``True``.
         **env_kwargs (key-value pairs): additional kwargs for
             :func:`d4rl.qlearning_dataset`. Supports ``terminate_on_end``
             (``False`` by default) or other kwargs if defined by D4RL library.
@@ -105,12 +114,14 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         transform: Optional["Transform"] = None,  # noqa-F821
         split_trajs: bool = False,
         from_env: bool = True,
+        use_timeout_as_done: bool = True,
         **env_kwargs,
     ):
 
         if not _has_d4rl:
             raise ImportError("Could not import d4rl") from D4RL_ERR
         self.from_env = from_env
+        self.use_timeout_as_done = use_timeout_as_done
         if from_env:
             dataset = self._get_dataset_from_env(name, env_kwargs)
         else:
@@ -160,11 +171,14 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset.rename_key("terminals", "terminal")
         if "timeouts" in dataset.keys():
             dataset.rename_key("timeouts", "timeout")
-        dataset.set(
-            "done",
-            dataset.get("terminal")
-            | dataset.get("timeout", torch.zeros((), dtype=torch.bool)),
-        )
+        if self.use_timeout_as_done:
+            dataset.set(
+                "done",
+                dataset.get("terminal")
+                | dataset.get("timeout", torch.zeros((), dtype=torch.bool)),
+            )
+        else:
+            dataset.set("done", dataset.get("terminal"))
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
 
@@ -223,11 +237,14 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset.rename_key("terminals", "terminal")
         if "timeouts" in dataset.keys():
             dataset.rename_key("timeouts", "timeout")
-        dataset.set(
-            "done",
-            dataset.get("terminal")
-            | dataset.get("timeout", torch.zeros((), dtype=torch.bool)),
-        )
+        if self.use_timeout_as_done:
+            dataset.set(
+                "done",
+                dataset.get("terminal")
+                | dataset.get("timeout", torch.zeros((), dtype=torch.bool)),
+            )
+        else:
+            dataset.set("done", dataset.get("terminal"))
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
         try:
