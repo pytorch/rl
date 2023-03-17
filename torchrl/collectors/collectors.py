@@ -380,18 +380,15 @@ class SyncDataCollector(_DataCollector):
             updated. This feature should be used cautiously: if the same
             tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
-<<<<<<< HEAD
             Default is False.
         interruptor : (_Interruptor, optional)
             An _Interruptor object that can be used from outside the class to control rollout collection.
             The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
             strategies such as preeptively stopping rollout collection.
-=======
             Default is ``False``.
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
->>>>>>> main
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -864,59 +861,6 @@ class _MultiDataCollector(_DataCollector):
             instance of :class:`torchrl.envs.EnvBase`.
         policy (Callable, optional): Instance of TensorDictModule class.
             Must accept TensorDictBase object as input.
-<<<<<<< HEAD
-        total_frames (int): lower bound of the total number of frames returned by the collector. In parallel settings,
-            the actual number of frames may well be greater than this as the closing signals are sent to the
-            workers only once the total number of frames has been collected on the server.
-        create_env_kwargs (dict, optional): A (list of) dictionaries with the arguments used to create an environment
-        max_frames_per_traj: Maximum steps per trajectory. Note that a trajectory can span over multiple batches
-            (unless reset_at_each_iter is set to True, see below). Once a traje tory reaches n_steps_max,
-            the environment is reset. If the environment wraps multiple environments together, the number of steps
-            is tracked for each environment independently. Negative values are allowed, in which case this argument
-            is ignored.
-            default: -1 (i.e. no maximum number of steps)
-        frames_per_batch (int): Time-length of a batch.
-            reset_at_each_iter and frames_per_batch == n_steps_max are equivalent configurations.
-            default: 200
-        init_random_frames (int): Number of frames for which the policy is ignored before it is called.
-            This feature is mainly intended to be used in offline/model-based settings, where a batch of random
-            trajectories can be used to initialize training.
-            default=-1 (i.e. no random frames)
-        reset_at_each_iter (bool): Whether or not environments should be reset for each batch.
-            default=False.
-        postproc (callable, optional): A PostProcessor is an object that will read a batch of data and process it in a
-            useful format for training.
-            default: None.
-        split_trajs (bool): Boolean indicating whether the resulting TensorDict should be split according to the trajectories.
-            See utils.split_trajectories for more information.
-        devices (int, str, torch.device or sequence of such, optional): The devices on which the policy will be placed.
-            If it differs from the input policy device, the update_policy_weights_() method should be queried
-            at appropriate times during the training loop to accommodate for the lag between parameter configuration
-            at various times.
-            default = None (i.e. policy is kept on its original device)
-        storing_devices (int, str, torch.device or sequence of such, optional): The devices on which the output TensorDict will be stored.
-            For long trajectories, it may be necessary to store the data on a different device than the one where
-            the policy and env are executed.
-            default = None (ie cpu)
-        update_at_each_batch (bool): if True, the policy weights will be updated every time a batch of trajectories
-            is collected.
-            default=False
-        init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
-            This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
-            default = True
-       exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
-            "mode" or "mean".
-            default = "random"
-        reset_when_done (bool, optional): if True, the contained environment will be reset
-            every time it hits a done. If the env contains multiple independent envs, a
-            reset index will be passed to it to reset only thos environments that need to
-            be reset. In practice, this will happen through a call to :obj:`env.reset(tensordict)`,
-            in other words, if the env is a multi-agent env, all agents will be
-            reset once one of them is done.
-            Defaults to `True`.
-        preemptive_threshold (float, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
-            that will be allowed to finished collecting their rollout before the rest are forced to end early.
-=======
             If ``None`` is provided, the policy used will be a
             :class:`RandomPolicy` instance with the environment
             ``action_spec``.
@@ -989,8 +933,8 @@ class _MultiDataCollector(_DataCollector):
         update_at_each_batch (boolm optional): if ``True``, :meth:`~.update_policy_weight_()`
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
-
->>>>>>> main
+        preemptive_threshold (float, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
+            that will be allowed to finished collecting their rollout before the rest are forced to end early.
     """
 
     def __init__(
