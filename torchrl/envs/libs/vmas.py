@@ -215,7 +215,6 @@ class VmasWrapper(_EnvWrapper):
         else:
             self._env.reset(return_observations=False)
 
-
         obs, dones, infos = self._env.get_from_scenario(
             get_observations=True,
             get_infos=True,
