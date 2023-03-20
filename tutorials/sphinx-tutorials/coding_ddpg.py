@@ -1,24 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-Coding DDPG using TorchRL
-=========================
+TorchRL objectives: Coding a DDPG loss
+======================================
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
 """
 ##############################################################################
-# This tutorial will guide you through the steps to code DDPG from scratch.
+# TorchRL separates the training of RL algorithms in various pieces that will be
+# assembled in your training script: the environment, the data collection and
+# storage, the model and finally the loss function.
 #
+# TorchRL losses (or "objectives") are stateful objects that contain the
+# trainable parameters (policy and value models).
+# This tutorial will guide you through the steps to code a loss from the ground up
+# using torchrl.
+#
+# To this aim, we will be focusing on DDPG, which is a relatively straightforward
+# algorithm to code.
 # DDPG (`Deep Deterministic Policy Gradient <https://arxiv.org/abs/1509.02971>_`_)
 # is a simple continuous control algorithm. It consists in learning a
 # parametric value function for an action-observation pair, and
 # then learning a policy that outputs actions that maximise this value
 # function given a certain observation.
-#
-# This tutorial is more  than the PPO tutorial: it covers
-# multiple topics that were left aside. We strongly advise the reader to go
-# through the PPO tutorial first before trying out this one. The goal is to
-# show how flexible torchrl is when it comes to writing scripts that can cover
-# multiple use cases.
 #
 # Key learnings:
 #
@@ -29,6 +32,10 @@ Coding DDPG using TorchRL
 #   in a replay buffer;
 # - how to store trajectories (and not transitions) in your replay buffer);
 # - and finally how to evaluate your model.
+#
+# This tutorial assumes that you have completed the PPO tutorial which gives
+# an overview of the TorchRL components.
+#
 #
 # This tutorial assumes the reader is familiar with some of TorchRL primitives,
 # such as :class:`tensordict.TensorDict` and
@@ -46,6 +53,10 @@ Coding DDPG using TorchRL
 
 # sphinx_gallery_start_ignore
 import warnings
+from typing import Tuple
+
+from torchrl.objectives import LossModule
+from torchrl.objectives.value import TDEstimate, TDLambdaEstimate
 
 warnings.filterwarnings("ignore")
 # sphinx_gallery_end_ignore
@@ -58,6 +69,7 @@ import torch.cuda
 import tqdm
 from matplotlib import pyplot as plt
 from tensordict.nn import TensorDictModule
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, optim
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import CompositeSpec, TensorDictReplayBuffer
@@ -76,21 +88,256 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.modules import (
+    Actor,
+    ActorCriticWrapper,
     MLP,
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
     ValueOperator,
 )
 from torchrl.modules.distributions.continuous import TanhDelta
-from torchrl.objectives.utils import hold_out_net
+from torchrl.objectives.utils import (
+    distance_loss,
+    hold_out_net,
+    hold_out_params,
+    SoftUpdate,
+)
 from torchrl.trainers import Recorder
 
 ###############################################################################
+# TorchRL LossModule
+# ------------------
+#
+# The ``__init__`` method
+# ~~~~~~~~~~~~~~~~~~~~~~~
+#
+# The parent class of all losses is :class:`torchrl.objectives.LossModule`.
+# As many other components of the library, its :meth:`__call__` method expects
+# as input a :class:`tensordict.TensorDict` instance sampled from an expenrience
+# replay buffer. Using this format makes it possible to re-use the module across
+# modalities, or in complex settings where the model needs to read multiple
+# entries for instance.
+#
+# To keep the tutorial as didactic as we can, we'll be displaying each method
+# of the class independently and we'll be populating the class at a later stage.
+#
+# Let us start with the :meth:`__init__` method. DDPG aims at a simple goal:
+# training a policy to output actions that maximise the value predicted by
+# a value network. Hence, our loss module needs to receive two networks in its
+# constructor: an actor and a value networks. We expect both of these to be
+# tensordict-compatible objects, such as :class:`tensordict.nn.TensorDictModule`.
+#
+# The crucial step of the :meth:`LossModule.__init__` method is the call to
+# :meth:`LossModule.convert_to_functional`. This method will extract the
+# parameters from the module and convert it to a functional module.
+# The reason TorchRL does this is that RL algorithms often execute the same
+# model with different sets of parameters, called "trainable" and "target" parameters.
+# The "trainable" parameters are those that the optimizer needs to fit. The
+# "target" parameters are usually a copy of the formers with some time lag
+# (absolute or diluted through a moving average). These target parameters
+# are used to compute the value associated with the next observation.
+# One the advantages of using a set of target parameters for the value model
+# that do not match exactly the current configuration is that they provide
+# a pessimistic bound on the value function being computed.
+# Pay attention to the ``create_target_params`` keyword argument below: this
+# argument tells the :meth:`torchrl.objectives.LossModule.convert_to_functional`
+# method to create a set of target parameters in the loss module to be used
+# for target value computation. If this is set to ``False`` (see the actor network
+# for instance) the ``target_actor_network_params`` attribute will still be
+# accessible but this will just return a detached version of the actor parameters.
+#
+# Later, we will see how the target parameters should be updated in TorchRL.
+#
+# We also incorporate an advantage module. This will be used to compute the
+# next state value using our value network. We'll see later in this tutorial
+# how various advantage modules can be used. If none is provided, we'll
+# be using the TD(lambda) method.
+#
+
+
+def _init(
+    self,
+    actor_network: TensorDictModule,
+    value_network: TensorDictModule,
+    advantage="td(lambda)",
+) -> None:
+    super(type(self), self).__init__()
+
+    self.convert_to_functional(
+        actor_network,
+        "actor_network",
+        create_target_params=False,
+    )
+    self.convert_to_functional(
+        value_network,
+        "value_network",
+        create_target_params=True,
+        compare_against=list(actor_network.parameters()),
+    )
+
+    self.actor_in_keys = actor_network.in_keys
+
+    # Since the value we'll be using is based on the actor and value network,
+    # we put them together in a single actor-critic container.
+    actor_critic = ActorCriticWrapper(actor_network, value_network)
+    if advantage == "td(lambda)":
+        advantage_module = TDLambdaEstimate(
+            gamma=0.99,
+            lmbda=0.95,
+            value_network=actor_critic,
+            value_key="state_action_value",
+        )
+    elif advantage == "td(0)":
+        advantage_module = TDEstimate(
+            gamma=0.99, value_network=actor_critic, value_key="state_action_value"
+        )
+    else:
+        raise NotImplementedError("advantage must be one of 'td(lambda)' or 'td(0)'.")
+    self.advantage = advantage
+    self.advantage_module = advantage_module
+
+    self.loss_funtion = "l2"
+
+
+###############################################################################
+# The actor loss method
+# ~~~~~~~~~~~~~~~~~~~~~
+#
+# The central piece of an RL algorithm is the training loss for the actor.
+# In the case of DDPG, this function is quite simple: we just need to compute
+# the value associated with an action computed using the policy and optimize
+# the actor weights to maximise this value.
+#
+# When computing this value, we must make sure to take the value parameters out
+# of the graph, otherwise the actor and value loss will be mixed up.
+# For this, the :func:`torchrl.objectives.utils.hold_out_params` function
+# can be used.
+
+
+def _loss_actor(
+    self,
+    tensordict,
+) -> torch.Tensor:
+    td_copy = tensordict.select(*self.actor_in_keys).detach()
+    # Get an action from the actor network
+    td_copy = self.actor_network(
+        td_copy,
+        params=self.actor_network_params,
+    )
+    # get the value associated with that action
+    with hold_out_params(self.value_network_params) as params:
+        td_copy = self.value_network(
+            td_copy,
+            params=params,
+        )
+    return -td_copy.get("state_action_value")
+
+
+###############################################################################
+# The value loss method
+# ~~~~~~~~~~~~~~~~~~~~~
+#
+# We now need to optimize our value network parameters.
+# To do this, we will rely on the advantage module provided during
+# the loss construction.
+
+
+def _loss_value(
+    self,
+    tensordict,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    td_copy = tensordict.detach()
+
+    # we manually reconstruct the parameters of the actor-critic, where the first
+    # set of parameters belongs to the actor and the second to the value function.
+    params = TensorDict(
+        {
+            "module": {
+                "0": self.actor_network_params.detach(),
+                "1": self.value_network_params,
+            }
+        },
+        batch_size=self.target_actor_network_params.batch_size,
+        device=self.target_actor_network_params.device,
+    )
+    target_params = TensorDict(
+        {
+            "module": {
+                "0": self.target_actor_network_params,
+                "1": self.target_value_network_params,
+            }
+        },
+        batch_size=self.target_actor_network_params.batch_size,
+        device=self.target_actor_network_params.device,
+    )
+    with set_exploration_mode("mode"):
+        self.advantage_module(td_copy, params=params, target_params=target_params)
+        target_value = td_copy.get(self.advantage_module.value_target_key)
+    pred_val = td_copy.get("state_action_value")
+    # td_error = pred_val - target_value
+    loss_value = distance_loss(pred_val, target_value, loss_function=self.loss_funtion)
+
+    return loss_value, (pred_val - target_value).pow(2), pred_val, target_value
+
+
+###############################################################################
+# Putting things together in a forward call
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# The only missing piece is the forward method, which will glue together the
+# value and actor loss, collect the cost values and write them in a tensordict
+# delivered to the user.
+
+
+def _forward(self, input_tensordict: TensorDictBase) -> TensorDict:
+    if not input_tensordict.device == self.device:
+        raise RuntimeError(
+            f"Got device={input_tensordict.device} but "
+            f"actor_network.device={self.device} (self.device={self.device})"
+        )
+
+    loss_value, td_error, pred_val, target_value = self.loss_value(
+        input_tensordict,
+    )
+    td_error = td_error.detach()
+    td_error = td_error.unsqueeze(input_tensordict.ndimension())
+    if input_tensordict.device is not None:
+        td_error = td_error.to(input_tensordict.device)
+    input_tensordict.set(
+        "td_error",
+        td_error,
+        inplace=True,
+    )
+    loss_actor = self.loss_actor(input_tensordict)
+    return TensorDict(
+        source={
+            "loss_actor": loss_actor.mean(),
+            "loss_value": loss_value.mean(),
+            "pred_value": pred_val.mean().detach(),
+            "target_value": target_value.mean().detach(),
+            "pred_value_max": pred_val.max().detach(),
+            "target_value_max": target_value.max().detach(),
+        },
+        batch_size=[],
+    )
+
+
+class DDPGLoss(LossModule):
+    __init__ = _init
+    forward = _forward
+    loss_value = _loss_value
+    loss_actor = _loss_actor
+
+
+###############################################################################
+# Now that we have our loss, we can use it to train a policy to solve a
+# control task.
+#
 # Environment
 # -----------
 #
 # In most algorithms, the first thing that needs to be taken care of is the
-# construction of the environmet as it conditions the remainder of the
+# construction of the environment as it conditions the remainder of the
 # training script.
 #
 # For this example, we will be using the ``"cheetah"`` task. The goal is to make
@@ -118,7 +365,7 @@ from torchrl.trainers import Recorder
 #
 #    env = GymEnv("HalfCheetah-v4", from_pixels=True, pixels_only=True)
 #
-# We write a :func:`make_env` helper funciton that will create an environment
+# We write a :func:`make_env` helper function that will create an environment
 # with either one of the two backends considered above (dm-control or gym).
 #
 
@@ -155,7 +402,7 @@ def make_env():
 
 ###############################################################################
 # Transforms
-# ^^^^^^^^^^
+# ~~~~~~~~~~
 #
 # Now that we have a base environment, we may want to modify its representation
 # to make it more policy-friendly. In TorchRL, transforms are appended to the
@@ -232,7 +479,7 @@ def make_transformed_env(
 
 ###############################################################################
 # Normalization of the observations
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # To compute the normalizing statistics, we run an arbitrary number of random
 # steps in the environment and compute the mean and standard deviation of the
@@ -256,7 +503,7 @@ def get_env_stats():
 
 ###############################################################################
 # Parallel execution
-# ^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~
 #
 # The following helper function allows us to run environments in parallel.
 # Running environments in parallel can significantly speed up the collection
@@ -314,27 +561,19 @@ def parallel_env_constructor(
 # Building the model
 # ------------------
 #
-# We now turn to the setup of the model and loss function. DDPG requires a
+# We now turn to the setup of the model. As we have seen, DDPG requires a
 # value network, trained to estimate the value of a state-action pair, and a
 # parametric actor that learns how to select actions that maximize this value.
-# In this tutorial, we will be using two independent networks for these
-# components.
 #
 # Recall that building a torchrl module requires two steps:
 #
-# - writing the :class:`torch.nn.Module` that will be used as network
+# - writing the :class:`torch.nn.Module` that will be used as network,
 # - wrapping the network in a :class:`tensordict.nn.TensorDictModule` where the
 #   data flow is handled by specifying the input and output keys.
 #
 # In more complex scenarios, :class:`tensordict.nn.TensorDictSequential` can
 # also be used.
 #
-# In :func:`make_ddpg_actor`, we use a :class:`torchrl.modules.ProbabilisticActor`
-# object to wrap our policy network. Since DDPG is a deterministic algorithm,
-# this is not strictly necessary. We rely on this class to map the output
-# action to the appropriate domain. Alternatively, one could perfectly use a
-# non-linearity such as :class:`torch.tanh` to map the output to the right
-# domain.
 #
 # The Q-Value network is wrapped in a :class:`torchrl.modules.ValueOperator`
 # that automatically sets the ``out_keys`` to ``"state_action_value`` for q-value
@@ -357,36 +596,34 @@ def make_ddpg_actor(
     proof_environment.transform[2].load_state_dict(transform_state_dict)
 
     env_specs = proof_environment.specs
-    out_features = env_specs["input_spec"]["action"].shape[0]
+    in_features = env_specs["output_spec"]["observation"]["observation_vector"].shape[
+        -1
+    ]
+    out_features = env_specs["input_spec"]["action"].shape[-1]
 
     actor_net = MLP(
+        in_features=in_features,
+        out_features=out_features,
         num_cells=[num_cells] * num_layers,
         activation_class=nn.Tanh,
-        out_features=out_features,
+        activate_last_layer=True,  # with this option on, we use a Tanh map as a last layer, thereby constraining the action to the [-1; 1] domain
     )
     in_keys = ["observation_vector"]
-    out_keys = ["param"]
+    out_keys = ["action"]
 
-    actor_module = TensorDictModule(actor_net, in_keys=in_keys, out_keys=out_keys)
-
-    # We use a ProbabilisticActor to make sure that we map the network output
-    # to the right space using a TanhDelta distribution.
-    actor = ProbabilisticActor(
-        module=actor_module,
-        in_keys=["param"],
+    actor = Actor(
+        actor_net,
+        in_keys=in_keys,
+        out_keys=out_keys,
         spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
-        safe=True,
-        distribution_class=TanhDelta,
-        distribution_kwargs={
-            "min": env_specs["input_spec"]["action"].space.minimum,
-            "max": env_specs["input_spec"]["action"].space.maximum,
-        },
     ).to(device)
 
     q_net = MLP(
+        in_features=in_features
+        + out_features,  # receives an action and an observation as input
+        out_features=1,
         num_cells=[num_cells] * num_layers,
         activation_class=nn.Tanh,
-        out_features=1,
     )
 
     in_keys = in_keys + ["action"]
@@ -394,15 +631,6 @@ def make_ddpg_actor(
         in_keys=in_keys,
         module=q_net,
     ).to(device)
-
-    # init: since we have lazy layers, we should run the network
-    # once to initialize them
-    with torch.no_grad(), set_exploration_mode("random"):
-        td = proof_environment.fake_tensordict()
-        td = td.expand((*td.shape, 2))
-        td = td.to(device)
-        actor(td)
-        qnet(td)
 
     return actor, qnet
 
@@ -484,7 +712,7 @@ def make_replay_buffer(buffer_size, prefetch=3):
 
 ###############################################################################
 # Environment
-# ^^^^^^^^^^^
+# ~~~~~~~~~~~
 
 # The backend can be gym or dm_control
 backend = "gym"
@@ -509,7 +737,7 @@ annealing_frames = 1000000 // frame_skip
 
 ###############################################################################
 # Collection
-# ^^^^^^^^^^
+# ~~~~~~~~~~
 
 # We will execute the policy on cuda if available
 device = (
@@ -521,8 +749,10 @@ env_per_collector = 2
 
 # Total frames we will use during training. Scale up to 500K - 1M for a more
 # meaningful training
-total_frames = 5000 // frame_skip
-# Number of frames returned by the collector at each iteration of the outer loop
+total_frames = 10000 // frame_skip
+
+# Number of frames returned by the collector at each iteration of the outer loop.
+# We expect batches from the collector to have a shape [env_per_collector, frames_per_batch // env_per_collector]
 frames_per_batch = env_per_collector * 1000 // frame_skip
 max_frames_per_traj = 1000 // frame_skip
 init_random_frames = 0
@@ -535,7 +765,7 @@ record_interval = 10
 
 ###############################################################################
 # Optimizer and optimization
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 lr = 5e-4
 weight_decay = 0.0
@@ -545,7 +775,7 @@ batch_size = 128
 
 ###############################################################################
 # Model
-# ^^^^^
+# ~~~~~
 
 gamma = 0.99
 tau = 0.005  # Decay factor for the target network
@@ -556,12 +786,13 @@ num_layers = 2
 
 ###############################################################################
 # Replay buffer
-# ^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~
 
 # If True, a Prioritized replay buffer will be used
 prb = True
 # Number of frames stored in the buffer
-buffer_size = min(total_frames, 1000000 // frame_skip)
+traj_len_collector = frames_per_batch // env_per_collector
+buffer_size = min(total_frames, 1_000_000 // traj_len_collector)
 buffer_scratch_dir = "/tmp/"
 
 seed = 0
@@ -582,13 +813,13 @@ np.random.seed(seed)
 
 ###############################################################################
 # Normalization stats
-# ^^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~~
 
 transform_state_dict = get_env_stats()
 
 ###############################################################################
 # Models: policy and q-value network
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 actor, qnet = make_ddpg_actor(
     transform_state_dict=transform_state_dict,
@@ -597,10 +828,17 @@ actor, qnet = make_ddpg_actor(
 if device == torch.device("cpu"):
     actor.share_memory()
 
-###############################################################################
-# We create a copy of the q-value network to be used as target network
 
-qnet_target = deepcopy(qnet).requires_grad_(False)
+###############################################################################
+# Loss module
+# ~~~~~~~~~~~
+# We build our loss module with the actor and qnet we've just created.
+# Because we have target parameters to update, we _must_ create a target network
+# updater.
+#
+loss_module = DDPGLoss(actor, qnet)
+target_net_updater = SoftUpdate(loss_module, eps=0.98)
+target_net_updater.init_()
 
 ###############################################################################
 # The policy is wrapped in a :class:`torchrl.modules.OrnsteinUhlenbeckProcessWrapper`
@@ -615,7 +853,7 @@ if device == torch.device("cpu"):
 
 ###############################################################################
 # Parallel environment creation
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # We pass the stats computed earlier to normalize the output of our
 # environment:
@@ -626,7 +864,7 @@ create_env_fn = parallel_env_constructor(
 
 ###############################################################################
 # Data collector
-# ^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~
 #
 # TorchRL provides specialized classes to help you collect data by executing
 # the policy in the environment. These "data collectors" iteratively compute
@@ -684,9 +922,8 @@ collector = MultiaSyncDataCollector(
     reset_at_each_iter=False,
     postproc=multistep,
     split_trajs=True,
-    devices=[device, device],  # device for execution
+    device=device,  # device for execution
     storing_devices=[device, device],  # device where data will be stored and passed
-    pin_memory=False,
     update_at_each_batch=False,
     exploration_mode="random",
 )
@@ -695,83 +932,38 @@ collector.set_seed(seed)
 
 ###############################################################################
 # Replay buffer
-# ^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~
 #
 
 replay_buffer = make_replay_buffer(buffer_size, prefetch=3)
 
 ###############################################################################
 # Recorder
-# ^^^^^^^^
+# ~~~~~~~~
 
 recorder = make_recorder(actor_model_explore, transform_state_dict)
 
 ###############################################################################
 # Optimizer
-# ^^^^^^^^^
+# ~~~~~~~~~
 #
 # Finally, we will use the Adam optimizer for the policy and value network,
 # with the same learning rate for both.
 
-optimizer_actor = optim.Adam(actor.parameters(), lr=lr, weight_decay=weight_decay)
-optimizer_qnet = optim.Adam(qnet.parameters(), lr=lr, weight_decay=weight_decay)
+optimizer = optim.Adam(loss_module.parameters(), lr=lr, weight_decay=weight_decay)
 total_collection_steps = total_frames // frames_per_batch
 
-scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(
-    optimizer_actor, T_max=total_collection_steps
-)
-scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(
-    optimizer_qnet, T_max=total_collection_steps
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    optimizer, T_max=total_collection_steps
 )
 
 ###############################################################################
 # Time to train the policy
 # ------------------------
 #
-# Some notes about the following training loop:
+# The training loop is pretty straightforward now that we have built all the
+# modules we need.
 #
-# - :func:`torchrl.objectives.utils.hold_out_net` is a TorchRL context manager
-#   that temporarily sets :func:`torch.Tensor.requires_grad_()` to False for
-#   a designated set of network parameters. This is used to
-#   prevent :func:`torch.Tensor.backward()`` from writing gradients on
-#   parameters that need not to be differentiated given the loss at hand.
-# - The value network is designed using the
-#   :class:`torchrl.modules.ValueOperator` subclass from
-#   :class:`tensordict.nn.TensorDictModule` class. As explained earlier,
-#   this class will write a ``"state_action_value"`` entry if one of its
-#   ``in_keys`` is named ``"action"``, otherwise it will assume that only the
-#   state-value is returned and the output key will simply be ``"state_value"``.
-#   In the case of DDPG, the value if of the state-action pair,
-#   hence the ``"state_action_value"`` will be used.
-# - The :func:`torchrl.envs.utils.step_mdp(tensordict)` helper function is the
-#   equivalent of the ``obs = next_obs`` command found in multiple RL
-#   algorithms. It will return a new :class:`tensordict.TensorDict` instance
-#   that contains all the data that will need to be used in the next iteration.
-#   This makes it possible to pass this new tensordict to the policy or
-#   value network.
-# - When using prioritized replay buffer, a priority key is added to the
-#   sampled tensordict (named ``"td_error"`` by default). Then, this
-#   TensorDict will be fed back to the replay buffer using the
-#   :func:`torchrl.data.replay_buffers.TensorDictReplayBuffer.update_tensordict_priority`
-#   method. Under the hood, this method will read the index present in the
-#   TensorDict as well as the priority value, and update its list of priorities
-#   at these indices.
-# - TorchRL provides optimized versions of the loss functions (such as this one)
-#   where one only needs to pass a sampled tensordict and obtains a dictionary
-#   of losses and metadata in return (see :mod:`torchrl.objectives` for more
-#   context). Here we write the full loss function in the optimization loop
-#   for transparency.
-#   Similarly, the target network updates are written explicitly but
-#   TorchRL provides a couple of dedicated classes for this
-#   (see :class:`torchrl.objectives.SoftUpdate` and
-#   :class:`torchrl.objectives.HardUpdate`).
-# - After each collection of data, we call :func:`collector.update_policy_weights_()`,
-#   which will update the policy network weights on the data collector. If the
-#   code is executed on cpu or with a single cuda device, this part can be
-#   omitted. If the collector is executed on another device, then its weights
-#   must be synced with those on the main, training process and this method
-#   should be incorporated in the training loop (ideally early in the loop in
-#   async settings, and at the end of it in sync settings).
 
 rewards = []
 rewards_eval = []
@@ -794,13 +986,7 @@ for i, tensordict in enumerate(collector):
     pbar.update(tensordict.numel())
 
     # extend the replay buffer with the new data
-    if ("collector", "mask") in tensordict.keys(True):
-        # if multi-step, a mask is present to help filter padded values
-        current_frames = tensordict["collector", "mask"].sum()
-        tensordict = tensordict[tensordict.get(("collector", "mask"))]
-    else:
-        tensordict = tensordict.view(-1)
-        current_frames = tensordict.numel()
+    current_frames = tensordict.numel()
     collected_frames += current_frames
     replay_buffer.extend(tensordict.cpu())
 
@@ -810,49 +996,22 @@ for i, tensordict in enumerate(collector):
             # sample from replay buffer
             sampled_tensordict = replay_buffer.sample(batch_size).clone()
 
-            # compute loss for qnet and backprop
-            with hold_out_net(actor):
-                # get next state value
-                next_tensordict = step_mdp(sampled_tensordict)
-                qnet_target(actor(next_tensordict))
-                next_value = next_tensordict["state_action_value"]
-                assert not next_value.requires_grad
-            value_est = (
-                sampled_tensordict["next", "reward"]
-                + gamma * (1 - sampled_tensordict["next", "done"].float()) * next_value
+            # Compute loss
+            loss_dict = loss_module(sampled_tensordict)
+
+            # optimize
+            loss_val = sum(
+                value for key, value in loss_dict.items() if key.startswith("loss")
             )
-            value = qnet(sampled_tensordict)["state_action_value"]
-            value_loss = (value - value_est).pow(2).mean()
-            # we write the td_error in the sampled_tensordict for priority update
-            # because the indices of the samples is tracked in sampled_tensordict
-            # and the replay buffer will know which priorities to update.
-            sampled_tensordict["td_error"] = (value - value_est).pow(2).detach()
-            value_loss.backward()
-
-            optimizer_qnet.step()
-            optimizer_qnet.zero_grad()
-
-            # compute loss for actor and backprop:
-            # the actor must maximise the state-action value, hence the loss
-            # is the neg value of this.
-            sampled_tensordict_actor = sampled_tensordict.select(*actor.in_keys)
-            with hold_out_net(qnet):
-                qnet(actor(sampled_tensordict_actor))
-            actor_loss = -sampled_tensordict_actor["state_action_value"]
-            actor_loss.mean().backward()
-
-            optimizer_actor.step()
-            optimizer_actor.zero_grad()
-
-            # update qnet_target params
-            for (p_in, p_dest) in zip(qnet.parameters(), qnet_target.parameters()):
-                p_dest.data.copy_(tau * p_in.data + (1 - tau) * p_dest.data)
-            for (b_in, b_dest) in zip(qnet.buffers(), qnet_target.buffers()):
-                b_dest.data.copy_(tau * b_in.data + (1 - tau) * b_dest.data)
+            loss_val.backward()
+            optimizer.step()
+            optimizer.zero_grad()
 
             # update priority
             if prb:
                 replay_buffer.update_tensordict_priority(sampled_tensordict)
+            # update target network
+            target_net_updater.step()
 
     rewards.append(
         (
@@ -873,8 +1032,7 @@ for i, tensordict in enumerate(collector):
     # update the exploration strategy
     actor_model_explore.step(current_frames)
     if collected_frames >= init_random_frames:
-        scheduler1.step()
-        scheduler2.step()
+        scheduler.step()
 
 collector.shutdown()
 del collector
@@ -898,259 +1056,15 @@ plt.ylabel("reward")
 plt.tight_layout()
 
 ###############################################################################
-# Sampling trajectories and using TD(lambda)
-# ------------------------------------------
+# Conclusion
+# ----------
 #
-# TD(lambda) is known to be less biased than the regular TD-error we used in
-# the previous example. To use it, however, we need to sample trajectories and
-# not single transitions.
+# In this tutorial, we have learnt how to code a loss module in TorchRL given
+# the concrete example of DDPG.
 #
-# We modify the previous example to make this possible.
+# The key takeaways are:
 #
-# The first modification consists in building a replay buffer that stores
-# trajectories (and not transitions).
+# - How to use the :class:`torchrl.objectives.LossModule` class to register components;
+# - How to use (or not) a target network, and how to update its parameters;
+# - How to create an optimizer associated with a loss module.
 #
-# Specifically, we'll collect trajectories of (at most)
-# 250 steps (note that the total trajectory length is actually 1000 frames, but
-# we collect batches of 500 transitions obtained over 2 environments running in
-# parallel, hence only 250 steps per trajectory are collected at any given
-# time). Hence, we'll divide our replay buffer size by 250:
-
-buffer_size = 100000 // frame_skip // 250
-print("the new buffer size is", buffer_size)
-batch_size_traj = max(4, batch_size // 250)
-print("the new batch size for trajectories is", batch_size_traj)
-
-n_steps_forward = 0  # disable multi-step for simplicity
-
-###############################################################################
-# The following code is identical to the initialization we made earlier:
-
-torch.manual_seed(seed)
-np.random.seed(seed)
-
-# get stats for normalization
-transform_state_dict = get_env_stats()
-
-# Actor and qnet instantiation
-actor, qnet = make_ddpg_actor(
-    transform_state_dict=transform_state_dict,
-    device=device,
-)
-if device == torch.device("cpu"):
-    actor.share_memory()
-
-# Target network
-qnet_target = deepcopy(qnet).requires_grad_(False)
-
-# Exploration wrappers:
-actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-    actor,
-    annealing_num_steps=annealing_frames,
-).to(device)
-if device == torch.device("cpu"):
-    actor_model_explore.share_memory()
-
-# Environment setting:
-create_env_fn = parallel_env_constructor(
-    transform_state_dict=transform_state_dict,
-)
-# Batch collector:
-collector = MultiaSyncDataCollector(
-    create_env_fn=[create_env_fn, create_env_fn],
-    policy=actor_model_explore,
-    total_frames=total_frames,
-    max_frames_per_traj=max_frames_per_traj,
-    frames_per_batch=frames_per_batch,
-    init_random_frames=init_random_frames,
-    reset_at_each_iter=False,
-    postproc=None,
-    split_trajs=False,
-    devices=[device, device],  # device for execution
-    storing_devices=[device, device],  # device where data will be stored and passed
-    seed=None,
-    pin_memory=False,
-    update_at_each_batch=False,
-    exploration_mode="random",
-)
-collector.set_seed(seed)
-
-# Replay buffer:
-replay_buffer = make_replay_buffer(buffer_size, prefetch=0)
-
-# trajectory recorder
-recorder = make_recorder(actor_model_explore, transform_state_dict)
-
-# Optimizers
-optimizer_actor = optim.Adam(actor.parameters(), lr=lr, weight_decay=weight_decay)
-optimizer_qnet = optim.Adam(qnet.parameters(), lr=lr, weight_decay=weight_decay)
-total_collection_steps = total_frames // frames_per_batch
-
-scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(
-    optimizer_actor, T_max=total_collection_steps
-)
-scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(
-    optimizer_qnet, T_max=total_collection_steps
-)
-
-###############################################################################
-# The training loop needs to be slightly adapted.
-# First, whereas before extending the replay buffer we used to flatten the
-# collected data, this won't be the case anymore. To understand why, let's
-# check the output shape of the data collector:
-
-for data in collector:
-    print(data.shape)
-    break
-
-###############################################################################
-# We see that our data has shape ``[2, 250]`` as expected: 2 envs, each
-# returning 250 frames.
-#
-# Let's import the td_lambda function:
-#
-
-from torchrl.objectives.value.functional import vec_td_lambda_advantage_estimate
-
-lmbda = 0.95
-
-###############################################################################
-# The training loop is roughly the same as before, with the exception that we
-# don't flatten the collected data. Also, the sampling from the replay buffer
-# is slightly different: We will collect at minimum four trajectories, compute
-# the returns (TD(lambda)), then sample from these the values we'll be using
-# to compute gradients. This ensures that do not have batches that are
-# 'too big' but still compute an accurate return.
-#
-
-rewards = []
-rewards_eval = []
-
-# Main loop
-norm_factor_training = (
-    sum(gamma**i for i in range(n_steps_forward)) if n_steps_forward else 1
-)
-
-collected_frames = 0
-# # if tqdm is to be used
-# pbar = tqdm.tqdm(total=total_frames)
-r0 = None
-for i, tensordict in enumerate(collector):
-
-    # update weights of the inference policy
-    collector.update_policy_weights_()
-
-    if r0 is None:
-        r0 = tensordict["next", "reward"].mean().item()
-
-    # extend the replay buffer with the new data
-    current_frames = tensordict.numel()
-    collected_frames += current_frames
-    replay_buffer.extend(tensordict.cpu())
-
-    # optimization steps
-    if collected_frames >= init_random_frames:
-        for _ in range(update_to_data):
-            # sample from replay buffer
-            sampled_tensordict = replay_buffer.sample(batch_size_traj)
-            # reset the batch size temporarily, and exclude index
-            # whose shape is incompatible with the new size
-            index = sampled_tensordict.get("index")
-            sampled_tensordict.exclude("index", inplace=True)
-
-            # compute loss for qnet and backprop
-            with hold_out_net(actor):
-                # get next state value
-                next_tensordict = step_mdp(sampled_tensordict)
-                qnet_target(actor(next_tensordict.view(-1))).view(
-                    sampled_tensordict.shape
-                )
-                next_value = next_tensordict["state_action_value"]
-                assert not next_value.requires_grad
-
-            # This is the crucial part: we'll compute the TD(lambda)
-            # instead of a simple single step estimate
-            done = sampled_tensordict["next", "done"]
-            reward = sampled_tensordict["next", "reward"]
-            value = qnet(sampled_tensordict.view(-1)).view(sampled_tensordict.shape)[
-                "state_action_value"
-            ]
-            advantage = vec_td_lambda_advantage_estimate(
-                gamma, lmbda, value, next_value, reward, done
-            )
-            # we sample from the values we have computed
-            rand_idx = torch.randint(0, advantage.numel(), (batch_size,))
-            value_loss = advantage.view(-1)[rand_idx].pow(2).mean()
-
-            # we write the td_error in the sampled_tensordict for priority update
-            # because the indices of the samples is tracked in sampled_tensordict
-            # and the replay buffer will know which priorities to update.
-            value_loss.backward()
-
-            optimizer_qnet.step()
-            optimizer_qnet.zero_grad()
-
-            # compute loss for actor and backprop: the actor must maximise the state-action value, hence the loss is the neg value of this.
-            sampled_tensordict_actor = sampled_tensordict.select(*actor.in_keys)
-            with hold_out_net(qnet):
-                qnet(actor(sampled_tensordict_actor.view(-1))).view(
-                    sampled_tensordict.shape
-                )
-            actor_loss = -sampled_tensordict_actor["state_action_value"]
-            actor_loss.view(-1)[rand_idx].mean().backward()
-
-            optimizer_actor.step()
-            optimizer_actor.zero_grad()
-
-            # update qnet_target params
-            for (p_in, p_dest) in zip(qnet.parameters(), qnet_target.parameters()):
-                p_dest.data.copy_(tau * p_in.data + (1 - tau) * p_dest.data)
-            for (b_in, b_dest) in zip(qnet.buffers(), qnet_target.buffers()):
-                b_dest.data.copy_(tau * b_in.data + (1 - tau) * b_dest.data)
-
-            # update priority
-            sampled_tensordict.batch_size = [batch_size_traj]
-            sampled_tensordict["td_error"] = advantage.detach().pow(2).mean(1)
-            sampled_tensordict["index"] = index
-            if prb:
-                replay_buffer.update_tensordict_priority(sampled_tensordict)
-
-    rewards.append(
-        (
-            i,
-            tensordict["next", "reward"].mean().item()
-            / norm_factor_training
-            / frame_skip,
-        )
-    )
-    td_record = recorder(None)
-    if td_record is not None:
-        rewards_eval.append((i, td_record["r_evaluation"].item()))
-    #     if len(rewards_eval):
-    #         pbar.set_description(f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f}), reward eval: reward: {rewards_eval[-1][1]: 4.4f}")
-
-    # update the exploration strategy
-    actor_model_explore.step(current_frames)
-    if collected_frames >= init_random_frames:
-        scheduler1.step()
-        scheduler2.step()
-
-collector.shutdown()
-del create_env_fn
-del collector
-
-###############################################################################
-# We can observe that using TD(lambda) made our results considerably more
-# stable for a similar training speed:
-#
-# **Note**: As already mentioned above, to get a more reasonable performance,
-# use a greater value for ``total_frames`` e.g. 1000000.
-
-plt.figure()
-plt.plot(*zip(*rewards), label="training")
-plt.plot(*zip(*rewards_eval), label="eval")
-plt.legend()
-plt.xlabel("iter")
-plt.ylabel("reward")
-plt.tight_layout()
-plt.title("TD-labmda DDPG results")

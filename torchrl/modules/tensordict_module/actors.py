@@ -6,7 +6,7 @@
 from typing import Optional, Sequence, Tuple, Union
 
 import torch
-from tensordict.nn import TensorDictModuleWrapper
+from tensordict.nn import get_functional, TensorDictModuleWrapper
 from torch import nn
 
 from torchrl.data.tensor_specs import (
@@ -911,6 +911,7 @@ class ActorCriticWrapper(SafeSequential):
             policy_operator,
             value_operator,
         )
+        get_functional(self)
 
     def get_policy_operator(self) -> SafeSequential:
         """Returns a stand-alone policy operator that maps an observation to an action."""

@@ -153,6 +153,10 @@ class MultiStep(nn.Module):
         """
         tensordict = tensordict.clone(False)
         done = tensordict.get(("next", "done"))
+        truncated = tensordict.get(
+            ("next", "truncated"), torch.zeros((), dtype=done.dtype, device=done.device)
+        )
+        done = done | truncated
 
         # we'll be using the done states to index the tensordict.
         # if the shapes don't match we're in trouble.
@@ -175,10 +179,6 @@ class MultiStep(nn.Module):
                         "(trailing singleton dimension excluded)."
                     ) from err
 
-        truncated = tensordict.get(
-            ("next", "truncated"), torch.zeros((), dtype=done.dtype, device=done.device)
-        )
-        done = done | truncated
         mask = tensordict.get(("collector", "mask"), None)
         reward = tensordict.get(("next", "reward"))
         *batch, T = tensordict.batch_size
