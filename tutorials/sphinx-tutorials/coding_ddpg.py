@@ -61,10 +61,8 @@ from torchrl.objectives.value import TDEstimate, TDLambdaEstimate
 warnings.filterwarnings("ignore")
 # sphinx_gallery_end_ignore
 
-from copy import deepcopy
 
 import numpy as np
-import torch
 import torch.cuda
 import tqdm
 from matplotlib import pyplot as plt
@@ -86,19 +84,16 @@ from torchrl.envs import (
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode, step_mdp
+from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     Actor,
     ActorCriticWrapper,
     MLP,
     OrnsteinUhlenbeckProcessWrapper,
-    ProbabilisticActor,
     ValueOperator,
 )
-from torchrl.modules.distributions.continuous import TanhDelta
 from torchrl.objectives.utils import (
     distance_loss,
-    hold_out_net,
     hold_out_params,
     SoftUpdate,
 )
