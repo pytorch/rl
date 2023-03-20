@@ -13,7 +13,6 @@ from tensordict.nn import make_functional
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
-from torchrl.data import CompositeSpec
 from torchrl.modules import ProbabilisticActor, SafeModule
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.utils import distance_loss, next_state_value
@@ -447,7 +446,7 @@ class DiscreteSACLoss(LossModule):
         self,
         actor_network: ProbabilisticActor,
         qvalue_network: SafeModule,
-        action_spec: CompositeSpec,
+        num_actions: int,
         num_qvalue_nets: int = 2,
         gamma: Number = 0.99,
         priotity_key: str = "td_error",
@@ -507,9 +506,7 @@ class DiscreteSACLoss(LossModule):
             )
 
         if target_entropy == "auto":
-            target_entropy = -float(
-                np.log(1.0 / action_spec["action"].shape[0]) * target_entropy_weight
-            )
+            target_entropy = -float(np.log(1.0 / num_actions) * target_entropy_weight)
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
@@ -523,9 +520,7 @@ class DiscreteSACLoss(LossModule):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
-        tensordict_select = tensordict.select(
-            "reward", "done", "next", *obs_keys, "action"
-        )
+        tensordict_select = tensordict.select("next", *obs_keys, "action")
 
         actor_params = torch.stack(
             [self.actor_network_params, self.target_actor_network_params], 0
@@ -609,14 +604,14 @@ class DiscreteSACLoss(LossModule):
         )
 
         loss_actor = -(
-            (state_action_value_actor.min(0)[0] * probs[0]).sum(1, keepdim=True)
+            (state_action_value_actor.min(0)[0] * probs[0]).sum(-1, keepdim=True)
             - self.alpha * logp_pi_pol[0]
         ).mean()
 
         pred_next_val = (
             probs[1]
             * (next_state_action_value_qvalue.min(0)[0] - self.alpha * logp_pi[1])
-        ).sum(dim=1, keepdim=True)
+        ).sum(dim=-1, keepdim=True)
 
         target_value = next_state_value(
             tensordict,
@@ -624,12 +619,13 @@ class DiscreteSACLoss(LossModule):
             pred_next_val=pred_next_val,
         )
 
-        actions = torch.where(tensordict_select["action"])[1]
+        actions = torch.argmax(tensordict_select["action"], dim=-1)
+
         pred_val_1 = (
-            state_action_value_qvalue[0].gather(1, actions[:, None]).unsqueeze(0)
+            state_action_value_qvalue[0].gather(-1, actions.unsqueeze(-1)).unsqueeze(0)
         )
         pred_val_2 = (
-            state_action_value_qvalue[1].gather(1, actions[:, None]).unsqueeze(0)
+            state_action_value_qvalue[1].gather(-1, actions.unsqueeze(-1)).unsqueeze(0)
         )
         pred_val = torch.cat([pred_val_1, pred_val_2], dim=0).squeeze()
         td_error = (pred_val - target_value.expand_as(pred_val)).pow(2)

@@ -2,6 +2,7 @@
 logger: wandb
 exp_name: discrete_sac
 record_interval: 1
+mode: online
 
 # Environment
 env_name: CartPole-v1

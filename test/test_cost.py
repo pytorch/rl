@@ -1337,14 +1337,15 @@ class TestDiscreteSAC:
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
         action_spec = OneHotDiscreteTensorSpec(action_dim)
-        net = NormalParamWrapper(nn.Linear(obs_dim, action_dim))
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
         module = SafeModule(net, in_keys=["observation"], out_keys=["logits"])
         actor = ProbabilisticActor(
+            spec=action_spec,
             module=module,
             in_keys=["logits"],
             out_keys=["action"],
-            spec=action_spec,
             distribution_class=OneHotCategorical,
+            return_log_prob=False,
         )
         return actor.to(device)
 
@@ -1352,15 +1353,15 @@ class TestDiscreteSAC:
         class ValueClass(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.linear = nn.Linear(obs_dim + action_dim, 1)
+                self.linear = nn.Linear(obs_dim, action_dim)
 
-            def forward(self, obs, act):
-                return self.linear(torch.cat([obs, act], -1))
+            def forward(self, obs):
+                return self.linear(obs)
 
         module = ValueClass()
         qvalue = ValueOperator(
             module=module,
-            in_keys=["observation", "action"],
+            in_keys=["observation"],
         )
         return qvalue.to(device)
 
@@ -1376,18 +1377,26 @@ class TestDiscreteSAC:
         obs = torch.randn(batch, obs_dim, device=device)
         next_obs = torch.randn(batch, obs_dim, device=device)
         if atoms:
-            raise NotImplementedError
+            action_value = torch.randn(batch, atoms, action_dim).softmax(-2)
+            action = (
+                (action_value[..., 0, :] == action_value[..., 0, :].max(-1, True)[0])
+                .to(torch.long)
+                .to(device)
+            )
         else:
-            action = torch.randint(high=action_dim, size=(batch, 1), device=device)
+            action_value = torch.randn(batch, action_dim, device=device)
+            action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
         reward = torch.randn(batch, 1, device=device)
         done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch,),
             source={
                 "observation": obs,
-                "next": {"observation": next_obs},
-                "done": done,
-                "reward": reward,
+                "next": {
+                    "observation": next_obs,
+                    "done": done,
+                    "reward": reward,
+                },
                 "action": action,
             },
             device=device,
@@ -1402,51 +1411,51 @@ class TestDiscreteSAC:
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
-            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
-                -1, 1
-            )
+            action_value = torch.randn(
+                batch, T, atoms, action_dim, device=device
+            ).softmax(-2)
+            action = (
+                action_value[..., 0, :] == action_value[..., 0, :].max(-1, True)[0]
+            ).to(torch.long)
         else:
-            action = torch.randint(high=action_dim, size=(batch, T, 1), device=device)
+            action_value = torch.randn(batch, T, action_dim, device=device)
+            action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
+
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = torch.ones(batch, T, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0)
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
-                "done": done,
-                "mask": mask,
-                "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "collector": {"mask": mask},
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
-            device=device,
         )
         return td
 
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
     )
-    @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
-    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("target_entropy_weight", [0.01, 0.5, 0.99])
     @pytest.mark.parametrize("target_entropy", ["auto", 1.0, 0.1, 0.0])
-    def test_sac(
+    def test_discrete_sac(
         self,
-        delay_value,
-        delay_actor,
         delay_qvalue,
         num_qvalue,
         device,
         target_entropy_weight,
         target_entropy,
     ):
-        if (delay_actor or delay_qvalue) and not delay_value:
-            pytest.skip("incompatible config")
 
         torch.manual_seed(self.seed)
         td = self._create_mock_data_sac(device=device)
@@ -1455,16 +1464,13 @@ class TestDiscreteSAC:
         qvalue = self._create_mock_qvalue(device=device)
 
         kwargs = {}
-        if delay_actor:
-            kwargs["delay_actor"] = True
         if delay_qvalue:
             kwargs["delay_qvalue"] = True
-        if delay_value:
-            kwargs["delay_value"] = True
 
         loss_fn = DiscreteSACLoss(
             actor_network=actor,
             qvalue_network=qvalue,
+            num_actions=actor.spec["action"].space.n,
             num_qvalue_nets=num_qvalue,
             gamma=0.9,
             target_entropy_weight=target_entropy_weight,
@@ -1539,16 +1545,14 @@ class TestDiscreteSAC:
         not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
     )
     @pytest.mark.parametrize("n", list(range(4)))
-    @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
-    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("target_entropy_weight", [0.01, 0.5, 0.99])
     @pytest.mark.parametrize("target_entropy", ["auto", 1.0, 0.1, 0.0])
-    def test_sac_batcher(
+    def test_discrete_sac_batcher(
         self,
         n,
-        delay_actor,
         delay_qvalue,
         num_qvalue,
         device,
@@ -1556,8 +1560,6 @@ class TestDiscreteSAC:
         target_entropy,
         gamma=0.9,
     ):
-        if delay_actor or delay_qvalue:
-            pytest.skip("incompatible config")
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_sac(device=device)
 
@@ -1565,14 +1567,12 @@ class TestDiscreteSAC:
         qvalue = self._create_mock_qvalue(device=device)
 
         kwargs = {}
-        if delay_actor:
-            kwargs["delay_actor"] = True
         if delay_qvalue:
             kwargs["delay_qvalue"] = True
-
         loss_fn = DiscreteSACLoss(
             actor_network=actor,
             qvalue_network=qvalue,
+            num_actions=actor.spec["action"].space.n,
             num_qvalue_nets=num_qvalue,
             gamma=0.9,
             loss_function="l2",
@@ -1581,7 +1581,7 @@ class TestDiscreteSAC:
             **kwargs,
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+        ms = MultiStep(gamma=gamma, n_steps=n).to(device)
 
         td_clone = td.clone()
         ms_td = ms(td_clone)
@@ -1597,7 +1597,7 @@ class TestDiscreteSAC:
             np.random.seed(0)
             loss = loss_fn(td)
         if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum([item for _, item in loss.items()])
             _loss_ms = sum([item for _, item in loss_ms.items()])
             assert (

@@ -41,6 +41,7 @@ def env_maker(env_name, frame_skip=1, device="cpu", from_pixels=False):
 def make_replay_buffer(
     prb=False,
     buffer_size=1000000,
+    batch_size=256,
     buffer_scratch_dir="/tmp/",
     device="cpu",
     make_replay_buffer=3,
@@ -50,6 +51,7 @@ def make_replay_buffer(
             alpha=0.7,
             beta=0.5,
             pin_memory=False,
+            batch_size=batch_size,
             prefetch=make_replay_buffer,
             storage=LazyMemmapStorage(
                 buffer_size,
@@ -60,6 +62,7 @@ def make_replay_buffer(
     else:
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
+            batch_size=batch_size,
             prefetch=make_replay_buffer,
             storage=LazyMemmapStorage(
                 buffer_size,
@@ -83,7 +86,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     exp_name = generate_exp_name("Discrete_SAC", cfg.exp_name)
     logger = get_logger(
-        logger_type=cfg.logger, logger_name="dSAC_logging", experiment_name=exp_name
+        logger_type=cfg.logger,
+        logger_name="dSAC_logging",
+        experiment_name=exp_name,
+        wandb_kwargs={"mode": cfg.mode},
     )
 
     torch.manual_seed(cfg.seed)
@@ -102,7 +108,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Sanity check
     test_env = env_factory(num_workers=5)
-    num_actions = test_env.specs["action_spec"].space.n
+    num_actions = test_env.action_spec.space.n
 
     # Create Agent
     # Define Actor Network
@@ -122,7 +128,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         out_keys=["logits"],
     )
     actor = ProbabilisticActor(
-        spec=CompositeSpec(action=test_env.specs["action_spec"]),
+        spec=CompositeSpec(action=test_env.action_spec),
         module=actor_module,
         in_keys=["logits"],
         out_keys=["action"],
@@ -165,7 +171,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module = DiscreteSACLoss(
         actor_network=model[0],
         qvalue_network=model[1],
-        action_spec=CompositeSpec(action=test_env.specs["action_spec"]),
+        num_actions=num_actions,
         num_qvalue_nets=2,
         gamma=cfg.gamma,
         target_entropy_weight=cfg.target_entropy_weight,
@@ -184,13 +190,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
         max_frames_per_traj=cfg.max_frames_per_traj,
         total_frames=cfg.total_frames,
         device=cfg.device,
-        passing_device=cfg.device,
     )
     collector.set_seed(cfg.seed)
 
     # Make Replay Buffer
     replay_buffer = make_replay_buffer(
-        prb=cfg.prb, buffer_size=cfg.buffer_size, device=device
+        prb=cfg.prb,
+        buffer_size=cfg.buffer_size,
+        batch_size=cfg.batch_size,
+        device=device,
     )
 
     # Optimizers
@@ -204,7 +212,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     target_net_updater.init_()
 
     collected_frames = 0
-    episodes = 0
     pbar = tqdm.tqdm(total=cfg.total_frames)
     r0 = None
     loss = None
@@ -214,8 +221,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # update weights of the inference policy
         collector.update_policy_weights_()
 
+        new_collected_epochs = len(np.unique(tensordict["collector"]["traj_ids"]))
         if r0 is None:
-            r0 = tensordict["reward"].sum(-1).mean().item()
+            r0 = (
+                tensordict["reward"].sum().item()
+                / new_collected_epochs
+                / cfg.env_per_collector
+            )
         pbar.update(tensordict.numel())
 
         # extend the replay buffer with the new data
@@ -228,7 +240,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             current_frames = tensordict.numel()
         replay_buffer.extend(tensordict.cpu())
         collected_frames += current_frames
-        episodes += torch.unique(tensordict["traj_ids"]).shape[0]
+        total_collected_epochs = tensordict["collector"]["traj_ids"].max().item()
 
         # optimization steps
         if collected_frames >= cfg.init_random_frames:
@@ -242,7 +254,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             ) = ([], [], [], [], [], [])
             for _ in range(cfg.frames_per_batch * int(cfg.utd_ratio)):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample(cfg.batch_size).clone()
+                sampled_tensordict = replay_buffer.sample().clone()
 
                 loss_td = loss_module(sampled_tensordict)
 
@@ -270,13 +282,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 entropies.append(loss_td["entropy"].item())
 
         rewards.append(
-            (i, cfg.frames_per_batch / torch.unique(tensordict["traj_ids"]).shape[0])
+            (
+                i,
+                tensordict["reward"].sum().item()
+                / cfg.env_per_collector
+                / new_collected_epochs,
+            )
         )
         metrics = {
-            "unique traj": torch.unique(tensordict["traj_ids"]).shape[0],
             "train_reward": rewards[-1][1],
             "collected_frames": collected_frames,
-            "episodes": episodes,
+            "epochs": total_collected_epochs,
         }
 
         if loss is not None:
