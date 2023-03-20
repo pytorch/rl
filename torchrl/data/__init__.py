@@ -21,6 +21,8 @@ from .tensor_specs import (
     CompositeSpec,
     DEVICE_TYPING,
     DiscreteTensorSpec,
+    LazyStackedCompositeSpec,
+    LazyStackedTensorSpec,
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
