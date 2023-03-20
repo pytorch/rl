@@ -146,7 +146,10 @@ from torchrl.trainers import Recorder
 # We also incorporate an advantage module. This will be used to compute the
 # next state value using our value network. We'll see later in this tutorial
 # how various advantage modules can be used. If none is provided, we'll
-# be using the TD(lambda) method.
+# be using the TD(lambda) method, which is usually preferable to TD(0).
+# Notice that this choice makes it necessary that the tensordict provided
+# has its last dimension representing the time span of the experiment (ie
+# our replay buffer must be populated using non-flatten data).
 #
 
 
