@@ -10,6 +10,8 @@ from typing import Optional, Union
 import numpy as np
 import pytest
 import torch
+from packaging import version
+from tensordict.tensordict import assert_allclose_td, TensorDict
 
 from _utils_internal import (
     _make_multithreaded_env,
@@ -19,8 +21,6 @@ from _utils_internal import (
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
 )
-from packaging import version
-from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
@@ -968,8 +968,16 @@ class TestVmas:
         tdreset = env.reset()
         tdrollout = env.rollout(max_steps=n_rollout_samples)
         env.close()
-        assert tdreset.batch_size == (env.n_agents, num_envs)
-        assert tdrollout.batch_size == (env.n_agents, num_envs, n_rollout_samples)
+
+        assert tdreset.batch_size == (num_envs,)
+        assert tdreset["observation"].shape[1] == env.n_agents
+        assert tdreset["done"].shape[1] == 1
+
+        assert tdrollout.batch_size == (num_envs, n_rollout_samples)
+        assert tdrollout["observation"].shape[2] == env.n_agents
+        assert tdrollout["reward"].shape[2] == env.n_agents
+        assert tdrollout["action"].shape[2] == env.n_agents
+        assert tdrollout["done"].shape[2] == 1
         del env
 
     @pytest.mark.parametrize("num_envs", [1, 20])
@@ -1007,7 +1015,7 @@ class TestVmas:
         )
         assert str(env) == (
             f"{VmasEnv.__name__}(env={env._env}, num_envs={num_envs}, n_agents={env.n_agents},"
-            f" batch_size={torch.Size((env.n_agents,num_envs))}, device={env.device}) (scenario_name={scenario_name})"
+            f" batch_size={torch.Size((num_envs,))}, device={env.device}) (scenario_name={scenario_name})"
         )
 
     @pytest.mark.parametrize("num_envs", [1, 10])
@@ -1038,7 +1046,7 @@ class TestVmas:
         tensordict = env.rollout(max_steps=n_rollout_samples)
 
         assert tensordict.shape == torch.Size(
-            [n_workers, list(env.n_agents)[0], list(env.num_envs)[0], n_rollout_samples]
+            [n_workers, list(env.num_envs)[0], n_rollout_samples]
         )
 
     @pytest.mark.parametrize("num_envs", [1, 10])
@@ -1067,11 +1075,15 @@ class TestVmas:
         env = ParallelEnv(n_workers, make_vmas)
         tensordict = env.rollout(max_steps=n_rollout_samples)
 
-        assert tensordict["next", "done"].squeeze(-1)[..., -1].all()
+        assert tensordict["next", "done"].squeeze(-1).squeeze(-1)[..., -1].all()
 
-        _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+        _reset = torch.randint(
+            low=0, high=2, size=env.done_spec.shape, dtype=torch.bool
+        )
         while not _reset.any():
-            _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+            _reset = torch.randint(
+                low=0, high=2, size=env.done_spec.shape, dtype=torch.bool
+            )
 
         tensordict = env.reset(
             TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
