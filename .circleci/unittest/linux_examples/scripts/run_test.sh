@@ -47,8 +47,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   env.num_envs=2 \
   optim.batch_size=10 \
   optim.optim_steps_per_batch=1 \
-  record.video=True \
-  record.frames=4 \
+  recorder.video=True \
+  recorder.frames=4 \
   replay_buffer.capacity=120 \
   env.from_pixels=True
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
@@ -60,8 +60,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   env.num_envs=2 \
   optim.batch_size=10 \
   optim.optim_steps_per_batch=1 \
-  record.video=True \
-  record.frames=4 \
+  recorder.video=True \
+  recorder.frames=4 \
   replay_buffer.capacity=120 \
   env.from_pixels=False
 # With single envs
@@ -74,8 +74,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   env.num_envs=1 \
   optim.batch_size=10 \
   optim.optim_steps_per_batch=1 \
-  record.video=True \
-  record.frames=4 \
+  recorder.video=True \
+  recorder.frames=4 \
   replay_buffer.capacity=120 \
   env.from_pixels=True
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
@@ -87,8 +87,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   env.num_envs=1 \
   optim.batch_size=10 \
   optim.optim_steps_per_batch=1 \
-  record.video=True \
-  record.frames=4 \
+  recorder.video=True \
+  recorder.frames=4 \
   replay_buffer.capacity=120 \
   env.from_pixels=False
 
