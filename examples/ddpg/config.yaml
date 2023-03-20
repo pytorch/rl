@@ -11,6 +11,7 @@ env:
   n_samples_stats: 1000
   noop: 1
   reward_scaling:
+  from_pixels: False
 
 # collector
 collector:
@@ -25,9 +26,9 @@ collector:
 
 # eval
 recorder:
-  record_video: True
-  record_interval: 10
-  record_frames: 10000
+  video: True
+  interval: 10000  # record interval in frames
+  frames: 10000
 
 # logger
 logger:

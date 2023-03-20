@@ -1,16 +1,9 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
-import dataclasses
 from copy import deepcopy
 
-import hydra
-import torch.cuda
-import tqdm
-from hydra.core.config_store import ConfigStore
+import torch.nn
+import torch.optim
 from tensordict.nn import TensorDictModule
+
 from torchrl.collectors import MultiaSyncDataCollector, MultiSyncDataCollector
 from torchrl.data import (
     CompositeSpec,
@@ -20,52 +13,39 @@ from torchrl.data import (
 )
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
 from torchrl.envs import (
+    CatFrames,
     CatTensors,
     DoubleToFloat,
     EnvCreator,
+    GrayScale,
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
+    Resize,
+    RewardScaling,
+    ToTensorImage,
+    TransformedEnv,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     AdditiveGaussianWrapper,
+    DdpgCnnActor,
+    DdpgCnnQNet,
     DdpgMlpActor,
     DdpgMlpQNet,
     NoisyLinear,
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
-    SafeModule,
     TanhDelta,
     ValueOperator,
 )
 from torchrl.objectives import DDPGLoss, SoftUpdate
 from torchrl.record import VideoRecorder
-from torchrl.record.loggers import generate_exp_name, get_logger, WandbLogger
-from torchrl.trainers.helpers.collectors import (
-    make_collector_offpolicy,
-    OffPolicyCollectorConfig,
-)
-from torchrl.trainers.helpers.envs import (
-    correct_for_frame_skip,
-    EnvConfig,
-    initialize_observation_norm_transforms,
-    LIBS,
-    parallel_env_constructor,
-    retrieve_observation_norms_state_dict,
-    transformed_env_constructor,
-)
-from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.losses import LossConfig, make_ddpg_loss
-from torchrl.trainers.helpers.models import (
-    ACTIVATIONS,
-    DDPGModelConfig,
-    make_ddpg_actor,
-)
-from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
-from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
+from torchrl.record.loggers import generate_exp_name, WandbLogger
+from torchrl.trainers import Recorder
+from torchrl.trainers.helpers.envs import LIBS
+from torchrl.trainers.helpers.models import ACTIVATIONS
 
 
 DEFAULT_REWARD_SCALING = {
@@ -78,11 +58,17 @@ DEFAULT_REWARD_SCALING = {
     "humanoid": 100,
 }
 
+# ====================================================================
+# Environment utils
+# -----------------
 
-def make_base_env(env_cfg, from_pixels=False):
+
+def make_base_env(env_cfg, from_pixels=None):
     env_library = LIBS[env_cfg.env_library]
     env_name = env_cfg.env_name
     frame_skip = env_cfg.frame_skip
+    if from_pixels is None:
+        from_pixels = env_cfg.from_pixels
 
     env_kwargs = {
         "env_name": env_name,
@@ -100,6 +86,56 @@ def make_base_env(env_cfg, from_pixels=False):
 
 
 def make_transformed_env(base_env, env_cfg):
+    from_pixels = env_cfg.from_pixels
+    if from_pixels:
+        return make_transformed_env_pixels(base_env, env_cfg)
+    else:
+        return make_transformed_env_states(base_env, env_cfg)
+
+
+def make_transformed_env_pixels(base_env, env_cfg):
+    if not isinstance(env_cfg.reward_scaling, float):
+        env_cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(env_cfg.env_name, 5.0)
+
+    env_library = LIBS[env_cfg.env_library]
+    env = TransformedEnv(base_env)
+
+    reward_scaling = env_cfg.reward_scaling
+
+    env.append_transform(RewardScaling(0.0, reward_scaling))
+
+    double_to_float_list = []
+    double_to_float_inv_list = []
+
+    #
+    env.append_transform(ToTensorImage())
+    env.append_transform(GrayScale())
+    env.append_transform(Resize(84, 84))
+    env.append_transform(CatFrames(N=4, dim=-3))
+
+    obs_norm = ObservationNorm(in_keys=["pixels"])
+    env.append_transform(obs_norm)
+
+    if env_library is DMControlEnv:
+        double_to_float_list += [
+            "reward",
+        ]
+        double_to_float_list += [
+            "action",
+        ]
+        double_to_float_inv_list += ["action"]  # DMControl requires double-precision
+        double_to_float_list += ["observation_vector"]
+    else:
+        double_to_float_list += ["observation_vector"]
+    env.append_transform(
+        DoubleToFloat(
+            in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
+        )
+    )
+    return env
+
+
+def make_transformed_env_states(base_env, env_cfg):
     if not isinstance(env_cfg.reward_scaling, float):
         env_cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(env_cfg.env_name, 5.0)
 
@@ -155,6 +191,29 @@ def make_parallel_env(env_cfg, state_dict):
     return env
 
 
+def get_stats(env_cfg):
+    from_pixels = env_cfg.from_pixels
+    env = make_transformed_env(make_base_env(env_cfg), env_cfg)
+    for t in env.transform:
+        if isinstance(t, ObservationNorm):
+            if from_pixels:
+                t.init_stats(
+                    env_cfg.n_samples_stats,
+                    cat_dim=-3,
+                    reduce_dim=(-1, -2, -3),
+                    keep_dims=(-1, -2, -3),
+                )
+            else:
+                t.init_stats(env_cfg.n_samples_stats)
+
+    return env.state_dict()
+
+
+# ====================================================================
+# Collector and replay buffer
+# ---------------------------
+
+
 def make_collector(cfg, state_dict, policy):
     env_cfg = cfg.env
     loss_cfg = cfg.loss
@@ -181,22 +240,6 @@ def make_collector(cfg, state_dict, policy):
     return collector
 
 
-def make_logger(logger_cfg):
-    if logger_cfg.logger_class == "wandb":
-        logger = WandbLogger(logger_cfg.exp_name)
-    else:
-        raise NotImplementedError
-    return logger
-
-
-def make_recorder(cfg, logger):
-    env_cfg = deepcopy(cfg.env)
-    env = make_transformed_env(make_base_env(env_cfg, from_pixels=True), env_cfg)
-    env.insert_transform(
-        0, VideoRecorder(logger=logger, tag=cfg.logger.exp_name, in_keys=["pixels"])
-    )
-
-
 def make_replay_buffer(rb_cfg):
     if rb_cfg.prb:
         sampler = PrioritizedSampler(max_capacity=rb_cfg.capacity, alpha=0.7, beta=0.5)
@@ -207,29 +250,34 @@ def make_replay_buffer(rb_cfg):
     )
 
 
+# ====================================================================
+# Model
+# -----
+#
+# We give one version of the model for learning from pixels, and one for state.
+# TorchRL comes in handy at this point, as the high-level interactions with
+# these models is unchanged, regardless of the modality.
+#
+
+
 def make_ddpg_model(cfg):
 
     env_cfg = cfg.env
     model_cfg = cfg.model
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
-
-    noisy = model_cfg.noisy
-
-    linear_layer_class = torch.nn.Linear if not noisy else NoisyLinear
-
     env_specs = proof_environment.specs
-    out_features = env_specs["input_spec"]["action"].shape[0]
+    from_pixels = env_cfg.from_pixels
 
-    actor_net_default_kwargs = {
-        "action_dim": out_features,
-        "mlp_net_kwargs": {
-            "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[model_cfg.activation],
-        },
-    }
-    in_keys = ["observation_vector"]
-    actor_net = DdpgMlpActor(**actor_net_default_kwargs)
-    actor_module = TensorDictModule(actor_net, in_keys=in_keys, out_keys=["param"])
+    if not from_pixels:
+        actor_net, q_net = make_ddpg_modules_state(model_cfg, proof_environment)
+        in_keys = ["observation_vector"]
+        out_keys = ["param"]
+    else:
+        actor_net, q_net = make_ddpg_modules_pixels(model_cfg, proof_environment)
+        in_keys = ["pixels"]
+        out_keys = ["param", "hidden"]
+
+    actor_module = TensorDictModule(actor_net, in_keys=in_keys, out_keys=out_keys)
 
     # We use a ProbabilisticActor to make sure that we map the
     # network output to the right space using a TanhDelta
@@ -246,29 +294,13 @@ def make_ddpg_model(cfg):
         },
     )
 
-    # Value model: DdpgMlpQNet is a specialized class that reads the state and
-    # the action and outputs a value from it. It has two sub-components that
-    # we parameterize with `mlp_net_kwargs_net1` and `mlp_net_kwargs_net2`.
-    state_class = ValueOperator
-    value_net_default_kwargs1 = {
-        "activation_class": ACTIVATIONS[model_cfg.activation],
-        "layer_class": linear_layer_class,
-        "activation_class": ACTIVATIONS[model_cfg.activation],
-        "bias_last_layer": True,
-    }
-    value_net_default_kwargs2 = {
-        "num_cells": [400, 300],
-        "activation_class": ACTIVATIONS[model_cfg.activation],
-        "bias_last_layer": True,
-        "layer_class": linear_layer_class,
-    }
-    in_keys = ["observation_vector", "action"]
+    if not from_pixels:
+        in_keys = ["observation_vector", "action"]
+    else:
+        in_keys = ["pixels", "action"]
+
     out_keys = ["state_action_value"]
-    q_net = DdpgMlpQNet(
-        mlp_net_kwargs_net1=value_net_default_kwargs1,
-        mlp_net_kwargs_net2=value_net_default_kwargs2,
-    )
-    value = state_class(
+    value = ValueOperator(
         in_keys=in_keys,
         out_keys=out_keys,
         module=q_net,
@@ -287,6 +319,74 @@ def make_ddpg_model(cfg):
     return actor, value
 
 
+def make_ddpg_modules_state(model_cfg, proof_environment):
+
+    noisy = model_cfg.noisy
+
+    linear_layer_class = torch.nn.Linear if not noisy else NoisyLinear
+
+    env_specs = proof_environment.specs
+    out_features = env_specs["input_spec"]["action"].shape[0]
+
+    actor_net_default_kwargs = {
+        "action_dim": out_features,
+        "mlp_net_kwargs": {
+            "layer_class": linear_layer_class,
+            "activation_class": ACTIVATIONS[model_cfg.activation],
+        },
+    }
+    actor_net = DdpgMlpActor(**actor_net_default_kwargs)
+
+    # Value model: DdpgMlpQNet is a specialized class that reads the state and
+    # the action and outputs a value from it. It has two sub-components that
+    # we parameterize with `mlp_net_kwargs_net1` and `mlp_net_kwargs_net2`.
+    value_net_default_kwargs1 = {
+        "layer_class": linear_layer_class,
+        "activation_class": ACTIVATIONS[model_cfg.activation],
+        "bias_last_layer": True,
+    }
+    value_net_default_kwargs2 = {
+        "num_cells": [400, 300],
+        "activation_class": ACTIVATIONS[model_cfg.activation],
+        "bias_last_layer": True,
+        "layer_class": linear_layer_class,
+    }
+    q_net = DdpgMlpQNet(
+        mlp_net_kwargs_net1=value_net_default_kwargs1,
+        mlp_net_kwargs_net2=value_net_default_kwargs2,
+    )
+    return actor_net, q_net
+
+
+def make_ddpg_modules_pixels(model_cfg, proof_environment):
+    noisy = model_cfg.noisy
+
+    linear_layer_class = torch.nn.Linear if not noisy else NoisyLinear
+
+    env_specs = proof_environment.specs
+    out_features = env_specs["input_spec"]["action"].shape[0]
+
+    actor_net_default_kwargs = {
+        "action_dim": out_features,
+        "mlp_net_kwargs": {
+            "layer_class": linear_layer_class,
+            "activation_class": ACTIVATIONS[model_cfg.activation],
+        },
+        "conv_net_kwargs": {"activation_class": ACTIVATIONS[model_cfg.activation]},
+    }
+    actor_net = DdpgCnnActor(**actor_net_default_kwargs)
+
+    value_net_default_kwargs = {
+        "mlp_net_kwargs": {
+            "layer_class": linear_layer_class,
+            "activation_class": ACTIVATIONS[model_cfg.activation],
+        }
+    }
+    q_net = DdpgCnnQNet(**value_net_default_kwargs)
+
+    return actor_net, q_net
+
+
 def make_policy(model_cfg, actor):
     if model_cfg.ou_exploration:
         return OrnsteinUhlenbeckProcessWrapper(actor)
@@ -294,12 +394,9 @@ def make_policy(model_cfg, actor):
         return AdditiveGaussianWrapper(actor)
 
 
-def get_stats(env_cfg):
-    env = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    for t in env.transform:
-        if isinstance(t, ObservationNorm):
-            t.init_stats(env_cfg.n_samples_stats)
-    return env.state_dict()
+# ====================================================================
+# DDPG Loss
+# ---------
 
 
 def make_loss(loss_cfg, actor_network, value_network):
@@ -323,56 +420,33 @@ def make_optim(optim_cfg, actor_network, value_network):
     return optim
 
 
-@hydra.main(config_path=".", config_name="config")
-def main(cfg: "DictConfig"):  # noqa: F821
-
-    cfg = correct_for_frame_skip(cfg)
-    model_device = cfg.optim.device
-
-    exp_name = generate_exp_name("DDPG", cfg.logger.exp_name)
-
-    state_dict = get_stats(cfg.env)
-    logger = make_logger(cfg.logger)
-    recorder = make_recorder(cfg, logger)
-    replay_buffer = make_replay_buffer(cfg.replay_buffer)
-
-    actor_network, value_network = make_ddpg_model(cfg)
-    actor_network = actor_network.to(model_device)
-    value_network = value_network.to(model_device)
-
-    policy = make_policy(cfg.model, actor_network)
-    collector = make_collector(cfg, state_dict=state_dict, policy=policy)
-    loss, target_net_updater = make_loss(cfg.loss, actor_network, value_network)
-    optim = make_optim(cfg.optim, actor_network, value_network)
-
-    optim_steps_per_batch = cfg.optim.optim_steps_per_batch
-    batch_size = cfg.optim.batch_size
-    init_random_frames = cfg.collector.init_random_frames
-
-    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
-    collected_frames = 0
-    for i, data in enumerate(collector):
-        collected_frames += data.numel()
-        pbar.update(data.numel())
-        # extend replay buffer
-        replay_buffer.extend(data.view(-1))
-        if collected_frames >= init_random_frames:
-            for j in range(optim_steps_per_batch):
-                # sample
-                sample = replay_buffer.sample(batch_size)
-                # loss
-                loss_vals = loss(sample)
-                # backprop
-                loss_val = sum(
-                    val for key, val in loss_vals.items() if key.startswith("loss")
-                )
-                loss_val.backward()
-                optim.step()
-                optim.zero_grad()
-                target_net_updater.step()
-                pbar.set_description(f"loss: {loss_val.item(): 4.4f}")
-            collector.update_policy_weights_()
+# ====================================================================
+# Logging and recording
+# ---------------------
 
 
-if __name__ == "__main__":
-    main()
+def make_logger(logger_cfg):
+    exp_name = generate_exp_name("DDPG", logger_cfg.exp_name)
+    logger_cfg.exp_name = exp_name
+    if logger_cfg.logger_class == "wandb":
+        logger = WandbLogger(exp_name)
+    else:
+        raise NotImplementedError
+    return logger
+
+
+def make_recorder(cfg, logger, policy) -> Recorder:
+    env_cfg = deepcopy(cfg.env)
+    env = make_transformed_env(make_base_env(env_cfg, from_pixels=True), env_cfg)
+    if cfg.recorder.video:
+        env.insert_transform(
+            0, VideoRecorder(logger=logger, tag=cfg.logger.exp_name, in_keys=["pixels"])
+        )
+    return Recorder(
+        record_interval=1,
+        record_frames=cfg.recorder.frames,
+        frame_skip=env_cfg.frame_skip,
+        policy_exploration=policy,
+        recorder=env,
+        exploration_mode="mean",
+    )

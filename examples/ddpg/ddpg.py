@@ -2,196 +2,104 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+"""DDPG Example.
 
-import dataclasses
+This is a self-contained example of a DDPG training script.
+
+It works across Gym and DM-control over a variety of tasks.
+
+Both state and pixel-based environments are supported.
+
+The helper functions are coded in the utils.py associated with this script.
+
+"""
 
 import hydra
-import torch.cuda
-from hydra.core.config_store import ConfigStore
-from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
-from torchrl.record import VideoRecorder
-from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.trainers.helpers.collectors import (
-    make_collector_offpolicy,
-    OffPolicyCollectorConfig,
+import tqdm
+from torchrl.trainers.helpers.envs import correct_for_frame_skip
+
+from utils import (
+    get_stats,
+    make_collector,
+    make_ddpg_model,
+    make_logger,
+    make_loss,
+    make_optim,
+    make_policy,
+    make_recorder,
+    make_replay_buffer,
 )
-from torchrl.trainers.helpers.envs import (
-    correct_for_frame_skip,
-    EnvConfig,
-    initialize_observation_norm_transforms,
-    parallel_env_constructor,
-    retrieve_observation_norms_state_dict,
-    transformed_env_constructor,
-)
-from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.losses import LossConfig, make_ddpg_loss
-from torchrl.trainers.helpers.models import DDPGModelConfig, make_ddpg_actor
-from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
-from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
-
-config_fields = [
-    (config_field.name, config_field.type, config_field)
-    for config_cls in (
-        TrainerConfig,
-        OffPolicyCollectorConfig,
-        EnvConfig,
-        LossConfig,
-        DDPGModelConfig,
-        LoggerConfig,
-        ReplayArgsConfig,
-    )
-    for config_field in dataclasses.fields(config_cls)
-]
-Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-cs = ConfigStore.instance()
-cs.store(name="config", node=Config)
-
-DEFAULT_REWARD_SCALING = {
-    "Hopper-v1": 5,
-    "Walker2d-v1": 5,
-    "HalfCheetah-v1": 5,
-    "cheetah": 5,
-    "Ant-v2": 5,
-    "Humanoid-v2": 20,
-    "humanoid": 100,
-}
 
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
+@hydra.main(config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
+    model_device = cfg.optim.device
 
-    if not isinstance(cfg.reward_scaling, float):
-        cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(cfg.env_name, 5.0)
+    state_dict = get_stats(cfg.env)
+    logger = make_logger(cfg.logger)
+    replay_buffer = make_replay_buffer(cfg.replay_buffer)
 
-    device = (
-        torch.device("cpu")
-        if torch.cuda.device_count() == 0
-        else torch.device("cuda:0")
-    )
+    actor_network, value_network = make_ddpg_model(cfg)
+    actor_network = actor_network.to(model_device)
+    value_network = value_network.to(model_device)
 
-    exp_name = generate_exp_name("DDPG", cfg.exp_name)
-    logger = get_logger(
-        logger_type=cfg.logger, logger_name="ddpg_logging", experiment_name=exp_name
-    )
-    video_tag = exp_name if cfg.record_video else ""
+    policy = make_policy(cfg.model, actor_network)
+    collector = make_collector(cfg, state_dict=state_dict, policy=policy)
+    loss, target_net_updater = make_loss(cfg.loss, actor_network, value_network)
+    optim = make_optim(cfg.optim, actor_network, value_network)
+    recorder = make_recorder(cfg, logger, policy)
 
-    key, init_env_steps, stats = None, None, None
-    if not cfg.vecnorm and cfg.norm_stats:
-        if not hasattr(cfg, "init_env_steps"):
-            raise AttributeError("init_env_steps missing from arguments.")
-        key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
-        init_env_steps = cfg.init_env_steps
-        stats = {"loc": None, "scale": None}
-    elif cfg.from_pixels:
-        stats = {"loc": 0.5, "scale": 0.5}
+    optim_steps_per_batch = cfg.optim.optim_steps_per_batch
+    batch_size = cfg.optim.batch_size
+    init_random_frames = cfg.collector.init_random_frames
+    record_interval = cfg.recorder.interval
 
-    proof_env = transformed_env_constructor(
-        cfg=cfg,
-        stats=stats,
-        use_env_creator=False,
-    )()
-    initialize_observation_norm_transforms(
-        proof_environment=proof_env, num_iter=init_env_steps, key=key
-    )
-    _, obs_norm_state_dict = retrieve_observation_norms_state_dict(proof_env)[0]
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    collected_frames = 0
 
-    model = make_ddpg_actor(
-        proof_env,
-        cfg=cfg,
-        device=device,
-    )
-    loss_module, target_net_updater = make_ddpg_loss(model, cfg)
+    r0 = None
+    l0 = None
+    for data in collector:
+        frames_in_batch = data.numel()
+        collected_frames += frames_in_batch
+        pbar.update(data.numel())
+        # extend replay buffer
+        replay_buffer.extend(data.view(-1))
+        if collected_frames >= init_random_frames:
+            for _ in range(optim_steps_per_batch):
+                # sample
+                sample = replay_buffer.sample(batch_size)
+                # loss
+                loss_vals = loss(sample)
+                # backprop
+                loss_val = sum(
+                    val for key, val in loss_vals.items() if key.startswith("loss")
+                )
+                loss_val.backward()
+                optim.step()
+                optim.zero_grad()
+                target_net_updater.step()
+            if r0 is None:
+                r0 = data["reward"].mean().item()
+            if l0 is None:
+                l0 = loss_val.item()
 
-    actor_model_explore = model[0]
-    if cfg.ou_exploration:
-        if cfg.gSDE:
-            raise RuntimeError("gSDE and ou_exploration are incompatible")
-        actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-            actor_model_explore,
-            annealing_num_steps=cfg.annealing_frames,
-            sigma=cfg.ou_sigma,
-            theta=cfg.ou_theta,
-        ).to(device)
-    if device == torch.device("cpu"):
-        # mostly for debugging
-        actor_model_explore.share_memory()
+            for key, value in loss_vals.item():
+                logger.log_scalar(key, value.item(), collected_frames)
+            logger.log_scalar(
+                "reward_training", data["reward"].mean().item(), collected_frames
+            )
 
-    if cfg.gSDE:
-        with torch.no_grad(), set_exploration_mode("random"):
-            # get dimensions to build the parallel env
-            proof_td = actor_model_explore(proof_env.reset().to(device))
-        action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
-        del proof_td
-    else:
-        action_dim_gsde, state_dim_gsde = None, None
-
-    proof_env.close()
-
-    create_env_fn = parallel_env_constructor(
-        cfg=cfg,
-        obs_norm_state_dict=obs_norm_state_dict,
-        action_dim_gsde=action_dim_gsde,
-        state_dim_gsde=state_dim_gsde,
-    )
-
-    collector = make_collector_offpolicy(
-        make_env=create_env_fn,
-        actor_model_explore=actor_model_explore,
-        cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device} if device >= 0 else {}
-        #     for device in args.env_rendering_devices
-        # ],
-    )
-
-    replay_buffer = make_replay_buffer(device, cfg)
-
-    recorder = transformed_env_constructor(
-        cfg,
-        video_tag=video_tag,
-        norm_obs_only=True,
-        obs_norm_state_dict=obs_norm_state_dict,
-        logger=logger,
-        use_env_creator=False,
-    )()
-    if isinstance(create_env_fn, ParallelEnv):
-        raise NotImplementedError("This behaviour is deprecated")
-    elif isinstance(create_env_fn, EnvCreator):
-        recorder.transform[1:].load_state_dict(create_env_fn().transform.state_dict())
-    elif isinstance(create_env_fn, TransformedEnv):
-        recorder.transform = create_env_fn.transform.clone()
-    else:
-        raise NotImplementedError(f"Unsupported env type {type(create_env_fn)}")
-    if logger is not None and video_tag:
-        recorder.insert_transform(0, VideoRecorder(logger=logger, tag=video_tag))
-
-    # reset reward scaling
-    for t in recorder.transform:
-        if isinstance(t, RewardScaling):
-            t.scale.fill_(1.0)
-            t.loc.fill_(0.0)
-
-    trainer = make_trainer(
-        collector,
-        loss_module,
-        recorder,
-        target_net_updater,
-        actor_model_explore,
-        replay_buffer,
-        logger,
-        cfg,
-    )
-
-    final_seed = collector.set_seed(cfg.seed)
-    print(f"init seed: {cfg.seed}, final seed: {final_seed}")
-
-    trainer.train()
-    return (logger.log_dir, trainer._log_dict)
+            pbar.set_description(
+                f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['reward'].mean(): 4.4f} (init={r0: 4.4f})"
+            )
+            collector.update_policy_weights_()
+        if (
+            collected_frames - frames_in_batch
+        ) // record_interval < collected_frames // record_interval:
+            recorder()
 
 
 if __name__ == "__main__":
