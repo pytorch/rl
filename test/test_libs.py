@@ -10,6 +10,9 @@ from typing import Optional, Union
 import numpy as np
 import pytest
 import torch
+from packaging import version
+from tensordict.tensordict import assert_allclose_td, TensorDict
+
 from _utils_internal import (
     _make_multithreaded_env,
     CARTPOLE_VERSIONED,
@@ -18,8 +21,6 @@ from _utils_internal import (
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
 )
-from packaging import version
-from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
@@ -33,7 +34,6 @@ from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs
-
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
@@ -986,7 +986,7 @@ class TestVmas:
         )
         wrapped = VmasWrapper(
             vmas.make_env(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=num_envs,
                 n_agents=n_agents,
                 continuous_actions=continuous_actions,
