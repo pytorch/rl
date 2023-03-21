@@ -8,15 +8,7 @@
 
 set -e
 
-yum makecache
-yum install -y glfw
-yum install -y glew
-yum install -y mesa-libGL
-#yum install -y mesa-libGL-devel
-yum install -y mesa-libOSMesa-devel
-yum install mesa-libGLU -y
-#yum -y install egl-utils
-#yum -y install freeglut
+apt-get update && apt-get remove swig -y && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
