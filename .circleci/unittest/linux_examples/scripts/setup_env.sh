@@ -9,6 +9,8 @@ set -e
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
+apt-get update && apt-get install -y git wget gcc g++
+
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
@@ -71,18 +73,6 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL \
   PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
 
-# Software rendering requires GLX and OSMesa.
-if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
-  yum makecache
-  yum install -y glfw
-  yum install -y glew
-  yum install -y mesa-libGL
-  yum install -y mesa-libGL-devel
-  yum install -y mesa-libOSMesa-devel
-  yum -y install egl-utils
-  yum -y install freeglut
-fi
-
 pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
@@ -90,29 +80,5 @@ conda env update --file "${this_dir}/environment.yml" --prune
 conda deactivate
 conda activate "${env_dir}"
 
-if [[ $OSTYPE != 'darwin'* ]]; then
-  # install ale-py: manylinux names are broken for CentOS so we need to manually download and
-  # rename them
-  PY_VERSION=$(python --version)
-  if [[ $PY_VERSION == *"3.7"* ]]; then
-    wget https://files.pythonhosted.org/packages/ab/fd/6615982d9460df7f476cad265af1378057eee9daaa8e0026de4cedbaffbd/ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    pip install ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    rm ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-  elif [[ $PY_VERSION == *"3.8"* ]]; then
-    wget https://files.pythonhosted.org/packages/0f/8a/feed20571a697588bc4bfef05d6a487429c84f31406a52f8af295a0346a2/ale_py-0.8.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    pip install ale_py-0.8.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    rm ale_py-0.8.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-  elif [[ $PY_VERSION == *"3.9"* ]]; then
-    wget https://files.pythonhosted.org/packages/a0/98/4316c1cedd9934f9a91b6e27a9be126043b4445594b40cfa391c8de2e5e8/ale_py-0.8.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    pip install ale_py-0.8.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    rm ale_py-0.8.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-  elif [[ $PY_VERSION == *"3.10"* ]]; then
-    wget https://files.pythonhosted.org/packages/60/1b/3adde7f44f79fcc50d0a00a0643255e48024c4c3977359747d149dc43500/ale_py-0.8.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
-    mv ale_py-0.8.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    pip install ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    rm ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-  fi
-  pip install "gymnasium[atari,accept-rom-license]"
-else
-  pip install "gymnasium[atari,accept-rom-license]"
-fi
+pip install ale-py
+pip install "gymnasium[atari,accept-rom-license]"

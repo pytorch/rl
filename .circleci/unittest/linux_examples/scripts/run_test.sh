@@ -8,7 +8,7 @@
 
 set -e
 
-apt-get update && apt-get remove swig -y && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0
+apt-get update && apt-get remove swig -y && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0 wget freeglut3 freeglut3-dev
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
