@@ -479,16 +479,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
-            batch_size = self.batch_size
-            dims = len(batch_size)
-            leading_batch_size = (
-                tensordict.batch_size[:-dims] if dims else tensordict.shape
-            )
-            expected_reset_spec = torch.Size(
-                [*leading_batch_size, *self.done_spec.shape]
-            )
-            actual_reset_shape = _reset.shape
-            if actual_reset_shape != expected_reset_spec:
+            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
                 raise RuntimeError(
                     "_reset flag in tensordict should follow env.done_spec"
                 )

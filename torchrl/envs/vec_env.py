@@ -570,6 +570,10 @@ class SerialEnv(_BatchedEnv):
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
+            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
+                raise RuntimeError(
+                    "_reset flag in tensordict should follow env.done_spec"
+                )
         else:
             _reset = torch.ones(self.done_spec.shape, dtype=torch.bool)
 
@@ -791,6 +795,10 @@ class ParallelEnv(_BatchedEnv):
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
+            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
+                raise RuntimeError(
+                    "_reset flag in tensordict should follow env.done_spec"
+                )
         else:
             _reset = torch.ones(
                 self.done_spec.shape, dtype=torch.bool, device=self.device
