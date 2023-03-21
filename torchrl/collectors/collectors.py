@@ -750,7 +750,10 @@ class SyncDataCollector(_DataCollector):
                         self._tensordict_out.lock()
 
                 self._step_and_maybe_reset()
-                if self.interruptor is not None and self.interruptor.collection_stopped():
+                if (
+                    self.interruptor is not None
+                    and self.interruptor.collection_stopped()
+                ):
                     break
 
         return self._tensordict_out

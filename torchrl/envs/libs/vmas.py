@@ -49,7 +49,7 @@ class VmasWrapper(_EnvWrapper):
     Examples:
         >>>  env = VmasWrapper(
         ...      vmas.make_env(
-        ...          scenario_name="flocking",
+        ...          scenario="flocking",
         ...          num_envs=32,
         ...          continuous_actions=True,
         ...          max_steps=200,
@@ -211,19 +211,17 @@ class VmasWrapper(_EnvWrapper):
             envs_to_reset = _reset.any(dim=0)
             for env_index, to_reset in enumerate(envs_to_reset):
                 if to_reset:
-                    self._env.reset_at(env_index)
-            done = _selective_unsqueeze(self._env.done(), batch_size=(self.num_envs,))
-            obs = []
-            infos = []
-            dones = []
-            for agent in self.agents:
-                obs.append(self.scenario.observation(agent))
-                infos.append(self.scenario.info(agent))
-                dones.append(done.clone())
-
+                    self._env.reset_at(env_index, return_observations=False)
         else:
-            obs, infos = self._env.reset(return_info=True)
-            dones = None
+            self._env.reset(return_observations=False)
+
+        obs, dones, infos = self._env.get_from_scenario(
+            get_observations=True,
+            get_infos=True,
+            get_rewards=False,
+            get_dones=True,
+        )
+        dones = _selective_unsqueeze(dones, batch_size=(self.num_envs,))
 
         agent_tds = []
         for i in range(self.n_agents):
@@ -240,8 +238,8 @@ class VmasWrapper(_EnvWrapper):
 
             if agent_info is not None:
                 agent_td.set("info", agent_info)
-            if dones is not None:
-                agent_td.set("done", dones[i])
+
+            agent_td.set("done", dones)
             agent_tds.append(agent_td)
 
         tensordict_out = torch.stack(agent_tds, dim=0)
@@ -426,7 +424,7 @@ class VmasEnv(VmasWrapper):
 
         return super()._build_env(
             env=vmas.make_env(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=num_envs,
                 device=self.device,
                 continuous_actions=continuous_actions,
