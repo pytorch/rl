@@ -30,7 +30,7 @@ from torchrl._utils import (
     prod,
     VERBOSE,
 )
-from torchrl.collectors.utils import split_trajectories
+from torchrl.collectors.utils import Queue, split_trajectories
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
@@ -1135,8 +1135,7 @@ class _MultiDataCollector(_DataCollector):
         raise NotImplementedError
 
     def _run_processes(self) -> None:
-        manager = mp.Manager()  # because mp.Queue() does not have a qsize on osx
-        queue_out = manager.Queue(self._queue_len)  # sends data from proc to main
+        queue_out = Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
         for i, (env_fun, env_fun_kwargs) in enumerate(
@@ -1222,8 +1221,7 @@ also that the state dict is synchronised across processes if needed."""
 
         for proc in self.procs:
             proc.join(10.0)
-        # queue from manager needs not be closed
-        # self.queue_out.close()
+        self.queue_out.close()
         for pipe in self.pipes:
             pipe.close()
 
@@ -1886,8 +1884,8 @@ def _main_async_collector(
     interruptor=None,
 ) -> None:
     pipe_parent.close()
-    #  init variables that will be cleared when closing
-    tensordict = data = d = data_in = dc = dc_iter = None
+    # init variables that will be cleared when closing
+    tensordict = data_in = None
 
     dc = SyncDataCollector(
         create_env_fn,
@@ -1972,7 +1970,6 @@ def _main_async_collector(
                     raise RuntimeError(
                         f"expected device to be {storing_device} but got {tensordict.device}"
                     )
-                tensordict = tensordict.clone()
                 tensordict.share_memory_()
                 data = (tensordict, idx)
             else:
