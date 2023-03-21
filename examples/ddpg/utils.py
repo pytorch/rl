@@ -194,19 +194,22 @@ def make_parallel_env(env_cfg, state_dict):
 def get_stats(env_cfg):
     from_pixels = env_cfg.from_pixels
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
+    init_stats(env, env_cfg.n_samples_stats, from_pixels)
+    return env.state_dict()
+
+
+def init_stats(env, n_samples_stats, from_pixels):
     for t in env.transform:
         if isinstance(t, ObservationNorm):
             if from_pixels:
                 t.init_stats(
-                    env_cfg.n_samples_stats,
+                    n_samples_stats,
                     cat_dim=-3,
                     reduce_dim=(-1, -2, -3),
                     keep_dims=(-1, -2, -3),
                 )
             else:
-                t.init_stats(env_cfg.n_samples_stats)
-
-    return env.state_dict()
+                t.init_stats(n_samples_stats)
 
 
 # ====================================================================
@@ -260,13 +263,13 @@ def make_replay_buffer(rb_cfg):
 #
 
 
-def make_ddpg_model(cfg, state_dict):
+def make_ddpg_model(cfg):
 
     env_cfg = cfg.env
     model_cfg = cfg.model
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
     # we must initialize the observation norm transform
-    proof_environment.load_state_dict(state_dict)
+    init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
 
     env_specs = proof_environment.specs
     from_pixels = env_cfg.from_pixels
