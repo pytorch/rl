@@ -17,13 +17,41 @@ TorchRL trainer: A DQN example
 # In this tutorial, we will be using the trainer class to train a DQN algorithm
 # to solve the CartPole task from scratch.
 #
+# Main takeaways:
+#
+# - Building a trainer with its essential components: data collector, loss
+#   module, replay buffer and optimizer.
+# - Adding hooks to a trainer, such as loggers, target network updaters and such.
+#
+# We will also focus on some other aspects of the library:
+#
+# - how to build an environment in TorchRL, including transforms (e.g. data
+#   normalization, frame concatenation, resizing and turning to grayscale)
+#   and parallel execution. Unlike what we did in the
+#   `DDPG tutorial <https://pytorch.org/rl/tutorials/coding_ddpg.html>`_, we
+#   will normalize the pixels and not the state vector.
+# - how to design a ``QValueActor``, i.e. an actor that estimates the action
+#   values and picks up the action with the highest estimated return;
+# - how to collect data from your environment efficiently and store them
+#   in a replay buffer;
+# - how to store trajectories (and not transitions) in your replay buffer),
+#   and how to estimate returns using TD(lambda);
+# - and finally how to evaluate your model.
+#
+# **Prerequisites**: We encourage you to get familiar with torchrl through the
+# `PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>`_ first.
+#
+# DQN
+# ---
+#
 # DQN (`Deep Q-Learning <https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf>`_) was
 # the founding work in deep reinforcement learning.
 #
-# On a high level, the algorithm is quite simple: Q-learning consists in learning a table of
-# state-action values in such a way that, when encountering any particular state,
-# we know which action to pick just by searching for the action with the
-# highest value. This simple setting requires the actions and states to be
+# On a high level, the algorithm is quite simple: Q-learning consists in
+# learning a table of state-action values in such a way that, when
+# encountering any particular state, we know which action to pick just by
+# searching for the action with the highest value. This simple setting
+# requires the actions and states to be
 # discrete, otherwise a lookup table cannot be built.
 #
 # DQN uses a neural network that encodes a map from the state-action space to
@@ -43,32 +71,6 @@ TorchRL trainer: A DQN example
 #
 # .. figure:: /_static/img/cartpole_demo.gif
 #    :alt: Cart Pole
-#
-# **Prerequisites**: We encourage you to get familiar with torchrl through the
-# `PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>`_ first.
-# This tutorial is more complex and full-fleshed, but it may be .
-#
-# In this tutorial, you will learn:
-#
-# - how to build an environment in TorchRL, including transforms (e.g. data
-#   normalization, frame concatenation, resizing and turning to grayscale)
-#   and parallel execution. Unlike what we did in the
-#   `DDPG tutorial <https://pytorch.org/rl/tutorials/coding_ddpg.html>`_, we
-#   will normalize the pixels and not the state vector.
-# - how to design a QValue actor, i.e. an actor that estimates the action
-#   values and picks up the action with the highest estimated return;
-# - how to collect data from your environment efficiently and store them
-#   in a replay buffer;
-# - how to store trajectories (and not transitions) in your replay buffer),
-#   and how to estimate returns using TD(lambda);
-# - how to make a module functional and use ;
-# - and finally how to evaluate your model.
-#
-# This tutorial assumes the reader is familiar with some of TorchRL
-# primitives, such as :class:`tensordict.TensorDict` and
-# :class:`tensordict.TensorDictModules`, although it
-# should be sufficiently transparent to be understood without a deep
-# understanding of these classes.
 #
 # We do not aim at giving a SOTA implementation of the algorithm, but rather
 # to provide a high-level illustration of TorchRL features in the context
@@ -120,102 +122,6 @@ def is_notebook() -> bool:
 
 
 ###############################################################################
-# Hyperparameters
-# ---------------
-#
-# Let's start with our hyperparameters. The following setting should work well
-# in practice, and the performance of the algorithm should hopefully not be
-# too sensitive to slight variations of these.
-
-device = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
-
-###############################################################################
-# Optimizer
-# ^^^^^^^^^
-
-# the learning rate of the optimizer
-lr = 2e-3
-# the beta parameters of Adam
-betas = (0.9, 0.999)
-# Optimization steps per batch collected (aka UPD or updates per data)
-n_optim = 8
-
-###############################################################################
-# DQN parameters
-# ^^^^^^^^^^^^^^
-
-###############################################################################
-# gamma decay factor
-gamma = 0.99
-
-###############################################################################
-# lambda decay factor (see second the part with TD(:math:`\lambda`)
-lmbda = 0.95
-
-###############################################################################
-# Smooth target network update decay parameter.
-# This loosely corresponds to a 1/(1-tau) interval with hard target network
-# update
-tau = 0.005
-
-###############################################################################
-# Data collection and replay buffer
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Values to be used for proper training have been commented.
-#
-# Total frames collected in the environment. In other implementations, the
-# user defines a maximum number of episodes.
-# This is harder to do with our data collectors since they return batches
-# of N collected frames, where N is a constant.
-# However, one can easily get the same restriction on number of episodes by
-# breaking the training loop when a certain number
-# episodes has been collected.
-total_frames = 5000  # 500000
-
-###############################################################################
-# Random frames used to initialize the replay buffer.
-init_random_frames = 100  # 1000
-
-###############################################################################
-# Frames in each batch collected.
-frames_per_batch = 32  # 128
-
-###############################################################################
-# Frames sampled from the replay buffer at each optimization step
-batch_size = 32  # 256
-
-###############################################################################
-# Size of the replay buffer in terms of frames
-buffer_size = min(total_frames, 100000)
-
-###############################################################################
-# Number of environments run in parallel in each data collector
-num_workers = 2  # 8
-num_collectors = 2  # 4
-
-
-###############################################################################
-# Environment and exploration
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#
-# We set the initial and final value of the epsilon factor in Epsilon-greedy
-# exploration.
-# Since our policy is deterministic, exploration is crucial: without it, the
-# only source of randomness would be the environment reset.
-
-eps_greedy_val = 0.1
-eps_greedy_val_env = 0.005
-
-###############################################################################
-# To speed up learning, we set the bias of the last layer of our value network
-# to a predefined value (this is not mandatory)
-init_bias = 2.0
-
-###############################################################################
-# **Note**: for fast rendering of the tutorial ``total_frames`` hyperparameter
-# was set to a very low number. To get a reasonable performance, use a greater
-# value e.g. 500000
-#
 # Building the environment
 # ------------------------
 #
@@ -283,7 +189,7 @@ def make_env(parallel=False, observation_norm_state_dict=None):
 
 ###############################################################################
 # Compute normalizing constants
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # To normalize images, we don't want to normalize each pixel independently
 # with a full ``[C, W, H]`` normalizing mask, but with simpler ``[C, 1, 1]``
@@ -292,16 +198,16 @@ def make_env(parallel=False, observation_norm_state_dict=None):
 # dimensions must be reduced, and the ``keep_dims`` parameter to ensure that
 # not all dimensions disappear in the process:
 
-test_env = make_env()
-test_env.transform[-1].init_stats(
+def get_norm_const():
+    test_env = make_env()
+    test_env.transform[-1].init_stats(
     num_iter=1000, cat_dim=0, reduce_dim=[-1, -2, -4], keep_dims=(-1, -2)
 )
-observation_norm_state_dict = test_env.transform[-1].state_dict()
-
-###############################################################################
-# let's check that normalizing constants have a size of ``[C, 1, 1]`` where
-# ``C=4`` (because of :class:`torchrl.envs.CatFrames`).
-print(observation_norm_state_dict)
+    observation_norm_state_dict = test_env.transform[-1].state_dict()
+    # let's check that normalizing constants have a size of ``[C, 1, 1]`` where
+    # ``C=4`` (because of :class:`torchrl.envs.CatFrames`).
+    print(observation_norm_state_dict)
+    return observation_norm_state_dict
 
 ###############################################################################
 # Building the model (Deep Q-network)
@@ -324,7 +230,7 @@ print(observation_norm_state_dict)
 # in the input :class:`tensordict.TensorDict`.
 #
 # Target parameters
-# ^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~
 #
 # Many off-policy RL algorithms use the concept of "target parameters" when it
 # comes to estimate the value of the ``t+1`` state or state-action pair.
@@ -335,7 +241,7 @@ print(observation_norm_state_dict)
 # in similar algorithms.
 #
 # Functionalizing modules
-# ^^^^^^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~~~~~~
 #
 # One of the features of torchrl is its usage of functional modules: as the
 # same architecture is often used with multiple sets of parameters (e.g.
@@ -401,40 +307,12 @@ def make_model(dummy_env):
     return factor, actor, actor_explore, params, params_target
 
 
-(
-    factor,
-    actor,
-    actor_explore,
-    params,
-    params_target,
-) = make_model(test_env)
-
-###############################################################################
-# We represent the parameters and targets as flat structures, but unflattening
-# them is quite easy:
-
-params_flat = params.flatten_keys(".")
-
-###############################################################################
-# We will be using the adam optimizer:
-
-optim = torch.optim.Adam(list(params_flat.values()), lr, betas=betas)
-
-###############################################################################
-# We create a test environment for evaluation of the policy:
-
-test_env = make_env(
-    parallel=False, observation_norm_state_dict=observation_norm_state_dict
-)
-# sanity check:
-print(actor_explore(test_env.reset()))
-
 ###############################################################################
 # Collecting and storing data
 # ---------------------------
 #
 # Replay buffers
-# ^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~
 #
 # Replay buffers play a central role in off-policy RL algorithms such as DQN.
 # They constitute the dataset we will be sampling from during training.
@@ -450,14 +328,16 @@ print(actor_explore(test_env.reset()))
 # The only requirement of this storage is that the data passed to it at write
 # time must always have the same shape.
 
-replay_buffer = TensorDictReplayBuffer(
-    storage=LazyMemmapStorage(buffer_size),
-    prefetch=n_optim,
-)
+def get_replay_buffer(buffer_size, n_optim):
+    replay_buffer = TensorDictReplayBuffer(
+        storage=LazyMemmapStorage(buffer_size),
+        prefetch=n_optim,
+    )
+    return replay_buffer
 
 ###############################################################################
 # Data collector
-# ^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~
 #
 # As in `PPO <https://pytorch.org/rl/tutorials/coding_ppo.html>` and
 # `DDPG <https://pytorch.org/rl/tutorials/coding_ddpg.html>`, we will be using
@@ -485,27 +365,157 @@ replay_buffer = TensorDictReplayBuffer(
 # out training loop must account for. For simplicity, we set the devices to
 # the same value for all sub-collectors.
 
-data_collector = MultiaSyncDataCollector(
-    # ``num_collectors`` collectors, each with an set of `num_workers` environments being run in parallel
-    [
-        make_env(
-            parallel=True, observation_norm_state_dict=observation_norm_state_dict
-        ),
-    ]
-    * num_collectors,
-    policy=actor_explore,
-    frames_per_batch=frames_per_batch,
-    total_frames=total_frames,
-    # this is the default behaviour: the collector runs in ``"random"`` (or explorative) mode
-    exploration_mode="random",
-    # We set the all the devices to be identical. Below is an example of
-    # heterogeneous devices
-    devices=[device] * num_collectors,
-    storing_devices=[device] * num_collectors,
-    # devices=[f"cuda:{i}" for i in range(1, 1 + num_collectors)],
-    # storing_devices=[f"cuda:{i}" for i in range(1, 1 + num_collectors)],
-    split_trajs=False,
+def get_collector(observation_norm_state_dict, num_collectors, actor_explore, frames_per_batch, total_frames, device):
+    data_collector = MultiaSyncDataCollector(
+        [
+            make_env(
+                parallel=True, observation_norm_state_dict=observation_norm_state_dict
+            ),
+        ]
+        * num_collectors,
+        policy=actor_explore,
+        frames_per_batch=frames_per_batch,
+        total_frames=total_frames,
+        # this is the default behaviour: the collector runs in ``"random"`` (or explorative) mode
+        exploration_mode="random",
+        # We set the all the devices to be identical. Below is an example of
+        # heterogeneous devices
+        device=device,
+        storing_device=device,
+        split_trajs=False,
+    )
+    return data_collector
+
+
+
+
+###############################################################################
+# Hyperparameters
+# ---------------
+#
+# Let's start with our hyperparameters. The following setting should work well
+# in practice, and the performance of the algorithm should hopefully not be
+# too sensitive to slight variations of these.
+
+device = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
+
+###############################################################################
+# Optimizer
+# ~~~~~~~~~
+
+# the learning rate of the optimizer
+lr = 2e-3
+# the beta parameters of Adam
+betas = (0.9, 0.999)
+# Optimization steps per batch collected (aka UPD or updates per data)
+n_optim = 8
+
+###############################################################################
+# DQN parameters
+# ~~~~~~~~~~~~~~
+
+###############################################################################
+# gamma decay factor
+gamma = 0.99
+
+###############################################################################
+# lambda decay factor (see second the part with TD(:math:`\lambda`)
+lmbda = 0.95
+
+###############################################################################
+# Smooth target network update decay parameter.
+# This loosely corresponds to a 1/(1-tau) interval with hard target network
+# update
+tau = 0.005
+
+###############################################################################
+# Data collection and replay buffer
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Values to be used for proper training have been commented.
+#
+# Total frames collected in the environment. In other implementations, the
+# user defines a maximum number of episodes.
+# This is harder to do with our data collectors since they return batches
+# of N collected frames, where N is a constant.
+# However, one can easily get the same restriction on number of episodes by
+# breaking the training loop when a certain number
+# episodes has been collected.
+total_frames = 5000  # 500000
+
+###############################################################################
+# Random frames used to initialize the replay buffer.
+init_random_frames = 100  # 1000
+
+###############################################################################
+# Frames in each batch collected.
+frames_per_batch = 32  # 128
+
+###############################################################################
+# Frames sampled from the replay buffer at each optimization step
+batch_size = 32  # 256
+
+###############################################################################
+# Size of the replay buffer in terms of frames
+buffer_size = min(total_frames, 100000)
+
+###############################################################################
+# Number of environments run in parallel in each data collector
+num_workers = 2  # 8
+num_collectors = 2  # 4
+
+
+###############################################################################
+# Environment and exploration
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# We set the initial and final value of the epsilon factor in Epsilon-greedy
+# exploration.
+# Since our policy is deterministic, exploration is crucial: without it, the
+# only source of randomness would be the environment reset.
+
+eps_greedy_val = 0.1
+eps_greedy_val_env = 0.005
+
+###############################################################################
+# To speed up learning, we set the bias of the last layer of our value network
+# to a predefined value (this is not mandatory)
+init_bias = 2.0
+
+###############################################################################
+# .. note::
+#   For fast rendering of the tutorial ``total_frames`` hyperparameter
+#   was set to a very low number. To get a reasonable performance, use a greater
+#   value e.g. 500000
+#
+
+
+(
+    factor,
+    actor,
+    actor_explore,
+    params,
+    params_target,
+) = make_model(test_env)
+
+###############################################################################
+# We represent the parameters and targets as flat structures, but unflattening
+# them is quite easy:
+
+params_flat = params.flatten_keys(".")
+
+###############################################################################
+# We will be using the adam optimizer:
+
+optim = torch.optim.Adam(list(params_flat.values()), lr, betas=betas)
+
+###############################################################################
+# We create a test environment for evaluation of the policy:
+
+test_env = make_env(
+    parallel=False, observation_norm_state_dict=observation_norm_state_dict
 )
+# sanity check:
+print(actor_explore(test_env.reset()))
 
 ###############################################################################
 # Training loop of a regular DQN
