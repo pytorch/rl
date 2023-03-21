@@ -42,7 +42,7 @@ from torchrl.modules import (
 )
 from torchrl.objectives import DDPGLoss, SoftUpdate
 from torchrl.record import VideoRecorder
-from torchrl.record.loggers import generate_exp_name, WandbLogger
+from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers import Recorder
 from torchrl.trainers.helpers.envs import LIBS
 from torchrl.trainers.helpers.models import ACTIVATIONS
@@ -428,10 +428,9 @@ def make_optim(optim_cfg, actor_network, value_network):
 def make_logger(logger_cfg):
     exp_name = generate_exp_name("DDPG", logger_cfg.exp_name)
     logger_cfg.exp_name = exp_name
-    if logger_cfg.logger_class == "wandb":
-        logger = WandbLogger(exp_name)
-    else:
-        raise NotImplementedError
+    logger = get_logger(
+        logger_cfg.backend, logger_name="ddpg", experiment_name=exp_name
+    )
     return logger
 
 

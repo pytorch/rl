@@ -32,7 +32,7 @@ recorder:
 
 # logger
 logger:
-  logger_class: wandb
+  backend: wandb
   exp_name: ddpg_cheetah_gym
 
 # Buffer

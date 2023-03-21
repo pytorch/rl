@@ -38,19 +38,6 @@ python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_
 # Batched on/off
 #
 # With batched environments
-#python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
-#  collector.total_frames=48 \
-#  collector.init_random_frames=10 \
-#  collector.frames_per_batch=16 \
-#  collector.num_collectors=4 \
-#  collector.collector_devices=cuda:0 \
-#  env.num_envs=2 \
-#  optim.batch_size=10 \
-#  optim.optim_steps_per_batch=1 \
-#  recorder.video=True \
-#  recorder.frames=4 \
-#  replay_buffer.capacity=120 \
-#  env.from_pixels=True
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -63,21 +50,23 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   recorder.video=True \
   recorder.frames=4 \
   replay_buffer.capacity=120 \
-  env.from_pixels=False
+  env.from_pixels=False \
+  logger.backend=csv
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  collector.num_collectors=4 \
+  collector.collector_devices=cuda:0 \
+  env.num_envs=2 \
+  optim.batch_size=10 \
+  optim.optim_steps_per_batch=1 \
+  recorder.video=True \
+  recorder.frames=4 \
+  replay_buffer.capacity=120 \
+  env.from_pixels=True \
+  logger.backend=csv
 # With single envs
-#python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
-#  collector.total_frames=48 \
-#  collector.init_random_frames=10 \
-#  collector.frames_per_batch=16 \
-#  collector.num_collectors=4 \
-#  collector.collector_devices=cuda:0 \
-#  env.num_envs=1 \
-#  optim.batch_size=10 \
-#  optim.optim_steps_per_batch=1 \
-#  recorder.video=True \
-#  recorder.frames=4 \
-#  replay_buffer.capacity=120 \
-#  env.from_pixels=True
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -90,7 +79,22 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   recorder.video=True \
   recorder.frames=4 \
   replay_buffer.capacity=120 \
-  env.from_pixels=False
+  env.from_pixels=False \
+  logger.backend=csv
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  collector.num_collectors=4 \
+  collector.collector_devices=cuda:0 \
+  env.num_envs=1 \
+  optim.batch_size=10 \
+  optim.optim_steps_per_batch=1 \
+  recorder.video=True \
+  recorder.frames=4 \
+  replay_buffer.capacity=120 \
+  env.from_pixels=True \
+  logger.backend=csv
 
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c.py \
   total_frames=48 \
