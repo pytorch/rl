@@ -21,7 +21,7 @@ try:
     import d4rl, gym  # noqa
 
     _has_d4rl = True
-except ModuleNotFoundError as err:
+except Exception as err:
     _has_d4rl = False
     D4RL_ERR = err
 
