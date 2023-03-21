@@ -1,16 +1,25 @@
 # -*- coding: utf-8 -*-
 """
-Coding a pixel-based DQN using TorchRL
-======================================
+TorchRL trainer: A DQN example
+==============================
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
 """
 
 ##############################################################################
-# This tutorial will guide you through the steps to code DQN to solve the
-# CartPole task from scratch. DQN
-# (`Deep Q-Learning <https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf>`_) was
+# TorchRL provides a generic :class:`torchrl.trainers.Trainer` class to handle
+# your training loop. The trainer executes a nested loop where the outer loop
+# is the data collection and the inner loop consumes this data or some data
+# retrieved from the replay buffer to train the model.
+# At various points in this training loop, hooks can be attached and executed at
+# given intervals.
+#
+# In this tutorial, we will be using the trainer class to train a DQN algorithm
+# to solve the CartPole task from scratch.
+#
+# DQN (`Deep Q-Learning <https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf>`_) was
 # the founding work in deep reinforcement learning.
+#
 # On a high level, the algorithm is quite simple: Q-learning consists in learning a table of
 # state-action values in such a way that, when encountering any particular state,
 # we know which action to pick just by searching for the action with the
