@@ -767,7 +767,7 @@ class SyncDataCollector(_DataCollector):
             if prod(self.env.batch_size) == 0:
                 raise RuntimeError("resetting unique env with index is not permitted.")
             _reset = torch.zeros(
-                self.env.batch_size,
+                self.env.done_spec.shape,
                 dtype=torch.bool,
                 device=self.env.device,
             )
