@@ -693,7 +693,7 @@ class SyncDataCollector(_DataCollector):
             # to `reset()`.
             if len(self.env.batch_size):
                 self._tensordict.masked_fill_(done_or_terminated, 0)
-                _reset = done_or_terminated
+                _reset = done_or_terminated.unsqueeze(-1)
                 td_reset = self._tensordict.select().set("_reset", _reset)
             else:
                 _reset = None
@@ -750,7 +750,10 @@ class SyncDataCollector(_DataCollector):
                         self._tensordict_out.lock()
 
                 self._step_and_maybe_reset()
-                if self.interruptor is not None and self.interruptor.collection_stopped():
+                if (
+                    self.interruptor is not None
+                    and self.interruptor.collection_stopped()
+                ):
                     break
 
         return self._tensordict_out

@@ -17,6 +17,7 @@ from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right
 from torch import nn, Tensor
+
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -1718,18 +1719,21 @@ class CatFrames(ObservationTransform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
-        _reset = tensordict.get(
-            "_reset",
-            None,
-        )
-        if _reset is None:
-            _reset = torch.ones(
-                tensordict.batch_size,
-                dtype=torch.bool,
-                device=tensordict.device
-                if tensordict.device is not None
-                else torch.device("cpu"),
+        _reset = (
+            tensordict.get(
+                "_reset",
+                torch.ones(
+                    self.parent.done_spec.shape,
+                    dtype=torch.bool,
+                    device=tensordict.device
+                    if tensordict.device is not None
+                    else torch.device("cpu"),
+                ),
             )
+            .view(tensordict.batch_size, -1)
+            .any(-1)
+        )
+
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
             buffer = getattr(self, buffer_name)
@@ -1764,6 +1768,7 @@ class CatFrames(ObservationTransform):
                 buffer = self._make_missing_buffer(data, buffer_name)
             # shift obs 1 position to the right
             if self._just_reset or (_reset is not None and _reset.any()):
+                _reset = _reset.view(tensordict.batch_size, -1).any(-1)
                 data_in = buffer[_reset]
                 shape = [1 for _ in data_in.shape]
                 shape[self.dim] = self.N
@@ -2876,13 +2881,17 @@ class RewardSum(Transform):
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets episode rewards."""
         # Non-batched environments
-        _reset = tensordict.get(
-            "_reset",
-            torch.ones(
-                tensordict.batch_size,
-                dtype=torch.bool,
-                device=tensordict.device,
-            ),
+        _reset = (
+            tensordict.get(
+                "_reset",
+                torch.ones(
+                    self.parent.done_spec.shape,
+                    dtype=torch.bool,
+                    device=tensordict.device,
+                ),
+            )
+            .view(tensordict.batch_size, -1)
+            .any(-1)
         )
         if _reset.any():
             for in_key, out_key in zip(self.in_keys, self.out_keys):
@@ -3005,7 +3014,7 @@ class StepCounter(Transform):
         _reset = tensordict.get(
             "_reset",
             # TODO: decide if using done here, or using a default `True` tensor
-            default=torch.ones_like(done.squeeze(-1)),
+            default=torch.ones_like(done),
         )
         step_count = tensordict.get(
             "step_count",
@@ -3017,6 +3026,7 @@ class StepCounter(Transform):
                 dtype=torch.int64,
                 device=tensordict.device,
             )
+        _reset = _reset.view(tensordict.batch_size, -1).any(-1)
         step_count[_reset] = 0
         tensordict.set(
             "step_count",
@@ -3229,7 +3239,7 @@ class TimeMaxPool(Transform):
             _reset = tensordict.get(
                 "_reset",
                 torch.ones(
-                    tensordict.batch_size,
+                    self.parent.done_spec.shape,
                     dtype=torch.bool,
                     device=tensordict.device,
                 ),
@@ -3239,6 +3249,7 @@ class TimeMaxPool(Transform):
                 buffer = getattr(self, buffer_name)
                 if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
                     continue
+                _reset = _reset.view(tensordict.batch_size, -1).any(-1)
                 buffer[:, _reset] = 0.0
 
         return tensordict
