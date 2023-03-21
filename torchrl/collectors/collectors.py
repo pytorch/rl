@@ -1474,7 +1474,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             i += 1
             max_traj_idx = None
 
-            if self.interrupter is not None and self.interrupter < 1.0:
+            if self.interrupter is not None and self.preemptive_threshold < 1.0:
                 self.interrupter.start_collection()
                 while self.queue_out.qsize() < int(
                     self.num_workers * self.preemptive_threshold
