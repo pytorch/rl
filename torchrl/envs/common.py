@@ -712,7 +712,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 exclude_action=False,
             )
             if not break_when_any_done and done.any():
-                _reset = done
+                _reset = done.clone()
                 tensordict.set("_reset", _reset)
                 self.reset(tensordict)
 
