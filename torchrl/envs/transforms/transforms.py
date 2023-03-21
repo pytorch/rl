@@ -1730,7 +1730,7 @@ class CatFrames(ObservationTransform):
                     else torch.device("cpu"),
                 ),
             )
-            .view(tensordict.batch_size, -1)
+            .view(*tensordict.batch_size, -1)
             .any(-1)
         )
 
@@ -1757,6 +1757,8 @@ class CatFrames(ObservationTransform):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
         _reset = tensordict.get("_reset", None)
+        if _reset is not None:
+            _reset = _reset.view(*tensordict.batch_size, -1).any(-1)
 
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             # Lazy init of buffers
@@ -1768,7 +1770,6 @@ class CatFrames(ObservationTransform):
                 buffer = self._make_missing_buffer(data, buffer_name)
             # shift obs 1 position to the right
             if self._just_reset or (_reset is not None and _reset.any()):
-                _reset = _reset.view(tensordict.batch_size, -1).any(-1)
                 data_in = buffer[_reset]
                 shape = [1 for _ in data_in.shape]
                 shape[self.dim] = self.N
@@ -2890,7 +2891,7 @@ class RewardSum(Transform):
                     device=tensordict.device,
                 ),
             )
-            .view(tensordict.batch_size, -1)
+            .view(*tensordict.batch_size, -1)
             .any(-1)
         )
         if _reset.any():
@@ -3026,7 +3027,7 @@ class StepCounter(Transform):
                 dtype=torch.int64,
                 device=tensordict.device,
             )
-        _reset = _reset.view(tensordict.batch_size, -1).any(-1)
+        _reset = _reset.view(*tensordict.batch_size, -1).any(-1)
         step_count[_reset] = 0
         tensordict.set(
             "step_count",
@@ -3249,7 +3250,7 @@ class TimeMaxPool(Transform):
                 buffer = getattr(self, buffer_name)
                 if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
                     continue
-                _reset = _reset.view(tensordict.batch_size, -1).any(-1)
+                _reset = _reset.view(*tensordict.batch_size, -1).any(-1)
                 buffer[:, _reset] = 0.0
 
         return tensordict

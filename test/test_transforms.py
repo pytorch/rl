@@ -11,6 +11,9 @@ from functools import partial
 import numpy as np
 import pytest
 import torch
+from tensordict.tensordict import TensorDict, TensorDictBase
+from torch import multiprocessing as mp, nn, Tensor
+
 from _utils_internal import (  # noqa
     dtype_fixture,
     get_available_devices,
@@ -26,8 +29,6 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
 )
-from tensordict.tensordict import TensorDict, TensorDictBase
-from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import prod
 from torchrl.data import (
     BoundedTensorSpec,
@@ -1046,7 +1047,7 @@ class TestStepCounter(TransformBase):
         td = TensorDict({"done": done, ("next", "done"): done}, batch, device=device)
         _reset = torch.zeros((), dtype=torch.bool, device=device)
         while not _reset.any() and reset_workers:
-            _reset = torch.randn(batch, device=device) < 0
+            _reset = torch.randn(done.shape, device=device) < 0
             td.set("_reset", _reset)
             td.set("done", _reset)
             td.set(("next", "done"), done)
@@ -1071,8 +1072,9 @@ class TestStepCounter(TransformBase):
             assert torch.all(td.get("truncated"))
         td = step_counter.reset(td)
         if reset_workers:
-            assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
-            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
+
+            assert torch.all(torch.masked_select(td.get("step_count"), _reset.view(*td.batch_size,-1).any(-1)) == 0)
+            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset.view(*td.batch_size,-1).any(-1)) == i)
         else:
             assert torch.all(td.get("step_count") == 0)
 
