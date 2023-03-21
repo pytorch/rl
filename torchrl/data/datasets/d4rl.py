@@ -127,7 +127,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         else:
             dataset = self._get_dataset_direct(name, env_kwargs)
         # Fill unknown next states with 0
-        # dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0
+        dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0
 
         if split_trajs:
             dataset = split_trajectories(dataset)
@@ -187,7 +187,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         # let's make sure that the dtypes match what's expected
         for key, spec in env.observation_spec.items(True, True):
             dataset[key] = dataset[key].to(spec.dtype)
-            dataset["next", key] = dataset["next", key].to(spec.dtype)
+            dataset["next", key] = dataset["next", key].to(spec.dtype).clone()
         for key, spec in env.input_spec.items(True, True):
             dataset[key] = dataset[key].to(spec.dtype)
         dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
@@ -265,7 +265,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset = dataset[:-1].set(
             "next",
-            dataset.select("observation", "info", strict=False)[1:],
+            dataset.select("observation", "info", strict=False)[1:].clone(),
         )
         dataset["next"].update(
             dataset.select("reward", "done", "terminal", "timeout", strict=False)
