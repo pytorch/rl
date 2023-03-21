@@ -3015,18 +3015,17 @@ class StepCounter(Transform):
         )
         if step_count is None:
             step_count = torch.zeros(
-                tensordict.batch_size,
+                self.parent.done_spec.shape,
                 dtype=torch.int64,
                 device=tensordict.device,
             )
-        _reset = _reset.view(*tensordict.batch_size, -1).any(-1)
         step_count[_reset] = 0
         tensordict.set(
             "step_count",
             step_count,
         )
         if self.max_steps is not None:
-            truncated = (step_count >= self.max_steps).unsqueeze(-1)
+            truncated = step_count >= self.max_steps
             tensordict.set(self.truncated_key, truncated)
         return tensordict
 
@@ -3038,7 +3037,7 @@ class StepCounter(Transform):
         next_step_count = step_count + 1
         tensordict.set(("next", "step_count"), next_step_count)
         if self.max_steps is not None:
-            truncated = (next_step_count >= self.max_steps).unsqueeze(-1)
+            truncated = next_step_count >= self.max_steps
             tensordict.set(("next", self.truncated_key), truncated)
         return tensordict
 
@@ -3050,7 +3049,7 @@ class StepCounter(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=observation_spec.shape,
+            shape=self.parent.done_spec.shape,
             dtype=torch.int64,
             device=observation_spec.device,
         )
@@ -3067,7 +3066,7 @@ class StepCounter(Transform):
                 f"input_spec was expected to be of type CompositeSpec. Got {type(input_spec)} instead."
             )
         input_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=input_spec.shape,
+            shape=self.parent.done_spec.shape,
             dtype=torch.int64,
             device=input_spec.device,
         )
