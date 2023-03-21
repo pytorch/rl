@@ -79,20 +79,14 @@ TorchRL trainer: A DQN example
 if __name__ == "__main__":
     # sphinx_gallery_start_ignore
     import warnings
-    from collections import defaultdict
 
-    from torchrl.objectives import DQNLoss
-    from torchrl.trainers import Trainer
+    from torchrl.objectives import DQNLoss, SoftUpdate
+    from torchrl.trainers import Trainer, ReplayBufferTrainer, UpdateWeights
 
     warnings.filterwarnings("ignore")
     # sphinx_gallery_end_ignore
 
     import torch
-    import tqdm
-    from functorch import vmap
-    from matplotlib import pyplot as plt
-    from tensordict import TensorDict
-    from tensordict.nn import get_functional
     from torch import nn
     from torchrl.collectors import MultiaSyncDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
@@ -100,7 +94,6 @@ if __name__ == "__main__":
     from torchrl.envs.libs.gym import GymEnv
     from torchrl.envs.transforms import (
         CatFrames,
-        CatTensors,
         Compose,
         GrayScale,
         ObservationNorm,
@@ -108,7 +101,6 @@ if __name__ == "__main__":
         ToTensorImage,
         TransformedEnv,
     )
-    from torchrl.envs.utils import set_exploration_mode, step_mdp
     from torchrl.modules import DuelingCnnDQNet, EGreedyWrapper, QValueActor
 
 
@@ -137,11 +129,12 @@ if __name__ == "__main__":
     #   of vectorization of the operations on device, although this would
     #   technically work with every single environment attached to its own set of
     #   transforms.
-    # - ``observation_norm_state_dict`` will contain the normalizing constants for
-    #   the :class:`torchrl.envs.ObservationNorm` tranform.
+    # - ``obs_norm_sd`` will contain the normalizing constants for
+    #   the :class:`torchrl.envs.ObservationNorm` transform.
     #
     # We will be using five transforms:
     #
+    # - :class:`torchrl.envs.StepCounter` to count the number of steps in each trajectory;
     # - :class:`torchrl.envs.ToTensorImage` will convert a ``[W, H, C]`` uint8
     #   tensor in a floating point tensor in the ``[0, 1]`` space with shape
     #   ``[C, W, H]``;
@@ -159,21 +152,21 @@ if __name__ == "__main__":
     #
 
 
-    def make_env(parallel=False, observation_norm_state_dict=None, frame_skip=1):
-        if observation_norm_state_dict is None:
-            observation_norm_state_dict = {"standard_normal": True}
+    def make_env(parallel=False, obs_norm_sd=None, ):
+        if obs_norm_sd is None:
+            obs_norm_sd = {"standard_normal": True}
         if parallel:
             base_env = ParallelEnv(
                 num_workers,
                 EnvCreator(
                     lambda: GymEnv(
-                        "CartPole-v1", from_pixels=True, pixels_only=True, device=device, frame_skip=frame_skip
+                        "CartPole-v1", from_pixels=True, pixels_only=True, device=device,
                     )
                 ),
             )
         else:
             base_env = GymEnv(
-                "CartPole-v1", from_pixels=True, pixels_only=True, device=device, frame_skip=frame_skip,
+                "CartPole-v1", from_pixels=True, pixels_only=True, device=device,
             )
 
         env = TransformedEnv(
@@ -185,7 +178,7 @@ if __name__ == "__main__":
                 GrayScale(),
                 Resize(64, 64),
                 CatFrames(4, in_keys=["pixels"], dim=-3),
-                ObservationNorm(in_keys=["pixels"], **observation_norm_state_dict),
+                ObservationNorm(in_keys=["pixels"], **obs_norm_sd),
             ),
         )
         return env
@@ -197,21 +190,23 @@ if __name__ == "__main__":
     #
     # To normalize images, we don't want to normalize each pixel independently
     # with a full ``[C, W, H]`` normalizing mask, but with simpler ``[C, 1, 1]``
-    # shaped loc and scale parameters. We will be using the ``reduce_dim`` argument
+    # shaped set of normalizing constants (loc and scale parameters).
+    # We will be using the ``reduce_dim`` argument
     # of :func:`torchrl.envs.ObservationNorm.init_stats` to instruct which
     # dimensions must be reduced, and the ``keep_dims`` parameter to ensure that
     # not all dimensions disappear in the process:
+    #
 
     def get_norm_stats():
         test_env = make_env()
         test_env.transform[-1].init_stats(
         num_iter=1000, cat_dim=0, reduce_dim=[-1, -2, -4], keep_dims=(-1, -2)
     )
-        observation_norm_state_dict = test_env.transform[-1].state_dict()
+        obs_norm_sd = test_env.transform[-1].state_dict()
         # let's check that normalizing constants have a size of ``[C, 1, 1]`` where
         # ``C=4`` (because of :class:`torchrl.envs.CatFrames`).
-        print(observation_norm_state_dict)
-        return observation_norm_state_dict
+        print(obs_norm_sd)
+        return obs_norm_sd
 
     ###############################################################################
     # Building the model (Deep Q-network)
@@ -229,20 +224,10 @@ if __name__ == "__main__":
     # where :math:`b` is a :math:`\# obs \rightarrow 1` function and :math:`v` is a
     # :math:`\# obs \rightarrow num_actions` function.
     #
-    # Our network is wrapped in a :class:`torchrl.modules.QValueActor`, which will read the state-action
+    # Our network is wrapped in a :class:`torchrl.modules.QValueActor`,
+    # which will read the state-action
     # values, pick up the one with the maximum value and write all those results
     # in the input :class:`tensordict.TensorDict`.
-    #
-    # Target parameters
-    # ~~~~~~~~~~~~~~~~~
-    #
-    # Many off-policy RL algorithms use the concept of "target parameters" when it
-    # comes to estimate the value of the ``t+1`` state or state-action pair.
-    # The target parameters are lagged copies of the model parameters. Because
-    # their predictions mismatch those of the current model configuration, they
-    # help learning by putting a pessimistic bound on the value being estimated.
-    # This is a powerful trick (known as "Double Q-Learning") that is ubiquitous
-    # in similar algorithms.
     #
 
     def make_model(dummy_env):
@@ -344,11 +329,11 @@ if __name__ == "__main__":
     # out training loop must account for. For simplicity, we set the devices to
     # the same value for all sub-collectors.
 
-    def get_collector(observation_norm_state_dict, num_collectors, actor_explore, frames_per_batch, total_frames, device):
+    def get_collector(obs_norm_sd, num_collectors, actor_explore, frames_per_batch, total_frames, device):
         data_collector = MultiaSyncDataCollector(
             [
                 make_env(
-                    parallel=True, observation_norm_state_dict=observation_norm_state_dict
+                    parallel=True, obs_norm_sd=obs_norm_sd
                 ),
             ]
             * num_collectors,
@@ -365,8 +350,29 @@ if __name__ == "__main__":
         )
         return data_collector
 
+    ###############################################################################
+    # Loss function
+    # -------------
+    #
+    # Building our loss function is straightforward: we only need to provide
+    # the model and a bunch of hyperparameters to the DQNLoss class.
+    #
+    # Target parameters
+    # ~~~~~~~~~~~~~~~~~
+    #
+    # Many off-policy RL algorithms use the concept of "target parameters" when it
+    # comes to estimate the value of the next state or state-action pair.
+    # The target parameters are lagged copies of the model parameters. Because
+    # their predictions mismatch those of the current model configuration, they
+    # help learning by putting a pessimistic bound on the value being estimated.
+    # This is a powerful trick (known as "Double Q-Learning") that is ubiquitous
+    # in similar algorithms.
+    #
 
-
+    def get_loss_module(actor, gamma):
+        loss_module = DQNLoss(actor, gamma=gamma, delay_value=True)
+        target_updater = SoftUpdate(loss_module)
+        return loss_module, target_updater
 
     ###############################################################################
     # Hyperparameters
@@ -469,26 +475,49 @@ if __name__ == "__main__":
     #   value e.g. 500000
     #
 
-    def get_trainer():
-        stats = get_norm_stats()
-        test_env = make_env(parallel=False, observation_norm_state_dict=stats)
-        # Get model
-        actor, actor_explore = make_model(test_env)
-        loss_module = DQNLoss(actor, gamma=0.99)
-        collector = get_collector(stats, num_collectors, actor_explore, frames_per_batch, total_frames, device)
-        optimizer = torch.optim.Adam(loss_module.parameters(), lr=lr, weight_decay=wd, betas=betas)
-        trainer = Trainer(
-                    collector=collector,
-            total_frames=total_frames,
-            frame_skip=1,
-            loss_module=loss_module,
-            optimizer=optimizer,
-            logger=None,
-            optim_steps_per_batch = n_optim,
-        )
-        return trainer
+    ###############################################################################
+    # Building a Trainer
+    # ------------------
+    #
+    # TorchRL's :class:`torchrl.trainers.Trainer` class constructor takes the
+    # following keyword-only arguments:
+    #
+    # - ``collector``
+    # - ``loss_module``
+    # - ``optimizer``
+    # - ``logger``: A logger can be
+    # - ``total_frames``: this parameter defines the lifespan of the trainer.
+    # - ``frame_skip``: when a frame-skip is used, the collector must be made
+    #   aware of it in order to accurately count the number of frames
+    #   collected etc. Making the trainer aware of this parameter is not
+    #   mandatory but helps to have a fairer comparison between settings where
+    #   the total number of frames (budget) is fixed but the frame-skip is
+    #   variable.
 
-    trainer = get_trainer()
+    stats = get_norm_stats()
+    test_env = make_env(parallel=False, obs_norm_sd=stats)
+    # Get model
+    actor, actor_explore = make_model(test_env)
+    loss_module, target_net_updater = get_loss_module(actor, gamma)
+    collector = get_collector(stats, num_collectors, actor_explore, frames_per_batch, total_frames, device)
+    optimizer = torch.optim.Adam(loss_module.parameters(), lr=lr, weight_decay=wd, betas=betas)
+    trainer = Trainer(
+                collector=collector,
+        total_frames=total_frames,
+        frame_skip=1,
+        loss_module=loss_module,
+        optimizer=optimizer,
+        logger=None,
+        optim_steps_per_batch = n_optim,
+    )
+
+    buffer_hook = ReplayBufferTrainer(get_replay_buffer(buffer_size, n_optim))
+    buffer_hook.register(trainer)
+    weight_updater = UpdateWeights(collector, update_weights_interval=1)
+    weight_updater.register(trainer)
+
+    trainer.register_op("post_optim", target_net_updater.step)
+
     trainer.train()
 
     # ###############################################################################
@@ -506,7 +535,7 @@ if __name__ == "__main__":
     # # We create a test environment for evaluation of the policy:
     #
     # test_env = make_env(
-    #     parallel=False, observation_norm_state_dict=observation_norm_state_dict
+    #     parallel=False, obs_norm_sd=obs_norm_sd
     # )
     # # sanity check:
     # print(actor_explore(test_env.reset()))
@@ -744,7 +773,7 @@ if __name__ == "__main__":
     #
     # optim = torch.optim.Adam(list(params_flat.values()), lr, betas=betas)
     # test_env = make_env(
-    #     parallel=False, observation_norm_state_dict=observation_norm_state_dict
+    #     parallel=False, obs_norm_sd=obs_norm_sd
     # )
     # print(actor_explore(test_env.reset()))
     #
@@ -765,7 +794,7 @@ if __name__ == "__main__":
     # data_collector = MultiaSyncDataCollector(
     #     [
     #         make_env(
-    #             parallel=True, observation_norm_state_dict=observation_norm_state_dict
+    #             parallel=True, obs_norm_sd=obs_norm_sd
     #         ),
     #     ]
     #     * num_collectors,

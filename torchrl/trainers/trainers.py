@@ -95,17 +95,16 @@ class Trainer:
         optimizer (optim.Optimizer): An optimizer that trains the parameters
             of the model.
         logger (Logger, optional): a Logger that will handle the logging.
-        optim_steps_per_batch (int, optional): number of optimization steps
+        optim_steps_per_batch (int): number of optimization steps
             per collection of data. An trainer works as follows: a main loop
             collects batches of data (epoch loop), and a sub-loop (training
             loop) performs model updates in between two collections of data.
-            Default is 500
         clip_grad_norm (bool, optional): If True, the gradients will be clipped
             based on the total norm of the model parameters. If False,
             all the partial derivatives will be clamped to
             (-clip_norm, clip_norm). Default is :obj:`True`.
         clip_norm (Number, optional): value to be used for clipping gradients.
-            Default is 100.0.
+            Default is None (no clip norm).
         progress_bar (bool, optional): If True, a progress bar will be
             displayed using tqdm. If tqdm is not installed, this option
             won't have any effect. Default is :obj:`True`
@@ -131,15 +130,16 @@ class Trainer:
 
     def __init__(
         self,
+        *,
         collector: _DataCollector,
         total_frames: int,
         frame_skip: int,
+        optim_steps_per_batch: int,
         loss_module: Union[LossModule, Callable[[TensorDictBase], TensorDictBase]],
         optimizer: Optional[optim.Optimizer] = None,
         logger: Optional[Logger] = None,
-        optim_steps_per_batch: int = 500,
         clip_grad_norm: bool = True,
-        clip_norm: float = 100.0,
+        clip_norm: float = None,
         progress_bar: bool = True,
         seed: int = 42,
         save_trainer_interval: int = 10000,
@@ -726,11 +726,12 @@ class OptimizerHook(TrainerHookBase):
         for param_group in self.optimizer.param_groups:
             params += param_group["params"]
 
-        if clip_grad_norm:
+        if clip_grad_norm and clip_norm is not None:
             gn = nn.utils.clip_grad_norm_(params, clip_norm)
         else:
             gn = sum([p.grad.pow(2).sum() for p in params if p.grad is not None]).sqrt()
-            nn.utils.clip_grad_value_(params, clip_norm)
+            if clip_norm is not None:
+                nn.utils.clip_grad_value_(params, clip_norm)
 
         return float(gn)
 
