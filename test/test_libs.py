@@ -1108,7 +1108,7 @@ class TestVmas:
 
 @pytest.mark.skipif(not _has_d4rl, reason=f"D4RL not found: {D4RL_ERR}")
 class TestD4RL:
-    @pytest.mark.parametrize("task", ["ant-medium-v2"])
+    @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     def test_terminate_on_end(self, task):
         t0 = time.time()
         data_true = D4RLExperienceReplay(
@@ -1136,13 +1136,10 @@ class TestD4RL:
         )
         keys = set(data_from_env._storage._storage.keys(True, True))
         keys = keys.intersection(data_true._storage._storage.keys(True, True))
-        print(data_true._storage._storage)
-        print(data_from_env._storage._storage)
         assert_allclose_td(
             data_true._storage._storage.select(*keys),
             data_from_env._storage._storage.select(*keys),
         )
-        print(f"completed test after {time.time()-t0}s")
 
     @pytest.mark.parametrize(
         "task",
@@ -1152,8 +1149,8 @@ class TestD4RL:
             # "maze2d-open-v0",
             # "maze2d-open-dense-v0",
             # "relocate-human-v1",
-            # "walker2d-medium-replay-v2",
-            "ant-medium-v2",
+            "walker2d-medium-replay-v2",
+            # "ant-medium-v2",
             # # "flow-merge-random-v0",
             # "kitchen-partial-v0",
             # # "carla-town-v0",
@@ -1164,7 +1161,7 @@ class TestD4RL:
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
         print(f"completed test after {time.time()-t0}s")
 
-    @pytest.mark.parametrize("task", ["ant-medium-v2"])
+    @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
     @pytest.mark.parametrize("from_env", [True, False])
     def test_dataset_build(self, task, split_trajs, from_env):
@@ -1182,7 +1179,7 @@ class TestD4RL:
             assert sim.shape[-1] == offline.shape[-1], key
         print(f"completed test after {time.time()-t0}s")
 
-    @pytest.mark.parametrize("task", ["ant-medium-v2"])
+    @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
     def test_d4rl_iteration(self, task, split_trajs):
         t0 = time.time()
