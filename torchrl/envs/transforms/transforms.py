@@ -1723,15 +1723,13 @@ class CatFrames(ObservationTransform):
             tensordict.get(
                 "_reset",
                 torch.ones(
-                    self.parent.done_spec.shape,
+                    tensordict.batch_size,
                     dtype=torch.bool,
                     device=tensordict.device
                     if tensordict.device is not None
                     else torch.device("cpu"),
                 ),
             )
-            .view(*tensordict.batch_size, -1)
-            .any(-1)
         )
 
         for in_key in self.in_keys:
@@ -2886,13 +2884,11 @@ class RewardSum(Transform):
             tensordict.get(
                 "_reset",
                 torch.ones(
-                    self.parent.done_spec.shape,
+                    tensordict.batch_size,
                     dtype=torch.bool,
                     device=tensordict.device,
                 ),
             )
-            .view(*tensordict.batch_size, -1)
-            .any(-1)
         )
         if _reset.any():
             for in_key, out_key in zip(self.in_keys, self.out_keys):
