@@ -750,7 +750,10 @@ class SyncDataCollector(_DataCollector):
                         self._tensordict_out.lock()
 
                 self._step_and_maybe_reset()
-                if self.interruptor is not None and self.interruptor.collection_stopped():
+                if (
+                    self.interruptor is not None
+                    and self.interruptor.collection_stopped()
+                ):
                     break
 
         return self._tensordict_out
@@ -1132,7 +1135,8 @@ class _MultiDataCollector(_DataCollector):
         raise NotImplementedError
 
     def _run_processes(self) -> None:
-        queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
+        manager = mp.Manager()  # because mp.Queue() does not have a qsize on osx
+        queue_out = manager.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
         for i, (env_fun, env_fun_kwargs) in enumerate(
