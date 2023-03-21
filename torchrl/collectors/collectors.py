@@ -1972,6 +1972,7 @@ def _main_async_collector(
                     raise RuntimeError(
                         f"expected device to be {storing_device} but got {tensordict.device}"
                     )
+                tensordict = tensordict.clone()
                 tensordict.share_memory_()
                 data = (tensordict, idx)
             else:
