@@ -199,7 +199,9 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["next"].update(
             dataset.select("reward", "done", "terminal", "timeout", strict=False)
         )
-        dataset = dataset.clone()  # make sure that all tensors have a different data_ptr
+        dataset = (
+            dataset.clone()
+        )  # make sure that all tensors have a different data_ptr
         self._shift_reward_done(dataset)
         self.specs = env.specs.clone()
         return dataset
@@ -271,7 +273,9 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["next"].update(
             dataset.select("reward", "done", "terminal", "timeout", strict=False)
         )
-        dataset = dataset.clone()  # make sure that all tensors have a different data_ptr
+        dataset = (
+            dataset.clone()
+        )  # make sure that all tensors have a different data_ptr
         self._shift_reward_done(dataset)
         self.specs = env.specs.clone()
         return dataset
