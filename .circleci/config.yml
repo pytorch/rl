@@ -1344,10 +1344,10 @@ workflows:
           cu_version: cu117
           name: unittest_linux_habitat_gpu_py3.8
           python_version: '3.8'
-#      - unittest_linux_d4rl_gpu:
-#          cu_version: cu117
-#          name: unittest_linux_d4rl_gpu_py3.8
-#          python_version: '3.8'
+      - unittest_linux_d4rl_gpu:
+          cu_version: cu117
+          name: unittest_linux_d4rl_gpu_py3.8
+          python_version: '3.8'
       - unittest_linux_jumanji_gpu:
           cu_version: cu117
           name: unittest_linux_jumanji_gpu_py3.8
