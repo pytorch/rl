@@ -1222,8 +1222,8 @@ also that the state dict is synchronised across processes if needed."""
 
         for proc in self.procs:
             proc.join(10.0)
-
-        self.queue_out.close()
+        # queue from manager needs not be closed
+        # self.queue_out.close()
         for pipe in self.pipes:
             pipe.close()
 
