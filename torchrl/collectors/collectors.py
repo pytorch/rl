@@ -11,8 +11,9 @@ import time
 import warnings
 from collections import OrderedDict
 from copy import deepcopy
-from multiprocessing import connection, queues
+from multiprocessing import connection
 from multiprocessing.managers import SyncManager
+
 from textwrap import indent
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
@@ -22,6 +23,8 @@ import torch.nn as nn
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
+
+from torch.multiprocessing import queues
 from torch.utils.data import IterableDataset
 
 from torchrl._utils import (

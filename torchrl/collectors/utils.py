@@ -8,6 +8,7 @@ from typing import Callable
 import torch
 from tensordict.tensordict import pad, TensorDictBase
 from torch import multiprocessing as mp
+from torch.multiprocessing import queues
 
 
 def _stack_output(fun) -> Callable:
@@ -136,7 +137,7 @@ class SharedCounter(object):
         return self.count.value
 
 
-class Queue(mp.queues.Queue):
+class Queue(queues.Queue):
     """A portable implementation of multiprocessing.Queue.
 
     Because of multithreading / multiprocessing semantics, Queue.qsize() may
