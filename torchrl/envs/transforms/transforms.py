@@ -3415,7 +3415,9 @@ class InitTracker(Transform):
                 device = torch.device("cpu")
             tensordict.set(
                 self.out_keys[0],
-                torch.zeros(self.parent.done_spec.shape, device=device, dtype=torch.bool),
+                torch.zeros(
+                    self.parent.done_spec.shape, device=device, dtype=torch.bool
+                ),
             )
         return tensordict
 
@@ -3423,7 +3425,10 @@ class InitTracker(Transform):
         device = tensordict.device
         if device is None:
             device = torch.device("cpu")
-        _reset = tensordict.get("_reset",  torch.ones(self.parent.done_spec.shape, device=device, dtype=torch.bool))
+        _reset = tensordict.get(
+            "_reset",
+            torch.ones(self.parent.done_spec.shape, device=device, dtype=torch.bool),
+        )
         tensordict.set(self.out_keys[0], _reset.clone())
         return tensordict
 
