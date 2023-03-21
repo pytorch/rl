@@ -1719,15 +1719,19 @@ class CatFrames(ObservationTransform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
-        _reset = tensordict.get(
-            "_reset",
-            torch.ones(
-                tensordict.batch_size,
-                dtype=torch.bool,
-                device=tensordict.device
-                if tensordict.device is not None
-                else torch.device("cpu"),
-            ),
+        _reset = (
+            tensordict.get(
+                "_reset",
+                torch.ones(
+                    self.parent.done_spec.shape,
+                    dtype=torch.bool,
+                    device=tensordict.device
+                    if tensordict.device is not None
+                    else torch.device("cpu"),
+                ),
+            )
+            .view(*tensordict.batch_size, -1)
+            .any(-1)
         )
 
         for in_key in self.in_keys:
@@ -2881,7 +2885,7 @@ class RewardSum(Transform):
         _reset = tensordict.get(
             "_reset",
             torch.ones(
-                tensordict.batch_size,
+                self.parent.done_spec.shape,
                 dtype=torch.bool,
                 device=tensordict.device,
             ),
