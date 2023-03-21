@@ -187,7 +187,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         # let's make sure that the dtypes match what's expected
         for key, spec in env.observation_spec.items(True, True):
             dataset[key] = dataset[key].to(spec.dtype)
-            dataset["next", key] = dataset["next", key].to(spec.dtype).clone()
+            dataset["next", key] = dataset["next", key].to(spec.dtype)
         for key, spec in env.input_spec.items(True, True):
             dataset[key] = dataset[key].to(spec.dtype)
         dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
@@ -199,6 +199,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["next"].update(
             dataset.select("reward", "done", "terminal", "timeout", strict=False)
         )
+        dataset = dataset.clone()  # make sure that all tensors have a different data_ptr
         self._shift_reward_done(dataset)
         self.specs = env.specs.clone()
         return dataset
@@ -265,11 +266,12 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset = dataset[:-1].set(
             "next",
-            dataset.select("observation", "info", strict=False)[1:].clone(),
+            dataset.select("observation", "info", strict=False)[1:],
         )
         dataset["next"].update(
             dataset.select("reward", "done", "terminal", "timeout", strict=False)
         )
+        dataset = dataset.clone()  # make sure that all tensors have a different data_ptr
         self._shift_reward_done(dataset)
         self.specs = env.specs.clone()
         return dataset
