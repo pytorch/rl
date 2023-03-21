@@ -23,7 +23,7 @@ export MKL_THREADING_LAYER=GNU
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 20
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 20 -k 'test_gym or test_dm_control_pixels or test_dm_control'
 #MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m xvfb-run -a pytest --instafail -v --durations 20
-MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 20 --ignore test/test_distributed.py
+CKPT_BACKEND=torch MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 20 --ignore test/test_distributed.py
 #pytest --instafail -v --durations 20
 #python test/test_libs.py
 coverage combine
