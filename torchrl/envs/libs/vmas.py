@@ -211,10 +211,11 @@ class VmasWrapper(_EnvWrapper):
             self.batch_size
         )
         self.output_spec = CompositeSpec(
-            observation=CompositeSpec(observation=multi_agent_observation_spec),
+            observation=CompositeSpec(
+                observation=multi_agent_observation_spec, info=multi_agent_info_spec
+            ),
             reward=multi_agent_reward_spec,
             done=done_spec,
-            info=multi_agent_info_spec,
         ).expand(self.batch_size)
 
     def _check_kwargs(self, kwargs: Dict):
@@ -284,7 +285,6 @@ class VmasWrapper(_EnvWrapper):
         obs, rews, dones, infos = self._env.step(action)
 
         dones = self.read_done(dones)
-        self._env.render()
 
         agent_tds = []
         for i in range(self.n_agents):
