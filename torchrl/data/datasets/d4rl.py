@@ -126,7 +126,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset = self._get_dataset_from_env(name, env_kwargs)
         else:
             dataset = self._get_dataset_direct(name, env_kwargs)
-        dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0
+        # Fill unknown next states with 0
+        # dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0
 
         if split_trajs:
             dataset = split_trajectories(dataset)
@@ -199,7 +200,6 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset.select("reward", "done", "terminal", "timeout", strict=False)
         )
         self._shift_reward_done(dataset)
-        # Fill unknown next states with 0
         self.specs = env.specs.clone()
         return dataset
 
@@ -271,7 +271,6 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset.select("reward", "done", "terminal", "timeout", strict=False)
         )
         self._shift_reward_done(dataset)
-        # Fill unknown next states with 0
         self.specs = env.specs.clone()
         return dataset
 
