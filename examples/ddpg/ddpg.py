@@ -86,7 +86,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             if l0 is None:
                 l0 = loss_val.item()
 
-            for key, value in loss_vals.item():
+            for key, value in loss_vals.items():
                 logger.log_scalar(key, value.item(), collected_frames)
             logger.log_scalar(
                 "reward_training", data["reward"].mean().item(), collected_frames
