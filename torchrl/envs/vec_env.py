@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import logging
-
 import os
 from collections import OrderedDict
 from copy import deepcopy
@@ -17,10 +16,10 @@ from warnings import warn
 
 import numpy as np
 import torch
-
 from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
+
 from torchrl._utils import _check_for_faulty_process, VERBOSE
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -568,12 +567,11 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
         else:
-            _reset = torch.ones(self.batch_size, dtype=torch.bool)
+            _reset = torch.ones(self.done_spec.shape, dtype=torch.bool)
 
         for i, _env in enumerate(self._envs):
             if tensordict is not None:
@@ -656,7 +654,6 @@ class ParallelEnv(_BatchedEnv):
     __doc__ += _BatchedEnv.__doc__
 
     def _start_workers(self) -> None:
-
         _num_workers = self.num_workers
         ctx = mp.get_context("spawn")
 
@@ -795,7 +792,9 @@ class ParallelEnv(_BatchedEnv):
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
         else:
-            _reset = torch.ones(self.batch_size, dtype=torch.bool, device=self.device)
+            _reset = torch.ones(
+                self.done_spec.shape, dtype=torch.bool, device=self.device
+            )
 
         for i, channel in enumerate(self.parent_channels):
             if tensordict is not None:
@@ -1253,7 +1252,6 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         create_env_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
-
         self.env_name = env_name.replace("ALE/", "")  # Naming convention of EnvPool
         self.num_workers = num_workers
         self.batch_size = torch.Size([num_workers])
