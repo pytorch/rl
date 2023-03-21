@@ -8,6 +8,16 @@
 
 set -e
 
+yum makecache
+yum install -y glfw
+yum install -y glew
+yum install -y mesa-libGL
+#yum install -y mesa-libGL-devel
+yum install -y mesa-libOSMesa-devel
+yum install mesa-libGLU -y
+#yum -y install egl-utils
+#yum -y install freeglut
+
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
