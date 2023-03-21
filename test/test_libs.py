@@ -387,8 +387,8 @@ class TestHabitat:
 @pytest.mark.parametrize(
     "envname",
     [
-        "TSP50-v0",
-        "Snake-6x6-v0",
+        "TSP-v1",
+        "Snake-v1",
     ],
 )
 class TestJumanji:
