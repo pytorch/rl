@@ -6676,7 +6676,7 @@ class TestInitTracker(TransformBase):
         env = CountingBatchedEnv(max_steps=torch.tensor([3, 4]), batch_size=[2])
         env = TransformedEnv(env, InitTracker())
         r = env.rollout(100, policy, break_when_any_done=False)
-        assert (r["is_init"].sum(1) == torch.tensor([25, 20])).all()
+        assert (r["is_init"].view(r.batch_size).sum(-1) == torch.tensor([25, 20])).all()
 
     def test_transform_model(self):
         with pytest.raises(
