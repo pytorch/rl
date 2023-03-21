@@ -14,16 +14,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
+
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-
 from .._utils import prod, seed_generator
 from ..data.utils import DEVICE_TYPING
-
 from .utils import get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
@@ -480,6 +479,19 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
+            batch_size = self.batch_size
+            dims = len(batch_size)
+            leading_batch_size = (
+                tensordict.batch_size[:-dims] if dims else tensordict.shape
+            )
+            expected_reset_spec = torch.Size(
+                [*leading_batch_size, *self.done_spec.shape]
+            )
+            actual_reset_shape = _reset.shape
+            if actual_reset_shape != expected_reset_spec:
+                raise RuntimeError(
+                    "_reset flag in tensordict should follow env.done_spec"
+                )
         else:
             _reset = None
 
