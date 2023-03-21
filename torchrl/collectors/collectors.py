@@ -1894,7 +1894,7 @@ def _main_async_collector(
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
-    tensordict = data_in = None
+    tensordict = data = d = data_in = dc = dc_iter = None
 
     dc = SyncDataCollector(
         create_env_fn,
