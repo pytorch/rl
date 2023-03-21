@@ -315,8 +315,8 @@ def test_collector_env_reset():
     )
     for _data in collector:
         continue
-    steps = _data["next", "step_count"][..., 1:]
-    done = _data["next", "done"][..., :-1, :].squeeze(-1)
+    steps = _data["next", "step_count"][..., 1:,:]
+    done = _data["next", "done"][..., :-1, :]
     # we don't want just one done
     assert done.sum() > 3
     # check that after a done, the next step count is always 1
