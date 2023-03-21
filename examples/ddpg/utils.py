@@ -260,11 +260,14 @@ def make_replay_buffer(rb_cfg):
 #
 
 
-def make_ddpg_model(cfg):
+def make_ddpg_model(cfg, state_dict):
 
     env_cfg = cfg.env
     model_cfg = cfg.model
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
+    # we must initialize the observation norm transform
+    proof_environment.load_state_dict(state_dict)
+
     env_specs = proof_environment.specs
     from_pixels = env_cfg.from_pixels
 

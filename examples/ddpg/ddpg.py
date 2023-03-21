@@ -41,7 +41,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     logger = make_logger(cfg.logger)
     replay_buffer = make_replay_buffer(cfg.replay_buffer)
 
-    actor_network, value_network = make_ddpg_model(cfg)
+    actor_network, value_network = make_ddpg_model(cfg, state_dict)
     actor_network = actor_network.to(model_device)
     value_network = value_network.to(model_device)
 
