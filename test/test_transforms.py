@@ -1073,18 +1073,8 @@ class TestStepCounter(TransformBase):
         td = step_counter.reset(td)
         if reset_workers:
 
-            assert torch.all(
-                torch.masked_select(
-                    td.get("step_count"), _reset.view(*td.batch_size, -1).any(-1)
-                )
-                == 0
-            )
-            assert torch.all(
-                torch.masked_select(
-                    td.get("step_count"), ~_reset.view(*td.batch_size, -1).any(-1)
-                )
-                == i
-            )
+            assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
+            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
         else:
             assert torch.all(td.get("step_count") == 0)
 

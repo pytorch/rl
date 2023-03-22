@@ -1723,7 +1723,9 @@ class CatFrames(ObservationTransform):
             tensordict.get(
                 "_reset",
                 torch.ones(
-                    self.parent.done_spec.shape,
+                    self.parent.done_spec.shape
+                    if self.parent
+                    else tensordict.batch_size,
                     dtype=torch.bool,
                     device=tensordict.device
                     if tensordict.device is not None
@@ -2885,7 +2887,7 @@ class RewardSum(Transform):
         _reset = tensordict.get(
             "_reset",
             torch.ones(
-                self.parent.done_spec.shape,
+                self.parent.done_spec.shape if self.parent else tensordict.batch_size,
                 dtype=torch.bool,
                 device=tensordict.device,
             ),
@@ -3004,7 +3006,7 @@ class StepCounter(Transform):
         done = tensordict.get("done", None)
         if done is None:
             done = torch.ones(
-                self.parent.done_spec.shape,
+                self.parent.done_spec.shape if self.parent else tensordict.batch_size,
                 dtype=self.parent.done_spec.dtype,
                 device=self.parent.done_spec.device,
             )
@@ -3015,14 +3017,9 @@ class StepCounter(Transform):
         )
         step_count = tensordict.get(
             "step_count",
-            None,
+            default=torch.zeros_like(done),
         )
-        if step_count is None:
-            step_count = torch.zeros(
-                self.parent.done_spec.shape,
-                dtype=torch.int64,
-                device=tensordict.device,
-            )
+
         step_count[_reset] = 0
         tensordict.set(
             "step_count",
@@ -3053,7 +3050,9 @@ class StepCounter(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=self.parent.done_spec.shape,
+            shape=self.parent.done_spec.shape
+            if self.parent
+            else observation_spec.shape,
             dtype=torch.int64,
             device=observation_spec.device,
         )
@@ -3061,7 +3060,9 @@ class StepCounter(Transform):
             observation_spec["step_count"].space.minimum * 0
         )
         if self.max_steps is not None and self.truncated_key != "done":
-            observation_spec[self.truncated_key] = self.parent.done_spec.clone()
+            observation_spec[self.truncated_key] = (
+                self.parent.done_spec.clone() if self.parent else observation_spec.shape
+            )
         return observation_spec
 
     def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
@@ -3070,7 +3071,7 @@ class StepCounter(Transform):
                 f"input_spec was expected to be of type CompositeSpec. Got {type(input_spec)} instead."
             )
         input_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=self.parent.done_spec.shape,
+            shape=self.parent.done_spec.shape if self.parent else input_spec.shape,
             dtype=torch.int64,
             device=input_spec.device,
         )
@@ -3235,7 +3236,9 @@ class TimeMaxPool(Transform):
             _reset = tensordict.get(
                 "_reset",
                 torch.ones(
-                    self.parent.done_spec.shape,
+                    self.parent.done_spec.shape
+                    if self.parent
+                    else tensordict.batch_size,
                     dtype=torch.bool,
                     device=tensordict.device,
                 ),
@@ -3430,7 +3433,11 @@ class InitTracker(Transform):
             device = torch.device("cpu")
         _reset = tensordict.get(
             "_reset",
-            torch.ones(self.parent.done_spec.shape, device=device, dtype=torch.bool),
+            torch.ones(
+                self.parent.done_spec.shape if self.parent else tensordict.batch_size,
+                device=device,
+                dtype=torch.bool,
+            ),
         )
         tensordict.set(self.out_keys[0], _reset.clone())
         return tensordict
@@ -3440,7 +3447,9 @@ class InitTracker(Transform):
             2,
             dtype=torch.bool,
             device=self.parent.device,
-            shape=self.parent.done_spec.shape,
+            shape=self.parent.done_spec.shape
+            if self.parent
+            else observation_spec.shape,
         )
         return observation_spec
 
