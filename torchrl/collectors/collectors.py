@@ -7,12 +7,15 @@ import abc
 import inspect
 import os
 import queue
+import sys
 import time
 import warnings
 from collections import OrderedDict
 from copy import deepcopy
+
 from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
+
 from textwrap import indent
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
@@ -43,6 +46,8 @@ _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time s
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
 
 DEFAULT_EXPLORATION_MODE: str = "random"
+
+_is_osx = sys.platform.startswith("darwin")
 
 
 class RandomPolicy:
@@ -381,7 +386,7 @@ class SyncDataCollector(_DataCollector):
             tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
             Default is False.
-        interruptor : (_Interruptor, optional)
+        interrupter (_Interruptor, optional):
             An _Interruptor object that can be used from outside the class to control rollout collection.
             The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
             strategies such as preeptively stopping rollout collection.
@@ -463,7 +468,7 @@ class SyncDataCollector(_DataCollector):
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         return_same_td: bool = False,
         reset_when_done: bool = True,
-        interruptor=None,
+        interrupter=None,
     ):
         self.closed = True
 
@@ -592,7 +597,7 @@ class SyncDataCollector(_DataCollector):
         self.split_trajs = split_trajs
         self._has_been_done = None
         self._exclude_private_keys = True
-        self.interruptor = interruptor
+        self.interrupter = interrupter
 
     # for RPC
     def next(self):
@@ -751,8 +756,8 @@ class SyncDataCollector(_DataCollector):
 
                 self._step_and_maybe_reset()
                 if (
-                    self.interruptor is not None
-                    and self.interruptor.collection_stopped()
+                    self.interrupter is not None
+                    and self.interrupter.collection_stopped()
                 ):
                     break
 
@@ -1105,13 +1110,17 @@ class _MultiDataCollector(_DataCollector):
         self.exploration_mode = exploration_mode
         self.frames_per_worker = np.inf
         if preemptive_threshold is not None:
+            if _is_osx:
+                raise NotImplementedError(
+                    "Cannot use preemption on OSX due to Queue.qsize() not being implemented on this platform."
+                )
             self.preemptive_threshold = np.clip(preemptive_threshold, 0.0, 1.0)
             manager = _InterruptorManager()
             manager.start()
-            self.interruptor = manager._Interruptor()
+            self.interrupter = manager._Interruptor()
         else:
             self.preemptive_threshold = 1.0
-            self.interruptor = None
+            self.interrupter = None
         self._run_processes()
         self._exclude_private_keys = True
 
@@ -1164,7 +1173,7 @@ class _MultiDataCollector(_DataCollector):
                 "exploration_mode": self.exploration_mode,
                 "reset_when_done": self.reset_when_done,
                 "idx": i,
-                "interruptor": self.interruptor,
+                "interruptor": self.interrupter,
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
@@ -1221,7 +1230,6 @@ also that the state dict is synchronised across processes if needed."""
 
         for proc in self.procs:
             proc.join(10.0)
-
         self.queue_out.close()
         for pipe in self.pipes:
             pipe.close()
@@ -1466,13 +1474,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
             i += 1
             max_traj_idx = None
 
-            if self.interruptor is not None:
-                self.interruptor.start_collection()
+            if self.interrupter is not None and self.preemptive_threshold < 1.0:
+                self.interrupter.start_collection()
                 while self.queue_out.qsize() < int(
                     self.num_workers * self.preemptive_threshold
                 ):
                     continue
-                self.interruptor.stop_collection()
+                self.interrupter.stop_collection()
                 # Now wait for stragglers to return
                 while self.queue_out.qsize() < int(self.num_workers):
                     continue
@@ -1885,7 +1893,7 @@ def _main_async_collector(
     interruptor=None,
 ) -> None:
     pipe_parent.close()
-    #  init variables that will be cleared when closing
+    # init variables that will be cleared when closing
     tensordict = data = d = data_in = dc = dc_iter = None
 
     dc = SyncDataCollector(
@@ -1903,7 +1911,7 @@ def _main_async_collector(
         exploration_mode=exploration_mode,
         reset_when_done=reset_when_done,
         return_same_td=True,
-        interruptor=interruptor,
+        interrupter=interruptor,
     )
     if verbose:
         print("Sync data collector created")

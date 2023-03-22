@@ -42,6 +42,7 @@ from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, Saf
 _os_is_windows = sys.platform == "win32"
 _python_is_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 _python_is_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
+_os_is_osx = sys.platform == "darwin"
 
 
 class WrappablePolicy(nn.Module):
@@ -1233,6 +1234,7 @@ def weight_reset(m):
         m.reset_parameters()
 
 
+@pytest.mark.skipif(_os_is_osx, reason="Queue.qsize does not work on osx.")
 class TestPreemptiveThreshold:
     @pytest.mark.parametrize("env_name", ["conv", "vec"])
     def test_sync_collector_interruptor_mechanism(self, env_name, seed=100):
@@ -1252,7 +1254,7 @@ class TestPreemptiveThreshold:
             frames_per_batch=50,
             total_frames=200,
             device="cpu",
-            interruptor=interruptor,
+            interrupter=interruptor,
             split_trajs=False,
         )
 

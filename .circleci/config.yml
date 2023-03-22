@@ -368,6 +368,63 @@ jobs:
       - store_test_results:
           path: test-results
 
+  unittest_linux_distributed_gpu:
+    <<: *binary_common
+    machine:
+      image: ubuntu-2004-cuda-11.4:202110-01
+    resource_class: gpu.nvidia.medium
+    environment:
+      image_name: "pytorch/manylinux-cuda117"
+      TAR_OPTIONS: --no-same-owner
+      PYTHON_VERSION: << parameters.python_version >>
+      CU_VERSION: << parameters.cu_version >>
+
+    steps:
+      - checkout
+      - designate_upload_channel
+      - run:
+          name: Generate cache key
+          # This will refresh cache on Sundays, nightly build should generate new cache.
+          command: echo "$(date +"%Y-%U")" > .circleci-weekly
+      - restore_cache:
+
+          keys:
+            - env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_distributed/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+
+      - run:
+          name: Setup
+          command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_distributed/scripts/setup_env.sh
+      - save_cache:
+
+          key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_distributed/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+
+          paths:
+            - conda
+            - env
+#      - run:
+#          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
+#          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
+#          # They're available in all the other workflows (OSX and Windows).
+#          # But here, we're running the unittest_linux_distributed_gpu workflows in a docker container, where those variables aren't accessible.
+#          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
+#          name: export CIRCLECI env var
+#          command: echo "CIRCLECI=true" >> ./env.list
+      - run:
+          name: Install torchrl
+          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux/scripts/install.sh
+      - run:
+          name: Run tests
+          command: bash .circleci/unittest/linux_distributed/scripts/run_test.sh
+      - run:
+          name: Codecov upload
+          command: |
+            bash <(curl -s https://codecov.io/bash) -Z -F linux-distributed-gpu
+      - run:
+          name: Post Process
+          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_distributed/scripts/post_process.sh
+      - store_test_results:
+          path: test-results
+
 
   unittest_linux_examples_gpu:
     <<: *binary_common
@@ -1237,6 +1294,10 @@ workflows:
           cu_version: cu117
           name: unittest_linux_gpu_py3.7
           python_version: '3.7'
+      - unittest_linux_distributed_gpu:
+          cu_version: cu117
+          name: unittest_linux_distributed_gpu_py3.7
+          python_version: '3.7'
       - unittest_linux_optdeps_gpu:
           cu_version: cu117
           name: unittest_linux_optdeps_gpu_py3.7
@@ -1261,6 +1322,10 @@ workflows:
       - unittest_linux_gpu:
           cu_version: cu117
           name: unittest_linux_gpu_py3.8
+          python_version: '3.8'
+      - unittest_linux_distributed_gpu:
+          cu_version: cu117
+          name: unittest_linux_distributed_gpu_py3.8
           python_version: '3.8'
       - unittest_linux_optdeps_gpu:
           cu_version: cu117
@@ -1317,6 +1382,10 @@ workflows:
           cu_version: cu117
           name: unittest_linux_gpu_py3.9
           python_version: '3.9'
+      - unittest_linux_distributed_gpu:
+          cu_version: cu117
+          name: unittest_linux_distributed_gpu_py3.9
+          python_version: '3.9'
       - unittest_linux_optdeps_gpu:
           cu_version: cu117
           name: unittest_linux_optdeps_gpu_py3.9
@@ -1341,6 +1410,10 @@ workflows:
       - unittest_linux_gpu:
           cu_version: cu117
           name: unittest_linux_gpu_py3.10
+          python_version: '3.10'
+      - unittest_linux_distributed_gpu:
+          cu_version: cu117
+          name: unittest_linux_distributed_gpu_py3.10
           python_version: '3.10'
       - unittest_linux_optdeps_gpu:
           cu_version: cu117
