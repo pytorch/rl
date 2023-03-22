@@ -3006,7 +3006,7 @@ class StepCounter(Transform):
         done = tensordict.get("done", None)
         if done is None:
             done = torch.ones(
-                self.parent.done_spec.shape if self.parent else tensordict.batch_size,
+                self.parent.done_spec.shape,
                 dtype=self.parent.done_spec.dtype,
                 device=self.parent.done_spec.device,
             )
@@ -3434,7 +3434,7 @@ class InitTracker(Transform):
         _reset = tensordict.get(
             "_reset",
             torch.ones(
-                self.parent.done_spec.shape if self.parent else tensordict.batch_size,
+                self.parent.done_spec.shape,
                 device=device,
                 dtype=torch.bool,
             ),
@@ -3447,9 +3447,7 @@ class InitTracker(Transform):
             2,
             dtype=torch.bool,
             device=self.parent.device,
-            shape=self.parent.done_spec.shape
-            if self.parent
-            else observation_spec.shape,
+            shape=self.parent.done_spec.shape,
         )
         return observation_spec
 
