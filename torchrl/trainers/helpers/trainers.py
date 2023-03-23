@@ -8,7 +8,7 @@ from typing import List, Optional, Union
 from warnings import warn
 
 import torch
-from tensordict.nn import TensorDictModuleWrapper
+from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
@@ -16,7 +16,7 @@ from torchrl._utils import VERBOSE
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
-from torchrl.modules import reset_noise, SafeModule
+from torchrl.modules import reset_noise
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
@@ -81,7 +81,9 @@ def make_trainer(
     loss_module: LossModule,
     recorder: Optional[EnvBase] = None,
     target_net_updater: Optional[TargetNetUpdater] = None,
-    policy_exploration: Optional[Union[TensorDictModuleWrapper, SafeModule]] = None,
+    policy_exploration: Optional[
+        Union[TensorDictModuleWrapper, TensorDictModule]
+    ] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
     logger: Optional[Logger] = None,
     cfg: "DictConfig" = None,  # noqa: F821

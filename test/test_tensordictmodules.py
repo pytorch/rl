@@ -23,7 +23,7 @@ from torchrl.modules.tensordict_module.common import (
 )
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
-    SafeProbabilisticSequential,
+    SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
@@ -213,7 +213,7 @@ class TestTDModule:
                 **kwargs,
             )
 
-        tensordict_module = SafeProbabilisticSequential(net, prob_module)
+        tensordict_module = SafeProbabilisticTensorDictSequential(net, prob_module)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         with set_exploration_mode(exp_mode):
             tensordict_module(td)
@@ -324,7 +324,7 @@ class TestTDModule:
                 **kwargs,
             )
 
-        tensordict_module = SafeProbabilisticSequential(tdnet, prob_module)
+        tensordict_module = SafeProbabilisticTensorDictSequential(tdnet, prob_module)
         params = make_functional(tensordict_module)
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -436,7 +436,7 @@ class TestTDModule:
                 **kwargs,
             )
 
-        tdmodule = SafeProbabilisticSequential(tdnet, prob_module)
+        tdmodule = SafeProbabilisticTensorDictSequential(tdnet, prob_module)
         params = make_functional(tdmodule)
 
         td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
@@ -574,7 +574,7 @@ class TestTDModule:
                 **kwargs,
             )
 
-        tdmodule = SafeProbabilisticSequential(tdnet, prob_module)
+        tdmodule = SafeProbabilisticTensorDictSequential(tdnet, prob_module)
         params = make_functional(tdmodule)
 
         # vmap = True
@@ -757,7 +757,7 @@ class TestTDSequence:
                 safe=False,
                 **kwargs,
             )
-            tdmodule = SafeProbabilisticSequential(
+            tdmodule = SafeProbabilisticTensorDictSequential(
                 tdmodule1, dummy_tdmodule, tdmodule2, prob_module
             )
 
@@ -905,7 +905,7 @@ class TestTDSequence:
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = SafeProbabilisticSequential(
+            tdmodule = SafeProbabilisticTensorDictSequential(
                 tdmodule1, dummy_tdmodule, tdmodule2, prob_module
             )
 
@@ -1067,7 +1067,7 @@ class TestTDSequence:
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = SafeProbabilisticSequential(
+            tdmodule = SafeProbabilisticTensorDictSequential(
                 tdmodule1, dummy_tdmodule, tdmodule2, prob_module
             )
 
@@ -1248,7 +1248,9 @@ class TestTDSequence:
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = SafeProbabilisticSequential(tdmodule1, tdmodule2, prob_module)
+            tdmodule = SafeProbabilisticTensorDictSequential(
+                tdmodule1, tdmodule2, prob_module
+            )
 
         params = make_functional(tdmodule)
 
@@ -1351,7 +1353,7 @@ class TestTDSequence:
             spec=None,
             safe=False,
         )
-        tdmodule2 = SafeProbabilisticSequential(
+        tdmodule2 = SafeProbabilisticTensorDictSequential(
             net2,
             SafeProbabilisticModule(
                 in_keys=["loc", "scale"],
@@ -1361,7 +1363,7 @@ class TestTDSequence:
                 **kwargs,
             ),
         )
-        tdmodule3 = SafeProbabilisticSequential(
+        tdmodule3 = SafeProbabilisticTensorDictSequential(
             net3,
             SafeProbabilisticModule(
                 in_keys=["loc", "scale"],

@@ -20,7 +20,7 @@ from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 
 class SafeProbabilisticModule(ProbabilisticTensorDictModule):
-    """A :obj:``SafeProbabilisticModule`` is an :obj:``tensordict.nn.ProbabilisticTensorDictModule`` subclass that accepts a :obj:``TensorSpec`` as argument to control the output domain.
+    """:class:`tensordict.nn.ProbabilisticTensorDictModule` subclass that accepts a :class:`torchrl.envs.TensorSpec` as argument to control the output domain.
 
     `SafeProbabilisticModule` is a non-parametric module representing a
     probability distribution. It reads the distribution parameters from an input
@@ -189,8 +189,10 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         return self.random(tensordict)
 
 
-class SafeProbabilisticSequential(ProbabilisticTensorDictSequential, SafeSequential):
-    """A :obj:``SafeProbabilisticSequential`` is an :obj:``tensordict.nn.ProbabilisticTensorDictSequential`` subclass that accepts a :obj:``TensorSpec`` as argument to control the output domain.
+class SafeProbabilisticTensorDictSequential(
+    ProbabilisticTensorDictSequential, SafeSequential
+):
+    """:class:`tensordict.nn.ProbabilisticTensorDictSequential` subclass that accepts a :class:`torchrl.envs.TensorSpec` as argument to control the output domain.
 
     Similarly to :obj:`TensorDictSequential`, but enforces that the final module in the
     sequence is an :obj:`ProbabilisticTensorDictModule` and also exposes ``get_dist``

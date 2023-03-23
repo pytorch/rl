@@ -10,10 +10,9 @@ from copy import deepcopy
 from typing import Tuple
 
 import torch
-from tensordict.nn import make_functional, repopulate_module
+from tensordict.nn import make_functional, repopulate_module, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.modules import SafeModule
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.utils import distance_loss, hold_out_params, next_state_value
 
@@ -25,8 +24,8 @@ class DDPGLoss(LossModule):
     """The DDPG Loss class.
 
     Args:
-        actor_network (SafeModule): a policy operator.
-        value_network (SafeModule): a Q value operator.
+        actor_network (TensorDictModule): a policy operator.
+        value_network (TensorDictModule): a Q value operator.
         gamma (scalar): a discount factor for return computation.
         device (str, int or torch.device, optional): a device where the losses will be computed, if it can't be found
             via the value operator.
@@ -39,8 +38,8 @@ class DDPGLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: SafeModule,
-        value_network: SafeModule,
+        actor_network: TensorDictModule,
+        value_network: TensorDictModule,
         gamma: float,
         loss_function: str = "l2",
         delay_actor: bool = False,

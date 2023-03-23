@@ -45,7 +45,7 @@ from torchrl.modules import (
     QValueActor,
     SafeModule,
     SafeProbabilisticModule,
-    SafeProbabilisticSequential,
+    SafeProbabilisticTensorDictSequential,
     SafeSequential,
     WorldModelWrapper,
 )
@@ -2606,7 +2606,7 @@ class TestDreamer:
             num_cells=mlp_num_units,
             activation_class=nn.ELU,
         )
-        actor_model = SafeProbabilisticSequential(
+        actor_model = SafeProbabilisticTensorDictSequential(
             SafeModule(
                 actor_module,
                 in_keys=["state", "belief"],

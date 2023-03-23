@@ -264,37 +264,38 @@ class gSDEModule(nn.Module):
 
     Examples:
         >>> from tensordict import TensorDict
-        >>> from torchrl.modules import SafeModule, SafeSequential, ProbabilisticActor, TanhNormal
+        >>> from torchrl.modules import ProbabilisticActor, TanhNormal
+        >>> from tensordict.nn import TensorDictModule, ProbabilisticTensorDictSequential
         >>> batch, state_dim, action_dim = 3, 7, 5
         >>> model = nn.Linear(state_dim, action_dim)
-        >>> deterministic_policy = SafeModule(model, in_keys=["obs"], out_keys=["action"])
-        >>> stochatstic_part = SafeModule(
+        >>> deterministic_policy = TensorDictModule(model, in_keys=["obs"], out_keys=["action"])
+        >>> stochastic_part = TensorDictModule(
         ...     gSDEModule(action_dim, state_dim),
         ...     in_keys=["action", "obs", "_eps_gSDE"],
         ...     out_keys=["loc", "scale", "action", "_eps_gSDE"])
-        >>> stochatstic_part = ProbabilisticActor(stochatstic_part,
-        ...      dist_in_keys=["loc", "scale"],
+        >>> stochastic_part = ProbabilisticActor(stochastic_part,
+        ...      in_keys=["loc", "scale"],
         ...      distribution_class=TanhNormal)
-        >>> stochatstic_policy = SafeSequential(deterministic_policy, stochatstic_part)
+        >>> stochastic_policy = ProbabilisticTensorDictSequential(deterministic_policy, *stochastic_part)
         >>> tensordict = TensorDict({'obs': torch.randn(state_dim), '_epx_gSDE': torch.zeros(1)}, [])
-        >>> _ = stochatstic_policy(tensordict)
+        >>> _ = stochastic_policy(tensordict)
         >>> print(tensordict)
         TensorDict(
             fields={
-                obs: Tensor(torch.Size([7]), dtype=torch.float32),
-                _epx_gSDE: Tensor(torch.Size([1]), dtype=torch.float32),
-                action: Tensor(torch.Size([5]), dtype=torch.float32),
-                loc: Tensor(torch.Size([5]), dtype=torch.float32),
-                scale: Tensor(torch.Size([5]), dtype=torch.float32),
-                _eps_gSDE: Tensor(torch.Size([5, 7]), dtype=torch.float32)},
+                _eps_gSDE: Tensor(shape=torch.Size([5, 7]), device=cpu, dtype=torch.float32, is_shared=False),
+                _epx_gSDE: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                action: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
+                loc: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs: Tensor(shape=torch.Size([7]), device=cpu, dtype=torch.float32, is_shared=False),
+                scale: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
-            device=cpu,
+            device=None,
             is_shared=False)
         >>> action_first_call = tensordict.get("action").clone()
-        >>> dist, *_ = stochatstic_policy.get_dist(tensordict)
+        >>> dist = stochastic_policy.get_dist(tensordict)
         >>> print(dist)
         TanhNormal(loc: torch.Size([5]), scale: torch.Size([5]))
-        >>> _ = stochatstic_policy(tensordict)
+        >>> _ = stochastic_policy(tensordict)
         >>> action_second_call = tensordict.get("action").clone()
         >>> assert (action_second_call == action_first_call).all()  # actions are the same
         >>> assert (action_first_call != dist.base_dist.base_dist.loc).all()  # actions are truly stochastic

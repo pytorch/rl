@@ -6,7 +6,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
-from tensordict.nn import TensorDictModuleWrapper
+from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
 
 from torchrl.collectors.collectors import (
@@ -18,7 +18,6 @@ from torchrl.collectors.collectors import (
 from torchrl.data import MultiStep
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
-from torchrl.modules import SafeProbabilisticSequential
 
 
 def sync_async_collector(
@@ -249,7 +248,9 @@ def _make_collector(
 
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticSequential],
+    actor_model_explore: Union[
+        TensorDictModuleWrapper, ProbabilisticTensorDictSequential
+    ],
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
@@ -311,7 +312,9 @@ def make_collector_offpolicy(
 
 def make_collector_onpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticSequential],
+    actor_model_explore: Union[
+        TensorDictModuleWrapper, ProbabilisticTensorDictSequential
+    ],
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
