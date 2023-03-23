@@ -59,7 +59,7 @@ class TD3Loss(LossModule):
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",
         delay_actor: bool = False,
-        delay_qvalue: bool = False,
+        delay_qvalue: bool = True,
     ) -> None:
         if not _has_functorch:
             raise ImportError(
