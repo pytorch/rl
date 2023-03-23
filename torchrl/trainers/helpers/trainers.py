@@ -13,7 +13,7 @@ from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl._utils import VERBOSE
-from torchrl.collectors.collectors import _DataCollector
+from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.modules import reset_noise, SafeModule
@@ -77,7 +77,7 @@ class TrainerConfig:
 
 
 def make_trainer(
-    collector: _DataCollector,
+    collector: DataCollectorBase,
     loss_module: LossModule,
     recorder: Optional[EnvBase] = None,
     target_net_updater: Optional[TargetNetUpdater] = None,
@@ -89,7 +89,7 @@ def make_trainer(
     """Creates a Trainer instance given its constituents.
 
     Args:
-        collector (_DataCollector): A data collector to be used to collect data.
+        collector (DataCollectorBase): A data collector to be used to collect data.
         loss_module (LossModule): A TorchRL loss module
         recorder (EnvBase, optional): a recorder environment. If None, the trainer will train the policy without
             testing it.

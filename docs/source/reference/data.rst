@@ -24,11 +24,12 @@ Composable Replay Buffers
 
 We also give users the ability to compose a replay buffer using the following components:
 
+.. currentmodule:: torchrl.data.replay_buffers
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst
 
-    .. currentmodule:: torchrl.data.replay_buffers
 
     Sampler
     PrioritizedSampler
@@ -176,11 +177,12 @@ Here's an example:
   `the repository <https://github.com/Farama-Foundation/D4RL>`_ is needed as
   the latest wheels are not published on PyPI.
 
+.. currentmodule:: torchrl.data.datasets
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst
 
-    .. currentmodule:: torchrl.data.datasets
 
     D4RLExperienceReplay
 
@@ -193,6 +195,7 @@ It is important that your environment specs match the input and output that it s
 :obj:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
 Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
 
+.. currentmodule:: torchrl.data
 
 .. autosummary::
     :toctree: generated/
@@ -212,6 +215,8 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
 
 Utils
 -----
+
+.. currentmodule:: torchrl.data.datasets
 
 .. autosummary::
     :toctree: generated/
