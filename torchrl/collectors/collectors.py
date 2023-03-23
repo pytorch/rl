@@ -160,7 +160,9 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
     )
 
 
-class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
+class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
+    """Base class for data collectors."""
+
     _iterator = None
 
     def _get_policy_and_device(
@@ -319,7 +321,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
 
 
 @accept_remote_rref_udf_invocation
-class SyncDataCollector(_DataCollector):
+class SyncDataCollector(DataCollectorBase):
     """Generic data collector for RL problems. Requires and environment constructor and a policy.
 
     Args:
@@ -861,7 +863,7 @@ class SyncDataCollector(_DataCollector):
         return string
 
 
-class _MultiDataCollector(_DataCollector):
+class _MultiDataCollector(DataCollectorBase):
     """Runs a given number of DataCollectors on separate processes.
 
     Args:
