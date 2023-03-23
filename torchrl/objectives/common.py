@@ -37,9 +37,12 @@ except ImportError:
 class LossModule(nn.Module):
     """A parent class for RL losses.
 
-    LossModule inherits from nn.Module. It is designed to read an input TensorDict and return another tensordict
-    with loss keys named "loss_*".
-    Splitting the loss in its component can then be used by the trainer to log the various loss values throughout
+    LossModule inherits from nn.Module. It is designed to read an input
+    TensorDict and return another tensordict
+    with loss keys named ``"loss_*"``.
+
+    Splitting the loss in its component can then be used by the trainer to log
+    the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
 
     """
@@ -75,6 +78,8 @@ class LossModule(nn.Module):
         compare_against: Optional[List[Parameter]] = None,
         funs_to_decorate=None,
     ) -> None:
+        """Converts a module to functional to be used in the loss.
+        """
         if funs_to_decorate is None:
             funs_to_decorate = ["forward"]
         # To make it robust to device casting, we must register list of
