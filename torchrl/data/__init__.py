@@ -30,3 +30,4 @@ from .tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
+from . import datasets
