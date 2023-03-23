@@ -10,7 +10,7 @@ from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModuleWra
 from tensordict.tensordict import TensorDictBase
 
 from torchrl.collectors.collectors import (
-    _DataCollector,
+    DataCollectorBase,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
     SyncDataCollector,
@@ -174,7 +174,7 @@ def _make_collector(
     num_env_per_collector: Optional[int] = None,
     num_collectors: Optional[int] = None,
     **kwargs,
-) -> _DataCollector:
+) -> DataCollectorBase:
     if env_kwargs is None:
         env_kwargs = {}
     if isinstance(env_fns, list):
@@ -253,7 +253,7 @@ def make_collector_offpolicy(
     ],
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
-) -> _DataCollector:
+) -> DataCollectorBase:
     """Returns a data collector for off-policy algorithms.
 
     Args:
@@ -317,7 +317,7 @@ def make_collector_onpolicy(
     ],
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
-) -> _DataCollector:
+) -> DataCollectorBase:
     """Makes a collector in on-policy settings.
 
     Args:

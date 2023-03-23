@@ -66,10 +66,11 @@ Single node data collectors
     :toctree: generated/
     :template: rl_template.rst
 
+    DataCollectorBase
+    SyncDataCollector
     MultiSyncDataCollector
     MultiaSyncDataCollector
     RandomPolicy
-    SyncDataCollector
     aSyncDataCollector
 
 

@@ -1,0 +1,28 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - protobuf
+  - pip:
+    - hypothesis
+    - future
+    - cloudpickle
+    - pygame
+    - moviepy
+    - tqdm
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - expecttest
+    - pyyaml
+    - scipy
+    - hydra-core
+    - tensorboard
+    - wandb
+    - dm_control
+    - mlflow
+    - av
+    - coverage
