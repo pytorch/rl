@@ -689,7 +689,7 @@ class SyncDataCollector(DataCollectorBase):
 
         if not self.reset_when_done:
             done = torch.zeros_like(done)
-        done_or_terminated = done.squeeze(-1) | truncated.squeeze(-1)
+        done_or_terminated = done | truncated
         # keep track of envs that have been done at least once
         if self._has_been_done is None:
             self._has_been_done = done_or_terminated
@@ -699,8 +699,7 @@ class SyncDataCollector(DataCollectorBase):
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
             if len(self.env.batch_size):
-                self._tensordict.masked_fill_(done_or_terminated, 0)
-                _reset = done_or_terminated.unsqueeze(-1)
+                _reset = done_or_terminated
                 td_reset = self._tensordict.select().set("_reset", _reset)
             else:
                 _reset = None
@@ -714,8 +713,11 @@ class SyncDataCollector(DataCollectorBase):
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
                 )
-            traj_ids[done_or_terminated] = traj_ids.max() + torch.arange(
-                1, done_or_terminated.sum() + 1, device=traj_ids.device
+            traj_done_or_terminated = done_or_terminated.view(
+                self._tensordict.batch_size, -1
+            ).any(-1)
+            traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
+                1, traj_done_or_terminated + 1, device=traj_ids.device
             )
             self._tensordict.set_(
                 ("collector", "traj_ids"), traj_ids
