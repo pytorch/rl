@@ -19,6 +19,9 @@ from .exploration import (
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from .probabilistic import SafeProbabilisticModule, SafeProbabilisticSequential
+from .probabilistic import (
+    SafeProbabilisticModule,
+    SafeProbabilisticTensorDictSequential,
+)
 from .sequence import SafeSequential
 from .world_models import WorldModelWrapper

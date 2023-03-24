@@ -7,12 +7,11 @@ from functools import wraps
 from typing import List, Optional, Tuple, Union
 
 import torch
-from tensordict.nn import dispatch
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import SafeModule
 
 from torchrl.objectives.utils import hold_out_net
 from torchrl.objectives.value.functional import (
@@ -37,7 +36,7 @@ class TDEstimate(nn.Module):
 
     Args:
         gamma (scalar): exponential mean discount.
-        value_network (SafeModule): value operator used to retrieve the value estimates.
+        value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if True, rewards will be standardized
             before the TD is computed.
         differentiable (bool, optional): if True, gradients are propagated throught
@@ -54,7 +53,7 @@ class TDEstimate(nn.Module):
     def __init__(
         self,
         gamma: Union[float, torch.Tensor],
-        value_network: SafeModule,
+        value_network: TensorDictModule,
         average_rewards: bool = False,
         differentiable: bool = False,
         advantage_key: Union[str, Tuple] = "advantage",
@@ -123,7 +122,7 @@ class TDEstimate(nn.Module):
 
         Examples:
             >>> from tensordict import TensorDict
-            >>> value_net = SafeModule(
+            >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
             >>> module = TDEstimate(
@@ -141,7 +140,7 @@ class TDEstimate(nn.Module):
         The module supports non-tensordict (i.e. unpacked tensordict) inputs too:
 
         Examples:
-            >>> value_net = SafeModule(
+            >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
             >>> module = TDEstimate(
@@ -205,7 +204,7 @@ class TDLambdaEstimate(nn.Module):
     Args:
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
-        value_network (SafeModule): value operator used to retrieve the value estimates.
+        value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if True, rewards will be standardized
             before the TD is computed.
         differentiable (bool, optional): if True, gradients are propagated throught
@@ -225,7 +224,7 @@ class TDLambdaEstimate(nn.Module):
         self,
         gamma: Union[float, torch.Tensor],
         lmbda: Union[float, torch.Tensor],
-        value_network: SafeModule,
+        value_network: TensorDictModule,
         average_rewards: bool = False,
         differentiable: bool = False,
         vectorized: bool = True,
@@ -297,7 +296,7 @@ class TDLambdaEstimate(nn.Module):
 
         Examples:
             >>> from tensordict import TensorDict
-            >>> value_net = SafeModule(
+            >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
             >>> module = TDLambdaEstimate(
@@ -316,7 +315,7 @@ class TDLambdaEstimate(nn.Module):
         The module supports non-tensordict (i.e. unpacked tensordict) inputs too:
 
         Examples:
-            >>> value_net = SafeModule(
+            >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
             >>> module = TDLambdaEstimate(
@@ -394,7 +393,7 @@ class GAE(nn.Module):
     Args:
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
-        value_network (SafeModule): value operator used to retrieve the value estimates.
+        value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_gae (bool): if True, the resulting GAE values will be standardized.
             Default is :obj:`False`.
         differentiable (bool, optional): if True, gradients are propagated throught
@@ -419,7 +418,7 @@ class GAE(nn.Module):
         self,
         gamma: Union[float, torch.Tensor],
         lmbda: float,
-        value_network: SafeModule,
+        value_network: TensorDictModule,
         average_gae: bool = False,
         differentiable: bool = False,
         advantage_key: Union[str, Tuple] = "advantage",
@@ -490,7 +489,7 @@ class GAE(nn.Module):
 
         Examples:
             >>> from tensordict import TensorDict
-            >>> value_net = SafeModule(
+            >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
             >>> module = GAE(
@@ -509,7 +508,7 @@ class GAE(nn.Module):
         The module supports non-tensordict (i.e. unpacked tensordict) inputs too:
 
         Examples:
-            >>> value_net = SafeModule(
+            >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
             >>> module = GAE(

@@ -7,10 +7,11 @@ from numbers import Number
 from typing import Optional, Tuple
 
 import torch
+from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
-from torchrl.modules import ProbabilisticActor, SafeModule
+from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.utils import distance_loss, next_state_value
 
 from ..envs.utils import set_exploration_mode, step_mdp
@@ -33,8 +34,8 @@ class IQLLoss(LossModule):
 
     Args:
         actor_network (ProbabilisticActor): stochastic actor
-        qvalue_network (SafeModule): Q(s, a) parametric model
-        value_network (SafeModule, optional): V(s) parametric model. If not
+        qvalue_network (TensorDictModule): Q(s, a) parametric model
+        value_network (TensorDictModule, optional): V(s) parametric model. If not
             provided, the second version of SAC is assumed.
         qvalue_network_bis (ProbabilisticTDModule, optional): if required, the
             Q-value can be computed twice independently using two separate
@@ -59,8 +60,8 @@ class IQLLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: SafeModule,
-        value_network: Optional[SafeModule] = None,
+        qvalue_network: TensorDictModule,
+        value_network: Optional[TensorDictModule] = None,
         num_qvalue_nets: int = 2,
         gamma: Number = 0.99,
         priotity_key: str = "td_error",

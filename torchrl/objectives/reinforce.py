@@ -6,9 +6,9 @@
 from typing import Optional
 
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.modules.tensordict_module import SafeModule, SafeProbabilisticSequential
+from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import distance_loss
 
@@ -23,8 +23,8 @@ class ReinforceLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: SafeProbabilisticSequential,
-        critic: Optional[SafeModule] = None,
+        actor_network: ProbabilisticTensorDictSequential,
+        critic: Optional[TensorDictModule] = None,
         delay_value: bool = False,
         gamma: float = 0.99,
         advantage_key: str = "advantage",
