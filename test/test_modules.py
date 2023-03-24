@@ -57,8 +57,13 @@ def double_prec_fixture():
 )
 @pytest.mark.parametrize(
     "norm_class, norm_kwargs",
-    [(nn.LazyBatchNorm1d, {}), (nn.BatchNorm1d, {"num_features": 32})],
+    [
+        (nn.LazyBatchNorm1d, {}),
+        (nn.BatchNorm1d, {"num_features": 32}),
+        (nn.LayerNorm, {"normalized_shape": 32}),
+    ],
 )
+@pytest.mark.parametrize("dropout", [0.0, 0.5])
 @pytest.mark.parametrize("bias_last_layer", [True, False])
 @pytest.mark.parametrize("single_bias_last_layer", [True, False])
 @pytest.mark.parametrize("layer_class", [nn.Linear, NoisyLinear])
@@ -70,6 +75,7 @@ def test_mlp(
     num_cells,
     activation_class,
     activation_kwargs,
+    dropout,
     bias_last_layer,
     norm_class,
     norm_kwargs,
@@ -89,6 +95,7 @@ def test_mlp(
         activation_kwargs=activation_kwargs,
         norm_class=norm_class,
         norm_kwargs=norm_kwargs,
+        dropout=dropout,
         bias_last_layer=bias_last_layer,
         single_bias_last_layer=False,
         layer_class=layer_class,
