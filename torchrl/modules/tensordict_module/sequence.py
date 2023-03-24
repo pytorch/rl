@@ -114,9 +114,9 @@ class SafeSequential(TensorDictSequential, SafeModule):
 
         spec = CompositeSpec()
         for module in modules:
-            if isinstance(module, TensorDictModule) and hasattr(module, "spec"):
+            try:
                 spec.update(module.spec)
-            else:
+            except AttributeError:
                 spec.update(CompositeSpec({key: None for key in module.out_keys}))
 
         super(TensorDictSequential, self).__init__(

@@ -8,7 +8,7 @@ import argparse
 import pytest
 import torch
 from tensordict import TensorDict
-from tensordict.nn.functional_modules import make_functional
+from tensordict.nn import make_functional, TensorDictModule
 from torch import nn
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -29,7 +29,7 @@ from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 _has_functorch = False
 try:
-    from functorch import vmap
+    from torch import vmap
 
     _has_functorch = True
 except ImportError:
@@ -267,7 +267,7 @@ class TestTDModule:
             )
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tensordict_module(td, params=params)
+        tensordict_module(td, params=TensorDict({"module": params}, []))
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -378,7 +378,7 @@ class TestTDModule:
             )
 
         td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
-        tdmodule(td, params=params)
+        tdmodule(td, params=TensorDict({"module": params}, []))
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 32])
 
@@ -1518,7 +1518,7 @@ def test_ensure_tensordict_compatible():
         out_keys=["out_1", "out_2", "out_3"],
     )
     assert set(ensured_module.in_keys) == {"x"}
-    assert isinstance(ensured_module, SafeModule)
+    assert isinstance(ensured_module, TensorDictModule)
 
 
 if __name__ == "__main__":
