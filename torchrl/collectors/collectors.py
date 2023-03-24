@@ -1460,7 +1460,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
         frames_per_batch_worker = -(
             -self.requested_frames_per_batch // self.num_workers
         )
-        self.frames_per_batch = frames_per_batch_worker * self.num_workers
         return frames_per_batch_worker
 
     @property
