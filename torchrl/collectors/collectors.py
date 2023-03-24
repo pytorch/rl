@@ -548,6 +548,12 @@ class SyncDataCollector(DataCollectorBase):
         self.postproc = postproc
         if self.postproc is not None:
             self.postproc.to(self.storing_device)
+        if frames_per_batch % self.n_env != 0:
+            warnings.warn(
+                f"frames_per_batch {frames_per_batch} is not exactly divisible by the number of batched environments {self.n_env}, "
+                f" this results in more frames_per_batch per iteration that requested"
+            )
+        self.requested_frames_per_batch = frames_per_batch
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.exploration_mode = (
             exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
@@ -555,8 +561,7 @@ class SyncDataCollector(DataCollectorBase):
         self.return_same_td = return_same_td
 
         self._tensordict = env.reset()
-        n = self.env.batch_size.numel() if len(self.env.batch_size) else 1
-        traj_ids = torch.arange(n, device=env.device).view(self.env.batch_size)
+        traj_ids = torch.arange(self.n_env, device=env.device).view(self.env.batch_size)
         self._tensordict.set(
             ("collector", "traj_ids"),
             traj_ids,
@@ -1110,7 +1115,7 @@ class _MultiDataCollector(DataCollectorBase):
         self.reset_at_each_iter = reset_at_each_iter
         self.postprocs = postproc
         self.max_frames_per_traj = max_frames_per_traj
-        self.frames_per_batch = frames_per_batch
+        self.requested_frames_per_batch = frames_per_batch
         self.reset_when_done = reset_when_done
         if split_trajs is None:
             split_trajs = False
@@ -1459,7 +1464,15 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     @property
     def frames_per_batch_worker(self):
-        return -(-self.frames_per_batch // self.num_workers)
+        if self.requested_frames_per_batch % self.num_workers != 0:
+            warnings.warn(
+                f"frames_per_batch {self.requested_frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers},"
+                f" this results in more frames_per_batch per iteration that requested"
+            )
+        frames_per_batch_worker = -(
+            -self.requested_frames_per_batch // self.num_workers
+        )
+        return frames_per_batch_worker
 
     @property
     def _queue_len(self) -> int:
@@ -1690,7 +1703,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     @property
     def frames_per_batch_worker(self):
-        return self.frames_per_batch
+        return self.requested_frames_per_batch
 
     def _get_from_queue(self, timeout=None) -> Tuple[int, int, TensorDictBase]:
         new_data, j = self.queue_out.get(timeout=timeout)
