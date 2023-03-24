@@ -169,7 +169,8 @@ class _Dynamic_CKPT_BACKEND:
                 _has_ts = False
             if not _has_ts:
                 raise ImportError(
-                    f"torchsnapshot not found, but the backend points to this library. Consider installing torchsnapshot or choose another backend (available backends: {self.backends})"
+                    f"torchsnapshot not found, but the backend points to this library. "
+                    f"Consider installing torchsnapshot or choose another backend (available backends: {self.backends})"
                 )
         return backend
 

@@ -37,7 +37,7 @@ from torch.distributed import rpc
 
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
-    _DataCollector,
+    DataCollectorBase,
     DEFAULT_EXPLORATION_MODE,
     MultiSyncDataCollector,
     SyncDataCollector,
@@ -84,7 +84,7 @@ def _rpc_init_collection_node(
     rpc.shutdown()
 
 
-class RPCDataCollector(_DataCollector):
+class RPCDataCollector(DataCollectorBase):
     """An RPC-based distributed data collector.
 
     Supports sync and async data collection.
