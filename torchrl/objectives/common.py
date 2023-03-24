@@ -18,6 +18,7 @@ from torch import nn, Tensor
 from torch.nn import Parameter
 
 from torchrl.modules.utils import Buffer
+from torchrl.objectives.value import ValueFunctionBase
 
 _has_functorch = False
 try:
@@ -353,3 +354,12 @@ class LossModule(nn.Module):
 
     def cpu(self) -> LossModule:
         return self.to(torch.device("cpu"))
+
+    def _default_value_function(self) -> ValueFunctionBase:
+        """A value-function constructor when none is provided.
+
+        No kwarg should be present as default parameters should be retrieved
+        from :obj:`torchrl.objectives.utils.DEFAULT_VALUE_FUN_PARAMS`.
+
+        """
+        raise NotImplementedError

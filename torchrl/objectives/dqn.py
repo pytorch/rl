@@ -3,11 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Union
+from typing import Union, Optional
 
 import torch
-from tensordict import TensorDict
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import make_functional
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
@@ -15,7 +15,8 @@ from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 
 from .common import LossModule
-from .utils import distance_loss, next_state_value
+from .utils import distance_loss, next_state_value, DEFAULT_VALUE_FUN_PARAMS
+from .value import ValueFunctionBase, TDLambdaEstimate
 
 
 class DQNLoss(LossModule):
@@ -33,7 +34,7 @@ class DQNLoss(LossModule):
     def __init__(
         self,
         value_network: Union[QValueActor, nn.Module],
-        gamma: float,
+        value_function: Optional[ValueFunctionBase]=None,
         loss_function: str = "l2",
         priority_key: str = "td_error",
         delay_value: bool = False,
@@ -41,10 +42,12 @@ class DQNLoss(LossModule):
 
         super().__init__()
         self.delay_value = delay_value
-
+        if value_function is not None and value_function.value_network is not value_network:
+            raise RuntimeError("value_function.value_network and value_network must match.")
         value_network = ensure_tensordict_compatible(
             module=value_network, wrapper_type=QValueActor
         )
+        self.value_function.value_key = "chosen_action_value"
 
         self.convert_to_functional(
             value_network,
@@ -52,12 +55,29 @@ class DQNLoss(LossModule):
             create_target_params=self.delay_value,
         )
 
+        make_functional(self.value_network)
+
+        if value_function is None:
+            value_function = self._default_value_function()
+        self.value_function = value_function
+
         self.value_network_in_keys = value_network.in_keys
 
-        self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_function = loss_function
         self.priority_key = priority_key
         self.action_space = self.value_network.action_space
+
+    def _default_value_function(self):
+        return TDLambdaEstimate(gamma=DEFAULT_VALUE_FUN_PARAMS.gamma,
+        lmbda=DEFAULT_VALUE_FUN_PARAMS.lmbda,
+        value_network=self.value_network,
+        average_rewards=True,
+        differentiable=False,
+        vectorized=True,
+        advantage_key="advantage",
+        value_target_key = "value_target",
+        value_key="chosen_action_value",
+        )
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DQN loss given a tensordict sampled from the replay buffer.
@@ -106,14 +126,9 @@ class DQNLoss(LossModule):
             action = action.to(torch.float)
             pred_val_index = (pred_val * action).sum(-1)
 
-        with torch.no_grad():
-            target_value = next_state_value(
-                tensordict,
-                self.value_network,
-                gamma=self.gamma,
-                params=self.target_value_network_params,
-                next_val_key="chosen_action_value",
-            )
+        self.value_function(tensordict, self.value_network_parameters, self.target_value_network_parameters)
+        target_value = tensordict[self.value_function.value_target_key]
+
         priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
         if input_tensordict.device is not None:
@@ -150,12 +165,14 @@ class DistributionalDQNLoss(LossModule):
     def __init__(
         self,
         value_network: Union[DistributionalQValueActor, nn.Module],
-        gamma: float,
+        value_function: ValueFunctionBase,
         priority_key: str = "td_error",
         delay_value: bool = False,
     ):
         super().__init__()
-        self.register_buffer("gamma", torch.tensor(gamma))
+        self.value_function = value_function
+        if self.value_function.value_network is not value_network:
+            raise RuntimeError("value_function.value_network and value_network must match.")
         self.priority_key = priority_key
         self.delay_value = delay_value
 
@@ -168,6 +185,9 @@ class DistributionalDQNLoss(LossModule):
             "value_network",
             create_target_params=self.delay_value,
         )
+
+        make_functional(self.value_function.value_network)
+
         self.action_space = self.value_network.action_space
 
     @staticmethod

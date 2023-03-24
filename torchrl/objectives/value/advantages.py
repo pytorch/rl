@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import abc
 from functools import wraps
 from typing import List, Optional, Tuple, Union
 
@@ -30,8 +30,41 @@ def _self_set_grad_enabled(fun):
 
     return new_fun
 
+class ValueFunctionBase(nn.Module):
+    """An abstract parent class for value function modules."""
 
-class TDEstimate(nn.Module):
+    value_network: TensorDictModule
+    value_key: Union[Tuple[str], str]
+
+    @abc.abstractmethod
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+        params: Optional[TensorDictBase] = None,
+        target_params: Optional[TensorDictBase] = None,
+    ) -> TensorDictBase:
+        """Computes the a value estimate given the data in tensordict.
+
+        If a functional module is provided, a nested TensorDict containing the parameters
+        (and if relevant the target parameters) can be passed to the module.
+
+        Args:
+            tensordict (TensorDictBase): A TensorDict containing the data
+                (an observation key, "action", ("next", "reward"), ("next", "done") and "next" tensordict state
+                as returned by the environment) necessary to compute the value estimates and the TDEstimate.
+                The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
+                the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
+            params (TensorDictBase, optional): A nested TensorDict containing the params
+                to be passed to the functional value network module.
+            target_params (TensorDictBase, optional): A nested TensorDict containing the
+                target params to be passed to the functional value network module.
+
+        Returns:
+            An updated TensorDict with an advantage and a value_error keys as defined in the constructor.
+        """
+        raise NotImplementedError
+
+class TDEstimate(ValueFunctionBase):
     """Temporal Difference estimate of advantage function.
 
     Args:
@@ -198,7 +231,7 @@ class TDEstimate(nn.Module):
         return tensordict
 
 
-class TDLambdaEstimate(nn.Module):
+class TDLambdaEstimate(ValueFunctionBase):
     """TD-Lambda estimate of advantage function.
 
     Args:
@@ -384,7 +417,7 @@ class TDLambdaEstimate(nn.Module):
         return tensordict
 
 
-class GAE(nn.Module):
+class GAE(ValueFunctionBase):
     """A class wrapper around the generalized advantage estimate functional.
 
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"

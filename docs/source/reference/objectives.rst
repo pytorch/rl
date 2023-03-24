@@ -108,6 +108,7 @@ Returns
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    ValueFunctionBase
     GAE
     TDLambdaEstimate
     TDEstimate
