@@ -229,7 +229,11 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                     sig = policy.forward.__signature__
                 except AttributeError:
                     sig = inspect.signature(policy.forward)
-                required_params = {str(k) for k, p in sig.parameters.items() if p.default is inspect._empty}
+                required_params = {
+                    str(k)
+                    for k, p in sig.parameters.items()
+                    if p.default is inspect._empty
+                }
                 next_observation = {
                     key: value for key, value in observation_spec.rand().items()
                 }
