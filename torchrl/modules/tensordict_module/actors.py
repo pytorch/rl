@@ -12,7 +12,6 @@ from torch import nn
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     TensorSpec,
-    UnboundedContinuousTensorSpec,
 )
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
