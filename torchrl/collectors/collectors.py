@@ -506,7 +506,11 @@ class SyncDataCollector(DataCollectorBase):
         self.reset_when_done = reset_when_done
         self.n_env = self.env.batch_size.numel()
 
-        (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
+        (
+            self.policy,
+            self.device,
+            self.get_weights_fn,
+        ) = self._get_policy_and_device(
             policy=policy,
             device=device,
             observation_spec=self.env.observation_spec,
@@ -699,6 +703,9 @@ class SyncDataCollector(DataCollectorBase):
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
             if len(self.env.batch_size):
+                self._tensordict.masked_fill_(
+                    done_or_terminated.view(self._tensordict.batch_size, -1).any(-1), 0
+                )
                 _reset = done_or_terminated
                 td_reset = self._tensordict.select().set("_reset", _reset)
             else:
@@ -714,7 +721,7 @@ class SyncDataCollector(DataCollectorBase):
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
                 )
             traj_done_or_terminated = done_or_terminated.view(
-                self._tensordict.batch_size, -1
+                *self._tensordict.batch_size, -1
             ).any(-1)
             traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
                 1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
