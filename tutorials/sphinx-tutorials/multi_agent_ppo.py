@@ -1,0 +1,225 @@
+from collections import defaultdict
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import wandb
+from tensordict.nn import TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
+from torch import nn
+from torchrl.collectors import SyncDataCollector
+from torchrl.data.replay_buffers import ReplayBuffer
+from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
+from torchrl.data.replay_buffers.storages import LazyTensorStorage
+from torchrl.envs import (
+    Compose,
+    DoubleToFloat,
+    ObservationNorm,
+    StepCounter,
+    TransformedEnv,
+)
+from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.vmas import VmasEnv
+from torchrl.envs.utils import check_env_specs, set_exploration_mode, step_mdp
+from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
+from torchrl.objectives import ClipPPOLoss
+from torchrl.objectives.value import GAE
+
+from torchrl.record.loggers.wandb import WandbLogger
+from tqdm import tqdm
+
+if __name__ == "__main__":
+    device = "cpu" if not torch.has_cuda else "cuda:0"
+
+    lr = 3e-4
+    max_grad_norm = 1.0
+
+    vmas_envs = 32
+    max_steps = 200
+    frames_per_batch = vmas_envs * max_steps
+    # For a complete training, bring the number of frames up to 1M
+    total_frames = frames_per_batch * 500
+
+    sub_batch_size = 64  # cardinality of the sub-samples gathered from the current data in the inner loop
+    num_epochs = 10  # optimisation steps per batch of data collected
+    clip_epsilon = (
+        0.2  # clip value for PPO loss: see the equation in the intro for more context.
+    )
+    gamma = 0.99
+    lmbda = 0.95
+    entropy_eps = 1e-4
+
+    env = VmasEnv(
+        scenario_name="balance",
+        num_envs=vmas_envs,
+        continuous_actions=True,
+        max_steps=max_steps,
+        device=device,
+        # Scenario kwargs
+        n_agents=3,
+    )
+    test_env = VmasEnv(
+        scenario_name="balance",
+        num_envs=1,
+        continuous_actions=True,
+        max_steps=max_steps,
+        device=device,
+        # Scenario kwargs
+        n_agents=3,
+    )
+
+    # print("observation_spec:", env.observation_spec)
+    # print("reward_spec:", env.reward_spec)
+    # print("input_spec:", env.input_spec)
+    # print("action_spec (as defined by input_spec):", env.action_spec)
+    #
+    # rollout = env.rollout(3)
+    # print("rollout of three steps:", rollout)
+    # print("Shape of the rollout TensorDict:", rollout.batch_size)
+    shared_net = nn.Sequential(
+        nn.LazyLinear(256, device=device),
+        nn.Tanh(),
+        nn.LazyLinear(256, device=device),
+        nn.Tanh(),
+    )
+
+    actor_net = nn.Sequential(
+        shared_net,
+        nn.LazyLinear(2 * env.action_spec.shape[-1], device=device),
+        NormalParamExtractor(),
+    )
+
+    policy_module = TensorDictModule(
+        actor_net, in_keys=["observation"], out_keys=["loc", "scale"]
+    )
+
+    policy_module = ProbabilisticActor(
+        module=policy_module,
+        spec=env.action_spec,
+        in_keys=["loc", "scale"],
+        distribution_class=TanhNormal,
+        distribution_kwargs={
+            "min": env.action_spec.space.minimum,
+            "max": env.action_spec.space.maximum,
+        },
+        return_log_prob=True,
+        # we'll need the log-prob for the numerator of the importance weights
+    )
+
+    value_net = nn.Sequential(
+        shared_net,
+        nn.LazyLinear(1, device=device),
+    )
+    value_module = ValueOperator(
+        module=value_net,
+        in_keys=["observation"],
+    )
+
+    policy_module(env.reset())
+    value_module(env.reset())
+    # print("Running policy:", policy_module(env.reset()))
+    # print("Running value:", value_module(env.reset()))
+
+    collector = SyncDataCollector(
+        env,
+        policy_module,
+        frames_per_batch=frames_per_batch,
+        total_frames=total_frames,
+        split_trajs=False,
+        device=device,
+    )
+
+    replay_buffer = ReplayBuffer(
+        storage=LazyTensorStorage(frames_per_batch),
+        sampler=SamplerWithoutReplacement(),
+    )
+
+    advantage_module = GAE(
+        gamma=gamma, lmbda=lmbda, value_network=value_module, average_gae=False
+    )
+
+    loss_module = ClipPPOLoss(
+        actor=policy_module,
+        critic=value_module,
+        advantage_key="advantage",
+        clip_epsilon=clip_epsilon,
+        entropy_bonus=bool(entropy_eps),
+        entropy_coef=entropy_eps,
+        # these keys match by default but we set this for completeness
+        value_target_key=advantage_module.value_target_key,
+        critic_coef=1.0,
+        gamma=0.99,
+        loss_critic_type="smooth_l1",
+    )
+
+    optim = torch.optim.Adam(loss_module.parameters(), lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optim, total_frames // frames_per_batch, 0.0
+    )
+
+    logs = defaultdict(list)
+    logger = WandbLogger(exp_name="mult_ppo_tutorial", project="torchrl")
+
+    for i, tensordict_data in enumerate(collector):
+        for _ in range(num_epochs):
+            advantage_module(tensordict_data)
+            data_view = tensordict_data.reshape(-1)
+            replay_buffer.extend(data_view.cpu())
+            for _ in range(frames_per_batch // sub_batch_size):
+                subdata, *_ = replay_buffer.sample(sub_batch_size)
+                loss_vals = loss_module(subdata.to(device))
+                loss_value = (
+                    loss_vals["loss_objective"]
+                    + loss_vals["loss_critic"]
+                    + loss_vals["loss_entropy"]
+                )
+
+                # Optimization: backward, grad clipping and optim step
+                loss_value.backward()
+                # this is not strictly mandatory but it's good practice to keep
+                # your gradient norm bounded
+                torch.nn.utils.clip_grad_norm_(loss_module.parameters(), max_grad_norm)
+                optim.step()
+                optim.zero_grad()
+
+        logger.log_scalar(
+            "reward",
+            tensordict_data["next", "reward"].mean().item(),
+            step=i,
+        )
+        print(f"Iteration {i}")
+
+        if i % 10 == 0:
+
+            with set_exploration_mode("mean"), torch.no_grad():
+                # execute a rollout with the trained policy
+                tensordict = test_env.reset()
+                frames = []
+                for i in range(max_steps):
+                    tensordict = policy_module(tensordict)
+                    frames.append(
+                        test_env._env.render(mode="rgb_array", agent_index_focus=None)
+                    )
+
+                    tensordict = test_env.step(tensordict)
+                    done = tensordict.get(("next", "done"))
+                    if done.any():
+                        break
+                    tensordict = step_mdp(
+                        tensordict,
+                        keep_other=True,
+                        exclude_action=False,
+                    )
+
+                vid = np.transpose(frames, (0, 3, 1, 2))
+                logger.experiment.log(
+                    {
+                        "video": wandb.Video(
+                            vid, fps=1 / test_env._env.world.dt, format="mp4"
+                        )
+                    }
+                ),
+
+        # We're also using a learning rate scheduler. Like the gradient clipping,
+        # this is a nice-to-have but nothing necessary for PPO to work.
+        scheduler.step()
