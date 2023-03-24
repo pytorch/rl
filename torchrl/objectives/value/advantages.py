@@ -208,13 +208,6 @@ class TDEstimate(ValueFunctionBase):
                 "Expected input tensordict to have at least one dimensions, got"
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
-        reward = tensordict.get(("next", "reward"))
-        if self.average_rewards:
-            reward = reward - reward.mean()
-            reward = reward / reward.std().clamp_min(1e-4)
-            tensordict.set(
-                ("next", "reward"), reward
-            )  # we must update the rewards if they are used later in the code
 
         kwargs = {}
         if self.is_functional and params is None:
@@ -240,6 +233,12 @@ class TDEstimate(ValueFunctionBase):
         # we may still need to pass gradient, but we don't want to assign grads to
         # value net params
         reward = tensordict.get(("next", "reward"))
+        if self.average_rewards:
+            reward = reward - reward.mean()
+            reward = reward / reward.std().clamp_min(1e-4)
+            tensordict.set(
+                ("next", "reward"), reward
+            )  # we must update the rewards if they are used later in the code
         step_td = step_mdp(tensordict)
         if target_params is not None:
             # we assume that target parameters are not differentiable
@@ -389,17 +388,6 @@ class TDLambdaEstimate(ValueFunctionBase):
                 "Expected input tensordict to have at least one dimensions, got"
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
-        reward = tensordict.get(("next", "reward"))
-        if self.average_rewards:
-            reward = reward - reward.mean()
-            reward = reward / reward.std().clamp_min(1e-4)
-            tensordict.set(
-                ("next", "reward"), reward
-            )  # we must update the rewards if they are used later in the code
-
-        gamma = self.gamma
-        lmbda = self.lmbda
-
         kwargs = {}
         if self.is_functional and params is None:
             raise RuntimeError(
@@ -410,13 +398,33 @@ class TDLambdaEstimate(ValueFunctionBase):
         with hold_out_net(self.value_network):
             self.value_network(tensordict, **kwargs)
             value = tensordict.get(self.value_key)
+        if params is not None and target_params is None:
+            target_params = params.detach()
+        value_target = self.value_estimate(tensordict, target_params=target_params)
+
+        tensordict.set(self.advantage_key, value_target-value)
+        tensordict.set(self.value_target_key, value_target)
+        return tensordict
+
+    def value_estimate(self, tensordict, requires_grad=False, target_params: Optional[TensorDictBase] = None):
+
+        gamma = self.gamma
+        lmbda = self.lmbda
+        reward = tensordict.get(("next", "reward"))
+        if self.average_rewards:
+            reward = reward - reward.mean()
+            reward = reward / reward.std().clamp_min(1e-4)
+            tensordict.set(
+                ("next", "reward"), reward
+            )  # we must update the rewards if they are used later in the code
+
+
+        kwargs = {}
 
         step_td = step_mdp(tensordict)
         if target_params is not None:
             # we assume that target parameters are not differentiable
             kwargs["params"] = target_params
-        elif "params" in kwargs:
-            kwargs["params"] = kwargs["params"].detach()
         with hold_out_net(self.value_network):
             # we may still need to pass gradient, but we don't want to assign grads to
             # value net params
@@ -432,10 +440,6 @@ class TDLambdaEstimate(ValueFunctionBase):
             adv = td_lambda_advantage_estimate(
                 gamma, lmbda, value, next_value, reward, done
             )
-
-        tensordict.set(self.advantage_key, adv)
-        tensordict.set(self.value_target_key, adv + value)
-        return tensordict
 
 
 class GAE(ValueFunctionBase):
