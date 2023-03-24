@@ -455,7 +455,7 @@ class TestParallel:
             _ = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"_reset": torch.zeros(N, dtype=torch.bool).bernoulli_()},
+            source={"_reset": env_parallel.done_spec.zero().bernoulli_()},
             batch_size=[
                 N,
             ],
@@ -530,7 +530,7 @@ class TestParallel:
             _ = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"_reset": torch.zeros(N, dtype=torch.bool).bernoulli_()},
+            source={"_reset": env_parallel.done_spec.zero().bernoulli_()},
             batch_size=[
                 N,
             ],
@@ -886,9 +886,13 @@ class TestParallel:
         assert (td["next", "done"] == 1).all()
         assert (td["next"]["observation"] == max_steps + 1).all()
 
-        _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+        _reset = torch.randint(
+            low=0, high=2, size=env.done_spec.shape, dtype=torch.bool
+        )
         while not _reset.any():
-            _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+            _reset = torch.randint(
+                low=0, high=2, size=env.done_spec.shape, dtype=torch.bool
+            )
 
         td_reset = env.reset(
             TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
@@ -922,7 +926,7 @@ def test_env_base_reset_flag(batch_size, max_steps=3):
     assert (td["next", "done"] == 1).all()
     assert (td["next", "observation"] == max_steps + 1).all()
 
-    _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+    _reset = torch.randint(low=0, high=2, size=env.done_spec.shape, dtype=torch.bool)
     td_reset = env.reset(
         TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
     )
