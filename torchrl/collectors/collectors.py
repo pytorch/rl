@@ -717,7 +717,7 @@ class SyncDataCollector(DataCollectorBase):
                 self._tensordict.batch_size, -1
             ).any(-1)
             traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
-                1, traj_done_or_terminated + 1, device=traj_ids.device
+                1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )
             self._tensordict.set_(
                 ("collector", "traj_ids"), traj_ids
