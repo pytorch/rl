@@ -24,7 +24,8 @@ class DQNLoss(LossModule):
 
     Args:
         value_network (QValueActor or nn.Module): a Q value operator.
-        gamma (scalar): a discount factor for return computation.
+        value_function (ValueFunctionBase, optional): the value function module
+            to be used. Defaults to :class:`torchrl.objectives.values.TDLambdaEstimate`.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
         delay_value (bool, optional): whether to duplicate the value network into a new target value network to
             create a double DQN. Default is :obj:`False`.
@@ -58,8 +59,6 @@ class DQNLoss(LossModule):
             "value_network",
             create_target_params=self.delay_value,
         )
-
-        make_functional(self.value_network)
 
         if value_function is None:
             value_function = self._default_value_function()
@@ -169,22 +168,23 @@ class DistributionalDQNLoss(LossModule):
         value_network (DistributionalQValueActor or nn.Module): the distributional Q
             value operator.
         gamma (scalar): a discount factor for return computation.
-        delay_value (bool): whether to duplicate the value network into a new target value network to create double DQN
+            .. note::
+              Unlike :class:`DQNLoss`, this class does not currently support
+              custom value functions. The next value estimation is not
+              bootstrapped.
+        delay_value (bool): whether to duplicate the value network into a new
+            target value network to create double DQN
     """
 
     def __init__(
         self,
         value_network: Union[DistributionalQValueActor, nn.Module],
-        value_function: ValueFunctionBase,
+        gamma: float,
         priority_key: str = "td_error",
         delay_value: bool = False,
     ):
         super().__init__()
-        self.value_function = value_function
-        if self.value_function.value_network is not value_network:
-            raise RuntimeError(
-                "value_function.value_network and value_network must match."
-            )
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.priority_key = priority_key
         self.delay_value = delay_value
 
@@ -197,9 +197,6 @@ class DistributionalDQNLoss(LossModule):
             "value_network",
             create_target_params=self.delay_value,
         )
-
-        make_functional(self.value_function.value_network)
-
         self.action_space = self.value_network.action_space
 
     @staticmethod

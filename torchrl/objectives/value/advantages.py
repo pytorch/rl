@@ -65,6 +65,20 @@ class ValueFunctionBase(nn.Module):
         """
         raise NotImplementedError
 
+    def value_estimate(self, tensordict, requires_grad=False, target_params: Optional[TensorDictBase] = None):
+        """Gets a value estimate, usually used as a target value for the value network.
+
+        Args:
+            tensordict (TensorDictBase): the tensordict containing the data to
+                read.
+            requires_grad (bool, optional): whether the estimate should be part
+                of a computational graph.
+                Defaults to ``False``.
+            target_params (TensorDictBase, optional): A nested TensorDict containing the
+                target params to be passed to the functional value network module.
+
+        """
+        raise NotImplementedError
 
 class TDEstimate(ValueFunctionBase):
     """Temporal Difference estimate of advantage function.
@@ -202,7 +216,6 @@ class TDEstimate(ValueFunctionBase):
                 ("next", "reward"), reward
             )  # we must update the rewards if they are used later in the code
 
-        gamma = self.gamma
         kwargs = {}
         if self.is_functional and params is None:
             raise RuntimeError(
@@ -214,24 +227,30 @@ class TDEstimate(ValueFunctionBase):
             self.value_network(tensordict, **kwargs)
             value = tensordict.get(self.value_key)
 
+        if params is not None and target_params is None:
+            target_params = params.detach()
+        value_target = self.value_estimate(tensordict, target_params=target_params)
+        tensordict.set("advantage", value_target - value)
+        tensordict.set("value_target", value_target)
+        return tensordict
+
+    def value_estimate(self, tensordict, requires_grad=False, target_params: Optional[TensorDictBase] = None):
+        kwargs = {}
+        gamma = self.gamma
         # we may still need to pass gradient, but we don't want to assign grads to
         # value net params
+        reward = tensordict.get(("next", "reward"))
         step_td = step_mdp(tensordict)
         if target_params is not None:
             # we assume that target parameters are not differentiable
             kwargs["params"] = target_params
-        elif "params" in kwargs:
-            kwargs["params"] = kwargs["params"].detach()
         with hold_out_net(self.value_network):
             self.value_network(step_td, **kwargs)
             next_value = step_td.get(self.value_key)
 
         done = tensordict.get(("next", "done"))
-        adv = td_advantage_estimate(gamma, value, next_value, reward, done)
-        tensordict.set("advantage", adv)
-        tensordict.set("value_target", adv + value)
-        return tensordict
-
+        value_target = td_advantage_estimate(gamma, torch.zeros_like(next_value), next_value, reward, done)
+        return value_target
 
 class TDLambdaEstimate(ValueFunctionBase):
     """TD-Lambda estimate of advantage function.
