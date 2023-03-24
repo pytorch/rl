@@ -6,12 +6,12 @@
 
 import torch
 from packaging import version
+from tensordict.nn import TensorDictModule
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
 from torchrl.modules.distributions import NormalParamWrapper
 from torchrl.modules.models.models import MLP
-from torchrl.modules.tensordict_module.common import SafeModule
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 
@@ -151,13 +151,13 @@ class RSSMRollout(nn.Module):
     Reference: https://arxiv.org/abs/1811.04551
 
     Args:
-        rssm_prior (SafeModule): Prior network.
-        rssm_posterior (SafeModule): Posterior network.
+        rssm_prior (TensorDictModule): Prior network.
+        rssm_posterior (TensorDictModule): Posterior network.
 
 
     """
 
-    def __init__(self, rssm_prior: SafeModule, rssm_posterior: SafeModule):
+    def __init__(self, rssm_prior: TensorDictModule, rssm_posterior: TensorDictModule):
         super().__init__()
         _module = SafeSequential(rssm_prior, rssm_posterior)
         self.in_keys = _module.in_keys

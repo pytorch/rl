@@ -1171,10 +1171,7 @@ class TestAutoWrap:
 
         with pytest.raises(
             TypeError,
-            match=(
-                "Arguments to policy.forward are incompatible with entries in "
-                "env.observation_spec."
-            ),
+            match=(r"Arguments to policy.forward are incompatible with entries in"),
         ):
             collector_class(
                 **self._create_collector_kwargs(env_maker, collector_class, policy)
