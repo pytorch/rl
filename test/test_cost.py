@@ -109,7 +109,7 @@ class _check_td_steady:
         pass
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        assert (self.td.select(*self.td_clone.keys()) == self.td_clone).all()
+        assert (self.td.select(*self.td_clone.keys()) == self.td_clone).all(), "Some keys have been modified in the tensordict!"
 
 
 def get_devices():
@@ -301,7 +301,7 @@ class TestDQN:
         td = self._create_mock_data_dqn(
             action_spec_type=action_spec_type, device=device
         )
-        loss_fn = DQNLoss(actor, gamma=0.9, loss_function="l2", delay_value=delay_value)
+        loss_fn = DQNLoss(actor, loss_function="l2", delay_value=delay_value)
         with _check_td_steady(td):
             loss = loss_fn(td)
         assert loss_fn.priority_key in td.keys()
@@ -341,7 +341,7 @@ class TestDQN:
             action_spec_type=action_spec_type, device=device
         )
         loss_fn = DQNLoss(
-            actor, gamma=gamma, loss_function="l2", delay_value=delay_value
+            actor, loss_function="l2", delay_value=delay_value
         )
 
         ms = MultiStep(gamma=gamma, n_steps=n).to(device)

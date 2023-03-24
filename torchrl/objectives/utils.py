@@ -14,9 +14,11 @@ from torch.nn import functional as F
 
 from torchrl.envs.utils import step_mdp
 
+
 class DEFAULT_VALUE_FUN_PARAMS:
-    gamma: 0.99
-    lmbda: 0.95
+    gamma = 0.99
+    lmbda = 0.95
+
 
 class _context_manager:
     def __init__(self, value=True):

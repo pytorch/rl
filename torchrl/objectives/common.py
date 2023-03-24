@@ -79,8 +79,7 @@ class LossModule(nn.Module):
         compare_against: Optional[List[Parameter]] = None,
         funs_to_decorate=None,
     ) -> None:
-        """Converts a module to functional to be used in the loss.
-        """
+        """Converts a module to functional to be used in the loss."""
         if funs_to_decorate is None:
             funs_to_decorate = ["forward"]
         # To make it robust to device casting, we must register list of

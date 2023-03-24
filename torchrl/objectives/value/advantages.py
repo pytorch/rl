@@ -30,6 +30,7 @@ def _self_set_grad_enabled(fun):
 
     return new_fun
 
+
 class ValueFunctionBase(nn.Module):
     """An abstract parent class for value function modules."""
 
@@ -63,6 +64,7 @@ class ValueFunctionBase(nn.Module):
             An updated TensorDict with an advantage and a value_error keys as defined in the constructor.
         """
         raise NotImplementedError
+
 
 class TDEstimate(ValueFunctionBase):
     """Temporal Difference estimate of advantage function.
