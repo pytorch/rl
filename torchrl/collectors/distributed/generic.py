@@ -18,7 +18,7 @@ from torch import multiprocessing as mp, nn
 
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
-    _DataCollector,
+    DataCollectorBase,
     DEFAULT_EXPLORATION_MODE,
     MultiSyncDataCollector,
     SyncDataCollector,
@@ -238,7 +238,7 @@ def _run_collector(
     return
 
 
-class DistributedDataCollector(_DataCollector):
+class DistributedDataCollector(DataCollectorBase):
     """A distributed data collector with torch.distributed backend.
 
     Supports sync and async data collection.
