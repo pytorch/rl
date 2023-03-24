@@ -8,15 +8,15 @@ from typing import List, Optional, Union
 from warnings import warn
 
 import torch
-from tensordict.nn import TensorDictModuleWrapper
+from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl._utils import VERBOSE
-from torchrl.collectors.collectors import _DataCollector
+from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
-from torchrl.modules import reset_noise, SafeModule
+from torchrl.modules import reset_noise
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
@@ -77,11 +77,13 @@ class TrainerConfig:
 
 
 def make_trainer(
-    collector: _DataCollector,
+    collector: DataCollectorBase,
     loss_module: LossModule,
     recorder: Optional[EnvBase] = None,
     target_net_updater: Optional[TargetNetUpdater] = None,
-    policy_exploration: Optional[Union[TensorDictModuleWrapper, SafeModule]] = None,
+    policy_exploration: Optional[
+        Union[TensorDictModuleWrapper, TensorDictModule]
+    ] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
     logger: Optional[Logger] = None,
     cfg: "DictConfig" = None,  # noqa: F821
@@ -89,7 +91,7 @@ def make_trainer(
     """Creates a Trainer instance given its constituents.
 
     Args:
-        collector (_DataCollector): A data collector to be used to collect data.
+        collector (DataCollectorBase): A data collector to be used to collect data.
         loss_module (LossModule): A TorchRL loss module
         recorder (EnvBase, optional): a recorder environment. If None, the trainer will train the policy without
             testing it.

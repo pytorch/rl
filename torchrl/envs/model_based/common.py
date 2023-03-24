@@ -10,10 +10,10 @@ from typing import List, Optional, Union
 import numpy as np
 import torch
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-from torchrl.modules.tensordict_module import SafeModule
 
 
 class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
@@ -53,12 +53,12 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         >>> import torch.nn as nn
         >>> from torchrl.modules import MLP, WorldModelWrapper
         >>> world_model = WorldModelWrapper(
-        ...     SafeModule(
+        ...     TensorDictModule(
         ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
         ...         in_keys=["hidden_observation", "action"],
         ...         out_keys=["hidden_observation"],
         ...     ),
-        ...     SafeModule(
+        ...     TensorDictModule(
         ...         nn.Linear(4, 1),
         ...         in_keys=["hidden_observation"],
         ...         out_keys=["reward"],
@@ -113,7 +113,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
 
     def __init__(
         self,
-        world_model: SafeModule,
+        world_model: TensorDictModule,
         params: Optional[List[torch.Tensor]] = None,
         buffers: Optional[List[torch.Tensor]] = None,
         device: DEVICE_TYPING = "cpu",

@@ -160,7 +160,9 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
     )
 
 
-class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
+class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
+    """Base class for data collectors."""
+
     _iterator = None
 
     def _get_policy_and_device(
@@ -221,11 +223,23 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                         "rather than a TensorDictModule or a nn.Module that accepts a "
                         "TensorDict as input and defines in_keys and out_keys."
                     )
-                sig = inspect.signature(policy.forward)
+
+                try:
+                    # signature modified by make_functional
+                    sig = policy.forward.__signature__
+                except AttributeError:
+                    sig = inspect.signature(policy.forward)
+                required_params = {
+                    str(k)
+                    for k, p in sig.parameters.items()
+                    if p.default is inspect._empty
+                }
                 next_observation = {
                     key: value for key, value in observation_spec.rand().items()
                 }
-                if set(sig.parameters) == set(next_observation):
+                # we check if all the mandatory params are there
+                if not required_params.difference(set(next_observation)):
+                    in_keys = [str(k) for k in sig.parameters if k in next_observation]
                     out_keys = ["action"]
                     output = policy(**next_observation)
 
@@ -233,17 +247,17 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                         out_keys.extend(f"output{i+1}" for i in range(len(output) - 1))
 
                     policy = TensorDictModule(
-                        policy, in_keys=list(sig.parameters), out_keys=out_keys
+                        policy, in_keys=in_keys, out_keys=out_keys
                     )
                 else:
                     raise TypeError(
-                        "Arguments to policy.forward are incompatible with entries in "
-                        "env.observation_spec. If you want TorchRL to automatically "
-                        "wrap your policy with a TensorDictModule then the arguments "
-                        "to policy.forward must correspond one-to-one with entries in "
-                        "env.observation_spec that are prefixed with 'next_'. For more "
-                        "complex behaviour and more control you can consider writing "
-                        "your own TensorDictModule."
+                        f"""Arguments to policy.forward are incompatible with entries in
+env.observation_spec (got incongruent signatures: fun signature is {set(sig.parameters)} vs specs {set(next_observation)}).
+If you want TorchRL to automatically wrap your policy with a TensorDictModule
+then the arguments to policy.forward must correspond one-to-one with entries
+in env.observation_spec that are prefixed with 'next_'. For more complex
+behaviour and more control you can consider writing your own TensorDictModule.
+"""
                     )
 
         try:
@@ -319,7 +333,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
 
 
 @accept_remote_rref_udf_invocation
-class SyncDataCollector(_DataCollector):
+class SyncDataCollector(DataCollectorBase):
     """Generic data collector for RL problems. Requires and environment constructor and a policy.
 
     Args:
@@ -861,7 +875,7 @@ class SyncDataCollector(_DataCollector):
         return string
 
 
-class _MultiDataCollector(_DataCollector):
+class _MultiDataCollector(DataCollectorBase):
     """Runs a given number of DataCollectors on separate processes.
 
     Args:

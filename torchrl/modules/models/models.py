@@ -49,10 +49,11 @@ class MLP(nn.Sequential):
         activation_kwargs (dict, optional): kwargs to be used with the activation class;
         norm_class (Type, optional): normalization class, if any.
         norm_kwargs (dict, optional): kwargs to be used with the normalization layers;
-        dropout (float, optional): dropout probability;
-        bias_last_layer (bool): if True, the last Linear layer will have a bias parameter.
+        dropout (float, optional): dropout probability. Defaults to ``None`` (no
+            dropout);
+        bias_last_layer (bool): if ``True``, the last Linear layer will have a bias parameter.
             default: True;
-        single_bias_last_layer (bool): if True, the last dimension of the bias of the last layer will be a singleton
+        single_bias_last_layer (bool): if ``True``, the last dimension of the bias of the last layer will be a singleton
             dimension.
             default: True;
         layer_class (Type[nn.Module]): class to be used for the linear layers;
@@ -285,7 +286,7 @@ class ConvNet(nn.Sequential):
         activation_kwargs (dict, optional): kwargs to be used with the activation class;
         norm_class (Type, optional): normalization class, if any;
         norm_kwargs (dict, optional): kwargs to be used with the normalization layers;
-        bias_last_layer (bool): if True, the last Linear layer will have a bias parameter.
+        bias_last_layer (bool): if ``True``, the last Linear layer will have a bias parameter.
             default: True;
         aggregator_class (Type[nn.Module]): aggregator to use at the end of the chain.
             default:  SquashDims;
@@ -722,7 +723,7 @@ class DdpgCnnActor(nn.Module):
             'activation_class': nn.ELU,
             'bias_last_layer': True,
         }
-        use_avg_pooling (bool, optional): if True, a nn.AvgPooling layer is
+        use_avg_pooling (bool, optional): if ``True``, a nn.AvgPooling layer is
             used to aggregate the output. Default is :obj:`False`.
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
@@ -853,7 +854,7 @@ class DdpgCnnQNet(nn.Module):
             'activation_class': nn.ELU,
             'bias_last_layer': True,
         }
-        use_avg_pooling (bool, optional): if True, a nn.AvgPooling layer is
+        use_avg_pooling (bool, optional): if ``True``, a nn.AvgPooling layer is
             used to aggregate the output. Default is :obj:`True`.
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """

@@ -15,17 +15,17 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, U
 
 import numpy as np
 import torch.nn
+from tensordict.nn import TensorDictModule
 from tensordict.tensordict import pad, TensorDictBase
 from tensordict.utils import expand_right
 from torch import nn, optim
 
 from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict, VERBOSE
-from torchrl.collectors.collectors import _DataCollector
+from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import SafeModule
 from torchrl.objectives.common import LossModule
 from torchrl.record.loggers import Logger
 
@@ -131,7 +131,7 @@ class Trainer:
 
     def __init__(
         self,
-        collector: _DataCollector,
+        collector: DataCollectorBase,
         total_frames: int,
         frame_skip: int,
         loss_module: Union[LossModule, Callable[[TensorDictBase], TensorDictBase]],
@@ -286,11 +286,11 @@ class Trainer:
         np.random.seed(seed)
 
     @property
-    def collector(self) -> _DataCollector:
+    def collector(self) -> DataCollectorBase:
         return self._collector
 
     @collector.setter
-    def collector(self, collector: _DataCollector) -> None:
+    def collector(self, collector: DataCollectorBase) -> None:
         self._collector = collector
 
     def register_op(self, dest: str, op: Callable, **kwargs) -> None:
@@ -1135,7 +1135,7 @@ class Recorder(TrainerHookBase):
         record_interval: int,
         record_frames: int,
         frame_skip: int,
-        policy_exploration: SafeModule,
+        policy_exploration: TensorDictModule,
         recorder: EnvBase,
         exploration_mode: str = "random",
         log_keys: Optional[List[str]] = None,
@@ -1223,7 +1223,7 @@ class UpdateWeights(TrainerHookBase):
     intervals. If the devices match, this will result in a no-op.
 
     Args:
-        collector (_DataCollector): A data collector where the policy weights
+        collector (DataCollectorBase): A data collector where the policy weights
             must be synced.
         update_weights_interval (int): Interval (in terms of number of batches
             collected) where the sync must take place.
@@ -1234,7 +1234,7 @@ class UpdateWeights(TrainerHookBase):
 
     """
 
-    def __init__(self, collector: _DataCollector, update_weights_interval: int):
+    def __init__(self, collector: DataCollectorBase, update_weights_interval: int):
         self.collector = collector
         self.update_weights_interval = update_weights_interval
         self.counter = 0
