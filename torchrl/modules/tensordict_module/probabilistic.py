@@ -59,7 +59,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             sampling step will be skipped.
         spec (TensorSpec): specs of the first output tensor. Used when calling
             td_module.random() to generate random values in the target space.
-        safe (bool, optional): if True, the value of the sample is checked against the
+        safe (bool, optional): if ``True``, the value of the sample is checked against the
             input spec. Out-of-domain sampling can occur because of exploration policies
             or numerical under/overflow issues. As for the :obj:`spec` argument, this
             check will only occur for the distribution sample, but not the other tensors
@@ -79,15 +79,15 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         distribution_class (Type, optional): a torch.distributions.Distribution class to
             be used for sampling. Default is Delta.
         distribution_kwargs (dict, optional): kwargs to be passed to the distribution.
-        return_log_prob (bool, optional): if True, the log-probability of the
+        return_log_prob (bool, optional): if ``True``, the log-probability of the
             distribution sample will be written in the tensordict with the key
-            `'sample_log_prob'`. Default is `False`.
-        cache_dist (bool, optional): EXPERIMENTAL: if True, the parameters of the
+            `'sample_log_prob'`. Default is ``False``.
+        cache_dist (bool, optional): EXPERIMENTAL: if ``True``, the parameters of the
             distribution (i.e. the output of the module) will be written to the
             tensordict along with the sample. Those parameters can be used to re-compute
             the original distribution later on (e.g. to compute the divergence between
             the distribution used to sample the action and the updated distribution in
-            PPO). Default is `False`.
+            PPO). Default is ``False``.
         n_empirical_estimate (int, optional): number of samples to compute the empirical
             mean when it is not available. Default is 1000
 
@@ -202,7 +202,7 @@ class SafeProbabilisticTensorDictSequential(
          modules (iterable of TensorDictModules): ordered sequence of TensorDictModule
             instances, terminating in ProbabilisticTensorDictModule, to be run
             sequentially.
-         partial_tolerant (bool, optional): if True, the input tensordict can miss some
+         partial_tolerant (bool, optional): if ``True``, the input tensordict can miss some
             of the input keys. If so, the only module that will be executed are those
             who can be executed given the keys that are present. Also, if the input
             tensordict is a lazy stack of tensordicts AND if partial_tolerant is

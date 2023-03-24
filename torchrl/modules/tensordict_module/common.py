@@ -98,18 +98,27 @@ class SafeModule(TensorDictModule):
     """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`torchrl.data.TensorSpec` as argument to control the output domain.
 
     Args:
-        module (nn.Module): a nn.Module used to map the input to the output parameter space. Can be a functional
-            module (FunctionalModule or FunctionalModuleWithBuffers), in which case the :obj:`forward` method will expect
+        module (nn.Module): a nn.Module used to map the input to the output
+            parameter space. Can be a functional
+            module (FunctionalModule or FunctionalModuleWithBuffers), in which
+            case the :obj:`forward` method will expect
             the params (and possibly) buffers keyword arguments.
-        in_keys (iterable of str): keys to be read from input tensordict and passed to the module. If it
-            contains more than one element, the values will be passed in the order given by the in_keys iterable.
-        out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
-            number of tensors returned by the embedded module. Using "_" as a key avoid writing tensor to output.
-        spec (TensorSpec): specs of the output tensor. If the module outputs multiple output tensors,
+        in_keys (iterable of str): keys to be read from input tensordict and
+            passed to the module. If it
+            contains more than one element, the values will be passed in the
+            order given by the in_keys iterable.
+        out_keys (iterable of str): keys to be written to the input tensordict.
+            The length of out_keys must match the
+            number of tensors returned by the embedded module. Using "_" as a
+            key avoid writing tensor to output.
+        spec (TensorSpec, optional): specs of the output tensor. If the module
+            outputs multiple output tensors,
             spec characterize the space of the first output tensor.
-        safe (bool): if True, the value of the output is checked against the input spec. Out-of-domain sampling can
+        safe (bool): if ``True``, the value of the output is checked against the
+            input spec. Out-of-domain sampling can
             occur because of exploration policies or numerical under/overflow issues.
-            If this value is out of bounds, it is projected back onto the desired space using the :obj:`TensorSpec.project`
+            If this value is out of bounds, it is projected back onto the
+            desired space using the :obj:`TensorSpec.project`
             method. Default is :obj:`False`.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can

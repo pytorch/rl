@@ -32,7 +32,7 @@ class NoisyLinear(nn.Linear):
     Args:
         in_features (int): input features dimension
         out_features (int): out features dimension
-        bias (bool): if True, a bias term will be added to the matrix multiplication: Ax + b.
+        bias (bool): if ``True``, a bias term will be added to the matrix multiplication: Ax + b.
             default: True
         device (DEVICE_TYPING, optional): device of the layer.
             default: "cpu"
@@ -154,7 +154,7 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
 
     Args:
         out_features (int): out features dimension
-        bias (bool): if True, a bias term will be added to the matrix multiplication: Ax + b.
+        bias (bool): if ``True``, a bias term will be added to the matrix multiplication: Ax + b.
             default: True
         device (DEVICE_TYPING, optional): device of the layer.
         dtype (torch.dtype, optional): dtype of the parameters.

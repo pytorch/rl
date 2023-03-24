@@ -278,7 +278,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
             default: 1000
         key (str): key of the action to be modified.
             default: "action"
-        safe (bool): if True, actions that are out of bounds given the action specs will be projected in the space
+        safe (bool): if ``True``, actions that are out of bounds given the action specs will be projected in the space
             given the :obj:`TensorSpec.project` heuristic.
             default: True
 
