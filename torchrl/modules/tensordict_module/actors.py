@@ -9,10 +9,7 @@ import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from torch import nn
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    TensorSpec,
-)
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (
