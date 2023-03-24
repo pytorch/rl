@@ -40,7 +40,7 @@ logger:
 
 # Buffer
 replay_buffer:
-  prb: 1
+  prb: 0
   buffer_prefetch: 64
   capacity: 1_000_000
 
@@ -51,7 +51,7 @@ optim:
   weight_decay: 0.0
   batch_size: 256
   lr_scheduler: ""
-  optim_steps_per_batch: 128
+  optim_steps_per_batch: 1000
   value_network_update_interval: 2
 
 # Policy and model
