@@ -455,7 +455,7 @@ class TestParallel:
             _ = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"_reset": env_parallel.done_spec.zero().bernoulli_()},
+            source={"_reset": env_parallel.done_spec.rand()},
             batch_size=[
                 N,
             ],
@@ -530,7 +530,7 @@ class TestParallel:
             _ = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"_reset": env_parallel.done_spec.zero().bernoulli_()},
+            source={"_reset": env_parallel.done_spec.rand()},
             batch_size=[
                 N,
             ],
