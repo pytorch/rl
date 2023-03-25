@@ -3020,7 +3020,7 @@ class StepCounter(Transform):
             default=None,
         )
         if step_count is None:
-            step_count = torch.zeros_like(done)
+            step_count = torch.zeros_like(done, dtype=torch.int64)
 
         step_count[_reset] = 0
         tensordict.set(
