@@ -3062,9 +3062,7 @@ class StepCounter(Transform):
             observation_spec["step_count"].space.minimum * 0
         )
         if self.max_steps is not None and self.truncated_key != "done":
-            observation_spec[self.truncated_key] = (
-                self.parent.done_spec.clone() if self.parent else observation_spec.shape
-            )
+            observation_spec[self.truncated_key] = self.parent.done_spec.clone()
         return observation_spec
 
     def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
