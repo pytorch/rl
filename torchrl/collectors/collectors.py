@@ -725,9 +725,9 @@ class SyncDataCollector(DataCollectorBase):
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
                 )
-            traj_done_or_terminated = done_or_terminated.view(
-                *self._tensordict.batch_size, -1
-            ).any(-1)
+            traj_done_or_terminated = done_or_terminated.sum(
+                tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim))
+            )
             traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
                 1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )

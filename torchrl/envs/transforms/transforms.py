@@ -1719,22 +1719,16 @@ class CatFrames(ObservationTransform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
-        _reset = (
-            tensordict.get(
-                "_reset",
-                torch.ones(
-                    self.parent.done_spec.shape
-                    if self.parent
-                    else tensordict.batch_size,
-                    dtype=torch.bool,
-                    device=tensordict.device
-                    if tensordict.device is not None
-                    else torch.device("cpu"),
-                ),
+        _reset = tensordict.get("_reset", None)
+        if _reset is None:
+            torch.ones(
+                self.parent.done_spec.shape if self.parent else tensordict.batch_size,
+                dtype=torch.bool,
+                device=tensordict.device
+                if tensordict.device is not None
+                else torch.device("cpu"),
             )
-            .view(*tensordict.batch_size, -1)
-            .any(-1)
-        )
+        _reset = _reset.sum(tuple(range(tensordict.batch_dims, _reset.ndim)))
 
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
@@ -1760,7 +1754,7 @@ class CatFrames(ObservationTransform):
         """Update the episode tensordict with max pooled keys."""
         _reset = tensordict.get("_reset", None)
         if _reset is not None:
-            _reset = _reset.view(*tensordict.batch_size, -1).any(-1)
+            _reset = _reset.sum(tuple(range(tensordict.batch_dims, _reset.ndim)))
 
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             # Lazy init of buffers
@@ -3248,7 +3242,7 @@ class TimeMaxPool(Transform):
                 buffer = getattr(self, buffer_name)
                 if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
                     continue
-                _reset = _reset.view(*tensordict.batch_size, -1).any(-1)
+                _reset = _reset.sum(tuple(range(tensordict.batch_dims, _reset.ndim)))
                 buffer[:, _reset] = 0.0
 
         return tensordict
@@ -3431,14 +3425,15 @@ class InitTracker(Transform):
         device = tensordict.device
         if device is None:
             device = torch.device("cpu")
-        _reset = tensordict.get(
-            "_reset",
-            torch.ones(
-                self.parent.done_spec.shape,
-                device=device,
-                dtype=torch.bool,
-            ),
-        )
+        _reset = tensordict.get("_reset", None)
+        if _reset is None:
+            _reset = (
+                torch.ones(
+                    self.parent.done_spec.shape,
+                    device=device,
+                    dtype=torch.bool,
+                ),
+            )
         tensordict.set(self.out_keys[0], _reset.clone())
         return tensordict
 
