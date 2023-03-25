@@ -1721,7 +1721,7 @@ class CatFrames(ObservationTransform):
         """Resets _buffers."""
         _reset = tensordict.get("_reset", None)
         if _reset is None:
-            torch.ones(
+            _reset = torch.ones(
                 self.parent.done_spec.shape if self.parent else tensordict.batch_size,
                 dtype=torch.bool,
                 device=tensordict.device
