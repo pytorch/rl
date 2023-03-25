@@ -3007,12 +3007,16 @@ class StepCounter(Transform):
         _reset = tensordict.get(
             "_reset",
             # TODO: decide if using done here, or using a default `True` tensor
-            default=torch.ones_like(done),
+            default=None,
         )
+        if _reset is None:
+            _reset = torch.ones_like(done)
         step_count = tensordict.get(
             "step_count",
-            default=torch.zeros_like(done),
+            default=None,
         )
+        if step_count is None:
+            step_count = torch.zeros_like(done)
 
         step_count[_reset] = 0
         tensordict.set(
