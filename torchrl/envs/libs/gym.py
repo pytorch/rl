@@ -350,10 +350,17 @@ class GymWrapper(GymLikeEnv):
             else:
                 observation_spec = CompositeSpec(observation=observation_spec)
         self.observation_spec = observation_spec
-        self.reward_spec = UnboundedContinuousTensorSpec(
-            shape=[1],
-            device=self.device,
-        )
+        if env.reward_space is not None:
+            self.reward_spec = _gym_to_torchrl_spec_transform(
+                env.reward_space,
+                device=self.device,
+                categorical_action_encoding=self._categorical_action_encoding,
+            )
+        else:
+            self.reward_spec = UnboundedContinuousTensorSpec(
+                shape=[1],
+                device=self.device,
+            )
 
     def _init_env(self):
         self.reset()
