@@ -47,7 +47,7 @@ from .tensordict_module import (
     QValueActor,
     SafeModule,
     SafeProbabilisticModule,
-    SafeProbabilisticSequential,
+    SafeProbabilisticTensorDictSequential,
     SafeSequential,
     ValueOperator,
     WorldModelWrapper,

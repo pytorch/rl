@@ -223,11 +223,23 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                         "rather than a TensorDictModule or a nn.Module that accepts a "
                         "TensorDict as input and defines in_keys and out_keys."
                     )
-                sig = inspect.signature(policy.forward)
+
+                try:
+                    # signature modified by make_functional
+                    sig = policy.forward.__signature__
+                except AttributeError:
+                    sig = inspect.signature(policy.forward)
+                required_params = {
+                    str(k)
+                    for k, p in sig.parameters.items()
+                    if p.default is inspect._empty
+                }
                 next_observation = {
                     key: value for key, value in observation_spec.rand().items()
                 }
-                if set(sig.parameters) == set(next_observation):
+                # we check if all the mandatory params are there
+                if not required_params.difference(set(next_observation)):
+                    in_keys = [str(k) for k in sig.parameters if k in next_observation]
                     out_keys = ["action"]
                     output = policy(**next_observation)
 
@@ -235,17 +247,17 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                         out_keys.extend(f"output{i+1}" for i in range(len(output) - 1))
 
                     policy = TensorDictModule(
-                        policy, in_keys=list(sig.parameters), out_keys=out_keys
+                        policy, in_keys=in_keys, out_keys=out_keys
                     )
                 else:
                     raise TypeError(
-                        "Arguments to policy.forward are incompatible with entries in "
-                        "env.observation_spec. If you want TorchRL to automatically "
-                        "wrap your policy with a TensorDictModule then the arguments "
-                        "to policy.forward must correspond one-to-one with entries in "
-                        "env.observation_spec that are prefixed with 'next_'. For more "
-                        "complex behaviour and more control you can consider writing "
-                        "your own TensorDictModule."
+                        f"""Arguments to policy.forward are incompatible with entries in
+env.observation_spec (got incongruent signatures: fun signature is {set(sig.parameters)} vs specs {set(next_observation)}).
+If you want TorchRL to automatically wrap your policy with a TensorDictModule
+then the arguments to policy.forward must correspond one-to-one with entries
+in env.observation_spec that are prefixed with 'next_'. For more complex
+behaviour and more control you can consider writing your own TensorDictModule.
+"""
                     )
 
         try:
@@ -536,6 +548,12 @@ class SyncDataCollector(DataCollectorBase):
         self.postproc = postproc
         if self.postproc is not None:
             self.postproc.to(self.storing_device)
+        if frames_per_batch % self.n_env != 0:
+            warnings.warn(
+                f"frames_per_batch {frames_per_batch} is not exactly divisible by the number of batched environments {self.n_env}, "
+                f" this results in more frames_per_batch per iteration that requested"
+            )
+        self.requested_frames_per_batch = frames_per_batch
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.exploration_mode = (
             exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
@@ -543,8 +561,7 @@ class SyncDataCollector(DataCollectorBase):
         self.return_same_td = return_same_td
 
         self._tensordict = env.reset()
-        n = self.env.batch_size.numel() if len(self.env.batch_size) else 1
-        traj_ids = torch.arange(n, device=env.device).view(self.env.batch_size)
+        traj_ids = torch.arange(self.n_env, device=env.device).view(self.env.batch_size)
         self._tensordict.set(
             ("collector", "traj_ids"),
             traj_ids,
@@ -713,9 +730,10 @@ class SyncDataCollector(DataCollectorBase):
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
                 )
-            traj_done_or_terminated = done_or_terminated.view(
-                *self._tensordict.batch_size, -1
-            ).any(-1)
+            traj_done_or_terminated = done_or_terminated.sum(
+                tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
+                dtype=torch.bool,
+            )
             traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
                 1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )
@@ -1100,7 +1118,7 @@ class _MultiDataCollector(DataCollectorBase):
         self.reset_at_each_iter = reset_at_each_iter
         self.postprocs = postproc
         self.max_frames_per_traj = max_frames_per_traj
-        self.frames_per_batch = frames_per_batch
+        self.requested_frames_per_batch = frames_per_batch
         self.reset_when_done = reset_when_done
         if split_trajs is None:
             split_trajs = False
@@ -1449,7 +1467,15 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     @property
     def frames_per_batch_worker(self):
-        return -(-self.frames_per_batch // self.num_workers)
+        if self.requested_frames_per_batch % self.num_workers != 0:
+            warnings.warn(
+                f"frames_per_batch {self.requested_frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers},"
+                f" this results in more frames_per_batch per iteration that requested"
+            )
+        frames_per_batch_worker = -(
+            -self.requested_frames_per_batch // self.num_workers
+        )
+        return frames_per_batch_worker
 
     @property
     def _queue_len(self) -> int:
@@ -1680,7 +1706,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     @property
     def frames_per_batch_worker(self):
-        return self.frames_per_batch
+        return self.requested_frames_per_batch
 
     def _get_from_queue(self, timeout=None) -> Tuple[int, int, TensorDictBase]:
         new_data, j = self.queue_out.get(timeout=timeout)

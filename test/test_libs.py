@@ -1077,13 +1077,10 @@ class TestVmas:
 
         assert tensordict["next", "done"].squeeze(-1).squeeze(-1)[..., -1].all()
 
-        _reset = torch.randint(
-            low=0, high=2, size=env.done_spec.shape, dtype=torch.bool
-        )
+
+        _reset = env.done_spec.rand()
         while not _reset.any():
-            _reset = torch.randint(
-                low=0, high=2, size=env.done_spec.shape, dtype=torch.bool
-            )
+            _reset = env.done_spec.rand()
 
         tensordict = env.reset(
             TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)

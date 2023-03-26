@@ -15,6 +15,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, U
 
 import numpy as np
 import torch.nn
+from tensordict.nn import TensorDictModule
 from tensordict.tensordict import pad, TensorDictBase
 from tensordict.utils import expand_right
 from torch import nn, optim
@@ -25,7 +26,6 @@ from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuff
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import SafeModule
 from torchrl.objectives.common import LossModule
 from torchrl.record.loggers import Logger
 
@@ -1135,7 +1135,7 @@ class Recorder(TrainerHookBase):
         record_interval: int,
         record_frames: int,
         frame_skip: int,
-        policy_exploration: SafeModule,
+        policy_exploration: TensorDictModule,
         recorder: EnvBase,
         exploration_mode: str = "random",
         log_keys: Optional[List[str]] = None,

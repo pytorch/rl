@@ -6,19 +6,15 @@
 from typing import Optional, Sequence, Tuple, Union
 
 import torch
-from tensordict.nn import TensorDictModuleWrapper
+from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from torch import nn
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    TensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
-    SafeProbabilisticSequential,
+    SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
@@ -30,11 +26,40 @@ class Actor(SafeModule):
     and if the spec is provided but not as a CompositeSpec object, it will be
     automatically translated into :obj:`spec = CompositeSpec(action=spec)`
 
+    Args:
+        module (nn.Module): a :class:`torch.nn.Module` used to map the input to
+            the output parameter space.
+            Can be a functional module, in which case the
+            :meth:`torch.nn.Module.forward` method will expect
+            the params (and possibly) buffers keyword arguments.
+        in_keys (iterable of str, optional): keys to be read from input
+            tensordict and passed to the module. If it
+            contains more than one element, the values will be passed in the
+            order given by the in_keys iterable.
+            Defaults to ``["observation"]``.
+        out_keys (iterable of str): keys to be written to the input tensordict.
+            The length of out_keys must match the
+            number of tensors returned by the embedded module. Using "_" as a
+            key avoid writing tensor to output.
+            Defaults to ``["action"]``.
+        spec (TensorSpec, optional): Keyword-only argument.
+            Specs of the output tensor. If the module
+            outputs multiple output tensors,
+            spec characterize the space of the first output tensor.
+        safe (bool): Keyword-only argument.
+            If ``True``, the value of the output is checked against the
+            input spec. Out-of-domain sampling can
+            occur because of exploration policies or numerical under/overflow
+            issues. If this value is out of bounds, it is projected back onto the
+            desired space using the :obj:`TensorSpec.project`
+            method. Default is :obj:`False`.
+
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.data import UnboundedContinuousTensorSpec
         >>> from torchrl.modules import Actor
+        >>> torch.manual_seed(0)
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
         >>> action_spec = UnboundedContinuousTensorSpec(4)
         >>> module = torch.nn.Linear(4, 4)
@@ -43,15 +68,26 @@ class Actor(SafeModule):
         ...    spec=action_spec,
         ...    )
         >>> td_module(td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
         >>> print(td.get("action"))
+        tensor([[-1.3635, -0.0340,  0.1476, -1.3911],
+                [-0.1664,  0.5455,  0.2247, -0.4583],
+                [-0.2916,  0.2160,  0.5337, -0.5193]], grad_fn=<AddmmBackward0>)
 
     """
 
     def __init__(
         self,
-        *args,
+        module: nn.Module,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
+        *,
         spec: Optional[TensorSpec] = None,
         **kwargs,
     ):
@@ -67,7 +103,7 @@ class Actor(SafeModule):
             spec = CompositeSpec(action=spec)
 
         super().__init__(
-            *args,
+            module,
             in_keys=in_keys,
             out_keys=out_keys,
             spec=spec,
@@ -75,28 +111,85 @@ class Actor(SafeModule):
         )
 
 
-class ProbabilisticActor(SafeProbabilisticSequential):
+class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
     """General class for probabilistic actors in RL.
 
     The Actor class comes with default values for the out_keys (["action"])
     and if the spec is provided but not as a CompositeSpec object, it will be
     automatically translated into :obj:`spec = CompositeSpec(action=spec)`
 
+    Args:
+        module (nn.Module): a :class:`torch.nn.Module` used to map the input to
+            the output parameter space.
+            Can be a functional module, in which case the
+            :meth:`torch.nn.Module.forward` method will expect
+            the params (and possibly) buffers keyword arguments.
+        in_keys (str or iterable of str or dict): key(s) that will be read from the
+            input TensorDict and used to build the distribution. Importantly, if it's an
+            iterable of string or a string, those keys must match the keywords used by
+            the distribution class of interest, e.g. :obj:`"loc"` and :obj:`"scale"` for
+            the Normal distribution and similar. If in_keys is a dictionary,, the keys
+            are the keys of the distribution and the values are the keys in the
+            tensordict that will get match to the corresponding distribution keys.
+        out_keys (str or iterable of str): keys where the sampled values will be
+            written. Importantly, if these keys are found in the input TensorDict, the
+            sampling step will be skipped.
+        spec (TensorSpec, optional): keyword-only argument containing the specs
+            of the output tensor. If the module outputs multiple output tensors,
+            spec characterize the space of the first output tensor.
+        safe (bool): keyword-only argument. if ``True``, the value of the output is checked against the
+            input spec. Out-of-domain sampling can
+            occur because of exploration policies or numerical under/overflow
+            issues. If this value is out of bounds, it is projected back onto the
+            desired space using the :obj:`TensorSpec.project`
+            method. Default is :obj:`False`.
+        default_interaction_mode (str, optional): keyword-only argument.
+            Default method to be used to retrieve
+            the output value. Should be one of: 'mode', 'median', 'mean' or 'random'
+            (in which case the value is sampled randomly from the distribution). Default
+            is 'mode'.
+            Note: When a sample is drawn, the :obj:`ProbabilisticTDModule` instance will
+            first look for the interaction mode dictated by the `interaction_mode()`
+            global function. If this returns `None` (its default value), then the
+            `default_interaction_mode` of the `ProbabilisticTDModule` instance will be
+            used. Note that DataCollector instances will use `set_interaction_mode` to
+            `"random"` by default.
+        distribution_class (Type, optional): keyword-only argument.
+            A :class:`torch.distributions.Distribution` class to
+            be used for sampling.
+            Default is :class:`tensordict.nn.distributions.Delta`.
+        distribution_kwargs (dict, optional): keyword-only argument.
+            Keyword-argument pairs to be passed to the distribution.
+        return_log_prob (bool, optional): keyword-only argument.
+            If ``True``, the log-probability of the
+            distribution sample will be written in the tensordict with the key
+            `'sample_log_prob'`. Default is ``False``.
+        cache_dist (bool, optional): keyword-only argument.
+            EXPERIMENTAL: if ``True``, the parameters of the
+            distribution (i.e. the output of the module) will be written to the
+            tensordict along with the sample. Those parameters can be used to re-compute
+            the original distribution later on (e.g. to compute the divergence between
+            the distribution used to sample the action and the updated distribution in
+            PPO). Default is ``False``.
+        n_empirical_estimate (int, optional): keyword-only argument.
+            Number of samples to compute the empirical
+            mean when it is not available. Defaults to 1000.
+
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn.functional_modules import make_functional
+        >>> from tensordict.nn import TensorDictModule, make_functional
         >>> from torchrl.data import BoundedTensorSpec
-        >>> from torchrl.modules import ProbabilisticActor, NormalParamWrapper, SafeModule, TanhNormal
+        >>> from torchrl.modules import ProbabilisticActor, NormalParamWrapper, TanhNormal
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
         >>> action_spec = BoundedTensorSpec(shape=torch.Size([4]),
         ...    minimum=-1, maximum=1)
         >>> module = NormalParamWrapper(torch.nn.Linear(4, 8))
-        >>> tensordict_module = SafeModule(module, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> tensordict_module = TensorDictModule(module, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> td_module = ProbabilisticActor(
         ...    module=tensordict_module,
         ...    spec=action_spec,
-        ...    dist_in_keys=["loc", "scale"],
+        ...    in_keys=["loc", "scale"],
         ...    distribution_class=TanhNormal,
         ...    )
         >>> params = make_functional(td_module)
@@ -104,21 +197,22 @@ class ProbabilisticActor(SafeProbabilisticSequential):
         >>> td
         TensorDict(
             fields={
-                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                action: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
+                action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
-            device=cpu,
+            device=None,
             is_shared=False)
 
     """
 
     def __init__(
         self,
-        module: SafeModule,
+        module: TensorDictModule,
         in_keys: Union[str, Sequence[str]],
         out_keys: Optional[Sequence[str]] = None,
+        *,
         spec: Optional[TensorSpec] = None,
         **kwargs,
     ):
@@ -139,7 +233,7 @@ class ProbabilisticActor(SafeProbabilisticSequential):
         )
 
 
-class ValueOperator(SafeModule):
+class ValueOperator(TensorDictModule):
     """General class for value functions in RL.
 
     The ValueOperator class comes with default values for the in_keys and
@@ -147,10 +241,27 @@ class ValueOperator(SafeModule):
     ["state_action_value"], respectively and depending on whether the "action"
     key is part of the in_keys list).
 
+    Args:
+        module (nn.Module): a :class:`torch.nn.Module` used to map the input to
+            the output parameter space.
+            Can be a functional module, in which case the
+            :meth:`torch.nn.Module.forward` method will expect
+            the params (and possibly) buffers keyword arguments.
+        in_keys (iterable of str, optional): keys to be read from input
+            tensordict and passed to the module. If it
+            contains more than one element, the values will be passed in the
+            order given by the in_keys iterable.
+            Defaults to ``["observation"]``.
+        out_keys (iterable of str): keys to be written to the input tensordict.
+            The length of out_keys must match the
+            number of tensors returned by the embedded module. Using "_" as a
+            key avoid writing tensor to output.
+            Defaults to ``["action"]``.
+
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn.functional_modules import make_functional
+        >>> from tensordict.nn import make_functional
         >>> from torch import nn
         >>> from torchrl.data import UnboundedContinuousTensorSpec
         >>> from torchrl.modules import ValueOperator
@@ -166,13 +277,13 @@ class ValueOperator(SafeModule):
         ...    in_keys=["observation", "action"], module=module
         ... )
         >>> params = make_functional(td_module)
-        >>> td_module(td, params=params)
+        >>> td = td_module(td, params=params)
         >>> print(td)
         TensorDict(
             fields={
-                action: Tensor(torch.Size([3, 2]), dtype=torch.float32),
-                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                state_action_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
+                action: Tensor(shape=torch.Size([3, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                state_action_value: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
@@ -193,9 +304,7 @@ class ValueOperator(SafeModule):
             out_keys = (
                 ["state_value"] if "action" not in in_keys else ["state_action_value"]
             )
-        value_spec = UnboundedContinuousTensorSpec()
         super().__init__(
-            spec=value_spec,
             module=module,
             in_keys=in_keys,
             out_keys=out_keys,
@@ -205,13 +314,17 @@ class ValueOperator(SafeModule):
 class QValueHook:
     """Q-Value hook for Q-value policies.
 
-    Given a the output of a regular nn.Module, representing the values of the different discrete actions available,
-    a QValueHook will transform these values into their argmax component (i.e. the resulting greedy action).
+    Given a the output of a regular nn.Module, representing the values of the
+    different discrete actions available,
+    a QValueHook will transform these values into their argmax component (i.e.
+    the resulting greedy action).
     Currently, this is returned as a one-hot encoding.
 
     Args:
-        action_space (str): Action space. Must be one of "one-hot", "mult_one_hot", "binary" or "categorical".
-        var_nums (int, optional): if action_space == "mult_one_hot", this value represents the cardinality of each
+        action_space (str): Action space. Must be one of
+            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
+        var_nums (int, optional): if ``action_space = "mult_one_hot"``,
+            this value represents the cardinality of each
             action component.
 
     Examples:
@@ -326,9 +439,11 @@ class DistributionalQValueHook(QValueHook):
     https://arxiv.org/pdf/1707.06887.pdf
 
     Args:
-        action_space (str): Action space. Must be one of "one_hot", "mult_one_hot", "binary" or "categorical".
+        action_space (str): Action space. Must be one of
+            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
         support (torch.Tensor): support of the action values.
-        var_nums (int, optional): if action_space == "mult_one_hot", this value represents the cardinality of each
+        var_nums (int, optional): if ``action_space = "mult_one_hot"``, this
+            value represents the cardinality of each
             action component.
 
     Examples:
@@ -442,7 +557,39 @@ class DistributionalQValueHook(QValueHook):
 class QValueActor(Actor):
     """DQN Actor subclass.
 
-    This class hooks the module such that it returns a one-hot encoding of the argmax value.
+    This class hooks the module such that it returns a one-hot encoding of
+    the argmax value.
+
+    Args:
+        module (nn.Module): a :class:`torch.nn.Module` used to map the input to
+            the output parameter space.
+            Can be a functional module, in which case the
+            :meth:`torch.nn.Module.forward` method will expect
+            the params (and possibly) buffers keyword arguments.
+        in_keys (iterable of str, optional): keys to be read from input
+            tensordict and passed to the module. If it
+            contains more than one element, the values will be passed in the
+            order given by the in_keys iterable.
+            Defaults to ``["observation"]``.
+        out_keys (iterable of str): keys to be written to the input tensordict.
+            The length of out_keys must match the
+            number of tensors returned by the embedded module. Using "_" as a
+            key avoid writing tensor to output.
+            Defaults to ``["action"]``.
+        spec (TensorSpec, optional): Keyword-only argument.
+            Specs of the output tensor. If the module
+            outputs multiple output tensors,
+            spec characterize the space of the first output tensor.
+        safe (bool): Keyword-only argument.
+            If ``True``, the value of the output is checked against the
+            input spec. Out-of-domain sampling can
+            occur because of exploration policies or numerical under/overflow
+            issues. If this value is out of bounds, it is projected back onto the
+            desired space using the :obj:`TensorSpec.project`
+            method. Default is :obj:`False`.
+        action_space (str, optional): The action space to be considered.
+            Must be one of
+            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
 
     Examples:
         >>> import torch
@@ -470,7 +617,7 @@ class QValueActor(Actor):
 
     """
 
-    def __init__(self, *args, action_space: int = "one_hot", **kwargs):
+    def __init__(self, *args, action_space: str = "one_hot", **kwargs):
         out_keys = [
             "action",
             "action_value",
@@ -486,6 +633,38 @@ class DistributionalQValueActor(QValueActor):
 
     This class hooks the module such that it returns a one-hot encoding of the argmax value on its support.
 
+    Args:
+        module (nn.Module): a :class:`torch.nn.Module` used to map the input to
+            the output parameter space.
+            Can be a functional module, in which case the
+            :meth:`torch.nn.Module.forward` method will expect
+            the params (and possibly) buffers keyword arguments.
+        in_keys (iterable of str, optional): keys to be read from input
+            tensordict and passed to the module. If it
+            contains more than one element, the values will be passed in the
+            order given by the in_keys iterable.
+            Defaults to ``["observation"]``.
+        out_keys (iterable of str): keys to be written to the input tensordict.
+            The length of out_keys must match the
+            number of tensors returned by the embedded module. Using "_" as a
+            key avoid writing tensor to output.
+            Defaults to ``["action"]``.
+        spec (TensorSpec, optional): Keyword-only argument.
+            Specs of the output tensor. If the module
+            outputs multiple output tensors,
+            spec characterize the space of the first output tensor.
+        safe (bool): Keyword-only argument.
+            If ``True``, the value of the output is checked against the
+            input spec. Out-of-domain sampling can
+            occur because of exploration policies or numerical under/overflow
+            issues. If this value is out of bounds, it is projected back onto the
+            desired space using the :obj:`TensorSpec.project`
+            method. Default is :obj:`False`.
+        support (torch.Tensor): support of the action values.
+        action_space (str, optional): The action space to be considered.
+            Must be one of
+            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
+
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
@@ -497,13 +676,13 @@ class DistributionalQValueActor(QValueActor):
         >>> module = MLP(out_features=(nbins, 4), depth=2)
         >>> action_spec = OneHotDiscreteTensorSpec(4)
         >>> qvalue_actor = DistributionalQValueActor(module=module, spec=action_spec, support=torch.arange(nbins))
-        >>> qvalue_actor(td)
+        >>> td = qvalue_actor(td)
         >>> print(td)
         TensorDict(
             fields={
-                action: Tensor(torch.Size([5, 4]), dtype=torch.int64),
-                action_value: Tensor(torch.Size([5, 3, 4]), dtype=torch.float32),
-                observation: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
+                action: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.int64, is_shared=False),
+                action_value: Tensor(shape=torch.Size([5, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([5]),
             device=None,
             is_shared=False)
@@ -565,9 +744,12 @@ class ActorValueOperator(SafeSequential):
     will both return a stand-alone TDModule with the dedicated functionality.
 
     Args:
-        common_operator (SafeModule): a common operator that reads observations and produces a hidden variable
-        policy_operator (SafeModule): a policy operator that reads the hidden variable and returns an action
-        value_operator (SafeModule): a value operator, that reads the hidden variable and returns a value
+        common_operator (TensorDictModule): a common operator that reads
+            observations and produces a hidden variable
+        policy_operator (TensorDictModule): a policy operator that reads the
+            hidden variable and returns an action
+        value_operator (TensorDictModule): a value operator, that reads the
+            hidden variable and returns a value
 
     Examples:
         >>> import torch
@@ -584,7 +766,7 @@ class ActorValueOperator(SafeSequential):
         ...    out_keys=["hidden"],
         ...    )
         >>> spec_action = BoundedTensorSpec(-1, 1, torch.Size([8]))
-        >>> module_action = SafeModule(
+        >>> module_action = TensorDictModule(
         ...     NormalParamWrapper(torch.nn.Linear(4, 8)),
         ...     in_keys=["hidden"],
         ...     out_keys=["loc", "scale"],
@@ -592,8 +774,8 @@ class ActorValueOperator(SafeSequential):
         >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
         ...    spec=spec_action,
-        ...    dist_in_keys=["loc", "scale"],
-        ...    sample_out_key=["action"],
+        ...    in_keys=["loc", "scale"],
+        ...    out_keys=["action"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )
@@ -608,13 +790,13 @@ class ActorValueOperator(SafeSequential):
         >>> print(td_clone)
         TensorDict(
             fields={
-                action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                state_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
+                action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                hidden: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                state_value: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
@@ -622,12 +804,12 @@ class ActorValueOperator(SafeSequential):
         >>> print(td_clone)  # no value
         TensorDict(
             fields={
-                action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
+                action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                hidden: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
@@ -635,9 +817,9 @@ class ActorValueOperator(SafeSequential):
         >>> print(td_clone)  # no action
         TensorDict(
             fields={
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                state_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
+                hidden: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                state_value: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
@@ -646,9 +828,9 @@ class ActorValueOperator(SafeSequential):
 
     def __init__(
         self,
-        common_operator: SafeModule,
-        policy_operator: SafeModule,
-        value_operator: SafeModule,
+        common_operator: TensorDictModule,
+        policy_operator: TensorDictModule,
+        value_operator: TensorDictModule,
     ):
         super().__init__(
             common_operator,
@@ -658,8 +840,10 @@ class ActorValueOperator(SafeSequential):
 
     def get_policy_operator(self) -> SafeSequential:
         """Returns a stand-alone policy operator that maps an observation to an action."""
-        if isinstance(self.module[1], SafeProbabilisticSequential):
-            return SafeProbabilisticSequential(self.module[0], *self.module[1].module)
+        if isinstance(self.module[1], SafeProbabilisticTensorDictSequential):
+            return SafeProbabilisticTensorDictSequential(
+                self.module[0], *self.module[1].module
+            )
         return SafeSequential(self.module[0], self.module[1])
 
     def get_value_operator(self) -> SafeSequential:
@@ -699,14 +883,14 @@ class ActorCriticOperator(ActorValueOperator):
     parent object, as the value is computed based on the policy output.
 
     Args:
-        common_operator (SafeModule): a common operator that reads observations and produces a hidden variable
-        policy_operator (SafeModule): a policy operator that reads the hidden variable and returns an action
-        value_operator (SafeModule): a value operator, that reads the hidden variable and returns a value
+        common_operator (TensorDictModule): a common operator that reads observations and produces a hidden variable
+        policy_operator (TensorDictModule): a policy operator that reads the hidden variable and returns an action
+        value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.modules import ProbabilisticActor, SafeModule
+        >>> from torchrl.modules import ProbabilisticActor
         >>> from torchrl.data import UnboundedContinuousTensorSpec, BoundedTensorSpec
         >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper, MLP
         >>> spec_hidden = UnboundedContinuousTensorSpec(4)
@@ -719,12 +903,12 @@ class ActorCriticOperator(ActorValueOperator):
         ...    )
         >>> spec_action = BoundedTensorSpec(-1, 1, torch.Size([8]))
         >>> module_action = NormalParamWrapper(torch.nn.Linear(4, 8))
-        >>> module_action = SafeModule(module_action, in_keys=["hidden"], out_keys=["loc", "scale"])
+        >>> module_action = TensorDictModule(module_action, in_keys=["hidden"], out_keys=["loc", "scale"])
         >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
         ...    spec=spec_action,
-        ...    dist_in_keys=["loc", "scale"],
-        ...    sample_out_key=["action"],
+        ...    in_keys=["loc", "scale"],
+        ...    out_keys=["action"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )
@@ -740,13 +924,13 @@ class ActorCriticOperator(ActorValueOperator):
         >>> print(td_clone)
         TensorDict(
             fields={
-                action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                state_action_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
+                action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                hidden: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                state_action_value: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
@@ -754,12 +938,12 @@ class ActorCriticOperator(ActorValueOperator):
         >>> print(td_clone)  # no value
         TensorDict(
             fields={
-                action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
+                action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                hidden: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
@@ -767,13 +951,13 @@ class ActorCriticOperator(ActorValueOperator):
         >>> print(td_clone)  # no action
         TensorDict(
             fields={
-                action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                state_action_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
+                action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                hidden: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                state_action_value: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
@@ -830,31 +1014,31 @@ class ActorCriticWrapper(SafeSequential):
     will both return a stand-alone TDModule with the dedicated functionality.
 
     Args:
-        policy_operator (SafeModule): a policy operator that reads the hidden variable and returns an action
-        value_operator (SafeModule): a value operator, that reads the hidden variable and returns a value
+        policy_operator (TensorDictModule): a policy operator that reads the hidden variable and returns an action
+        value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.data import UnboundedContinuousTensorSpec, BoundedTensorSpec
         >>> from torchrl.modules import (
-                ActorCriticWrapper,
-                ProbabilisticActor,
-                NormalParamWrapper,
-                SafeModule,
-                TanhNormal,
-                ValueOperator,
-            )
+        ...      ActorCriticWrapper,
+        ...      ProbabilisticActor,
+        ...      NormalParamWrapper,
+        ...      TanhNormal,
+        ...      ValueOperator,
+        ...  )
         >>> action_spec = BoundedTensorSpec(-1, 1, torch.Size([8]))
-        >>> action_module = SafeModule(
-                NormalParamWrapper(torch.nn.Linear(4, 8)),
-                in_keys=["observation"],
-                out_keys=["loc", "scale"],
-            )
+        >>> action_module = TensorDictModule(
+        ...        NormalParamWrapper(torch.nn.Linear(4, 8)),
+        ...        in_keys=["observation"],
+        ...        out_keys=["loc", "scale"],
+        ...    )
         >>> td_module_action = ProbabilisticActor(
         ...    module=action_module,
         ...    spec=action_spec,
-        ...    dist_in_keys=["loc", "scale"],
+        ...    in_keys=["loc", "scale"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )
@@ -869,12 +1053,12 @@ class ActorCriticWrapper(SafeSequential):
         >>> print(td_clone)
         TensorDict(
             fields={
-                action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                state_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
+                action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                state_value: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
@@ -882,11 +1066,11 @@ class ActorCriticWrapper(SafeSequential):
         >>> print(td_clone)  # no value
         TensorDict(
             fields={
-                action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
+                action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
@@ -894,8 +1078,8 @@ class ActorCriticWrapper(SafeSequential):
         >>> print(td_clone)  # no action
         TensorDict(
             fields={
-                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                state_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
+                observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                state_value: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
@@ -904,8 +1088,8 @@ class ActorCriticWrapper(SafeSequential):
 
     def __init__(
         self,
-        policy_operator: SafeModule,
-        value_operator: SafeModule,
+        policy_operator: TensorDictModule,
+        value_operator: TensorDictModule,
     ):
         super().__init__(
             policy_operator,

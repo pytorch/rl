@@ -409,10 +409,10 @@ And it is `functorch` and `torch.compile` compatible!
       in_keys=["hidden"],
       out_keys=["loc", "scale"],
   )
-  # Use a SafeProbabilisticSequential to combine the SafeModule with a
+  # Use a SafeProbabilisticTensorDictSequential to combine the SafeModule with a
   # SafeProbabilisticModule, indicating how to build the
   # torch.distribution.Distribution object and what to do with it
-  policy_module = SafeProbabilisticSequential(  # stochastic policy
+  policy_module = SafeProbabilisticTensorDictSequential(  # stochastic policy
       policy_module,
       SafeProbabilisticModule(
           in_keys=["loc", "scale"],

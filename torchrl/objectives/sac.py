@@ -9,11 +9,11 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict.nn import make_functional
+from tensordict.nn import make_functional, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
-from torchrl.modules import ProbabilisticActor, SafeModule
+from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.utils import distance_loss, next_state_value
 
@@ -39,13 +39,9 @@ class SACLoss(LossModule):
 
     Args:
         actor_network (ProbabilisticActor): stochastic actor
-        qvalue_network (SafeModule): Q(s, a) parametric model
-        value_network (SafeModule, optional): V(s) parametric model. If not
+        qvalue_network (TensorDictModule): Q(s, a) parametric model
+        value_network (TensorDictModule, optional): V(s) parametric model. If not
             provided, the second version of SAC is assumed.
-        qvalue_network_bis (ProbabilisticTDModule, optional): if required, the
-            Q-value can be computed twice independently using two separate
-            networks. The minimum predicted value will then be used for
-            inference.
         gamma (number, optional): discount for return computation
             Default is 0.99
         priority_key (str, optional): tensordict key where to write the
@@ -80,11 +76,11 @@ class SACLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: SafeModule,
-        value_network: Optional[SafeModule] = None,
+        qvalue_network: TensorDictModule,
+        value_network: Optional[TensorDictModule] = None,
         num_qvalue_nets: int = 2,
         gamma: Number = 0.99,
-        priotity_key: str = "td_error",
+        priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         min_alpha: float = 0.1,
@@ -137,7 +133,7 @@ class SACLoss(LossModule):
         )
 
         self.register_buffer("gamma", torch.tensor(gamma))
-        self.priority_key = priotity_key
+        self.priority_key = priority_key
         self.loss_function = loss_function
         try:
             device = next(self.parameters()).device
@@ -420,7 +416,7 @@ class DiscreteSACLoss(LossModule):
 
     Args:
         actor_network (ProbabilisticActor): the actor to be trained
-        qvalue_network (SafeModule): a single Q-value network that will be multiplicated as many times as needed.
+        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
         gamma (Number, optional): gamma decay factor. Default is 0.99.
         priotity_key (str, optional): Key where to write the priority value for prioritized replay buffers. Default is
@@ -445,7 +441,7 @@ class DiscreteSACLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: SafeModule,
+        qvalue_network: TensorDictModule,
         num_actions: int,
         num_qvalue_nets: int = 2,
         gamma: Number = 0.99,
