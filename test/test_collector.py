@@ -316,8 +316,8 @@ def test_collector_env_reset():
     )
     for _data in collector:
         continue
-    steps = _data["next", "step_count"][..., 1:]
-    done = _data["next", "done"][..., :-1, :].squeeze(-1)
+    steps = _data["next", "step_count"][..., 1:, :]
+    done = _data["next", "done"][..., :-1, :]
     # we don't want just one done
     assert done.sum() > 3
     # check that after a done, the next step count is always 1
@@ -425,7 +425,7 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 
     assert d.ndimension() == 2
     assert d["collector", "mask"].shape == d.shape
-    assert d["next", "step_count"].shape == d.shape
+    assert d["next", "step_count"].shape == d["next", "done"].shape
     assert d["collector", "traj_ids"].shape == d.shape
     for traj in d.unbind(0):
         assert traj["collector", "traj_ids"].unique().numel() == 1

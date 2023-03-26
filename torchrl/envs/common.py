@@ -14,6 +14,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
+
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
@@ -23,7 +24,6 @@ from torchrl.data.tensor_specs import (
 
 from .._utils import prod, seed_generator
 from ..data.utils import DEVICE_TYPING
-
 from .utils import get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
@@ -480,6 +480,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
+            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
+                raise RuntimeError(
+                    "_reset flag in tensordict should follow env.done_spec"
+                )
         else:
             _reset = None
 
@@ -708,7 +712,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 exclude_action=False,
             )
             if not break_when_any_done and done.any():
-                _reset = done.view(tensordict.shape)
+                _reset = done.clone()
                 tensordict.set("_reset", _reset)
                 self.reset(tensordict)
 
