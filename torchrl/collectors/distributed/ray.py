@@ -79,8 +79,8 @@ def as_remote(cls, remote_config):
     return remote_collector
 
 
-class RayDataCollector(DataCollectorBase):
-    """Distributed data collector with Ray (https://docs.ray.io/) backend.
+class RayCollector(DataCollectorBase):
+    """Distributed data collector with Should `Ray <https://docs.ray.io/>`_ backend.
 
     This Python class serves as a ray-based solution to instantiate and coordinate multiple
     data collectors in a distributed cluster. Like TorchRL non-distributed collectors, this
@@ -167,10 +167,10 @@ class RayDataCollector(DataCollectorBase):
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.collectors.collectors import SyncDataCollector
-        >>> from torchrl.collectors.distributed import RayDataCollector
+        >>> from torchrl.collectors.distributed import RayCollector
         >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
         >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
-        >>> distributed_collector = RayDataCollector(
+        >>> distributed_collector = RayCollector(
         ...     env_makers=[env_maker],
         ...     policy=policy,
         ...     collector_class=SyncDataCollector,

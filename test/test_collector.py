@@ -31,7 +31,7 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     RandomPolicy,
 )
-from torchrl.collectors.distributed.ray import RayDataCollector
+from torchrl.collectors.distributed.ray import RayCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv, StepCounter
@@ -1237,7 +1237,7 @@ class TestRayDataCollector:
     def test_ray_distributed_collector_basic(self, frames_per_batch):
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
-        collector = RayDataCollector(
+        collector = RayCollector(
             [env],
             policy,
             total_frames=1000,
@@ -1255,7 +1255,7 @@ class TestRayDataCollector:
         frames_per_batch = 50
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
-        collector = RayDataCollector(
+        collector = RayCollector(
             [env],
             policy,
             total_frames=200,
@@ -1279,7 +1279,7 @@ class TestRayDataCollector:
     ):
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
-        collector = RayDataCollector(
+        collector = RayCollector(
             [env],
             policy,
             collector_class=collector_class,
