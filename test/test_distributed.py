@@ -431,7 +431,6 @@ class TestRayCollector:
         for data in collector:
             total += data.numel()
             assert data.numel() == frames_per_batch
-        collector.shutdown()
         assert total == 1000
 
     @pytest.mark.parametrize("sync", [True, False])
@@ -450,7 +449,6 @@ class TestRayCollector:
         for data in collector:
             total += data.numel()
             assert data.numel() == frames_per_batch
-        collector.shutdown()
         assert total == 200
 
     @pytest.mark.parametrize("frames_per_batch", [50, 100])
@@ -474,7 +472,6 @@ class TestRayCollector:
         for data in collector:
             total += data.numel()
             assert data.numel() == frames_per_batch
-        collector.shutdown()
         assert total == 200
 
 
