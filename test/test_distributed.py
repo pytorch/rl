@@ -31,6 +31,7 @@ from torchrl.collectors.distributed import (
     RayCollector,
     RPCDataCollector,
 )
+from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 
 TIMEOUT = 200
 
@@ -423,10 +424,12 @@ class TestRayCollector:
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
-        os.environ["PYTHONPATH"] = os.path.dirname(__file__)  # for ray workers
+        ray_init_config = DEFAULT_RAY_INIT_CONFIG
+        ray_init_config["runtime_env"] = {"working_dir": os.path.dirname(__file__)}  # for ray workers
         collector = RayCollector(
             [env],
             policy,
+            ray_init_config=ray_init_config,
             total_frames=1000,
             frames_per_batch=frames_per_batch,
         )
@@ -442,10 +445,12 @@ class TestRayCollector:
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
-        os.environ["PYTHONPATH"] = os.path.dirname(__file__)  # for ray workers
+        ray_init_config = DEFAULT_RAY_INIT_CONFIG
+        ray_init_config["runtime_env"] = {"working_dir": os.path.dirname(__file__)}  # for ray workers
         collector = RayCollector(
             [env],
             policy,
+            ray_init_config=ray_init_config,
             total_frames=200,
             frames_per_batch=frames_per_batch,
             sync=sync,
@@ -465,10 +470,12 @@ class TestRayCollector:
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
-        os.environ["PYTHONPATH"] = os.path.dirname(__file__)  # for ray workers
+        ray_init_config = DEFAULT_RAY_INIT_CONFIG
+        ray_init_config["runtime_env"] = {"working_dir": os.path.dirname(__file__)}  # for ray workers
         collector = RayCollector(
             [env],
             policy,
+            ray_init_config=ray_init_config,
             collector_class=collector_class,
             total_frames=200,
             frames_per_batch=frames_per_batch,
