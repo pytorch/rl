@@ -403,13 +403,18 @@ def make_loss(loss_cfg, actor_network, qvalue_network):
     return loss, target_net_updater
 
 
-def make_optim(optim_cfg, actor_network, qvalue_network):
-    optim = torch.optim.Adam(
-        list(actor_network.parameters()) + list(qvalue_network.parameters()),
+def make_td3_optimizer(optim_cfg, actor_network, qvalue_network):
+    actor_optim = torch.optim.Adam(
+        actor_network.parameters(),
         lr=optim_cfg.lr,
         weight_decay=optim_cfg.weight_decay,
     )
-    return optim
+    critic_optim = torch.optim.Adam(
+        qvalue_network.parameters(),
+        lr=optim_cfg.lr,
+        weight_decay=optim_cfg.weight_decay,
+    )
+    return actor_optim, critic_optim
 
 
 # ====================================================================

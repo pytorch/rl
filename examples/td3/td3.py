@@ -23,11 +23,11 @@ from utils import (
     make_collector,
     make_logger,
     make_loss,
-    make_optim,
     make_policy,
     make_recorder,
     make_replay_buffer,
     make_td3_model,
+    make_td3_optimizer,
 )
 
 
@@ -48,7 +48,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     policy = make_policy(cfg.model, actor_network)
     collector = make_collector(cfg, state_dict=state_dict, policy=policy)
     loss, target_net_updater = make_loss(cfg.loss, actor_network, value_network)
-    optim = make_optim(cfg.optim, actor_network, value_network)
+    actor_optim, critic_optim = make_td3_optimizer(
+        cfg.optim, actor_network, value_network
+    )
     recorder = make_recorder(cfg, logger, policy)
 
     optim_steps_per_batch = cfg.optim.optim_steps_per_batch
@@ -68,19 +70,25 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # extend replay buffer
         replay_buffer.extend(data.view(-1))
         if collected_frames >= init_random_frames:
-            for _ in range(optim_steps_per_batch):
+            for i in range(optim_steps_per_batch):
                 # sample
                 sample = replay_buffer.sample(batch_size)
                 # loss
                 loss_vals = loss(sample)
                 # backprop
-                loss_val = sum(
-                    val for key, val in loss_vals.items() if key.startswith("loss")
-                )
-                loss_val.backward()
-                optim.step()
-                optim.zero_grad()
-                target_net_updater.step()
+                actor_loss = loss_vals["loss_actor"]
+                q_loss = loss_vals["loss_qvalue"]
+                loss_val = actor_loss + q_loss
+
+                critic_optim.zero_grad()
+                q_loss.backward()
+                critic_optim.step()
+                if i % cfg.policy_update_delay == 0:
+                    actor_optim.zero_grad()
+                    actor_loss.backward()
+                    actor_optim.step()
+                    target_net_updater.step()
+
             if r0 is None:
                 r0 = data["reward"].mean().item()
             if l0 is None:
