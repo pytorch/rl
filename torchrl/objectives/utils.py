@@ -377,6 +377,8 @@ def next_state_value(
 
     rewards = tensordict.get(("next", "reward")).squeeze(-1)
     done = tensordict.get(("next", "done")).squeeze(-1)
+    if done.all() or gamma == 0:
+        return rewards
 
     if pred_next_val is None:
         next_td = step_mdp(tensordict)  # next_observation -> observation
