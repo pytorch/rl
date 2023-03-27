@@ -213,8 +213,8 @@ class RayCollector(DataCollectorBase):
         ...     collector_class=SyncDataCollector,
         ...     max_frames_per_traj=50,
         ...     init_random_frames=-1,
+        ...     reset_at_each_iter=-False,
         ...     collector_kwargs={
-        ...         "reset_at_each_iter": False,
         ...         "device": "cpu",
         ...         "storing_device": "cpu",
         ...     },
