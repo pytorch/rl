@@ -10,6 +10,7 @@ import abc
 import argparse
 import os
 import sys
+import ray
 import time
 
 import pytest
@@ -421,6 +422,7 @@ class TestRayCollector:
     def test_ray_distributed_collector_basic(self, frames_per_batch):
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
+        ray.shutdown()  # make sure ray is not running
         collector = RayCollector(
             [env],
             policy,
@@ -438,6 +440,7 @@ class TestRayCollector:
         frames_per_batch = 50
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
+        ray.shutdown()  # make sure ray is not running
         collector = RayCollector(
             [env],
             policy,
@@ -461,6 +464,7 @@ class TestRayCollector:
     ):
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
+        ray.shutdown()  # make sure ray is not running
         collector = RayCollector(
             [env],
             policy,
