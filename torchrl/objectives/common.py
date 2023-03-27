@@ -11,13 +11,12 @@ from typing import Iterator, List, Optional, Tuple, Union
 
 import torch
 
-from tensordict.nn import make_functional, repopulate_module
+from tensordict.nn import make_functional, repopulate_module, TensorDictModule
 
 from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 from torch.nn import Parameter
 
-from torchrl.modules import SafeModule
 from torchrl.modules.utils import Buffer
 
 _has_functorch = False
@@ -69,7 +68,7 @@ class LossModule(nn.Module):
 
     def convert_to_functional(
         self,
-        module: SafeModule,
+        module: TensorDictModule,
         module_name: str,
         expand_dim: Optional[int] = None,
         create_target_params: bool = False,

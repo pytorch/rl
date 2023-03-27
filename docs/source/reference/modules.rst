@@ -24,7 +24,7 @@ TensorDict modules
     EGreedyWrapper
     OrnsteinUhlenbeckProcessWrapper
     SafeProbabilisticModule
-    SafeProbabilisticSequential
+    SafeProbabilisticTensorDictSequential
     SafeSequential
     WorldModelWrapper
     common.is_tensordict_compatible

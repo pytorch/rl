@@ -11,6 +11,7 @@ from functools import partial
 import numpy as np
 import pytest
 import torch
+
 from _utils_internal import (  # noqa
     dtype_fixture,
     get_available_devices,
@@ -1046,7 +1047,7 @@ class TestStepCounter(TransformBase):
         td = TensorDict({"done": done, ("next", "done"): done}, batch, device=device)
         _reset = torch.zeros((), dtype=torch.bool, device=device)
         while not _reset.any() and reset_workers:
-            _reset = torch.randn(batch, device=device) < 0
+            _reset = torch.randn(done.shape, device=device) < 0
             td.set("_reset", _reset)
             td.set("done", _reset)
             td.set(("next", "done"), done)
@@ -1071,6 +1072,7 @@ class TestStepCounter(TransformBase):
             assert torch.all(td.get("truncated"))
         td = step_counter.reset(td)
         if reset_workers:
+
             assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
             assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
         else:
@@ -6664,7 +6666,7 @@ class TestInitTracker(TransformBase):
         env = CountingBatchedEnv(max_steps=torch.tensor([3, 4]), batch_size=[2])
         env = TransformedEnv(env, InitTracker())
         r = env.rollout(100, policy, break_when_any_done=False)
-        assert (r["is_init"].sum(1) == torch.tensor([25, 20])).all()
+        assert (r["is_init"].view(r.batch_size).sum(-1) == torch.tensor([25, 20])).all()
 
     def test_transform_model(self):
         with pytest.raises(

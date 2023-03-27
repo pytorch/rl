@@ -26,7 +26,7 @@ from torchrl.modules import (
     NormalParamWrapper,
     SafeModule,
     SafeProbabilisticModule,
-    SafeProbabilisticSequential,
+    SafeProbabilisticTensorDictSequential,
     SafeSequential,
 )
 from torchrl.modules.distributions import (
@@ -1644,7 +1644,7 @@ def _dreamer_make_actors(
 
 
 def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
-    actor_simulator = SafeProbabilisticSequential(
+    actor_simulator = SafeProbabilisticTensorDictSequential(
         SafeModule(
             actor_module,
             in_keys=["state", "belief"],
@@ -1694,7 +1694,7 @@ def _dreamer_make_actor_real(
                 "state",
             ],
         ),
-        SafeProbabilisticSequential(
+        SafeProbabilisticTensorDictSequential(
             SafeModule(
                 actor_module,
                 in_keys=["state", "belief"],
