@@ -226,9 +226,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         """
         if env_kwargs:
             raise RuntimeError("env_kwargs cannot be passed with using from_env=True")
+        import gym
+
         # we do a local import to avoid circular import issues
         from torchrl.envs.libs.gym import GymWrapper
-        import gym
 
         env = GymWrapper(gym.make(name))
         dataset = make_tensordict(
