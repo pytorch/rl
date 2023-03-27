@@ -350,7 +350,7 @@ class GymWrapper(GymLikeEnv):
             else:
                 observation_spec = CompositeSpec(observation=observation_spec)
         self.observation_spec = observation_spec
-        if env.reward_space is not None:
+        if hasattr(env, "reward_space") and env.reward_space is not None:
             self.reward_spec = _gym_to_torchrl_spec_transform(
                 env.reward_space,
                 device=self.device,
