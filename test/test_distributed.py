@@ -419,10 +419,11 @@ class TestSyncCollector(DistributedCollectorBase):
 
 class TestRayCollector:
     @pytest.mark.parametrize("frames_per_batch", [50, 100])
-    def test_ray_distributed_collector_basic(self, frames_per_batch):
+    def test_ray_collector_basic(self, frames_per_batch):
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
+        os.environ['PYTHONPATH'] = os.path.dirname(__file__)  # for ray workers
         collector = RayCollector(
             [env],
             policy,
@@ -436,11 +437,12 @@ class TestRayCollector:
         assert total == 1000
 
     @pytest.mark.parametrize("sync", [True, False])
-    def test_ray_distributed_collector_sync(self, sync):
+    def test_ray_collector_sync(self, sync):
         frames_per_batch = 50
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
+        os.environ['PYTHONPATH'] = os.path.dirname(__file__)  # for ray workers
         collector = RayCollector(
             [env],
             policy,
@@ -459,12 +461,13 @@ class TestRayCollector:
         "collector_class",
         [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector],
     )
-    def test_ray_distributed_collector_collector_class(
+    def test_ray_collector_collector_class(
         self, frames_per_batch, collector_class
     ):
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
+        os.environ['PYTHONPATH'] = os.path.dirname(__file__)  # for ray workers
         collector = RayCollector(
             [env],
             policy,
