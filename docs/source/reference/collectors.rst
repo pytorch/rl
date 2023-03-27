@@ -116,7 +116,7 @@ node or across multiple nodes.
     RPCDataCollector
     DistributedSyncDataCollector
     submitit_delayed_launcher
-    RayDataCollector
+    RayCollector
 
 
 Helper functions
