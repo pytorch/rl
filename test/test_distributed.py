@@ -425,7 +425,9 @@ class TestRayCollector:
         policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
         ray_init_config = DEFAULT_RAY_INIT_CONFIG
-        ray_init_config["runtime_env"] = {"working_dir": os.path.dirname(__file__)}  # for ray workers
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__)
+        }  # for ray workers
         collector = RayCollector(
             [env],
             policy,
@@ -446,7 +448,9 @@ class TestRayCollector:
         policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
         ray_init_config = DEFAULT_RAY_INIT_CONFIG
-        ray_init_config["runtime_env"] = {"working_dir": os.path.dirname(__file__)}  # for ray workers
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__)
+        }  # for ray workers
         collector = RayCollector(
             [env],
             policy,
@@ -471,7 +475,9 @@ class TestRayCollector:
         policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
         ray_init_config = DEFAULT_RAY_INIT_CONFIG
-        ray_init_config["runtime_env"] = {"working_dir": os.path.dirname(__file__)}  # for ray workers
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__)
+        }  # for ray workers
         collector = RayCollector(
             [env],
             policy,
