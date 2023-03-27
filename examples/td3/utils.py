@@ -311,9 +311,9 @@ def make_td3_model(cfg):
 
     # init the lazy layers
     with torch.no_grad(), set_exploration_mode("random"):
-        for t in proof_environment.transform:
-            if isinstance(t, ObservationNorm):
-                t.init_stats(2)
+        # for t in proof_environment.transform:
+        #     if isinstance(t, ObservationNorm):
+        #         t.init_stats(2)
         td = proof_environment.rollout(max_steps=1000)
         print(td)
         actor(td)
@@ -431,7 +431,8 @@ def make_logger(logger_cfg):
 
 def make_recorder(cfg, logger, policy) -> Recorder:
     env_cfg = deepcopy(cfg.env)
-    env = make_transformed_env(make_base_env(env_cfg, from_pixels=True), env_cfg)
+    env = make_transformed_env(make_base_env(env_cfg), env_cfg)
+    init_stats(env, env_cfg.n_samples_stats, env_cfg.from_pixels)
     if cfg.recorder.video:
         env.insert_transform(
             0, VideoRecorder(logger=logger, tag=cfg.logger.exp_name, in_keys=["pixels"])
