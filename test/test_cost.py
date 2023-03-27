@@ -89,7 +89,7 @@ from torchrl.objectives.deprecated import DoubleREDQLoss_deprecated, REDQLoss_de
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.reinforce import ReinforceLoss
 from torchrl.objectives.utils import HardUpdate, hold_out_net, SoftUpdate
-from torchrl.objectives.value.advantages import GAE, TDEstimate, TDLambdaEstimate
+from torchrl.objectives.value.advantages import GAE, TD1Estimate, TDLambdaEstimate
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td_advantage_estimate,
@@ -109,7 +109,9 @@ class _check_td_steady:
         pass
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        assert (self.td.select(*self.td_clone.keys()) == self.td_clone).all(), "Some keys have been modified in the tensordict!"
+        assert (
+            self.td.select(*self.td_clone.keys()) == self.td_clone
+        ).all(), "Some keys have been modified in the tensordict!"
 
 
 def get_devices():
@@ -340,9 +342,7 @@ class TestDQN:
         td = self._create_seq_mock_data_dqn(
             action_spec_type=action_spec_type, device=device
         )
-        loss_fn = DQNLoss(
-            actor, loss_function="l2", delay_value=delay_value
-        )
+        loss_fn = DQNLoss(actor, loss_function="l2", delay_value=delay_value)
 
         ms = MultiStep(gamma=gamma, n_steps=n).to(device)
         ms_td = ms(td.clone())
@@ -1072,7 +1072,6 @@ class TestSAC:
             qvalue_network=qvalue,
             value_network=value,
             num_qvalue_nets=num_qvalue,
-            gamma=0.9,
             loss_function="l2",
             **kwargs,
         )
@@ -1197,7 +1196,6 @@ class TestSAC:
         num_qvalue,
         device,
         version,
-        gamma=0.9,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
@@ -1224,12 +1222,11 @@ class TestSAC:
             qvalue_network=qvalue,
             value_network=value,
             num_qvalue_nets=num_qvalue,
-            gamma=0.9,
             loss_function="l2",
             **kwargs,
         )
 
-        ms = MultiStep(gamma=gamma, n_steps=n).to(device)
+        ms = MultiStep(gamma=0.9, n_steps=n).to(device)
 
         td_clone = td.clone()
         ms_td = ms(td_clone)
@@ -2256,7 +2253,7 @@ class TestPPO:
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td":
-            advantage = TDEstimate(
+            advantage = TD1Estimate(
                 gamma=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td_lambda":
@@ -2319,7 +2316,7 @@ class TestPPO:
                 value_network=value,
             )
         elif advantage == "td":
-            advantage = TDEstimate(
+            advantage = TD1Estimate(
                 gamma=0.9,
                 value_network=value,
             )
@@ -2395,7 +2392,7 @@ class TestPPO:
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td":
-            advantage = TDEstimate(
+            advantage = TD1Estimate(
                 gamma=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td_lambda":
@@ -2531,7 +2528,7 @@ class TestA2C:
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td":
-            advantage = TDEstimate(
+            advantage = TD1Estimate(
                 gamma=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td_lambda":
@@ -2607,7 +2604,7 @@ class TestA2C:
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td":
-            advantage = TDEstimate(
+            advantage = TD1Estimate(
                 gamma=0.9, value_network=value, differentiable=gradient_mode
             )
         elif advantage == "td_lambda":
@@ -2682,7 +2679,7 @@ class TestReinforce:
                 differentiable=gradient_mode,
             )
         elif advantage == "td":
-            advantage = TDEstimate(
+            advantage = TD1Estimate(
                 gamma=gamma,
                 value_network=get_functional(value_net),
                 differentiable=gradient_mode,
@@ -4208,7 +4205,11 @@ def test_shared_params(dest, expected_dtype, expected_device):
 class TestAdv:
     @pytest.mark.parametrize(
         "adv,kwargs",
-        [[GAE, {"lmbda": 0.95}], [TDEstimate, {}], [TDLambdaEstimate, {"lmbda": 0.95}]],
+        [
+            [GAE, {"lmbda": 0.95}],
+            [TD1Estimate, {}],
+            [TDLambdaEstimate, {"lmbda": 0.95}],
+        ],
     )
     def test_dispatch(
         self,
@@ -4236,7 +4237,11 @@ class TestAdv:
 
     @pytest.mark.parametrize(
         "adv,kwargs",
-        [[GAE, {"lmbda": 0.95}], [TDEstimate, {}], [TDLambdaEstimate, {"lmbda": 0.95}]],
+        [
+            [GAE, {"lmbda": 0.95}],
+            [TD1Estimate, {}],
+            [TDLambdaEstimate, {"lmbda": 0.95}],
+        ],
     )
     def test_diff_reward(
         self,
@@ -4273,7 +4278,11 @@ class TestAdv:
 
     @pytest.mark.parametrize(
         "adv,kwargs",
-        [[GAE, {"lmbda": 0.95}], [TDEstimate, {}], [TDLambdaEstimate, {"lmbda": 0.95}]],
+        [
+            [GAE, {"lmbda": 0.95}],
+            [TD1Estimate, {}],
+            [TDLambdaEstimate, {"lmbda": 0.95}],
+        ],
     )
     def test_non_differentiable(self, adv, kwargs):
         value_net = TensorDictModule(

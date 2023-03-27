@@ -17,10 +17,22 @@ from torchrl.envs.utils import step_mdp
 
 
 class ValueFunctions(Enum):
+    """Value function enumerator for custom-built estimators.
+
+    Allows for a flexible usage of various value functions when the loss module
+    allows it.
+
+    Examples:
+        >>> dqn_loss = DQNLoss(actor)
+        >>> dqn_loss.make_value_function(ValueFunctions.TD0, gamma=0.9)
+
+    """
+
     TD0 = 1
     TD1 = 2
     TDLambda = 3
     GAE = 4
+
 
 def default_value_kwargs(value_type: ValueFunctions):
     """Default value function keyword argument generator.
@@ -44,8 +56,6 @@ def default_value_kwargs(value_type: ValueFunctions):
         return {"gamma": 0.99, "lmbda": 0.95}
     else:
         raise NotImplementedError(f"Unknown value type {value_type}.")
-
-
 
 
 class _context_manager:

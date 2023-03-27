@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional, Union
+from typing import Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -14,8 +14,9 @@ from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 
 from .common import LossModule
-from .utils import distance_loss, ValueFunctions, default_value_kwargs
-from .value import TDLambdaEstimate, ValueFunctionBase
+from .utils import default_value_kwargs, distance_loss, ValueFunctions
+from .value import GAE, TDLambdaEstimate
+from .value.advantages import TD0Estimate, TD1Estimate
 
 
 class DQNLoss(LossModule):
@@ -23,8 +24,6 @@ class DQNLoss(LossModule):
 
     Args:
         value_network (QValueActor or nn.Module): a Q value operator.
-        value_function (ValueFunctionBase, optional): the value function module
-            to be used. Defaults to :class:`torchrl.objectives.values.TDLambdaEstimate`.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
         delay_value (bool, optional): whether to duplicate the value network into a new target value network to
             create a double DQN. Default is :obj:`False`.
@@ -34,7 +33,6 @@ class DQNLoss(LossModule):
     def __init__(
         self,
         value_network: Union[QValueActor, nn.Module],
-        value_function: Optional[ValueFunctionBase] = None,
         loss_function: str = "l2",
         priority_key: str = "td_error",
         delay_value: bool = False,
@@ -42,13 +40,6 @@ class DQNLoss(LossModule):
 
         super().__init__()
         self.delay_value = delay_value
-        if (
-            value_function is not None
-            and value_function.value_network is not value_network
-        ):
-            raise RuntimeError(
-                "value_function.value_network and value_network must match."
-            )
         value_network = ensure_tensordict_compatible(
             module=value_network, wrapper_type=QValueActor
         )
@@ -59,37 +50,41 @@ class DQNLoss(LossModule):
             create_target_params=self.delay_value,
         )
 
-        if value_function is None:
-            value_function = self._default_value_function()
-        else:
-            value_function.value_key = "chosen_action_value"
-        self.value_function = value_function
-
         self.value_network_in_keys = value_network.in_keys
 
         self.loss_function = loss_function
         self.priority_key = priority_key
         self.action_space = self.value_network.action_space
 
-    def make_value_function(
-        self,
-        value_type: ValueFunctions,
-        **hyperparams
-    ):
+    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
-        if value_type == ValueFunctions.TD1:
-            raise NotImplementedError(f"Value type {value_type} it not implemented for loss {type(self)}.")
-        elif value_type == ValueFunctions.TD0:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-                )
-        elif value_type == ValueFunctions.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-                )
-        elif value_type == ValueFunctions.TDLambda:
-            return TDLambdaEstimate(
+        if value_type is ValueFunctions.TD1:
+            self._value_function = TD1Estimate(
+                **hp,
+                value_network=self.value_network,
+                advantage_key="advantage",
+                value_target_key="value_target",
+                value_key="chosen_action_value",
+            )
+        elif value_type is ValueFunctions.TD0:
+            self._value_function = TD0Estimate(
+                **hp,
+                value_network=self.value_network,
+                advantage_key="advantage",
+                value_target_key="value_target",
+                value_key="chosen_action_value",
+            )
+        elif value_type is ValueFunctions.GAE:
+            self._value_function = GAE(
+                **hp,
+                value_network=self.value_network,
+                advantage_key="advantage",
+                value_target_key="value_target",
+                value_key="chosen_action_value",
+            )
+        elif value_type is ValueFunctions.TDLambda:
+            self._value_function = TDLambdaEstimate(
                 **hp,
                 value_network=self.value_network,
                 advantage_key="advantage",
@@ -99,19 +94,8 @@ class DQNLoss(LossModule):
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 
-
     def _default_value_function(self):
-        return TDLambdaEstimate(
-            gamma=DEFAULT_VALUE_FUN_PARAMS.gamma,
-            lmbda=DEFAULT_VALUE_FUN_PARAMS.lmbda,
-            value_network=self.value_network,
-            average_rewards=True,
-            differentiable=False,
-            vectorized=True,
-            advantage_key="advantage",
-            value_target_key="value_target",
-            value_key="chosen_action_value",
-        )
+        self.make_value_function(ValueFunctions.TDLambda)
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DQN loss given a tensordict sampled from the replay buffer.
@@ -160,11 +144,9 @@ class DQNLoss(LossModule):
             action = action.to(torch.float)
             pred_val_index = (pred_val * action).sum(-1)
 
-        target_value = self.value_function(
-            tensordict.clone(False),
-            self.value_network_params,
-            self.target_value_network_params,
-        ).get(self.value_function.value_target_key).squeeze(-1)
+        target_value = self.value_function.value_estimate(
+            tensordict.clone(False), target_params=self.target_value_network_params
+        ).squeeze(-1)
 
         priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
@@ -317,6 +299,7 @@ class DistributionalDQNLoss(LossModule):
             reward = reward.to("cpu")
             support = support.to("cpu")
             pns_a = pns_a.to("cpu")
+
             Tz = reward + (1 - done.to(reward.dtype)) * discount * support
             if Tz.shape != torch.Size([batch_size, atoms]):
                 raise RuntimeError(
@@ -363,3 +346,25 @@ class DistributionalDQNLoss(LossModule):
         )
         loss_td = TensorDict({"loss": loss.mean()}, [])
         return loss_td
+
+    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
+        if value_type is ValueFunctions.TD1:
+            raise NotImplementedError(
+                f"value type {value_type} is not implemented for {self.__class__.__name__}."
+            )
+        elif value_type is ValueFunctions.TD0:
+            # see forward call
+            pass
+        elif value_type is ValueFunctions.GAE:
+            raise NotImplementedError(
+                f"value type {value_type} is not implemented for {self.__class__.__name__}."
+            )
+        elif value_type is ValueFunctions.TDLambda:
+            raise NotImplementedError(
+                f"value type {value_type} is not implemented for {self.__class__.__name__}."
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")
+
+    def _default_value_function(self):
+        self.make_value_function(ValueFunctions.TD0)

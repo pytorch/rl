@@ -52,6 +52,7 @@ class LossModule(nn.Module):
     def __init__(self):
         super().__init__()
         self._param_maps = {}
+        self._value_function = None
         # self.register_forward_pre_hook(_parameters_to_tensordict)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -355,7 +356,19 @@ class LossModule(nn.Module):
     def cpu(self) -> LossModule:
         return self.to(torch.device("cpu"))
 
-    def _default_value_function(self) -> ValueFunctionBase:
+    @property
+    def value_function(self) -> ValueFunctionBase:
+        out = self._value_function
+        if out is None:
+            self._default_value_function()
+            return self._value_function
+        return out
+
+    @value_function.setter
+    def value_function(self, value):
+        self._value_function = value
+
+    def _default_value_function(self):
         """A value-function constructor when none is provided.
 
         No kwarg should be present as default parameters should be retrieved
@@ -387,18 +400,20 @@ class LossModule(nn.Module):
 
         """
         if value_type == ValueFunctions.TD1:
-            raise NotImplementedError(f"Value type {value_type} it not implemented for loss {type(self)}.")
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
         elif value_type == ValueFunctions.TD0:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
-                )
+            )
         elif value_type == ValueFunctions.GAE:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
-                )
+            )
         elif value_type == ValueFunctions.TDLambda:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
-                )
+            )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")

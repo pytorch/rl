@@ -109,9 +109,10 @@ Returns
     :template: rl_template_noinherit.rst
 
     ValueFunctionBase
-    GAE
+    TD0Estimate
+    TD1Estimate
     TDLambdaEstimate
-    TDEstimate
+    GAE
     functional.generalized_advantage_estimate
     functional.vec_generalized_advantage_estimate
     functional.vec_td_lambda_return_estimate
@@ -135,3 +136,5 @@ Utils
     next_state_value
     SoftUpdate
     HardUpdate
+    ValueFunctions
+    default_value_kwargs
