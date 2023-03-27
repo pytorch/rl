@@ -427,8 +427,8 @@ class TestRayCollector:
         ray_init_config = DEFAULT_RAY_INIT_CONFIG
         ray_init_config["runtime_env"] = {
             "working_dir": os.path.dirname(__file__),
- #           "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
- #           "pip": ["ray"],
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+            "pip": ["ray"],
         }  # for ray workers
         collector = RayCollector(
             [env],
@@ -452,8 +452,8 @@ class TestRayCollector:
         ray_init_config = DEFAULT_RAY_INIT_CONFIG
         ray_init_config["runtime_env"] = {
             "working_dir": os.path.dirname(__file__),
- #           "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
- #           "pip": ["ray"],
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+            "pip": ["ray"],
         }  # for ray workers
         collector = RayCollector(
             [env],
@@ -481,8 +481,8 @@ class TestRayCollector:
         ray_init_config = DEFAULT_RAY_INIT_CONFIG
         ray_init_config["runtime_env"] = {
             "working_dir": os.path.dirname(__file__),
-#            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
-#            "pip": ["ray"],
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+            "pip": ["ray"],
         }  # for ray workers
         collector = RayCollector(
             [env],
