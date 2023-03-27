@@ -28,6 +28,7 @@ from torchrl.collectors.distributed import (
     DistributedDataCollector,
     DistributedSyncDataCollector,
     RPCDataCollector,
+    RayCollector,
 )
 
 TIMEOUT = 200
@@ -413,6 +414,68 @@ class TestSyncCollector(DistributedCollectorBase):
             if proc.is_alive():
                 proc.terminate()
             queue.close()
+
+
+class TestRayCollector:
+    @pytest.mark.parametrize("frames_per_batch", [50, 100])
+    def test_ray_distributed_collector_basic(self, frames_per_batch):
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
+        collector = RayCollector(
+            [env],
+            policy,
+            total_frames=1000,
+            frames_per_batch=frames_per_batch,
+        )
+        total = 0
+        for data in collector:
+            total += data.numel()
+            assert data.numel() == frames_per_batch
+        collector.shutdown()
+        assert total == 1000
+
+    @pytest.mark.parametrize("sync", [True, False])
+    def test_ray_distributed_collector_sync(self, sync):
+        frames_per_batch = 50
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
+        collector = RayCollector(
+            [env],
+            policy,
+            total_frames=200,
+            frames_per_batch=frames_per_batch,
+            sync=sync,
+        )
+        total = 0
+        for data in collector:
+            total += data.numel()
+            assert data.numel() == frames_per_batch
+        collector.shutdown()
+        assert total == 200
+
+    @pytest.mark.parametrize("frames_per_batch", [50, 100])
+    @pytest.mark.parametrize(
+        "collector_class",
+        [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector],
+    )
+    def test_ray_distributed_collector_collector_class(
+        self, frames_per_batch, collector_class
+    ):
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
+        collector = RayCollector(
+            [env],
+            policy,
+            collector_class=collector_class,
+            total_frames=200,
+            frames_per_batch=frames_per_batch,
+        )
+        total = 0
+        for data in collector:
+            total += data.numel()
+            assert data.numel() == frames_per_batch
+        collector.shutdown()
+        assert total == 200
 
 
 if __name__ == "__main__":

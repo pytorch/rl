@@ -26,4 +26,3 @@ dependencies:
     - mlflow
     - av
     - coverage
-    - ray
