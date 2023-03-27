@@ -83,7 +83,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 critic_optim.zero_grad()
                 q_loss.backward(retain_graph=True)
                 critic_optim.step()
-                if i % cfg.policy_update_delay == 0:
+                if i % cfg.optim.policy_update_delay == 0:
                     actor_optim.zero_grad()
                     actor_loss.backward()
                     actor_optim.step()

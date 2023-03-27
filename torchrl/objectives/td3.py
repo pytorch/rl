@@ -111,7 +111,7 @@ class TD3Loss(LossModule):
         tensordict_actor = tensordict_actor.contiguous()
 
         with set_exploration_mode("mode"):
-            actor_output_td = vmap(self.actor_network, (None, 0))(
+            actor_output_td = vmap(self.actor_network)(
                 tensordict_actor,
                 actor_params,
             )
@@ -162,7 +162,7 @@ class TD3Loss(LossModule):
             ],
             0,
         )
-        tensordict_qval = vmap(self.qvalue_network, (None, 0))(
+        tensordict_qval = vmap(self.qvalue_network)(
             tensordict_qval,
             qvalue_params,
         )
