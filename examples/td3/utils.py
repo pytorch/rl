@@ -289,7 +289,7 @@ def make_td3_model(cfg):
         module=actor_module,
         in_keys=["param"],
         spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
-        safe=True,
+        safe=False,
         distribution_class=TanhDelta,
         distribution_kwargs={
             "min": env_specs["input_spec"]["action"].space.minimum,
