@@ -27,8 +27,8 @@ from torchrl.collectors.collectors import (
 from torchrl.collectors.distributed import (
     DistributedDataCollector,
     DistributedSyncDataCollector,
-    RPCDataCollector,
     RayCollector,
+    RPCDataCollector,
 )
 
 TIMEOUT = 200
