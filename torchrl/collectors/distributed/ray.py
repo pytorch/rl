@@ -343,6 +343,7 @@ class RayCollector(DataCollectorBase):
         self._local_policy = policy
         self.collector_class = collector_class
         self.collected_frames = 0
+        self.split_trajs = split_trajs
         self.total_frames = total_frames
         self.num_collectors = num_collectors
         self.update_after_each_batch = update_after_each_batch
@@ -382,8 +383,8 @@ class RayCollector(DataCollectorBase):
             collector_kwarg["exploration_mode"] = exploration_mode
             collector_kwarg["reset_when_done"] = reset_when_done
             collector_kwarg["split_trajs"] = False
+            collector_kwarg["frames_per_batch"] = self._frames_per_batch_corrected
 
-        self.split_trajs = split_trajs
         if postproc is not None and hasattr(postproc, "to"):
             self.postproc = postproc.to(self.storing_device)
         else:
@@ -396,7 +397,6 @@ class RayCollector(DataCollectorBase):
                 create_env_fn,
                 num_workers_per_collector,
                 policy,
-                frames_per_batch,
                 collector_kwargs,
                 remote_configs,
             )
@@ -408,13 +408,12 @@ class RayCollector(DataCollectorBase):
         ray.wait(object_refs=pending_samples)
 
     @staticmethod
-    def _make_collector(cls, env_maker, policy, frames_per_batch, other_params):
+    def _make_collector(cls, env_maker, policy, other_params):
         """Create a single collector instance."""
         collector = cls(
             env_maker,
             policy,
             total_frames=-1,
-            frames_per_batch=frames_per_batch,
             **other_params,
         )
         return collector
@@ -424,7 +423,6 @@ class RayCollector(DataCollectorBase):
         create_env_fn,
         num_envs,
         policy,
-        frames_per_batch,
         collector_kwargs,
         remote_configs,
     ):
@@ -439,7 +437,6 @@ class RayCollector(DataCollectorBase):
                 if self.collector_class is not SyncDataCollector
                 else env_maker,
                 policy,
-                frames_per_batch,
                 other_params,
             )
             self._remote_collectors.extend([collector])

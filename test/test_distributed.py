@@ -469,6 +469,30 @@ class TestRayCollector:
             assert data.numel() == frames_per_batch
         assert total == 200
 
+    @pytest.mark.parametrize("sync", [True, False])
+    def test_ray_collector_mult(self, sync):
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
+        ray.shutdown()  # make sure ray is not running
+        ray_init_config = DEFAULT_RAY_INIT_CONFIG
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+            "pip": ["ray"],
+        }  # for ray workers
+        collector = RayCollector(
+            [env] * 2,
+            policy,
+            ray_init_config=ray_init_config,
+            total_frames=1000,
+            frames_per_batch=200,
+            sync=sync,
+        )
+        total = 0
+        for data in collector:
+            total += data.numel()
+        assert total == 1000
+
     @pytest.mark.parametrize("frames_per_batch", [50, 100])
     @pytest.mark.parametrize(
         "collector_class",
@@ -496,6 +520,30 @@ class TestRayCollector:
         for data in collector:
             total += data.numel()
             assert data.numel() == frames_per_batch
+        assert total == 200
+
+    def test_ray_collector_update_policy(self):
+        env = CountingEnv()
+        policy = CountingPolicy()
+        ray.shutdown()  # make sure ray is not running
+        ray_init_config = DEFAULT_RAY_INIT_CONFIG
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+            "pip": ["ray"],
+        }  # for ray workers
+        collector = RayCollector(
+            [env],
+            policy,
+            ray_init_config=ray_init_config,
+            total_frames=200,
+            frames_per_batch=100,
+        )
+        total = 0
+        for data in collector:
+            total += data.numel()
+            policy.weight.data += 1
+            collector.update_policy_weights_()
         assert total == 200
 
 
