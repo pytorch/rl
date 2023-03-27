@@ -10,10 +10,10 @@ import abc
 import argparse
 import os
 import sys
-import ray
 import time
 
 import pytest
+import ray
 import torch
 
 from mocking_classes import ContinuousActionVecMockEnv, CountingEnv
@@ -423,7 +423,7 @@ class TestRayCollector:
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
-        os.environ['PYTHONPATH'] = os.path.dirname(__file__)  # for ray workers
+        os.environ["PYTHONPATH"] = os.path.dirname(__file__)  # for ray workers
         collector = RayCollector(
             [env],
             policy,
@@ -442,7 +442,7 @@ class TestRayCollector:
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
-        os.environ['PYTHONPATH'] = os.path.dirname(__file__)  # for ray workers
+        os.environ["PYTHONPATH"] = os.path.dirname(__file__)  # for ray workers
         collector = RayCollector(
             [env],
             policy,
@@ -461,13 +461,11 @@ class TestRayCollector:
         "collector_class",
         [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector],
     )
-    def test_ray_collector_collector_class(
-        self, frames_per_batch, collector_class
-    ):
+    def test_ray_collector_collector_class(self, frames_per_batch, collector_class):
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
-        os.environ['PYTHONPATH'] = os.path.dirname(__file__)  # for ray workers
+        os.environ["PYTHONPATH"] = os.path.dirname(__file__)  # for ray workers
         collector = RayCollector(
             [env],
             policy,
