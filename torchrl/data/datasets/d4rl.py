@@ -16,15 +16,6 @@ from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import Writer
 
-D4RL_ERR = None
-try:
-    import d4rl, gym  # noqa
-
-    _has_d4rl = True
-except Exception as err:
-    _has_d4rl = False
-    D4RL_ERR = err
-
 
 class D4RLExperienceReplay(TensorDictReplayBuffer):
     """An Experience replay class for D4RL.
@@ -102,6 +93,18 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
     """
 
+    D4RL_ERR = None
+
+    @classmethod
+    def _import_d4rl(cls):
+        try:
+            import d4rl  # noqa
+
+            cls._has_d4rl = True
+        except ModuleNotFoundError as err:
+            cls._has_d4rl = False
+            cls.D4RL_ERR = err
+
     def __init__(
         self,
         name,
@@ -118,8 +121,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         **env_kwargs,
     ):
 
-        if not _has_d4rl:
-            raise ImportError("Could not import d4rl") from D4RL_ERR
+        type(self)._import_d4rl()
+
+        if not self._has_d4rl:
+            raise ImportError("Could not import d4rl") from self.D4RL_ERR
         self.from_env = from_env
         self.use_timeout_as_done = use_timeout_as_done
         if from_env:
@@ -146,6 +151,13 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
     def _get_dataset_direct(self, name, env_kwargs):
         from torchrl.envs.libs.gym import GymWrapper
+
+        type(self)._import_d4rl()
+
+        if not self._has_d4rl:
+            raise ImportError("Could not import d4rl") from self.D4RL_ERR
+        import d4rl
+        import gym
 
         env = GymWrapper(gym.make(name))
         dataset = d4rl.qlearning_dataset(env._env, **env_kwargs)
@@ -214,6 +226,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         """
         if env_kwargs:
             raise RuntimeError("env_kwargs cannot be passed with using from_env=True")
+        import gym
+
         # we do a local import to avoid circular import issues
         from torchrl.envs.libs.gym import GymWrapper
 

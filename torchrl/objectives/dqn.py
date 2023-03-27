@@ -101,6 +101,9 @@ class DQNLoss(LossModule):
         pred_val = td_copy.get("action_value")
 
         if self.action_space == "categorical":
+            if action.shape != pred_val.shape:
+                # unsqueeze the action if it lacks on trailing singleton dim
+                action = action.unsqueeze(-1)
             pred_val_index = torch.gather(pred_val, -1, index=action).squeeze(-1)
         else:
             action = action.to(torch.float)
@@ -180,11 +183,12 @@ class DistributionalDQNLoss(LossModule):
     @staticmethod
     def _log_ps_a_categorical(action, action_log_softmax):
         # Reshaping action of shape `[*batch_sizes, 1]` to `[*batch_sizes, atoms, 1]` for gather.
+        if action.shape[-1] != 1:
+            action = action.unsqueeze(-1)
         action = action.unsqueeze(-2)
         new_shape = [-1] * len(action.shape)
         new_shape[-2] = action_log_softmax.shape[-2]  # calculating atoms
         action = action.expand(new_shape)
-
         return torch.gather(action_log_softmax, -1, index=action).squeeze(-1)
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:

@@ -231,6 +231,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_onli
   mode=offline \
   collector_devices=cuda:0
 
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/bandits/dqn.py --n_steps=100
 
 coverage combine
 coverage xml -i

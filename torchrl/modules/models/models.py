@@ -172,6 +172,7 @@ class MLP(nn.Sequential):
 
         _out_features_num = out_features
         if not isinstance(out_features, Number):
+            print(out_features, type(out_features))
             _out_features_num = prod(out_features)
         self.out_features = out_features
         self._out_features_num = _out_features_num
