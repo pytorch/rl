@@ -13,8 +13,8 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
-from torchrl.envs import EnvBase, EnvCreator
 from torchrl.collectors.utils import split_trajectories
+from torchrl.envs import EnvBase, EnvCreator
 
 logger = logging.getLogger(__name__)
 
