@@ -1,4 +1,5 @@
 import logging
+import warnings
 from typing import Callable, Dict, Iterator, List, OrderedDict, Union
 
 import torch
@@ -8,20 +9,16 @@ from tensordict.tensordict import TensorDictBase
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
+    DEFAULT_EXPLORATION_MODE,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
 from torchrl.envs import EnvBase, EnvCreator
 
-# TODO: add visible devices?
-# TODO: change env_makers to create_env_fn
-# TODO: add max_frames_per_traj
-# TODO: add init_random_frames
-# TODO: add reset_at_each_iter
 # TODO: add postproc
-# TODO: add split_trajs
 # TODO: add exploration_mode
 # TODO: add reset_when_done
+# TODO: add visible devices
 # TODO: right params order
 
 logger = logging.getLogger(__name__)
@@ -121,21 +118,58 @@ class RayCollector(DataCollectorBase):
     provides the rollouts as they become available from individual remote collectors.
 
     Args:
-        env_makers (list of callables or EnvBase instances): a list of the
-            same length as the number of nodes to be launched. A single callable
-            can be provided as well, and will be used in all collectors.
-        policy (Callable[[TensorDict], TensorDict]): a callable that populates
-            the tensordict with an `"action"` field.
+        create_env_fn (Callable or List[Callabled]): list of Callables, each returning an
+            instance of :class:`torchrl.envs.EnvBase`.
+        policy (Callable): Instance of TensorDictModule class.
+            Must accept TensorDictBase object as input.
         frames_per_batch (int): A keyword-only argument representing the
-                total number of elements in a batch.
+            total number of elements in a batch.
+        total_frames (int, Optional): lower bound of the total number of frames returned by the collector.
+            The iterator will stop once the total number of frames equates or exceeds the total number of
+            frames passed to the collector. Default value is -1, which mean no target total number of frames
+            (i.e. the collector will run indefinitely).
+                max_frames_per_traj (int, optional): Maximum steps per trajectory.
+            Note that a trajectory can span over multiple batches (unless
+            ``reset_at_each_iter`` is set to ``True``, see below).
+            Once a trajectory reaches ``n_steps``, the environment is reset.
+            If the environment wraps multiple environments together, the number
+            of steps is tracked for each environment independently. Negative
+            values are allowed, in which case this argument is ignored.
+            Defaults to ``-1`` (i.e. no maximum number of steps).
+        init_random_frames (int, optional): Number of frames for which the
+            policy is ignored before it is called. This feature is mainly
+            intended to be used in offline/model-based settings, where a
+            batch of random trajectories can be used to initialize training.
+            Defaults to ``-1`` (i.e. no random frames).
+        reset_at_each_iter (bool, optional): Whether environments should be reset
+            at the beginning of a batch collection.
+            Defaults to ``False``.
+        postproc (Callable, optional): A post-processing transform, such as
+            a :class:`torchrl.envs.Transform` or a :class:`torchrl.data.postprocs.MultiStep`
+            instance.
+            Defaults to ``None``.
+        split_trajs (bool, optional): Boolean indicating whether the resulting
+            TensorDict should be split according to the trajectories.
+            See :func:`torchrl.collectors.utils.split_trajectories` for more
+            information.
+            Defaults to ``False``.
+        exploration_mode (str, optional): interaction mode to be used when
+            collecting data. Must be one of ``"random"``, ``"mode"`` or
+            ``"mean"``.
+            Defaults to ``"random"``
+        reset_when_done (bool, optional): if ``True`` (default), an environment
+            that return a ``True`` value in its ``"done"`` or ``"truncated"``
+            entry will be reset at the corresponding indices.
         collector_class (Python class): a collector class to be remotely instantiated. Can be
             :class:`torchrl.collectors.SyncDataCollector`,
             :class:`torchrl.collectors.MultiSyncDataCollector`,
             :class:`torchrl.collectors.MultiaSyncDataCollector`
             or a derived class of these.
             Defaults to :class:`torchrl.collectors.SyncDataCollector`.
-        collector_kwargs (list of dicts): kwargs to instantiate each collector_class.
-            A single dict can be provided as well, and will be used in all collectors.
+        collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
+            remote data-collector. If a list is provided, each element will
+            correspond to an individual set of keyword arguments for the
+            dedicated collector.
         num_workers_per_collector (int): the number of copies of the
             env constructor that is to be used on the remote nodes.
             Defaults to 1 (a single env per collector).
@@ -147,10 +181,6 @@ class RayCollector(DataCollectorBase):
         remote_configs (list of dicts, Optional): ray resource specs for each remote collector.
             A single dict can be provided as well, and will be used in all collectors.
         num_collectors (int, Optional): total number of collectors to be instantiated.
-        total_frames (int, Optional): lower bound of the total number of frames returned by the collector.
-            The iterator will stop once the total number of frames equates or exceeds the total number of
-            frames passed to the collector. Default value is -1, which mean no target total number of frames
-            (i.e. the collector will run indefinitely).
         sync (bool): if ``True``, the resulting tensordict is a stack of all the
             tensordicts collected on each node. If ``False`` (default), each
             tensordict results from a separate node in a "first-ready,
@@ -183,12 +213,12 @@ class RayCollector(DataCollectorBase):
         >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
         >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
         >>> distributed_collector = RayCollector(
-        ...     env_makers=[env_maker],
+        ...     create_env_fn=[env_maker],
         ...     policy=policy,
         ...     collector_class=SyncDataCollector,
+        ...     max_frames_per_traj=50,
+        ...     init_random_frames=-1,
         ...     collector_kwargs={
-        ...         "max_frames_per_traj": 50,
-        ...         "init_random_frames": -1,
         ...         "reset_at_each_iter": False,
         ...         "device": "cpu",
         ...         "storing_device": "cpu",
@@ -205,10 +235,19 @@ class RayCollector(DataCollectorBase):
 
     def __init__(
         self,
-        env_makers: Union[Callable, EnvBase, List[Callable], List[EnvBase]],
+        create_env_fn: Union[Callable, EnvBase, List[Callable], List[EnvBase]],
         policy: Callable[[TensorDict], TensorDict],
+        *,
         frames_per_batch: int,
         total_frames: int = -1,
+        max_frames_per_traj=-1,
+        init_random_frames=-1,
+        reset_at_each_iter=False,
+        postproc=None,
+        split_trajs=False,
+        exploration_mode=DEFAULT_EXPLORATION_MODE,
+        reset_when_done=True,
+
         collector_class: Callable[[TensorDict], TensorDict] = SyncDataCollector,
         collector_kwargs: Union[Dict, List[Dict]] = None,
         num_workers_per_collector: int = 1,
@@ -243,8 +282,8 @@ class RayCollector(DataCollectorBase):
             return param
 
         if num_collectors:
-            env_makers = check_consistency_with_num_collectors(
-                env_makers, "env_makers", num_collectors
+            create_env_fn = check_consistency_with_num_collectors(
+                create_env_fn, "create_env_fn", num_collectors
             )
             collector_kwargs = check_consistency_with_num_collectors(
                 collector_kwargs, "collector_kwargs", num_collectors
@@ -272,21 +311,21 @@ class RayCollector(DataCollectorBase):
                     lengths.add(len(new_lst))
             if len(lengths) > 1:
                 raise ValueError(
-                    "Inconsistent RayDistributedCollector parameters. env_makers, "
+                    "Inconsistent RayDistributedCollector parameters. create_env_fn, "
                     "collector_kwargs and remote_configs are lists of different length."
                 )
             else:
                 return new_lists
 
         out_lists = check_list_length_consistency(
-            env_makers, collector_kwargs, remote_configs
+            create_env_fn, collector_kwargs, remote_configs
         )
-        env_makers, collector_kwargs, remote_configs = out_lists
-        num_collectors = len(env_makers)
+        create_env_fn, collector_kwargs, remote_configs = out_lists
+        num_collectors = len(create_env_fn)
 
-        for i in range(len(env_makers)):
-            if not isinstance(env_makers[i], (EnvBase, EnvCreator)):
-                env_makers[i] = EnvCreator(env_makers[i])
+        for i in range(len(create_env_fn)):
+            if not isinstance(create_env_fn[i], (EnvBase, EnvCreator)):
+                create_env_fn[i] = EnvCreator(create_env_fn[i])
 
         # If ray available, try to connect to an existing Ray cluster or start one and connect to it.
         if not _has_ray:
@@ -314,7 +353,7 @@ class RayCollector(DataCollectorBase):
         self.num_collectors = num_collectors
         self.update_after_each_batch = update_after_each_batch
         self.max_weight_update_interval = max_weight_update_interval
-        self.collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
+        self.collector_kwargs = collector_kwargs if collector_kwargs is not None else [{}]
         self.storing_device = storing_device
         self._batches_since_weight_update = [0 for _ in range(self.num_collectors)]
         self._sync = sync
@@ -329,11 +368,30 @@ class RayCollector(DataCollectorBase):
         else:
             self._frames_per_batch_corrected = frames_per_batch
 
+        # update collector kwargs
+        for collector_kwarg in self.collector_kwargs:
+            collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
+            collector_kwarg["init_random_frames"] = (
+                    init_random_frames // self.num_collectors
+            )
+            if not self._sync and init_random_frames > 0:
+                warnings.warn(
+                    "async distributed data collection with init_random_frames > 0 "
+                    "may have unforeseen consequences as we do not control that once "
+                    "non-random data is being collected all nodes are returning non-random data. "
+                    "If this is a feature that you feel should be fixed, please raise an issue on "
+                    "torchrl's repo."
+                )
+            collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
+            collector_kwarg["exploration_mode"] = exploration_mode
+            collector_kwarg["reset_when_done"] = reset_when_done
+            collector_kwarg["split_trajs"] = split_trajs
+
         # Create remote instances of the collector class
         self._remote_collectors = []
         if self.num_collectors > 0:
             self.add_collectors(
-                env_makers,
+                create_env_fn,
                 num_workers_per_collector,
                 policy,
                 frames_per_batch,
@@ -355,14 +413,13 @@ class RayCollector(DataCollectorBase):
             policy,
             total_frames=-1,
             frames_per_batch=frames_per_batch,
-            split_trajs=False,
             **other_params,
         )
         return collector
 
     def add_collectors(
         self,
-        env_makers,
+        create_env_fn,
         num_envs,
         policy,
         frames_per_batch,
@@ -371,7 +428,7 @@ class RayCollector(DataCollectorBase):
     ):
         """Creates and adds a number of remote collectors to the set."""
         for env_maker, other_params, remote_config in zip(
-            env_makers, collector_kwargs, remote_configs
+            create_env_fn, collector_kwargs, remote_configs
         ):
             cls = self.collector_class.as_remote(remote_config).remote
             collector = self._make_collector(
