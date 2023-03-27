@@ -6,11 +6,10 @@
 from typing import Tuple
 
 import torch
+from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
 
-from torchrl.modules import SafeModule
-from torchrl.modules.tensordict_module import SafeProbabilisticSequential
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import distance_loss
 
@@ -26,7 +25,7 @@ class A2CLoss(LossModule):
     https://arxiv.org/abs/1602.01783v2
 
     Args:
-        actor (SafeProbabilisticSequential): policy operator.
+        actor (ProbabilisticTensorDictSequential): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
@@ -36,13 +35,13 @@ class A2CLoss(LossModule):
         critic_coef (float): the weight of the critic loss.
         gamma (scalar): a discount factor for return computation.
         loss_function_type (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
-        advantage_module (nn.Module): SafeModule used to compute tha advantage function.
+        advantage_module (nn.Module): TensorDictModule used to compute tha advantage function.
     """
 
     def __init__(
         self,
-        actor: SafeProbabilisticSequential,
-        critic: SafeModule,
+        actor: ProbabilisticTensorDictSequential,
+        critic: TensorDictModule,
         advantage_key: str = "advantage",
         value_target_key: str = "value_target",
         entropy_bonus: bool = True,

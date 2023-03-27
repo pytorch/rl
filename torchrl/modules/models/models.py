@@ -49,9 +49,11 @@ class MLP(nn.Sequential):
         activation_kwargs (dict, optional): kwargs to be used with the activation class;
         norm_class (Type, optional): normalization class, if any.
         norm_kwargs (dict, optional): kwargs to be used with the normalization layers;
-        bias_last_layer (bool): if True, the last Linear layer will have a bias parameter.
+        dropout (float, optional): dropout probability. Defaults to ``None`` (no
+            dropout);
+        bias_last_layer (bool): if ``True``, the last Linear layer will have a bias parameter.
             default: True;
-        single_bias_last_layer (bool): if True, the last dimension of the bias of the last layer will be a singleton
+        single_bias_last_layer (bool): if ``True``, the last dimension of the bias of the last layer will be a singleton
             dimension.
             default: True;
         layer_class (Type[nn.Module]): class to be used for the linear layers;
@@ -147,6 +149,7 @@ class MLP(nn.Sequential):
         activation_kwargs: Optional[dict] = None,
         norm_class: Optional[Type[nn.Module]] = None,
         norm_kwargs: Optional[dict] = None,
+        dropout: Optional[float] = None,
         bias_last_layer: bool = True,
         single_bias_last_layer: bool = False,
         layer_class: Type[nn.Module] = nn.Linear,
@@ -178,6 +181,7 @@ class MLP(nn.Sequential):
         )
         self.norm_class = norm_class
         self.norm_kwargs = norm_kwargs if norm_kwargs is not None else {}
+        self.dropout = dropout
         self.bias_last_layer = bias_last_layer
         self.single_bias_last_layer = single_bias_last_layer
         self.layer_class = layer_class
@@ -235,15 +239,18 @@ class MLP(nn.Sequential):
                 )
 
             if i < self.depth or self.activate_last_layer:
+                if self.dropout is not None:
+                    layers.append(create_on_device(nn.Dropout, device, p=self.dropout))
+                if self.norm_class is not None:
+                    layers.append(
+                        create_on_device(self.norm_class, device, **self.norm_kwargs)
+                    )
                 layers.append(
                     create_on_device(
                         self.activation_class, device, **self.activation_kwargs
                     )
                 )
-                if self.norm_class is not None:
-                    layers.append(
-                        create_on_device(self.norm_class, device, **self.norm_kwargs)
-                    )
+
         return layers
 
     def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
@@ -279,7 +286,7 @@ class ConvNet(nn.Sequential):
         activation_kwargs (dict, optional): kwargs to be used with the activation class;
         norm_class (Type, optional): normalization class, if any;
         norm_kwargs (dict, optional): kwargs to be used with the normalization layers;
-        bias_last_layer (bool): if True, the last Linear layer will have a bias parameter.
+        bias_last_layer (bool): if ``True``, the last Linear layer will have a bias parameter.
             default: True;
         aggregator_class (Type[nn.Module]): aggregator to use at the end of the chain.
             default:  SquashDims;
@@ -716,7 +723,7 @@ class DdpgCnnActor(nn.Module):
             'activation_class': nn.ELU,
             'bias_last_layer': True,
         }
-        use_avg_pooling (bool, optional): if True, a nn.AvgPooling layer is
+        use_avg_pooling (bool, optional): if ``True``, a nn.AvgPooling layer is
             used to aggregate the output. Default is :obj:`False`.
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
@@ -847,7 +854,7 @@ class DdpgCnnQNet(nn.Module):
             'activation_class': nn.ELU,
             'bias_last_layer': True,
         }
-        use_avg_pooling (bool, optional): if True, a nn.AvgPooling layer is
+        use_avg_pooling (bool, optional): if ``True``, a nn.AvgPooling layer is
             used to aggregate the output. Default is :obj:`True`.
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """

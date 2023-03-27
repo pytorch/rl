@@ -2061,6 +2061,7 @@ class TestStack:
         c1 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float64)
         c2 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float32)
         c = torch.stack([c1, c2], stack_dim)
+        torch.manual_seed(0)
 
         shape = list(shape)
         shape.insert(stack_dim, 2)

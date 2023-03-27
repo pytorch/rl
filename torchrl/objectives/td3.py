@@ -6,11 +6,11 @@
 from numbers import Number
 
 import torch
+from tensordict.nn import TensorDictModule
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.envs.utils import set_exploration_mode, step_mdp
-from torchrl.modules import SafeModule
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     distance_loss,
@@ -31,8 +31,8 @@ class TD3Loss(LossModule):
     """TD3 Loss module.
 
     Args:
-        actor_network (SafeModule): the actor to be trained
-        qvalue_network (SafeModule): a single Q-value network that will be multiplicated as many times as needed.
+        actor_network (TensorDictModule): the actor to be trained
+        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
         gamma (Number, optional): gamma decay factor. Default is 0.99.
         max_action (float, optional): Maximum action, in MuJoCo environments typically 1.0.
@@ -50,8 +50,8 @@ class TD3Loss(LossModule):
 
     def __init__(
         self,
-        actor_network: SafeModule,
-        qvalue_network: SafeModule,
+        actor_network: TensorDictModule,
+        qvalue_network: TensorDictModule,
         num_qvalue_nets: int = 2,
         gamma: Number = 0.99,
         policy_noise: float = 0.2,
