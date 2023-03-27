@@ -247,7 +247,6 @@ class RayCollector(DataCollectorBase):
         split_trajs=False,
         exploration_mode=DEFAULT_EXPLORATION_MODE,
         reset_when_done=True,
-
         collector_class: Callable[[TensorDict], TensorDict] = SyncDataCollector,
         collector_kwargs: Union[Dict, List[Dict]] = None,
         num_workers_per_collector: int = 1,
@@ -353,7 +352,9 @@ class RayCollector(DataCollectorBase):
         self.num_collectors = num_collectors
         self.update_after_each_batch = update_after_each_batch
         self.max_weight_update_interval = max_weight_update_interval
-        self.collector_kwargs = collector_kwargs if collector_kwargs is not None else [{}]
+        self.collector_kwargs = (
+            collector_kwargs if collector_kwargs is not None else [{}]
+        )
         self.storing_device = storing_device
         self._batches_since_weight_update = [0 for _ in range(self.num_collectors)]
         self._sync = sync
@@ -372,7 +373,7 @@ class RayCollector(DataCollectorBase):
         for collector_kwarg in self.collector_kwargs:
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
-                    init_random_frames // self.num_collectors
+                init_random_frames // self.num_collectors
             )
             if not self._sync and init_random_frames > 0:
                 warnings.warn(
