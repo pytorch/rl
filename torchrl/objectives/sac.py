@@ -19,7 +19,7 @@ from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueF
 
 from ..envs.utils import set_exploration_mode, step_mdp
 from .common import LossModule
-from .value import GAE, TD0Estimate, TD1Estimate, TDLambdaEstimate
+from .value import TD0Estimate, TD1Estimate, TDLambdaEstimate
 
 try:
     from functorch import vmap

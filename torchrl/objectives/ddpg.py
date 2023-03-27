@@ -23,7 +23,7 @@ from torchrl.objectives.utils import (
 
 from ..envs.utils import set_exploration_mode
 from .common import LossModule
-from .value import GAE, TD0Estimate, TD1Estimate, TDLambdaEstimate
+from .value import TD0Estimate, TD1Estimate, TDLambdaEstimate
 
 
 class DDPGLoss(LossModule):

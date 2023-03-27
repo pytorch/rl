@@ -15,7 +15,7 @@ from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueF
 
 from ..envs.utils import set_exploration_mode
 from .common import LossModule
-from .value import GAE, TD0Estimate, TD1Estimate, TDLambdaEstimate
+from .value import TD0Estimate, TD1Estimate, TDLambdaEstimate
 
 try:
     from functorch import vmap
@@ -255,11 +255,8 @@ class IQLLoss(LossModule):
                 value_key=value_key,
             )
         elif value_type is ValueFunctions.GAE:
-            self._value_function = GAE(
-                **hp,
-                value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type is ValueFunctions.TDLambda:
             self._value_function = TDLambdaEstimate(

@@ -22,7 +22,7 @@ from torchrl.objectives import (
     ValueFunctions,
 )
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.value import GAE, TD0Estimate, TD1Estimate, TDLambdaEstimate
+from torchrl.objectives.value import TD0Estimate, TD1Estimate, TDLambdaEstimate
 
 try:
     from functorch import vmap
@@ -289,7 +289,9 @@ class REDQLoss_deprecated(LossModule):
                 value_network=None, value_key=value_key, **hp
             )
         elif value_type == ValueFunctions.GAE:
-            self._value_function = GAE(value_network=None, value_key=value_key, **hp)
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
         elif value_type == ValueFunctions.TDLambda:
             self._value_function = TDLambdaEstimate(
                 value_network=None, value_key=value_key, **hp

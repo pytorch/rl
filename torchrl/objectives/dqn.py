@@ -15,7 +15,7 @@ from torchrl.modules.tensordict_module.common import ensure_tensordict_compatibl
 
 from .common import LossModule
 from .utils import default_value_kwargs, distance_loss, ValueFunctions
-from .value import GAE, TDLambdaEstimate
+from .value import TDLambdaEstimate
 from .value.advantages import TD0Estimate, TD1Estimate
 
 

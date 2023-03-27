@@ -17,7 +17,7 @@ from torch import Tensor
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueFunctions
-from torchrl.objectives.value import GAE, TD0Estimate, TD1Estimate, TDLambdaEstimate
+from torchrl.objectives.value import TD0Estimate, TD1Estimate, TDLambdaEstimate
 
 try:
     from functorch import vmap
@@ -327,7 +327,9 @@ class REDQLoss(LossModule):
                 value_network=None, value_key=value_key, **hp
             )
         elif value_type == ValueFunctions.GAE:
-            self._value_function = GAE(value_network=None, value_key=value_key, **hp)
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
         elif value_type == ValueFunctions.TDLambda:
             self._value_function = TDLambdaEstimate(
                 value_network=None, value_key=value_key, **hp

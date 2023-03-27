@@ -12,7 +12,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueFunctions
-from torchrl.objectives.value import GAE, TD0Estimate, TD1Estimate, TDLambdaEstimate
+from torchrl.objectives.value import TD0Estimate, TD1Estimate, TDLambdaEstimate
 
 try:
     from functorch import vmap
