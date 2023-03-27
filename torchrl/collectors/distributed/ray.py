@@ -13,6 +13,16 @@ from torchrl.collectors.collectors import (
 )
 from torchrl.envs import EnvBase, EnvCreator
 
+# TODO: add visible devices?
+# TODO: change env_makers to create_env_fn
+# TODO: add max_frames_per_traj
+# TODO: add init_random_frames
+# TODO: add reset_at_each_iter
+# TODO: add postproc
+# TODO: add split_trajs
+# TODO: add exploration_mode
+# TODO: add reset_when_done
+# TODO: right params order
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +126,8 @@ class RayCollector(DataCollectorBase):
             can be provided as well, and will be used in all collectors.
         policy (Callable[[TensorDict], TensorDict]): a callable that populates
             the tensordict with an `"action"` field.
+        frames_per_batch (int): A keyword-only argument representing the
+                total number of elements in a batch.
         collector_class (Python class): a collector class to be remotely instantiated. Can be
             :class:`torchrl.collectors.SyncDataCollector`,
             :class:`torchrl.collectors.MultiSyncDataCollector`,

@@ -426,7 +426,9 @@ class TestRayCollector:
         ray.shutdown()  # make sure ray is not running
         ray_init_config = DEFAULT_RAY_INIT_CONFIG
         ray_init_config["runtime_env"] = {
-            "working_dir": os.path.dirname(__file__)
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.environ.get["PYTHONPATH"]},
+            "pip": ["ray"],
         }  # for ray workers
         collector = RayCollector(
             [env],
@@ -449,7 +451,9 @@ class TestRayCollector:
         ray.shutdown()  # make sure ray is not running
         ray_init_config = DEFAULT_RAY_INIT_CONFIG
         ray_init_config["runtime_env"] = {
-            "working_dir": os.path.dirname(__file__)
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.environ.get["PYTHONPATH"]},
+            "pip": ["ray"],
         }  # for ray workers
         collector = RayCollector(
             [env],
@@ -476,7 +480,9 @@ class TestRayCollector:
         ray.shutdown()  # make sure ray is not running
         ray_init_config = DEFAULT_RAY_INIT_CONFIG
         ray_init_config["runtime_env"] = {
-            "working_dir": os.path.dirname(__file__)
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.environ.get["PYTHONPATH"]},
+            "pip": ["ray"],
         }  # for ray workers
         collector = RayCollector(
             [env],
