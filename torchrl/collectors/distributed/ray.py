@@ -14,12 +14,7 @@ from torchrl.collectors.collectors import (
     SyncDataCollector,
 )
 from torchrl.envs import EnvBase, EnvCreator
-
-# TODO: add postproc
-# TODO: add exploration_mode
-# TODO: add reset_when_done
-# TODO: add visible devices
-# TODO: right params order
+from torchrl.collectors.utils import split_trajectories
 
 logger = logging.getLogger(__name__)
 
@@ -386,7 +381,13 @@ class RayCollector(DataCollectorBase):
             collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
             collector_kwarg["exploration_mode"] = exploration_mode
             collector_kwarg["reset_when_done"] = reset_when_done
-            collector_kwarg["split_trajs"] = split_trajs
+            collector_kwarg["split_trajs"] = False
+
+        self.split_trajs = split_trajs
+        if postproc is not None and hasattr(postproc, "to"):
+            self.postproc = postproc.to(self.storing_device)
+        else:
+            self.postproc = postproc
 
         # Create remote instances of the collector class
         self._remote_collectors = []
@@ -462,9 +463,16 @@ class RayCollector(DataCollectorBase):
 
     def iterator(self):
         if self._sync:
-            return self._sync_iterator()
+            data = self._sync_iterator()
         else:
-            return self._async_iterator()
+            data = self._async_iterator()
+
+        if self.split_trajs:
+            data = split_trajectories(data)
+        if self.postproc is not None:
+            data = self.postproc(data)
+
+        return data
 
     def _sync_iterator(self) -> Iterator[TensorDictBase]:
         """Collects one data batch per remote collector in each iteration."""
