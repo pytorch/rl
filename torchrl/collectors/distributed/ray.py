@@ -80,7 +80,7 @@ def as_remote(cls, remote_config):
 
 
 class RayCollector(DataCollectorBase):
-    """Distributed data collector with Should `Ray <https://docs.ray.io/>`_ backend.
+    """Distributed data collector with `Ray <https://docs.ray.io/>`_ backend.
 
     This Python class serves as a ray-based solution to instantiate and coordinate multiple
     data collectors in a distributed cluster. Like TorchRL non-distributed collectors, this
