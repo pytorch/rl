@@ -18,6 +18,7 @@ from torch import nn, Tensor
 from torch.nn import Parameter
 
 from torchrl.modules.utils import Buffer
+from torchrl.objectives.utils import ValueFunctions
 from torchrl.objectives.value import ValueFunctionBase
 
 _has_functorch = False
@@ -362,3 +363,42 @@ class LossModule(nn.Module):
 
         """
         raise NotImplementedError
+
+    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
+        """Value-function constructor.
+
+        If the non-default value function is wanted, it must be built using
+        this method.
+
+        Args:
+            value_type (ValueFunctions): A :class:`torchrl.objectives.utils.ValueFunctions`
+                enum type indicating the value function to use.
+            **hyperparams: hyperparameters to use for the value function.
+                If not provided, the value indicated by
+                :func:`torchrl.objectives.utils.default_value_kwargs` will be
+                used.
+
+        Examples:
+            >>> # initialize the DQN loss
+            >>> dqn_loss = DQNLoss(actor)
+            >>> dqn_loss.make_value_function(
+            ...     ValueFunctions.TD1,
+            ...     gamma=0.9)
+
+        """
+        if value_type == ValueFunctions.TD1:
+            raise NotImplementedError(f"Value type {value_type} it not implemented for loss {type(self)}.")
+        elif value_type == ValueFunctions.TD0:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+                )
+        elif value_type == ValueFunctions.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+                )
+        elif value_type == ValueFunctions.TDLambda:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+                )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")

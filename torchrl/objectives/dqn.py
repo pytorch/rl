@@ -7,7 +7,6 @@ from typing import Optional, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import make_functional
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
@@ -15,7 +14,7 @@ from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 
 from .common import LossModule
-from .utils import DEFAULT_VALUE_FUN_PARAMS, distance_loss, next_state_value
+from .utils import distance_loss, ValueFunctions, default_value_kwargs
 from .value import TDLambdaEstimate, ValueFunctionBase
 
 
@@ -71,6 +70,35 @@ class DQNLoss(LossModule):
         self.loss_function = loss_function
         self.priority_key = priority_key
         self.action_space = self.value_network.action_space
+
+    def make_value_function(
+        self,
+        value_type: ValueFunctions,
+        **hyperparams
+    ):
+        hp = dict(default_value_kwargs(value_type))
+        hp.update(hyperparams)
+        if value_type == ValueFunctions.TD1:
+            raise NotImplementedError(f"Value type {value_type} it not implemented for loss {type(self)}.")
+        elif value_type == ValueFunctions.TD0:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+                )
+        elif value_type == ValueFunctions.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+                )
+        elif value_type == ValueFunctions.TDLambda:
+            return TDLambdaEstimate(
+                **hp,
+                value_network=self.value_network,
+                advantage_key="advantage",
+                value_target_key="value_target",
+                value_key="chosen_action_value",
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")
+
 
     def _default_value_function(self):
         return TDLambdaEstimate(

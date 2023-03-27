@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
+from enum import Enum
 from typing import Iterable, Optional, Union
 
 import torch
@@ -15,9 +16,36 @@ from torch.nn import functional as F
 from torchrl.envs.utils import step_mdp
 
 
-class DEFAULT_VALUE_FUN_PARAMS:
-    gamma = 0.99
-    lmbda = 0.95
+class ValueFunctions(Enum):
+    TD0 = 1
+    TD1 = 2
+    TDLambda = 3
+    GAE = 4
+
+def default_value_kwargs(value_type: ValueFunctions):
+    """Default value function keyword argument generator.
+
+    Args:
+        value_type (Enum.value): the value function type, from the
+        :class:`torchrl.objectives.utils.ValueFunctions` class.
+
+    Examples:
+        >>> kwargs = default_value_kwargs(ValueFunctions.TDLambda)
+        {"gamma": 0.99, "lmbda": 0.95}
+
+    """
+    if value_type == ValueFunctions.TD1:
+        return {"gamma": 0.99}
+    elif value_type == ValueFunctions.TD0:
+        return {"gamma": 0.99}
+    elif value_type == ValueFunctions.GAE:
+        return {"gamma": 0.99, "lmbda": 0.95}
+    elif value_type == ValueFunctions.TDLambda:
+        return {"gamma": 0.99, "lmbda": 0.95}
+    else:
+        raise NotImplementedError(f"Unknown value type {value_type}.")
+
+
 
 
 class _context_manager:
