@@ -31,7 +31,7 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     RandomPolicy,
 )
-from torchrl.collectors.distributed.ray_collector import RayDistributedCollector
+from torchrl.collectors.distributed.ray import RayDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv, StepCounter
@@ -1232,12 +1232,12 @@ def weight_reset(m):
         m.reset_parameters()
 
 
-class TestRayDistributedCollector:
+class TestRayDataCollector:
     @pytest.mark.parametrize("frames_per_batch", [50, 100])
     def test_ray_distributed_collector_basic(self, frames_per_batch):
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
-        collector = RayDistributedCollector(
+        collector = RayDataCollector(
             [env],
             policy,
             total_frames=1000,
@@ -1255,7 +1255,7 @@ class TestRayDistributedCollector:
         frames_per_batch = 50
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
-        collector = RayDistributedCollector(
+        collector = RayDataCollector(
             [env],
             policy,
             total_frames=200,
@@ -1279,7 +1279,7 @@ class TestRayDistributedCollector:
     ):
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
-        collector = RayDistributedCollector(
+        collector = RayDataCollector(
             [env],
             policy,
             collector_class=collector_class,
@@ -1292,6 +1292,7 @@ class TestRayDistributedCollector:
             assert data.numel() == frames_per_batch
         collector.shutdown()
         assert total == 200
+
 
 @pytest.mark.skipif(_os_is_osx, reason="Queue.qsize does not work on osx.")
 class TestPreemptiveThreshold:

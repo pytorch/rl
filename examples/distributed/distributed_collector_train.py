@@ -14,7 +14,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 from torchrl.collectors import SyncDataCollector
-from torchrl.collectors.distributed.ray_collector import RayDistributedCollector
+from torchrl.collectors.distributed.ray import RayDistributedCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage

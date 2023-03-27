@@ -7,7 +7,7 @@ from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
-    _DataCollector,
+    DataCollectorBase,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
@@ -79,7 +79,7 @@ def as_remote(cls, remote_config):
     return remote_collector
 
 
-class RayDistributedCollector(_DataCollector):
+class RayDataCollector(DataCollectorBase):
     """Distributed data collector with Ray (https://docs.ray.io/) backend.
 
     This Python class serves as a ray-based solution to instantiate and coordinate multiple
@@ -93,7 +93,7 @@ class RayDistributedCollector(_DataCollector):
     existing cluster is found. Refer to Ray documentation for advanced initialization kwargs.
 
     Similarly, dictionary input parameter "remote_configs" can be used to specify the kwargs for
-    ray.remote() when called to created each remote collector actor, including collector compute
+    ray.remote() when called to create each remote collector actor, including collector compute
     resources.The sum of all collector resources should be available in the cluster. Refer to Ray
     documentation for advanced configuration of the ray.remote() method. Default kwargs are:
 
@@ -113,7 +113,7 @@ class RayDistributedCollector(_DataCollector):
     Args:
         env_makers (list of callables or EnvBase instances): a list of the
             same length as the number of nodes to be launched. A single callable
-            can be provides as well, and will be used in all collectors.
+            can be provided as well, and will be used in all collectors.
         policy (Callable[[TensorDict], TensorDict]): a callable that populates
             the tensordict with an `"action"` field.
         collector_class (Python class): a collector class to be remotely instantiated. Can be
@@ -123,7 +123,7 @@ class RayDistributedCollector(_DataCollector):
             or a derived class of these.
             Defaults to :class:`torchrl.collectors.SyncDataCollector`.
         collector_kwargs (list of dicts): kwargs to instantiate each collector_class.
-            A single dict can be provides as well, and will be used in all collectors.
+            A single dict can be provided as well, and will be used in all collectors.
         num_workers_per_collector (int): the number of copies of the
             env constructor that is to be used on the remote nodes.
             Defaults to 1 (a single env per collector).
@@ -133,7 +133,7 @@ class RayDistributedCollector(_DataCollector):
             subnodes.
         ray_init_config (dict, Optional): kwargs used to call ray.init().
         remote_configs (list of dicts, Optional): ray resource specs for each remote collector.
-            A single dict can be provides as well, and will be used in all collectors.
+            A single dict can be provided as well, and will be used in all collectors.
         num_collectors (int, Optional): total number of collectors to be instantiated.
         total_frames (int, Optional): lower bound of the total number of frames returned by the collector.
             The iterator will stop once the total number of frames equates or exceeds the total number of
@@ -144,13 +144,13 @@ class RayDistributedCollector(_DataCollector):
             tensordict results from a separate node in a "first-ready,
             first-served" fashion.
         storing_device (torch.device, optional): if specified, collected tensordicts will be moved
-            to this devices before returning them to the user.
+            to these devices before returning them to the user.
         update_after_each_batch (bool, optional): if ``True``, the weights will
             be updated after each collection. For ``sync=True``, this means that
             all workers will see their weights updated. For ``sync=False``,
             only the worker from which the data has been gathered will be
             updated.
-            Defaults to ``False``, ie. updates have to be executed manually
+            Defaults to ``False``, i.e. updates have to be executed manually
             through
             ``torchrl.collectors.distributed.RayDistributedCollector.update_policy_weights_()``
         max_weight_update_interval (int, optional): the maximum number of
@@ -167,10 +167,10 @@ class RayDistributedCollector(_DataCollector):
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.collectors.collectors import SyncDataCollector
-        >>> from torchrl.collectors.distributed.ray_collector import RayDistributedCollector
+        >>> from torchrl.collectors.distributed import RayDataCollector
         >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
         >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
-        >>> distributed_collector = RayDistributedCollector(
+        >>> distributed_collector = RayDataCollector(
         ...     env_makers=[env_maker],
         ...     policy=policy,
         ...     collector_class=SyncDataCollector,
