@@ -8,10 +8,11 @@ from .common import LossModule
 from .ddpg import DDPGLoss
 from .dqn import DistributionalDQNLoss, DQNLoss
 from .dreamer import DreamerActorLoss, DreamerModelLoss, DreamerValueLoss
+from .iql import IQLLoss
 from .ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from .redq import REDQLoss
 from .reinforce import ReinforceLoss
-from .sac import SACLoss
+from .sac import DiscreteSACLoss, SACLoss
 from .td3 import TD3Loss
 from .utils import (
     distance_loss,

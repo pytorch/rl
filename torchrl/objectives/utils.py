@@ -7,12 +7,12 @@ import functools
 from typing import Iterable, Optional, Union
 
 import torch
+from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import SafeModule
 
 
 class _context_manager:
@@ -297,7 +297,7 @@ class hold_out_params(_context_manager):
 @torch.no_grad()
 def next_state_value(
     tensordict: TensorDictBase,
-    operator: Optional[SafeModule] = None,
+    operator: Optional[TensorDictModule] = None,
     next_val_key: str = "state_action_value",
     gamma: float = 0.99,
     pred_next_val: Optional[Tensor] = None,
@@ -332,8 +332,8 @@ def next_state_value(
     else:
         steps_to_next_obs = 1
 
-    rewards = tensordict.get("reward").squeeze(-1)
-    done = tensordict.get("done").squeeze(-1)
+    rewards = tensordict.get(("next", "reward")).squeeze(-1)
+    done = tensordict.get(("next", "done")).squeeze(-1)
 
     if pred_next_val is None:
         next_td = step_mdp(tensordict)  # next_observation -> observation

@@ -7,12 +7,11 @@ from functools import wraps
 from typing import List, Optional, Tuple, Union
 
 import torch
-from tensordict.nn import dispatch_kwargs
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import SafeModule
 
 from torchrl.objectives.utils import hold_out_net
 from torchrl.objectives.value.functional import (
@@ -37,7 +36,7 @@ class TDEstimate(nn.Module):
 
     Args:
         gamma (scalar): exponential mean discount.
-        value_network (SafeModule): value operator used to retrieve the value estimates.
+        value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if True, rewards will be standardized
             before the TD is computed.
         differentiable (bool, optional): if True, gradients are propagated throught
@@ -54,7 +53,7 @@ class TDEstimate(nn.Module):
     def __init__(
         self,
         gamma: Union[float, torch.Tensor],
-        value_network: SafeModule,
+        value_network: TensorDictModule,
         average_rewards: bool = False,
         differentiable: bool = False,
         advantage_key: Union[str, Tuple] = "advantage",
@@ -82,7 +81,7 @@ class TDEstimate(nn.Module):
 
         self.in_keys = (
             value_network.in_keys
-            + ["reward", "done"]
+            + [("next", "reward"), ("next", "done")]
             + [("next", in_key) for in_key in value_network.in_keys]
         )
         self.out_keys = [self.advantage_key, self.value_target_key]
@@ -95,7 +94,7 @@ class TDEstimate(nn.Module):
         )
 
     @_self_set_grad_enabled
-    @dispatch_kwargs
+    @dispatch
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -109,7 +108,7 @@ class TDEstimate(nn.Module):
 
         Args:
             tensordict (TensorDictBase): A TensorDict containing the data
-                (an observation key, "action", "reward", "done" and "next" tensordict state
+                (an observation key, "action", ("next", "reward"), ("next", "done") and "next" tensordict state
                 as returned by the environment) necessary to compute the value estimates and the TDEstimate.
                 The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
@@ -123,7 +122,7 @@ class TDEstimate(nn.Module):
 
         Examples:
             >>> from tensordict import TensorDict
-            >>> value_net = SafeModule(
+            >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
             >>> module = TDEstimate(
@@ -134,14 +133,14 @@ class TDEstimate(nn.Module):
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs}, "done": done, "reward": reward}, [1, 10])
+            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs, "done": done, "reward": reward}}, [1, 10])
             >>> _ = module(tensordict)
             >>> assert "advantage" in tensordict.keys()
 
         The module supports non-tensordict (i.e. unpacked tensordict) inputs too:
 
         Examples:
-            >>> value_net = SafeModule(
+            >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
             >>> module = TDEstimate(
@@ -160,12 +159,12 @@ class TDEstimate(nn.Module):
                 "Expected input tensordict to have at least one dimensions, got"
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
-        reward = tensordict.get("reward")
+        reward = tensordict.get(("next", "reward"))
         if self.average_rewards:
             reward = reward - reward.mean()
             reward = reward / reward.std().clamp_min(1e-4)
             tensordict.set(
-                "reward", reward
+                ("next", "reward"), reward
             )  # we must update the rewards if they are used later in the code
 
         gamma = self.gamma
@@ -192,7 +191,7 @@ class TDEstimate(nn.Module):
             self.value_network(step_td, **kwargs)
             next_value = step_td.get(self.value_key)
 
-        done = tensordict.get("done")
+        done = tensordict.get(("next", "done"))
         adv = td_advantage_estimate(gamma, value, next_value, reward, done)
         tensordict.set("advantage", adv)
         tensordict.set("value_target", adv + value)
@@ -205,7 +204,7 @@ class TDLambdaEstimate(nn.Module):
     Args:
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
-        value_network (SafeModule): value operator used to retrieve the value estimates.
+        value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if True, rewards will be standardized
             before the TD is computed.
         differentiable (bool, optional): if True, gradients are propagated throught
@@ -225,7 +224,7 @@ class TDLambdaEstimate(nn.Module):
         self,
         gamma: Union[float, torch.Tensor],
         lmbda: Union[float, torch.Tensor],
-        value_network: SafeModule,
+        value_network: TensorDictModule,
         average_rewards: bool = False,
         differentiable: bool = False,
         vectorized: bool = True,
@@ -256,7 +255,7 @@ class TDLambdaEstimate(nn.Module):
 
         self.in_keys = (
             value_network.in_keys
-            + ["reward", "done"]
+            + [("next", "reward"), ("next", "done")]
             + [("next", in_key) for in_key in value_network.in_keys]
         )
         self.out_keys = [self.advantage_key, self.value_target_key]
@@ -269,7 +268,7 @@ class TDLambdaEstimate(nn.Module):
         )
 
     @_self_set_grad_enabled
-    @dispatch_kwargs
+    @dispatch
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -283,7 +282,7 @@ class TDLambdaEstimate(nn.Module):
 
         Args:
             tensordict (TensorDictBase): A TensorDict containing the data
-                (an observation key, "action", "reward", "done" and "next" tensordict state
+                (an observation key, "action", ("next", "reward"), ("next", "done") and "next" tensordict state
                 as returned by the environment) necessary to compute the value estimates and the TDLambdaEstimate.
                 The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
@@ -297,7 +296,7 @@ class TDLambdaEstimate(nn.Module):
 
         Examples:
             >>> from tensordict import TensorDict
-            >>> value_net = SafeModule(
+            >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
             >>> module = TDLambdaEstimate(
@@ -309,14 +308,14 @@ class TDLambdaEstimate(nn.Module):
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs}, "done": done, "reward": reward}, [1, 10])
+            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs, "done": done, "reward": reward}}, [1, 10])
             >>> _ = module(tensordict)
             >>> assert "advantage" in tensordict.keys()
 
         The module supports non-tensordict (i.e. unpacked tensordict) inputs too:
 
         Examples:
-            >>> value_net = SafeModule(
+            >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
             >>> module = TDLambdaEstimate(
@@ -336,12 +335,12 @@ class TDLambdaEstimate(nn.Module):
                 "Expected input tensordict to have at least one dimensions, got"
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
-        reward = tensordict.get("reward")
+        reward = tensordict.get(("next", "reward"))
         if self.average_rewards:
             reward = reward - reward.mean()
             reward = reward / reward.std().clamp_min(1e-4)
             tensordict.set(
-                "reward", reward
+                ("next", "reward"), reward
             )  # we must update the rewards if they are used later in the code
 
         gamma = self.gamma
@@ -370,7 +369,7 @@ class TDLambdaEstimate(nn.Module):
             self.value_network(step_td, **kwargs)
             next_value = step_td.get(self.value_key)
 
-        done = tensordict.get("done")
+        done = tensordict.get(("next", "done"))
         if self.vectorized:
             adv = vec_td_lambda_advantage_estimate(
                 gamma, lmbda, value, next_value, reward, done
@@ -394,7 +393,7 @@ class GAE(nn.Module):
     Args:
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
-        value_network (SafeModule): value operator used to retrieve the value estimates.
+        value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_gae (bool): if True, the resulting GAE values will be standardized.
             Default is :obj:`False`.
         differentiable (bool, optional): if True, gradients are propagated throught
@@ -419,7 +418,7 @@ class GAE(nn.Module):
         self,
         gamma: Union[float, torch.Tensor],
         lmbda: float,
-        value_network: SafeModule,
+        value_network: TensorDictModule,
         average_gae: bool = False,
         differentiable: bool = False,
         advantage_key: Union[str, Tuple] = "advantage",
@@ -448,7 +447,7 @@ class GAE(nn.Module):
 
         self.in_keys = (
             value_network.in_keys
-            + ["reward", "done"]
+            + [("next", "reward"), ("next", "done")]
             + [("next", in_key) for in_key in value_network.in_keys]
         )
         self.out_keys = [self.advantage_key, self.value_target_key]
@@ -461,7 +460,7 @@ class GAE(nn.Module):
         )
 
     @_self_set_grad_enabled
-    @dispatch_kwargs
+    @dispatch
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -490,7 +489,7 @@ class GAE(nn.Module):
 
         Examples:
             >>> from tensordict import TensorDict
-            >>> value_net = SafeModule(
+            >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
             >>> module = GAE(
@@ -509,7 +508,7 @@ class GAE(nn.Module):
         The module supports non-tensordict (i.e. unpacked tensordict) inputs too:
 
         Examples:
-            >>> value_net = SafeModule(
+            >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
             >>> module = GAE(
@@ -529,7 +528,7 @@ class GAE(nn.Module):
                 "Expected input tensordict to have at least one dimensions, got"
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
-        reward = tensordict.get("reward")
+        reward = tensordict.get(("next", "reward"))
         gamma, lmbda = self.gamma, self.lmbda
         kwargs = {}
         if self.is_functional and params is None:
@@ -556,7 +555,7 @@ class GAE(nn.Module):
             # value net params
             self.value_network(step_td, **kwargs)
         next_value = step_td.get(self.value_key)
-        done = tensordict.get("done")
+        done = tensordict.get(("next", "done"))
         adv, value_target = vec_generalized_advantage_estimate(
             gamma, lmbda, value, next_value, reward, done
         )

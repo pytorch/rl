@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .common import EnvBase, EnvMetaData, make_tensordict, Specs
+from .common import EnvBase, EnvMetaData, make_tensordict
 from .env_creator import EnvCreator, get_env_metadata
 from .gym_like import default_info_dict_reader, GymLikeEnv
 from .model_based import ModelBasedEnvBase
@@ -21,12 +21,14 @@ from .transforms import (
     FrameSkipTransform,
     GrayScale,
     gSDENoise,
+    InitTracker,
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,
+    RenameTransform,
     Resize,
     RewardClipping,
     RewardScaling,

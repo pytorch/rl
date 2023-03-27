@@ -24,7 +24,7 @@ class LoggerConfig:
     # number of batch collections in between two collections of validation rollouts. Default=1000.
     record_frames: int = 1000
     # number of steps in validation rollouts. " "Default=1000.
-    recorder_log_keys: Any = field(default_factory=lambda: ["reward"])
+    recorder_log_keys: Any = field(default_factory=lambda: None)
     # Keys to log in the recorder
     offline_logging: bool = True
     # If True, Wandb will do the logging offline

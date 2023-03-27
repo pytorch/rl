@@ -6,10 +6,10 @@ from typing import Optional, Tuple
 
 import torch
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
-from torchrl.modules import SafeModule
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import distance_loss, hold_out_net
 from torchrl.objectives.value.functional import vec_td_lambda_return_estimate
@@ -24,7 +24,7 @@ class DreamerModelLoss(LossModule):
     Reference: https://arxiv.org/abs/1912.01603.
 
     Args:
-        world_model (SafeModule): the world model.
+        world_model (TensorDictModule): the world model.
         lambda_kl (float, optional): the weight of the kl divergence loss. Default: 1.0.
         lambda_reco (float, optional): the weight of the reconstruction loss. Default: 1.0.
         lambda_reward (float, optional): the weight of the reward loss. Default: 1.0.
@@ -42,7 +42,7 @@ class DreamerModelLoss(LossModule):
 
     def __init__(
         self,
-        world_model: SafeModule,
+        world_model: TensorDictModule,
         lambda_kl: float = 1.0,
         lambda_reco: float = 1.0,
         lambda_reward: float = 1.0,
@@ -65,7 +65,7 @@ class DreamerModelLoss(LossModule):
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
-        tensordict.rename_key("reward", "true_reward")
+        tensordict.rename_key_(("next", "reward"), ("next", "true_reward"))
         tensordict = self.world_model(tensordict)
         # compute model loss
         kl_loss = self.kl_loss(
@@ -84,8 +84,8 @@ class DreamerModelLoss(LossModule):
         reco_loss = reco_loss.mean().unsqueeze(-1)
 
         reward_loss = distance_loss(
-            tensordict.get("true_reward"),
-            tensordict.get("reward"),
+            tensordict.get(("next", "true_reward")),
+            tensordict.get(("next", "reward")),
             self.reward_loss,
         )
         if not self.global_average:
@@ -134,8 +134,8 @@ class DreamerActorLoss(LossModule):
     Reference: https://arxiv.org/abs/1912.01603.
 
     Args:
-        actor_model (SafeModule): the actor model.
-        value_model (SafeModule): the value model.
+        actor_model (TensorDictModule): the actor model.
+        value_model (TensorDictModule): the value model.
         model_based_env (DreamerEnv): the model based environment.
         imagination_horizon (int, optional): The number of steps to unroll the
             model. Default: 15.
@@ -148,8 +148,8 @@ class DreamerActorLoss(LossModule):
 
     def __init__(
         self,
-        actor_model: SafeModule,
-        value_model: SafeModule,
+        actor_model: TensorDictModule,
+        value_model: TensorDictModule,
         model_based_env: DreamerEnv,
         imagination_horizon: int = 15,
         gamma: int = 0.99,
@@ -186,7 +186,7 @@ class DreamerActorLoss(LossModule):
             with hold_out_net(self.value_model):
                 next_tensordict = self.value_model(next_tensordict)
 
-        reward = fake_data.get("reward")
+        reward = fake_data.get(("next", "reward"))
         next_value = next_tensordict.get("state_value")
         lambda_target = self.lambda_target(reward, next_value)
         fake_data.set("lambda_target", lambda_target)
@@ -218,7 +218,7 @@ class DreamerValueLoss(LossModule):
     Reference: https://arxiv.org/abs/1912.01603.
 
     Args:
-        value_model (SafeModule): the value model.
+        value_model (TensorDictModule): the value model.
         value_loss (str, optional): the loss to use for the value loss. Default: "l2".
         gamma (float, optional): the gamma discount factor. Default: 0.99.
         discount_loss (bool, optional): if True, the loss is discounted with a
@@ -228,7 +228,7 @@ class DreamerValueLoss(LossModule):
 
     def __init__(
         self,
-        value_model: SafeModule,
+        value_model: TensorDictModule,
         value_loss: Optional[str] = None,
         gamma: int = 0.99,
         discount_loss: bool = False,  # for consistency with paper

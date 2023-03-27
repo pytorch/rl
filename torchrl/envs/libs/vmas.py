@@ -2,6 +2,7 @@ from typing import Dict, List, Optional
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+
 from torchrl.data import CompositeSpec, DEVICE_TYPING, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
@@ -48,7 +49,7 @@ class VmasWrapper(_EnvWrapper):
     Examples:
         >>>  env = VmasWrapper(
         ...      vmas.make_env(
-        ...          scenario_name="flocking",
+        ...          scenario="flocking",
         ...          num_envs=32,
         ...          continuous_actions=True,
         ...          max_steps=200,
@@ -107,25 +108,6 @@ class VmasWrapper(_EnvWrapper):
                 raise TypeError("Env device is different from vmas device")
             kwargs["device"] = str(env.device)
         super().__init__(**kwargs)
-        if len(self.batch_size) == 0:
-            # Batch size not set
-            self.batch_size = torch.Size((self.num_envs,))
-        elif len(self.batch_size) == 1:
-            # Batch size is set
-            if not self.batch_size[0] == self.num_envs:
-                raise TypeError(
-                    "Batch size used in constructor does not match vmas batch size."
-                )
-        else:
-            raise TypeError(
-                "Batch size used in constructor is not compatible with vmas."
-            )
-        self.batch_size = torch.Size([self.n_agents, *self.batch_size])
-        self.input_spec = self.input_spec.expand(self.batch_size)
-        self.observation_spec = self.observation_spec.expand(self.batch_size)
-        self.reward_spec = self.reward_spec.expand(
-            [*self.batch_size, *self.reward_spec.shape]
-        )
 
     @property
     def lib(self):
@@ -143,6 +125,22 @@ class VmasWrapper(_EnvWrapper):
         # TODO pixels
         if self.from_pixels:
             raise NotImplementedError("vmas rendering not yet implemented")
+
+        # Adjust batch size
+        if len(self.batch_size) == 0:
+            # Batch size not set
+            self.batch_size = torch.Size((env.num_envs,))
+        elif len(self.batch_size) == 1:
+            # Batch size is set
+            if not self.batch_size[0] == env.num_envs:
+                raise TypeError(
+                    "Batch size used in constructor does not match vmas batch size."
+                )
+        else:
+            raise TypeError(
+                "Batch size used in constructor is not compatible with vmas."
+            )
+        self.batch_size = torch.Size([env.n_agents, *self.batch_size])
 
         return env
 
@@ -213,19 +211,17 @@ class VmasWrapper(_EnvWrapper):
             envs_to_reset = _reset.any(dim=0)
             for env_index, to_reset in enumerate(envs_to_reset):
                 if to_reset:
-                    self._env.reset_at(env_index)
-            done = _selective_unsqueeze(self._env.done(), batch_size=(self.num_envs,))
-            obs = []
-            infos = []
-            dones = []
-            for agent in self.agents:
-                obs.append(self.scenario.observation(agent))
-                infos.append(self.scenario.info(agent))
-                dones.append(done.clone())
-
+                    self._env.reset_at(env_index, return_observations=False)
         else:
-            obs, infos = self._env.reset(return_info=True)
-            dones = None
+            self._env.reset(return_observations=False)
+
+        obs, dones, infos = self._env.get_from_scenario(
+            get_observations=True,
+            get_infos=True,
+            get_rewards=False,
+            get_dones=True,
+        )
+        dones = _selective_unsqueeze(dones, batch_size=(self.num_envs,))
 
         agent_tds = []
         for i in range(self.n_agents):
@@ -240,10 +236,10 @@ class VmasWrapper(_EnvWrapper):
                 device=self.device,
             )
 
-            if infos is not None:
+            if agent_info is not None:
                 agent_td.set("info", agent_info)
-            if dones is not None:
-                agent_td.set("done", dones[i])
+
+            agent_td.set("done", dones)
             agent_tds.append(agent_td)
 
         tensordict_out = torch.stack(agent_tds, dim=0)
@@ -279,13 +275,13 @@ class VmasWrapper(_EnvWrapper):
                 device=self.device,
             )
 
-            if infos is not None:
+            if agent_info is not None:
                 agent_td.set("info", agent_info)
             agent_tds.append(agent_td)
 
         tensordict_out = torch.stack(agent_tds, dim=0)
 
-        return tensordict_out
+        return tensordict_out.select().set("next", tensordict_out)
 
     def read_obs(self, observations: torch.Tensor) -> torch.Tensor:
         observations = _selective_unsqueeze(
@@ -428,7 +424,7 @@ class VmasEnv(VmasWrapper):
 
         return super()._build_env(
             env=vmas.make_env(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=num_envs,
                 device=self.device,
                 continuous_actions=continuous_actions,

@@ -68,7 +68,6 @@ def make_replay_buffer(
 ):
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
-            buffer_size,
             alpha=0.7,
             beta=0.5,
             pin_memory=False,
@@ -81,7 +80,6 @@ def make_replay_buffer(
         )
     else:
         replay_buffer = TensorDictReplayBuffer(
-            buffer_size,
             pin_memory=False,
             prefetch=make_replay_buffer,
             storage=LazyMemmapStorage(
@@ -106,7 +104,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     exp_name = generate_exp_name("TD3", cfg.exp_name)
     logger = get_logger(
-        logger_type=cfg.logger, logger_name="td3_logging", experiment_name=exp_name
+        logger_type=cfg.logger,
+        logger_name="td3_logging",
+        experiment_name=exp_name,
+        wandb_kwargs={"mode": cfg.mode},
     )
 
     torch.manual_seed(cfg.seed)
@@ -150,7 +151,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     dist_kwargs = {
         "min": action_spec.space.minimum,
         "max": action_spec.space.maximum,
-        "tanh_loc": False,
     }
 
     in_keys_actor = in_keys
@@ -258,7 +258,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     target_net_updater.init_()
 
     collected_frames = 0
-    episodes = 0
     pbar = tqdm.tqdm(total=cfg.total_frames)
     r0 = None
     q_loss = None
@@ -282,7 +281,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
             current_frames = tensordict.numel()
         replay_buffer.extend(tensordict.cpu())
         collected_frames += current_frames
-        episodes += torch.unique(tensordict["traj_ids"]).shape[0]
 
         # optimization steps
         if collected_frames >= cfg.init_random_frames:
@@ -323,7 +321,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         train_log = {
             "train_reward": rewards[-1][1],
             "collected_frames": collected_frames,
-            "episodes": episodes,
         }
         if q_loss is not None:
             train_log.update(

@@ -12,12 +12,13 @@ import torch
 from jax import dlpack as jax_dlpack, numpy as jnp
 from tensordict.tensordict import make_tensordict, TensorDictBase
 from torch.utils import dlpack as torch_dlpack
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     CompositeSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
+from torchrl.data.utils import numpy_to_torch_dtype_dict
 
 
 def _tree_reshape(x, batch_size: torch.Size):
@@ -47,7 +48,9 @@ def _ndarray_to_tensor(value: Union[jnp.ndarray, np.ndarray]) -> torch.Tensor:
         dlpack_tensor = value.__dlpack__()
     else:
         raise NotImplementedError(f"unsupported data type {type(value)}")
-    return torch_dlpack.from_dlpack(dlpack_tensor)
+    out = torch_dlpack.from_dlpack(dlpack_tensor)
+    # dtype can be messed up by dlpack
+    return out.to(numpy_to_torch_dtype_dict[value.dtype])
 
 
 def _tensor_to_ndarray(value: torch.Tensor) -> jnp.ndarray:
@@ -78,7 +81,7 @@ def _object_to_tensordict(obj, device, batch_size) -> TensorDictBase:
             t[name] = _ndarray_to_tensor(value).to(device)
         else:
             t[name] = _object_to_tensordict(value, device, batch_size)
-    return make_tensordict(**t, device=device, batch_size=batch_size)
+    return make_tensordict(t, device=device, batch_size=batch_size)
 
 
 def _tensordict_to_object(tensordict: TensorDictBase, object_example):
@@ -91,6 +94,8 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
         if isinstance(value, TensorDictBase):
             t[name] = _tensordict_to_object(value, example)
         else:
+            if value.dtype is torch.bool:
+                value = value.to(torch.uint8)
             value = jax_dlpack.from_dlpack(torch_dlpack.to_dlpack(value))
             t[name] = value.reshape(example.shape).view(example.dtype)
     return type(object_example)(**t)

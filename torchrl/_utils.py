@@ -1,12 +1,19 @@
 import collections
+
 import math
 import os
+import sys
 import time
 import warnings
+from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
 
 import numpy as np
+import torch
+
+VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
+_os_is_windows = sys.platform == "win32"
 
 
 class timeit:
@@ -162,7 +169,8 @@ class _Dynamic_CKPT_BACKEND:
                 _has_ts = False
             if not _has_ts:
                 raise ImportError(
-                    f"torchsnapshot not found, but the backend points to this library. Consider installing torchsnapshot or choose another backend (available backends: {self.backends})"
+                    f"torchsnapshot not found, but the backend points to this library. "
+                    f"Consider installing torchsnapshot or choose another backend (available backends: {self.backends})"
                 )
         return backend
 
@@ -272,3 +280,30 @@ class implement_for:
             return unsupported
 
         return unsupported
+
+
+def accept_remote_rref_invocation(func):
+    """Decorator that allows a method to be invoked remotely.
+
+    Passes the `rpc.RRef` associated with the remote object construction as first argument in place of the object reference.
+
+    """
+
+    @wraps(func)
+    def unpack_rref_and_invoke_function(self, *args, **kwargs):
+        # windows does not know torch._C._distributed_rpc.PyRRef
+        if not _os_is_windows and isinstance(self, torch._C._distributed_rpc.PyRRef):
+            self = self.local_value()
+        return func(self, *args, **kwargs)
+
+    return unpack_rref_and_invoke_function
+
+
+def accept_remote_rref_udf_invocation(decorated_class):
+    """Class decorator that applies `accept_remote_rref_invocation` to all public methods."""
+    # ignores private methods
+    for name in dir(decorated_class):
+        method = getattr(decorated_class, name)
+        if callable(method) and not name.startswith("_"):
+            setattr(decorated_class, name, accept_remote_rref_invocation(method))
+    return decorated_class

@@ -13,14 +13,14 @@ from tensordict.nn import (
 )
 from tensordict.tensordict import TensorDictBase
 
-from torchrl.data import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.modules.distributions import Delta
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 
 class SafeProbabilisticModule(ProbabilisticTensorDictModule):
-    """A :obj:``SafeProbabilisticModule`` is an :obj:``tensordict.nn.ProbabilisticTensorDictModule`` subclass that accepts a :obj:``TensorSpec`` as argument to control the output domain.
+    """:class:`tensordict.nn.ProbabilisticTensorDictModule` subclass that accepts a :class:`torchrl.envs.TensorSpec` as argument to control the output domain.
 
     `SafeProbabilisticModule` is a non-parametric module representing a
     probability distribution. It reads the distribution parameters from an input
@@ -59,7 +59,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             sampling step will be skipped.
         spec (TensorSpec): specs of the first output tensor. Used when calling
             td_module.random() to generate random values in the target space.
-        safe (bool, optional): if True, the value of the sample is checked against the
+        safe (bool, optional): if ``True``, the value of the sample is checked against the
             input spec. Out-of-domain sampling can occur because of exploration policies
             or numerical under/overflow issues. As for the :obj:`spec` argument, this
             check will only occur for the distribution sample, but not the other tensors
@@ -79,15 +79,15 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         distribution_class (Type, optional): a torch.distributions.Distribution class to
             be used for sampling. Default is Delta.
         distribution_kwargs (dict, optional): kwargs to be passed to the distribution.
-        return_log_prob (bool, optional): if True, the log-probability of the
+        return_log_prob (bool, optional): if ``True``, the log-probability of the
             distribution sample will be written in the tensordict with the key
-            `'sample_log_prob'`. Default is `False`.
-        cache_dist (bool, optional): EXPERIMENTAL: if True, the parameters of the
+            `'sample_log_prob'`. Default is ``False``.
+        cache_dist (bool, optional): EXPERIMENTAL: if ``True``, the parameters of the
             distribution (i.e. the output of the module) will be written to the
             tensordict along with the sample. Those parameters can be used to re-compute
             the original distribution later on (e.g. to compute the divergence between
             the distribution used to sample the action and the updated distribution in
-            PPO). Default is `False`.
+            PPO). Default is ``False``.
         n_empirical_estimate (int, optional): number of samples to compute the empirical
             mean when it is not available. Default is 1000
 
@@ -132,15 +132,15 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         elif spec is None:
             spec = CompositeSpec()
 
-        if set(spec.keys()) != set(self.out_keys):
+        if set(spec.keys(True, True)) != set(self.out_keys):
             # then assume that all the non indicated specs are None
             for key in self.out_keys:
                 if key not in spec:
                     spec[key] = None
 
-        if set(spec.keys()) != set(self.out_keys):
+        if set(spec.keys(True, True)) != set(self.out_keys):
             raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {set(spec.keys())} and {set(self.out_keys)} respectively"
+                f"spec keys and out_keys do not match, got: {set(spec.keys(True, True))} and {set(self.out_keys)} respectively"
             )
 
         self._spec = spec
@@ -189,8 +189,10 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         return self.random(tensordict)
 
 
-class SafeProbabilisticSequential(ProbabilisticTensorDictSequential, SafeSequential):
-    """A :obj:``SafeProbabilisticSequential`` is an :obj:``tensordict.nn.ProbabilisticTensorDictSequential`` subclass that accepts a :obj:``TensorSpec`` as argument to control the output domain.
+class SafeProbabilisticTensorDictSequential(
+    ProbabilisticTensorDictSequential, SafeSequential
+):
+    """:class:`tensordict.nn.ProbabilisticTensorDictSequential` subclass that accepts a :class:`torchrl.envs.TensorSpec` as argument to control the output domain.
 
     Similarly to :obj:`TensorDictSequential`, but enforces that the final module in the
     sequence is an :obj:`ProbabilisticTensorDictModule` and also exposes ``get_dist``
@@ -200,7 +202,7 @@ class SafeProbabilisticSequential(ProbabilisticTensorDictSequential, SafeSequent
          modules (iterable of TensorDictModules): ordered sequence of TensorDictModule
             instances, terminating in ProbabilisticTensorDictModule, to be run
             sequentially.
-         partial_tolerant (bool, optional): if True, the input tensordict can miss some
+         partial_tolerant (bool, optional): if ``True``, the input tensordict can miss some
             of the input keys. If so, the only module that will be executed are those
             who can be executed given the keys that are present. Also, if the input
             tensordict is a lazy stack of tensordicts AND if partial_tolerant is

@@ -8,6 +8,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import torch
 
+from torchrl._utils import VERBOSE
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
@@ -153,8 +154,8 @@ def make_env_transforms(
     if not from_pixels:
         selected_keys = [
             key
-            for key in env.observation_spec.keys()
-            if ("pixels" not in key) and (key not in env.input_spec.keys())
+            for key in env.observation_spec.keys(True, True)
+            if ("pixels" not in key) and (key not in env.input_spec.keys(True, True))
         ]
 
         # even if there is a single tensor, it'll be renamed in "observation_vector"
@@ -394,7 +395,8 @@ def get_stats_random_rollout(
             cfg=cfg, use_env_creator=False, stats={"loc": 0.0, "scale": 1.0}
         )()
 
-    print("computing state stats")
+    if VERBOSE:
+        print("computing state stats")
     if not hasattr(cfg, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
@@ -409,7 +411,7 @@ def get_stats_random_rollout(
     val_stats = torch.cat(val_stats, 0)
 
     if key is None:
-        keys = list(proof_environment.observation_spec.keys())
+        keys = list(proof_environment.observation_spec.keys(True, True))
         key = keys.pop()
         if len(keys):
             raise RuntimeError(
@@ -426,11 +428,12 @@ def get_stats_random_rollout(
     m[s == 0] = 0.0
     s[s == 0] = 1.0
 
-    print(
-        f"stats computed for {val_stats.numel()} steps. Got: \n"
-        f"loc = {m}, \n"
-        f"scale = {s}"
-    )
+    if VERBOSE:
+        print(
+            f"stats computed for {val_stats.numel()} steps. Got: \n"
+            f"loc = {m}, \n"
+            f"scale = {s}"
+        )
     if not torch.isfinite(m).all():
         raise RuntimeError("non-finite values found in mean")
     if not torch.isfinite(s).all():
@@ -474,7 +477,7 @@ def initialize_observation_norm_transforms(
         return
 
     if key is None:
-        keys = list(proof_environment.base_env.observation_spec.keys())
+        keys = list(proof_environment.base_env.observation_spec.keys(True, True))
         key = keys.pop()
         if len(keys):
             raise RuntimeError(

@@ -1,4 +1,4 @@
-## About MuJoCo
+# Working with MuJoCo-based environments
 
 From its [official repository](https://github.com/deepmind/mujoco/),
 > MuJoCo stands for Multi-Joint dynamics with Contact. It is a general purpose 
@@ -139,6 +139,15 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
     ```
 
     _Solution_: This should disappear once `mesalib` is installed: `conda install -y -c conda-forge mesalib`
+3. 
+   ```
+   ImportError: /lib/x86_64-linux-gnu/libstdc++.so.6: version `GLIBCXX_3.4.29' not found (required by /path/to/conda/envs/compile/bin/../lib/libOSMesa.so.8)
+   ```
+   
+   _Solution_: Install libgcc, e.g.: `conda install libgcc -y`. Then make sure that it is being loaded during execution:
+   ```
+   export LD_PRELOAD=$LD_PRELOAD:/path/to/conda/envs/compile/lib/libstdc++.so.6
+   ```
 4. 
    ```
    FileNotFoundError: [Errno 2] No such file or directory: 'patchelf'
