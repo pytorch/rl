@@ -1251,7 +1251,7 @@ class TestPreemptiveThreshold:
             frames_per_batch=50,
             total_frames=200,
             device="cpu",
-            interrupter=interruptor,
+            interruptor=interruptor,
             split_trajs=False,
         )
 
