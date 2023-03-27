@@ -65,7 +65,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             check will only occur for the distribution sample, but not the other tensors
             returned by the input module. If the sample is out of bounds, it is
             projected back onto the desired space using the `TensorSpec.project` method.
-            Default is :obj:`False`.
+            Default is ``False``.
         default_interaction_mode (str, optional): default method to be used to retrieve
             the output value. Should be one of: 'mode', 'median', 'mean' or 'random'
             (in which case the value is sampled randomly from the distribution). Default

@@ -26,13 +26,16 @@ class DQNLoss(LossModule):
         value_network (QValueActor or nn.Module): a Q value operator.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
         delay_value (bool, optional): whether to duplicate the value network into a new target value network to
-            create a double DQN. Default is :obj:`False`.
+            create a double DQN. Default is ``False``.
 
     """
+
+    default_value_type = ValueFunctions.TDLambda
 
     def __init__(
         self,
         value_network: Union[QValueActor, nn.Module],
+        *,
         loss_function: str = "l2",
         priority_key: str = "td_error",
         delay_value: bool = False,
@@ -76,12 +79,8 @@ class DQNLoss(LossModule):
                 value_key="chosen_action_value",
             )
         elif value_type is ValueFunctions.GAE:
-            self._value_function = GAE(
-                **hp,
-                value_network=self.value_network,
-                advantage_key="advantage",
-                value_target_key="value_target",
-                value_key="chosen_action_value",
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type is ValueFunctions.TDLambda:
             self._value_function = TDLambdaEstimate(
@@ -93,9 +92,6 @@ class DQNLoss(LossModule):
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
-
-    def _default_value_function(self):
-        self.make_value_function(ValueFunctions.TDLambda)
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DQN loss given a tensordict sampled from the replay buffer.

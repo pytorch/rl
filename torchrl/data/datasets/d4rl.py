@@ -47,7 +47,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
             To chain transforms use the :obj:`Compose` class.
-        split_trajs (bool, optional): if True, the trajectories will be split
+        split_trajs (bool, optional): if ``True``, the trajectories will be split
             along the first dimension and padded to have a matching shape.
             To split the trajectories, the ``"done"`` signal will be used, which
             is recovered via ``done = timeout | terminal``. In other words,

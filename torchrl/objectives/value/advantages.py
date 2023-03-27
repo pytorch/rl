@@ -82,12 +82,17 @@ class ValueFunctionBase(nn.Module):
     ):
         """Gets a value estimate, usually used as a target value for the value network.
 
+        If the state value key is present under ``tensordict.get(("next", self.value_key))``
+        then this value will be used without recurring to the value network.
+
         Args:
             tensordict (TensorDictBase): the tensordict containing the data to
                 read.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
                 target params to be passed to the functional value network module.
             **kwargs: the keyword arguments to be passed to the value network.
+
+        Returns: a tensor corresponding to the state value.
 
         """
         raise NotImplementedError
@@ -99,17 +104,24 @@ class ValueFunctionBase(nn.Module):
         else:
             raise RuntimeError("Cannot determine if value network is functional.")
 
+    @property
+    def is_stateless(self):
+        if not self.is_functional:
+            return False
+        return self.value_network._is_stateless
+
 
 class TD0Estimate(ValueFunctionBase):
     """Myopic Temporal Difference (TD(0)) estimate of advantage function.
 
     Args:
         gamma (scalar): exponential mean discount.
-        value_network (TensorDictModule): value operator used to retrieve the value estimates.
-        average_rewards (bool, optional): if True, rewards will be standardized
+        value_network (TensorDictModule): value operator used to retrieve
+            the value estimates.
+        average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
-        differentiable (bool, optional): if True, gradients are propagated throught
-            the computation of the value function. Default is :obj:`False`.
+        differentiable (bool, optional): if ``True``, gradients are propagated throught
+            the computation of the value function. Default is ``False``.
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
@@ -121,6 +133,7 @@ class TD0Estimate(ValueFunctionBase):
 
     def __init__(
         self,
+        *,
         gamma: Union[float, torch.Tensor],
         value_network: TensorDictModule,
         average_rewards: bool = False,
@@ -132,7 +145,7 @@ class TD0Estimate(ValueFunctionBase):
         super().__init__()
         try:
             device = next(value_network.parameters()).device
-        except StopIteration:
+        except (AttributeError, StopIteration):
             device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.value_network = value_network
@@ -151,11 +164,16 @@ class TD0Estimate(ValueFunctionBase):
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
 
-        self.in_keys = (
-            value_network.in_keys
-            + [("next", "reward"), ("next", "done")]
-            + [("next", in_key) for in_key in value_network.in_keys]
-        )
+        try:
+            self.in_keys = (
+                value_network.in_keys
+                + [("next", "reward"), ("next", "done")]
+                + [("next", in_key) for in_key in value_network.in_keys]
+            )
+        except AttributeError:
+            # value network does not have an `in_keys` attribute
+            pass
+
         self.out_keys = [self.advantage_key, self.value_target_key]
 
     @_self_set_grad_enabled
@@ -226,7 +244,7 @@ class TD0Estimate(ValueFunctionBase):
             )
 
         kwargs = {}
-        if self.is_functional and params is None:
+        if self.is_stateless and params is None:
             raise RuntimeError(
                 "Expected params to be passed to advantage module but got none."
             )
@@ -249,8 +267,9 @@ class TD0Estimate(ValueFunctionBase):
         target_params: Optional[TensorDictBase] = None,
         **kwargs,
     ):
-        gamma = self.gamma
         reward = tensordict.get(("next", "reward"))
+        device = reward.device
+        gamma = self.gamma.to(device)
         steps_to_next_obs = tensordict.get("steps_to_next_obs", None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -262,12 +281,12 @@ class TD0Estimate(ValueFunctionBase):
                 ("next", "reward"), reward
             )  # we must update the rewards if they are used later in the code
         step_td = step_mdp(tensordict)
-        if target_params is not None:
-            # we assume that target parameters are not differentiable
-            kwargs["params"] = target_params
-        with hold_out_net(self.value_network):
-            self.value_network(step_td, **kwargs)
-            next_value = step_td.get(self.value_key)
+        if self.value_key not in step_td.keys():
+            if target_params is not None:
+                kwargs["params"] = target_params
+            with hold_out_net(self.value_network):
+                self.value_network(step_td, **kwargs)
+        next_value = step_td.get(self.value_key)
 
         done = tensordict.get(("next", "done"))
         value_target = reward + gamma * (1 - done.to(reward.dtype)) * next_value
@@ -280,10 +299,10 @@ class TD1Estimate(ValueFunctionBase):
     Args:
         gamma (scalar): exponential mean discount.
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
-        average_rewards (bool, optional): if True, rewards will be standardized
+        average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
-        differentiable (bool, optional): if True, gradients are propagated throught
-            the computation of the value function. Default is :obj:`False`.
+        differentiable (bool, optional): if ``True``, gradients are propagated throught
+            the computation of the value function. Default is ``False``.
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
@@ -295,6 +314,7 @@ class TD1Estimate(ValueFunctionBase):
 
     def __init__(
         self,
+        *,
         gamma: Union[float, torch.Tensor],
         value_network: TensorDictModule,
         average_rewards: bool = False,
@@ -306,7 +326,7 @@ class TD1Estimate(ValueFunctionBase):
         super().__init__()
         try:
             device = next(value_network.parameters()).device
-        except StopIteration:
+        except (AttributeError, StopIteration):
             device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.value_network = value_network
@@ -325,11 +345,15 @@ class TD1Estimate(ValueFunctionBase):
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
 
-        self.in_keys = (
-            value_network.in_keys
-            + [("next", "reward"), ("next", "done")]
-            + [("next", in_key) for in_key in value_network.in_keys]
-        )
+        try:
+            self.in_keys = (
+                value_network.in_keys
+                + [("next", "reward"), ("next", "done")]
+                + [("next", in_key) for in_key in value_network.in_keys]
+            )
+        except AttributeError:
+            # value network does not have an `in_keys` attribute
+            pass
         self.out_keys = [self.advantage_key, self.value_target_key]
 
     @_self_set_grad_enabled
@@ -400,7 +424,7 @@ class TD1Estimate(ValueFunctionBase):
             )
 
         kwargs = {}
-        if self.is_functional and params is None:
+        if self.is_stateless and params is None:
             raise RuntimeError(
                 "Expected params to be passed to advantage module but got none."
             )
@@ -423,8 +447,9 @@ class TD1Estimate(ValueFunctionBase):
         target_params: Optional[TensorDictBase] = None,
         **kwargs,
     ):
-        gamma = self.gamma
         reward = tensordict.get(("next", "reward"))
+        device = reward.device
+        gamma = self.gamma.to(device)
         steps_to_next_obs = tensordict.get("steps_to_next_obs", None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -436,12 +461,12 @@ class TD1Estimate(ValueFunctionBase):
                 ("next", "reward"), reward
             )  # we must update the rewards if they are used later in the code
         step_td = step_mdp(tensordict)
-        if target_params is not None:
-            # we assume that target parameters are not differentiable
-            kwargs["params"] = target_params
-        with hold_out_net(self.value_network):
-            self.value_network(step_td, **kwargs)
-            next_value = step_td.get(self.value_key)
+        if self.value_key not in step_td.keys():
+            if target_params is not None:
+                kwargs["params"] = target_params
+            with hold_out_net(self.value_network):
+                self.value_network(step_td, **kwargs)
+        next_value = step_td.get(self.value_key)
 
         done = tensordict.get(("next", "done"))
         value_target = td_advantage_estimate(
@@ -457,10 +482,10 @@ class TDLambdaEstimate(ValueFunctionBase):
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
-        average_rewards (bool, optional): if True, rewards will be standardized
+        average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
-        differentiable (bool, optional): if True, gradients are propagated throught
-            the computation of the value function. Default is :obj:`False`.
+        differentiable (bool, optional): if ``True``, gradients are propagated throught
+            the computation of the value function. Default is ``False``.
         vectorized (bool, optional): whether to use the vectorized version of the
             lambda return. Default is `True`.
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
@@ -474,6 +499,7 @@ class TDLambdaEstimate(ValueFunctionBase):
 
     def __init__(
         self,
+        *,
         gamma: Union[float, torch.Tensor],
         lmbda: Union[float, torch.Tensor],
         value_network: TensorDictModule,
@@ -487,7 +513,7 @@ class TDLambdaEstimate(ValueFunctionBase):
         super().__init__()
         try:
             device = next(value_network.parameters()).device
-        except StopIteration:
+        except (AttributeError, StopIteration):
             device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
@@ -508,11 +534,15 @@ class TDLambdaEstimate(ValueFunctionBase):
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
 
-        self.in_keys = (
-            value_network.in_keys
-            + [("next", "reward"), ("next", "done")]
-            + [("next", in_key) for in_key in value_network.in_keys]
-        )
+        try:
+            self.in_keys = (
+                value_network.in_keys
+                + [("next", "reward"), ("next", "done")]
+                + [("next", in_key) for in_key in value_network.in_keys]
+            )
+        except AttributeError:
+            # value network does not have an `in_keys` attribute
+            pass
         self.out_keys = [self.advantage_key, self.value_target_key]
 
     @_self_set_grad_enabled
@@ -584,7 +614,7 @@ class TDLambdaEstimate(ValueFunctionBase):
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
         kwargs = {}
-        if self.is_functional and params is None:
+        if self.is_stateless and params is None:
             raise RuntimeError(
                 "Expected params to be passed to advantage module but got none."
             )
@@ -607,9 +637,9 @@ class TDLambdaEstimate(ValueFunctionBase):
         target_params: Optional[TensorDictBase] = None,
         **kwargs,
     ):
-
-        gamma = self.gamma
         reward = tensordict.get(("next", "reward"))
+        device = reward.device
+        gamma = self.gamma.to(device)
         steps_to_next_obs = tensordict.get("steps_to_next_obs", None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -623,14 +653,12 @@ class TDLambdaEstimate(ValueFunctionBase):
             )  # we must update the rewards if they are used later in the code
 
         step_td = step_mdp(tensordict)
-        if target_params is not None:
-            # we assume that target parameters are not differentiable
-            kwargs["params"] = target_params
-        with hold_out_net(self.value_network):
-            # we may still need to pass gradient, but we don't want to assign grads to
-            # value net params
-            self.value_network(step_td, **kwargs)
-            next_value = step_td.get(self.value_key)
+        if self.value_key not in step_td.keys():
+            if target_params is not None:
+                kwargs["params"] = target_params
+            with hold_out_net(self.value_network):
+                self.value_network(step_td, **kwargs)
+        next_value = step_td.get(self.value_key)
 
         done = tensordict.get(("next", "done"))
         if self.vectorized:
@@ -654,10 +682,10 @@ class GAE(ValueFunctionBase):
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
-        average_gae (bool): if True, the resulting GAE values will be standardized.
-            Default is :obj:`False`.
-        differentiable (bool, optional): if True, gradients are propagated throught
-            the computation of the value function. Default is :obj:`False`.
+        average_gae (bool): if ``True``, the resulting GAE values will be standardized.
+            Default is ``False``.
+        differentiable (bool, optional): if ``True``, gradients are propagated throught
+            the computation of the value function. Default is ``False``.
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
@@ -676,6 +704,7 @@ class GAE(ValueFunctionBase):
 
     def __init__(
         self,
+        *,
         gamma: Union[float, torch.Tensor],
         lmbda: float,
         value_network: TensorDictModule,
@@ -688,7 +717,7 @@ class GAE(ValueFunctionBase):
         super().__init__()
         try:
             device = next(value_network.parameters()).device
-        except StopIteration:
+        except (AttributeError, StopIteration):
             device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
@@ -708,11 +737,16 @@ class GAE(ValueFunctionBase):
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
 
-        self.in_keys = (
-            value_network.in_keys
-            + [("next", "reward"), ("next", "done")]
-            + [("next", in_key) for in_key in value_network.in_keys]
-        )
+        try:
+            self.in_keys = (
+                value_network.in_keys
+                + [("next", "reward"), ("next", "done")]
+                + [("next", in_key) for in_key in value_network.in_keys]
+            )
+        except AttributeError:
+            # value network does not have an `in_keys` attribute
+            pass
+
         self.out_keys = [self.advantage_key, self.value_target_key]
 
     @_self_set_grad_enabled
@@ -785,14 +819,14 @@ class GAE(ValueFunctionBase):
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
         reward = tensordict.get(("next", "reward"))
-        gamma, lmbda = self.gamma, self.lmbda
-        reward = tensordict.get(("next", "reward"))
+        device = reward.device
+        gamma, lmbda = self.gamma.to(device), self.lmbda.to(device)
         steps_to_next_obs = tensordict.get("steps_to_next_obs", None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
         kwargs = {}
-        if self.is_functional and params is None:
+        if self.is_stateless and params is None:
             raise RuntimeError(
                 "Expected params to be passed to advantage module but got none."
             )
@@ -845,12 +879,13 @@ class GAE(ValueFunctionBase):
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
         reward = tensordict.get(("next", "reward"))
-        gamma, lmbda = self.gamma, self.lmbda
+        device = reward.device
+        gamma, lmbda = self.gamma.to(device), self.lmbda.to(device)
         steps_to_next_obs = tensordict.get("steps_to_next_obs", None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
-        if self.is_functional and params is None:
+        if self.is_stateless and params is None:
             raise RuntimeError(
                 "Expected params to be passed to advantage module but got none."
             )

@@ -45,6 +45,10 @@ def generalized_advantage_estimate(
         done (Tensor): boolean flag for end of episode.
 
     """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     for tensor in (next_state_value, state_value, reward, done):
         if tensor.shape[-1] != 1:
             raise RuntimeError(
@@ -97,6 +101,10 @@ def vec_generalized_advantage_estimate(
         done (Tensor): boolean flag for end of episode.
 
     """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     for tensor in (next_state_value, state_value, reward, done):
         if tensor.shape[-1] != 1:
             raise RuntimeError(
@@ -163,6 +171,10 @@ def td_advantage_estimate(
         done (Tensor): boolean flag for end of episode.
 
     """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     for tensor in (next_state_value, state_value, reward, done):
         if tensor.shape[-1] != 1:
             raise RuntimeError(
@@ -191,7 +203,7 @@ def td_lambda_return_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
-        rolling_gamma (bool, optional): if True, it is assumed that each gamma
+        rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
               value = [v1, v2, v3, v4]
@@ -214,6 +226,10 @@ def td_lambda_return_estimate(
             Default is True.
 
     """
+    if not (next_state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     for tensor in (next_state_value, reward, done):
         if tensor.shape[-1] != 1:
             raise RuntimeError(
@@ -288,7 +304,7 @@ def td_lambda_advantage_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
-        rolling_gamma (bool, optional): if True, it is assumed that each gamma
+        rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
               value = [v1, v2, v3, v4]
@@ -311,6 +327,10 @@ def td_lambda_advantage_estimate(
             Default is True.
 
     """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
     returns = td_lambda_return_estimate(
@@ -342,7 +362,7 @@ def vec_td_lambda_advantage_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
-        rolling_gamma (bool, optional): if True, it is assumed that each gamma
+        rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
               value = [v1, v2, v3, v4]
@@ -365,6 +385,10 @@ def vec_td_lambda_advantage_estimate(
             Default is True.
 
     """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     return (
         vec_td_lambda_return_estimate(
             gamma, lmbda, next_state_value, reward, done, rolling_gamma
@@ -387,7 +411,7 @@ def vec_td_lambda_return_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
-        rolling_gamma (bool, optional): if True, it is assumed that each gamma
+        rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
               value = [v1, v2, v3, v4]
@@ -410,6 +434,10 @@ def vec_td_lambda_return_estimate(
             Default is True.
 
     """
+    if not (next_state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     shape = next_state_value.shape
     if not shape[-1] == 1:
         raise RuntimeError("last dimension of inputs shape must be singleton")

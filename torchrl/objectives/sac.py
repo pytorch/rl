@@ -9,18 +9,13 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict.nn import make_functional, TensorDictModule, TensorDictSequential
+from tensordict.nn import make_functional, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
-from torchrl.objectives.utils import (
-    default_value_kwargs,
-    distance_loss,
-    next_state_value,
-    ValueFunctions,
-)
+from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueFunctions
 
 from ..envs.utils import set_exploration_mode, step_mdp
 from .common import LossModule
@@ -34,53 +29,6 @@ try:
 except ImportError as err:
     _has_functorch = False
     FUNCTORCH_ERROR = err
-
-
-class _SACValueNet(TensorDictSequential):
-    r"""Value network for SAC v2.
-
-    SAC v2 is based on a value estimate of the form:
-
-    .. math::
-
-      V = Q(s,a) - \alpha * \log p(a | s)
-
-    This class computes this value given the actor and qvalue network
-
-    """
-
-    def __init__(self, actor_network, qvalue_network):
-        super().__init__(actor_network, qvalue_network)
-        # we highjack the forward so the out_keys must be re-written
-        self.out_keys = ["state_value"]
-
-    def forward(self, tensordict, _alpha, actor_params, qval_params):
-        """Computes the value as `val = qval - a * log_prob(a)`."""
-        actor_network, qvalue_network = self
-
-        obs_keys = actor_network.in_keys
-        data = tensordict.select(*obs_keys)
-        # get actions and log-probs
-        with torch.no_grad():
-            with set_exploration_mode("random"):
-                dist = actor_network.get_dist(data, params=actor_params)
-                data.set("action", dist.rsample())
-                log_prob = dist.log_prob(data.get("action"))
-                data.set("sample_log_prob", log_prob)
-            sample_log_prob = data.get("sample_log_prob")
-
-            # get q-values
-            data = vmap(qvalue_network, (None, 0))(data, qval_params)
-            state_action_value = data.get("state_action_value")
-            if (
-                state_action_value.shape[-len(sample_log_prob.shape) :]
-                != sample_log_prob.shape
-            ):
-                sample_log_prob = sample_log_prob.unsqueeze(-1)
-            state_value = state_action_value - _alpha * sample_log_prob
-            state_value = state_value.min(0)[0]
-        tensordict.set("state_value", state_value)
-        return tensordict
 
 
 class SACLoss(LossModule):
@@ -99,6 +47,8 @@ class SACLoss(LossModule):
             .. note::
               If not provided, the second version of SAC is assumed, where
               only the Q-Value network is needed.
+        num_qvalue_nets (integer, optional): number of Q-Value networks used.
+            Defaults to ``2``.
         priority_key (str, optional): tensordict key where to write the
             priority (for prioritized replay buffer usage). Defaults to
             ``"td_error"``.
@@ -110,29 +60,32 @@ class SACLoss(LossModule):
             Default is 0.1.
         max_alpha (float, optional): max value of alpha.
             Default is 10.0.
-        fixed_alpha (bool, optional): if True, alpha will be fixed to its
+        fixed_alpha (bool, optional): if ``True``, alpha will be fixed to its
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
-            Default is :obj:`False`.
+            Default is ``False``.
         target_entropy (float or str, optional): Target entropy for the
             stochastic policy. Default is "auto", where target entropy is
             computed as :obj:`-prod(n_actions)`.
         delay_actor (bool, optional): Whether to separate the target actor
             networks from the actor networks used for data collection.
-            Default is :obj:`False`.
+            Default is ``False``.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used for data collection.
-            Default is :obj:`False`.
+            Default is ``False``.
         delay_value (bool, optional): Whether to separate the target value
             networks from the value networks used for data collection.
-            Default is :obj:`False`.
+            Default is ``False``.
     """
+
+    default_value_type = ValueFunctions.TD0
 
     def __init__(
         self,
         actor_network: ProbabilisticActor,
         qvalue_network: TensorDictModule,
         value_network: Optional[TensorDictModule] = None,
+        *,
         num_qvalue_nets: int = 2,
         priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
@@ -231,7 +184,8 @@ class SACLoss(LossModule):
         if self._version == 1:
             value_net = self.actor_critic
         elif self._version == 2:
-            value_net = _SACValueNet(self.actor_network, self.qvalue_network)
+            # we will take care of computing the next value inside this module
+            value_net = None
         else:
             # unreachable
             raise NotImplementedError
@@ -254,11 +208,8 @@ class SACLoss(LossModule):
                 value_key=value_key,
             )
         elif value_type is ValueFunctions.GAE:
-            self._value_function = GAE(
-                **hp,
-                value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type is ValueFunctions.TDLambda:
             self._value_function = TDLambdaEstimate(
@@ -269,10 +220,6 @@ class SACLoss(LossModule):
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
-
-    def _default_value_function(self):
-        # TD0 by default, as in paper
-        self.make_value_function(ValueFunctions.TD0)
 
     @property
     def device(self) -> torch.device:
@@ -393,14 +340,57 @@ class SACLoss(LossModule):
 
         return loss_value, priority_value
 
+    def _get_value_v2(self, tensordict, _alpha, actor_params, qval_params):
+        r"""Value network for SAC v2.
+
+        SAC v2 is based on a value estimate of the form:
+
+        .. math::
+
+          V = Q(s,a) - \alpha * \log p(a | s)
+
+        This class computes this value given the actor and qvalue network
+
+        """
+        tensordict = tensordict.clone(False)
+        # get actions and log-probs
+        with torch.no_grad():
+            with set_exploration_mode("random"):
+                dist = self.actor_network.get_dist(tensordict, params=actor_params)
+                tensordict.set("action", dist.rsample())
+                log_prob = dist.log_prob(tensordict.get("action"))
+                tensordict.set("sample_log_prob", log_prob)
+            sample_log_prob = tensordict.get("sample_log_prob")
+
+            # get q-values
+            tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+                tensordict, qval_params
+            )
+            state_action_value = tensordict_expand.get("state_action_value")
+            if (
+                state_action_value.shape[-len(sample_log_prob.shape) :]
+                != sample_log_prob.shape
+            ):
+                sample_log_prob = sample_log_prob.unsqueeze(-1)
+            state_value = state_action_value - _alpha * sample_log_prob
+            state_value = state_value.min(0)[0]
+            tensordict.set(("next", self.value_function.value_key), state_value)
+            target_value = self.value_function.value_estimate(
+                tensordict,
+                _alpha=self._alpha,
+                actor_params=self.target_actor_network_params,
+                qval_params=self.target_qvalue_network_params,
+            ).squeeze(-1)
+            return target_value
+
     def _loss_qvalue_v2(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         # we pass the alpha value to the tensordict. Since it's a scalar, we must erase the batch-size first.
-        target_value = self.value_function.value_estimate(
+        target_value = self._get_value_v2(
             tensordict,
-            _alpha=self._alpha,
-            actor_params=self.target_actor_network_params,
-            qval_params=self.target_qvalue_network_params,
-        ).squeeze(-1)
+            self._alpha,
+            self.target_actor_network_params,
+            self.target_qvalue_network_params,
+        )
 
         tensordict_expand = vmap(self.qvalue_network, (None, 0))(
             tensordict.select(*self.qvalue_network.in_keys),
@@ -476,9 +466,9 @@ class DiscreteSACLoss(LossModule):
     Args:
         actor_network (ProbabilisticActor): the actor to be trained
         qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
+        num_actions (int): number of actions in the action space.
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
-        gamma (Number, optional): gamma decay factor. Default is 0.99.
-        priotity_key (str, optional): Key where to write the priority value for prioritized replay buffers. Default is
+        priority_key (str, optional): Key where to write the priority value for prioritized replay buffers. Default is
             `"td_error"`.
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
@@ -488,13 +478,15 @@ class DiscreteSACLoss(LossModule):
             Default is 0.1.
         max_alpha (float, optional): max value of alpha.
             Default is 10.0.
-        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is :obj:`False`.
+        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is ``False``.
         target_entropy_weight (float, optional): weight for the target entropy term.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
-            for data collection. Default is :obj:`False`.
+            for data collection. Default is ``False``.
+
     """
 
+    default_value_type = ValueFunctions.TD0
     delay_actor: bool = False
 
     def __init__(
@@ -502,9 +494,9 @@ class DiscreteSACLoss(LossModule):
         actor_network: ProbabilisticActor,
         qvalue_network: TensorDictModule,
         num_actions: int,
+        *,
         num_qvalue_nets: int = 2,
-        gamma: Number = 0.99,
-        priotity_key: str = "td_error",
+        priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         min_alpha: float = 0.1,
@@ -533,8 +525,7 @@ class DiscreteSACLoss(LossModule):
             compare_against=list(actor_network.parameters()),
         )
         self.num_qvalue_nets = num_qvalue_nets
-        self.register_buffer("gamma", torch.tensor(gamma))
-        self.priority_key = priotity_key
+        self.priority_key = priority_key
         self.loss_function = loss_function
 
         try:
@@ -575,7 +566,7 @@ class DiscreteSACLoss(LossModule):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
-        tensordict_select = tensordict.select("next", *obs_keys, "action")
+        tensordict_select = tensordict.clone(False).select("next", *obs_keys, "action")
 
         actor_params = torch.stack(
             [self.actor_network_params, self.target_actor_network_params], 0
@@ -668,11 +659,8 @@ class DiscreteSACLoss(LossModule):
             * (next_state_action_value_qvalue.min(0)[0] - self.alpha * logp_pi[1])
         ).sum(dim=-1, keepdim=True)
 
-        target_value = next_state_value(
-            tensordict,
-            gamma=self.gamma,
-            pred_next_val=pred_next_val,
-        )
+        tensordict_select.set(("next", self.value_function.value_key), pred_next_val)
+        target_value = self.value_function.value_estimate(tensordict_select).squeeze(-1)
 
         actions = torch.argmax(tensordict_select["action"], dim=-1)
 
@@ -731,3 +719,36 @@ class DiscreteSACLoss(LossModule):
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
         return alpha_loss
+
+    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
+        value_net = None
+        value_key = "state_value"
+        hp = dict(default_value_kwargs(value_type))
+        hp.update(hyperparams)
+        if value_type is ValueFunctions.TD1:
+            self._value_function = TD1Estimate(
+                **hp,
+                value_network=value_net,
+                value_target_key="value_target",
+                value_key=value_key,
+            )
+        elif value_type is ValueFunctions.TD0:
+            self._value_function = TD0Estimate(
+                **hp,
+                value_network=value_net,
+                value_target_key="value_target",
+                value_key=value_key,
+            )
+        elif value_type is ValueFunctions.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type is ValueFunctions.TDLambda:
+            self._value_function = TDLambdaEstimate(
+                **hp,
+                value_network=value_net,
+                value_target_key="value_target",
+                value_key=value_key,
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")

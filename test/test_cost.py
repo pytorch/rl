@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
-import re
 from copy import deepcopy
 
 from packaging import version as pack_version
@@ -88,7 +87,12 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.deprecated import DoubleREDQLoss_deprecated, REDQLoss_deprecated
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.reinforce import ReinforceLoss
-from torchrl.objectives.utils import HardUpdate, hold_out_net, SoftUpdate
+from torchrl.objectives.utils import (
+    HardUpdate,
+    hold_out_net,
+    SoftUpdate,
+    ValueFunctions,
+)
 from torchrl.objectives.value.advantages import GAE, TD1Estimate, TDLambdaEstimate
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
@@ -295,7 +299,8 @@ class TestDQN:
     @pytest.mark.parametrize(
         "action_spec_type", ("nd_bounded", "one_hot", "categorical")
     )
-    def test_dqn(self, delay_value, device, action_spec_type):
+    @pytest.mark.parametrize("td_est", list(ValueFunctions) + [None])
+    def test_dqn(self, delay_value, device, action_spec_type, td_est):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(
             action_spec_type=action_spec_type, device=device
@@ -304,6 +309,12 @@ class TestDQN:
             action_spec_type=action_spec_type, device=device
         )
         loss_fn = DQNLoss(actor, loss_function="l2", delay_value=delay_value)
+        if td_est is ValueFunctions.GAE:
+            with pytest.raises(NotImplementedError):
+                loss_fn.make_value_function(td_est)
+            return
+        if td_est is not None:
+            loss_fn.make_value_function(td_est)
         with _check_td_steady(td):
             loss = loss_fn(td)
         assert loss_fn.priority_key in td.keys()
@@ -388,8 +399,9 @@ class TestDQN:
     @pytest.mark.parametrize(
         "action_spec_type", ("mult_one_hot", "one_hot", "categorical")
     )
+    @pytest.mark.parametrize("td_est", list(ValueFunctions) + [None])
     def test_distributional_dqn(
-        self, atoms, delay_value, device, action_spec_type, gamma=0.9
+        self, atoms, delay_value, device, action_spec_type, td_est, gamma=0.9
     ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_distributional_actor(
@@ -400,6 +412,13 @@ class TestDQN:
             action_spec_type=action_spec_type, atoms=atoms
         ).to(device)
         loss_fn = DistributionalDQNLoss(actor, gamma=gamma, delay_value=delay_value)
+
+        if td_est not in (None, ValueFunctions.TD0):
+            with pytest.raises(NotImplementedError):
+                loss_fn.make_value_function(td_est)
+            return
+        elif td_est is not None:
+            loss_fn.make_value_function(td_est)
 
         with _check_td_steady(td):
             loss = loss_fn(td)
@@ -529,7 +548,8 @@ class TestDDPG:
     )
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
-    def test_ddpg(self, delay_actor, delay_value, device):
+    @pytest.mark.parametrize("td_est", list(ValueFunctions) + [None])
+    def test_ddpg(self, delay_actor, delay_value, device, td_est):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
@@ -537,11 +557,17 @@ class TestDDPG:
         loss_fn = DDPGLoss(
             actor,
             value,
-            gamma=0.9,
             loss_function="l2",
             delay_actor=delay_actor,
             delay_value=delay_value,
         )
+        if td_est is ValueFunctions.GAE:
+            with pytest.raises(NotImplementedError):
+                loss_fn.make_value_function(td_est)
+            return
+        if td_est is not None:
+            loss_fn.make_value_function(td_est)
+
         with _check_td_steady(td):
             loss = loss_fn(td)
 
@@ -632,7 +658,6 @@ class TestDDPG:
         loss_fn = DDPGLoss(
             actor,
             value,
-            gamma=gamma,
             loss_function="l2",
             delay_actor=delay_actor,
             delay_value=delay_value,
@@ -763,6 +788,7 @@ class TestTD3:
     )
     @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
     @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
+    @pytest.mark.parametrize("td_est", list(ValueFunctions) + [None])
     def test_td3(
         self,
         delay_actor,
@@ -770,6 +796,7 @@ class TestTD3:
         device,
         policy_noise,
         noise_clip,
+        td_est,
     ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
@@ -778,13 +805,18 @@ class TestTD3:
         loss_fn = TD3Loss(
             actor,
             value,
-            gamma=0.9,
             loss_function="l2",
             policy_noise=policy_noise,
             noise_clip=noise_clip,
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
         )
+        if td_est is ValueFunctions.GAE:
+            with pytest.raises(NotImplementedError):
+                loss_fn.make_value_function(td_est)
+            return
+        if td_est is not None:
+            loss_fn.make_value_function(td_est)
         with _check_td_steady(td):
             loss = loss_fn(td)
 
@@ -849,7 +881,6 @@ class TestTD3:
         loss_fn = TD3Loss(
             actor,
             value,
-            gamma=0.9,
             policy_noise=policy_noise,
             noise_clip=noise_clip,
             delay_qvalue=delay_qvalue,
@@ -1043,8 +1074,16 @@ class TestSAC:
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("td_est", list(ValueFunctions) + [None])
     def test_sac(
-        self, delay_value, delay_actor, delay_qvalue, num_qvalue, device, version
+        self,
+        delay_value,
+        delay_actor,
+        delay_qvalue,
+        num_qvalue,
+        device,
+        version,
+        td_est,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
@@ -1075,6 +1114,13 @@ class TestSAC:
             loss_function="l2",
             **kwargs,
         )
+
+        if td_est is ValueFunctions.GAE:
+            with pytest.raises(NotImplementedError):
+                loss_fn.make_value_function(td_est)
+            return
+        if td_est is not None:
+            loss_fn.make_value_function(td_est)
 
         with _check_td_steady(td):
             loss = loss_fn(td)
@@ -1445,6 +1491,7 @@ class TestDiscreteSAC:
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("target_entropy_weight", [0.01, 0.5, 0.99])
     @pytest.mark.parametrize("target_entropy", ["auto", 1.0, 0.1, 0.0])
+    @pytest.mark.parametrize("td_est", list(ValueFunctions) + [None])
     def test_discrete_sac(
         self,
         delay_qvalue,
@@ -1452,6 +1499,7 @@ class TestDiscreteSAC:
         device,
         target_entropy_weight,
         target_entropy,
+        td_est,
     ):
 
         torch.manual_seed(self.seed)
@@ -1469,12 +1517,17 @@ class TestDiscreteSAC:
             qvalue_network=qvalue,
             num_actions=actor.spec["action"].space.n,
             num_qvalue_nets=num_qvalue,
-            gamma=0.9,
             target_entropy_weight=target_entropy_weight,
             target_entropy=target_entropy,
             loss_function="l2",
             **kwargs,
         )
+        if td_est is ValueFunctions.GAE:
+            with pytest.raises(NotImplementedError):
+                loss_fn.make_value_function(td_est)
+            return
+        if td_est is not None:
+            loss_fn.make_value_function(td_est)
 
         with _check_td_steady(td):
             loss = loss_fn(td)
@@ -1571,7 +1624,6 @@ class TestDiscreteSAC:
             qvalue_network=qvalue,
             num_actions=actor.spec["action"].space.n,
             num_qvalue_nets=num_qvalue,
-            gamma=0.9,
             loss_function="l2",
             target_entropy_weight=target_entropy_weight,
             target_entropy=target_entropy,
@@ -1807,7 +1859,6 @@ class TestREDQ:
             actor_network=actor,
             qvalue_network=qvalue,
             num_qvalue_nets=num_qvalue,
-            gamma=0.9,
             loss_function="l2",
             delay_qvalue=delay_qvalue,
         )
@@ -1892,7 +1943,6 @@ class TestREDQ:
             actor_network=actor,
             qvalue_network=qvalue,
             num_qvalue_nets=num_qvalue,
-            gamma=0.9,
             loss_function="l2",
             delay_qvalue=delay_qvalue,
             target_entropy=0.0,
@@ -1997,7 +2047,6 @@ class TestREDQ:
             actor_network=deepcopy(actor),
             qvalue_network=deepcopy(qvalue),
             num_qvalue_nets=num_qvalue,
-            gamma=0.9,
             loss_function="l2",
             delay_qvalue=delay_qvalue,
         )
@@ -2009,7 +2058,6 @@ class TestREDQ:
             actor_network=deepcopy(actor),
             qvalue_network=deepcopy(qvalue),
             num_qvalue_nets=num_qvalue,
-            gamma=0.9,
             loss_function="l2",
         )
 
@@ -2041,7 +2089,6 @@ class TestREDQ:
             actor_network=actor,
             qvalue_network=qvalue,
             num_qvalue_nets=num_qvalue,
-            gamma=0.9,
             loss_function="l2",
             delay_qvalue=delay_qvalue,
         )
@@ -2240,7 +2287,7 @@ class TestPPO:
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
+    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_ppo(self, loss_class, device, gradient_mode, advantage):
         torch.manual_seed(self.seed)
@@ -2260,15 +2307,14 @@ class TestPPO:
             advantage = TDLambdaEstimate(
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
+        elif advantage is None:
+            pass
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(actor, value, gamma=0.9, loss_critic_type="l2")
-        with pytest.raises(
-            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
-        ):
-            _ = loss_fn(td)
-        advantage(td)
+        loss_fn = loss_class(actor, value, loss_critic_type="l2")
+        if advantage is not None:
+            advantage(td)
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -2302,7 +2348,7 @@ class TestPPO:
         actor.zero_grad()
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
+    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_ppo_shared(self, loss_class, device, advantage):
         torch.manual_seed(self.seed)
@@ -2326,20 +2372,18 @@ class TestPPO:
                 lmbda=0.9,
                 value_network=value,
             )
+        elif advantage is None:
+            pass
         else:
             raise NotImplementedError
         loss_fn = loss_class(
             actor,
             value,
-            gamma=0.9,
             loss_critic_type="l2",
         )
 
-        with pytest.raises(
-            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
-        ):
-            _ = loss_fn(td)
-        advantage(td)
+        if advantage is not None:
+            advantage(td)
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -2377,7 +2421,7 @@ class TestPPO:
     )
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
+    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_ppo_diff(self, loss_class, device, gradient_mode, advantage):
         if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
@@ -2399,6 +2443,8 @@ class TestPPO:
             advantage = TDLambdaEstimate(
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
+        elif advantage is None:
+            pass
         else:
             raise NotImplementedError
 
@@ -2409,11 +2455,8 @@ class TestPPO:
         for p in params:
             p.data.zero_()
         # assert len(list(floss_fn.parameters())) == 0
-        with pytest.raises(
-            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
-        ):
-            _ = floss_fn(params, buffers, td)
-        advantage(td)
+        if advantage is not None:
+            advantage(td)
         loss = floss_fn(params, buffers, td)
 
         loss_critic = loss["loss_critic"]
@@ -2515,7 +2558,7 @@ class TestA2C:
         return td
 
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
+    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_a2c(self, device, gradient_mode, advantage):
         torch.manual_seed(self.seed)
@@ -2535,10 +2578,12 @@ class TestA2C:
             advantage = TDLambdaEstimate(
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
+        elif advantage is None:
+            pass
         else:
             raise NotImplementedError
 
-        loss_fn = A2CLoss(actor, value, gamma=0.9, loss_critic_type="l2")
+        loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
 
         # Check error is raised when actions require grads
         td["action"].requires_grad = True
@@ -2550,12 +2595,8 @@ class TestA2C:
         td["action"].requires_grad = False
 
         td = td.exclude(loss_fn.value_target_key)
-
-        with pytest.raises(
-            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
-        ):
-            _ = loss_fn(td)
-        advantage(td)
+        if advantage is not None:
+            advantage(td)
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -2589,7 +2630,7 @@ class TestA2C:
         not _has_functorch, reason=f"functorch not found, {FUNCTORCH_ERR}"
     )
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
+    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_a2c_diff(self, device, gradient_mode, advantage):
         if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
@@ -2611,18 +2652,17 @@ class TestA2C:
             advantage = TDLambdaEstimate(
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
             )
+        elif advantage is None:
+            pass
         else:
             raise NotImplementedError
 
-        loss_fn = A2CLoss(actor, value, gamma=0.9, loss_critic_type="l2")
+        loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
 
         floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
 
-        with pytest.raises(
-            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
-        ):
-            _ = floss_fn(params, buffers, td)
-        advantage(td)
+        if advantage is not None:
+            advantage(td)
         loss = floss_fn(params, buffers, td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -2655,7 +2695,7 @@ class TestA2C:
 class TestReinforce:
     @pytest.mark.parametrize("delay_value", [True, False])
     @pytest.mark.parametrize("gradient_mode", [True, False])
-    @pytest.mark.parametrize("advantage", ["gae", "td", "td_lambda"])
+    @pytest.mark.parametrize("advantage", ["gae", "td", "td_lambda", None])
     def test_reinforce_value_net(self, advantage, gradient_mode, delay_value):
         n_obs = 3
         n_act = 5
@@ -2691,13 +2731,14 @@ class TestReinforce:
                 value_network=get_functional(value_net),
                 differentiable=gradient_mode,
             )
+        elif advantage is None:
+            pass
         else:
             raise NotImplementedError
 
         loss_fn = ReinforceLoss(
             actor_net,
             critic=value_net,
-            gamma=gamma,
             delay_value=delay_value,
         )
 
@@ -2714,12 +2755,9 @@ class TestReinforce:
             [batch],
         )
 
-        with pytest.raises(
-            KeyError, match=re.escape('key "advantage" not found in TensorDict with')
-        ):
-            _ = loss_fn(td)
         params = TensorDict(value_net.state_dict(), []).unflatten_keys(".")
-        advantage(td, params=params)
+        if advantage is not None:
+            advantage(td, params=params)
         loss_td = loss_fn(td)
         autograd.grad(
             loss_td.get("loss_actor"),
@@ -3270,7 +3308,6 @@ class TestIQL:
             qvalue_network=qvalue,
             value_network=value,
             num_qvalue_nets=num_qvalue,
-            gamma=0.9,
             temperature=temperature,
             expectile=expectile,
             loss_function="l2",
@@ -3385,7 +3422,6 @@ class TestIQL:
             qvalue_network=qvalue,
             value_network=value,
             num_qvalue_nets=num_qvalue,
-            gamma=0.9,
             temperature=temperature,
             expectile=expectile,
             loss_function="l2",

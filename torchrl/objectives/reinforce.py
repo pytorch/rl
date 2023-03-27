@@ -10,7 +10,8 @@ import torch
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import distance_loss
+from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueFunctions
+from torchrl.objectives.value import GAE, TD0Estimate, TD1Estimate, TDLambdaEstimate
 
 
 class ReinforceLoss(LossModule):
@@ -19,14 +20,55 @@ class ReinforceLoss(LossModule):
     Presented in "Simple statistical gradient-following algorithms for connectionist reinforcement learning", Williams, 1992
     https://doi.org/10.1007/BF00992696
 
+
+    Args:
+        actor (ProbabilisticTensorDictSequential): policy operator.
+        critic (ValueOperator): value operator.
+        delay_value (bool, optional): if ``True``, a target network is needed
+            for the critic. Defaults to ``False``.
+        advantage_key (str): the input tensordict key where the advantage is
+            expected to be written.
+            Defaults to ``"advantage"``.
+        value_target_key (str): the input tensordict key where the target state
+            value is expected to be written. Defaults to ``"value_target"``.
+        loss_critic_type (str): loss function for the value discrepancy.
+            Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+
+    .. note:
+      The advantage (typically GAE) can be computed by the loss function or
+      in the training loop. The latter option is usually preferred, but this is
+      up to the user to choose which option is to be preferred.
+      If the advantage key (``"advantage`` by default) is not present in the
+      input tensordict, the advantage will be computed by the :meth:`~.forward`
+      method.
+
+        >>> reinforce_loss = ReinforceLoss(actor, critic)
+        >>> advantage = GAE(critic)
+        >>> data = next(datacollector)
+        >>> losses = reinforce_loss(data)
+        >>> # equivalent
+        >>> advantage(data)
+        >>> losses = reinforce_loss(data)
+
+      A custom advantage module can be built using :meth:`~.make_value_function`.
+      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+
+        >>> reinforce_loss = ReinforceLoss(actor, critic)
+        >>> reinforce_loss.make_value_function(ValueFunctions.TDLambda)
+        >>> data = next(datacollector)
+        >>> losses = reinforce_loss(data)
+
     """
+
+    default_value_type = ValueFunctions.GAE
 
     def __init__(
         self,
-        actor_network: ProbabilisticTensorDictSequential,
+        actor: ProbabilisticTensorDictSequential,
         critic: Optional[TensorDictModule] = None,
+        *,
         delay_value: bool = False,
-        gamma: float = 0.99,
         advantage_key: str = "advantage",
         value_target_key: str = "value_target",
         loss_critic_type: str = "smooth_l1",
@@ -37,11 +79,10 @@ class ReinforceLoss(LossModule):
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
         self.loss_critic_type = loss_critic_type
-        self.register_buffer("gamma", torch.tensor(gamma))
 
         # Actor
         self.convert_to_functional(
-            actor_network,
+            actor,
             "actor_network",
             create_target_params=False,
         )
@@ -52,11 +93,18 @@ class ReinforceLoss(LossModule):
                 critic,
                 "critic",
                 create_target_params=self.delay_value,
-                compare_against=list(actor_network.parameters()),
+                compare_against=list(actor.parameters()),
             )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        advantage = tensordict.get(self.advantage_key)
+        advantage = tensordict.get(self.advantage_key, None)
+        if advantage is None:
+            self.value_function(
+                tensordict,
+                params=self.critic_params,
+                target_params=self.target_critic_params,
+            )
+            advantage = tensordict.get(self.advantage_key)
 
         # compute log-prob
         tensordict = self.actor_network(
@@ -95,3 +143,26 @@ class ReinforceLoss(LossModule):
                 f"can be used for the value loss."
             )
         return loss_value
+
+    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
+        hp = dict(default_value_kwargs(value_type))
+        hp.update(hyperparams)
+        value_key = "state_value"
+        if value_type == ValueFunctions.TD1:
+            self._value_function = TD1Estimate(
+                value_network=self.critic, value_key=value_key, **hp
+            )
+        elif value_type == ValueFunctions.TD0:
+            self._value_function = TD0Estimate(
+                value_network=self.critic, value_key=value_key, **hp
+            )
+        elif value_type == ValueFunctions.GAE:
+            self._value_function = GAE(
+                value_network=self.critic, value_key=value_key, **hp
+            )
+        elif value_type == ValueFunctions.TDLambda:
+            self._value_function = TDLambdaEstimate(
+                value_network=self.critic, value_key=value_key, **hp
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")

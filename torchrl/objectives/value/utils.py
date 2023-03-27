@@ -145,7 +145,7 @@ def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
     Args:
         gamma (torch.tensor): the gamma tensor to be prepared.
         T (int): the time length
-        rolling_gamma (bool): if True, the gamma value is set for each step
+        rolling_gamma (bool): if ``True``, the gamma value is set for each step
             independently. If False, the gamma value at (i, t) will be used for the
             trajectory following (i, t).
 

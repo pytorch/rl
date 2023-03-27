@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from numbers import Number
 from typing import Optional, Tuple
 
 import torch
@@ -12,10 +11,11 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
 from torchrl.modules import ProbabilisticActor
-from torchrl.objectives.utils import distance_loss, next_state_value
+from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueFunctions
 
-from ..envs.utils import set_exploration_mode, step_mdp
+from ..envs.utils import set_exploration_mode
 from .common import LossModule
+from .value import GAE, TD0Estimate, TD1Estimate, TDLambdaEstimate
 
 try:
     from functorch import vmap
@@ -35,14 +35,9 @@ class IQLLoss(LossModule):
     Args:
         actor_network (ProbabilisticActor): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model
-        value_network (TensorDictModule, optional): V(s) parametric model. If not
-            provided, the second version of SAC is assumed.
-        qvalue_network_bis (ProbabilisticTDModule, optional): if required, the
-            Q-value can be computed twice independently using two separate
-            networks. The minimum predicted value will then be used for
-            inference.
-        gamma (number, optional): discount for return computation
-            Default is 0.99
+        value_network (TensorDictModule, optional): V(s) parametric model.
+        num_qvalue_nets (integer, optional): number of Q-Value networks used.
+            Defaults to ``2``.
         priority_key (str, optional): tensordict key where to write the
             priority (for prioritized replay buffer usage). Default is
             `"td_error"`.
@@ -57,14 +52,16 @@ class IQLLoss(LossModule):
 
     """
 
+    default_value_type = ValueFunctions.TD0
+
     def __init__(
         self,
         actor_network: ProbabilisticActor,
         qvalue_network: TensorDictModule,
-        value_network: Optional[TensorDictModule] = None,
+        value_network: Optional[TensorDictModule],
+        *,
         num_qvalue_nets: int = 2,
-        gamma: Number = 0.99,
-        priotity_key: str = "td_error",
+        priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         temperature: float = 1.0,
         expectile: float = 0.5,
@@ -106,8 +103,7 @@ class IQLLoss(LossModule):
             + list(value_network.parameters()),
         )
 
-        self.register_buffer("gamma", torch.tensor(gamma))
-        self.priority_key = priotity_key
+        self.priority_key = priority_key
         self.loss_function = loss_function
 
     @property
@@ -218,26 +214,9 @@ class IQLLoss(LossModule):
         obs_keys = self.actor_network.in_keys
         tensordict = tensordict.select("next", *obs_keys, "action")
 
-        with torch.no_grad():
-            next_td = step_mdp(tensordict).select(
-                *self.actor_network.in_keys
-            )  # next_observation ->
-            # observation
-            # select pseudo-action
-            # get state values
-            next_td = self.value_network(
-                next_td,
-                params=self.value_network_params,
-            )
-
-            state_value = next_td.get("state_value")
-
-        tensordict.set("next.state_value", state_value)
-        target_value = next_state_value(
-            tensordict,
-            gamma=self.gamma,
-            pred_next_val=state_value,
-        )
+        target_value = self.value_function.value_estimate(
+            tensordict, target_params=self.target_value_network_params
+        ).squeeze(-1)
         tensordict_expand = vmap(self.qvalue_network, (None, 0))(
             tensordict.select(*self.qvalue_network.in_keys),
             self.qvalue_network_params,
@@ -254,3 +233,40 @@ class IQLLoss(LossModule):
             .mean()
         )
         return loss_qval, td_error.detach().max(0)[0]
+
+    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
+        value_net = self.value_network
+
+        value_key = "state_value"
+        hp = dict(default_value_kwargs(value_type))
+        hp.update(hyperparams)
+        if value_type is ValueFunctions.TD1:
+            self._value_function = TD1Estimate(
+                **hp,
+                value_network=value_net,
+                value_target_key="value_target",
+                value_key=value_key,
+            )
+        elif value_type is ValueFunctions.TD0:
+            self._value_function = TD0Estimate(
+                **hp,
+                value_network=value_net,
+                value_target_key="value_target",
+                value_key=value_key,
+            )
+        elif value_type is ValueFunctions.GAE:
+            self._value_function = GAE(
+                **hp,
+                value_network=value_net,
+                value_target_key="value_target",
+                value_key=value_key,
+            )
+        elif value_type is ValueFunctions.TDLambda:
+            self._value_function = TDLambdaEstimate(
+                **hp,
+                value_network=value_net,
+                value_target_key="value_target",
+                value_key=value_key,
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")

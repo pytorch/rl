@@ -47,7 +47,14 @@ class LossModule(nn.Module):
     the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
 
+    :cvar defaylt_value_type: The default value type of the class.
+        Losses that require a value estimation are equipped with a default value
+        pointer. This class attribute indicates which value estimator will be
+        used if none other is specified.
+        The value estimator can be changed using the :meth:`~.make_value_function` method.
     """
+
+    default_value_type: ValueFunctions = None
 
     def __init__(self):
         super().__init__()
@@ -358,6 +365,7 @@ class LossModule(nn.Module):
 
     @property
     def value_function(self) -> ValueFunctionBase:
+        """The value function blends in the reward and value estimate(s) from upcoming state(s)/state-action pair(s) into a target value estimate for the value network."""
         out = self._value_function
         if out is None:
             self._default_value_function()
@@ -375,7 +383,7 @@ class LossModule(nn.Module):
         from :obj:`torchrl.objectives.utils.DEFAULT_VALUE_FUN_PARAMS`.
 
         """
-        raise NotImplementedError
+        self.make_value_function(self.default_value_type)
 
     def make_value_function(self, value_type: ValueFunctions, **hyperparams):
         """Value-function constructor.
