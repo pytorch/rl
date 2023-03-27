@@ -10,7 +10,7 @@ be created. Why?
 
 from tensordict.nn import TensorDictModule
 from torch import nn
-from torchrl.collectors.distributed.ray import RayDistributedCollector
+from torchrl.collectors.distributed.ray import RayCollector
 from torchrl.envs.libs.gym import GymEnv
 
 
@@ -31,7 +31,7 @@ if __name__ == "__main__":
         "memory": 5 * 1024**3,
         "object_store_memory": 2 * 1024**3,
     }
-    distributed_collector = RayDistributedCollector(
+    distributed_collector = RayCollector(
         [env_maker],
         policy,
         total_frames=10000,

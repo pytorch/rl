@@ -3,7 +3,7 @@ Train example with a distributed collector
 ==========================================
 
 This script reproduces the PPO example in https://pytorch.org/rl/tutorials/coding_ppo.html
-with a DistributedCollector.
+with a RayCollector.
 """
 
 from collections import defaultdict
@@ -14,7 +14,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 from torchrl.collectors import SyncDataCollector
-from torchrl.collectors.distributed.ray import RayDistributedCollector
+from torchrl.collectors.distributed.ray import RayCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -118,7 +118,7 @@ if __name__ == "__main__":
         "memory": 1024**3,
         "object_store_memory": 1024**3,
     }
-    collector = RayDistributedCollector(
+    collector = RayCollector(
         env_makers=[env] * num_collectors,
         policy=policy_module,
         collector_class=SyncDataCollector,
