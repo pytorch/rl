@@ -34,10 +34,10 @@ class ValueEstimators(Enum):
 
     """
 
-    TD0 = 1
-    TD1 = 2
-    TDLambda = 3
-    GAE = 4
+    TD0 = "Bootstrapped TD (1-step return)"
+    TD1 = "TD(1) (infinity-step return)"
+    TDLambda = "TD(lambda)"
+    GAE = "Generalized advantage estimate"
 
 
 def default_value_kwargs(value_type: ValueEstimators):

@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 import abc
 import warnings
-from copy import deepcopy
 from functools import wraps
 from typing import Callable, List, Optional, Tuple, Union
 
@@ -17,9 +16,9 @@ from torchrl.envs.utils import step_mdp
 
 from torchrl.objectives.utils import hold_out_net
 from torchrl.objectives.value.functional import (
-    td_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_generalized_advantage_estimate,
+    vec_td1_advantage_estimate,
     vec_td_lambda_advantage_estimate,
 )
 
@@ -114,7 +113,9 @@ class ValueEstimatorBase(nn.Module):
 
 
 class TD0Estimator(ValueEstimatorBase):
-    """Myopic Temporal Difference (TD(0)) estimate of advantage function.
+    """Temporal Difference (TD(0)) estimate of advantage function.
+
+    AKA bootstrapped temporal difference or 1-step return.
 
     Args:
         gamma (scalar): exponential mean discount.
@@ -296,7 +297,7 @@ class TD0Estimator(ValueEstimatorBase):
 
 
 class TD1Estimator(ValueEstimatorBase):
-    """Bootstrapped Temporal Difference (TD(1)) estimate of advantage function.
+    r""":math:`\infty`-Temporal Difference (TD(1)) estimate of advantage function.
 
     Args:
         gamma (scalar): exponential mean discount.
@@ -471,7 +472,7 @@ class TD1Estimator(ValueEstimatorBase):
         next_value = step_td.get(self.value_key)
 
         done = tensordict.get(("next", "done"))
-        value_target = td_advantage_estimate(
+        value_target = vec_td1_advantage_estimate(
             gamma, torch.zeros_like(next_value), next_value, reward, done
         )
         return value_target
@@ -927,9 +928,11 @@ def _deprecate_class(cls, new_cls):
     cls.__init__ = new_init
 
 
-TD0Estimate = deepcopy(TD0Estimator)
+TD0Estimate = type("TD0Estimate", TD0Estimator.__bases__, dict(TD0Estimator.__dict__))
 _deprecate_class(TD0Estimate, TD0Estimator)
-TD1Estimate = deepcopy(TD1Estimator)
+TD1Estimate = type("TD1Estimate", TD1Estimator.__bases__, dict(TD1Estimator.__dict__))
 _deprecate_class(TD1Estimate, TD1Estimator)
-TDLambdaEstimate = deepcopy(TDLambdaEstimator)
+TDLambdaEstimate = type(
+    "TDLambdaEstimate", TDLambdaEstimator.__bases__, dict(TDLambdaEstimator.__dict__)
+)
 _deprecate_class(TDLambdaEstimate, TDLambdaEstimator)

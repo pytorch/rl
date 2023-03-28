@@ -253,7 +253,7 @@ class REDQLoss_deprecated(LossModule):
             next_state_value = next_state_value.min(0)[0]
 
         tensordict.set(("next", "state_value"), next_state_value)
-        target_value = self.value_function.value_estimate(tensordict).squeeze(-1)
+        target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
         tensordict_expand = vmap(self.qvalue_network, (None, 0))(
             tensordict.select(*self.qvalue_network.in_keys),
             self.qvalue_network_params,
@@ -289,11 +289,11 @@ class REDQLoss_deprecated(LossModule):
         value_key = "state_value"
         # we do not need a value network bc the next state value is already passed
         if value_type == ValueEstimators.TD1:
-            self._value_function = TD1Estimator(
+            self._value_estimator = TD1Estimator(
                 value_network=None, value_key=value_key, **hp
             )
         elif value_type == ValueEstimators.TD0:
-            self._value_function = TD0Estimator(
+            self._value_estimator = TD0Estimator(
                 value_network=None, value_key=value_key, **hp
             )
         elif value_type == ValueEstimators.GAE:
@@ -301,7 +301,7 @@ class REDQLoss_deprecated(LossModule):
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type == ValueEstimators.TDLambda:
-            self._value_function = TDLambdaEstimator(
+            self._value_estimator = TDLambdaEstimator(
                 value_network=None, value_key=value_key, **hp
             )
         else:

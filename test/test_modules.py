@@ -478,9 +478,9 @@ class TestPlanner:
         value_net = nn.LazyLinear(1, device=device)
         value_net = ValueOperator(value_net, in_keys=["observation"])
         advantage_module = TDLambdaEstimator(
-            0.99,
-            0.95,
-            value_net,
+            gamma=0.99,
+            lmbda=0.95,
+            value_network=value_net,
         )
         value_net(env.reset())
         planner = MPPIPlanner(
