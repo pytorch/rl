@@ -46,6 +46,10 @@ class ValueEstimatorBase(nn.Module):
 
     value_network: Union[TensorDictModule, Callable]
     value_key: Union[Tuple[str], str]
+    DIFF_DEPREC_MSG = "differentiable=False will soon be deprecated and all value computations will be made" \
+                      "differentiable. " \
+                      "Consider using differentiable=True and " \
+                      "decorate your function with `torch.no_grad()` or pass detached functional parameters."
 
     @abc.abstractmethod
     def forward(
@@ -54,7 +58,7 @@ class ValueEstimatorBase(nn.Module):
         params: Optional[TensorDictBase] = None,
         target_params: Optional[TensorDictBase] = None,
     ) -> TensorDictBase:
-        """Computes the a value estimate given the data in tensordict.
+        """Computes the advantage estimate given the data in tensordict.
 
         If a functional module is provided, a nested TensorDict containing the parameters
         (and if relevant the target parameters) can be passed to the module.
@@ -123,8 +127,12 @@ class TD0Estimator(ValueEstimatorBase):
             the value estimates.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
-        differentiable (bool, optional): if ``True``, gradients are propagated throught
+        differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
+            .. note::
+              The proper way to make the function call non-differentiable is to
+              decorate it in a `torch.no_grad()` context manager/decorator or
+              pass detached parameters for functional modules.
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
@@ -155,6 +163,8 @@ class TD0Estimator(ValueEstimatorBase):
 
         self.average_rewards = average_rewards
         self.differentiable = differentiable
+        if not differentiable:
+            warnings.warn(self.DIFF_DEPREC_MSG)
         self.value_key = value_key
         if (
             hasattr(value_network, "out_keys")
@@ -187,7 +197,7 @@ class TD0Estimator(ValueEstimatorBase):
         params: Optional[TensorDictBase] = None,
         target_params: Optional[TensorDictBase] = None,
     ) -> TensorDictBase:
-        """Computes the TDEstimate given the data in tensordict.
+        """Computes the TD(0) advantage given the data in tensordict.
 
         If a functional module is provided, a nested TensorDict containing the parameters
         (and if relevant the target parameters) can be passed to the module.
@@ -214,7 +224,6 @@ class TD0Estimator(ValueEstimatorBase):
             >>> module = TDEstimate(
             ...     gamma=0.98,
             ...     value_network=value_net,
-            ...     differentiable=False,
             ... )
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
@@ -232,7 +241,6 @@ class TD0Estimator(ValueEstimatorBase):
             >>> module = TDEstimate(
             ...     gamma=0.98,
             ...     value_network=value_net,
-            ...     differentiable=False,
             ... )
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
@@ -304,8 +312,12 @@ class TD1Estimator(ValueEstimatorBase):
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
-        differentiable (bool, optional): if ``True``, gradients are propagated throught
+        differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
+            .. note::
+              The proper way to make the function call non-differentiable is to
+              decorate it in a `torch.no_grad()` context manager/decorator or
+              pass detached parameters for functional modules.
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
@@ -336,6 +348,8 @@ class TD1Estimator(ValueEstimatorBase):
 
         self.average_rewards = average_rewards
         self.differentiable = differentiable
+        if not differentiable:
+            warnings.warn(self.DIFF_DEPREC_MSG)
         self.value_key = value_key
         if (
             hasattr(value_network, "out_keys")
@@ -367,7 +381,7 @@ class TD1Estimator(ValueEstimatorBase):
         params: Optional[TensorDictBase] = None,
         target_params: Optional[TensorDictBase] = None,
     ) -> TensorDictBase:
-        """Computes the TDEstimate given the data in tensordict.
+        """Computes the TD(1) advantage given the data in tensordict.
 
         If a functional module is provided, a nested TensorDict containing the parameters
         (and if relevant the target parameters) can be passed to the module.
@@ -394,7 +408,6 @@ class TD1Estimator(ValueEstimatorBase):
             >>> module = TDEstimate(
             ...     gamma=0.98,
             ...     value_network=value_net,
-            ...     differentiable=False,
             ... )
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
@@ -412,7 +425,6 @@ class TD1Estimator(ValueEstimatorBase):
             >>> module = TDEstimate(
             ...     gamma=0.98,
             ...     value_network=value_net,
-            ...     differentiable=False,
             ... )
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
@@ -485,8 +497,12 @@ class TDLambdaEstimator(ValueEstimatorBase):
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
-        differentiable (bool, optional): if ``True``, gradients are propagated throught
+        differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
+            .. note::
+              The proper way to make the function call non-differentiable is to
+              decorate it in a `torch.no_grad()` context manager/decorator or
+              pass detached parameters for functional modules.
         vectorized (bool, optional): whether to use the vectorized version of the
             lambda return. Default is `True`.
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
@@ -523,6 +539,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
 
         self.average_rewards = average_rewards
         self.differentiable = differentiable
+        if not differentiable:
+            warnings.warn(self.DIFF_DEPREC_MSG)
         self.value_key = value_key
         if (
             hasattr(value_network, "out_keys")
@@ -554,7 +572,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         params: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
     ) -> TensorDictBase:
-        """Computes the TDLambdaEstimate given the data in tensordict.
+        r"""Computes the TD(:math:`\lambda`) advantage given the data in tensordict.
 
         If a functional module is provided, a nested TensorDict containing the parameters
         (and if relevant the target parameters) can be passed to the module.
@@ -582,7 +600,6 @@ class TDLambdaEstimator(ValueEstimatorBase):
             ...     gamma=0.98,
             ...     lmbda=0.94,
             ...     value_network=value_net,
-            ...     differentiable=False,
             ... )
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
@@ -601,7 +618,6 @@ class TDLambdaEstimator(ValueEstimatorBase):
             ...     gamma=0.98,
             ...     lmbda=0.94,
             ...     value_network=value_net,
-            ...     differentiable=False,
             ... )
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
@@ -681,8 +697,12 @@ class GAE(ValueEstimatorBase):
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_gae (bool): if ``True``, the resulting GAE values will be standardized.
             Default is ``False``.
-        differentiable (bool, optional): if ``True``, gradients are propagated throught
+        differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
+            .. note::
+              The proper way to make the function call non-differentiable is to
+              decorate it in a `torch.no_grad()` context manager/decorator or
+              pass detached parameters for functional modules.
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
@@ -730,7 +750,8 @@ class GAE(ValueEstimatorBase):
 
         self.average_gae = average_gae
         self.differentiable = differentiable
-
+        if not differentiable:
+            warnings.warn(self.DIFF_DEPREC_MSG)
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
 

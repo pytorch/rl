@@ -168,10 +168,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg.lmbda,
         value_network=critic_model,
         average_gae=True,
+        differentiable=True,
     )
     trainer.register_op(
         "process_optim_batch",
-        lambda tensordict: advantage(tensordict.to(device)),
+        lambda tensordict: torch.no_grad()(advantage(tensordict.to(device))),
     )
     trainer._process_optim_batch_ops = [
         trainer._process_optim_batch_ops[-1],
