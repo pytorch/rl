@@ -56,7 +56,6 @@ import warnings
 from typing import Tuple
 
 from torchrl.objectives import LossModule
-from torchrl.objectives.value import TDEstimate, TDLambdaEstimate
 
 warnings.filterwarnings("ignore")
 # sphinx_gallery_end_ignore
@@ -92,11 +91,7 @@ from torchrl.modules import (
     OrnsteinUhlenbeckProcessWrapper,
     ValueOperator,
 )
-from torchrl.objectives.utils import (
-    distance_loss,
-    hold_out_params,
-    SoftUpdate,
-)
+from torchrl.objectives.utils import distance_loss, SoftUpdate
 from torchrl.trainers import Recorder
 
 ###############################################################################
@@ -211,7 +206,9 @@ def _init(
     # Since the value we'll be using is based on the actor and value network,
     # we put them together in a single actor-critic container.
     actor_critic = ActorCriticWrapper(actor_network, value_network)
+    self.actor_critic = actor_critic
     self.loss_funtion = "l2"
+
 
 ###############################################################################
 # The value estimator loss method
@@ -236,6 +233,45 @@ from torchrl.objectives.utils import ValueEstimators
 default_value_estimator = ValueEstimators.TD0
 
 ###############################################################################
+# We also need to give some instructions to DDPG on how to build the value
+# estimator, depending on the user query. Depending on the estimator provided,
+# we will build the corresponding module to be used at train time:
+
+from torchrl.objectives.utils import default_value_kwargs
+from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+
+def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    hp = dict(default_value_kwargs(value_type))
+    if hasattr(self, "gamma"):
+        hp["gamma"] = self.gamma
+    hp.update(hyperparams)
+    value_key = "state_action_value"
+    if value_type == ValueEstimators.TD1:
+        self._value_estimator = TD1Estimator(
+            value_network=self.actor_critic, value_key=value_key, **hp
+        )
+    elif value_type == ValueEstimators.TD0:
+        self._value_estimator = TD0Estimator(
+            value_network=self.actor_critic, value_key=value_key, **hp
+        )
+    elif value_type == ValueEstimators.GAE:
+        raise NotImplementedError(
+            f"Value type {value_type} it not implemented for loss {type(self)}."
+        )
+    elif value_type == ValueEstimators.TDLambda:
+        self._value_estimator = TDLambdaEstimator(
+            value_network=self.actor_critic, value_key=value_key, **hp
+        )
+    else:
+        raise NotImplementedError(f"Unknown value type {value_type}")
+
+
+###############################################################################
+# The ``make_value_estimator`` method can but does not need to be called: if
+# not, the :class:`torchrl.objectives.LossModule` will query this method with
+# its default estimator.
+#
 # The actor loss method
 # ~~~~~~~~~~~~~~~~~~~~~
 #
@@ -248,6 +284,8 @@ default_value_estimator = ValueEstimators.TD0
 # of the graph, otherwise the actor and value loss will be mixed up.
 # For this, the :func:`torchrl.objectives.utils.hold_out_params` function
 # can be used.
+
+from torchrl.objectives.utils import hold_out_params
 
 
 def _loss_actor(
@@ -274,8 +312,8 @@ def _loss_actor(
 # ~~~~~~~~~~~~~~~~~~~~~
 #
 # We now need to optimize our value network parameters.
-# To do this, we will rely on the advantage module provided during
-# the loss construction.
+# To do this, we will rely on the value estimator of our class:
+#
 
 
 def _loss_value(
@@ -284,18 +322,12 @@ def _loss_value(
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     td_copy = tensordict.detach()
 
+    # V(s, a)
+    self.value_network(td_copy, params=self.value_network_params)
+    pred_val = td_copy.get("state_action_value").squeeze(-1)
+
     # we manually reconstruct the parameters of the actor-critic, where the first
     # set of parameters belongs to the actor and the second to the value function.
-    params = TensorDict(
-        {
-            "module": {
-                "0": self.actor_network_params.detach(),
-                "1": self.value_network_params,
-            }
-        },
-        batch_size=self.target_actor_network_params.batch_size,
-        device=self.target_actor_network_params.device,
-    )
     target_params = TensorDict(
         {
             "module": {
@@ -306,14 +338,16 @@ def _loss_value(
         batch_size=self.target_actor_network_params.batch_size,
         device=self.target_actor_network_params.device,
     )
-    with set_exploration_mode("mode"):
-        self.advantage_module(td_copy, params=params, target_params=target_params)
-        target_value = td_copy.get(self.advantage_module.value_target_key)
-    pred_val = td_copy.get("state_action_value")
+    with set_exploration_mode("mode"):  # we make sure that no exploration is performed
+        target_value = self.value_estimator.value_estimate(
+            tensordict, target_params=target_params
+        ).squeeze(-1)
+
     # td_error = pred_val - target_value
     loss_value = distance_loss(pred_val, target_value, loss_function=self.loss_funtion)
+    td_error = (pred_val - target_value).pow(2)
 
-    return loss_value, (pred_val - target_value).pow(2), pred_val, target_value
+    return loss_value, td_error, pred_val, target_value
 
 
 ###############################################################################
@@ -874,6 +908,8 @@ if device == torch.device("cpu"):
 # updater.
 #
 loss_module = DDPGLoss(actor, qnet)
+# let's use the TD(lambda) estimator!
+loss_module.make_value_estimator(ValueEstimators.TDLambda)
 target_net_updater = SoftUpdate(loss_module, eps=0.98)
 target_net_updater.init_()
 

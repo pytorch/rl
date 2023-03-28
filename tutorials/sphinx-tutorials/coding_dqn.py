@@ -26,7 +26,8 @@ TorchRL trainer: A DQN example
 # The trainer is fully customisable and offers a large set of functionalities.
 # The tutorial is organised around its construction.
 # We will be detailing how to build each of the components of the library first,
-# and then put the pieces together using the `torchrl.trainers.Trainer` class.
+# and then put the pieces together using the :class:`torchrl.trainers.Trainer`
+# class.
 #
 # Along the road, we will also focus on some other aspects of the library:
 #
@@ -86,7 +87,8 @@ TorchRL trainer: A DQN example
 import warnings
 
 from torchrl.objectives import DQNLoss, SoftUpdate
-from torchrl.trainers import Trainer, ReplayBufferTrainer, UpdateWeights
+from torchrl.record.loggers.csv import CSVLogger
+from torchrl.trainers import Recorder, ReplayBufferTrainer, Trainer, UpdateWeights
 
 warnings.filterwarnings("ignore")
 # sphinx_gallery_end_ignore
@@ -177,7 +179,10 @@ def is_notebook() -> bool:
 #
 
 
-def make_env(parallel=False, obs_norm_sd=None, ):
+def make_env(
+    parallel=False,
+    obs_norm_sd=None,
+):
     if obs_norm_sd is None:
         obs_norm_sd = {"standard_normal": True}
     if parallel:
@@ -185,13 +190,19 @@ def make_env(parallel=False, obs_norm_sd=None, ):
             num_workers,
             EnvCreator(
                 lambda: GymEnv(
-                    "CartPole-v1", from_pixels=True, pixels_only=True, device=device,
+                    "CartPole-v1",
+                    from_pixels=True,
+                    pixels_only=True,
+                    device=device,
                 )
             ),
         )
     else:
         base_env = GymEnv(
-            "CartPole-v1", from_pixels=True, pixels_only=True, device=device,
+            "CartPole-v1",
+            from_pixels=True,
+            pixels_only=True,
+            device=device,
         )
 
     env = TransformedEnv(
@@ -222,16 +233,18 @@ def make_env(parallel=False, obs_norm_sd=None, ):
 # not all dimensions disappear in the process:
 #
 
+
 def get_norm_stats():
     test_env = make_env()
     test_env.transform[-1].init_stats(
-    num_iter=1000, cat_dim=0, reduce_dim=[-1, -2, -4], keep_dims=(-1, -2)
-)
+        num_iter=1000, cat_dim=0, reduce_dim=[-1, -2, -4], keep_dims=(-1, -2)
+    )
     obs_norm_sd = test_env.transform[-1].state_dict()
     # let's check that normalizing constants have a size of ``[C, 1, 1]`` where
     # ``C=4`` (because of :class:`torchrl.envs.CatFrames`).
     print(obs_norm_sd)
     return obs_norm_sd
+
 
 ###############################################################################
 # Building the model (Deep Q-network)
@@ -254,6 +267,7 @@ def get_norm_stats():
 # values, pick up the one with the maximum value and write all those results
 # in the input :class:`tensordict.TensorDict`.
 #
+
 
 def make_model(dummy_env):
     cnn_kwargs = {
@@ -317,12 +331,15 @@ def make_model(dummy_env):
 # The only requirement of this storage is that the data passed to it at write
 # time must always have the same shape.
 
-def get_replay_buffer(buffer_size, n_optim):
+
+def get_replay_buffer(buffer_size, n_optim, batch_size):
     replay_buffer = TensorDictReplayBuffer(
+        batch_size=batch_size,
         storage=LazyMemmapStorage(buffer_size),
         prefetch=n_optim,
     )
     return replay_buffer
+
 
 ###############################################################################
 # Data collector
@@ -354,12 +371,13 @@ def get_replay_buffer(buffer_size, n_optim):
 # out training loop must account for. For simplicity, we set the devices to
 # the same value for all sub-collectors.
 
-def get_collector(obs_norm_sd, num_collectors, actor_explore, frames_per_batch, total_frames, device):
+
+def get_collector(
+    obs_norm_sd, num_collectors, actor_explore, frames_per_batch, total_frames, device
+):
     data_collector = MultiaSyncDataCollector(
         [
-            make_env(
-                parallel=True, obs_norm_sd=obs_norm_sd
-            ),
+            make_env(parallel=True, obs_norm_sd=obs_norm_sd),
         ]
         * num_collectors,
         policy=actor_explore,
@@ -374,6 +392,7 @@ def get_collector(obs_norm_sd, num_collectors, actor_explore, frames_per_batch, 
         split_trajs=False,
     )
     return data_collector
+
 
 ###############################################################################
 # Loss function
@@ -394,10 +413,12 @@ def get_collector(obs_norm_sd, num_collectors, actor_explore, frames_per_batch, 
 # in similar algorithms.
 #
 
+
 def get_loss_module(actor, gamma):
     loss_module = DQNLoss(actor, gamma=gamma, delay_value=True)
     target_updater = SoftUpdate(loss_module)
     return loss_module, target_updater
+
 
 ###############################################################################
 # Hyperparameters
@@ -475,7 +496,6 @@ buffer_size = min(total_frames, 100000)
 num_workers = 2  # 8
 num_collectors = 2  # 4
 
-
 ###############################################################################
 # Environment and exploration
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -524,582 +544,111 @@ test_env = make_env(parallel=False, obs_norm_sd=stats)
 # Get model
 actor, actor_explore = make_model(test_env)
 loss_module, target_net_updater = get_loss_module(actor, gamma)
-collector = get_collector(stats, num_collectors, actor_explore, frames_per_batch, total_frames, device)
-optimizer = torch.optim.Adam(loss_module.parameters(), lr=lr, weight_decay=wd, betas=betas)
+collector = get_collector(
+    stats, num_collectors, actor_explore, frames_per_batch, total_frames, device
+)
+optimizer = torch.optim.Adam(
+    loss_module.parameters(), lr=lr, weight_decay=wd, betas=betas
+)
+logger = CSVLogger(exp_name="dqn_exp", log_dir="./")
+
 trainer = Trainer(
-            collector=collector,
+    collector=collector,
     total_frames=total_frames,
     frame_skip=1,
     loss_module=loss_module,
     optimizer=optimizer,
-    logger=None,
-    optim_steps_per_batch = n_optim,
+    logger=logger,
+    optim_steps_per_batch=n_optim,
 )
 
-buffer_hook = ReplayBufferTrainer(get_replay_buffer(buffer_size, n_optim))
+###############################################################################
+# Registering hooks
+# ~~~~~~~~~~~~~~~~~
+#
+# Registering hooks can be achieved in two separate ways:
+#
+# - If the hook has it, the :meth:`torchrl.trainers.TrainerHookBase.register`
+#   method is the first choice. One just needs to provide the trainer as input
+#   and the hook will be registered with a default name at a default location.
+#   For some hooks, the registration can be quite complex: :class:`torchrl.trainers.ReplayBufferTrainer`
+#   requires 3 hooks (``extend``, ``sample`` and ``update_priority``) which
+#   can be cumbersome to implement.
+buffer_hook = ReplayBufferTrainer(
+    get_replay_buffer(buffer_size, n_optim, batch_size=batch_size),
+    flatten_tensordicts=False,
+)
 buffer_hook.register(trainer)
 weight_updater = UpdateWeights(collector, update_weights_interval=1)
 weight_updater.register(trainer)
+recorder = Recorder(
+    record_interval=100,  # log every 100 optimization steps
+    record_frames=10_000,  # maximum number of frames in the record
+    frame_skip=1,
+    policy_exploration=actor_explore,
+    environment=test_env,
+    exploration_mode="mode",
+    log_keys=[("next", "reward")],
+    out_keys={("next", "reward"): "rewards"},
+)
+recorder.register(trainer)
 
+###############################################################################
+# - Any callable (including :class:`torchrl.trainers.TrainerHookBase`
+#   subclasses) can be registered using :meth:`torchrl.trainers.Trainer.register_op`.
+#   In this case, a location must be explicitely passed (). This method gives
+#   more control over the location of the hook but it also requires more
+#   understanding of the Trainer mechanism.
+#   Check the `trainer documentation <https://pytorch.org/rl/reference/trainers.html>`_
+#   for a detailed description of the trainer hooks.
+#
 trainer.register_op("post_optim", target_net_updater.step)
 
+###############################################################################
+# Here we are, ready to train our algorithm! A simple call to
+# ``trainer.train()`` and we'll be getting our results logged in.
+#
 trainer.train()
 
-# ###############################################################################
-# # We represent the parameters and targets as flat structures, but unflattening
-# # them is quite easy:
-#
-# params_flat = params.flatten_keys(".")
-#
-# ###############################################################################
-# # We will be using the adam optimizer:
-#
-# optim = torch.optim.Adam(list(params_flat.values()), lr, betas=betas)
-#
-# ###############################################################################
-# # We create a test environment for evaluation of the policy:
-#
-# test_env = make_env(
-#     parallel=False, obs_norm_sd=obs_norm_sd
-# )
-# # sanity check:
-# print(actor_explore(test_env.reset()))
-#
-# ###############################################################################
-# # Training loop of a regular DQN
-# # ------------------------------
-# #
-# # We'll start with a simple implementation of DQN where the returns are
-# # computed without bootstrapping, i.e.
-# #
-# # .. math::
-# #
-# #       Q_{t}(s, a) = R(s, a) + \gamma * V_{t+1}(s)
-# #
-# # where :math:`Q(s, a)` is the Q-value of the current state-action pair,
-# # :math:`R(s, a)` is the result of the reward function, and :math:`V(s)` is a
-# # value function that returns 0 for terminating states.
-# #
-# # We store the logs in a defaultdict:
-#
-# logs_exp1 = defaultdict(list)
-# prev_traj_count = 0
-#
-# pbar = tqdm.tqdm(total=total_frames)
-# for j, data in enumerate(data_collector):
-#     current_frames = data.numel()
-#     pbar.update(current_frames)
-#     data = data.view(-1)
-#
-#     # We store the values on the replay buffer, after placing them on CPU.
-#     # When called for the first time, this will instantiate our storage
-#     # object which will print its content.
-#     replay_buffer.extend(data.cpu())
-#
-#     # some logging
-#     if len(logs_exp1["frames"]):
-#         logs_exp1["frames"].append(current_frames + logs_exp1["frames"][-1])
-#     else:
-#         logs_exp1["frames"].append(current_frames)
-#
-#     if data["next", "done"].any():
-#         done = data["next", "done"].squeeze(-1)
-#         logs_exp1["traj_lengths"].append(
-#             data["next", "step_count"][done].float().mean().item()
-#         )
-#
-#     # check that we have enough data to start training
-#     if sum(logs_exp1["frames"]) > init_random_frames:
-#         for _ in range(n_optim):
-#             # sample from the RB and send to device
-#             sampled_data = replay_buffer.sample(batch_size)
-#             sampled_data = sampled_data.to(device, non_blocking=True)
-#
-#             # collect data from RB
-#             reward = sampled_data["next", "reward"].squeeze(-1)
-#             done = sampled_data["next", "done"].squeeze(-1).to(reward.dtype)
-#             action = sampled_data["action"].clone()
-#
-#             # Compute action value (of the action actually taken) at time t
-#             # By default, TorchRL uses one-hot encodings for discrete actions
-#             sampled_data_out = sampled_data.select(*actor.in_keys)
-#             sampled_data_out = factor(sampled_data_out, params=params)
-#             action_value = sampled_data_out["action_value"]
-#             action_value = (action_value * action.to(action_value.dtype)).sum(-1)
-#             with torch.no_grad():
-#                 # compute best action value for the next step, using target parameters
-#                 tdstep = step_mdp(sampled_data)
-#                 next_value = factor(
-#                     tdstep.select(*actor.in_keys),
-#                     params=params_target,
-#                 )["chosen_action_value"].squeeze(-1)
-#                 exp_value = reward + gamma * next_value * (1 - done)
-#             assert exp_value.shape == action_value.shape
-#             # we use MSE loss but L1 or smooth L1 should also work
-#             error = nn.functional.mse_loss(exp_value, action_value).mean()
-#             error.backward()
-#
-#             gv = nn.utils.clip_grad_norm_(list(params_flat.values()), 1)
-#
-#             optim.step()
-#             optim.zero_grad()
-#
-#             # update of the target parameters
-#             params_target.apply(
-#                 lambda p_target, p_orig: p_orig * tau + p_target * (1 - tau),
-#                 params.detach(),
-#                 inplace=True,
-#             )
-#
-#         actor_explore.step(current_frames)
-#
-#         # Logging
-#         logs_exp1["grad_vals"].append(float(gv))
-#         logs_exp1["losses"].append(error.item())
-#         logs_exp1["values"].append(action_value.mean().item())
-#         logs_exp1["traj_count"].append(
-#             prev_traj_count + data["next", "done"].sum().item()
-#         )
-#         prev_traj_count = logs_exp1["traj_count"][-1]
-#
-#         if j % 10 == 0:
-#             with set_exploration_mode("mode"), torch.no_grad():
-#                 # execute a rollout. The `set_exploration_mode("mode")` has no effect here since the policy is deterministic, but we add it for completeness
-#                 eval_rollout = test_env.rollout(
-#                     max_steps=10000,
-#                     policy=actor,
-#                 ).cpu()
-#             logs_exp1["traj_lengths_eval"].append(eval_rollout.shape[-1])
-#             logs_exp1["evals"].append(eval_rollout["next", "reward"].sum().item())
-#             if len(logs_exp1["mavgs"]):
-#                 logs_exp1["mavgs"].append(
-#                     logs_exp1["evals"][-1] * 0.05 + logs_exp1["mavgs"][-1] * 0.95
-#                 )
-#             else:
-#                 logs_exp1["mavgs"].append(logs_exp1["evals"][-1])
-#             logs_exp1["traj_count_eval"].append(logs_exp1["traj_count"][-1])
-#             pbar.set_description(
-#                 f"error: {error: 4.4f}, value: {action_value.mean(): 4.4f}, test return: {logs_exp1['evals'][-1]: 4.4f}"
-#             )
-#
-#     # update policy weights
-#     data_collector.update_policy_weights_()
-#
-# ###############################################################################
-# # We write a custom plot function to display the performance of our algorithm
-# #
-#
-#
-# def plot(logs, name):
-#     plt.figure(figsize=(15, 10))
-#     plt.subplot(2, 3, 1)
-#     plt.plot(
-#         logs["frames"][-len(logs["evals"]) :],
-#         logs["evals"],
-#         label="return (eval)",
-#     )
-#     plt.plot(
-#         logs["frames"][-len(logs["mavgs"]) :],
-#         logs["mavgs"],
-#         label="mavg of returns (eval)",
-#     )
-#     plt.xlabel("frames collected")
-#     plt.ylabel("trajectory length (= return)")
-#     plt.subplot(2, 3, 2)
-#     plt.plot(
-#         logs["traj_count"][-len(logs["evals"]) :],
-#         logs["evals"],
-#         label="return",
-#     )
-#     plt.plot(
-#         logs["traj_count"][-len(logs["mavgs"]) :],
-#         logs["mavgs"],
-#         label="mavg",
-#     )
-#     plt.xlabel("trajectories collected")
-#     plt.legend()
-#     plt.subplot(2, 3, 3)
-#     plt.plot(logs["frames"][-len(logs["losses"]) :], logs["losses"])
-#     plt.xlabel("frames collected")
-#     plt.title("loss")
-#     plt.subplot(2, 3, 4)
-#     plt.plot(logs["frames"][-len(logs["values"]) :], logs["values"])
-#     plt.xlabel("frames collected")
-#     plt.title("value")
-#     plt.subplot(2, 3, 5)
-#     plt.plot(
-#         logs["frames"][-len(logs["grad_vals"]) :],
-#         logs["grad_vals"],
-#     )
-#     plt.xlabel("frames collected")
-#     plt.title("grad norm")
-#     if len(logs["traj_lengths"]):
-#         plt.subplot(2, 3, 6)
-#         plt.plot(logs["traj_lengths"])
-#         plt.xlabel("batches")
-#         plt.title("traj length (training)")
-#     plt.savefig(name)
-#     if is_notebook():
-#         plt.show()
-#
-#
-# ###############################################################################
-# # The performance of the policy can be measured as the length of trajectories.
-# # As we can see on the results of the :func:`plot` function, the performance
-# # of the policy increases, albeit slowly.
-# #
-# # .. code-block:: python
-# #
-# #    plot(logs_exp1, "dqn_td0.png")
-# #
-# # .. figure:: /_static/img/dqn_td0.png
-# #    :alt: Cart Pole results with TD(0)
-# #
-#
-# print("shutting down")
-# data_collector.shutdown()
-# del data_collector
-#
-# ###############################################################################
-# # DQN with TD(:math:`\lambda`)
-# # ----------------------------
-# #
-# # We can improve the above algorithm by getting a better estimate of the
-# # return, using not only the next state value but the whole sequence of rewards
-# # and values that follow a particular step.
-# #
-# # TorchRL provides a vectorized version of TD(lambda) named
-# # :func:`torchrl.objectives.value.functional.vec_td_lambda_advantage_estimate`.
-# # We'll use this to obtain a target value that the value network will be
-# # trained to match.
-# #
-# # The big difference in this implementation is that we'll store entire
-# # trajectories and not single steps in the replay buffer. This will be done
-# # automatically as long as we're not "flattening" the tensordict collected:
-# # by keeping a shape ``[Batch x timesteps]`` and giving this
-# # to the RB, we'll be creating a replay buffer of size
-# # ``[Capacity x timesteps]``.
-#
-#
-# from torchrl.objectives.value.functional import vec_td_lambda_advantage_estimate
-#
-# ###############################################################################
-# # We reset the actor parameters:
-# #
-#
-# (
-#     factor,
-#     actor,
-#     actor_explore,
-#     params,
-#     params_target,
-# ) = make_model(test_env)
-# params_flat = params.flatten_keys(".")
-#
-# optim = torch.optim.Adam(list(params_flat.values()), lr, betas=betas)
-# test_env = make_env(
-#     parallel=False, obs_norm_sd=obs_norm_sd
-# )
-# print(actor_explore(test_env.reset()))
-#
-# ###############################################################################
-# # Data: Replay buffer and collector
-# # ---------------------------------
-# #
-# # We need to build a new replay buffer of the appropriate size:
-# #
-#
-# max_size = frames_per_batch // num_workers
-#
-# replay_buffer = TensorDictReplayBuffer(
-#     storage=LazyMemmapStorage(-(-buffer_size // max_size)),
-#     prefetch=n_optim,
-# )
-#
-# data_collector = MultiaSyncDataCollector(
-#     [
-#         make_env(
-#             parallel=True, obs_norm_sd=obs_norm_sd
-#         ),
-#     ]
-#     * num_collectors,
-#     policy=actor_explore,
-#     frames_per_batch=frames_per_batch,
-#     total_frames=total_frames,
-#     exploration_mode="random",
-#     devices=[device] * num_collectors,
-#     storing_devices=[device] * num_collectors,
-#     # devices=[f"cuda:{i}" for i in range(1, 1 + num_collectors)],
-#     # storing_devices=[f"cuda:{i}" for i in range(1, 1 + num_collectors)],
-#     split_trajs=False,
-# )
-#
-#
-# logs_exp2 = defaultdict(list)
-# prev_traj_count = 0
-#
-# ###############################################################################
-# # Training loop
-# # -------------
-# #
-# # There are very few differences with the training loop above:
-# #
-# # - The tensordict received by the collector is used as-is, without being
-# #   flattened (recall the ``data.view(-1)`` above), to keep the temporal
-# #   relation between consecutive steps.
-# # - We use :func:`vec_td_lambda_advantage_estimate` to compute the target
-# #   value.
-#
-# pbar = tqdm.tqdm(total=total_frames)
-# for j, data in enumerate(data_collector):
-#     current_frames = data.numel()
-#     pbar.update(current_frames)
-#
-#     replay_buffer.extend(data.cpu())
-#     if len(logs_exp2["frames"]):
-#         logs_exp2["frames"].append(current_frames + logs_exp2["frames"][-1])
-#     else:
-#         logs_exp2["frames"].append(current_frames)
-#
-#     if data["next", "done"].any():
-#         done = data["next", "done"].squeeze(-1)
-#         logs_exp2["traj_lengths"].append(
-#             data["next", "step_count"][done].float().mean().item()
-#         )
-#
-#     if sum(logs_exp2["frames"]) > init_random_frames:
-#         for _ in range(n_optim):
-#             sampled_data = replay_buffer.sample(batch_size // max_size)
-#             sampled_data = sampled_data.clone().to(device, non_blocking=True)
-#
-#             reward = sampled_data["next", "reward"]
-#             done = sampled_data["next", "done"].to(reward.dtype)
-#             action = sampled_data["action"].clone()
-#
-#             sampled_data_out = sampled_data.select(*actor.in_keys)
-#             sampled_data_out = vmap(factor, (0, None))(sampled_data_out, params)
-#             action_value = sampled_data_out["action_value"]
-#             action_value = (action_value * action.to(action_value.dtype)).sum(-1, True)
-#             with torch.no_grad():
-#                 tdstep = step_mdp(sampled_data)
-#                 next_value = vmap(factor, (0, None))(
-#                     tdstep.select(*actor.in_keys), params
-#                 )
-#                 next_value = next_value["chosen_action_value"]
-#             error = vec_td_lambda_advantage_estimate(
-#                 gamma,
-#                 lmbda,
-#                 action_value,
-#                 next_value,
-#                 reward,
-#                 done,
-#             ).pow(2)
-#             error = error.mean()
-#             error.backward()
-#
-#             gv = nn.utils.clip_grad_norm_(list(params_flat.values()), 1)
-#
-#             optim.step()
-#             optim.zero_grad()
-#
-#             # update of the target parameters
-#             params_target.apply(
-#                 lambda p_target, p_orig: p_orig * tau + p_target * (1 - tau),
-#                 params.detach(),
-#                 inplace=True,
-#             )
-#
-#         actor_explore.step(current_frames)
-#
-#         # Logging
-#         logs_exp2["grad_vals"].append(float(gv))
-#
-#         logs_exp2["losses"].append(error.item())
-#         logs_exp2["values"].append(action_value.mean().item())
-#         logs_exp2["traj_count"].append(
-#             prev_traj_count + data["next", "done"].sum().item()
-#         )
-#         prev_traj_count = logs_exp2["traj_count"][-1]
-#         if j % 10 == 0:
-#             with set_exploration_mode("mode"), torch.no_grad():
-#                 # execute a rollout. The `set_exploration_mode("mode")` has
-#                 # no effect here since the policy is deterministic, but we add
-#                 # it for completeness
-#                 eval_rollout = test_env.rollout(
-#                     max_steps=10000,
-#                     policy=actor,
-#                 ).cpu()
-#             logs_exp2["traj_lengths_eval"].append(eval_rollout.shape[-1])
-#             logs_exp2["evals"].append(eval_rollout["next", "reward"].sum().item())
-#             if len(logs_exp2["mavgs"]):
-#                 logs_exp2["mavgs"].append(
-#                     logs_exp2["evals"][-1] * 0.05 + logs_exp2["mavgs"][-1] * 0.95
-#                 )
-#             else:
-#                 logs_exp2["mavgs"].append(logs_exp2["evals"][-1])
-#             logs_exp2["traj_count_eval"].append(logs_exp2["traj_count"][-1])
-#             pbar.set_description(
-#                 f"error: {error: 4.4f}, value: {action_value.mean(): 4.4f}, test return: {logs_exp2['evals'][-1]: 4.4f}"
-#             )
-#
-#     # update policy weights
-#     data_collector.update_policy_weights_()
-#
-#
-# ###############################################################################
-# # TD(:math:`\lambda`) performs significantly better than TD(0) because it
-# # retrieves a much less biased estimate of the state-action value.
-# #
-# # .. code-block:: python
-# #
-# #    plot(logs_exp2, "dqn_tdlambda.png")
-# #
-# # .. figure:: /_static/img/dqn_tdlambda.png
-# #    :alt: Cart Pole results with TD(lambda)
-# #
-#
-#
-# print("shutting down")
-# data_collector.shutdown()
-# del data_collector
-#
-# ###############################################################################
-# # Let's compare the results on a single plot. Because the TD(lambda) version
-# # works better, we'll have fewer episodes collected for a given number of
-# # frames (as there are more frames per episode).
-# #
-# # **Note**: As already mentioned above, to get a more reasonable performance,
-# # use a greater value for ``total_frames`` e.g. 500000.
-#
-#
-# def plot_both():
-#     frames_td0 = logs_exp1["frames"]
-#     frames_tdlambda = logs_exp2["frames"]
-#     evals_td0 = logs_exp1["evals"]
-#     evals_tdlambda = logs_exp2["evals"]
-#     mavgs_td0 = logs_exp1["mavgs"]
-#     mavgs_tdlambda = logs_exp2["mavgs"]
-#     traj_count_td0 = logs_exp1["traj_count_eval"]
-#     traj_count_tdlambda = logs_exp2["traj_count_eval"]
-#
-#     plt.figure(figsize=(15, 10))
-#     plt.subplot(1, 2, 1)
-#     plt.plot(frames_td0[-len(evals_td0) :], evals_td0, label="return (td0)", alpha=0.5)
-#     plt.plot(
-#         frames_tdlambda[-len(evals_tdlambda) :],
-#         evals_tdlambda,
-#         label="return (td(lambda))",
-#         alpha=0.5,
-#     )
-#     plt.plot(frames_td0[-len(mavgs_td0) :], mavgs_td0, label="mavg (td0)")
-#     plt.plot(
-#         frames_tdlambda[-len(mavgs_tdlambda) :],
-#         mavgs_tdlambda,
-#         label="mavg (td(lambda))",
-#     )
-#     plt.xlabel("frames collected")
-#     plt.ylabel("trajectory length (= return)")
-#
-#     plt.subplot(1, 2, 2)
-#     plt.plot(
-#         traj_count_td0[-len(evals_td0) :],
-#         evals_td0,
-#         label="return (td0)",
-#         alpha=0.5,
-#     )
-#     plt.plot(
-#         traj_count_tdlambda[-len(evals_tdlambda) :],
-#         evals_tdlambda,
-#         label="return (td(lambda))",
-#         alpha=0.5,
-#     )
-#     plt.plot(traj_count_td0[-len(mavgs_td0) :], mavgs_td0, label="mavg (td0)")
-#     plt.plot(
-#         traj_count_tdlambda[-len(mavgs_tdlambda) :],
-#         mavgs_tdlambda,
-#         label="mavg (td(lambda))",
-#     )
-#     plt.xlabel("trajectories collected")
-#     plt.legend()
-#
-#     plt.savefig("dqn.png")
-#
-#
-# ###############################################################################
-# # .. code-block:: python
-# #
-# #    plot_both()
-# #
-# # .. figure:: /_static/img/dqn.png
-# #    :alt: Cart Pole results from the TD(:math:`lambda`) trained policy.
-# #
-# # Finally, we generate a new video to check what the algorithm has learnt.
-# # If all goes well, the duration should be significantly longer than with a
-# # random rollout.
-# #
-# # To get the raw pixels of the rollout, we insert a
-# # :class:`torchrl.envs.CatTensors` transform that precedes all others and copies
-# # the ``"pixels"`` key onto a ``"pixels_save"`` key. This is necessary because
-# # the other transforms that modify this key will update its value in-place in
-# # the output tensordict.
-# #
-#
-# test_env.transform.insert(0, CatTensors(["pixels"], "pixels_save", del_keys=False))
-# eval_rollout = test_env.rollout(max_steps=10000, policy=actor, auto_reset=True).cpu()
-#
-# # sphinx_gallery_start_ignore
-# import imageio
-#
-# imageio.mimwrite("cartpole.gif", eval_rollout["pixels_save"].numpy(), fps=30)
-# # sphinx_gallery_end_ignore
-#
-# del test_env
-#
-# ###############################################################################
-# # The video of the rollout can be saved using the imageio package:
-# #
-# # .. code-block::
-# #
-# #   import imageio
-# #   imageio.mimwrite('cartpole.mp4', eval_rollout["pixels_save"].numpy(), fps=30);
-# #
-# # .. figure:: /_static/img/cartpole.gif
-# #    :alt: Cart Pole results from the TD(:math:`\lambda`) trained policy.
-#
-# ###############################################################################
-# # Conclusion and possible improvements
-# # ------------------------------------
-# #
-# # In this tutorial we have learnt:
-# #
-# # - How to train a policy that read pixel-based states, what transforms to
-# #   include and how to normalize the data;
-# # - How to create a policy that picks up the action with the highest value
-# #   with :class:`torchrl.modules.QValueNetwork`;
-# # - How to build a multiprocessed data collector;
-# # - How to train a DQN with TD(:math:`\lambda`) returns.
-# #
-# # We have seen that using TD(:math:`\lambda`) greatly improved the performance
-# # of DQN. Other possible improvements could include:
-# #
-# # - Using the Multi-Step post-processing. Multi-step will project an action
-# #   to the nth following step, and create a discounted sum of the rewards in
-# #   between. This trick can make the algorithm noticebly less myopic. To use
-# #   this, simply create the collector with
-# #
-# #       from torchrl.data.postprocs.postprocs import MultiStep
-# #       collector = CollectorClass(..., postproc=MultiStep(gamma, n))
-# #
-# #   where ``n`` is the number of looking-forward steps. Pay attention to the
-# #   fact that the ``gamma`` factor has to be corrected by the number of
-# #   steps till the next observation when being passed to
-# #   ``vec_td_lambda_advantage_estimate``:
-# #
-# #       gamma = gamma ** tensordict["steps_to_next_obs"]
-# # - A prioritized replay buffer could also be used. This will give a
-# #   higher priority to samples that have the worst value accuracy.
-# # - A distributional loss (see ``torchrl.objectives.DistributionalDQNLoss``
-# #   for more information).
-# # - More fancy exploration techniques, such as NoisyLinear layers and such
-# #   (check ``torchrl.modules.NoisyLinear``, which is fully compatible with the
-# #   ``MLP`` class used in our Dueling DQN).
+###############################################################################
+# We can now quickly check the CSVs with the results.
+
+# TODO
+
+###############################################################################
+# Conclusion and possible improvements
+# ------------------------------------
+#
+# In this tutorial we have learnt:
+#
+# - How to train a policy that read pixel-based states, what transforms to
+#   include and how to normalize the data;
+# - How to create a policy that picks up the action with the highest value
+#   with :class:`torchrl.modules.QValueNetwork`;
+# - How to build a multiprocessed data collector;
+# - How to train a DQN with TD(:math:`\lambda`) returns.
+#
+# We have seen that using TD(:math:`\lambda`) greatly improved the performance
+# of DQN. Other possible improvements could include:
+#
+# - Using the Multi-Step post-processing. Multi-step will project an action
+#   to the nth following step, and create a discounted sum of the rewards in
+#   between. This trick can make the algorithm noticebly less myopic. To use
+#   this, simply create the collector with
+#
+#       from torchrl.data.postprocs.postprocs import MultiStep
+#       collector = CollectorClass(..., postproc=MultiStep(gamma, n))
+#
+#   where ``n`` is the number of looking-forward steps. Pay attention to the
+#   fact that the ``gamma`` factor has to be corrected by the number of
+#   steps till the next observation when being passed to
+#   ``vec_td_lambda_advantage_estimate``:
+#
+#       gamma = gamma ** tensordict["steps_to_next_obs"]
+# - A prioritized replay buffer could also be used. This will give a
+#   higher priority to samples that have the worst value accuracy.
+# - A distributional loss (see ``torchrl.objectives.DistributionalDQNLoss``
+#   for more information).
+# - More fancy exploration techniques, such as NoisyLinear layers and such
+#   (check ``torchrl.modules.NoisyLinear``, which is fully compatible with the
+#   ``MLP`` class used in our Dueling DQN).

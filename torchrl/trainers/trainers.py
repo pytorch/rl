@@ -601,8 +601,10 @@ class ReplayBufferTrainer(TrainerHookBase):
 
     Args:
         replay_buffer (TensorDictReplayBuffer): replay buffer to be used.
-        batch_size (int): batch size when sampling data from the
-            latest collection or from the replay buffer.
+        batch_size (int, optional): batch size when sampling data from the
+            latest collection or from the replay buffer. If none is provided,
+            the replay buffer batch-size will be used (preferred option for
+            unchanged batch-sizes).
         memmap (bool, optional): if ``True``, a memmap tensordict is created.
             Default is False.
         device (device, optional): device where the samples must be placed.
@@ -630,7 +632,7 @@ class ReplayBufferTrainer(TrainerHookBase):
     def __init__(
         self,
         replay_buffer: TensorDictReplayBuffer,
-        batch_size: int,
+        batch_size: Optional[int] = None,
         memmap: bool = False,
         device: DEVICE_TYPING = "cpu",
         flatten_tensordicts: bool = True,
@@ -640,6 +642,12 @@ class ReplayBufferTrainer(TrainerHookBase):
         self.batch_size = batch_size
         self.memmap = memmap
         self.device = device
+        if flatten_tensordicts:
+            warnings.warn(
+                "flatten_tensordicts default value will soon be changed "
+                "to False for a faster execution. Make sure your "
+                "code is robust to this change."
+            )
         self.flatten_tensordicts = flatten_tensordicts
         self.max_dims = max_dims
 
@@ -668,7 +676,7 @@ class ReplayBufferTrainer(TrainerHookBase):
         self.replay_buffer.extend(batch)
 
     def sample(self, batch: TensorDictBase) -> TensorDictBase:
-        sample = self.replay_buffer.sample(self.batch_size)
+        sample = self.replay_buffer.sample(batch_size=self.batch_size)
         return sample.to(self.device, non_blocking=True)
 
     def update_priority(self, batch: TensorDictBase) -> None:
@@ -1094,7 +1102,7 @@ class BatchSubSampler(TrainerHookBase):
 
 
 class Recorder(TrainerHookBase):
-    """Recorder hook for Trainer.
+    """Recorder hook for :class:`torchrl.trainers.Trainer`.
 
     Args:
         record_interval (int): total number of optimisation steps
@@ -1118,33 +1126,45 @@ class Recorder(TrainerHookBase):
             the performance of the policy, it should be possible to turn off
             the explorative behaviour by calling the
             `set_exploration_mode('mode')` context manager.
-        recorder (EnvBase): An environment instance to be used
+        environment (EnvBase): An environment instance to be used
             for testing.
         exploration_mode (str, optional): exploration mode to use for the
             policy. By default, no exploration is used and the value used is
             "mode". Set to "random" to enable exploration
-        out_key (str, optional): reward key to set to the logger. Default is
-            `"reward_evaluation"`.
+        log_keys (sequence of str or tuples or str, optional): keys to read in the tensordict
+            for logging. Defaults to ``[("next", "reward")]``.
+        out_keys (Dict[str, str], optional): a dictionary mapping the ``log_keys``
+            to their name in the logs. Defaults to ``{("next", "reward"): "r_evaluation"}``.
         suffix (str, optional): suffix of the video to be recorded.
         log_pbar (bool, optional): if ``True``, the reward value will be logged on
             the progression bar. Default is `False`.
 
     """
 
+    ENV_DEPREC = (
+        "the environment should be passed under the 'environment' key"
+        " and not the 'recorder' key."
+    )
+
     def __init__(
         self,
+        *,
         record_interval: int,
         record_frames: int,
         frame_skip: int,
         policy_exploration: TensorDictModule,
-        recorder: EnvBase,
+        environment: EnvBase = None,
         exploration_mode: str = "random",
-        log_keys: Optional[List[str]] = None,
-        out_keys: Optional[Dict[str, str]] = None,
+        log_keys: Optional[List[Union[str, Tuple[str]]]] = None,
+        out_keys: Optional[Dict[Union[str, Tuple[str]], str]] = None,
         suffix: Optional[str] = None,
         log_pbar: bool = False,
+        recorder: EnvBase = None,
     ) -> None:
-
+        if environment is None and recorder is not None:
+            warnings.warn(self.ENV_DEPREC)
+        elif environment is not None and recorder is not None:
+            raise ValueError("environment and recorder conflict.")
         self.policy_exploration = policy_exploration
         self.recorder = recorder
         self.record_frames = record_frames
