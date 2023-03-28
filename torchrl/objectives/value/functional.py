@@ -10,14 +10,23 @@ import torch
 __all__ = [
     "generalized_advantage_estimate",
     "vec_generalized_advantage_estimate",
-    "vec_td_lambda_return_estimate",
-    "vec_td_lambda_advantage_estimate",
+    "td0_advantage_estimate",
+    "td0_return_estimate",
+    "td1_return_estimate",
+    "vec_td1_return_estimate",
+    "td1_advantage_estimate",
+    "vec_td1_advantage_estimate",
     "td_lambda_return_estimate",
+    "vec_td_lambda_return_estimate",
     "td_lambda_advantage_estimate",
-    "td_advantage_estimate",
+    "vec_td_lambda_advantage_estimate",
 ]
 
 from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor
+
+########################################################################
+# GAE
+# ---
 
 
 def generalized_advantage_estimate(
@@ -28,7 +37,7 @@ def generalized_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Get generalized advantage estimate of a trajectory.
+    """Generalized advantage estimate of a trajectory.
 
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
     https://arxiv.org/pdf/1506.02438.pdf for more context.
@@ -37,14 +46,19 @@ def generalized_advantage_estimate(
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
         state_value (Tensor): value function result with old_state input.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         next_state_value (Tensor): value function result with new_state input.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         reward (Tensor): reward of taking actions in the environment.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
 
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
+    single task, single objective F=1).
+
     """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     for tensor in (next_state_value, state_value, reward, done):
         if tensor.shape[-1] != 1:
             raise RuntimeError(
@@ -80,7 +94,7 @@ def vec_generalized_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Get generalized advantage estimate of a trajectory.
+    """Vectorized Generalized advantage estimate of a trajectory.
 
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
     https://arxiv.org/pdf/1506.02438.pdf for more context.
@@ -89,14 +103,19 @@ def vec_generalized_advantage_estimate(
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
         state_value (Tensor): value function result with old_state input.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         next_state_value (Tensor): value function result with new_state input.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         reward (Tensor): reward of taking actions in the environment.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
 
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
+    single task, single objective F=1).
+
     """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     for tensor in (next_state_value, state_value, reward, done):
         if tensor.shape[-1] != 1:
             raise RuntimeError(
@@ -140,22 +159,55 @@ def vec_generalized_advantage_estimate(
     return advantage, value_target
 
 
-def td_advantage_estimate(
+########################################################################
+# TD(0)
+# -----
+
+
+def td0_advantage_estimate(
     gamma: float,
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Get generalized advantage estimate of a trajectory.
+    """TD(0) advantage estimate of a trajectory.
 
-    Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
-    https://arxiv.org/pdf/1506.02438.pdf for more context.
+    Also known as bootstrapped Temporal Difference or one-step return.
 
     Args:
         gamma (scalar): exponential mean discount.
         state_value (Tensor): value function result with old_state input.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        next_state_value (Tensor): value function result with new_state input.
+        reward (Tensor): reward of taking actions in the environment.
+        done (Tensor): boolean flag for end of episode.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
+    single task, single objective F=1).
+
+    """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
+    not_done = 1 - done.to(next_state_value.dtype)
+    advantage = reward + gamma * not_done * next_state_value - state_value
+    return advantage
+
+
+def td0_return_estimate(
+    gamma: float,
+    next_state_value: torch.Tensor,
+    reward: torch.Tensor,
+    done: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """TD(0) discounted return estimate of a trajectory.
+
+    Also known as bootstrapped Temporal Difference or one-step return.
+
+    Args:
+        gamma (scalar): exponential mean discount.
         next_state_value (Tensor): value function result with new_state input.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         reward (Tensor): reward of taking actions in the environment.
@@ -163,35 +215,35 @@ def td_advantage_estimate(
         done (Tensor): boolean flag for end of episode.
 
     """
-    for tensor in (next_state_value, state_value, reward, done):
-        if tensor.shape[-1] != 1:
-            raise RuntimeError(
-                "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
-            )
+    if not (next_state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     not_done = 1 - done.to(next_state_value.dtype)
-    advantage = reward + gamma * not_done * next_state_value - state_value
+    advantage = reward + gamma * not_done * next_state_value
     return advantage
 
 
-def td_lambda_return_estimate(
+########################################################################
+# TD(1)
+# ----------
+
+
+def td1_return_estimate(
     gamma: float,
-    lmbda: float,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
     rolling_gamma: bool = None,
 ) -> torch.Tensor:
-    """TD(lambda) return estimate.
+    r"""TD(1) return estimate.
 
     Args:
         gamma (scalar): exponential mean discount.
-        lmbda (scalar): trajectory discount.
         next_state_value (Tensor): value function result with new_state input.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         reward (Tensor): reward of taking actions in the environment.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
-        rolling_gamma (bool, optional): if True, it is assumed that each gamma
+        rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
               value = [v1, v2, v3, v4]
@@ -213,7 +265,256 @@ def td_lambda_return_estimate(
               ]
             Default is True.
 
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
+    single task, single objective F=1).
+
     """
+    if not (next_state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
+    not_done = 1 - done.to(next_state_value.dtype)
+
+    returns = torch.empty_like(next_state_value)
+
+    T = returns.shape[-2]
+
+    single_gamma = False
+    if not (isinstance(gamma, torch.Tensor) and gamma.shape == not_done.shape):
+        single_gamma = True
+        gamma = torch.full_like(next_state_value, gamma)
+
+    if rolling_gamma is None:
+        rolling_gamma = True
+    elif not rolling_gamma and single_gamma:
+        raise RuntimeError(
+            "rolling_gamma=False is expected only with time-sensitive gamma values"
+        )
+
+    if rolling_gamma:
+        gamma = gamma * not_done
+        g = next_state_value[..., -1, :]
+        for i in reversed(range(T)):
+            g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * g
+    else:
+        for k in range(T):
+            g = next_state_value[..., -1, :]
+            _gamma = gamma[..., k, :]
+            nd = not_done
+            _gamma = _gamma.unsqueeze(-2) * nd
+            for i in reversed(range(k, T)):
+                g = reward[..., i, :] + _gamma[..., i, :] * g
+            returns[..., k, :] = g
+    return returns
+
+
+def td1_advantage_estimate(
+    gamma: float,
+    state_value: torch.Tensor,
+    next_state_value: torch.Tensor,
+    reward: torch.Tensor,
+    done: torch.Tensor,
+    rolling_gamma: bool = None,
+) -> torch.Tensor:
+    """TD(1) advantage estimate.
+
+    Args:
+        gamma (scalar): exponential mean discount.
+        state_value (Tensor): value function result with old_state input.
+        next_state_value (Tensor): value function result with new_state input.
+        reward (Tensor): reward of taking actions in the environment.
+        done (Tensor): boolean flag for end of episode.
+        rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
+            if a gamma tensor is tied to a single event:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+                v2 + g2 v3 + g2 g3 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            if False, it is assumed that each gamma is tied to the upcoming
+            trajectory:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1**2 v3 + g**3 v4,
+                v2 + g2 v3 + g2**2 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            Default is True.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
+    single task, single objective F=1).
+
+    """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
+    if not state_value.shape == next_state_value.shape:
+        raise RuntimeError("shape of state_value and next_state_value must match")
+    returns = td1_return_estimate(gamma, next_state_value, reward, done, rolling_gamma)
+    advantage = returns - state_value
+    return advantage
+
+
+def vec_td1_return_estimate(
+    gamma, next_state_value, reward, done, rolling_gamma: Optional[bool] = None
+):
+    """Vectorized TD(1) return estimate.
+
+    Args:
+        gamma (scalar, Tensor): exponential mean discount. If tensor-valued,
+        next_state_value (Tensor): value function result with new_state input.
+        reward (Tensor): reward of taking actions in the environment.
+        done (Tensor): boolean flag for end of episode.
+        rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
+            if a gamma tensor is tied to a single event:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+                v2 + g2 v3 + g2 g3 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            if False, it is assumed that each gamma is tied to the upcoming
+            trajectory:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1**2 v3 + g**3 v4,
+                v2 + g2 v3 + g2**2 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            Default is True.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
+    single task, single objective F=1).
+
+    """
+    return vec_td_lambda_return_estimate(
+        gamma=gamma,
+        next_state_value=next_state_value,
+        reward=reward,
+        done=done,
+        rolling_gamma=rolling_gamma,
+        lmbda=1,
+    )
+
+
+def vec_td1_advantage_estimate(
+    gamma,
+    state_value,
+    next_state_value,
+    reward,
+    done,
+    rolling_gamma: bool = None,
+):
+    """Vectorized TD(1) advantage estimate.
+
+    Args:
+        gamma (scalar, Tensor): exponential mean discount. If tensor-valued,
+        state_value (Tensor): value function result with old_state input.
+        next_state_value (Tensor): value function result with new_state input.
+        reward (Tensor): reward of taking actions in the environment.
+        done (Tensor): boolean flag for end of episode.
+        rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
+            if a gamma tensor is tied to a single event:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+                v2 + g2 v3 + g2 g3 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            if False, it is assumed that each gamma is tied to the upcoming
+            trajectory:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1**2 v3 + g**3 v4,
+                v2 + g2 v3 + g2**2 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            Default is True.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
+    single task, single objective F=1).
+
+    """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
+    return (
+        vec_td1_return_estimate(gamma, next_state_value, reward, done, rolling_gamma)
+        - state_value
+    )
+
+
+########################################################################
+# TD(lambda)
+# ----------
+
+
+def td_lambda_return_estimate(
+    gamma: float,
+    lmbda: float,
+    next_state_value: torch.Tensor,
+    reward: torch.Tensor,
+    done: torch.Tensor,
+    rolling_gamma: bool = None,
+) -> torch.Tensor:
+    r"""TD(:math:`\lambda`) return estimate.
+
+    Args:
+        gamma (scalar): exponential mean discount.
+        lmbda (scalar): trajectory discount.
+        next_state_value (Tensor): value function result with new_state input.
+        reward (Tensor): reward of taking actions in the environment.
+        done (Tensor): boolean flag for end of episode.
+        rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
+            if a gamma tensor is tied to a single event:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+                v2 + g2 v3 + g2 g3 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            if False, it is assumed that each gamma is tied to the upcoming
+            trajectory:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1**2 v3 + g**3 v4,
+                v2 + g2 v3 + g2**2 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            Default is True.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
+    single task, single objective F=1).
+
+    """
+    if not (next_state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     for tensor in (next_state_value, reward, done):
         if tensor.shape[-1] != 1:
             raise RuntimeError(
@@ -276,19 +577,16 @@ def td_lambda_advantage_estimate(
     done: torch.Tensor,
     rolling_gamma: bool = None,
 ) -> torch.Tensor:
-    """TD(lambda) advantage estimate.
+    r"""TD(:math:`\lambda`) advantage estimate.
 
     Args:
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
         state_value (Tensor): value function result with old_state input.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         next_state_value (Tensor): value function result with new_state input.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         reward (Tensor): reward of taking actions in the environment.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
-        rolling_gamma (bool, optional): if True, it is assumed that each gamma
+        rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
               value = [v1, v2, v3, v4]
@@ -310,7 +608,15 @@ def td_lambda_advantage_estimate(
               ]
             Default is True.
 
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
+    single task, single objective F=1).
+
     """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
     returns = td_lambda_return_estimate(
@@ -320,63 +626,10 @@ def td_lambda_advantage_estimate(
     return advantage
 
 
-def vec_td_lambda_advantage_estimate(
-    gamma,
-    lmbda,
-    state_value,
-    next_state_value,
-    reward,
-    done,
-    rolling_gamma: bool = None,
-):
-    """Vectorized TD(lambda) advantage estimate.
-
-    Args:
-        gamma (scalar, Tensor): exponential mean discount. If tensor-valued,
-            must be a [Batch x TimeSteps x 1] tensor.
-        lmbda (scalar): trajectory discount.
-        state_value (Tensor): value function result with old_state input.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
-        next_state_value (Tensor): value function result with new_state input.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
-        reward (Tensor): reward of taking actions in the environment.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
-        done (Tensor): boolean flag for end of episode.
-        rolling_gamma (bool, optional): if True, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
-            trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
-
-    """
-    return (
-        vec_td_lambda_return_estimate(
-            gamma, lmbda, next_state_value, reward, done, rolling_gamma
-        )
-        - state_value
-    )
-
-
 def vec_td_lambda_return_estimate(
     gamma, lmbda, next_state_value, reward, done, rolling_gamma: Optional[bool] = None
 ):
-    """Vectorized TD(lambda) return estimate.
+    r"""Vectorized TD(:math:`\lambda`) return estimate.
 
     Args:
         gamma (scalar, Tensor): exponential mean discount. If tensor-valued,
@@ -387,7 +640,7 @@ def vec_td_lambda_return_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
-        rolling_gamma (bool, optional): if True, it is assumed that each gamma
+        rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
               value = [v1, v2, v3, v4]
@@ -409,7 +662,15 @@ def vec_td_lambda_return_estimate(
               ]
             Default is True.
 
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
+    single task, single objective F=1).
+
     """
+    if not (next_state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
     shape = next_state_value.shape
     if not shape[-1] == 1:
         raise RuntimeError("last dimension of inputs shape must be singleton")
@@ -510,3 +771,60 @@ def vec_td_lambda_return_estimate(
         v3[..., :-1] = 0
         v3 = _custom_conv1d(v3, dec * (gammas * lambdas).transpose(1, 2))
         return (v1 + v2 + v3).view(shape)
+
+
+def vec_td_lambda_advantage_estimate(
+    gamma,
+    lmbda,
+    state_value,
+    next_state_value,
+    reward,
+    done,
+    rolling_gamma: bool = None,
+):
+    r"""Vectorized TD(:math:`\lambda`) advantage estimate.
+
+    Args:
+        gamma (scalar, Tensor): exponential mean discount. If tensor-valued,
+        lmbda (scalar): trajectory discount.
+        state_value (Tensor): value function result with old_state input.
+        next_state_value (Tensor): value function result with new_state input.
+        reward (Tensor): reward of taking actions in the environment.
+        done (Tensor): boolean flag for end of episode.
+        rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
+            if a gamma tensor is tied to a single event:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+                v2 + g2 v3 + g2 g3 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            if False, it is assumed that each gamma is tied to the upcoming
+            trajectory:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1**2 v3 + g**3 v4,
+                v2 + g2 v3 + g2**2 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            Default is True.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
+    single task, single objective F=1).
+
+    """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(
+            "All input tensors (value, reward and done states) must share a unique shape."
+        )
+    return (
+        vec_td_lambda_return_estimate(
+            gamma, lmbda, next_state_value, reward, done, rolling_gamma
+        )
+        - state_value
+    )

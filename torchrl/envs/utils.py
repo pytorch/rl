@@ -39,17 +39,17 @@ def step_mdp(
     Args:
         tensordict (TensorDictBase): tensordict with keys to be renamed
         next_tensordict (TensorDictBase, optional): destination tensordict
-        keep_other (bool, optional): if True, all keys that do not start with :obj:`'next_'` will be kept.
+        keep_other (bool, optional): if ``True``, all keys that do not start with :obj:`'next_'` will be kept.
             Default is ``True``.
-        exclude_reward (bool, optional): if True, the :obj:`"reward"` key will be discarded
+        exclude_reward (bool, optional): if ``True``, the :obj:`"reward"` key will be discarded
             from the resulting tensordict. If ``False``, it will be copied (and replaced)
             from the ``"next"`` entry (if present).
             Default is ``False``.
-        exclude_done (bool, optional): if True, the :obj:`"done"` key will be discarded
+        exclude_done (bool, optional): if ``True``, the :obj:`"done"` key will be discarded
             from the resulting tensordict. If ``False``, it will be copied (and replaced)
             from the ``"next"`` entry (if present).
             Default is ``False``.
-        exclude_action (bool, optional): if True, the :obj:`"action"` key will
+        exclude_action (bool, optional): if ``True``, the :obj:`"action"` key will
             be discarded from the resulting tensordict. If ``False``, it will
             be kept in the root tensordict (since it should not be present in
             the ``"next"`` entry).
@@ -232,7 +232,7 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
 
     Args:
         env (EnvBase): the env for which the specs have to be checked against data.
-        return_contiguous (bool, optional): if True, the random rollout will be called with
+        return_contiguous (bool, optional): if ``True``, the random rollout will be called with
             return_contiguous=True. This will fail in some cases (e.g. heterogeneous shapes
             of inputs/outputs). Defaults to True.
         check_dtype (bool, optional): if False, dtype checks will be skipped.

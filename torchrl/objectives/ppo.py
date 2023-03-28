@@ -2,8 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import math
+import warnings
 from typing import Tuple
 
 import torch
@@ -11,21 +11,30 @@ from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
 
-from torchrl.objectives.utils import distance_loss
+from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    ValueEstimators,
+)
 
 from .common import LossModule
+from .value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
 class PPOLoss(LossModule):
     """A parent PPO loss class.
 
-    PPO (Proximal Policy Optimisation) is a model-free, online RL algorithm that makes use of a recorded (batch of)
-    trajectories to perform several optimization steps, while actively preventing the updated policy to deviate too
+    PPO (Proximal Policy Optimisation) is a model-free, online RL algorithm
+    that makes use of a recorded (batch of)
+    trajectories to perform several optimization steps, while actively
+    preventing the updated policy to deviate too
     much from its original parameter configuration.
 
-    PPO loss can be found in different flavours, depending on the way the constrained optimisation is implemented:
-        ClipPPOLoss and KLPENPPOLoss.
-    Unlike its subclasses, this class does not implement any regularisation and should therefore be used cautiously.
+    PPO loss can be found in different flavours, depending on the way the
+    constrained optimisation is implemented: ClipPPOLoss and KLPENPPOLoss.
+    Unlike its subclasses, this class does not implement any regularisation
+    and should therefore be used cautiously.
 
     For more details regarding PPO, refer to: "Proximal Policy Optimization Algorithms",
     https://arxiv.org/abs/1707.06347
@@ -33,37 +42,71 @@ class PPOLoss(LossModule):
     Args:
         actor (ProbabilisticTensorDictSequential): policy operator.
         critic (ValueOperator): value operator.
-        advantage_key (str): the input tensordict key where the advantage is expected to be written.
-            default: "advantage"
-        entropy_bonus (bool): if True, an entropy bonus will be added to the loss to favour exploratory policies.
-        samples_mc_entropy (int): if the distribution retrieved from the policy operator does not have a closed form
-            formula for the entropy, a Monte-Carlo estimate will be used. samples_mc_entropy will control how many
+        advantage_key (str): the input tensordict key where the advantage is
+            expected to be written.
+            Defaults to ``"advantage"``.
+        value_target_key (str): the input tensordict key where the target state
+            value is expected to be written. Defaults to ``"value_target"``.
+        entropy_bonus (bool): if ``True``, an entropy bonus will be added to the
+            loss to favour exploratory policies.
+        samples_mc_entropy (int): if the distribution retrieved from the policy
+            operator does not have a closed form
+            formula for the entropy, a Monte-Carlo estimate will be used.
+            ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
-            default: 1
+            Defaults to ``1``.
         entropy_coef (scalar): entropy multiplier when computing the total loss.
-            default: 0.01
-        critic_coef (scalar): critic loss multiplier when computing the total loss.
-            default: 1.0
-        gamma (scalar): a discount factor for return computation.
-        loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
-        normalize_advantage (bool): if True, the advantage will be normalized before being used.
-            Defaults to False.
+            Defaults to ``0.01``.
+        critic_coef (scalar): critic loss multiplier when computing the total
+            loss. Defaults to ``1.0``.
+        loss_critic_type (str): loss function for the value discrepancy.
+            Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+        normalize_advantage (bool): if ``True``, the advantage will be normalized
+            before being used. Defaults to ``False``.
+
+    .. note:
+      The advantage (typically GAE) can be computed by the loss function or
+      in the training loop. The latter option is usually preferred, but this is
+      up to the user to choose which option is to be preferred.
+      If the advantage key (``"advantage`` by default) is not present in the
+      input tensordict, the advantage will be computed by the :meth:`~.forward`
+      method.
+
+        >>> ppo_loss = PPOLoss(actor, critic)
+        >>> advantage = GAE(critic)
+        >>> data = next(datacollector)
+        >>> losses = ppo_loss(data)
+        >>> # equivalent
+        >>> advantage(data)
+        >>> losses = ppo_loss(data)
+
+      A custom advantage module can be built using :meth:`~.make_value_estimator`.
+      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+
+        >>> ppo_loss = PPOLoss(actor, critic)
+        >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
+        >>> data = next(datacollector)
+        >>> losses = ppo_loss(data)
 
     """
+
+    default_value_estimator = ValueEstimators.GAE
 
     def __init__(
         self,
         actor: ProbabilisticTensorDictSequential,
         critic: TensorDictModule,
+        *,
         advantage_key: str = "advantage",
         value_target_key: str = "value_target",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
         critic_coef: float = 1.0,
-        gamma: float = 0.99,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
+        gamma: float = None,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -82,9 +125,11 @@ class PPOLoss(LossModule):
         self.register_buffer(
             "critic_coef", torch.tensor(critic_coef, device=self.device)
         )
-        self.register_buffer("gamma", torch.tensor(gamma, device=self.device))
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
 
     def reset(self) -> None:
         pass
@@ -117,6 +162,8 @@ class PPOLoss(LossModule):
         return log_weight, dist
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
+        # TODO: if the advantage is gathered by forward, this introduces an
+        # overhead that we could easily reduce.
         try:
             target_return = tensordict.get(self.value_target_key)
             tensordict_select = tensordict.select(*self.critic.in_keys)
@@ -141,7 +188,14 @@ class PPOLoss(LossModule):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.advantage_key)
+        advantage = tensordict.get(self.advantage_key, None)
+        if advantage is None:
+            self.value_estimator(
+                tensordict,
+                params=self.critic_params.detach(),
+                target_params=self.target_critic_params,
+            )
+            advantage = tensordict.get(self.advantage_key)
         if self.normalize_advantage and advantage.numel() > 1:
             loc = advantage.mean().item()
             scale = advantage.std().clamp_min(1e-6).item()
@@ -159,6 +213,31 @@ class PPOLoss(LossModule):
             td_out.set("loss_critic", loss_critic.mean())
         return td_out
 
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+        hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
+        hp.update(hyperparams)
+        value_key = "state_value"
+        if value_type == ValueEstimators.TD1:
+            self._value_estimator = TD1Estimator(
+                value_network=self.critic, value_key=value_key, **hp
+            )
+        elif value_type == ValueEstimators.TD0:
+            self._value_estimator = TD0Estimator(
+                value_network=self.critic, value_key=value_key, **hp
+            )
+        elif value_type == ValueEstimators.GAE:
+            self._value_estimator = GAE(
+                value_network=self.critic, value_key=value_key, **hp
+            )
+        elif value_type == ValueEstimators.TDLambda:
+            self._value_estimator = TDLambdaEstimator(
+                value_network=self.critic, value_key=value_key, **hp
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")
+
 
 class ClipPPOLoss(PPOLoss):
     """Clipped PPO loss.
@@ -170,22 +249,52 @@ class ClipPPOLoss(PPOLoss):
         actor (ProbabilisticTensorDictSequential): policy operator.
         critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
-            default: "advantage"
+            Defaults to ``"advantage"``.
+        value_target_key (str): the input tensordict key where the target state
+            value is expected to be written. Defaults to ``"value_target"``.
         clip_epsilon (scalar): weight clipping threshold in the clipped PPO loss equation.
             default: 0.2
-        entropy_bonus (bool): if True, an entropy bonus will be added to the loss to favour exploratory policies.
-        samples_mc_entropy (int): if the distribution retrieved from the policy operator does not have a closed form
-            formula for the entropy, a Monte-Carlo estimate will be used. samples_mc_entropy will control how many
+        entropy_bonus (bool): if ``True``, an entropy bonus will be added to the
+            loss to favour exploratory policies.
+        samples_mc_entropy (int): if the distribution retrieved from the policy
+            operator does not have a closed form
+            formula for the entropy, a Monte-Carlo estimate will be used.
+            ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
-            default: 1
+            Defaults to ``1``.
         entropy_coef (scalar): entropy multiplier when computing the total loss.
-            default: 0.01
-        critic_coef (scalar): critic loss multiplier when computing the total loss.
-            default: 1.0
-        gamma (scalar): a discount factor for return computation.
-        loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
-        normalize_advantage (bool): if True, the advantage will be normalized before being used.
-            Defaults to True.
+            Defaults to ``0.01``.
+        critic_coef (scalar): critic loss multiplier when computing the total
+            loss. Defaults to ``1.0``.
+        loss_critic_type (str): loss function for the value discrepancy.
+            Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+        normalize_advantage (bool): if ``True``, the advantage will be normalized
+            before being used. Defaults to ``False``.
+
+    .. note:
+      The advantage (typically GAE) can be computed by the loss function or
+      in the training loop. The latter option is usually preferred, but this is
+      up to the user to choose which option is to be preferred.
+      If the advantage key (``"advantage`` by default) is not present in the
+      input tensordict, the advantage will be computed by the :meth:`~.forward`
+      method.
+
+        >>> ppo_loss = ClipPPOLoss(actor, critic)
+        >>> advantage = GAE(critic)
+        >>> data = next(datacollector)
+        >>> losses = ppo_loss(data)
+        >>> # equivalent
+        >>> advantage(data)
+        >>> losses = ppo_loss(data)
+
+      A custom advantage module can be built using :meth:`~.make_value_estimator`.
+      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+
+        >>> ppo_loss = ClipPPOLoss(actor, critic)
+        >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
+        >>> data = next(datacollector)
+        >>> losses = ppo_loss(data)
 
     """
 
@@ -193,28 +302,29 @@ class ClipPPOLoss(PPOLoss):
         self,
         actor: ProbabilisticTensorDictSequential,
         critic: TensorDictModule,
+        *,
         advantage_key: str = "advantage",
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
         critic_coef: float = 1.0,
-        gamma: float = 0.99,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = True,
+        gamma: float = None,
         **kwargs,
     ):
         super(ClipPPOLoss, self).__init__(
             actor,
             critic,
-            advantage_key,
+            advantage_key=advantage_key,
             entropy_bonus=entropy_bonus,
             samples_mc_entropy=samples_mc_entropy,
             entropy_coef=entropy_coef,
             critic_coef=critic_coef,
-            gamma=gamma,
             loss_critic_type=loss_critic_type,
             normalize_advantage=normalize_advantage,
+            gamma=gamma,
             **kwargs,
         )
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
@@ -228,7 +338,14 @@ class ClipPPOLoss(PPOLoss):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.advantage_key)
+        advantage = tensordict.get(self.advantage_key, None)
+        if advantage is None:
+            self.value_estimator(
+                tensordict,
+                params=self.critic_params.detach(),
+                target_params=self.target_critic_params,
+            )
+            advantage = tensordict.get(self.advantage_key)
         log_weight, dist = self._log_weight(tensordict)
         # ESS for logging
         with torch.no_grad():
@@ -278,28 +395,61 @@ class KLPENPPOLoss(PPOLoss):
     Args:
         actor (ProbabilisticTensorDictSequential): policy operator.
         critic (ValueOperator): value operator.
-        advantage_key (str): the input tensordict key where the advantage is expected to be written.
-            default: "advantage"
-        dtarg (scalar): target KL divergence.
-        beta (scalar): initial KL divergence multiplier.
-            default: 1.0
-        increment (scalar): how much beta should be incremented if KL > dtarg. Valid range: increment >= 1.0
-            default: 2.0
-        decrement (scalar): how much beta should be decremented if KL < dtarg. Valid range: decrement <= 1.0
-            default: 0.5
-        entropy_bonus (bool): if True, an entropy bonus will be added to the loss to favour exploratory policies.
-        samples_mc_entropy (int): if the distribution retrieved from the policy operator does not have a closed form
-            formula for the entropy, a Monte-Carlo estimate will be used. samples_mc_entropy will control how many
+        advantage_key (str, optional): the input tensordict key where the advantage is expected to be written.
+            Defaults to ``"advantage"``.
+        value_target_key (str, optional): the input tensordict key where the target state
+            value is expected to be written. Defaults to ``"value_target"``.
+        dtarg (scalar, optional): target KL divergence. Defaults to ``0.01``.
+        samples_mc_kl (int, optional): number of samples used to compute the KL divergence
+            if no analytical formula can be found. Defaults to ``1``.
+        beta (scalar, optional): initial KL divergence multiplier.
+            Defaults to ``1.0``.
+        decrement (scalar, optional): how much beta should be decremented if KL < dtarg. Valid range: decrement <= 1.0
+            default: ``0.5``.
+        increment (scalar, optional): how much beta should be incremented if KL > dtarg. Valid range: increment >= 1.0
+            default: ``2.0``.
+        entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
+            loss to favour exploratory policies. Defaults to ``True``.
+        samples_mc_entropy (int, optional): if the distribution retrieved from the policy
+            operator does not have a closed form
+            formula for the entropy, a Monte-Carlo estimate will be used.
+            ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
-            default: 1
-        entropy_coef (scalar): entropy multiplier when computing the total loss.
-            default: 0.01
-        critic_coef (scalar): critic loss multiplier when computing the total loss.
-            default: 1.0
-        gamma (scalar): a discount factor for return computation.
-        loss_critic_type (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
-        normalize_advantage (bool): if True, the advantage will be normalized before being used.
-            Defaults to True.
+            Defaults to ``1``.
+        entropy_coef (scalar, optional): entropy multiplier when computing the total loss.
+            Defaults to ``0.01``.
+        critic_coef (scalar, optional): critic loss multiplier when computing the total
+            loss. Defaults to ``1.0``.
+        loss_critic_type (str, optional): loss function for the value discrepancy.
+            Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+        normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
+            before being used. Defaults to ``False``.
+
+
+    .. note:
+      The advantage (typically GAE) can be computed by the loss function or
+      in the training loop. The latter option is usually preferred, but this is
+      up to the user to choose which option is to be preferred.
+      If the advantage key (``"advantage`` by default) is not present in the
+      input tensordict, the advantage will be computed by the :meth:`~.forward`
+      method.
+
+        >>> ppo_loss = KLPENPPOLoss(actor, critic)
+        >>> advantage = GAE(critic)
+        >>> data = next(datacollector)
+        >>> losses = ppo_loss(data)
+        >>> # equivalent
+        >>> advantage(data)
+        >>> losses = ppo_loss(data)
+
+      A custom advantage module can be built using :meth:`~.make_value_estimator`.
+      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+
+        >>> ppo_loss = KLPENPPOLoss(actor, critic)
+        >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
+        >>> data = next(datacollector)
+        >>> losses = ppo_loss(data)
 
     """
 
@@ -307,6 +457,7 @@ class KLPENPPOLoss(PPOLoss):
         self,
         actor: ProbabilisticTensorDictSequential,
         critic: TensorDictModule,
+        *,
         advantage_key="advantage",
         dtarg: float = 0.01,
         beta: float = 1.0,
@@ -317,22 +468,22 @@ class KLPENPPOLoss(PPOLoss):
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
         critic_coef: float = 1.0,
-        gamma: float = 0.99,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = True,
+        gamma: float = None,
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
             actor,
             critic,
-            advantage_key,
+            advantage_key=advantage_key,
             entropy_bonus=entropy_bonus,
             samples_mc_entropy=samples_mc_entropy,
             entropy_coef=entropy_coef,
             critic_coef=critic_coef,
-            gamma=gamma,
             loss_critic_type=loss_critic_type,
             normalize_advantage=normalize_advantage,
+            gamma=gamma,
             **kwargs,
         )
 
@@ -354,7 +505,14 @@ class KLPENPPOLoss(PPOLoss):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
         tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.advantage_key)
+        advantage = tensordict.get(self.advantage_key, None)
+        if advantage is None:
+            self.value_estimator(
+                tensordict,
+                params=self.critic_params.detach(),
+                target_params=self.target_critic_params,
+            )
+            advantage = tensordict.get(self.advantage_key)
         if self.normalize_advantage and advantage.numel() > 1:
             loc = advantage.mean().item()
             scale = advantage.std().clamp_min(1e-6).item()

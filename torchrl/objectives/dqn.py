@@ -2,12 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from typing import Union
 
 import torch
-from tensordict import TensorDict
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
@@ -15,7 +14,14 @@ from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 
 from .common import LossModule
-from .utils import distance_loss, next_state_value
+from .utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    ValueEstimators,
+)
+from .value import TDLambdaEstimator
+from .value.advantages import TD0Estimator, TD1Estimator
 
 
 class DQNLoss(LossModule):
@@ -23,25 +29,26 @@ class DQNLoss(LossModule):
 
     Args:
         value_network (QValueActor or nn.Module): a Q value operator.
-        gamma (scalar): a discount factor for return computation.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
         delay_value (bool, optional): whether to duplicate the value network into a new target value network to
-            create a double DQN. Default is :obj:`False`.
+            create a double DQN. Default is ``False``.
 
     """
+
+    default_value_estimator = ValueEstimators.TDLambda
 
     def __init__(
         self,
         value_network: Union[QValueActor, nn.Module],
-        gamma: float,
+        *,
         loss_function: str = "l2",
         priority_key: str = "td_error",
         delay_value: bool = False,
+        gamma: float = None,
     ) -> None:
 
         super().__init__()
         self.delay_value = delay_value
-
         value_network = ensure_tensordict_compatible(
             module=value_network, wrapper_type=QValueActor
         )
@@ -54,10 +61,49 @@ class DQNLoss(LossModule):
 
         self.value_network_in_keys = value_network.in_keys
 
-        self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_function = loss_function
         self.priority_key = priority_key
         self.action_space = self.value_network.action_space
+
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
+
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+        hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
+        hp.update(hyperparams)
+        if value_type is ValueEstimators.TD1:
+            self._value_estimator = TD1Estimator(
+                **hp,
+                value_network=self.value_network,
+                advantage_key="advantage",
+                value_target_key="value_target",
+                value_key="chosen_action_value",
+            )
+        elif value_type is ValueEstimators.TD0:
+            self._value_estimator = TD0Estimator(
+                **hp,
+                value_network=self.value_network,
+                advantage_key="advantage",
+                value_target_key="value_target",
+                value_key="chosen_action_value",
+            )
+        elif value_type is ValueEstimators.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type is ValueEstimators.TDLambda:
+            self._value_estimator = TDLambdaEstimator(
+                **hp,
+                value_network=self.value_network,
+                advantage_key="advantage",
+                value_target_key="value_target",
+                value_key="chosen_action_value",
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DQN loss given a tensordict sampled from the replay buffer.
@@ -109,14 +155,10 @@ class DQNLoss(LossModule):
             action = action.to(torch.float)
             pred_val_index = (pred_val * action).sum(-1)
 
-        with torch.no_grad():
-            target_value = next_state_value(
-                tensordict,
-                self.value_network,
-                gamma=self.gamma,
-                params=self.target_value_network_params,
-                next_val_key="chosen_action_value",
-            )
+        target_value = self.value_estimator.value_estimate(
+            tensordict.clone(False), target_params=self.target_value_network_params
+        ).squeeze(-1)
+
         priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
         if input_tensordict.device is not None:
@@ -147,7 +189,12 @@ class DistributionalDQNLoss(LossModule):
         value_network (DistributionalQValueActor or nn.Module): the distributional Q
             value operator.
         gamma (scalar): a discount factor for return computation.
-        delay_value (bool): whether to duplicate the value network into a new target value network to create double DQN
+            .. note::
+              Unlike :class:`DQNLoss`, this class does not currently support
+              custom value functions. The next value estimation is always
+              bootstrapped.
+        delay_value (bool): whether to duplicate the value network into a new
+            target value network to create double DQN
     """
 
     def __init__(
@@ -264,6 +311,7 @@ class DistributionalDQNLoss(LossModule):
             reward = reward.to("cpu")
             support = support.to("cpu")
             pns_a = pns_a.to("cpu")
+
             Tz = reward + (1 - done.to(reward.dtype)) * discount * support
             if Tz.shape != torch.Size([batch_size, atoms]):
                 raise RuntimeError(
@@ -310,3 +358,25 @@ class DistributionalDQNLoss(LossModule):
         )
         loss_td = TensorDict({"loss": loss.mean()}, [])
         return loss_td
+
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+        if value_type is ValueEstimators.TD1:
+            raise NotImplementedError(
+                f"value type {value_type} is not implemented for {self.__class__.__name__}."
+            )
+        elif value_type is ValueEstimators.TD0:
+            # see forward call
+            pass
+        elif value_type is ValueEstimators.GAE:
+            raise NotImplementedError(
+                f"value type {value_type} is not implemented for {self.__class__.__name__}."
+            )
+        elif value_type is ValueEstimators.TDLambda:
+            raise NotImplementedError(
+                f"value type {value_type} is not implemented for {self.__class__.__name__}."
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")
+
+    def _default_value_estimator(self):
+        self.make_value_estimator(ValueEstimators.TD0)
