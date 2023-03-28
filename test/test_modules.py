@@ -37,7 +37,7 @@ from torchrl.modules.models.model_based import (
 )
 from torchrl.modules.models.utils import SquashDims
 from torchrl.modules.planners.mppi import MPPIPlanner
-from torchrl.objectives.value import TDLambdaEstimate
+from torchrl.objectives.value import TDLambdaEstimator
 
 
 @pytest.fixture
@@ -477,10 +477,10 @@ class TestPlanner:
         env = MockBatchedUnLockedEnv(device=device)
         value_net = nn.LazyLinear(1, device=device)
         value_net = ValueOperator(value_net, in_keys=["observation"])
-        advantage_module = TDLambdaEstimate(
-            0.99,
-            0.95,
-            value_net,
+        advantage_module = TDLambdaEstimator(
+            gamma=0.99,
+            lmbda=0.95,
+            value_network=value_net,
         )
         value_net(env.reset())
         planner = MPPIPlanner(

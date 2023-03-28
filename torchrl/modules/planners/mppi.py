@@ -46,7 +46,7 @@ class MPPIPlanner(MPCPlannerBase):
         >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
         >>> from torchrl.envs.model_based import ModelBasedEnvBase
         >>> from torchrl.modules import TensorDictModule, ValueOperator
-        >>> from torchrl.objectives.value import TDLambdaEstimate
+        >>> from torchrl.objectives.value import TDLambdaEstimator
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
@@ -87,7 +87,7 @@ class MPPIPlanner(MPCPlannerBase):
         >>> env = MyMBEnv(world_model)
         >>> value_net = nn.Linear(4, 1)
         >>> value_net = ValueOperator(value_net, in_keys=["hidden_observation"])
-        >>> adv = TDLambdaEstimate(
+        >>> adv = TDLambdaEstimator(
         ...     0.99,
         ...     0.95,
         ...     value_net,

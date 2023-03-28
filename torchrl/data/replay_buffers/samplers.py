@@ -76,7 +76,7 @@ class SamplerWithoutReplacement(Sampler):
     """A data-consuming sampler that ensures that the same sample is not present in consecutive batches.
 
     Args:
-        drop_last (bool, optional): if True, the last incomplete sample (if any) will be dropped.
+        drop_last (bool, optional): if ``True``, the last incomplete sample (if any) will be dropped.
             If False, this last sample will be kept and (unlike with torch dataloaders)
             completed with other samples from a fresh indices permutation.
 

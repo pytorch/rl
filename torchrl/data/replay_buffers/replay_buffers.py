@@ -561,7 +561,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             mini-batch of Tensor(s)/outputs.  Used when using batched loading
             from a map-style dataset.
         pin_memory (bool, optional): whether pin_memory() should be called on
-            the rb samples. Default is :obj:`False`.
+            the rb samples. Default is ``False``.
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.

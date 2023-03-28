@@ -116,7 +116,7 @@ class DMControlWrapper(GymLikeEnv):
 
     Args:
         env (dm_control.suite env): environment instance
-        from_pixels (bool): if True, the observation
+        from_pixels (bool): if ``True``, the observation
 
     Examples:
         >>> env = dm_control.suite.load("cheetah", "run")
@@ -272,7 +272,7 @@ class DMControlEnv(DMControlWrapper):
         env_name (str): name of the environment
         task_name (str): name of the task
         seed (int, optional): seed to use for the environment
-        from_pixels (bool, optional): if True, the observation will be returned
+        from_pixels (bool, optional): if ``True``, the observation will be returned
             as an image.
             Default is False.
 

@@ -635,7 +635,7 @@ class SyncDataCollector(DataCollectorBase):
 
         Args:
             seed (int): integer representing the seed to be used for the environment.
-            static_seed(bool, optional): if True, the seed is not incremented.
+            static_seed(bool, optional): if ``True``, the seed is not incremented.
                 Defaults to False
 
         Returns:
@@ -1263,7 +1263,7 @@ also that the state dict is synchronised across processes if needed."""
 
         Args:
             seed: integer representing the seed to be used for the environment.
-            static_seed (bool, optional): if True, the seed is not incremented.
+            static_seed (bool, optional): if ``True``, the seed is not incremented.
                 Defaults to False
 
         Returns:
@@ -1840,7 +1840,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             the output TensorDict will be stored. For long trajectories,
             it may be necessary to store the data on a different.
             device than the one where the policy is stored. Default is None.
-        update_at_each_batch (bool): if True, the policy weights will be updated every time a batch of trajectories
+        update_at_each_batch (bool): if ``True``, the policy weights will be updated every time a batch of trajectories
             is collected.
             default=False
 
