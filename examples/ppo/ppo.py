@@ -164,8 +164,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     critic_model = model.get_value_operator()
     advantage = GAE(
-        cfg.gamma,
-        cfg.lmbda,
+        gamma=cfg.gamma,
+        lmbda=cfg.lmbda,
         value_network=critic_model,
         average_gae=True,
         differentiable=True,
