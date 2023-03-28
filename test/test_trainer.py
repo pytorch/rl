@@ -89,11 +89,10 @@ _mocking_optim = MockingOptim()
 
 def mocking_trainer(file=None, optimizer=_mocking_optim) -> Trainer:
     trainer = Trainer(
-        MockingCollector(),
-        *[
-            None,
-        ]
-        * 2,
+        collector=MockingCollector(),
+        total_frames=None,
+        frame_skip=None,
+        optim_steps_per_batch=None,
         loss_module=MockingLossModule(),
         optimizer=optimizer,
         save_trainer_file=file,
