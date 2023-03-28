@@ -268,7 +268,7 @@ def make_offline_replay_buffer(rb_cfg, state_dict):
     )
     data.append_transform(
         ObservationNorm(
-            in_keys=["observation_vector", ("next", "observation_vector")],
+            in_keys=["observation_vector"],
             loc=state_dict["transforms.2.loc"],
             scale=state_dict["transforms.2.scale"],
             standard_normal=state_dict["transforms.2.standard_normal"],

@@ -75,16 +75,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
 
         if r0 is None:
-            r0 = eval_td["reward"].mean().item()
+            r0 = eval_td["reward"].sum(1).mean().item()
         if l0 is None:
             l0 = loss_val.item()
 
         for key, value in loss_vals.items():
             logger.log_scalar(key, value.item(), i)
-        logger.log_scalar("reward_evaluation", eval_td["reward"].mean().item(), i)
+        logger.log_scalar(
+            "reward_evaluation", eval_td["reward"].sum(1).mean().item(), i
+        )
 
         pbar.set_description(
-            f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {eval_td['reward'].mean(): 4.4f} (init={r0: 4.4f})"
+            f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {eval_td['reward'].sum(1).mean(): 4.4f} (init={r0: 4.4f})"
         )
 
 
