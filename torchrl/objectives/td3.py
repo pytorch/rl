@@ -34,21 +34,29 @@ class TD3Loss(LossModule):
 
     Args:
         actor_network (TensorDictModule): the actor to be trained
-        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
-        num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
-        policy_noise (float, optional): Standard deviation for the target policy action noise. Default is 0.2.
-        noise_clip (float, optional): Clipping range value for the sampled target policy action noise. Default is 0.5.
-        priority_key (str, optional): Key where to write the priority value for prioritized replay buffers. Default is
+        qvalue_network (TensorDictModule): a single Q-value network that will
+            be multiplicated as many times as needed.
+        num_qvalue_nets (int, optional): Number of Q-value networks to be
+            trained. Default is ``10``.
+        policy_noise (float, optional): Standard deviation for the target
+            policy action noise. Default is ``0.2``.
+        noise_clip (float, optional): Clipping range value for the sampled
+            target policy action noise. Default is ``0.5``.
+        priority_key (str, optional): Key where to write the priority value
+            for prioritized replay buffers. Default is
             `"td_error"`.
-        loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
-            "l1", Default is "smooth_l1".
-        delay_actor (bool, optional): whether to separate the target actor networks from the actor networks used for
+        loss_function (str, optional): loss function to be used for the Q-value.
+            Can be one of  ``"smooth_l1"``, ``"l2"``,
+            ``"l1"``, Default is ``"smooth_l1"``.
+        delay_actor (bool, optional): whether to separate the target actor
+            networks from the actor networks used for
             data collection. Default is ``False``.
-        delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
+        delay_qvalue (bool, optional): Whether to separate the target Q value
+            networks from the Q value networks used
             for data collection. Default is ``False``.
     """
 
-    default_value_type = ValueFunctions.TD0
+    default_value_function = ValueFunctions.TD0
 
     def __init__(
         self,

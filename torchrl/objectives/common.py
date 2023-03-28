@@ -54,7 +54,7 @@ class LossModule(nn.Module):
         The value estimator can be changed using the :meth:`~.make_value_function` method.
     """
 
-    default_value_type: ValueFunctions = None
+    default_value_function: ValueFunctions = None
 
     def __init__(self):
         super().__init__()
@@ -383,7 +383,7 @@ class LossModule(nn.Module):
         from :obj:`torchrl.objectives.utils.DEFAULT_VALUE_FUN_PARAMS`.
 
         """
-        self.make_value_function(self.default_value_type)
+        self.make_value_function(self.default_value_function)
 
     def make_value_function(self, value_type: ValueFunctions, **hyperparams):
         """Value-function constructor.
