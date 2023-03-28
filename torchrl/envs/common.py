@@ -14,6 +14,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
+
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
@@ -23,7 +24,6 @@ from torchrl.data.tensor_specs import (
 
 from .._utils import prod, seed_generator
 from ..data.utils import DEVICE_TYPING
-
 from .utils import get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
@@ -127,7 +127,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         - reward_spec (TensorSpec): sampling spec of the rewards;
         - batch_size (torch.Size): number of environments contained in the instance;
         - device (torch.device): device where the env input and output are expected to live
-        - run_type_checks (bool): if True, the observation and reward dtypes
+        - run_type_checks (bool): if ``True``, the observation and reward dtypes
             will be compared against their respective spec and an exception
             will be raised if they don't match.
             Defaults to False.
@@ -480,6 +480,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
+            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
+                raise RuntimeError(
+                    "_reset flag in tensordict should follow env.done_spec"
+                )
         else:
             _reset = None
 
@@ -534,7 +538,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         Args:
             seed (int): seed to be set
-            static_seed (bool, optional): if True, the seed is not incremented.
+            static_seed (bool, optional): if ``True``, the seed is not incremented.
                 Defaults to False
 
         Returns:
@@ -647,11 +651,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 actions will be called using :obj:`env.rand_step()`
                 default = None
             callback (callable, optional): function to be called at each iteration with the given TensorDict.
-            auto_reset (bool, optional): if True, resets automatically the environment
+            auto_reset (bool, optional): if ``True``, resets automatically the environment
                 if it is in a done state when the rollout is initiated.
                 Default is :obj:`True`.
-            auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
-                policy device before the policy is used. Default is :obj:`False`.
+            auto_cast_to_device (bool, optional): if ``True``, the device of the tensordict is automatically cast to the
+                policy device before the policy is used. Default is ``False``.
             break_when_any_done (bool): breaks if any of the done state is True. If False, a reset() is
                 called on the sub-envs that are done. Default is True.
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
@@ -708,7 +712,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 exclude_action=False,
             )
             if not break_when_any_done and done.any():
-                _reset = done.view(tensordict.shape)
+                _reset = done.clone()
                 tensordict.set("_reset", _reset)
                 self.reset(tensordict)
 

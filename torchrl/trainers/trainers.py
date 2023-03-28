@@ -15,17 +15,17 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, U
 
 import numpy as np
 import torch.nn
+from tensordict.nn import TensorDictModule
 from tensordict.tensordict import pad, TensorDictBase
 from tensordict.utils import expand_right
 from torch import nn, optim
 
 from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict, VERBOSE
-from torchrl.collectors.collectors import _DataCollector
+from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import SafeModule
 from torchrl.objectives.common import LossModule
 from torchrl.record.loggers import Logger
 
@@ -131,7 +131,7 @@ class Trainer:
     def __init__(
         self,
         *,
-        collector: _DataCollector,
+        collector: DataCollectorBase,
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
@@ -286,11 +286,11 @@ class Trainer:
         np.random.seed(seed)
 
     @property
-    def collector(self) -> _DataCollector:
+    def collector(self) -> DataCollectorBase:
         return self._collector
 
     @collector.setter
-    def collector(self, collector: _DataCollector) -> None:
+    def collector(self, collector: DataCollectorBase) -> None:
         self._collector = collector
 
     def register_op(self, dest: str, op: Callable, **kwargs) -> None:
@@ -603,11 +603,11 @@ class ReplayBufferTrainer(TrainerHookBase):
         replay_buffer (TensorDictReplayBuffer): replay buffer to be used.
         batch_size (int): batch size when sampling data from the
             latest collection or from the replay buffer.
-        memmap (bool, optional): if True, a memmap tensordict is created.
+        memmap (bool, optional): if ``True``, a memmap tensordict is created.
             Default is False.
         device (device, optional): device where the samples must be placed.
             Default is cpu.
-        flatten_tensordicts (bool, optional): if True, the tensordicts will be
+        flatten_tensordicts (bool, optional): if ``True``, the tensordicts will be
             flattened (or equivalently masked with the valid mask obtained from
             the collector) before being passed to the replay buffer. Otherwise,
             no transform will be achieved other than padding (see :obj:`max_dims` arg below).
@@ -793,8 +793,8 @@ class LogReward(TrainerHookBase):
 
     Args:
         logname (str, optional): name of the rewards to be logged. Default is :obj:`"r_training"`.
-        log_pbar (bool, optional): if True, the reward value will be logged on
-            the progression bar. Default is :obj:`False`.
+        log_pbar (bool, optional): if ``True``, the reward value will be logged on
+            the progression bar. Default is ``False``.
         reward_key (str or tuple, optional): the key where to find the reward
             in the input batch. Defaults to ``("next", "reward")``
 
@@ -1126,7 +1126,7 @@ class Recorder(TrainerHookBase):
         out_key (str, optional): reward key to set to the logger. Default is
             `"reward_evaluation"`.
         suffix (str, optional): suffix of the video to be recorded.
-        log_pbar (bool, optional): if True, the reward value will be logged on
+        log_pbar (bool, optional): if ``True``, the reward value will be logged on
             the progression bar. Default is `False`.
 
     """
@@ -1136,7 +1136,7 @@ class Recorder(TrainerHookBase):
         record_interval: int,
         record_frames: int,
         frame_skip: int,
-        policy_exploration: SafeModule,
+        policy_exploration: TensorDictModule,
         recorder: EnvBase,
         exploration_mode: str = "random",
         log_keys: Optional[List[str]] = None,
@@ -1224,7 +1224,7 @@ class UpdateWeights(TrainerHookBase):
     intervals. If the devices match, this will result in a no-op.
 
     Args:
-        collector (_DataCollector): A data collector where the policy weights
+        collector (DataCollectorBase): A data collector where the policy weights
             must be synced.
         update_weights_interval (int): Interval (in terms of number of batches
             collected) where the sync must take place.
@@ -1235,7 +1235,7 @@ class UpdateWeights(TrainerHookBase):
 
     """
 
-    def __init__(self, collector: _DataCollector, update_weights_interval: int):
+    def __init__(self, collector: DataCollectorBase, update_weights_interval: int):
         self.collector = collector
         self.update_weights_interval = update_weights_interval
         self.counter = 0
@@ -1266,7 +1266,7 @@ class CountFramesLog(TrainerHookBase):
         frame_skip (int): frame skip of the environment. This argument is
             important to keep track of the total number of frames, not the
             apparent one.
-        log_pbar (bool, optional): if True, the reward value will be logged on
+        log_pbar (bool, optional): if ``True``, the reward value will be logged on
             the progression bar. Default is `False`.
 
     Examples:

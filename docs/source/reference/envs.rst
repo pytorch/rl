@@ -406,5 +406,6 @@ Libraries
     habitat.HabitatEnv
     jumanji.JumanjiEnv
     jumanji.JumanjiWrapper
+    openml.OpenMLEnv
     vmas.VmasEnv
     vmas.VmasWrapper

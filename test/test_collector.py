@@ -42,6 +42,7 @@ from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, Saf
 _os_is_windows = sys.platform == "win32"
 _python_is_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 _python_is_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
+_os_is_osx = sys.platform == "darwin"
 
 
 class WrappablePolicy(nn.Module):
@@ -315,8 +316,8 @@ def test_collector_env_reset():
     )
     for _data in collector:
         continue
-    steps = _data["next", "step_count"][..., 1:]
-    done = _data["next", "done"][..., :-1, :].squeeze(-1)
+    steps = _data["next", "step_count"][..., 1:, :]
+    done = _data["next", "done"][..., :-1, :]
     # we don't want just one done
     assert done.sum() > 3
     # check that after a done, the next step count is always 1
@@ -424,7 +425,7 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 
     assert d.ndimension() == 2
     assert d["collector", "mask"].shape == d.shape
-    assert d["next", "step_count"].shape == d.shape
+    assert d["next", "step_count"].shape == d["next", "done"].shape
     assert d["collector", "traj_ids"].shape == d.shape
     for traj in d.unbind(0):
         assert traj["collector", "traj_ids"].unique().numel() == 1
@@ -1170,10 +1171,7 @@ class TestAutoWrap:
 
         with pytest.raises(
             TypeError,
-            match=(
-                "Arguments to policy.forward are incompatible with entries in "
-                "env.observation_spec."
-            ),
+            match=(r"Arguments to policy.forward are incompatible with entries in"),
         ):
             collector_class(
                 **self._create_collector_kwargs(env_maker, collector_class, policy)
@@ -1233,6 +1231,7 @@ def weight_reset(m):
         m.reset_parameters()
 
 
+@pytest.mark.skipif(_os_is_osx, reason="Queue.qsize does not work on osx.")
 class TestPreemptiveThreshold:
     @pytest.mark.parametrize("env_name", ["conv", "vec"])
     def test_sync_collector_interruptor_mechanism(self, env_name, seed=100):

@@ -7,12 +7,15 @@ import abc
 import inspect
 import os
 import queue
+import sys
 import time
 import warnings
 from collections import OrderedDict
 from copy import deepcopy
+
 from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
+
 from textwrap import indent
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
@@ -43,6 +46,8 @@ _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time s
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
 
 DEFAULT_EXPLORATION_MODE: str = "random"
+
+_is_osx = sys.platform.startswith("darwin")
 
 
 class RandomPolicy:
@@ -81,6 +86,8 @@ class _Interruptor:
     by a lock to ensure thread-safety.
     """
 
+    # interrupter vs interruptor: google trends seems to indicate that "or" is more
+    # widely used than "er" even if my IDE complains about that...
     def __init__(self):
         self._collect = True
         self._lock = mp.Lock()
@@ -155,7 +162,9 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
     )
 
 
-class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
+class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
+    """Base class for data collectors."""
+
     _iterator = None
 
     def _get_policy_and_device(
@@ -216,11 +225,23 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                         "rather than a TensorDictModule or a nn.Module that accepts a "
                         "TensorDict as input and defines in_keys and out_keys."
                     )
-                sig = inspect.signature(policy.forward)
+
+                try:
+                    # signature modified by make_functional
+                    sig = policy.forward.__signature__
+                except AttributeError:
+                    sig = inspect.signature(policy.forward)
+                required_params = {
+                    str(k)
+                    for k, p in sig.parameters.items()
+                    if p.default is inspect._empty
+                }
                 next_observation = {
                     key: value for key, value in observation_spec.rand().items()
                 }
-                if set(sig.parameters) == set(next_observation):
+                # we check if all the mandatory params are there
+                if not required_params.difference(set(next_observation)):
+                    in_keys = [str(k) for k in sig.parameters if k in next_observation]
                     out_keys = ["action"]
                     output = policy(**next_observation)
 
@@ -228,17 +249,17 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                         out_keys.extend(f"output{i+1}" for i in range(len(output) - 1))
 
                     policy = TensorDictModule(
-                        policy, in_keys=list(sig.parameters), out_keys=out_keys
+                        policy, in_keys=in_keys, out_keys=out_keys
                     )
                 else:
                     raise TypeError(
-                        "Arguments to policy.forward are incompatible with entries in "
-                        "env.observation_spec. If you want TorchRL to automatically "
-                        "wrap your policy with a TensorDictModule then the arguments "
-                        "to policy.forward must correspond one-to-one with entries in "
-                        "env.observation_spec that are prefixed with 'next_'. For more "
-                        "complex behaviour and more control you can consider writing "
-                        "your own TensorDictModule."
+                        f"""Arguments to policy.forward are incompatible with entries in
+env.observation_spec (got incongruent signatures: fun signature is {set(sig.parameters)} vs specs {set(next_observation)}).
+If you want TorchRL to automatically wrap your policy with a TensorDictModule
+then the arguments to policy.forward must correspond one-to-one with entries
+in env.observation_spec that are prefixed with 'next_'. For more complex
+behaviour and more control you can consider writing your own TensorDictModule.
+"""
                     )
 
         try:
@@ -314,7 +335,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
 
 
 @accept_remote_rref_udf_invocation
-class SyncDataCollector(_DataCollector):
+class SyncDataCollector(DataCollectorBase):
     """Generic data collector for RL problems. Requires and environment constructor and a policy.
 
     Args:
@@ -381,7 +402,7 @@ class SyncDataCollector(_DataCollector):
             tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
             Default is False.
-        interruptor : (_Interruptor, optional)
+        interruptor (_Interruptor, optional):
             An _Interruptor object that can be used from outside the class to control rollout collection.
             The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
             strategies such as preeptively stopping rollout collection.
@@ -529,6 +550,12 @@ class SyncDataCollector(_DataCollector):
         self.postproc = postproc
         if self.postproc is not None:
             self.postproc.to(self.storing_device)
+        if frames_per_batch % self.n_env != 0:
+            warnings.warn(
+                f"frames_per_batch {frames_per_batch} is not exactly divisible by the number of batched environments {self.n_env}, "
+                f" this results in more frames_per_batch per iteration that requested"
+            )
+        self.requested_frames_per_batch = frames_per_batch
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.exploration_mode = (
             exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
@@ -536,8 +563,7 @@ class SyncDataCollector(_DataCollector):
         self.return_same_td = return_same_td
 
         self._tensordict = env.reset()
-        n = self.env.batch_size.numel() if len(self.env.batch_size) else 1
-        traj_ids = torch.arange(n, device=env.device).view(self.env.batch_size)
+        traj_ids = torch.arange(self.n_env, device=env.device).view(self.env.batch_size)
         self._tensordict.set(
             ("collector", "traj_ids"),
             traj_ids,
@@ -609,7 +635,7 @@ class SyncDataCollector(_DataCollector):
 
         Args:
             seed (int): integer representing the seed to be used for the environment.
-            static_seed(bool, optional): if True, the seed is not incremented.
+            static_seed(bool, optional): if ``True``, the seed is not incremented.
                 Defaults to False
 
         Returns:
@@ -682,7 +708,7 @@ class SyncDataCollector(_DataCollector):
 
         if not self.reset_when_done:
             done = torch.zeros_like(done)
-        done_or_terminated = done.squeeze(-1) | truncated.squeeze(-1)
+        done_or_terminated = done | truncated
         # keep track of envs that have been done at least once
         if self._has_been_done is None:
             self._has_been_done = done_or_terminated
@@ -692,7 +718,6 @@ class SyncDataCollector(_DataCollector):
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
             if len(self.env.batch_size):
-                self._tensordict.masked_fill_(done_or_terminated, 0)
                 _reset = done_or_terminated
                 td_reset = self._tensordict.select().set("_reset", _reset)
             else:
@@ -707,8 +732,12 @@ class SyncDataCollector(_DataCollector):
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
                 )
-            traj_ids[done_or_terminated] = traj_ids.max() + torch.arange(
-                1, done_or_terminated.sum() + 1, device=traj_ids.device
+            traj_done_or_terminated = done_or_terminated.sum(
+                tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
+                dtype=torch.bool,
+            )
+            traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
+                1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )
             self._tensordict.set_(
                 ("collector", "traj_ids"), traj_ids
@@ -767,7 +796,7 @@ class SyncDataCollector(_DataCollector):
             if prod(self.env.batch_size) == 0:
                 raise RuntimeError("resetting unique env with index is not permitted.")
             _reset = torch.zeros(
-                self.env.batch_size,
+                self.env.done_spec.shape,
                 dtype=torch.bool,
                 device=self.env.device,
             )
@@ -856,7 +885,7 @@ class SyncDataCollector(_DataCollector):
         return string
 
 
-class _MultiDataCollector(_DataCollector):
+class _MultiDataCollector(DataCollectorBase):
     """Runs a given number of DataCollectors on separate processes.
 
     Args:
@@ -1091,7 +1120,7 @@ class _MultiDataCollector(_DataCollector):
         self.reset_at_each_iter = reset_at_each_iter
         self.postprocs = postproc
         self.max_frames_per_traj = max_frames_per_traj
-        self.frames_per_batch = frames_per_batch
+        self.requested_frames_per_batch = frames_per_batch
         self.reset_when_done = reset_when_done
         if split_trajs is None:
             split_trajs = False
@@ -1105,6 +1134,10 @@ class _MultiDataCollector(_DataCollector):
         self.exploration_mode = exploration_mode
         self.frames_per_worker = np.inf
         if preemptive_threshold is not None:
+            if _is_osx:
+                raise NotImplementedError(
+                    "Cannot use preemption on OSX due to Queue.qsize() not being implemented on this platform."
+                )
             self.preemptive_threshold = np.clip(preemptive_threshold, 0.0, 1.0)
             manager = _InterruptorManager()
             manager.start()
@@ -1221,7 +1254,6 @@ also that the state dict is synchronised across processes if needed."""
 
         for proc in self.procs:
             proc.join(10.0)
-
         self.queue_out.close()
         for pipe in self.pipes:
             pipe.close()
@@ -1231,7 +1263,7 @@ also that the state dict is synchronised across processes if needed."""
 
         Args:
             seed: integer representing the seed to be used for the environment.
-            static_seed (bool, optional): if True, the seed is not incremented.
+            static_seed (bool, optional): if ``True``, the seed is not incremented.
                 Defaults to False
 
         Returns:
@@ -1437,7 +1469,15 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     @property
     def frames_per_batch_worker(self):
-        return -(-self.frames_per_batch // self.num_workers)
+        if self.requested_frames_per_batch % self.num_workers != 0:
+            warnings.warn(
+                f"frames_per_batch {self.requested_frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers},"
+                f" this results in more frames_per_batch per iteration that requested"
+            )
+        frames_per_batch_worker = -(
+            -self.requested_frames_per_batch // self.num_workers
+        )
+        return frames_per_batch_worker
 
     @property
     def _queue_len(self) -> int:
@@ -1466,7 +1506,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             i += 1
             max_traj_idx = None
 
-            if self.interruptor is not None:
+            if self.interruptor is not None and self.preemptive_threshold < 1.0:
                 self.interruptor.start_collection()
                 while self.queue_out.qsize() < int(
                     self.num_workers * self.preemptive_threshold
@@ -1668,7 +1708,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     @property
     def frames_per_batch_worker(self):
-        return self.frames_per_batch
+        return self.requested_frames_per_batch
 
     def _get_from_queue(self, timeout=None) -> Tuple[int, int, TensorDictBase]:
         new_data, j = self.queue_out.get(timeout=timeout)
@@ -1800,7 +1840,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             the output TensorDict will be stored. For long trajectories,
             it may be necessary to store the data on a different.
             device than the one where the policy is stored. Default is None.
-        update_at_each_batch (bool): if True, the policy weights will be updated every time a batch of trajectories
+        update_at_each_batch (bool): if ``True``, the policy weights will be updated every time a batch of trajectories
             is collected.
             default=False
 
@@ -1885,7 +1925,7 @@ def _main_async_collector(
     interruptor=None,
 ) -> None:
     pipe_parent.close()
-    #  init variables that will be cleared when closing
+    # init variables that will be cleared when closing
     tensordict = data = d = data_in = dc = dc_iter = None
 
     dc = SyncDataCollector(

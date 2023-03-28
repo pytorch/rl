@@ -17,6 +17,7 @@ from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right
 from torch import nn, Tensor
+
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -395,7 +396,7 @@ class TransformedEnv(EnvBase):
         transform (Transform, optional): transform to apply to the tensordict resulting
             from :obj:`env.step(td)`. If none is provided, an empty Compose
             placeholder in an eval mode is used.
-        cache_specs (bool, optional): if True, the specs will be cached once
+        cache_specs (bool, optional): if ``True``, the specs will be cached once
             and for all after the first call (i.e. the specs will be
             transformed_in only once). If the transform changes during
             training, the original spec transform may not be valid anymore,
@@ -879,7 +880,7 @@ class ToTensorImage(ObservationTransform):
     with values between 0 and 1.
 
     Args:
-        unsqueeze (bool): if True, the observation tensor is unsqueezed
+        unsqueeze (bool): if ``True``, the observation tensor is unsqueezed
             along the first dimension. default=False.
         dtype (torch.dtype, optional): dtype to use for the resulting
             observations.
@@ -1153,7 +1154,7 @@ class FlattenObservation(ObservationTransform):
             :obj:`["pixels"]` is assumed.
         out_keys (sequence of str, optional): the flatten observation keys. If none is
             provided, :obj:`in_keys` is assumed.
-        allow_positive_dim (bool, optional): if True, positive dimensions are accepted.
+        allow_positive_dim (bool, optional): if ``True``, positive dimensions are accepted.
             :obj:`FlattenObservation` will map these to the n^th feature dimension
             (ie n^th dimension after batch size of parent env) of the input tensor.
             Defaults to False, ie. non-negative dimensions are not permitted.
@@ -1228,7 +1229,7 @@ class UnsqueezeTransform(Transform):
     Args:
         unsqueeze_dim (int): dimension to unsqueeze. Must be negative (or allow_positive_dim
             must be turned on).
-        allow_positive_dim (bool, optional): if True, positive dimensions are accepted.
+        allow_positive_dim (bool, optional): if ``True``, positive dimensions are accepted.
             :obj:`UnsqueezeTransform` will map these to the n^th feature dimension
             (ie n^th dimension after batch size of parent env) of the input tensor,
             independently from the tensordict batch size (ie positive dims may be
@@ -1413,7 +1414,7 @@ class ObservationNorm(ObservationTransform):
             only the forward transform will be called.
         out_keys_inv (list of int, optional): output entries for the inverse transform.
             Defaults to the value of `in_keys_inv`.
-        standard_normal (bool, optional): if True, the transform will be
+        standard_normal (bool, optional): if ``True``, the transform will be
 
             .. math::
                 obs = (obs-loc)/scale
@@ -1718,18 +1719,19 @@ class CatFrames(ObservationTransform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
-        _reset = tensordict.get(
-            "_reset",
-            None,
-        )
+        _reset = tensordict.get("_reset", None)
         if _reset is None:
             _reset = torch.ones(
-                tensordict.batch_size,
+                self.parent.done_spec.shape if self.parent else tensordict.batch_size,
                 dtype=torch.bool,
                 device=tensordict.device
                 if tensordict.device is not None
                 else torch.device("cpu"),
             )
+        _reset = _reset.sum(
+            tuple(range(tensordict.batch_dims, _reset.ndim)), dtype=torch.bool
+        )
+
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
             buffer = getattr(self, buffer_name)
@@ -1753,6 +1755,10 @@ class CatFrames(ObservationTransform):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
         _reset = tensordict.get("_reset", None)
+        if _reset is not None:
+            _reset = _reset.sum(
+                tuple(range(tensordict.batch_dims, _reset.ndim)), dtype=torch.bool
+            )
 
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             # Lazy init of buffers
@@ -1825,7 +1831,7 @@ class RewardScaling(Transform):
     Args:
         loc (number or torch.Tensor): location of the affine transform
         scale (number or torch.Tensor): scale of the affine transform
-        standard_normal (bool, optional): if True, the transform will be
+        standard_normal (bool, optional): if ``True``, the transform will be
 
             .. math::
                 reward = (reward-loc)/scale
@@ -1987,9 +1993,9 @@ class CatTensors(Transform):
         out_key: key of the resulting tensor.
         dim (int, optional): dimension along which the concatenation will occur.
             Default is -1.
-        del_keys (bool, optional): if True, the input values will be deleted after
+        del_keys (bool, optional): if ``True``, the input values will be deleted after
             concatenation. Default is True.
-        unsqueeze_if_oor (bool, optional): if True, CatTensor will check that
+        unsqueeze_if_oor (bool, optional): if ``True``, CatTensor will check that
             the dimension indicated exist for the tensors to concatenate. If not,
             the tensors will be unsqueezed along that dimension.
             Default is False.
@@ -2162,7 +2168,7 @@ class DiscreteActionProjection(Transform):
         num_actions_effective (int): max number of action considered.
         max_actions (int): maximum number of actions that this module can read.
         action_key (str, optional): key name of the action. Defaults to "action".
-        include_forward (bool, optional): if True, a call to forward will also
+        include_forward (bool, optional): if ``True``, a call to forward will also
             map the action from one domain to the other when the module is called
             by a replay buffer or an nn.Module chain. Defaults to True.
 
@@ -2377,7 +2383,7 @@ class TensorDictPrimer(Transform):
     Args:
         primers (dict, optional): a dictionary containing key-spec pairs which will
             be used to populate the input tensordict.
-        random (bool, optional): if True, the values will be drawn randomly from
+        random (bool, optional): if ``True``, the values will be drawn randomly from
             the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
         default_value (float, optional): if non-random filling is chosen, this
@@ -2765,7 +2771,7 @@ class VecNorm(Transform):
                 tensordict
             keys (iterable of str, optional): keys that
                 have to be normalized. Default is `["next", "reward"]`
-            memmap (bool): if True, the resulting tensordict will be cast into
+            memmap (bool): if ``True``, the resulting tensordict will be cast into
                 memmory map (using `memmap_()`). Otherwise, the tensordict
                 will be placed in shared memory.
 
@@ -2879,7 +2885,7 @@ class RewardSum(Transform):
         _reset = tensordict.get(
             "_reset",
             torch.ones(
-                tensordict.batch_size,
+                self.parent.done_spec.shape if self.parent else tensordict.batch_size,
                 dtype=torch.bool,
                 device=tensordict.device,
             ),
@@ -3005,25 +3011,24 @@ class StepCounter(Transform):
         _reset = tensordict.get(
             "_reset",
             # TODO: decide if using done here, or using a default `True` tensor
-            default=torch.ones_like(done.squeeze(-1)),
+            default=None,
         )
+        if _reset is None:
+            _reset = torch.ones_like(done)
         step_count = tensordict.get(
             "step_count",
-            None,
+            default=None,
         )
         if step_count is None:
-            step_count = torch.zeros(
-                tensordict.batch_size,
-                dtype=torch.int64,
-                device=tensordict.device,
-            )
+            step_count = torch.zeros_like(done, dtype=torch.int64)
+
         step_count[_reset] = 0
         tensordict.set(
             "step_count",
             step_count,
         )
         if self.max_steps is not None:
-            truncated = (step_count >= self.max_steps).unsqueeze(-1)
+            truncated = step_count >= self.max_steps
             tensordict.set(self.truncated_key, truncated)
         return tensordict
 
@@ -3035,7 +3040,7 @@ class StepCounter(Transform):
         next_step_count = step_count + 1
         tensordict.set(("next", "step_count"), next_step_count)
         if self.max_steps is not None:
-            truncated = (next_step_count >= self.max_steps).unsqueeze(-1)
+            truncated = next_step_count >= self.max_steps
             tensordict.set(("next", self.truncated_key), truncated)
         return tensordict
 
@@ -3047,7 +3052,9 @@ class StepCounter(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
         observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=observation_spec.shape,
+            shape=self.parent.done_spec.shape
+            if self.parent
+            else observation_spec.shape,
             dtype=torch.int64,
             device=observation_spec.device,
         )
@@ -3064,7 +3071,7 @@ class StepCounter(Transform):
                 f"input_spec was expected to be of type CompositeSpec. Got {type(input_spec)} instead."
             )
         input_spec["step_count"] = UnboundedDiscreteTensorSpec(
-            shape=input_spec.shape,
+            shape=self.parent.done_spec.shape if self.parent else input_spec.shape,
             dtype=torch.int64,
             device=input_spec.device,
         )
@@ -3229,7 +3236,9 @@ class TimeMaxPool(Transform):
             _reset = tensordict.get(
                 "_reset",
                 torch.ones(
-                    tensordict.batch_size,
+                    self.parent.done_spec.shape
+                    if self.parent
+                    else tensordict.batch_size,
                     dtype=torch.bool,
                     device=tensordict.device,
                 ),
@@ -3239,6 +3248,9 @@ class TimeMaxPool(Transform):
                 buffer = getattr(self, buffer_name)
                 if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
                     continue
+                _reset = _reset.sum(
+                    tuple(range(tensordict.batch_dims, _reset.ndim)), dtype=torch.bool
+                )
                 buffer[:, _reset] = 0.0
 
         return tensordict
@@ -3411,7 +3423,9 @@ class InitTracker(Transform):
                 device = torch.device("cpu")
             tensordict.set(
                 self.out_keys[0],
-                torch.zeros(tensordict.shape, device=device, dtype=torch.bool),
+                torch.zeros(
+                    self.parent.done_spec.shape, device=device, dtype=torch.bool
+                ),
             )
         return tensordict
 
@@ -3421,7 +3435,11 @@ class InitTracker(Transform):
             device = torch.device("cpu")
         _reset = tensordict.get("_reset", None)
         if _reset is None:
-            _reset = torch.ones(tensordict.shape, device=device, dtype=torch.bool)
+            _reset = torch.ones(
+                self.parent.done_spec.shape,
+                device=device,
+                dtype=torch.bool,
+            )
         tensordict.set(self.out_keys[0], _reset.clone())
         return tensordict
 
@@ -3430,7 +3448,7 @@ class InitTracker(Transform):
             2,
             dtype=torch.bool,
             device=self.parent.device,
-            shape=self.parent.batch_size,
+            shape=self.parent.done_spec.shape,
         )
         return observation_spec
 

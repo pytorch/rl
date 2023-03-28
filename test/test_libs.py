@@ -24,18 +24,46 @@ from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
-from torchrl.data.datasets.d4rl import _has_d4rl, D4RL_ERR, D4RLExperienceReplay
+from torchrl.data.datasets.d4rl import D4RLExperienceReplay
+from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
-from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs import (
+    Compose,
+    DoubleToFloat,
+    EnvCreator,
+    ParallelEnv,
+    RenameTransform,
+)
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
+from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
+
+
+D4RL_ERR = None
+try:
+    import d4rl  # noqa
+
+    _has_d4rl = True
+except Exception as err:
+    # many things can wrong when importing d4rl :(
+    _has_d4rl = False
+    D4RL_ERR = err
+
+SKLEARN_ERR = None
+try:
+    import sklearn  # noqa
+
+    _has_sklearn = True
+except ModuleNotFoundError as err:
+    _has_sklearn = False
+    SKLEARN_ERR = err
 
 if _has_gym:
     try:
@@ -387,8 +415,8 @@ class TestHabitat:
 @pytest.mark.parametrize(
     "envname",
     [
-        "TSP50-v0",
-        "Snake-6x6-v0",
+        "TSP-v1",
+        "Snake-v1",
     ],
 )
 class TestJumanji:
@@ -1069,9 +1097,9 @@ class TestVmas:
 
         assert tensordict["next", "done"].squeeze(-1)[..., -1].all()
 
-        _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+        _reset = env.done_spec.rand()
         while not _reset.any():
-            _reset = torch.randint(low=0, high=2, size=env.batch_size, dtype=torch.bool)
+            _reset = env.done_spec.rand()
 
         tensordict = env.reset(
             TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
@@ -1108,6 +1136,39 @@ class TestVmas:
 
 @pytest.mark.skipif(not _has_d4rl, reason=f"D4RL not found: {D4RL_ERR}")
 class TestD4RL:
+    @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
+    def test_terminate_on_end(self, task):
+        t0 = time.time()
+        data_true = D4RLExperienceReplay(
+            task,
+            split_trajs=True,
+            from_env=False,
+            terminate_on_end=True,
+            batch_size=2,
+            use_timeout_as_done=False,
+        )
+        _ = D4RLExperienceReplay(
+            task,
+            split_trajs=True,
+            from_env=False,
+            terminate_on_end=False,
+            batch_size=2,
+            use_timeout_as_done=False,
+        )
+        data_from_env = D4RLExperienceReplay(
+            task,
+            split_trajs=True,
+            from_env=True,
+            batch_size=2,
+            use_timeout_as_done=False,
+        )
+        keys = set(data_from_env._storage._storage.keys(True, True))
+        keys = keys.intersection(data_true._storage._storage.keys(True, True))
+        assert_allclose_td(
+            data_true._storage._storage.select(*keys),
+            data_from_env._storage._storage.select(*keys),
+        )
+
     @pytest.mark.parametrize(
         "task",
         [
@@ -1116,8 +1177,8 @@ class TestD4RL:
             # "maze2d-open-v0",
             # "maze2d-open-dense-v0",
             # "relocate-human-v1",
-            # "walker2d-medium-replay-v2",
-            "ant-medium-v2",
+            "walker2d-medium-replay-v2",
+            # "ant-medium-v2",
             # # "flow-merge-random-v0",
             # "kitchen-partial-v0",
             # # "carla-town-v0",
@@ -1128,7 +1189,7 @@ class TestD4RL:
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
         print(f"completed test after {time.time()-t0}s")
 
-    @pytest.mark.parametrize("task", ["ant-medium-v2"])
+    @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
     @pytest.mark.parametrize("from_env", [True, False])
     def test_dataset_build(self, task, split_trajs, from_env):
@@ -1146,35 +1207,7 @@ class TestD4RL:
             assert sim.shape[-1] == offline.shape[-1], key
         print(f"completed test after {time.time()-t0}s")
 
-    @pytest.mark.parametrize("task", ["ant-medium-v2"])
-    def test_terminate_on_end(self, task):
-        t0 = time.time()
-        data_true = D4RLExperienceReplay(
-            task,
-            split_trajs=True,
-            from_env=False,
-            terminate_on_end=True,
-            batch_size=2,
-        )
-        _ = D4RLExperienceReplay(
-            task,
-            split_trajs=True,
-            from_env=False,
-            terminate_on_end=False,
-            batch_size=2,
-        )
-        data_from_env = D4RLExperienceReplay(
-            task, split_trajs=True, from_env=True, batch_size=2
-        )
-        keys = set(data_from_env._storage._storage.keys(True, True))
-        keys = keys.intersection(data_true._storage._storage.keys(True, True))
-        assert_allclose_td(
-            data_true._storage._storage.select(*keys),
-            data_from_env._storage._storage.select(*keys),
-        )
-        print(f"completed test after {time.time()-t0}s")
-
-    @pytest.mark.parametrize("task", ["ant-medium-v2"])
+    @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
     def test_d4rl_iteration(self, task, split_trajs):
         t0 = time.time()
@@ -1192,6 +1225,45 @@ class TestD4RL:
             i += 1
         assert len(data) // i == batch_size
         print(f"completed test after {time.time()-t0}s")
+
+
+@pytest.mark.skipif(not _has_sklearn, reason=f"Scikit-learn not found: {SKLEARN_ERR}")
+@pytest.mark.parametrize(
+    "dataset",
+    [
+        "adult_num",
+        "adult_onehot",
+        "mushroom_num",
+        "mushroom_onehot",
+        "covertype",
+        "shuttle",
+        "magic",
+    ],
+)
+class TestOpenML:
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 3)])
+    def test_env(self, dataset, batch_size):
+        env = OpenMLEnv(dataset, batch_size=batch_size)
+        td = env.reset()
+        assert td.shape == torch.Size(batch_size)
+        td = env.rand_step(td)
+        assert td.shape == torch.Size(batch_size)
+        assert "index" not in td.keys()
+        check_env_specs(env)
+
+    def test_data(self, dataset):
+        data = OpenMLExperienceReplay(
+            dataset,
+            batch_size=2048,
+            transform=Compose(
+                RenameTransform(["X"], ["observation"]),
+                DoubleToFloat(["observation"]),
+            ),
+        )
+        # check that dataset eventually runs out
+        for i, _ in enumerate(data):  # noqa: B007
+            continue
+        assert len(data) // 2048 in (i, i - 1)
 
 
 if __name__ == "__main__":

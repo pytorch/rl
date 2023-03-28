@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import logging
-
 import os
 from collections import OrderedDict
 from copy import deepcopy
@@ -17,10 +16,10 @@ from warnings import warn
 
 import numpy as np
 import torch
-
 from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
+
 from torchrl._utils import _check_for_faulty_process, VERBOSE
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -108,7 +107,7 @@ class _BatchedEnv(EnvBase):
             needed, which comes with a slight compute overhead;
         create_env_kwargs (dict or list of dicts, optional): kwargs to be used with the environments being created;
         pin_memory (bool): if True and device is "cpu", calls :obj:`pin_memory` on the tensordicts when created.
-        share_individual_td (bool, optional): if True, a different tensordict is created for every process/worker and a lazy
+        share_individual_td (bool, optional): if ``True``, a different tensordict is created for every process/worker and a lazy
             stack is returned.
             default = None (False if single task);
         shared_memory (bool): whether or not the returned tensordict will be placed in shared memory;
@@ -120,9 +119,9 @@ class _BatchedEnv(EnvBase):
             It is assumed that all environments will run on the same device as a common shared
             tensordict will be used to pass data from process to process. The device can be
             changed after instantiation using :obj:`env.to(device)`.
-        allow_step_when_done (bool, optional): if True, batched environments can
+        allow_step_when_done (bool, optional): if ``True``, batched environments can
             execute steps after a done state is encountered.
-            Defaults to :obj:`False`.
+            Defaults to ``False``.
 
     """
 
@@ -568,12 +567,15 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
+            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
+                raise RuntimeError(
+                    "_reset flag in tensordict should follow env.done_spec"
+                )
         else:
-            _reset = torch.ones(self.batch_size, dtype=torch.bool)
+            _reset = torch.ones(self.done_spec.shape, dtype=torch.bool)
 
         for i, _env in enumerate(self._envs):
             if tensordict is not None:
@@ -656,7 +658,6 @@ class ParallelEnv(_BatchedEnv):
     __doc__ += _BatchedEnv.__doc__
 
     def _start_workers(self) -> None:
-
         _num_workers = self.num_workers
         ctx = mp.get_context("spawn")
 
@@ -794,8 +795,14 @@ class ParallelEnv(_BatchedEnv):
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
+            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
+                raise RuntimeError(
+                    "_reset flag in tensordict should follow env.done_spec"
+                )
         else:
-            _reset = torch.ones(self.batch_size, dtype=torch.bool, device=self.device)
+            _reset = torch.ones(
+                self.done_spec.shape, dtype=torch.bool, device=self.device
+            )
 
         for i, channel in enumerate(self.parent_channels):
             if tensordict is not None:
@@ -1253,7 +1260,6 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         create_env_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
-
         self.env_name = env_name.replace("ALE/", "")  # Naming convention of EnvPool
         self.num_workers = num_workers
         self.batch_size = torch.Size([num_workers])

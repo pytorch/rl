@@ -4,15 +4,64 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
+from enum import Enum
 from typing import Iterable, Optional, Union
 
 import torch
+from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import SafeModule
+
+_GAMMA_LMBDA_DEPREC_WARNING = (
+    "Passing gamma / lambda parameters through the loss constructor "
+    "is deprecated and will be removed soon. To customize your value function, "
+    "run `loss_module.make_value_estimator(ValueFunctions.<value_fun>, gamma=val)`."
+)
+
+
+class ValueEstimators(Enum):
+    """Value function enumerator for custom-built estimators.
+
+    Allows for a flexible usage of various value functions when the loss module
+    allows it.
+
+    Examples:
+        >>> dqn_loss = DQNLoss(actor)
+        >>> dqn_loss.make_value_estimator(ValueEstimators.TD0, gamma=0.9)
+
+    """
+
+    TD0 = 1
+    TD1 = 2
+    TDLambda = 3
+    GAE = 4
+
+
+def default_value_kwargs(value_type: ValueEstimators):
+    """Default value function keyword argument generator.
+
+    Args:
+        value_type (Enum.value): the value function type, from the
+        :class:`torchrl.objectives.utils.ValueFunctions` class.
+
+    Examples:
+        >>> kwargs = default_value_kwargs(ValueEstimators.TDLambda)
+        {"gamma": 0.99, "lmbda": 0.95}
+
+    """
+    if value_type == ValueEstimators.TD1:
+        return {"gamma": 0.99}
+    elif value_type == ValueEstimators.TD0:
+        return {"gamma": 0.99}
+    elif value_type == ValueEstimators.GAE:
+        return {"gamma": 0.99, "lmbda": 0.95}
+    elif value_type == ValueEstimators.TDLambda:
+        return {"gamma": 0.99, "lmbda": 0.95}
+    else:
+        raise NotImplementedError(f"Unknown value type {value_type}.")
 
 
 class _context_manager:
@@ -297,7 +346,7 @@ class hold_out_params(_context_manager):
 @torch.no_grad()
 def next_state_value(
     tensordict: TensorDictBase,
-    operator: Optional[SafeModule] = None,
+    operator: Optional[TensorDictModule] = None,
     next_val_key: str = "state_action_value",
     gamma: float = 0.99,
     pred_next_val: Optional[Tensor] = None,
@@ -334,6 +383,8 @@ def next_state_value(
 
     rewards = tensordict.get(("next", "reward")).squeeze(-1)
     done = tensordict.get(("next", "done")).squeeze(-1)
+    if done.all() or gamma == 0:
+        return rewards
 
     if pred_next_val is None:
         next_td = step_mdp(tensordict)  # next_observation -> observation

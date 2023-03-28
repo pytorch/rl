@@ -6,11 +6,11 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
-from tensordict.nn import TensorDictModuleWrapper
+from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
 
 from torchrl.collectors.collectors import (
-    _DataCollector,
+    DataCollectorBase,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
     SyncDataCollector,
@@ -18,7 +18,6 @@ from torchrl.collectors.collectors import (
 from torchrl.data import MultiStep
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
-from torchrl.modules import SafeProbabilisticSequential
 
 
 def sync_async_collector(
@@ -175,7 +174,7 @@ def _make_collector(
     num_env_per_collector: Optional[int] = None,
     num_collectors: Optional[int] = None,
     **kwargs,
-) -> _DataCollector:
+) -> DataCollectorBase:
     if env_kwargs is None:
         env_kwargs = {}
     if isinstance(env_fns, list):
@@ -249,10 +248,12 @@ def _make_collector(
 
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticSequential],
+    actor_model_explore: Union[
+        TensorDictModuleWrapper, ProbabilisticTensorDictSequential
+    ],
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
-) -> _DataCollector:
+) -> DataCollectorBase:
     """Returns a data collector for off-policy algorithms.
 
     Args:
@@ -311,10 +312,12 @@ def make_collector_offpolicy(
 
 def make_collector_onpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticSequential],
+    actor_model_explore: Union[
+        TensorDictModuleWrapper, ProbabilisticTensorDictSequential
+    ],
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
-) -> _DataCollector:
+) -> DataCollectorBase:
     """Makes a collector in on-policy settings.
 
     Args:
@@ -370,7 +373,7 @@ class OnPolicyCollectorConfig:
     # If the collector device differs from the policy device (cuda:0 if available), then the
     # weights of the collector policy are synchronized with collector.update_policy_weights_().
     pin_memory: bool = False
-    # if True, the data collector will call pin_memory before dispatching tensordicts onto the passing device
+    # if ``True``, the data collector will call pin_memory before dispatching tensordicts onto the passing device
     frames_per_batch: int = 1000
     # number of steps executed in the environment per collection.
     # This value represents how many steps will the data collector execute and return in *each*

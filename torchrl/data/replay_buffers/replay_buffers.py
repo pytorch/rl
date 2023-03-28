@@ -176,6 +176,15 @@ class ReplayBuffer:
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
 
+        if self._transform is not None:
+            is_td = True
+            if not isinstance(data, TensorDictBase):
+                data = TensorDict({"data": data}, [])
+                is_td = False
+            data = self._transform(data)
+            if not is_td:
+                data = data["data"]
+
         return data
 
     def state_dict(self) -> Dict[str, Any]:
@@ -552,7 +561,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             mini-batch of Tensor(s)/outputs.  Used when using batched loading
             from a map-style dataset.
         pin_memory (bool, optional): whether pin_memory() should be called on
-            the rb samples. Default is :obj:`False`.
+            the rb samples. Default is ``False``.
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
