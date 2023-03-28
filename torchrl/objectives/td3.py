@@ -2,8 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-from numbers import Number
+import warnings
 
 import torch
 from tensordict.nn import TensorDictModule
@@ -13,9 +12,12 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
     distance_loss,
-    next_state_value as get_next_state_value,
+    ValueEstimators,
 )
+from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
     from functorch import vmap
@@ -32,34 +34,43 @@ class TD3Loss(LossModule):
 
     Args:
         actor_network (TensorDictModule): the actor to be trained
-        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
-        num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
-        gamma (Number, optional): gamma decay factor. Default is 0.99.
-        max_action (float, optional): Maximum action, in MuJoCo environments typically 1.0.
-        policy_noise (float, optional): Standard deviation for the target policy action noise. Default is 0.2.
-        noise_clip (float, optional): Clipping range value for the sampled target policy action noise. Default is 0.5.
-        priotity_key (str, optional): Key where to write the priority value for prioritized replay buffers. Default is
+        qvalue_network (TensorDictModule): a single Q-value network that will
+            be multiplicated as many times as needed.
+        num_qvalue_nets (int, optional): Number of Q-value networks to be
+            trained. Default is ``10``.
+        policy_noise (float, optional): Standard deviation for the target
+            policy action noise. Default is ``0.2``.
+        noise_clip (float, optional): Clipping range value for the sampled
+            target policy action noise. Default is ``0.5``.
+        priority_key (str, optional): Key where to write the priority value
+            for prioritized replay buffers. Default is
             `"td_error"`.
-        loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
-            "l1", Default is "smooth_l1".
-        delay_actor (bool, optional): whether to separate the target actor networks from the actor networks used for
-            data collection. Default is :obj:`False`.
-        delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
-            for data collection. Default is :obj:`False`.
+        loss_function (str, optional): loss function to be used for the Q-value.
+            Can be one of  ``"smooth_l1"``, ``"l2"``,
+            ``"l1"``, Default is ``"smooth_l1"``.
+        delay_actor (bool, optional): whether to separate the target actor
+            networks from the actor networks used for
+            data collection. Default is ``False``.
+        delay_qvalue (bool, optional): Whether to separate the target Q value
+            networks from the Q value networks used
+            for data collection. Default is ``False``.
     """
+
+    default_value_estimator = ValueEstimators.TD0
 
     def __init__(
         self,
         actor_network: TensorDictModule,
         qvalue_network: TensorDictModule,
+        *,
         num_qvalue_nets: int = 2,
-        gamma: Number = 0.99,
         policy_noise: float = 0.2,
         noise_clip: float = 0.5,
-        priotity_key: str = "td_error",
+        priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         delay_actor: bool = False,
         delay_qvalue: bool = False,
+        gamma: float = None,
     ) -> None:
         if not _has_functorch:
             raise ImportError(
@@ -86,25 +97,28 @@ class TD3Loss(LossModule):
         )
 
         self.num_qvalue_nets = num_qvalue_nets
-        self.register_buffer("gamma", torch.tensor(gamma))
-        self.priority_key = priotity_key
+        self.priority_key = priority_key
         self.loss_function = loss_function
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
         self.max_action = actor_network.spec["action"].space.maximum.max().item()
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
-        tensordict_select = tensordict.select("next", *obs_keys, "action")
+        tensordict_save = tensordict
+        tensordict = tensordict.clone(False)
 
         actor_params = torch.stack(
             [self.actor_network_params, self.target_actor_network_params], 0
         )
 
-        tensordict_actor_grad = tensordict_select.select(
+        tensordict_actor_grad = tensordict.select(
             *obs_keys
         )  # to avoid overwriting keys
-        next_td_actor = step_mdp(tensordict_select).select(
+        next_td_actor = step_mdp(tensordict).select(
             *self.actor_network.in_keys
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
@@ -134,9 +148,9 @@ class TD3Loss(LossModule):
             .select(*self.qvalue_network.in_keys)
             .expand(self.num_qvalue_nets, *tensordict_actor[0].batch_size)
         )  # for actor loss
-        _qval_td = tensordict_select.select(*self.qvalue_network.in_keys).expand(
+        _qval_td = tensordict.select(*self.qvalue_network.in_keys).expand(
             self.num_qvalue_nets,
-            *tensordict_select.select(*self.qvalue_network.in_keys).batch_size,
+            *tensordict.select(*self.qvalue_network.in_keys).batch_size,
         )  # for qvalue loss
         _next_val_td = (
             tensordict_actor[1]
@@ -180,12 +194,8 @@ class TD3Loss(LossModule):
         loss_actor = -(state_action_value_actor.min(0)[0]).mean()
 
         next_state_value = next_state_action_value_qvalue.min(0)[0]
-
-        target_value = get_next_state_value(
-            tensordict,
-            gamma=self.gamma,
-            pred_next_val=next_state_value,
-        )
+        tensordict.set(("next", "state_action_value"), next_state_value.unsqueeze(-1))
+        target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
         pred_val = state_action_value_qvalue
         td_error = (pred_val - target_value).pow(2)
         loss_qval = (
@@ -199,7 +209,7 @@ class TD3Loss(LossModule):
             * 0.5
         )
 
-        tensordict.set("td_error", td_error.detach().max(0)[0])
+        tensordict_save.set("td_error", td_error.detach().max(0)[0])
 
         if not loss_qval.shape == loss_actor.shape:
             raise RuntimeError(
@@ -218,3 +228,29 @@ class TD3Loss(LossModule):
         )
 
         return td_out
+
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+        hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
+        hp.update(hyperparams)
+        value_key = "state_action_value"
+        # we do not need a value network bc the next state value is already passed
+        if value_type == ValueEstimators.TD1:
+            self._value_estimator = TD1Estimator(
+                value_network=None, value_key=value_key, **hp
+            )
+        elif value_type == ValueEstimators.TD0:
+            self._value_estimator = TD0Estimator(
+                value_network=None, value_key=value_key, **hp
+            )
+        elif value_type == ValueEstimators.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.TDLambda:
+            self._value_estimator = TDLambdaEstimator(
+                value_network=None, value_key=value_key, **hp
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")

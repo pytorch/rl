@@ -119,7 +119,7 @@ class SafeModule(TensorDictModule):
             occur because of exploration policies or numerical under/overflow issues.
             If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
-            method. Default is :obj:`False`.
+            method. Default is ``False``.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can
         be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional

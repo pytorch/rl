@@ -244,7 +244,7 @@ def transformed_env_constructor(
         custom_env (EnvBase, optional): if an existing environment needs to be
             transformed_in, it can be passed directly to this helper. `custom_env_maker`
             and `custom_env` are exclusive features.
-        return_transformed_envs (bool, optional): if True, a transformed_in environment
+        return_transformed_envs (bool, optional): if ``True``, a transformed_in environment
             is returned.
         action_dim_gsde (int, Optional): if gSDE is used, this can present the action dim to initialize the noise.
             Make sure this is indicated in environment executed in parallel.
@@ -556,7 +556,7 @@ class EnvConfig:
     max_frames_per_traj: int = 1000
     # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
     batch_transform: bool = False
-    # if True, the transforms will be applied to the parallel env, and not to each individual env.\
+    # if ``True``, the transforms will be applied to the parallel env, and not to each individual env.\
     image_size: int = 84
     # if True and environment has discrete action space, then it is encoded as categorical values rather than one-hot.
     categorical_action_encoding: bool = False

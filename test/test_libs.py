@@ -24,18 +24,46 @@ from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
-from torchrl.data.datasets.d4rl import _has_d4rl, D4RL_ERR, D4RLExperienceReplay
+from torchrl.data.datasets.d4rl import D4RLExperienceReplay
+from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
-from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs import (
+    Compose,
+    DoubleToFloat,
+    EnvCreator,
+    ParallelEnv,
+    RenameTransform,
+)
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
+from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
+
+
+D4RL_ERR = None
+try:
+    import d4rl  # noqa
+
+    _has_d4rl = True
+except Exception as err:
+    # many things can wrong when importing d4rl :(
+    _has_d4rl = False
+    D4RL_ERR = err
+
+SKLEARN_ERR = None
+try:
+    import sklearn  # noqa
+
+    _has_sklearn = True
+except ModuleNotFoundError as err:
+    _has_sklearn = False
+    SKLEARN_ERR = err
 
 if _has_gym:
     try:
@@ -1206,6 +1234,45 @@ class TestD4RL:
             i += 1
         assert len(data) // i == batch_size
         print(f"completed test after {time.time()-t0}s")
+
+
+@pytest.mark.skipif(not _has_sklearn, reason=f"Scikit-learn not found: {SKLEARN_ERR}")
+@pytest.mark.parametrize(
+    "dataset",
+    [
+        "adult_num",
+        "adult_onehot",
+        "mushroom_num",
+        "mushroom_onehot",
+        "covertype",
+        "shuttle",
+        "magic",
+    ],
+)
+class TestOpenML:
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 3)])
+    def test_env(self, dataset, batch_size):
+        env = OpenMLEnv(dataset, batch_size=batch_size)
+        td = env.reset()
+        assert td.shape == torch.Size(batch_size)
+        td = env.rand_step(td)
+        assert td.shape == torch.Size(batch_size)
+        assert "index" not in td.keys()
+        check_env_specs(env)
+
+    def test_data(self, dataset):
+        data = OpenMLExperienceReplay(
+            dataset,
+            batch_size=2048,
+            transform=Compose(
+                RenameTransform(["X"], ["observation"]),
+                DoubleToFloat(["observation"]),
+            ),
+        )
+        # check that dataset eventually runs out
+        for i, _ in enumerate(data):  # noqa: B007
+            continue
+        assert len(data) // 2048 in (i, i - 1)
 
 
 if __name__ == "__main__":

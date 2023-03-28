@@ -86,6 +86,8 @@ class _Interruptor:
     by a lock to ensure thread-safety.
     """
 
+    # interrupter vs interruptor: google trends seems to indicate that "or" is more
+    # widely used than "er" even if my IDE complains about that...
     def __init__(self):
         self._collect = True
         self._lock = mp.Lock()
@@ -400,7 +402,7 @@ class SyncDataCollector(DataCollectorBase):
             tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
             Default is False.
-        interrupter (_Interruptor, optional):
+        interruptor (_Interruptor, optional):
             An _Interruptor object that can be used from outside the class to control rollout collection.
             The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
             strategies such as preeptively stopping rollout collection.
@@ -482,7 +484,7 @@ class SyncDataCollector(DataCollectorBase):
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         return_same_td: bool = False,
         reset_when_done: bool = True,
-        interrupter=None,
+        interruptor=None,
     ):
         self.closed = True
 
@@ -616,7 +618,7 @@ class SyncDataCollector(DataCollectorBase):
         self.split_trajs = split_trajs
         self._has_been_done = None
         self._exclude_private_keys = True
-        self.interrupter = interrupter
+        self.interruptor = interruptor
 
     # for RPC
     def next(self):
@@ -633,7 +635,7 @@ class SyncDataCollector(DataCollectorBase):
 
         Args:
             seed (int): integer representing the seed to be used for the environment.
-            static_seed(bool, optional): if True, the seed is not incremented.
+            static_seed(bool, optional): if ``True``, the seed is not incremented.
                 Defaults to False
 
         Returns:
@@ -778,8 +780,8 @@ class SyncDataCollector(DataCollectorBase):
 
                 self._step_and_maybe_reset()
                 if (
-                    self.interrupter is not None
-                    and self.interrupter.collection_stopped()
+                    self.interruptor is not None
+                    and self.interruptor.collection_stopped()
                 ):
                     break
 
@@ -1139,10 +1141,10 @@ class _MultiDataCollector(DataCollectorBase):
             self.preemptive_threshold = np.clip(preemptive_threshold, 0.0, 1.0)
             manager = _InterruptorManager()
             manager.start()
-            self.interrupter = manager._Interruptor()
+            self.interruptor = manager._Interruptor()
         else:
             self.preemptive_threshold = 1.0
-            self.interrupter = None
+            self.interruptor = None
         self._run_processes()
         self._exclude_private_keys = True
 
@@ -1195,7 +1197,7 @@ class _MultiDataCollector(DataCollectorBase):
                 "exploration_mode": self.exploration_mode,
                 "reset_when_done": self.reset_when_done,
                 "idx": i,
-                "interruptor": self.interrupter,
+                "interruptor": self.interruptor,
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
@@ -1261,7 +1263,7 @@ also that the state dict is synchronised across processes if needed."""
 
         Args:
             seed: integer representing the seed to be used for the environment.
-            static_seed (bool, optional): if True, the seed is not incremented.
+            static_seed (bool, optional): if ``True``, the seed is not incremented.
                 Defaults to False
 
         Returns:
@@ -1504,13 +1506,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
             i += 1
             max_traj_idx = None
 
-            if self.interrupter is not None and self.preemptive_threshold < 1.0:
-                self.interrupter.start_collection()
+            if self.interruptor is not None and self.preemptive_threshold < 1.0:
+                self.interruptor.start_collection()
                 while self.queue_out.qsize() < int(
                     self.num_workers * self.preemptive_threshold
                 ):
                     continue
-                self.interrupter.stop_collection()
+                self.interruptor.stop_collection()
                 # Now wait for stragglers to return
                 while self.queue_out.qsize() < int(self.num_workers):
                     continue
@@ -1838,7 +1840,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             the output TensorDict will be stored. For long trajectories,
             it may be necessary to store the data on a different.
             device than the one where the policy is stored. Default is None.
-        update_at_each_batch (bool): if True, the policy weights will be updated every time a batch of trajectories
+        update_at_each_batch (bool): if ``True``, the policy weights will be updated every time a batch of trajectories
             is collected.
             default=False
 
@@ -1941,7 +1943,7 @@ def _main_async_collector(
         exploration_mode=exploration_mode,
         reset_when_done=reset_when_done,
         return_same_td=True,
-        interrupter=interruptor,
+        interruptor=interruptor,
     )
     if verbose:
         print("Sync data collector created")

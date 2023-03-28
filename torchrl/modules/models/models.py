@@ -724,7 +724,7 @@ class DdpgCnnActor(nn.Module):
             'bias_last_layer': True,
         }
         use_avg_pooling (bool, optional): if ``True``, a nn.AvgPooling layer is
-            used to aggregate the output. Default is :obj:`False`.
+            used to aggregate the output. Default is ``False``.
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
 

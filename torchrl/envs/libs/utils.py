@@ -37,7 +37,7 @@ class GymPixelObservationWrapper(ObservationWrapper):
         env: The environment to wrap.
         pixels_only: If :obj:`True` (default), the original observation returned
             by the wrapped environment will be discarded, and a dictionary
-            observation will only include pixels. If :obj:`False`, the
+            observation will only include pixels. If ``False``, the
             observation dictionary will contain both the original
             observations and the pixel observations.
         render_kwargs: Optional :obj:`dict` containing keyword arguments passed

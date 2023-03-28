@@ -2345,7 +2345,7 @@ class CompositeSpec(TensorSpec):
                 :obj:`CompositeSpec(next=CompositeSpec(obs=None))` will lead to the keys
                 :obj:`["next"]. Default is ``False``, i.e. nested keys will not
                 be returned.
-            leaves_only (bool, optional): if :obj:`False`, the values returned
+            leaves_only (bool, optional): if ``False``, the values returned
                 will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
                 will lead to the keys :obj:`["next", ("next", "obs")]`.
                 Default is ``False``.
@@ -2367,7 +2367,7 @@ class CompositeSpec(TensorSpec):
                 :obj:`CompositeSpec(next=CompositeSpec(obs=None))` will lead to the keys
                 :obj:`["next"]. Default is ``False``, i.e. nested keys will not
                 be returned.
-            leaves_only (bool, optional): if :obj:`False`, the values returned
+            leaves_only (bool, optional): if ``False``, the values returned
                 will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
                 will lead to the keys :obj:`["next", ("next", "obs")]`.
                 Default is ``False``.
@@ -2395,7 +2395,7 @@ class CompositeSpec(TensorSpec):
                 :obj:`CompositeSpec(next=CompositeSpec(obs=None))` will lead to the keys
                 :obj:`["next"]. Default is ``False``, i.e. nested keys will not
                 be returned.
-            leaves_only (bool, optional): if :obj:`False`, the values returned
+            leaves_only (bool, optional): if ``False``, the values returned
                 will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
                 will lead to the keys :obj:`["next", ("next", "obs")]`.
                 Default is ``False``.
