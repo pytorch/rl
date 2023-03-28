@@ -53,13 +53,13 @@ def default_value_kwargs(value_type: ValueEstimators):
 
     """
     if value_type == ValueEstimators.TD1:
-        return {"gamma": 0.99}
+        return {"gamma": 0.99, "differentiable": True}
     elif value_type == ValueEstimators.TD0:
-        return {"gamma": 0.99}
+        return {"gamma": 0.99, "differentiable": True}
     elif value_type == ValueEstimators.GAE:
-        return {"gamma": 0.99, "lmbda": 0.95}
+        return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
     elif value_type == ValueEstimators.TDLambda:
-        return {"gamma": 0.99, "lmbda": 0.95}
+        return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
     else:
         raise NotImplementedError(f"Unknown value type {value_type}.")
 
