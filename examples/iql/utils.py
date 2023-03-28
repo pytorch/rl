@@ -12,6 +12,8 @@ from torchrl.data import (
     MultiStep,
     TensorDictReplayBuffer,
 )
+from torchrl.data.datasets.d4rl import D4RLExperienceReplay
+from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
 from torchrl.envs import (
     CatFrames,
@@ -22,6 +24,7 @@ from torchrl.envs import (
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
+    RenameTransform,
     Resize,
     RewardScaling,
     ToTensorImage,
@@ -169,7 +172,7 @@ def make_transformed_env_states(base_env, env_cfg):
 
 
 def make_parallel_env(env_cfg, state_dict):
-    num_envs = env_cfg.num_envs
+    num_envs = env_cfg.num_eval_envs
     env = make_transformed_env(
         ParallelEnv(num_envs, EnvCreator(lambda: make_base_env(env_cfg))), env_cfg
     )
@@ -240,6 +243,45 @@ def make_replay_buffer(rb_cfg):
     return TensorDictReplayBuffer(
         storage=LazyMemmapStorage(rb_cfg.capacity), sampler=sampler
     )
+
+
+def make_offline_replay_buffer(rb_cfg, state_dict):
+
+    data = D4RLExperienceReplay(
+        rb_cfg.dataset,
+        split_trajs=False,
+        batch_size=rb_cfg.batch_size,
+        sampler=SamplerWithoutReplacement(drop_last=False),
+    )
+    data.append_transform(
+        RewardScaling(
+            loc=state_dict["transforms.0.loc"],
+            scale=state_dict["transforms.0.scale"],
+            standard_normal=state_dict["transforms.0.standard_normal"],
+        )
+    )
+    data.append_transform(
+        RenameTransform(
+            ["observation", ("next", "observation")],
+            ["observation_vector", ("next", "observation_vector")],
+        )
+    )
+    data.append_transform(
+        ObservationNorm(
+            in_keys=["observation_vector", ("next", "observation_vector")],
+            loc=state_dict["transforms.2.loc"],
+            scale=state_dict["transforms.2.scale"],
+            standard_normal=state_dict["transforms.2.standard_normal"],
+        )
+    )
+    data.append_transform(
+        DoubleToFloat(
+            in_keys=["observation_vector", ("next", "observation_vector")],
+            in_keys_inv=[],
+        )
+    )
+
+    return data
 
 
 # ====================================================================

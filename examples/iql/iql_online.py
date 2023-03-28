@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 """IQL Example.
 
-This is a self-contained example of a IQL training script.
+This is a self-contained example of an online IQL training script.
 
 It works across Gym and DM-control over a variety of tasks.
 
