@@ -16,6 +16,7 @@ from torchrl.envs.utils import step_mdp
 
 from torchrl.objectives.utils import hold_out_net
 from torchrl.objectives.value.functional import (
+    td0_return_estimate,
     td_lambda_return_estimate,
     vec_generalized_advantage_estimate,
     vec_td1_return_estimate,
@@ -302,7 +303,9 @@ class TD0Estimator(ValueEstimatorBase):
         next_value = step_td.get(self.value_key)
 
         done = tensordict.get(("next", "done"))
-        value_target = reward + gamma * (1 - done.to(reward.dtype)) * next_value
+        value_target = td0_return_estimate(
+            gamma=gamma, next_state_value=next_value, reward=reward, done=done
+        )
         return value_target
 
 
