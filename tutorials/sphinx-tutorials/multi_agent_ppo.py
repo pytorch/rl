@@ -7,7 +7,7 @@ import wandb
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import SyncDataCollector, MultiSyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -31,41 +31,43 @@ from tqdm import tqdm
 if __name__ == "__main__":
     device = "cpu" if not torch.has_cuda else "cuda:0"
 
-    lr = 3e-4
-    max_grad_norm = 1.0
+    test = False
 
-    vmas_envs = 32
-    max_steps = 200
+    lr = 5e-5
+    max_grad_norm = 40.0
+
+    vmas_envs = 640  if not test else 1
+    max_steps = 100
     frames_per_batch = vmas_envs * max_steps
     # For a complete training, bring the number of frames up to 1M
-    total_frames = frames_per_batch * 500
+    total_frames = frames_per_batch * 1000
 
-    sub_batch_size = 64  # cardinality of the sub-samples gathered from the current data in the inner loop
-    num_epochs = 10  # optimisation steps per batch of data collected
+    sub_batch_size = 4096 if not test else 10  # cardinality of the sub-samples gathered from the current data in the inner loop
+    num_epochs = 45 if not test else 2 # optimisation steps per batch of data collected
     clip_epsilon = (
         0.2  # clip value for PPO loss: see the equation in the intro for more context.
     )
     gamma = 0.99
-    lmbda = 0.95
-    entropy_eps = 1e-4
+    lmbda = 0.9
+    entropy_eps = 0
 
     env = VmasEnv(
-        scenario_name="balance",
+        scenario_name="goal",
         num_envs=vmas_envs,
         continuous_actions=True,
         max_steps=max_steps,
         device=device,
         # Scenario kwargs
-        n_agents=3,
+        # n_agents=1,
     )
-    test_env = VmasEnv(
-        scenario_name="balance",
-        num_envs=1,
+    env_test = VmasEnv(
+        scenario_name="goal",
+        num_envs=vmas_envs,
         continuous_actions=True,
         max_steps=max_steps,
         device=device,
         # Scenario kwargs
-        n_agents=3,
+        # n_agents=1,
     )
 
     # print("observation_spec:", env.observation_spec)
@@ -76,15 +78,15 @@ if __name__ == "__main__":
     # rollout = env.rollout(3)
     # print("rollout of three steps:", rollout)
     # print("Shape of the rollout TensorDict:", rollout.batch_size)
-    shared_net = nn.Sequential(
-        nn.LazyLinear(256, device=device),
-        nn.Tanh(),
-        nn.LazyLinear(256, device=device),
-        nn.Tanh(),
-    )
+    # shared_net = nn.Sequential(
+    #
+    # )
 
     actor_net = nn.Sequential(
-        shared_net,
+        nn.LazyLinear(256, device=device),
+        nn.Tanh(),
+        nn.LazyLinear(256, device=device),
+        nn.Tanh(),
         nn.LazyLinear(2 * env.action_spec.shape[-1], device=device),
         NormalParamExtractor(),
     )
@@ -107,7 +109,10 @@ if __name__ == "__main__":
     )
 
     value_net = nn.Sequential(
-        shared_net,
+        nn.LazyLinear(256, device=device),
+        nn.Tanh(),
+        nn.LazyLinear(256, device=device),
+        nn.Tanh(),
         nn.LazyLinear(1, device=device),
     )
     value_module = ValueOperator(
@@ -132,6 +137,7 @@ if __name__ == "__main__":
     replay_buffer = ReplayBuffer(
         storage=LazyTensorStorage(frames_per_batch),
         sampler=SamplerWithoutReplacement(),
+        batch_size=sub_batch_size
     )
 
     advantage_module = GAE(
@@ -148,30 +154,37 @@ if __name__ == "__main__":
         # these keys match by default but we set this for completeness
         value_target_key=advantage_module.value_target_key,
         critic_coef=1.0,
-        gamma=0.99,
+        gamma=gamma,
         loss_critic_type="smooth_l1",
     )
 
     optim = torch.optim.Adam(loss_module.parameters(), lr)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optim, total_frames // frames_per_batch, 0.0
-    )
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    #     optim, total_frames // frames_per_batch, 0.0
+    # )
 
     logs = defaultdict(list)
     logger = WandbLogger(exp_name="mult_ppo_tutorial", project="torchrl")
 
     for i, tensordict_data in enumerate(collector):
-        for _ in range(num_epochs):
-            advantage_module(tensordict_data)
-            data_view = tensordict_data.reshape(-1)
-            replay_buffer.extend(data_view.cpu())
+        print("Collected data")
+        advantage_module(tensordict_data)
+        data_view = tensordict_data.reshape(-1)
+        replay_buffer.extend(data_view)
+        for j in range(num_epochs):
+            print(f"Inner epoch {j}")
+            # replay_buffer.extend(data_view)
+            indexes = torch.randperm(frames_per_batch)
+            index = 0
             for _ in range(frames_per_batch // sub_batch_size):
-                subdata, *_ = replay_buffer.sample(sub_batch_size)
+                # subdata = replay_buffer.sample()
+                subdata = data_view[indexes[index:index + sub_batch_size]]
+
                 loss_vals = loss_module(subdata.to(device))
                 loss_value = (
                     loss_vals["loss_objective"]
                     + loss_vals["loss_critic"]
-                    + loss_vals["loss_entropy"]
+                    # + loss_vals["loss_entropy"]
                 )
 
                 # Optimization: backward, grad clipping and optim step
@@ -181,7 +194,9 @@ if __name__ == "__main__":
                 torch.nn.utils.clip_grad_norm_(loss_module.parameters(), max_grad_norm)
                 optim.step()
                 optim.zero_grad()
+                index += sub_batch_size
 
+            assert index == (frames_per_batch // sub_batch_size) * sub_batch_size
         logger.log_scalar(
             "reward",
             tensordict_data["next", "reward"].mean().item(),
@@ -193,15 +208,15 @@ if __name__ == "__main__":
 
             with set_exploration_mode("mean"), torch.no_grad():
                 # execute a rollout with the trained policy
-                tensordict = test_env.reset()
+                tensordict = env_test.reset()
                 frames = []
                 for i in range(max_steps):
                     tensordict = policy_module(tensordict)
                     frames.append(
-                        test_env._env.render(mode="rgb_array", agent_index_focus=None)
+                        env_test.render(mode="rgb_array", agent_index_focus=None)
                     )
 
-                    tensordict = test_env.step(tensordict)
+                    tensordict = env_test.step(tensordict)
                     done = tensordict.get(("next", "done"))
                     if done.any():
                         break
@@ -215,11 +230,8 @@ if __name__ == "__main__":
                 logger.experiment.log(
                     {
                         "video": wandb.Video(
-                            vid, fps=1 / test_env._env.world.dt, format="mp4"
+                            vid, fps=1 / env_test.world.dt, format="mp4"
                         )
-                    }
+                    },
                 ),
 
-        # We're also using a learning rate scheduler. Like the gradient clipping,
-        # this is a nice-to-have but nothing necessary for PPO to work.
-        scheduler.step()
