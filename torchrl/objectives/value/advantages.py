@@ -16,10 +16,10 @@ from torchrl.envs.utils import step_mdp
 
 from torchrl.objectives.utils import hold_out_net
 from torchrl.objectives.value.functional import (
-    td_lambda_advantage_estimate,
+    td_lambda_return_estimate,
     vec_generalized_advantage_estimate,
-    vec_td1_advantage_estimate,
-    vec_td_lambda_advantage_estimate,
+    vec_td1_return_estimate,
+    vec_td_lambda_return_estimate,
 )
 
 
@@ -472,9 +472,7 @@ class TD1Estimator(ValueEstimatorBase):
         next_value = step_td.get(self.value_key)
 
         done = tensordict.get(("next", "done"))
-        value_target = vec_td1_advantage_estimate(
-            gamma, torch.zeros_like(next_value), next_value, reward, done
-        )
+        value_target = vec_td1_return_estimate(gamma, next_value, reward, done)
         return value_target
 
 
@@ -665,13 +663,9 @@ class TDLambdaEstimator(ValueEstimatorBase):
 
         done = tensordict.get(("next", "done"))
         if self.vectorized:
-            val = vec_td_lambda_advantage_estimate(
-                gamma, lmbda, torch.zeros_like(next_value), next_value, reward, done
-            )
+            val = vec_td_lambda_return_estimate(gamma, lmbda, next_value, reward, done)
         else:
-            val = td_lambda_advantage_estimate(
-                gamma, lmbda, torch.zeros_like(next_value), next_value, reward, done
-            )
+            val = td_lambda_return_estimate(gamma, lmbda, next_value, reward, done)
         return val
 
 
