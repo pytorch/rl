@@ -1,0 +1,55 @@
+# task and env
+env:
+  env_name: ALE/Pong-v5
+  env_task: ""
+  env_library: gym
+  frame_skip: 4
+  num_envs: 8
+  noop: 1
+  reward_scaling: 1.0
+  from_pixels: True
+
+# collector
+collector:
+  async_collection: 0
+  frames_per_batch: 2048
+  total_frames: 10_000_000
+  collector_devices: cpu  # [cpu,cpu,cpu,cpu]
+  num_collectors: 1
+  max_frames_per_traj: -1
+
+# eval
+recorder:
+  video: False
+  interval: 10000  # record interval in frames
+  frames: 10000
+
+# logger
+logger:
+  backend: wandb
+  exp_name: ppo_pong_gym
+
+# Optim
+optim:
+  device: cpu
+  lr: 2.5e-4
+  weight_decay: 0.0
+  batch_size: 128
+  lr_scheduler: ""
+
+# Policy and model
+model:
+  ou_exploration: 1
+  annealing_frames: 1000000
+  noisy: False
+  activation: elu
+
+# loss
+loss:
+  gamma: 0.99
+  num_steps: 128
+  gae_lamdda: 0.95
+  clip_epsilon: 0.1
+  critic_coef: 1.0
+  entropy_coef: 0.0001
+  loss_critic_type: l2
