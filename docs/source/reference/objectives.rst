@@ -16,13 +16,15 @@ The main characteristics of TorchRL losses are:
   method will receive a tensordict as input that contains all the necessary
   information to return a loss value.
 - They output a :class:`tensordict.TensorDict` instance with the loss values
-  written under a ``"loss_<smth>`` where ``smth`` is a string describing the
+  written under a ``"loss_<smth>"`` where ``smth`` is a string describing the
   loss. Additional keys in the tensordict may be useful metrics to log during
   training time.
   .. note::
     The reason we return independent losses is to let the user use a different
     optimizer for different sets of parameters for instance. Summing the losses
-    can be simply done via ``sum(loss for key, loss in loss_vals.items() if key.startswith("loss_")``.
+    can be simply done via
+
+        >>> loss_val = sum(loss for key, loss in loss_vals.items() if key.startswith("loss_"))
 
 Training value functions
 ------------------------

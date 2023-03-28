@@ -25,7 +25,8 @@ TorchRL objectives: Coding a DDPG loss
 #
 # Key learnings:
 #
-# - how to build an environment in TorchRL, including transforms
+# - how to write a loss module and customize its value estimator;
+# - how to build an environment in torchrl, including transforms
 #   (e.g. data normalization) and parallel execution;
 # - how to design a policy and value network;
 # - how to collect data from your environment efficiently and store them
@@ -34,18 +35,17 @@ TorchRL objectives: Coding a DDPG loss
 # - and finally how to evaluate your model.
 #
 # This tutorial assumes that you have completed the PPO tutorial which gives
-# an overview of the TorchRL components.
-#
-#
-# This tutorial assumes the reader is familiar with some of TorchRL primitives,
-# such as :class:`tensordict.TensorDict` and
-# :class:`tensordict.nn.TensorDictModules`, although it should be
+# an overview of the torchrl components and dependencies, such as
+# :class:`tensordict.TensorDict` and :class:`tensordict.nn.TensorDictModules`,
+# although it should be
 # sufficiently transparent to be understood without a deep understanding of
 # these classes.
 #
-# We do not aim at giving a SOTA implementation of the algorithm, but rather
-# to provide a high-level illustration of TorchRL features in the context of
-# this algorithm.
+# .. note::
+#   We do not aim at giving a SOTA implementation of the algorithm, but rather
+#   to provide a high-level illustration of torchrl's loss implementations
+#   and the library features that are to be used in the context of
+#   this algorithm.
 #
 # Imports
 # -------
@@ -100,56 +100,90 @@ from torchrl.objectives.utils import (
 from torchrl.trainers import Recorder
 
 ###############################################################################
-# TorchRL LossModule
-# ------------------
+# torchrl :class:`torchrl.objectives.LossModule`
+# ----------------------------------------------
+#
+# TorchRL provides a series of losses to use in your training scripts.
+# The aim is to have losses that are easily reusable/swappable and that have
+# a simple signature.
+#
+# The main characteristics of TorchRL losses are:
+#
+# - they are stateful objects: they contain a copy of the trainable parameters
+#   such that ``loss_module.parameters()`` gives whatever is needed to train the
+#   algorithm.
+# - They follow the ``tensordict`` convention: the :meth:`torch.nn.Module.forward`
+#   method will receive a tensordict as input that contains all the necessary
+#   information to return a loss value.
+#
+#       >>> data = replay_buffer.sample()
+#       >>> loss_dict = loss_module(data)
+#
+# - They output a :class:`tensordict.TensorDict` instance with the loss values
+#   written under a ``"loss_<smth>"`` where ``smth`` is a string describing the
+#   loss. Additional keys in the tensordict may be useful metrics to log during
+#   training time.
+#   .. note::
+#     The reason we return independent losses is to let the user use a different
+#     optimizer for different sets of parameters for instance. Summing the losses
+#     can be simply done via
+#
+#       >>> loss_val = sum(loss for key, loss in loss_dict.items() if key.startswith("loss_"))
 #
 # The ``__init__`` method
 # ~~~~~~~~~~~~~~~~~~~~~~~
 #
 # The parent class of all losses is :class:`torchrl.objectives.LossModule`.
-# As many other components of the library, its :meth:`__call__` method expects
-# as input a :class:`tensordict.TensorDict` instance sampled from an expenrience
-# replay buffer. Using this format makes it possible to re-use the module across
+# As many other components of the library, its :meth:`torchrl.objectives.LossModule.forward` method expects
+# as input a :class:`tensordict.TensorDict` instance sampled from an experience
+# replay buffer, or any similar data structure. Using this format makes it
+# possible to re-use the module across
 # modalities, or in complex settings where the model needs to read multiple
-# entries for instance.
+# entries for instance. In other words, it allows us to code a loss module that
+# is oblivious to the data type that is being given to is and that focuses on
+# running the elementary steps of the loss function and only those.
 #
 # To keep the tutorial as didactic as we can, we'll be displaying each method
-# of the class independently and we'll be populating the class at a later stage.
+# of the class independently and we'll be populating the class at a later
+# stage.
 #
-# Let us start with the :meth:`__init__` method. DDPG aims at a simple goal:
+# Let us start with the :meth:`torchrl.objectives.LossModule.__init__`
+# method. DDPG aims at solving a control task with a simple strategy:
 # training a policy to output actions that maximise the value predicted by
 # a value network. Hence, our loss module needs to receive two networks in its
 # constructor: an actor and a value networks. We expect both of these to be
-# tensordict-compatible objects, such as :class:`tensordict.nn.TensorDictModule`.
+# tensordict-compatible objects, such as
+# :class:`tensordict.nn.TensorDictModule`.
+# Our loss function will need to compute a target value and fit the value
+# network to this, and generate an action and fit the policy such that its
+# value estimate is maximised.
 #
 # The crucial step of the :meth:`LossModule.__init__` method is the call to
-# :meth:`LossModule.convert_to_functional`. This method will extract the
-# parameters from the module and convert it to a functional module.
+# :meth:`torchrl.LossModule.convert_to_functional`. This method will extract
+# the parameters from the module and convert it to a functional module.
+# Strictly speaking, this is not necessary and one may perfectly code all
+# the losses without it. However, we encourage its usage for the following
+# reason.
+#
 # The reason TorchRL does this is that RL algorithms often execute the same
-# model with different sets of parameters, called "trainable" and "target" parameters.
+# model with different sets of parameters, called "trainable" and "target"
+# parameters.
 # The "trainable" parameters are those that the optimizer needs to fit. The
 # "target" parameters are usually a copy of the formers with some time lag
-# (absolute or diluted through a moving average). These target parameters
-# are used to compute the value associated with the next observation.
-# One the advantages of using a set of target parameters for the value model
-# that do not match exactly the current configuration is that they provide
-# a pessimistic bound on the value function being computed.
+# (absolute or diluted through a moving average).
+# These target parameters are used to compute the value associated with the
+# next observation. One the advantages of using a set of target parameters
+# for the value model that do not match exactly the current configuration is
+# that they provide a pessimistic bound on the value function being computed.
 # Pay attention to the ``create_target_params`` keyword argument below: this
 # argument tells the :meth:`torchrl.objectives.LossModule.convert_to_functional`
 # method to create a set of target parameters in the loss module to be used
 # for target value computation. If this is set to ``False`` (see the actor network
 # for instance) the ``target_actor_network_params`` attribute will still be
-# accessible but this will just return a detached version of the actor parameters.
+# accessible but this will just return a **detached** version of the
+# actor parameters.
 #
-# Later, we will see how the target parameters should be updated in TorchRL.
-#
-# We also incorporate an advantage module. This will be used to compute the
-# next state value using our value network. We'll see later in this tutorial
-# how various advantage modules can be used. If none is provided, we'll
-# be using the TD(lambda) method, which is usually preferable to TD(0).
-# Notice that this choice makes it necessary that the tensordict provided
-# has its last dimension representing the time span of the experiment (ie
-# our replay buffer must be populated using non-flatten data).
+# Later, we will see how the target parameters should be updated in torchrl.
 #
 
 
@@ -157,7 +191,6 @@ def _init(
     self,
     actor_network: TensorDictModule,
     value_network: TensorDictModule,
-    advantage="td(lambda)",
 ) -> None:
     super(type(self), self).__init__()
 
@@ -178,24 +211,29 @@ def _init(
     # Since the value we'll be using is based on the actor and value network,
     # we put them together in a single actor-critic container.
     actor_critic = ActorCriticWrapper(actor_network, value_network)
-    if advantage == "td(lambda)":
-        advantage_module = TDLambdaEstimate(
-            gamma=0.99,
-            lmbda=0.95,
-            value_network=actor_critic,
-            value_key="state_action_value",
-        )
-    elif advantage == "td(0)":
-        advantage_module = TDEstimate(
-            gamma=0.99, value_network=actor_critic, value_key="state_action_value"
-        )
-    else:
-        raise NotImplementedError("advantage must be one of 'td(lambda)' or 'td(0)'.")
-    self.advantage = advantage
-    self.advantage_module = advantage_module
-
     self.loss_funtion = "l2"
 
+###############################################################################
+# The value estimator loss method
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# In many RL algorithm, the value network (or Q-value network) is trained based
+# on an empirical value estimate. This can be bootstrapped (TD(0), low
+# variance, high bias), meaning
+# that the target value is obtained using the next reward and nothing else, or
+# a Monte-Carlo estimate can be obtained (TD(1)) in which case the whole
+# sequence of upcoming rewards will be used (high variance, low bias). An
+# intermediate estimator (TD(:math:`\lambda`)) can also be used to compromise
+# bias and variance.
+# TorchRL makes it easy to use one or the other estimator via the
+# :class:`torchrl.objectives.utils.ValueEstimators` Enum class, which contains
+# pointers to all the value estimators implemented. Let us define the default
+# value function here. We will take the simplest version (TD(0)), and show later
+# on how this can be changed.
+
+from torchrl.objectives.utils import ValueEstimators
+
+default_value_estimator = ValueEstimators.TD0
 
 ###############################################################################
 # The actor loss method
@@ -321,6 +359,7 @@ def _forward(self, input_tensordict: TensorDictBase) -> TensorDict:
 
 
 class DDPGLoss(LossModule):
+    default_value_estimator = default_value_estimator
     __init__ = _init
     forward = _forward
     loss_value = _loss_value
@@ -563,7 +602,7 @@ def parallel_env_constructor(
 # value network, trained to estimate the value of a state-action pair, and a
 # parametric actor that learns how to select actions that maximize this value.
 #
-# Recall that building a torchrl module requires two steps:
+# Recall that building a TorchRL module requires two steps:
 #
 # - writing the :class:`torch.nn.Module` that will be used as network,
 # - wrapping the network in a :class:`tensordict.nn.TensorDictModule` where the
