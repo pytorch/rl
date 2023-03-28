@@ -10,7 +10,7 @@ import torch.cuda
 from hydra.core.config_store import ConfigStore
 from torchrl.envs.transforms import RewardScaling
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.objectives.value import TDEstimate
+from torchrl.objectives.value import TD0Estimator
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
@@ -144,14 +144,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     critic_model = model.get_value_operator()
-    advantage = TDEstimate(
-        cfg.gamma,
+    advantage = TD0Estimator(
+        gamma=cfg.gamma,
         value_network=critic_model,
         average_rewards=True,
+        differentiable=True,
     )
     trainer.register_op(
         "process_optim_batch",
-        advantage,
+        torch.no_grad()(advantage),
     )
 
     final_seed = collector.set_seed(cfg.seed)

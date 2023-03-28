@@ -188,13 +188,18 @@ Returns
     TD1Estimator
     TDLambdaEstimator
     GAE
+    functional.td0_return_estimate
+    functional.td0_advantage_estimate
+    functional.td1_return_estimate
+    functional.vec_td1_return_estimate
+    functional.td1_advantage_estimate
+    functional.vec_td1_advantage_estimate
+    functional.td_lambda_return_estimate
+    functional.vec_td_lambda_return_estimate
+    functional.td_lambda_advantage_estimate
+    functional.vec_td_lambda_advantage_estimate
     functional.generalized_advantage_estimate
     functional.vec_generalized_advantage_estimate
-    functional.vec_td_lambda_return_estimate
-    functional.vec_td_lambda_advantage_estimate
-    functional.td_lambda_return_estimate
-    functional.td_lambda_advantage_estimate
-    functional.td_advantage_estimate
 
 
 Utils

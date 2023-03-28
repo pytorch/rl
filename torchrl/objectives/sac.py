@@ -203,14 +203,14 @@ class SACLoss(LossModule):
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
         if value_type is ValueEstimators.TD1:
-            self._value_function = TD1Estimator(
+            self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
                 value_key=value_key,
             )
         elif value_type is ValueEstimators.TD0:
-            self._value_function = TD0Estimator(
+            self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
@@ -221,7 +221,7 @@ class SACLoss(LossModule):
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type is ValueEstimators.TDLambda:
-            self._value_function = TDLambdaEstimator(
+            self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
@@ -317,7 +317,7 @@ class SACLoss(LossModule):
             _run_checks=False,
         )
         with set_exploration_mode("mode"):
-            target_value = self.value_function.value_estimate(
+            target_value = self.value_estimator.value_estimate(
                 tensordict, target_params=target_params
             ).squeeze(-1)
 
@@ -383,8 +383,8 @@ class SACLoss(LossModule):
                 sample_log_prob = sample_log_prob.unsqueeze(-1)
             state_value = state_action_value - _alpha * sample_log_prob
             state_value = state_value.min(0)[0]
-            tensordict.set(("next", self.value_function.value_key), state_value)
-            target_value = self.value_function.value_estimate(
+            tensordict.set(("next", self.value_estimator.value_key), state_value)
+            target_value = self.value_estimator.value_estimate(
                 tensordict,
                 _alpha=self._alpha,
                 actor_params=self.target_actor_network_params,
@@ -668,8 +668,10 @@ class DiscreteSACLoss(LossModule):
             * (next_state_action_value_qvalue.min(0)[0] - self.alpha * logp_pi[1])
         ).sum(dim=-1, keepdim=True)
 
-        tensordict_select.set(("next", self.value_function.value_key), pred_next_val)
-        target_value = self.value_function.value_estimate(tensordict_select).squeeze(-1)
+        tensordict_select.set(("next", self.value_estimator.value_key), pred_next_val)
+        target_value = self.value_estimator.value_estimate(tensordict_select).squeeze(
+            -1
+        )
 
         actions = torch.argmax(tensordict_select["action"], dim=-1)
 
@@ -737,14 +739,14 @@ class DiscreteSACLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         if value_type is ValueEstimators.TD1:
-            self._value_function = TD1Estimator(
+            self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
                 value_key=value_key,
             )
         elif value_type is ValueEstimators.TD0:
-            self._value_function = TD0Estimator(
+            self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
@@ -755,7 +757,7 @@ class DiscreteSACLoss(LossModule):
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type is ValueEstimators.TDLambda:
-            self._value_function = TDLambdaEstimator(
+            self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",

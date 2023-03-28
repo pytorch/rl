@@ -75,7 +75,7 @@ class DQNLoss(LossModule):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
         if value_type is ValueEstimators.TD1:
-            self._value_function = TD1Estimator(
+            self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=self.value_network,
                 advantage_key="advantage",
@@ -83,7 +83,7 @@ class DQNLoss(LossModule):
                 value_key="chosen_action_value",
             )
         elif value_type is ValueEstimators.TD0:
-            self._value_function = TD0Estimator(
+            self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=self.value_network,
                 advantage_key="advantage",
@@ -95,7 +95,7 @@ class DQNLoss(LossModule):
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type is ValueEstimators.TDLambda:
-            self._value_function = TDLambdaEstimator(
+            self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=self.value_network,
                 advantage_key="advantage",
@@ -155,7 +155,7 @@ class DQNLoss(LossModule):
             action = action.to(torch.float)
             pred_val_index = (pred_val * action).sum(-1)
 
-        target_value = self.value_function.value_estimate(
+        target_value = self.value_estimator.value_estimate(
             tensordict.clone(False), target_params=self.target_value_network_params
         ).squeeze(-1)
 
@@ -191,7 +191,7 @@ class DistributionalDQNLoss(LossModule):
         gamma (scalar): a discount factor for return computation.
             .. note::
               Unlike :class:`DQNLoss`, this class does not currently support
-              custom value functions. The next value estimation is not
+              custom value functions. The next value estimation is always
               bootstrapped.
         delay_value (bool): whether to duplicate the value network into a new
             target value network to create double DQN

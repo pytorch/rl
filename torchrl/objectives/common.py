@@ -59,7 +59,7 @@ class LossModule(nn.Module):
     def __init__(self):
         super().__init__()
         self._param_maps = {}
-        self._value_function = None
+        self._value_estimator = None
         # self.register_forward_pre_hook(_parameters_to_tensordict)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -364,17 +364,17 @@ class LossModule(nn.Module):
         return self.to(torch.device("cpu"))
 
     @property
-    def value_function(self) -> ValueEstimatorBase:
+    def value_estimator(self) -> ValueEstimatorBase:
         """The value function blends in the reward and value estimate(s) from upcoming state(s)/state-action pair(s) into a target value estimate for the value network."""
-        out = self._value_function
+        out = self._value_estimator
         if out is None:
             self._default_value_estimator()
-            return self._value_function
+            return self._value_estimator
         return out
 
-    @value_function.setter
-    def value_function(self, value):
-        self._value_function = value
+    @value_estimator.setter
+    def value_estimator(self, value):
+        self._value_estimator = value
 
     def _default_value_estimator(self):
         """A value-function constructor when none is provided.

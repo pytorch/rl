@@ -223,7 +223,7 @@ class IQLLoss(LossModule):
         obs_keys = self.actor_network.in_keys
         tensordict = tensordict.select("next", *obs_keys, "action")
 
-        target_value = self.value_function.value_estimate(
+        target_value = self.value_estimator.value_estimate(
             tensordict, target_params=self.target_value_network_params
         ).squeeze(-1)
         tensordict_expand = vmap(self.qvalue_network, (None, 0))(
@@ -252,14 +252,14 @@ class IQLLoss(LossModule):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
         if value_type is ValueEstimators.TD1:
-            self._value_function = TD1Estimator(
+            self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
                 value_key=value_key,
             )
         elif value_type is ValueEstimators.TD0:
-            self._value_function = TD0Estimator(
+            self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
@@ -270,7 +270,7 @@ class IQLLoss(LossModule):
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type is ValueEstimators.TDLambda:
-            self._value_function = TDLambdaEstimator(
+            self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",

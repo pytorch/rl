@@ -195,7 +195,7 @@ class TD3Loss(LossModule):
 
         next_state_value = next_state_action_value_qvalue.min(0)[0]
         tensordict.set(("next", "state_action_value"), next_state_value.unsqueeze(-1))
-        target_value = self.value_function.value_estimate(tensordict).squeeze(-1)
+        target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
         pred_val = state_action_value_qvalue
         td_error = (pred_val - target_value).pow(2)
         loss_qval = (
@@ -237,11 +237,11 @@ class TD3Loss(LossModule):
         value_key = "state_action_value"
         # we do not need a value network bc the next state value is already passed
         if value_type == ValueEstimators.TD1:
-            self._value_function = TD1Estimator(
+            self._value_estimator = TD1Estimator(
                 value_network=None, value_key=value_key, **hp
             )
         elif value_type == ValueEstimators.TD0:
-            self._value_function = TD0Estimator(
+            self._value_estimator = TD0Estimator(
                 value_network=None, value_key=value_key, **hp
             )
         elif value_type == ValueEstimators.GAE:
@@ -249,7 +249,7 @@ class TD3Loss(LossModule):
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type == ValueEstimators.TDLambda:
-            self._value_function = TDLambdaEstimator(
+            self._value_estimator = TDLambdaEstimator(
                 value_network=None, value_key=value_key, **hp
             )
         else:

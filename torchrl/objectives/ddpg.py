@@ -169,7 +169,7 @@ class DDPGLoss(LossModule):
             device=self.target_actor_network_params.device,
         )
         with set_exploration_mode("mode"):
-            target_value = self.value_function.value_estimate(
+            target_value = self.value_estimator.value_estimate(
                 tensordict, target_params=target_params
             ).squeeze(-1)
 
@@ -187,11 +187,11 @@ class DDPGLoss(LossModule):
         hp.update(hyperparams)
         value_key = "state_action_value"
         if value_type == ValueEstimators.TD1:
-            self._value_function = TD1Estimator(
+            self._value_estimator = TD1Estimator(
                 value_network=self.actor_critic, value_key=value_key, **hp
             )
         elif value_type == ValueEstimators.TD0:
-            self._value_function = TD0Estimator(
+            self._value_estimator = TD0Estimator(
                 value_network=self.actor_critic, value_key=value_key, **hp
             )
         elif value_type == ValueEstimators.GAE:
@@ -199,7 +199,7 @@ class DDPGLoss(LossModule):
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type == ValueEstimators.TDLambda:
-            self._value_function = TDLambdaEstimator(
+            self._value_estimator = TDLambdaEstimator(
                 value_network=self.actor_critic, value_key=value_key, **hp
             )
         else:

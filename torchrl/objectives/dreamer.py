@@ -208,7 +208,7 @@ class DreamerActorLoss(LossModule):
         fake_data.set("lambda_target", lambda_target)
 
         if self.discount_loss:
-            gamma = self.value_function.gamma.to(tensordict.device)
+            gamma = self.value_estimator.gamma.to(tensordict.device)
             discount = gamma.expand(lambda_target.shape)
             discount[..., 0, :] = 1
             discount = discount.cumprod(dim=-2)
@@ -228,7 +228,7 @@ class DreamerActorLoss(LossModule):
             },
             [],
         )
-        return self.value_function.value_estimate(input_tensordict)
+        return self.value_estimator.value_estimate(input_tensordict)
 
     def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
         value_net = None
@@ -238,14 +238,14 @@ class DreamerActorLoss(LossModule):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
         if value_type is ValueEstimators.TD1:
-            self._value_function = TD1Estimator(
+            self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
                 value_key=value_key,
             )
         elif value_type is ValueEstimators.TD0:
-            self._value_function = TD0Estimator(
+            self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
@@ -260,7 +260,7 @@ class DreamerActorLoss(LossModule):
         elif value_type is ValueEstimators.TDLambda:
             if hasattr(self, "lmbda"):
                 hp["lmbda"] = self.lmbda
-            self._value_function = TDLambdaEstimator(
+            self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",

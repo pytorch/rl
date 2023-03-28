@@ -108,7 +108,7 @@ class ReinforceLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         advantage = tensordict.get(self.advantage_key, None)
         if advantage is None:
-            self.value_function(
+            self.value_estimator(
                 tensordict,
                 params=self.critic_params,
                 target_params=self.target_critic_params,
@@ -160,19 +160,19 @@ class ReinforceLoss(LossModule):
         hp.update(hyperparams)
         value_key = "state_value"
         if value_type == ValueEstimators.TD1:
-            self._value_function = TD1Estimator(
+            self._value_estimator = TD1Estimator(
                 value_network=self.critic, value_key=value_key, **hp
             )
         elif value_type == ValueEstimators.TD0:
-            self._value_function = TD0Estimator(
+            self._value_estimator = TD0Estimator(
                 value_network=self.critic, value_key=value_key, **hp
             )
         elif value_type == ValueEstimators.GAE:
-            self._value_function = GAE(
+            self._value_estimator = GAE(
                 value_network=self.critic, value_key=value_key, **hp
             )
         elif value_type == ValueEstimators.TDLambda:
-            self._value_function = TDLambdaEstimator(
+            self._value_estimator = TDLambdaEstimator(
                 value_network=self.critic, value_key=value_key, **hp
             )
         else:
