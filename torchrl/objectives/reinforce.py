@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from typing import Optional
 
 import torch
@@ -10,7 +10,12 @@ import torch
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueFunctions
+from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    ValueFunctions,
+)
 from torchrl.objectives.value import GAE, TD0Estimate, TD1Estimate, TDLambdaEstimate
 
 
@@ -72,6 +77,7 @@ class ReinforceLoss(LossModule):
         advantage_key: str = "advantage",
         value_target_key: str = "value_target",
         loss_critic_type: str = "smooth_l1",
+        gamma: float = None,
     ) -> None:
         super().__init__()
 
@@ -95,6 +101,9 @@ class ReinforceLoss(LossModule):
                 create_target_params=self.delay_value,
                 compare_against=list(actor.parameters()),
             )
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         advantage = tensordict.get(self.advantage_key, None)
@@ -146,6 +155,8 @@ class ReinforceLoss(LossModule):
 
     def make_value_function(self, value_type: ValueFunctions, **hyperparams):
         hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
         hp.update(hyperparams)
         value_key = "state_value"
         if value_type == ValueFunctions.TD1:

@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from typing import Tuple
 
 import torch
@@ -11,7 +11,12 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
 
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueFunctions
+from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    ValueFunctions,
+)
 from torchrl.objectives.value import GAE, TD0Estimate, TD1Estimate, TDLambdaEstimate
 
 
@@ -72,6 +77,7 @@ class A2CLoss(LossModule):
         entropy_coef: float = 0.01,
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
+        gamma: float = None,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -88,6 +94,9 @@ class A2CLoss(LossModule):
         self.register_buffer(
             "critic_coef", torch.tensor(critic_coef, device=self.device)
         )
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
         self.loss_critic_type = loss_critic_type
 
     def reset(self) -> None:
@@ -165,6 +174,8 @@ class A2CLoss(LossModule):
     def make_value_function(self, value_type: ValueFunctions, **hyperparams):
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
         value_key = "state_value"
         if value_type == ValueFunctions.TD1:
             self._value_function = TD1Estimate(

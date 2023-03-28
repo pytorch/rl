@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import warnings
 from copy import deepcopy
 
 from typing import Tuple
@@ -15,6 +16,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
     hold_out_params,
@@ -49,6 +51,7 @@ class DDPGLoss(LossModule):
         loss_function: str = "l2",
         delay_actor: bool = False,
         delay_value: bool = False,
+        gamma: float = None,
     ) -> None:
         super().__init__()
         self.delay_actor = delay_actor
@@ -77,6 +80,10 @@ class DDPGLoss(LossModule):
         self.actor_in_keys = actor_network.in_keys
 
         self.loss_funtion = loss_function
+
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.
@@ -175,6 +182,8 @@ class DDPGLoss(LossModule):
 
     def make_value_function(self, value_type: ValueFunctions, **hyperparams):
         hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
         hp.update(hyperparams)
         value_key = "state_action_value"
         if value_type == ValueFunctions.TD1:

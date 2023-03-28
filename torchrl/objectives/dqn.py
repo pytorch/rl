@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from typing import Union
 
 import torch
@@ -14,7 +14,12 @@ from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 
 from .common import LossModule
-from .utils import default_value_kwargs, distance_loss, ValueFunctions
+from .utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    ValueFunctions,
+)
 from .value import TDLambdaEstimate
 from .value.advantages import TD0Estimate, TD1Estimate
 
@@ -39,6 +44,7 @@ class DQNLoss(LossModule):
         loss_function: str = "l2",
         priority_key: str = "td_error",
         delay_value: bool = False,
+        gamma: float = None,
     ) -> None:
 
         super().__init__()
@@ -59,8 +65,14 @@ class DQNLoss(LossModule):
         self.priority_key = priority_key
         self.action_space = self.value_network.action_space
 
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
+
     def make_value_function(self, value_type: ValueFunctions, **hyperparams):
         hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
         hp.update(hyperparams)
         if value_type is ValueFunctions.TD1:
             self._value_function = TD1Estimate(

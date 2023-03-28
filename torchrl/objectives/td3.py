@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 
 import torch
 from tensordict.nn import TensorDictModule
@@ -11,7 +11,12 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueFunctions
+from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    ValueFunctions,
+)
 from torchrl.objectives.value import TD0Estimate, TD1Estimate, TDLambdaEstimate
 
 try:
@@ -57,6 +62,7 @@ class TD3Loss(LossModule):
         loss_function: str = "smooth_l1",
         delay_actor: bool = False,
         delay_qvalue: bool = False,
+        gamma: float = None,
     ) -> None:
         if not _has_functorch:
             raise ImportError(
@@ -88,6 +94,9 @@ class TD3Loss(LossModule):
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
         self.max_action = actor_network.spec["action"].space.maximum.max().item()
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
@@ -214,6 +223,8 @@ class TD3Loss(LossModule):
 
     def make_value_function(self, value_type: ValueFunctions, **hyperparams):
         hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
         hp.update(hyperparams)
         value_key = "state_action_value"
         # we do not need a value network bc the next state value is already passed

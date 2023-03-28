@@ -2,8 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import math
+import warnings
 from numbers import Number
 from typing import Union
 
@@ -16,7 +16,12 @@ from torch import Tensor
 
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueFunctions
+from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    ValueFunctions,
+)
 from torchrl.objectives.value import TD0Estimate, TD1Estimate, TDLambdaEstimate
 
 try:
@@ -89,6 +94,7 @@ class REDQLoss(LossModule):
         target_entropy: Union[str, Number] = "auto",
         delay_qvalue: bool = True,
         gSDE: bool = False,
+        gamma: float = None,
     ):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
@@ -152,6 +158,9 @@ class REDQLoss(LossModule):
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
         self.gSDE = gSDE
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
 
     @property
     def alpha(self):
@@ -315,6 +324,8 @@ class REDQLoss(LossModule):
 
     def make_value_function(self, value_type: ValueFunctions, **hyperparams):
         hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
         hp.update(hyperparams)
         value_key = "state_value"
         # we do not need a value network bc the next state value is already passed

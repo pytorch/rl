@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from typing import Optional, Tuple
 
 import torch
@@ -11,7 +11,12 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
 from torchrl.modules import ProbabilisticActor
-from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueFunctions
+from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    ValueFunctions,
+)
 
 from ..envs.utils import set_exploration_mode
 from .common import LossModule
@@ -65,6 +70,7 @@ class IQLLoss(LossModule):
         loss_function: str = "smooth_l1",
         temperature: float = 1.0,
         expectile: float = 0.5,
+        gamma: float = None,
     ) -> None:
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
@@ -105,6 +111,9 @@ class IQLLoss(LossModule):
 
         self.priority_key = priority_key
         self.loss_function = loss_function
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
 
     @property
     def device(self) -> torch.device:
@@ -239,6 +248,8 @@ class IQLLoss(LossModule):
 
         value_key = "state_value"
         hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
         hp.update(hyperparams)
         if value_type is ValueFunctions.TD1:
             self._value_function = TD1Estimate(

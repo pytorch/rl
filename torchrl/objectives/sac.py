@@ -2,8 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import math
+import warnings
 from numbers import Number
 from typing import Optional, Tuple, Union
 
@@ -15,7 +15,12 @@ from torch import Tensor
 
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
-from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueFunctions
+from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    ValueFunctions,
+)
 
 from ..envs.utils import set_exploration_mode, step_mdp
 from .common import LossModule
@@ -97,6 +102,7 @@ class SACLoss(LossModule):
         delay_actor: bool = False,
         delay_qvalue: bool = False,
         delay_value: bool = False,
+        gamma: float = None,
     ) -> None:
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
@@ -179,6 +185,9 @@ class SACLoss(LossModule):
                 self.actor_network, self.value_network
             )
             make_functional(self.actor_critic)
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
 
     def make_value_function(self, value_type: ValueFunctions, **hyperparams):
         if self._version == 1:
@@ -725,6 +734,8 @@ class DiscreteSACLoss(LossModule):
         value_key = "state_value"
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
         if value_type is ValueFunctions.TD1:
             self._value_function = TD1Estimate(
                 **hp,

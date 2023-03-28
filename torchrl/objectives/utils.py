@@ -15,6 +15,12 @@ from torch.nn import functional as F
 
 from torchrl.envs.utils import step_mdp
 
+_GAMMA_LMBDA_DEPREC_WARNING = (
+    "Passing gamma / lambda parameters through the loss constructor "
+    "is deprecated and will be removed soon. To customize your value function, "
+    "run `loss_module.make_value_function(ValueFunctions.<value_fun>, gamma=val)`."
+)
+
 
 class ValueFunctions(Enum):
     """Value function enumerator for custom-built estimators.

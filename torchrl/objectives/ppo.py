@@ -2,8 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import math
+import warnings
 from typing import Tuple
 
 import torch
@@ -11,7 +11,12 @@ from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
 
-from torchrl.objectives.utils import default_value_kwargs, distance_loss, ValueFunctions
+from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    ValueFunctions,
+)
 
 from .common import LossModule
 from .value import GAE, TD0Estimate, TD1Estimate, TDLambdaEstimate
@@ -101,6 +106,7 @@ class PPOLoss(LossModule):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
+        gamma: float = None,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -121,6 +127,9 @@ class PPOLoss(LossModule):
         )
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
 
     def reset(self) -> None:
         pass
@@ -206,6 +215,8 @@ class PPOLoss(LossModule):
 
     def make_value_function(self, value_type: ValueFunctions, **hyperparams):
         hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
         hp.update(hyperparams)
         value_key = "state_value"
         if value_type == ValueFunctions.TD1:
@@ -300,6 +311,7 @@ class ClipPPOLoss(PPOLoss):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = True,
+        gamma: float = None,
         **kwargs,
     ):
         super(ClipPPOLoss, self).__init__(
@@ -312,6 +324,7 @@ class ClipPPOLoss(PPOLoss):
             critic_coef=critic_coef,
             loss_critic_type=loss_critic_type,
             normalize_advantage=normalize_advantage,
+            gamma=gamma,
             **kwargs,
         )
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
@@ -457,6 +470,7 @@ class KLPENPPOLoss(PPOLoss):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = True,
+        gamma: float = None,
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
@@ -469,6 +483,7 @@ class KLPENPPOLoss(PPOLoss):
             critic_coef=critic_coef,
             loss_critic_type=loss_critic_type,
             normalize_advantage=normalize_advantage,
+            gamma=gamma,
             **kwargs,
         )
 

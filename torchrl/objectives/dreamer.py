@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import warnings
 from typing import Optional, Tuple
 
 import torch
@@ -12,6 +13,7 @@ from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
     hold_out_net,
@@ -163,6 +165,8 @@ class DreamerActorLoss(LossModule):
         *,
         imagination_horizon: int = 15,
         discount_loss: bool = False,  # for consistency with paper
+        gamma: int = None,
+        lmbda: int = None,
     ):
         super().__init__()
         self.actor_model = actor_model
@@ -170,6 +174,12 @@ class DreamerActorLoss(LossModule):
         self.model_based_env = model_based_env
         self.imagination_horizon = imagination_horizon
         self.discount_loss = discount_loss
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
+        if lmbda is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.lmbda = lmbda
 
     def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
         with torch.no_grad():
@@ -224,6 +234,8 @@ class DreamerActorLoss(LossModule):
         value_net = None
         value_key = "state_value"
         hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
         hp.update(hyperparams)
         if value_type is ValueFunctions.TD1:
             self._value_function = TD1Estimate(
@@ -240,10 +252,14 @@ class DreamerActorLoss(LossModule):
                 value_key=value_key,
             )
         elif value_type is ValueFunctions.GAE:
+            if hasattr(self, "lmbda"):
+                hp["lmbda"] = self.lmbda
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type is ValueFunctions.TDLambda:
+            if hasattr(self, "lmbda"):
+                hp["lmbda"] = self.lmbda
             self._value_function = TDLambdaEstimate(
                 **hp,
                 value_network=value_net,
@@ -264,10 +280,11 @@ class DreamerValueLoss(LossModule):
 
     Args:
         value_model (TensorDictModule): the value model.
-        value_loss (str, optional): the loss to use for the value loss. Default: "l2".
-        gamma (float, optional): the gamma discount factor. Default: 0.99.
+        value_loss (str, optional): the loss to use for the value loss.
+            Default: ``"l2"``.
         discount_loss (bool, optional): if ``True``, the loss is discounted with a
             gamma discount factor. Default: False.
+        gamma (float, optional): the gamma discount factor. Default: ``0.99``.
 
     """
 
@@ -275,8 +292,8 @@ class DreamerValueLoss(LossModule):
         self,
         value_model: TensorDictModule,
         value_loss: Optional[str] = None,
-        gamma: int = 0.99,
         discount_loss: bool = False,  # for consistency with paper
+        gamma: int = 0.99,
     ):
         super().__init__()
         self.value_model = value_model

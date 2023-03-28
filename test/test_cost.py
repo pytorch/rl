@@ -2623,7 +2623,7 @@ class TestA2C:
         td = td.exclude(loss_fn.value_target_key)
         if advantage is not None:
             advantage(td)
-        else:
+        elif td_est is not None:
             loss_fn.make_value_function(td_est)
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
@@ -2787,7 +2787,7 @@ class TestReinforce:
         params = TensorDict(value_net.state_dict(), []).unflatten_keys(".")
         if advantage is not None:
             advantage(td, params=params)
-        else:
+        elif td_est is not None:
             loss_fn.make_value_function(td_est)
         loss_td = loss_fn(td)
         autograd.grad(
