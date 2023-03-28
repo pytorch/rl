@@ -17,9 +17,9 @@ from torchrl.objectives.utils import (
     default_value_kwargs,
     distance_loss,
     hold_out_net,
-    ValueFunctions,
+    ValueEstimators,
 )
-from torchrl.objectives.value import TD0Estimate, TD1Estimate, TDLambdaEstimate
+from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
 class DreamerModelLoss(LossModule):
@@ -155,7 +155,7 @@ class DreamerActorLoss(LossModule):
 
     """
 
-    default_value_type = ValueFunctions.TDLambda
+    default_value_estimator = ValueEstimators.TDLambda
 
     def __init__(
         self,
@@ -230,37 +230,37 @@ class DreamerActorLoss(LossModule):
         )
         return self.value_function.value_estimate(input_tensordict)
 
-    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
         value_net = None
         value_key = "state_value"
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        if value_type is ValueFunctions.TD1:
-            self._value_function = TD1Estimate(
+        if value_type is ValueEstimators.TD1:
+            self._value_function = TD1Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
                 value_key=value_key,
             )
-        elif value_type is ValueFunctions.TD0:
-            self._value_function = TD0Estimate(
+        elif value_type is ValueEstimators.TD0:
+            self._value_function = TD0Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
                 value_key=value_key,
             )
-        elif value_type is ValueFunctions.GAE:
+        elif value_type is ValueEstimators.GAE:
             if hasattr(self, "lmbda"):
                 hp["lmbda"] = self.lmbda
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
-        elif value_type is ValueFunctions.TDLambda:
+        elif value_type is ValueEstimators.TDLambda:
             if hasattr(self, "lmbda"):
                 hp["lmbda"] = self.lmbda
-            self._value_function = TDLambdaEstimate(
+            self._value_function = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",

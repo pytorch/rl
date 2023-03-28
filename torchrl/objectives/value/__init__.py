@@ -6,7 +6,10 @@
 from .advantages import (
     GAE,
     TD0Estimate,
+    TD0Estimator,
     TD1Estimate,
+    TD1Estimator,
     TDLambdaEstimate,
-    ValueFunctionBase,
+    TDLambdaEstimator,
+    ValueEstimatorBase,
 )

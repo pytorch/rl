@@ -19,12 +19,12 @@ from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
-    ValueFunctions,
+    ValueEstimators,
 )
 
 from ..envs.utils import set_exploration_mode, step_mdp
 from .common import LossModule
-from .value import TD0Estimate, TD1Estimate, TDLambdaEstimate
+from .value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
     from functorch import vmap
@@ -83,7 +83,7 @@ class SACLoss(LossModule):
             Default is ``False``.
     """
 
-    default_value_type = ValueFunctions.TD0
+    default_value_estimator = ValueEstimators.TD0
 
     def __init__(
         self,
@@ -189,7 +189,7 @@ class SACLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
             self.gamma = gamma
 
-    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
         if self._version == 1:
             value_net = self.actor_critic
         elif self._version == 2:
@@ -202,26 +202,26 @@ class SACLoss(LossModule):
         value_key = "state_value"
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
-        if value_type is ValueFunctions.TD1:
-            self._value_function = TD1Estimate(
+        if value_type is ValueEstimators.TD1:
+            self._value_function = TD1Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
                 value_key=value_key,
             )
-        elif value_type is ValueFunctions.TD0:
-            self._value_function = TD0Estimate(
+        elif value_type is ValueEstimators.TD0:
+            self._value_function = TD0Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
                 value_key=value_key,
             )
-        elif value_type is ValueFunctions.GAE:
+        elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
-        elif value_type is ValueFunctions.TDLambda:
-            self._value_function = TDLambdaEstimate(
+        elif value_type is ValueEstimators.TDLambda:
+            self._value_function = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
@@ -495,7 +495,7 @@ class DiscreteSACLoss(LossModule):
 
     """
 
-    default_value_type = ValueFunctions.TD0
+    default_value_estimator = ValueEstimators.TD0
     delay_actor: bool = False
 
     def __init__(
@@ -729,33 +729,33 @@ class DiscreteSACLoss(LossModule):
             alpha_loss = torch.zeros_like(log_pi)
         return alpha_loss
 
-    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
         value_net = None
         value_key = "state_value"
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
-        if value_type is ValueFunctions.TD1:
-            self._value_function = TD1Estimate(
+        if value_type is ValueEstimators.TD1:
+            self._value_function = TD1Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
                 value_key=value_key,
             )
-        elif value_type is ValueFunctions.TD0:
-            self._value_function = TD0Estimate(
+        elif value_type is ValueEstimators.TD0:
+            self._value_function = TD0Estimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",
                 value_key=value_key,
             )
-        elif value_type is ValueFunctions.GAE:
+        elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
-        elif value_type is ValueFunctions.TDLambda:
-            self._value_function = TDLambdaEstimate(
+        elif value_type is ValueEstimators.TDLambda:
+            self._value_function = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
                 value_target_key="value_target",

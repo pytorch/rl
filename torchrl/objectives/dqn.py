@@ -18,10 +18,10 @@ from .utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
-    ValueFunctions,
+    ValueEstimators,
 )
-from .value import TDLambdaEstimate
-from .value.advantages import TD0Estimate, TD1Estimate
+from .value import TDLambdaEstimator
+from .value.advantages import TD0Estimator, TD1Estimator
 
 
 class DQNLoss(LossModule):
@@ -35,7 +35,7 @@ class DQNLoss(LossModule):
 
     """
 
-    default_value_type = ValueFunctions.TDLambda
+    default_value_estimator = ValueEstimators.TDLambda
 
     def __init__(
         self,
@@ -69,33 +69,33 @@ class DQNLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
             self.gamma = gamma
 
-    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        if value_type is ValueFunctions.TD1:
-            self._value_function = TD1Estimate(
+        if value_type is ValueEstimators.TD1:
+            self._value_function = TD1Estimator(
                 **hp,
                 value_network=self.value_network,
                 advantage_key="advantage",
                 value_target_key="value_target",
                 value_key="chosen_action_value",
             )
-        elif value_type is ValueFunctions.TD0:
-            self._value_function = TD0Estimate(
+        elif value_type is ValueEstimators.TD0:
+            self._value_function = TD0Estimator(
                 **hp,
                 value_network=self.value_network,
                 advantage_key="advantage",
                 value_target_key="value_target",
                 value_key="chosen_action_value",
             )
-        elif value_type is ValueFunctions.GAE:
+        elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
-        elif value_type is ValueFunctions.TDLambda:
-            self._value_function = TDLambdaEstimate(
+        elif value_type is ValueEstimators.TDLambda:
+            self._value_function = TDLambdaEstimator(
                 **hp,
                 value_network=self.value_network,
                 advantage_key="advantage",
@@ -359,24 +359,24 @@ class DistributionalDQNLoss(LossModule):
         loss_td = TensorDict({"loss": loss.mean()}, [])
         return loss_td
 
-    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
-        if value_type is ValueFunctions.TD1:
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+        if value_type is ValueEstimators.TD1:
             raise NotImplementedError(
                 f"value type {value_type} is not implemented for {self.__class__.__name__}."
             )
-        elif value_type is ValueFunctions.TD0:
+        elif value_type is ValueEstimators.TD0:
             # see forward call
             pass
-        elif value_type is ValueFunctions.GAE:
+        elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
                 f"value type {value_type} is not implemented for {self.__class__.__name__}."
             )
-        elif value_type is ValueFunctions.TDLambda:
+        elif value_type is ValueEstimators.TDLambda:
             raise NotImplementedError(
                 f"value type {value_type} is not implemented for {self.__class__.__name__}."
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 
-    def _default_value_function(self):
-        self.make_value_function(ValueFunctions.TD0)
+    def _default_value_estimator(self):
+        self.make_value_estimator(ValueEstimators.TD0)

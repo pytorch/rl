@@ -15,9 +15,9 @@ from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
-    ValueFunctions,
+    ValueEstimators,
 )
-from torchrl.objectives.value import GAE, TD0Estimate, TD1Estimate, TDLambdaEstimate
+from torchrl.objectives.value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
 class A2CLoss(LossModule):
@@ -57,13 +57,13 @@ class A2CLoss(LossModule):
       If the advantage key (``"advantage`` by default) is not present in the
       input tensordict, the advantage will be computed by the :meth:`~.forward`
       method.
-      A custom advantage module can be built using :meth:`~.make_value_function`.
+      A custom advantage module can be built using :meth:`~.make_value_estimator`.
       The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
       dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
 
     """
 
-    default_value_type: ValueFunctions = ValueFunctions.GAE
+    default_value_estimator: ValueEstimators = ValueEstimators.GAE
 
     def __init__(
         self,
@@ -171,26 +171,26 @@ class A2CLoss(LossModule):
             td_out.set("loss_critic", loss_critic.mean())
         return td_out
 
-    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         value_key = "state_value"
-        if value_type == ValueFunctions.TD1:
-            self._value_function = TD1Estimate(
+        if value_type == ValueEstimators.TD1:
+            self._value_function = TD1Estimator(
                 value_network=self.critic, value_key=value_key, **hp
             )
-        elif value_type == ValueFunctions.TD0:
-            self._value_function = TD0Estimate(
+        elif value_type == ValueEstimators.TD0:
+            self._value_function = TD0Estimator(
                 value_network=self.critic, value_key=value_key, **hp
             )
-        elif value_type == ValueFunctions.GAE:
+        elif value_type == ValueEstimators.GAE:
             self._value_function = GAE(
                 value_network=self.critic, value_key=value_key, **hp
             )
-        elif value_type == ValueFunctions.TDLambda:
-            self._value_function = TDLambdaEstimate(
+        elif value_type == ValueEstimators.TDLambda:
+            self._value_function = TDLambdaEstimator(
                 value_network=self.critic, value_key=value_key, **hp
             )
         else:

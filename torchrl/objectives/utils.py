@@ -18,11 +18,11 @@ from torchrl.envs.utils import step_mdp
 _GAMMA_LMBDA_DEPREC_WARNING = (
     "Passing gamma / lambda parameters through the loss constructor "
     "is deprecated and will be removed soon. To customize your value function, "
-    "run `loss_module.make_value_function(ValueFunctions.<value_fun>, gamma=val)`."
+    "run `loss_module.make_value_estimator(ValueFunctions.<value_fun>, gamma=val)`."
 )
 
 
-class ValueFunctions(Enum):
+class ValueEstimators(Enum):
     """Value function enumerator for custom-built estimators.
 
     Allows for a flexible usage of various value functions when the loss module
@@ -30,7 +30,7 @@ class ValueFunctions(Enum):
 
     Examples:
         >>> dqn_loss = DQNLoss(actor)
-        >>> dqn_loss.make_value_function(ValueFunctions.TD0, gamma=0.9)
+        >>> dqn_loss.make_value_estimator(ValueEstimators.TD0, gamma=0.9)
 
     """
 
@@ -40,7 +40,7 @@ class ValueFunctions(Enum):
     GAE = 4
 
 
-def default_value_kwargs(value_type: ValueFunctions):
+def default_value_kwargs(value_type: ValueEstimators):
     """Default value function keyword argument generator.
 
     Args:
@@ -48,17 +48,17 @@ def default_value_kwargs(value_type: ValueFunctions):
         :class:`torchrl.objectives.utils.ValueFunctions` class.
 
     Examples:
-        >>> kwargs = default_value_kwargs(ValueFunctions.TDLambda)
+        >>> kwargs = default_value_kwargs(ValueEstimators.TDLambda)
         {"gamma": 0.99, "lmbda": 0.95}
 
     """
-    if value_type == ValueFunctions.TD1:
+    if value_type == ValueEstimators.TD1:
         return {"gamma": 0.99}
-    elif value_type == ValueFunctions.TD0:
+    elif value_type == ValueEstimators.TD0:
         return {"gamma": 0.99}
-    elif value_type == ValueFunctions.GAE:
+    elif value_type == ValueEstimators.GAE:
         return {"gamma": 0.99, "lmbda": 0.95}
-    elif value_type == ValueFunctions.TDLambda:
+    elif value_type == ValueEstimators.TDLambda:
         return {"gamma": 0.99, "lmbda": 0.95}
     else:
         raise NotImplementedError(f"Unknown value type {value_type}.")

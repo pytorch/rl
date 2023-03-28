@@ -22,7 +22,7 @@ from .utils import (
     hold_out_params,
     next_state_value,
     SoftUpdate,
-    ValueFunctions,
+    ValueEstimators,
 )
 
 # from .value import bellman_max, c_val, dv_val, vtrace, GAE, TDLambdaEstimate, TDEstimate

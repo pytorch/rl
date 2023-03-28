@@ -3,6 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import abc
+import warnings
+from copy import deepcopy
 from functools import wraps
 from typing import Callable, List, Optional, Tuple, Union
 
@@ -31,7 +33,7 @@ def _self_set_grad_enabled(fun):
     return new_fun
 
 
-class ValueFunctionBase(nn.Module):
+class ValueEstimatorBase(nn.Module):
     """An abstract parent class for value function modules.
 
     Its :meth:`ValueFunctionBase.forward` method will compute the value (given
@@ -111,7 +113,7 @@ class ValueFunctionBase(nn.Module):
         return self.value_network._is_stateless
 
 
-class TD0Estimate(ValueFunctionBase):
+class TD0Estimator(ValueEstimatorBase):
     """Myopic Temporal Difference (TD(0)) estimate of advantage function.
 
     Args:
@@ -293,7 +295,7 @@ class TD0Estimate(ValueFunctionBase):
         return value_target
 
 
-class TD1Estimate(ValueFunctionBase):
+class TD1Estimator(ValueEstimatorBase):
     """Bootstrapped Temporal Difference (TD(1)) estimate of advantage function.
 
     Args:
@@ -475,7 +477,7 @@ class TD1Estimate(ValueFunctionBase):
         return value_target
 
 
-class TDLambdaEstimate(ValueFunctionBase):
+class TDLambdaEstimator(ValueEstimatorBase):
     r"""TD(:math:`\lambda`) estimate of advantage function.
 
     Args:
@@ -577,7 +579,7 @@ class TDLambdaEstimate(ValueFunctionBase):
             >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
-            >>> module = TDLambdaEstimate(
+            >>> module = TDLambdaEstimator(
             ...     gamma=0.98,
             ...     lmbda=0.94,
             ...     value_network=value_net,
@@ -596,7 +598,7 @@ class TDLambdaEstimate(ValueFunctionBase):
             >>> value_net = TensorDictModule(
             ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
             ... )
-            >>> module = TDLambdaEstimate(
+            >>> module = TDLambdaEstimator(
             ...     gamma=0.98,
             ...     lmbda=0.94,
             ...     value_network=value_net,
@@ -672,7 +674,7 @@ class TDLambdaEstimate(ValueFunctionBase):
         return val
 
 
-class GAE(ValueFunctionBase):
+class GAE(ValueEstimatorBase):
     """A class wrapper around the generalized advantage estimate functional.
 
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
@@ -914,3 +916,20 @@ class GAE(ValueFunctionBase):
             gamma, lmbda, value, next_value, reward, done
         )
         return value_target
+
+
+def _deprecate_class(cls, new_cls):
+    @wraps(cls.__init__)
+    def new_init(self, *args, **kwargs):
+        warnings.warn(f"class {cls} is deprecated, please use {new_cls} instead.")
+        cls.__init__(self, *args, **kwargs)
+
+    cls.__init__ = new_init
+
+
+TD0Estimate = deepcopy(TD0Estimator)
+_deprecate_class(TD0Estimate, TD0Estimator)
+TD1Estimate = deepcopy(TD1Estimator)
+_deprecate_class(TD1Estimate, TD1Estimator)
+TDLambdaEstimate = deepcopy(TDLambdaEstimator)
+_deprecate_class(TDLambdaEstimate, TDLambdaEstimator)

@@ -20,12 +20,12 @@ from torchrl.objectives.utils import (
     default_value_kwargs,
     distance_loss,
     hold_out_params,
-    ValueFunctions,
+    ValueEstimators,
 )
 
 from ..envs.utils import set_exploration_mode
 from .common import LossModule
-from .value import TD0Estimate, TD1Estimate, TDLambdaEstimate
+from .value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
 class DDPGLoss(LossModule):
@@ -41,7 +41,7 @@ class DDPGLoss(LossModule):
             data collection. Default is ``False``.
     """
 
-    default_value_type: ValueFunctions = ValueFunctions.TD0
+    default_value_estimator: ValueEstimators = ValueEstimators.TD0
 
     def __init__(
         self,
@@ -180,26 +180,26 @@ class DDPGLoss(LossModule):
 
         return loss_value, (pred_val - target_value).pow(2), pred_val, target_value
 
-    def make_value_function(self, value_type: ValueFunctions, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
         value_key = "state_action_value"
-        if value_type == ValueFunctions.TD1:
-            self._value_function = TD1Estimate(
+        if value_type == ValueEstimators.TD1:
+            self._value_function = TD1Estimator(
                 value_network=self.actor_critic, value_key=value_key, **hp
             )
-        elif value_type == ValueFunctions.TD0:
-            self._value_function = TD0Estimate(
+        elif value_type == ValueEstimators.TD0:
+            self._value_function = TD0Estimator(
                 value_network=self.actor_critic, value_key=value_key, **hp
             )
-        elif value_type == ValueFunctions.GAE:
+        elif value_type == ValueEstimators.GAE:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
-        elif value_type == ValueFunctions.TDLambda:
-            self._value_function = TDLambdaEstimate(
+        elif value_type == ValueEstimators.TDLambda:
+            self._value_function = TDLambdaEstimator(
                 value_network=self.actor_critic, value_key=value_key, **hp
             )
         else:
