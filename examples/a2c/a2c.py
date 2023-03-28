@@ -145,7 +145,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     critic_model = model.get_value_operator()
     advantage = TD0Estimator(
-        cfg.gamma,
+        gamma=cfg.gamma,
         value_network=critic_model,
         average_rewards=True,
         differentiable=True,
