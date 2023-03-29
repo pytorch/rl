@@ -25,6 +25,8 @@ from torchrl.envs import (
     RewardScaling,
     ToTensorImage,
     TransformedEnv,
+    RewardSum,
+    StepCounter
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.utils import set_exploration_mode
@@ -107,6 +109,8 @@ def make_transformed_env_pixels(base_env, env_cfg):
     env.append_transform(GrayScale())
     env.append_transform(Resize(84, 84))
     env.append_transform(CatFrames(N=4, dim=-3))
+    env.append_transform(RewardSum())
+    env.append_transform(StepCounter())
 
     # obs_norm = ObservationNorm(in_keys=["pixels"])
     # env.append_transform(obs_norm)

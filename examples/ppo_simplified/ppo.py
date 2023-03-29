@@ -59,7 +59,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     total_network_updates = (cfg.collector.total_frames // batch_size) * cfg.loss.ppo_epochs * num_mini_batches
     scheduler = LinearLR(optim, total_iters=total_network_updates, start_factor=1.0, end_factor=0.1)
 
-
     logger = make_logger(cfg.logger)
     recorder = make_recorder(cfg, logger, actor)
     test_env = make_test_env(cfg.env)
@@ -79,6 +78,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         data_view = data.reshape(-1)
         data_view = adv_module(data_view)  # TODO: modify after losses refactor
         data_buffer.extend(data_view)
+        episode_rewards = data_view["episode_reward"][data_view["done"]] # TODO: done is always False, why?
+        episode_rewards = data_view["episode_reward"][data_view["next"]["done"]]
+        if len(episode_rewards) > 0:
+            logger.log_scalar("reward_training", episode_rewards.mean().item(), collected_frames)
 
         for epoch in range(cfg.loss.ppo_epochs):
             for _ in range(frames_in_batch // cfg.loss.mini_batch_size):
@@ -143,7 +146,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     l0 = loss_val.item()
                 for key, value in loss_vals.items():
                     logger.log_scalar(key, value.item(), collected_frames)
-                logger.log_scalar("reward_training", data["reward"].mean().item(), collected_frames)
                 pbar.set_description(
                     f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['reward'].mean(): 4.4f} (init={r0: 4.4f})"
                 )
