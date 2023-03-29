@@ -987,8 +987,6 @@ if __name__ == "__main__":
     else:
         multistep = None
 
-    warnings.warn("Change collector!!")
-
     collector = MultiaSyncDataCollector(
         create_env_fn=[create_env_fn, create_env_fn],
         policy=actor_model_explore,
