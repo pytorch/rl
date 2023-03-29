@@ -1063,6 +1063,7 @@ for i, tensordict in enumerate(collector):
     # extend the replay buffer with the new data
     current_frames = tensordict.numel()
     collected_frames += current_frames
+    print("Tensordict shape: ", tensordict.shape)
     replay_buffer.extend(tensordict.cpu())
 
     # optimization steps
