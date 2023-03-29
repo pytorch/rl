@@ -859,7 +859,7 @@ class TestRecorder:
         with tempfile.TemporaryDirectory() as folder:
             logger = TensorboardLogger(exp_name=folder)
 
-            recorder = transformed_env_constructor(
+            environment = transformed_env_constructor(
                 args,
                 video_tag="tmp",
                 norm_obs_only=True,
@@ -871,7 +871,7 @@ class TestRecorder:
                 record_frames=args.record_frames,
                 frame_skip=args.frame_skip,
                 policy_exploration=None,
-                recorder=recorder,
+                environment=environment,
                 record_interval=args.record_interval,
             )
             trainer = mocking_trainer()
@@ -933,7 +933,7 @@ class TestRecorder:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
 
-            recorder = transformed_env_constructor(
+            environment = transformed_env_constructor(
                 args,
                 video_tag="tmp",
                 norm_obs_only=True,
@@ -945,7 +945,7 @@ class TestRecorder:
                 record_frames=args.record_frames,
                 frame_skip=args.frame_skip,
                 policy_exploration=None,
-                recorder=recorder,
+                environment=environment,
                 record_interval=args.record_interval,
             )
             recorder.register(trainer)

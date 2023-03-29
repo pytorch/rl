@@ -1163,10 +1163,11 @@ class Recorder(TrainerHookBase):
     ) -> None:
         if environment is None and recorder is not None:
             warnings.warn(self.ENV_DEPREC)
+            environment = recorder
         elif environment is not None and recorder is not None:
             raise ValueError("environment and recorder conflict.")
         self.policy_exploration = policy_exploration
-        self.recorder = recorder
+        self.environment = environment
         self.record_frames = record_frames
         self.frame_skip = frame_skip
         self._count = 0
@@ -1189,8 +1190,8 @@ class Recorder(TrainerHookBase):
             with set_exploration_mode(self.exploration_mode):
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.eval()
-                self.recorder.eval()
-                td_record = self.recorder.rollout(
+                self.environment.eval()
+                td_record = self.environment.rollout(
                     policy=self.policy_exploration,
                     max_steps=self.record_frames,
                     auto_reset=True,
@@ -1199,8 +1200,8 @@ class Recorder(TrainerHookBase):
                 ).clone()
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.train()
-                self.recorder.train()
-                self.recorder.transform.dump(suffix=self.suffix)
+                self.environment.train()
+                self.environment.transform.dump(suffix=self.suffix)
 
                 out = {}
                 for key in self.log_keys:
@@ -1214,18 +1215,18 @@ class Recorder(TrainerHookBase):
                     out[self.out_keys[key]] = value
                 out["log_pbar"] = self.log_pbar
         self._count += 1
-        self.recorder.close()
+        self.environment.close()
         return out
 
     def state_dict(self) -> Dict:
         return {
             "_count": self._count,
-            "recorder_state_dict": self.recorder.state_dict(),
+            "recorder_state_dict": self.environment.state_dict(),
         }
 
     def load_state_dict(self, state_dict: Dict) -> None:
         self._count = state_dict["_count"]
-        self.recorder.load_state_dict(state_dict["recorder_state_dict"])
+        self.environment.load_state_dict(state_dict["recorder_state_dict"])
 
     def register(self, trainer: Trainer, name: str = "recorder"):
         trainer.register_module(name, self)
