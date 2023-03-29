@@ -26,30 +26,27 @@ from utils import (
     make_loss,
     make_optim,
     make_recorder,
-    make_advantage_module
 )
 
 
 @hydra.main(config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    cfg = correct_for_frame_skip(cfg)
+    # cfg = correct_for_frame_skip(cfg)
     model_device = cfg.optim.device
 
-    actor_network, value_network = make_ppo_model(cfg)
-    actor_network = actor_network.to(model_device)
-    value_network = value_network.to(model_device)
+    actor, critic = make_ppo_model(cfg)
+    actor = actor.to(model_device)
+    critic = critic.to(model_device)
 
-    policy, critic = make_policy(cfg.model, actor_network)
-    collector = make_collector(cfg, policy=policy)
-    # loss, adv_module = make_loss(cfg.loss, actor_network, value_network)
-    # optim = make_optim(cfg.optim, actor_network, value_network)
+    collector = make_collector(cfg, policy=actor)
+    loss, adv_module = make_loss(cfg.loss, actor_network=actor, value_network=critic)
+    optim = make_optim(cfg.optim, actor_network=actor, value_network=critic)
     logger = make_logger(cfg.logger)
-    # recorder = make_recorder(cfg, logger, policy)
+    recorder = make_recorder(cfg, logger, actor)
 
-    # optim_steps_per_batch = cfg.optim.optim_steps_per_batch
-    # batch_size = cfg.optim.batch_size
-    # record_interval = cfg.recorder.interval
+    batch_size = cfg.optim.batch_size
+    record_interval = cfg.recorder.interval
 
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     collected_frames = 0
@@ -58,10 +55,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
     r0 = None
     l0 = None
     for data in collector:
-        import ipdb; ipdb.set_trace()
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch
         pbar.update(data.numel())
+        data_view = data.reshape(-1)
+        data_view = adv_module(data_view)  # TODO: modify after losses refactor
+        import ipdb; ipdb.set_trace()
+        data_view = loss(data_view)
 
 
 if __name__ == "__main__":

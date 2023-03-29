@@ -107,8 +107,8 @@ def make_transformed_env_pixels(base_env, env_cfg):
     env.append_transform(Resize(84, 84))
     env.append_transform(CatFrames(N=4, dim=-3))
 
-    obs_norm = ObservationNorm(in_keys=["pixels"])
-    env.append_transform(obs_norm)
+    # obs_norm = ObservationNorm(in_keys=["pixels"])
+    # env.append_transform(obs_norm)
 
     if env_library is DMControlEnv:
         double_to_float_list += [
@@ -188,7 +188,7 @@ def make_parallel_env(env_cfg, state_dict):
 def get_stats(env_cfg):
     from_pixels = env_cfg.from_pixels
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    init_stats(env, env_cfg.n_samples_stats, from_pixels)
+    # init_stats(env, env_cfg.n_samples_stats, from_pixels)
     return env.state_dict()
 
 
@@ -250,7 +250,7 @@ def make_ppo_model(cfg):
     model_cfg = cfg.model
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
     # we must initialize the observation norm transform
-    init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
+    # init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
 
     import gym
     import numpy as np
@@ -295,6 +295,7 @@ def make_ppo_model(cfg):
     value_module = ValueOperator(
         value_net,
         in_keys=["common_features"],
+        out_keys=["state_value"],
     )
 
     # 2.5 Wrap modules in a single ActorCritic operator
@@ -307,7 +308,6 @@ def make_ppo_model(cfg):
     # 2.6 Initialize the model by running a forward pass
     with torch.no_grad():
         td = proof_environment.rollout(max_steps=100, break_when_any_done=False)
-        td = td.reshape(-1)
         td = actor_critic(td)
         del td
 
