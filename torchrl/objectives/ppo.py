@@ -386,6 +386,7 @@ class ClipPPOLoss(PPOLoss):
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
         gain2 = log_weight_clip.exp() * advantage
 
+        import ipdb; ipdb.set_trace()
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
         td_out = TensorDict({"loss_objective": -gain.mean()}, [])
 
