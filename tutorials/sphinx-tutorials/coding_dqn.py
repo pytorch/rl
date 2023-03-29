@@ -616,6 +616,7 @@ trainer.train()
 ###############################################################################
 # We can now quickly check the CSVs with the results.
 
+
 def print_csv_files_in_folder(folder_path):
     """
     Find all CSV files in a folder and print the first 10 lines of each file.
@@ -638,6 +639,7 @@ def print_csv_files_in_folder(folder_path):
                     break
                 print(line.strip())
         print("\n")
+
 
 print_csv_files_in_folder(exp_name)
 

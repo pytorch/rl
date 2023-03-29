@@ -482,6 +482,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
         return index
 
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
+        if not isinstance(self._sampler, PrioritizedSampler):
+            return
         priority = torch.tensor(
             [self._get_priority(td) for td in data],
             dtype=torch.float,
