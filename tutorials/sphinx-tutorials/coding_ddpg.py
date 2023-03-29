@@ -67,7 +67,7 @@ from matplotlib import pyplot as plt
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, optim
-from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import CompositeSpec, TensorDictReplayBuffer
 from torchrl.data.postprocs import MultiStep
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
@@ -1010,7 +1010,9 @@ collector.set_seed(seed)
 # ~~~~~~~~~~~~~
 #
 
-replay_buffer = make_replay_buffer(buffer_size=buffer_size, batch_size=batch_size, prefetch=3)
+replay_buffer = make_replay_buffer(
+    buffer_size=buffer_size, batch_size=batch_size, prefetch=3
+)
 
 ###############################################################################
 # Recorder
@@ -1063,13 +1065,7 @@ for i, tensordict in enumerate(collector):
     # extend the replay buffer with the new data
     current_frames = tensordict.numel()
     collected_frames += current_frames
-    try:
-        replay_buffer.extend(tensordict.cpu())
-    except Exception as err:
-        print("iteration", i)
-        print(replay_buffer._storage._storage)
-        print(tensordict)
-        raise err
+    replay_buffer.extend(tensordict.cpu())
 
     # optimization steps
     if collected_frames >= init_random_frames:

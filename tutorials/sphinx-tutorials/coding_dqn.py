@@ -610,6 +610,11 @@ recorder.register(trainer)
 trainer.register_op("post_optim", target_net_updater.step)
 
 ###############################################################################
+# .. note::
+#   It is possible to link multiple optimizers to the trainer if needed.
+#   In this case, each optimizer will be tied to a field in the loss dictionary.
+#   Check the :class:`torchrl.trainers.OptimizerHook` to learn more.
+#
 # Here we are, ready to train our algorithm! A simple call to
 # ``trainer.train()`` and we'll be getting our results logged in.
 #
@@ -621,26 +626,28 @@ trainer.train()
 
 def print_csv_files_in_folder(folder_path):
     """
-    Find all CSV files in a folder and print the first 10 lines of each file.
+    Find all CSV files in a folder and return the first 10 lines of each file as a string.
 
     Args:
         folder_path (str): The relative path to the folder.
 
     Returns:
-        list: A list of all CSV files in the folder.
+        str: A string containing the first 10 lines of each CSV file in the folder.
     """
     csv_files = []
+    output_str = ""
     for file in os.listdir(folder_path):
         if file.endswith(".csv"):
             csv_files.append(os.path.join(folder_path, file))
     for csv_file in csv_files:
-        print(f"File: {csv_file}")
+        output_str += f"File: {csv_file}\n"
         with open(csv_file, "r") as f:
             for i, line in enumerate(f):
                 if i == 10:
                     break
-                print(line.strip())
-        print("\n")
+                output_str += line.strip() + "\n"
+        output_str += "\n"
+    return output_str
 
 
 print_csv_files_in_folder(exp_name)
@@ -649,36 +656,38 @@ print_csv_files_in_folder(exp_name)
 # Conclusion and possible improvements
 # ------------------------------------
 #
-# In this tutorial we have learnt:
+# In this tutorial we have learned:
 #
-# - How to train a policy that read pixel-based states, what transforms to
-#   include and how to normalize the data;
-# - How to create a policy that picks up the action with the highest value
-#   with :class:`torchrl.modules.QValueNetwork`;
+# - How to write a Trainer, including building its components and registering
+#   them in the trainer;
+# - How to code a DQN algorithm, including how to create a policy that picks
+#   up the action with the highest value with
+#   :class:`torchrl.modules.QValueNetwork`;
 # - How to build a multiprocessed data collector;
-# - How to train a DQN with TD(:math:`\lambda`) returns.
 #
-# We have seen that using TD(:math:`\lambda`) greatly improved the performance
-# of DQN. Other possible improvements could include:
+# Possible improvements to this tutorial could include:
 #
-# - Using the Multi-Step post-processing. Multi-step will project an action
-#   to the nth following step, and create a discounted sum of the rewards in
-#   between. This trick can make the algorithm noticebly less myopic. To use
-#   this, simply create the collector with
+# - Using the :class:`torchrl.data.MultiStep`
+#   post-processing. Multi-step will project an action
+#   to the :math:`n^{th}` following step, and create a discounted sum of the
+#   rewards in between. This trick can make the algorithm noticeably less
+#   myopic (although the reward is then biased). To use this, simply
+#   create the collector with
 #
-#       from torchrl.data.postprocs.postprocs import MultiStep
-#       collector = CollectorClass(..., postproc=MultiStep(gamma, n))
+#       >>> from torchrl.data.postprocs.postprocs import MultiStep
+#       >>> collector = CollectorClass(..., postproc=MultiStep(gamma, n))
 #
 #   where ``n`` is the number of looking-forward steps. Pay attention to the
 #   fact that the ``gamma`` factor has to be corrected by the number of
 #   steps till the next observation when being passed to
 #   ``vec_td_lambda_advantage_estimate``:
 #
-#       gamma = gamma ** tensordict["steps_to_next_obs"]
+#       >>> gamma = gamma ** tensordict["steps_to_next_obs"]
+#
 # - A prioritized replay buffer could also be used. This will give a
 #   higher priority to samples that have the worst value accuracy.
-# - A distributional loss (see ``torchrl.objectives.DistributionalDQNLoss``
+#   Learn more on the `replay buffer section <https://pytorch.org/rl/reference/data.html#composable-replay-buffers>`_
+#   of the documentation.
+# - A distributional loss (see :class:`torchrl.objectives.DistributionalDQNLoss`
 #   for more information).
-# - More fancy exploration techniques, such as NoisyLinear layers and such
-#   (check ``torchrl.modules.NoisyLinear``, which is fully compatible with the
-#   ``MLP`` class used in our Dueling DQN).
+# - More fancy exploration techniques, such as :class:`torchrl.modules.NoisyLinear` layers and such.
