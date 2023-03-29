@@ -207,6 +207,13 @@ def init_stats(env, n_samples_stats, from_pixels):
                 t.init_stats(n_samples_stats)
 
 
+def make_test_env(env_cfg):
+    env = make_transformed_env(
+        ParallelEnv(1, EnvCreator(lambda: make_base_env(env_cfg))), env_cfg
+    )
+    return env
+
+
 # ====================================================================
 # Collector and replay buffer
 # ---------------------------
