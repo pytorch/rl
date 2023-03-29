@@ -540,9 +540,11 @@ class SyncDataCollector(DataCollectorBase):
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
-            if total_frames % frames_per_batch != 0:
-                raise ValueError(
-                    f"total_frames ({total_frames}) must be divisible by frames_per_batch ({frames_per_batch})."
+            remainder = total_frames % frames_per_batch
+            if remainder != 0:
+                warnings.warn(
+                    f"total_frames ({total_frames}) is not divisible by frames_per_batch ({frames_per_batch})."
+                    f"{frames_per_batch - remainder} additional frames will be collected."
                 )
         self.total_frames = total_frames
         self.reset_at_each_iter = reset_at_each_iter
@@ -1112,9 +1114,11 @@ class _MultiDataCollector(DataCollectorBase):
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
-            if total_frames % frames_per_batch != 0:
-                raise ValueError(
-                    f"total_frames ({total_frames}) must be divisible by frames_per_batch ({frames_per_batch})."
+            remainder = total_frames % frames_per_batch
+            if remainder != 0:
+                warnings.warn(
+                    f"total_frames ({total_frames}) is not divisible by frames_per_batch ({frames_per_batch})."
+                    f"{frames_per_batch - remainder} additional frames will be collected."
                 )
         self.total_frames = total_frames
         self.reset_at_each_iter = reset_at_each_iter
