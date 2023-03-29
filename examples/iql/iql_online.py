@@ -36,33 +36,36 @@ def env_maker(env_name, frame_skip=1, device="cpu", from_pixels=False):
 
 
 def make_replay_buffer(
+    batch_size,
     prb=False,
     buffer_size=1000000,
     buffer_scratch_dir="/tmp/",
     device="cpu",
-    make_replay_buffer=3,
+    prefetch=3,
 ):
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
             alpha=0.7,
             beta=0.5,
             pin_memory=False,
-            prefetch=make_replay_buffer,
+            prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
                 device=device,
             ),
+            batch_size=batch_size,
         )
     else:
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
-            prefetch=make_replay_buffer,
+            prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
                 device=device,
             ),
+            batch_size=batch_size,
         )
     return replay_buffer
 
@@ -218,7 +221,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.set_seed(cfg.seed)
 
     # Make Replay Buffer
-    replay_buffer = make_replay_buffer(buffer_size=cfg.buffer_size, device=device)
+    replay_buffer = make_replay_buffer(
+        buffer_size=cfg.buffer_size, device=device, batch_size=cfg.batch_size
+    )
 
     # Optimizers
     params = list(loss_module.parameters())

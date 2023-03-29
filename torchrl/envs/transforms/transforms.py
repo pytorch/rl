@@ -396,7 +396,7 @@ class TransformedEnv(EnvBase):
         transform (Transform, optional): transform to apply to the tensordict resulting
             from :obj:`env.step(td)`. If none is provided, an empty Compose
             placeholder in an eval mode is used.
-        cache_specs (bool, optional): if True, the specs will be cached once
+        cache_specs (bool, optional): if ``True``, the specs will be cached once
             and for all after the first call (i.e. the specs will be
             transformed_in only once). If the transform changes during
             training, the original spec transform may not be valid anymore,
@@ -880,7 +880,7 @@ class ToTensorImage(ObservationTransform):
     with values between 0 and 1.
 
     Args:
-        unsqueeze (bool): if True, the observation tensor is unsqueezed
+        unsqueeze (bool): if ``True``, the observation tensor is unsqueezed
             along the first dimension. default=False.
         dtype (torch.dtype, optional): dtype to use for the resulting
             observations.
@@ -1154,7 +1154,7 @@ class FlattenObservation(ObservationTransform):
             :obj:`["pixels"]` is assumed.
         out_keys (sequence of str, optional): the flatten observation keys. If none is
             provided, :obj:`in_keys` is assumed.
-        allow_positive_dim (bool, optional): if True, positive dimensions are accepted.
+        allow_positive_dim (bool, optional): if ``True``, positive dimensions are accepted.
             :obj:`FlattenObservation` will map these to the n^th feature dimension
             (ie n^th dimension after batch size of parent env) of the input tensor.
             Defaults to False, ie. non-negative dimensions are not permitted.
@@ -1229,7 +1229,7 @@ class UnsqueezeTransform(Transform):
     Args:
         unsqueeze_dim (int): dimension to unsqueeze. Must be negative (or allow_positive_dim
             must be turned on).
-        allow_positive_dim (bool, optional): if True, positive dimensions are accepted.
+        allow_positive_dim (bool, optional): if ``True``, positive dimensions are accepted.
             :obj:`UnsqueezeTransform` will map these to the n^th feature dimension
             (ie n^th dimension after batch size of parent env) of the input tensor,
             independently from the tensordict batch size (ie positive dims may be
@@ -1414,7 +1414,7 @@ class ObservationNorm(ObservationTransform):
             only the forward transform will be called.
         out_keys_inv (list of int, optional): output entries for the inverse transform.
             Defaults to the value of `in_keys_inv`.
-        standard_normal (bool, optional): if True, the transform will be
+        standard_normal (bool, optional): if ``True``, the transform will be
 
             .. math::
                 obs = (obs-loc)/scale
@@ -1831,7 +1831,7 @@ class RewardScaling(Transform):
     Args:
         loc (number or torch.Tensor): location of the affine transform
         scale (number or torch.Tensor): scale of the affine transform
-        standard_normal (bool, optional): if True, the transform will be
+        standard_normal (bool, optional): if ``True``, the transform will be
 
             .. math::
                 reward = (reward-loc)/scale
@@ -1993,9 +1993,9 @@ class CatTensors(Transform):
         out_key: key of the resulting tensor.
         dim (int, optional): dimension along which the concatenation will occur.
             Default is -1.
-        del_keys (bool, optional): if True, the input values will be deleted after
+        del_keys (bool, optional): if ``True``, the input values will be deleted after
             concatenation. Default is True.
-        unsqueeze_if_oor (bool, optional): if True, CatTensor will check that
+        unsqueeze_if_oor (bool, optional): if ``True``, CatTensor will check that
             the dimension indicated exist for the tensors to concatenate. If not,
             the tensors will be unsqueezed along that dimension.
             Default is False.
@@ -2168,7 +2168,7 @@ class DiscreteActionProjection(Transform):
         num_actions_effective (int): max number of action considered.
         max_actions (int): maximum number of actions that this module can read.
         action_key (str, optional): key name of the action. Defaults to "action".
-        include_forward (bool, optional): if True, a call to forward will also
+        include_forward (bool, optional): if ``True``, a call to forward will also
             map the action from one domain to the other when the module is called
             by a replay buffer or an nn.Module chain. Defaults to True.
 
@@ -2383,7 +2383,7 @@ class TensorDictPrimer(Transform):
     Args:
         primers (dict, optional): a dictionary containing key-spec pairs which will
             be used to populate the input tensordict.
-        random (bool, optional): if True, the values will be drawn randomly from
+        random (bool, optional): if ``True``, the values will be drawn randomly from
             the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
         default_value (float, optional): if non-random filling is chosen, this
@@ -2771,7 +2771,7 @@ class VecNorm(Transform):
                 tensordict
             keys (iterable of str, optional): keys that
                 have to be normalized. Default is `["next", "reward"]`
-            memmap (bool): if True, the resulting tensordict will be cast into
+            memmap (bool): if ``True``, the resulting tensordict will be cast into
                 memmory map (using `memmap_()`). Otherwise, the tensordict
                 will be placed in shared memory.
 

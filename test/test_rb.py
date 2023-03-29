@@ -580,6 +580,54 @@ class TestBuffers:
         assert b
 
 
+def test_multi_loops():
+    """Tests that one can iterate multiple times over a buffer without rep."""
+    rb = ReplayBuffer(
+        batch_size=5, storage=ListStorage(10), sampler=SamplerWithoutReplacement()
+    )
+    rb.extend(torch.zeros(10))
+    for i, d in enumerate(rb):  # noqa: B007
+        assert (d == 0).all()
+    assert i == 1
+    for i, d in enumerate(rb):  # noqa: B007
+        assert (d == 0).all()
+    assert i == 1
+
+
+def test_batch_errors():
+    """Tests error messages related to batch-size"""
+    rb = ReplayBuffer(
+        storage=ListStorage(10), sampler=SamplerWithoutReplacement(drop_last=False)
+    )
+    rb.extend(torch.zeros(10))
+    rb.sample(3)  # that works
+    with pytest.raises(
+        RuntimeError,
+        match="Cannot iterate over the replay buffer. Batch_size was not specified",
+    ):
+        for _ in rb:
+            pass
+    with pytest.raises(RuntimeError, match="batch_size not specified"):
+        rb.sample()
+    with pytest.raises(ValueError, match="Samplers with drop_last=True"):
+        ReplayBuffer(
+            storage=ListStorage(10), sampler=SamplerWithoutReplacement(drop_last=True)
+        )
+    # that works
+    ReplayBuffer(
+        storage=ListStorage(10),
+    )
+    rb = ReplayBuffer(
+        storage=ListStorage(10),
+        sampler=SamplerWithoutReplacement(drop_last=False),
+        batch_size=3,
+    )
+    rb.extend(torch.zeros(10))
+    for _ in rb:
+        pass
+    rb.sample()
+
+
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
 @pytest.mark.parametrize("device", get_available_devices())

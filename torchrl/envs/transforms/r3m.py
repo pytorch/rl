@@ -215,7 +215,7 @@ class R3MTransform(Compose):
              argument will be treaded separetely and each will be given a single,
              separated entry in the output tensordict. Defaults to :obj:`True`.
         download (bool, torchvision Weights config or corresponding string):
-            if True, the weights will be downloaded using the torch.hub download
+            if ``True``, the weights will be downloaded using the torch.hub download
             API (i.e. weights will be cached for future use).
             These weights are the original weights from the R3M publication.
             If the torchvision weights are needed, there are two ways they can be

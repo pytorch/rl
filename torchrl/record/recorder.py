@@ -34,7 +34,7 @@ class VideoRecorder(ObservationTransform):
         skip (int): frame interval in the output video.
             Default is 2.
         center_crop (int, optional): value of square center crop.
-        make_grid (bool, optional): if True, a grid is created assuming that a
+        make_grid (bool, optional): if ``True``, a grid is created assuming that a
             tensor of shape [B x W x H x 3] is provided, with B being the batch
             size. Default is True.
 
@@ -138,7 +138,7 @@ class TensorDictRecorder(Transform):
 
     Args:
         out_file_base (str): a string defining the prefix of the file where the tensordict will be written.
-        skip_reset (bool): if True, the first TensorDict of the list will be discarded (usually the tensordict
+        skip_reset (bool): if ``True``, the first TensorDict of the list will be discarded (usually the tensordict
             resulting from the call to :obj:`env.reset()`)
             default: True
         skip (int): frame interval for the saved tensordict.

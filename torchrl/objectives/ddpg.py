@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import warnings
 from copy import deepcopy
 
 from typing import Tuple
@@ -14,10 +15,17 @@ from tensordict.nn import make_functional, repopulate_module, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
-from torchrl.objectives.utils import distance_loss, hold_out_params, next_state_value
+from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    hold_out_params,
+    ValueEstimators,
+)
 
 from ..envs.utils import set_exploration_mode
 from .common import LossModule
+from .value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
 class DDPGLoss(LossModule):
@@ -26,24 +34,24 @@ class DDPGLoss(LossModule):
     Args:
         actor_network (TensorDictModule): a policy operator.
         value_network (TensorDictModule): a Q value operator.
-        gamma (scalar): a discount factor for return computation.
-        device (str, int or torch.device, optional): a device where the losses will be computed, if it can't be found
-            via the value operator.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
         delay_actor (bool, optional): whether to separate the target actor networks from the actor networks used for
-            data collection. Default is :obj:`False`.
+            data collection. Default is ``False``.
         delay_value (bool, optional): whether to separate the target value networks from the value networks used for
-            data collection. Default is :obj:`False`.
+            data collection. Default is ``False``.
     """
+
+    default_value_estimator: ValueEstimators = ValueEstimators.TD0
 
     def __init__(
         self,
         actor_network: TensorDictModule,
         value_network: TensorDictModule,
-        gamma: float,
+        *,
         loss_function: str = "l2",
         delay_actor: bool = False,
         delay_value: bool = False,
+        gamma: float = None,
     ) -> None:
         super().__init__()
         self.delay_actor = delay_actor
@@ -71,8 +79,11 @@ class DDPGLoss(LossModule):
 
         self.actor_in_keys = actor_network.in_keys
 
-        self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_funtion = loss_function
+
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.
@@ -147,7 +158,6 @@ class DDPGLoss(LossModule):
         )
         pred_val = td_copy.get("state_action_value").squeeze(-1)
 
-        actor_critic = self.actor_critic
         target_params = TensorDict(
             {
                 "module": {
@@ -159,12 +169,9 @@ class DDPGLoss(LossModule):
             device=self.target_actor_network_params.device,
         )
         with set_exploration_mode("mode"):
-            target_value = next_state_value(
-                tensordict,
-                actor_critic,
-                gamma=self.gamma,
-                params=target_params,
-            )
+            target_value = self.value_estimator.value_estimate(
+                tensordict, target_params=target_params
+            ).squeeze(-1)
 
         # td_error = pred_val - target_value
         loss_value = distance_loss(
@@ -172,3 +179,28 @@ class DDPGLoss(LossModule):
         )
 
         return loss_value, (pred_val - target_value).pow(2), pred_val, target_value
+
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+        hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
+        hp.update(hyperparams)
+        value_key = "state_action_value"
+        if value_type == ValueEstimators.TD1:
+            self._value_estimator = TD1Estimator(
+                value_network=self.actor_critic, value_key=value_key, **hp
+            )
+        elif value_type == ValueEstimators.TD0:
+            self._value_estimator = TD0Estimator(
+                value_network=self.actor_critic, value_key=value_key, **hp
+            )
+        elif value_type == ValueEstimators.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.TDLambda:
+            self._value_estimator = TDLambdaEstimator(
+                value_network=self.actor_critic, value_key=value_key, **hp
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")
