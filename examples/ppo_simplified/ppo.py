@@ -17,10 +17,13 @@ The helper functions are coded in the utils.py associated with this script.
 # TODO: fix network definition
 
 import torch
+from torch.optim.lr_scheduler import LinearLR
+
 import hydra
 import tqdm
-from torchrl.trainers.helpers.envs import correct_for_frame_skip
 from tensordict import TensorDict
+from torchrl.envs.utils import set_exploration_mode
+from torchrl.trainers.helpers.envs import correct_for_frame_skip
 
 from utils import (
     get_stats,
@@ -32,6 +35,7 @@ from utils import (
     make_optim,
     make_recorder,
     make_data_buffer,
+    make_test_env,
 )
 
 
@@ -49,8 +53,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
     data_buffer = make_data_buffer(cfg)
     loss, adv_module = make_loss(cfg.loss, actor_network=actor, value_network=critic)
     optim = make_optim(cfg.optim, actor_network=actor, value_network=critic)
+
+    batch_size = cfg.collector.total_frames * cfg.env.num_envs
+    num_mini_batches = batch_size // cfg.loss.mini_batch_size
+    total_network_updates = (cfg.collector.total_frames // batch_size) * cfg.loss.ppo_epochs * num_mini_batches
+    scheduler = LinearLR(optim, total_iters=total_network_updates, start_factor=1.0, end_factor=0.1)
+
+
     logger = make_logger(cfg.logger)
     recorder = make_recorder(cfg, logger, actor)
+    test_env = make_test_env(cfg.env)
+
     record_interval = cfg.recorder.interval
 
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
@@ -69,6 +82,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         for epoch in range(cfg.loss.ppo_epochs):
             for _ in range(frames_in_batch // cfg.loss.mini_batch_size):
+
                 batch = data_buffer.sample().to(model_device)
 
                 ########################################################################################################
@@ -102,7 +116,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 surr2 = torch.clamp(ratio, 1.0 - 0.1, 1.0 + 0.1) * advantage
                 loss_action = - torch.min(surr1, surr2).mean()
 
-                loss_value = (returns - value_new).pow(2).mean()
+                loss_value = 0.5 * (returns - value_new).pow(2).mean()
 
                 # Entropy loss
                 loss_entropy = dist_entropy
@@ -114,13 +128,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 }
 
                 # Global loss
-                loss_val = loss_action + loss_value * 0.5 - loss_entropy * 0.0001
+                loss_val = loss_action + loss_value - loss_entropy * 0.0001
 
                 ########################################################################################################
 
                 loss_val.backward()
                 torch.nn.utils.clip_grad_norm_(list(actor.parameters()) + list(critic.parameters()), max_norm=0.5)
                 optim.step()
+                scheduler.step()
                 optim.zero_grad()
                 if r0 is None:
                     r0 = data["reward"].mean().item()
@@ -132,11 +147,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 pbar.set_description(
                     f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['reward'].mean(): 4.4f} (init={r0: 4.4f})"
                 )
-                collector.update_policy_weights_()
-                if (
-                    collected_frames - frames_in_batch
-                ) // record_interval < collected_frames // record_interval:
-                    recorder(batch=None)  # TODO: batch seems to be unused
+
+        collector.update_policy_weights_()
+        if (
+            collected_frames - frames_in_batch
+        ) // record_interval < collected_frames // record_interval:
+
+            with set_exploration_mode("random"):
+                td_record = test_env.rollout(
+                    policy=actor,
+                    max_steps=10_000_000,
+                    auto_reset=True,
+                    auto_cast_to_device=True,
+                    break_when_any_done=True,
+                ).clone()
+                logger.log_scalar("reward_testing", td_record["reward"].sum().item(), collected_frames)
 
 
 if __name__ == "__main__":
