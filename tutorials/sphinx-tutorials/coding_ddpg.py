@@ -818,7 +818,8 @@ device = (
 )
 
 # Number of environments in each data collector
-env_per_collector = 2
+warnings.warn("More envs!")
+env_per_collector = 1
 
 # Total frames we will use during training. Scale up to 500K - 1M for a more
 # meaningful training
