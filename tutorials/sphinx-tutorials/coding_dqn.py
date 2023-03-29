@@ -546,6 +546,8 @@ test_env = make_env(parallel=False, obs_norm_sd=stats)
 # Get model
 actor, actor_explore = make_model(test_env)
 loss_module, target_net_updater = get_loss_module(actor, gamma)
+target_net_updater.init_()
+
 collector = get_collector(
     stats, num_collectors, actor_explore, frames_per_batch, total_frames, device
 )
