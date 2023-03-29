@@ -650,7 +650,7 @@ def print_csv_files_in_folder(folder_path):
     return output_str
 
 
-print_csv_files_in_folder(exp_name)
+print_csv_files_in_folder("csv_logs/" + exp_name)
 
 ###############################################################################
 # Conclusion and possible improvements
