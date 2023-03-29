@@ -82,9 +82,9 @@ def _get_reward(
 class MultiStep(nn.Module):
     """Multistep reward transform.
 
-    Presented in 'Sutton, R. S. 1988. Learning to
-    predict by the methods of temporal differences. Machine learning 3(
-    1):9–44.'
+    Presented in
+
+    | Sutton, R. S. 1988. Learning to predict by the methods of temporal differences. Machine learning 3(1):9–44.
 
     This module maps the "next" observation to the t + n "next" observation.
     It is an identity transform whenever :attr:`n_steps` is 0.

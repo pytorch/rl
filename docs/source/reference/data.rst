@@ -180,8 +180,6 @@ Here's an example:
 
 .. currentmodule:: torchrl.data.datasets
 
-.. currentmodule:: torchrl.data.datasets
-
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst
@@ -220,7 +218,7 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
 Utils
 -----
 
-.. currentmodule:: torchrl.data.datasets
+.. currentmodule:: torchrl.data
 
 .. autosummary::
     :toctree: generated/

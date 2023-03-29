@@ -18,7 +18,7 @@ from torchrl.envs.utils import step_mdp
 _GAMMA_LMBDA_DEPREC_WARNING = (
     "Passing gamma / lambda parameters through the loss constructor "
     "is deprecated and will be removed soon. To customize your value function, "
-    "run `loss_module.make_value_estimator(ValueFunctions.<value_fun>, gamma=val)`."
+    "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
 )
 
 
@@ -45,7 +45,7 @@ def default_value_kwargs(value_type: ValueEstimators):
 
     Args:
         value_type (Enum.value): the value function type, from the
-        :class:`torchrl.objectives.utils.ValueFunctions` class.
+        :class:`torchrl.objectives.utils.ValueEstimators` class.
 
     Examples:
         >>> kwargs = default_value_kwargs(ValueEstimators.TDLambda)

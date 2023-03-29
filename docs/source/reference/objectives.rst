@@ -218,5 +218,5 @@ Utils
     next_state_value
     SoftUpdate
     HardUpdate
-    ValueFunctions
+    ValueEstimators
     default_value_kwargs
