@@ -818,8 +818,7 @@ if __name__ == "__main__":
     )
 
     # Number of environments in each data collector
-    warnings.warn("More envs!")
-    env_per_collector = 1
+    env_per_collector = 2
 
     # Total frames we will use during training. Scale up to 500K - 1M for a more
     # meaningful training
