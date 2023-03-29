@@ -191,8 +191,8 @@ def td0_advantage_estimate(
         raise RuntimeError(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
-    not_done = 1 - done.to(next_state_value.dtype)
-    advantage = reward + gamma * not_done * next_state_value - state_value
+    returns = td0_return_estimate(gamma, next_state_value, reward, done)
+    advantage = returns - state_value
     return advantage
 
 
@@ -220,8 +220,8 @@ def td0_return_estimate(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
     not_done = 1 - done.to(next_state_value.dtype)
-    advantage = reward + gamma * not_done * next_state_value
-    return advantage
+    returns = reward + gamma * not_done * next_state_value
+    return returns
 
 
 ########################################################################
