@@ -22,8 +22,8 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import check_env_specs, set_exploration_mode, step_mdp
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.objectives import ClipPPOLoss
-from torchrl.objectives.value import GAE
+from torchrl.objectives import ClipPPOLoss, ValueEstimators
+from torchrl.objectives.value import GAE, TD0Estimator
 
 from torchrl.record.loggers.wandb import WandbLogger
 from tqdm import tqdm
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     max_grad_norm = 40.0
 
     vmas_envs = 640  if not test else 1
-    max_steps = 100
+    max_steps = 200
     frames_per_batch = vmas_envs * max_steps
     # For a complete training, bring the number of frames up to 1M
     total_frames = frames_per_batch * 1000
@@ -49,25 +49,25 @@ if __name__ == "__main__":
     )
     gamma = 0.99
     lmbda = 0.9
-    entropy_eps = 0
+    entropy_eps = 1e-3
 
     env = VmasEnv(
-        scenario_name="goal",
+        scenario_name="balance",
         num_envs=vmas_envs,
         continuous_actions=True,
         max_steps=max_steps,
         device=device,
         # Scenario kwargs
-        # n_agents=1,
+        n_agents=3,
     )
     env_test = VmasEnv(
-        scenario_name="goal",
+        scenario_name="balance",
         num_envs=vmas_envs,
         continuous_actions=True,
         max_steps=max_steps,
         device=device,
         # Scenario kwargs
-        # n_agents=1,
+        n_agents=3,
     )
 
     # print("observation_spec:", env.observation_spec)
@@ -137,12 +137,11 @@ if __name__ == "__main__":
     replay_buffer = ReplayBuffer(
         storage=LazyTensorStorage(frames_per_batch),
         sampler=SamplerWithoutReplacement(),
-        batch_size=sub_batch_size
+        batch_size=sub_batch_size,
+        collate_fn=lambda x:x
     )
 
-    advantage_module = GAE(
-        gamma=gamma, lmbda=lmbda, value_network=value_module, average_gae=False
-    )
+
 
     loss_module = ClipPPOLoss(
         actor=policy_module,
@@ -152,11 +151,12 @@ if __name__ == "__main__":
         entropy_bonus=bool(entropy_eps),
         entropy_coef=entropy_eps,
         # these keys match by default but we set this for completeness
-        value_target_key=advantage_module.value_target_key,
         critic_coef=1.0,
-        gamma=gamma,
         loss_critic_type="smooth_l1",
+        normalize_advantage=False
     )
+    loss_module.make_value_estimator(ValueEstimators.TD0, gamma=gamma)
+    # loss_module.make_value_estimator(ValueEstimators.GAE, gamma=gamma, lmbda=lmbda)
 
     optim = torch.optim.Adam(loss_module.parameters(), lr)
     # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -167,24 +167,21 @@ if __name__ == "__main__":
     logger = WandbLogger(exp_name="mult_ppo_tutorial", project="torchrl")
 
     for i, tensordict_data in enumerate(collector):
+        print(tensordict_data)
         print("Collected data")
-        advantage_module(tensordict_data)
+        loss_module.value_estimator(tensordict_data, params=loss_module.critic_params)
         data_view = tensordict_data.reshape(-1)
         replay_buffer.extend(data_view)
         for j in range(num_epochs):
             print(f"Inner epoch {j}")
-            # replay_buffer.extend(data_view)
-            indexes = torch.randperm(frames_per_batch)
-            index = 0
-            for _ in range(frames_per_batch // sub_batch_size):
-                # subdata = replay_buffer.sample()
-                subdata = data_view[indexes[index:index + sub_batch_size]]
 
+            for _ in range(frames_per_batch // sub_batch_size):
+                subdata = replay_buffer.sample()
                 loss_vals = loss_module(subdata.to(device))
                 loss_value = (
                     loss_vals["loss_objective"]
                     + loss_vals["loss_critic"]
-                    # + loss_vals["loss_entropy"]
+                    + loss_vals["loss_entropy"]
                 )
 
                 # Optimization: backward, grad clipping and optim step
@@ -194,9 +191,7 @@ if __name__ == "__main__":
                 torch.nn.utils.clip_grad_norm_(loss_module.parameters(), max_grad_norm)
                 optim.step()
                 optim.zero_grad()
-                index += sub_batch_size
 
-            assert index == (frames_per_batch // sub_batch_size) * sub_batch_size
         logger.log_scalar(
             "reward",
             tensordict_data["next", "reward"].mean().item(),
@@ -204,7 +199,7 @@ if __name__ == "__main__":
         )
         print(f"Iteration {i}")
 
-        if i % 10 == 0:
+        if i % 1 == 0:
 
             with set_exploration_mode("mean"), torch.no_grad():
                 # execute a rollout with the trained policy
