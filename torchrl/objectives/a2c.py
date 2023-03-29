@@ -155,7 +155,7 @@ class A2CLoss(LossModule):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self.critic_params,
+                params=self.critic_params.detach(),
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.advantage_key)
