@@ -5,7 +5,7 @@ import torch.optim
 import torch.distributions as dist
 from tensordict.nn import TensorDictModule
 
-from torchrl.collectors import MultiSyncDataCollector
+from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data import (
     CompositeSpec,
     LazyMemmapStorage,
@@ -35,6 +35,7 @@ from torchrl.modules import (
     ProbabilisticActor,
     ValueOperator,
     ActorValueOperator,
+    OneHotCategorical,
 )
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value.advantages import GAE
@@ -213,26 +214,29 @@ def init_stats(env, n_samples_stats, from_pixels):
 def make_collector(cfg, policy):
     env_cfg = cfg.env
     collector_cfg = cfg.collector
-    collector_class = MultiSyncDataCollector
+    # collector_class = MultiSyncDataCollector
+    collector_class = SyncDataCollector
     state_dict = get_stats(env_cfg)
     collector = collector_class(
-        [make_parallel_env(env_cfg, state_dict=state_dict)]
-        * collector_cfg.num_collectors,
+        # [make_parallel_env(env_cfg, state_dict=state_dict)] * collector_cfg.num_collectors,
+        make_parallel_env(env_cfg, state_dict=state_dict),
         policy,
         frames_per_batch=collector_cfg.frames_per_batch,
         total_frames=collector_cfg.total_frames,
-        devices=collector_cfg.collector_devices,
+        # devices=collector_cfg.collector_devices,
         # init_random_frames=collector_cfg.init_random_frames,
         max_frames_per_traj=collector_cfg.max_frames_per_traj,
     )
     return collector
 
 
-def make_replay_buffer(cfg):
+def make_data_buffer(cfg):
+    cfg_collector = cfg.collector
     cfg_loss = cfg.loss
     sampler = SamplerWithoutReplacement()
     return TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(cfg_loss.num_steps), sampler=sampler
+        storage=LazyMemmapStorage(cfg_collector.frames_per_batch), sampler=sampler,
+        batch_size=cfg_loss.mini_batch_size,
     )
 
 
@@ -267,7 +271,7 @@ def make_ppo_model(cfg):
 
     # Define shared net
     common_module = CNN(obs_space)
-    dummy_obs = torch.zeros(1, *obs_space)
+    dummy_obs = torch.zeros(8, *obs_space)
     common_module_output = common_module(dummy_obs)
     common_module = SafeModule(  # Like TensorDictModule
         module=common_module,
@@ -283,10 +287,19 @@ def make_ppo_model(cfg):
         gain=np.sqrt(0.01))
 
     policy_net = init_(nn.Linear(common_module_output.shape[-1], act_space.n))
-    policy_module = SafeModule(  # Like TensorDictModule
+    policy_module = TensorDictModule(
         module=policy_net,
         in_keys=["common_features"],
         out_keys=["logits"],
+    )
+
+    policy_module = ProbabilisticActor(
+        module=policy_module,
+        in_keys=["logits"],
+        # out_keys=["action"],
+        distribution_class=OneHotCategorical,
+        distribution_kwargs={},
+        return_log_prob=True,
     )
 
     # Define one head for the value
@@ -386,7 +399,10 @@ def make_logger(logger_cfg):
 
 def make_recorder(cfg, logger, policy) -> Recorder:
     env_cfg = deepcopy(cfg.env)
-    env = make_transformed_env(make_base_env(env_cfg, from_pixels=True), env_cfg)
+    # env = make_transformed_env(make_base_env(env_cfg, from_pixels=True), env_cfg)
+    env = make_transformed_env(
+        ParallelEnv(1, EnvCreator(lambda: make_base_env(env_cfg))), env_cfg
+    )
     if cfg.recorder.video:
         env.insert_transform(
             0, VideoRecorder(logger=logger, tag=cfg.logger.exp_name, in_keys=["pixels"])
