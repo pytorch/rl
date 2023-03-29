@@ -68,7 +68,7 @@ from matplotlib import pyplot as plt
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, optim
-from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector
 from torchrl.data import CompositeSpec, TensorDictReplayBuffer
 from torchrl.data.postprocs import MultiStep
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
@@ -987,8 +987,10 @@ if n_steps_forward > 0:
 else:
     multistep = None
 
-collector = MultiaSyncDataCollector(
-    create_env_fn=[create_env_fn, create_env_fn],
+warnings.warn("Change collector!!")
+
+collector = SyncDataCollector(
+    create_env_fn=create_env_fn,
     policy=actor_model_explore,
     total_frames=total_frames,
     max_frames_per_traj=max_frames_per_traj,
@@ -998,7 +1000,7 @@ collector = MultiaSyncDataCollector(
     postproc=multistep,
     split_trajs=True,
     device=device,  # device for execution
-    storing_devices=[device, device],  # device where data will be stored and passed
+    storing_device=device,  # device where data will be stored and passed
     update_at_each_batch=False,
     exploration_mode="random",
 )
