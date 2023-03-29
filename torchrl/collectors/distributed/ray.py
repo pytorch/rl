@@ -99,11 +99,11 @@ class RayCollector(DataCollectorBase):
     resources.The sum of all collector resources should be available in the cluster. Refer to Ray
     documentation for advanced configuration of the ray.remote() method. Default kwargs are:
 
-    {
-        "num_cpus": 1,
-        "num_gpus": 0.2,
-        "memory": 2 * 1024 ** 3,
-    }
+    >>> kwargs = {
+    ...     "num_cpus": 1,
+    ...     "num_gpus": 0.2,
+    ...     "memory": 2 * 1024 ** 3,
+    ... }
 
 
     The coordination between collector instances can be specified as "synchronous" or "asynchronous".
