@@ -84,6 +84,8 @@ TorchRL trainer: A DQN example
 # of this algorithm.
 
 # sphinx_gallery_start_ignore
+import os
+import uuid
 import warnings
 
 from torchrl.objectives import DQNLoss, SoftUpdate
@@ -550,7 +552,8 @@ collector = get_collector(
 optimizer = torch.optim.Adam(
     loss_module.parameters(), lr=lr, weight_decay=wd, betas=betas
 )
-logger = CSVLogger(exp_name="dqn_exp", log_dir="./")
+exp_name = f"dqn_exp_{uuid.uuid1()}"
+logger = CSVLogger(exp_name=exp_name, log_dir="./")
 
 trainer = Trainer(
     collector=collector,
@@ -613,7 +616,30 @@ trainer.train()
 ###############################################################################
 # We can now quickly check the CSVs with the results.
 
-# TODO
+def print_csv_files_in_folder(folder_path):
+    """
+    Find all CSV files in a folder and print the first 10 lines of each file.
+
+    Args:
+        folder_path (str): The relative path to the folder.
+
+    Returns:
+        list: A list of all CSV files in the folder.
+    """
+    csv_files = []
+    for file in os.listdir(folder_path):
+        if file.endswith(".csv"):
+            csv_files.append(os.path.join(folder_path, file))
+    for csv_file in csv_files:
+        print(f"File: {csv_file}")
+        with open(csv_file, "r") as f:
+            for i, line in enumerate(f):
+                if i == 10:
+                    break
+                print(line.strip())
+        print("\n")
+
+print_csv_files_in_folder(exp_name)
 
 ###############################################################################
 # Conclusion and possible improvements

@@ -394,6 +394,8 @@ def _forward(self, input_tensordict: TensorDictBase) -> TensorDict:
 
 class DDPGLoss(LossModule):
     default_value_estimator = default_value_estimator
+    make_value_estimator = make_value_estimator
+
     __init__ = _init
     forward = _forward
     loss_value = _loss_value
