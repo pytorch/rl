@@ -137,6 +137,10 @@ class SamplerWithoutReplacement(Sampler):
     def ran_out(self):
         return self._ran_out
 
+    @ran_out.setter
+    def ran_out(self, value):
+        self._ran_out = value
+
 
 class PrioritizedSampler(Sampler):
     """Prioritized sampler for replay buffer.

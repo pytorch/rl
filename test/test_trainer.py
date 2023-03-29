@@ -203,7 +203,9 @@ class TestRB:
         S = 100
         storage = ListStorage(S)
         if prioritized:
-            replay_buffer = TensorDictPrioritizedReplayBuffer(1.1, 0.9, storage=storage)
+            replay_buffer = TensorDictPrioritizedReplayBuffer(
+                alpha=1.1, beta=0.9, storage=storage
+            )
         else:
             replay_buffer = TensorDictReplayBuffer(storage=storage)
 
@@ -260,8 +262,8 @@ class TestRB:
 
         if prioritized:
             replay_buffer = TensorDictPrioritizedReplayBuffer(
-                1.1,
-                0.9,
+                alpha=1.1,
+                beta=0.9,
                 storage=storage,
             )
         else:
@@ -293,7 +295,7 @@ class TestRB:
         trainer2 = mocking_trainer()
         if prioritized:
             replay_buffer2 = TensorDictPrioritizedReplayBuffer(
-                1.1, 0.9, storage=storage
+                alpha=1.1, beta=0.9, storage=storage
             )
         else:
             replay_buffer2 = TensorDictReplayBuffer(storage=storage)
@@ -398,8 +400,8 @@ class TestRB:
             storage = make_storage()
             if prioritized:
                 replay_buffer = TensorDictPrioritizedReplayBuffer(
-                    1.1,
-                    0.9,
+                    alpha=1.1,
+                    beta=0.9,
                     storage=storage,
                 )
             else:
@@ -430,8 +432,8 @@ class TestRB:
             storage2 = make_storage()
             if prioritized:
                 replay_buffer2 = TensorDictPrioritizedReplayBuffer(
-                    1.1,
-                    0.9,
+                    alpha=1.1,
+                    beta=0.9,
                     storage=storage2,
                 )
             else:
