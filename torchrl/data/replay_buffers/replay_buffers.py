@@ -82,32 +82,80 @@ def pin_memory_output(fun) -> Callable:
 class ReplayBuffer:
     """A generic, composable replay buffer class.
 
+    All arguments are keyword-only arguments.
+
     Args:
         storage (Storage, optional): the storage to be used. If none is provided
-            a default ListStorage with max_size of 1_000 will be created.
-        sampler (Sampler, optional): the sampler to be used. If none is provided
-            a default RandomSampler() will be used.
+            a default :class:`torchrl.data.replay_buffers.ListStorage` with
+            ``max_size`` of ``1_000`` will be created.
+        sampler (Sampler, optional): the sampler to be used. If none is provided,
+            a default :class:`torchrl.data.replay_buffers.RandomSampler`
+            will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default RoundRobinWriter() will be used.
+            a default :class:`torchrl.data.replay_buffers.RoundRobinWriter`
+            will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
-            loading from a map-style dataset.
+            loading from a map-style dataset. The default value will be decided
+            based on the storage type.
         pin_memory (bool): whether pin_memory() should be called on the rb
             samples.
         prefetch (int, optional): number of next batches to be prefetched
-            using multithreading.
-        transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            using multithreading. Defaults to None (no prefetching).
+        transform (Transform, optional): Transform to be executed when
+            sample() is called.
+            To chain transforms use the :class:`torchrl.envs.Compose` class.
             Transforms should be used with :class:`tensordict.TensorDict`
             content. If used with other structures, the transforms should be
-            encoded with a `"data"` leading key that will be used to
+            encoded with a ``"data"`` leading key that will be used to
             construct a tensordict from the non-tensordict content.
-        batch_size (int, optional): the batch size to be used when sample() is called.
+        batch_size (int, optional): the batch size to be used when sample() is
+            called.
+            .. note::
+              The batch-size can be specified at construction time via the
+              ``batch_size`` argument, or at sampling time. The former should
+              be preferred whenever the batch-size is consistent across the
+              experiment. If the batch-size is likely to change, it can be
+              passed to the :meth:`~.sample` method. This option is
+              incompatible with prefetching (since this requires to know the
+              batch-size in advance) as well as with samplers that have a
+              ``drop_last`` argument.
 
+    Examples:
+        >>> import torch
+        >>>
+        >>> from torchrl.data import ReplayBuffer, ListStorage
+        >>>
+        >>> torch.manual_seed(0)
+        >>> rb = ReplayBuffer(
+        ...     storage=ListStorage(max_size=1000),
+        ...     batch_size=5,
+        ... )
+        >>> # populate the replay buffer
+        >>> data = range(10)
+        >>> rb.extend(data)
+        >>> # sample will return as many elements as specified in the constructor
+        >>> sample = rb.sample()
+        >>> print(sample)
+        tensor([4, 9, 3, 0, 3])
+        >>> # Passing the batch-size to the sample method overrides the one in the constructor
+        >>> sample = rb.sample(batch_size=3)
+        >>> print(sample)
+        tensor([9, 7, 3])
+        >>> # one cans sample using the ``sample`` method or iterate over the buffer
+        >>> for i, batch in enumerate(rb):
+        ...     print(i, batch)
+        ...     if i == 3:
+        ...         break
+        0 tensor([7, 3, 1, 6, 6])
+        1 tensor([9, 8, 6, 6, 8])
+        2 tensor([4, 3, 6, 9, 1])
+        3 tensor([4, 4, 1, 9, 9])
     """
 
     def __init__(
         self,
+        *,
         storage: Optional[Storage] = None,
         sampler: Optional[Sampler] = None,
         writer: Optional[Writer] = None,
@@ -147,10 +195,21 @@ class ReplayBuffer:
         transform.eval()
         self._transform = transform
 
-        if batch_size is None:
-            warnings.warn(
-                "Constructing replay buffer without specifying behaviour is no longer "
-                "recommended, and will be deprecated in the future."
+        if batch_size is None and prefetch:
+            raise ValueError(
+                "Dynamic batch-size specification is incompatible "
+                "with multithreaded sampling. "
+                "When using prefetch, the batch-size must be specified in "
+                "advance. "
+            )
+        if (
+            batch_size is None
+            and hasattr(self._sampler, "drop_last")
+            and self._sampler.drop_last
+        ):
+            raise ValueError(
+                "Samplers with drop_last=True must work with a predictible batch-size. "
+                "Please pass the batch-size to the ReplayBuffer constructor."
             )
         self._batch_size = batch_size
 
@@ -175,6 +234,15 @@ class ReplayBuffer:
 
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
+
+        if self._transform is not None:
+            is_td = True
+            if not isinstance(data, TensorDictBase):
+                data = TensorDict({"data": data}, [])
+                is_td = False
+            data = self._transform(data)
+            if not is_td:
+                data = data["data"]
 
         return data
 
@@ -238,6 +306,7 @@ class ReplayBuffer:
     def _sample(self, batch_size: int) -> Tuple[Any, dict]:
         with self._replay_lock:
             index, info = self._sampler.sample(self._storage, batch_size)
+            info["index"] = index
             data = self._storage[index]
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
@@ -270,17 +339,26 @@ class ReplayBuffer:
             A batch of data selected in the replay buffer.
             A tuple containing this batch and info if return_info flag is set to True.
         """
-        if batch_size is not None:
+        if (
+            batch_size is not None
+            and self._batch_size is not None
+            and batch_size != self._batch_size
+        ):
             warnings.warn(
-                "batch_size argument in sample has been deprecated. Set the batch_size "
-                "when constructing the replay buffer instead."
+                f"Got conflicting batch_sizes in constructor ({self._batch_size}) "
+                f"and `sample` ({batch_size}). Refer to the ReplayBuffer documentation "
+                "for a proper usage of the batch-size arguments. "
+                "The batch-size provided to the sample method "
+                "will prevail."
             )
-        elif self._batch_size is not None:
+        elif batch_size is None and self._batch_size is not None:
             batch_size = self._batch_size
-        else:
+        elif batch_size is None:
             raise RuntimeError(
                 "batch_size not specified. You can specify the batch_size when "
-                "constructing the replay buffer"
+                "constructing the replay buffer, or pass it to the sample method. "
+                "Refer to the ReplayBuffer documentation "
+                "for a proper usage of the batch-size arguments."
             )
         if not self._prefetch:
             ret = self._sample(batch_size)
@@ -327,9 +405,12 @@ class ReplayBuffer:
         self._transform.insert(index, transform)
 
     def __iter__(self):
+        if self._sampler.ran_out:
+            self._sampler.ran_out = False
         if self._batch_size is None:
             raise RuntimeError(
-                "batch_size was not specified during construction of the replay buffer"
+                "Cannot iterate over the replay buffer. "
+                "Batch_size was not specified during construction of the replay buffer."
             )
         while not self._sampler.ran_out:
             data = self.sample()
@@ -338,6 +419,8 @@ class ReplayBuffer:
 
 class PrioritizedReplayBuffer(ReplayBuffer):
     """Prioritized replay buffer.
+
+    All arguments are keyword-only arguments.
 
     Presented in
         "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015.
@@ -350,22 +433,75 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         beta (float): importance sampling negative exponent.
         eps (float): delta added to the priorities to ensure that the buffer
             does not contain null priorities.
-        dtype (torch.dtype): type of the data. Can be torch.float or torch.double.
         storage (Storage, optional): the storage to be used. If none is provided
-            a default ListStorage with max_size of 1_000 will be created.
+            a default :class:`torchrl.data.replay_buffers.ListStorage` with
+            ``max_size`` of ``1_000`` will be created.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
-            loading from a map-style dataset.
+            loading from a map-style dataset. The default value will be decided
+            based on the storage type.
         pin_memory (bool): whether pin_memory() should be called on the rb
             samples.
         prefetch (int, optional): number of next batches to be prefetched
-            using multithreading.
-        transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            using multithreading. Defaults to None (no prefetching).
+        transform (Transform, optional): Transform to be executed when
+            sample() is called.
+            To chain transforms use the :class:`torchrl.envs.Compose` class.
+            Transforms should be used with :class:`tensordict.TensorDict`
+            content. If used with other structures, the transforms should be
+            encoded with a ``"data"`` leading key that will be used to
+            construct a tensordict from the non-tensordict content.
+        batch_size (int, optional): the batch size to be used when sample() is
+            called.
+            .. note::
+              The batch-size can be specified at construction time via the
+              ``batch_size`` argument, or at sampling time. The former should
+              be preferred whenever the batch-size is consistent across the
+              experiment. If the batch-size is likely to change, it can be
+              passed to the :meth:`~.sample` method. This option is
+              incompatible with prefetching (since this requires to know the
+              batch-size in advance) as well as with samplers that have a
+              ``drop_last`` argument.
+
+    .. note::
+        Generic prioritized replay buffers (ie. non-tensordict backed) require
+        calling :meth:`~.sample` with the ``return_info`` argument set to
+        ``True`` to have access to the indices, and hence update the priority.
+        Using :class:`tensordict.TensorDict` and the related
+        :class:`torchrl.data.TensorDictPrioritizedReplayBuffer` simplifies this
+        process.
+
+    Examples:
+        >>> import torch
+        >>>
+        >>> from torchrl.data import ListStorage, PrioritizedReplayBuffer
+        >>>
+        >>> torch.manual_seed(0)
+        >>>
+        >>> rb = PrioritizedReplayBuffer(alpha=0.7, beta=0.9, storage=ListStorage(10))
+        >>> data = range(10)
+        >>> rb.extend(data)
+        >>> sample = rb.sample(3)
+        >>> print(sample)
+        tensor([1, 0, 1])
+        >>> # get the info to find what the indices are
+        >>> sample, info = rb.sample(5, return_info=True)
+        >>> print(sample, info)
+        tensor([2, 7, 4, 3, 5]) {'_weight': array([1., 1., 1., 1., 1.], dtype=float32), 'index': array([2, 7, 4, 3, 5])}
+        >>> # update priority
+        >>> priority = torch.ones(5) * 5
+        >>> rb.update_priority(info["index"], priority)
+        >>> # and now a new sample, the weights should be updated
+        >>> sample, info = rb.sample(5, return_info=True)
+        >>> print(sample, info)
+        tensor([2, 5, 2, 2, 5]) {'_weight': array([0.36278465, 0.36278465, 0.36278465, 0.36278465, 0.36278465],
+              dtype=float32), 'index': array([2, 5, 2, 2, 5])}
+
     """
 
     def __init__(
         self,
+        *,
         alpha: float,
         beta: float,
         eps: float = 1e-8,
@@ -392,15 +528,114 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 
 class TensorDictReplayBuffer(ReplayBuffer):
-    """TensorDict-specific wrapper around the ReplayBuffer class.
+    """TensorDict-specific wrapper around the :class:`torchrl.data.ReplayBuffer` class.
+
+    All arguments are keyword-only arguments.
 
     Args:
-        priority_key (str): the key at which priority is assumed to be stored
-            within TensorDicts added to this ReplayBuffer.
+        storage (Storage, optional): the storage to be used. If none is provided
+            a default :class:`torchrl.data.replay_buffers.ListStorage` with
+            ``max_size`` of ``1_000`` will be created.
+        sampler (Sampler, optional): the sampler to be used. If none is provided
+            a default RandomSampler() will be used.
+        writer (Writer, optional): the writer to be used. If none is provided
+            a default :class:`torchrl.data.replay_buffers.RoundRobinWriter`
+            will be used.
+        collate_fn (callable, optional): merges a list of samples to form a
+            mini-batch of Tensor(s)/outputs.  Used when using batched
+            loading from a map-style dataset. The default value will be decided
+            based on the storage type.
+        pin_memory (bool): whether pin_memory() should be called on the rb
+            samples.
+        prefetch (int, optional): number of next batches to be prefetched
+            using multithreading. Defaults to None (no prefetching).
+        transform (Transform, optional): Transform to be executed when
+            sample() is called.
+            To chain transforms use the :class:`torchrl.envs.Compose` class.
+            Transforms should be used with :class:`tensordict.TensorDict`
+            content. If used with other structures, the transforms should be
+            encoded with a ``"data"`` leading key that will be used to
+            construct a tensordict from the non-tensordict content.
+        batch_size (int, optional): the batch size to be used when sample() is
+            called.
+            .. note::
+              The batch-size can be specified at construction time via the
+              ``batch_size`` argument, or at sampling time. The former should
+              be preferred whenever the batch-size is consistent across the
+              experiment. If the batch-size is likely to change, it can be
+              passed to the :meth:`~.sample` method. This option is
+              incompatible with prefetching (since this requires to know the
+              batch-size in advance) as well as with samplers that have a
+              ``drop_last`` argument.
+        priority_key (str, optional): the key at which priority is assumed to
+            be stored within TensorDicts added to this ReplayBuffer.
+            This is to be used when the sampler is of type
+            :class:`torchrl.data.PrioritizedSampler`.
+            Defaults to ``"td_error"``.
+
+    Examples:
+        >>> import torch
+        >>>
+        >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+        >>> from tensordict import TensorDict
+        >>>
+        >>> torch.manual_seed(0)
+        >>>
+        >>> rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10), batch_size=5)
+        >>> data = TensorDict({"a": torch.ones(10, 3), ("b", "c"): torch.zeros(10, 1, 1)}, [10])
+        >>> rb.extend(data)
+        >>> sample = rb.sample(3)
+        >>> # samples keep track of the index
+        >>> print(sample)
+        TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: TensorDict(
+                    fields={
+                        c: Tensor(shape=torch.Size([3, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=cpu,
+                    is_shared=False),
+                index: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.int32, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=cpu,
+            is_shared=False)
+        >>> # we can iterate over the buffer
+        >>> for i, data in enumerate(rb):
+        ...     print(i, data)
+        ...     if i == 2:
+        ...         break
+        0 TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: TensorDict(
+                    fields={
+                        c: Tensor(shape=torch.Size([5, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([5]),
+                    device=cpu,
+                    is_shared=False),
+                index: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.int32, is_shared=False)},
+            batch_size=torch.Size([5]),
+            device=cpu,
+            is_shared=False)
+        1 TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: TensorDict(
+                    fields={
+                        c: Tensor(shape=torch.Size([5, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([5]),
+                    device=cpu,
+                    is_shared=False),
+                index: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.int32, is_shared=False)},
+            batch_size=torch.Size([5]),
+            device=cpu,
+            is_shared=False)
+
     """
 
-    def __init__(self, *args, priority_key: str = "td_error", **kw) -> None:
-        super().__init__(*args, **kw)
+    def __init__(self, *, priority_key: str = "td_error", **kw) -> None:
+        super().__init__(**kw)
         self.priority_key = priority_key
 
     def _get_priority(self, tensordict: TensorDictBase) -> Optional[torch.Tensor]:
@@ -489,8 +724,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
     def sample(
         self,
         batch_size: Optional[int] = None,
-        include_info: bool = False,
         return_info: bool = False,
+        include_info: bool = None,
     ) -> TensorDictBase:
         """Samples a batch of data from the replay buffer.
 
@@ -500,7 +735,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
             batch_size (int, optional): size of data to be collected. If none
                 is provided, this method will sample a batch-size as indicated
                 by the sampler.
-            include_info (bool): whether to add info to the returned tensordict.
             return_info (bool): whether to return info. If True, the result
                 is a tuple (data, info). If False, the result is the data.
 
@@ -508,10 +742,18 @@ class TensorDictReplayBuffer(ReplayBuffer):
             A tensordict containing a batch of data selected in the replay buffer.
             A tuple containing this tensordict and info if return_info flag is set to True.
         """
+        if include_info is not None:
+            warnings.warn(
+                "include_info is going to be deprecated soon."
+                "The default behaviour has changed to `include_info=True` "
+                "to avoid bugs linked to wrongly preassigned values in the "
+                "output tensordict."
+            )
+
         data, info = super().sample(batch_size, return_info=True)
-        if include_info:
+        if include_info in (True, None):
             for k, v in info.items():
-                data.set(k, torch.tensor(v, device=data.device), inplace=True)
+                data.set(k, torch.tensor(v, device=data.device))
         if "_batch_size" in data.keys():
             # we need to reset the batch-size
             shape = data.pop("_batch_size")
@@ -530,40 +772,119 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
 
 class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
-    """TensorDict-specific wrapper around the PrioritizedReplayBuffer class.
+    """TensorDict-specific wrapper around the :class:`torchrl.data.PrioritizedReplayBuffer` class.
 
-    This class returns tensordicts with a new key "index" that represents
+    All arguments are keyword-only arguments.
+
+    This class returns tensordicts with a new key ``"index"`` that represents
     the index of each element in the replay buffer. It also provides the
-    'update_tensordict_priority' method that only requires for the
+    :meth:`~.update_tensordict_priority` method that only requires for the
     tensordict to be passed to it with its new priority value.
 
     Args:
-        alpha (float): exponent α determines how much prioritization is
-            used, with α = 0 corresponding to the uniform case.
+        alpha (float): exponent α determines how much prioritization is used,
+            with α = 0 corresponding to the uniform case.
         beta (float): importance sampling negative exponent.
-        priority_key (str, optional): key where the priority value can be
-            found in the stored tensordicts. Default is :obj:`"td_error"`
-        eps (float, optional): delta added to the priorities to ensure that the
-            buffer does not contain null priorities.
-        dtype (torch.dtype): type of the data. Can be torch.float or torch.double.
+        eps (float): delta added to the priorities to ensure that the buffer
+            does not contain null priorities.
         storage (Storage, optional): the storage to be used. If none is provided
-            a default ListStorage with max_size of 1_000 will be created.
+            a default :class:`torchrl.data.replay_buffers.ListStorage` with
+            ``max_size`` of ``1_000`` will be created.
         collate_fn (callable, optional): merges a list of samples to form a
-            mini-batch of Tensor(s)/outputs.  Used when using batched loading
-            from a map-style dataset.
-        pin_memory (bool, optional): whether pin_memory() should be called on
-            the rb samples. Default is :obj:`False`.
+            mini-batch of Tensor(s)/outputs.  Used when using batched
+            loading from a map-style dataset. The default value will be decided
+            based on the storage type.
+        pin_memory (bool): whether pin_memory() should be called on the rb
+            samples.
         prefetch (int, optional): number of next batches to be prefetched
-            using multithreading.
-        transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            using multithreading. Defaults to None (no prefetching).
+        transform (Transform, optional): Transform to be executed when
+            sample() is called.
+            To chain transforms use the :class:`torchrl.envs.Compose` class.
+            Transforms should be used with :class:`tensordict.TensorDict`
+            content. If used with other structures, the transforms should be
+            encoded with a ``"data"`` leading key that will be used to
+            construct a tensordict from the non-tensordict content.
+        batch_size (int, optional): the batch size to be used when sample() is
+            called.
+            .. note::
+              The batch-size can be specified at construction time via the
+              ``batch_size`` argument, or at sampling time. The former should
+              be preferred whenever the batch-size is consistent across the
+              experiment. If the batch-size is likely to change, it can be
+              passed to the :meth:`~.sample` method. This option is
+              incompatible with prefetching (since this requires to know the
+              batch-size in advance) as well as with samplers that have a
+              ``drop_last`` argument.
+        priority_key (str, optional): the key at which priority is assumed to
+            be stored within TensorDicts added to this ReplayBuffer.
+            This is to be used when the sampler is of type
+            :class:`torchrl.data.PrioritizedSampler`.
+            Defaults to ``"td_error"``.
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectories). Can be one of "max", "min",
             "median" or "mean".
+
+    Examples:
+        >>> import torch
+        >>>
+        >>> from torchrl.data import LazyTensorStorage, TensorDictPrioritizedReplayBuffer
+        >>> from tensordict import TensorDict
+        >>>
+        >>> torch.manual_seed(0)
+        >>>
+        >>> rb = TensorDictPrioritizedReplayBuffer(alpha=0.7, beta=1.1, storage=LazyTensorStorage(10), batch_size=5)
+        >>> data = TensorDict({"a": torch.ones(10, 3), ("b", "c"): torch.zeros(10, 3, 1)}, [10])
+        >>> rb.extend(data)
+        >>> print("len of rb", len(rb))
+        len of rb 10
+        >>> sample = rb.sample(5)
+        >>> print(sample)
+        TensorDict(
+            fields={
+                _weight: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
+                a: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: TensorDict(
+                    fields={
+                        c: Tensor(shape=torch.Size([5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([5]),
+                    device=cpu,
+                    is_shared=False),
+                index: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([5]),
+            device=cpu,
+            is_shared=False)
+        >>> print("index", sample["index"])
+        index tensor([9, 5, 2, 2, 7])
+        >>> # give a high priority to these samples...
+        >>> sample.set("td_error", 100*torch.ones(sample.shape))
+        >>> # and update priority
+        >>> rb.update_tensordict_priority(sample)
+        >>> # the new sample should have a high overlap with the previous one
+        >>> sample = rb.sample(5)
+        >>> print(sample)
+        TensorDict(
+            fields={
+                _weight: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
+                a: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: TensorDict(
+                    fields={
+                        c: Tensor(shape=torch.Size([5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([5]),
+                    device=cpu,
+                    is_shared=False),
+                index: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([5]),
+            device=cpu,
+            is_shared=False)
+        >>> print("index", sample["index"])
+        index tensor([2, 5, 5, 9, 7])
+
     """
 
     def __init__(
         self,
+        *,
         alpha: float,
         beta: float,
         priority_key: str = "td_error",
@@ -603,10 +924,12 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
     def sample(
         self,
         batch_size: Optional[int] = None,
-        include_info: bool = False,
+        include_info: bool = None,
         return_info: bool = False,
     ) -> TensorDictBase:
-        return super().sample(batch_size, include_info, return_info)
+        return super().sample(
+            batch_size=batch_size, include_info=include_info, return_info=return_info
+        )
 
     def add(self, data: TensorDictBase) -> int:
         return super().add(data)

@@ -44,7 +44,7 @@ def make_replay_buffer(
     batch_size=256,
     buffer_scratch_dir="/tmp/",
     device="cpu",
-    make_replay_buffer=3,
+    prefetch=3,
 ):
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
@@ -52,7 +52,7 @@ def make_replay_buffer(
             beta=0.5,
             pin_memory=False,
             batch_size=batch_size,
-            prefetch=make_replay_buffer,
+            prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
@@ -63,7 +63,7 @@ def make_replay_buffer(
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
             batch_size=batch_size,
-            prefetch=make_replay_buffer,
+            prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,

@@ -175,7 +175,8 @@ Here's an example:
 
   Installing dependencies is the responsibility of the user. For D4RL, a clone of
   `the repository <https://github.com/Farama-Foundation/D4RL>`_ is needed as
-  the latest wheels are not published on PyPI.
+  the latest wheels are not published on PyPI. For OpenML, `scikit-learn <https://pypi.org/project/scikit-learn/>`_ and
+  `pandas <https://pypi.org/project/pandas>`_ are required.
 
 .. currentmodule:: torchrl.data.datasets
 
@@ -185,6 +186,7 @@ Here's an example:
 
 
     D4RLExperienceReplay
+    OpenMLExperienceReplay
 
 TensorSpec
 ----------

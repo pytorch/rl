@@ -13,7 +13,7 @@ from torchrl.modules.tensordict_module.common import SafeModule
 
 
 class SafeSequential(TensorDictSequential, SafeModule):
-    """A sequence of TensorDictModules.
+    """A safe sequence of TensorDictModules.
 
     Similarly to :obj:`nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
     each, this module will read and write over a tensordict by querying each of the input modules.
