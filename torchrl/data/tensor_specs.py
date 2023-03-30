@@ -2437,7 +2437,10 @@ class CompositeSpec(TensorSpec):
         except RuntimeError:
             device = self._device
         return self.__class__(
-            {key: item.clone() for key, item in self.items()},
+            {
+                key: item.clone() if item is not None else None
+                for key, item in self.items()
+            },
             device=device,
             shape=self.shape,
         )

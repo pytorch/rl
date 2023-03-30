@@ -31,8 +31,8 @@ from torchrl._utils import (
     _check_for_faulty_process,
     accept_remote_rref_udf_invocation,
     prod,
-    VERBOSE,
     RL_WARNINGS,
+    VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.tensor_specs import TensorSpec
@@ -574,32 +574,51 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids,
         )
 
+        with torch.no_grad():
+            self._tensordict_out = env.fake_tensordict()
         if (
             hasattr(self.policy, "spec")
             and self.policy.spec is not None
-            and all(v is not None for v in self.policy.spec.values())
-            and set(self.policy.spec.keys(True, True)) == set(self.policy.out_keys)
+            and all(
+                v is not None for v in self.policy.spec.values()
+            )  # if a spec is None, we don't know anything about it
+            # and set(self.policy.spec.keys(True, True)) == set(self.policy.out_keys)
+            and any(
+                key not in self._tensordict_out.keys(isinstance(key, tuple))
+                for key in self.policy.spec
+            )
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
-            self._tensordict_out = env.fake_tensordict().to_tensordict()
-            self._tensordict_out.update(self.policy.spec.zero())
+            # the policy could have more keys than the env:
+            for key, spec in self.policy.spec.items():  # this may break for nested keys
+                if key in self._tensordict_out.keys():
+                    continue
+                if spec.ndim < self._tensordict_out.ndim:
+                    spec = spec.expand(self._tensordict_out.shape)
+                self._tensordict_out.set(key, spec.zero())
             self._tensordict_out = (
                 self._tensordict_out.unsqueeze(-1)
                 .expand(*env.batch_size, self.frames_per_batch)
-                .to_tensordict()
+                .clone()
             )
-        else:
+        elif hasattr(self.policy, "spec") and self.policy.spec is not None:
+            # reach this if the policy has specs and they match with the fake tensordict
+            self._tensordict_out = (
+                self._tensordict_out.unsqueeze(-1)
+                .expand(*env.batch_size, self.frames_per_batch)
+                .clone()
+            )
+        elif not hasattr(self.policy, "spec") or self.policy.spec is None:
             # otherwise, we perform a small number of steps with the policy to
             # determine the relevant keys with which to pre-populate _tensordict_out.
             # See #505 for additional context.
             with torch.no_grad():
-                self._tensordict_out = env.fake_tensordict()
                 self._tensordict_out = self._tensordict_out.to(self.device)
                 self._tensordict_out = self.policy(self._tensordict_out).unsqueeze(-1)
             self._tensordict_out = (
                 self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
-                .to_tensordict()
+                .clone()
                 .zero_()
             )
         # in addition to outputs of the policy, we add traj_ids and step_count to

@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from typing import Optional, Union
 
 import numpy as np
@@ -11,7 +11,11 @@ from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import expand_as_right
 
-from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import (
+    CompositeSpec,
+    TensorSpec,
+    UnboundedContinuousTensorSpec,
+)
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 
@@ -178,14 +182,19 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         self.register_buffer("std", torch.tensor([std]))
         self.register_buffer("sigma", torch.tensor([sigma_init]))
         self.action_key = action_key
-        self.spec = (
-            spec
-            if spec is not None
-            else policy.spec
-            if hasattr(policy, "spec")
-            else None
-        )
+        self.out_keys = list(self.td_module.out_keys)
+        if spec is not None:
+            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
+                spec = CompositeSpec({self.out_keys[0]: spec})
+            self._spec = spec
+        elif hasattr(self.td_module, "_spec"):
+            self._spec = self.td_module._spec.clone()
+        else:
+            self._spec = CompositeSpec({key: None for key in policy.in_keys})
+
         self.safe = safe
+        if self.safe:
+            self.register_forward_hook(_forward_hook_safe_action)
 
     def step(self, frames: int = 1) -> None:
         """A step of sigma decay.
@@ -340,14 +349,31 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
         self.out_keys = list(self.td_module.out_keys) + self.ou.out_keys
+        noise_key = self.ou.noise_key
+        steps_key = self.ou.steps_key
+
+        ou_specs = {
+            noise_key: None,
+            steps_key: UnboundedContinuousTensorSpec(
+                shape=(*self.td_module._spec.shape, 1),
+                device=self.td_module._spec.device,
+                dtype=torch.int64,
+            ),
+        }
         self._spec = CompositeSpec(
-            **self.td_module._spec, **{key: None for key in self.ou.out_keys}
+            **self.td_module._spec,
+            **ou_specs,
+            shape=self.td_module._spec.shape,
         )
         if len(set(self.out_keys)) != len(self.out_keys):
             raise RuntimeError(f"Got multiple identical output keys: {self.out_keys}")
         self.safe = safe
         if self.safe:
             self.register_forward_hook(_forward_hook_safe_action)
+
+    @property
+    def spec(self):
+        return self._spec
 
     def step(self, frames: int = 1) -> None:
         """Updates the eps noise factor.
@@ -375,6 +401,17 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = super().forward(tensordict)
         if exploration_mode() == "random" or exploration_mode() is None:
+            if "step_count" not in tensordict.keys():
+                warnings.warn(
+                    f"The tensordict passed to {self.__class__.__name__} appears to be "
+                    f"missing the 'step_count' entry. This entry is used to "
+                    f"reset the noise at the beginning of a trajectory, without it "
+                    f"the behaviour of this exploration method is undefined. "
+                    f"This is allowed for BC compatibility purposes but it will be deprecated soon! "
+                    f"To create a 'step_count' entry, simply append a StepCounter "
+                    f"transform to your environment with `env = TransformedEnv(env, StepCounter())`."
+                )
+                tensordict.set("step_count", torch.ones(tensordict.shape))
             tensordict = self.ou.add_sample(tensordict, self.eps.item())
         return tensordict
 
@@ -421,10 +458,13 @@ class _OrnsteinUhlenbeckProcess:
     def steps_key(self):
         return self._steps_key  # + str(id(self))
 
-    def _make_noise_pair(self, tensordict: TensorDictBase) -> None:
+    def _make_noise_pair(self, tensordict: TensorDictBase, is_init=None) -> None:
+        if is_init is not None:
+            tensordict = tensordict.get_sub_tensordict(is_init.view(tensordict.shape))
         tensordict.set(
             self.noise_key,
             torch.zeros(tensordict.get(self.key).shape, device=tensordict.device),
+            inplace=is_init is not None,
         )
         tensordict.set(
             self.steps_key,
@@ -433,6 +473,7 @@ class _OrnsteinUhlenbeckProcess:
                 dtype=torch.long,
                 device=tensordict.device,
             ),
+            inplace=is_init is not None,
         )
 
     def add_sample(
@@ -441,6 +482,9 @@ class _OrnsteinUhlenbeckProcess:
 
         if self.noise_key not in tensordict.keys():
             self._make_noise_pair(tensordict)
+        step_count = tensordict.get("step_count", None)
+        if step_count is not None and not step_count.all():
+            self._make_noise_pair(tensordict, step_count == 0)
 
         prev_noise = tensordict.get(self.noise_key)
         prev_noise = prev_noise + self.x0
