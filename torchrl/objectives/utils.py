@@ -242,15 +242,18 @@ class TargetNetUpdater:
 
 
 class SoftUpdate(TargetNetUpdater):
-    """A soft-update class for target network update in Double DQN/DDPG.
+    r"""A soft-update class for target network update in Double DQN/DDPG.
 
     This was proposed in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf
 
     Args:
         loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
         eps (scalar): epsilon in the update equation:
-            param = prev_param * eps + new_param * (1-eps)
-            default: 0.999
+            .. math::
+
+                \theta_t = \theta_{t-1} * \epsilon + \theta_t * (1-\epsilon)
+
+            Defaults to 0.999
     """
 
     def __init__(

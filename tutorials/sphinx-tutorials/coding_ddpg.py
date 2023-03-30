@@ -69,7 +69,6 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, optim
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import CompositeSpec, TensorDictReplayBuffer
-from torchrl.data.postprocs import MultiStep
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import (
@@ -342,7 +341,6 @@ def _loss_value(
             tensordict, target_params=target_params
         ).squeeze(-1)
 
-    # td_error = pred_val - target_value
     loss_value = distance_loss(pred_val, target_value, loss_function=self.loss_funtion)
     td_error = (pred_val - target_value).pow(2)
 
@@ -790,50 +788,65 @@ def make_replay_buffer(buffer_size, batch_size, prefetch=3):
 # The backend can be gym or dm_control
 backend = "gym"
 
-exp_name = "cheetah"
-
-# frame_skip batches multiple step together with a single action
-# If > 1, the other frame counts (e.g. frames_per_batch, total_frames) need to
-# be adjusted to have a consistent total number of frames collected across
-# experiments.
+###############################################################################
+# .. note::
+#   ``frame_skip`` batches multiple step together with a single action
+#   If > 1, the other frame counts (e.g. frames_per_batch, total_frames) need to
+#   be adjusted to have a consistent total number of frames collected across
+#   experiments. This is important as raising the frame-skip but keeping the
+#   total number of frames unchanged may seem like cheating: all things compared,
+#   a dataset of 10M elements collected with a frame-skip of 2 and another with
+#   a frame-skip of 1 actually have a ratio of interactions with the environment
+#   of 2:1!
+#
 frame_skip = 2
 from_pixels = False
+
+###############################################################################
 # Scaling the reward helps us control the signal magnitude for a more
 # efficient learning.
 reward_scaling = 5.0
 
+###############################################################################
 # Number of random steps used as for stats computation using ObservationNorm
 init_env_steps = 1000
 
+###############################################################################
 # Exploration: Number of frames before OU noise becomes null
 annealing_frames = 1000000 // frame_skip
 
 ###############################################################################
 # Collection
 # ~~~~~~~~~~
-
+#
 # We will execute the policy on cuda if available
 device = (
     torch.device("cpu") if torch.cuda.device_count() == 0 else torch.device("cuda:0")
 )
 
+###############################################################################
 # Number of environments in each data collector
 env_per_collector = 2
 
+###############################################################################
 # Total frames we will use during training. Scale up to 500K - 1M for a more
 # meaningful training
 total_frames = 10000 // frame_skip
 
+###############################################################################
 # Number of frames returned by the collector at each iteration of the outer loop.
-# We expect batches from the collector to have a shape [env_per_collector, frames_per_batch // env_per_collector]
-frames_per_batch = env_per_collector * 1000 // frame_skip
+# We expect batches from the collector to have a shape
+# ``[env_per_collector, traj_len]`` where ``traj_len`` is the time dimension
+# of the samples. TorchRL's datacollectors are given a certain number of
+# environment and a number of frames to deliver in each batch. We can
+# We can easily calculate how many frames we need to ask to the collectors:
+traj_len = 50  # time length of the batches
+frames_per_batch = env_per_collector * traj_len // frame_skip
 max_frames_per_traj = 1000 // frame_skip
 init_random_frames = 0
-# We'll be using the MultiStep class to have a less myopic representation of
-# upcoming states
-n_steps_forward = 3
 
-# record every 10 batch collected
+###############################################################################
+# We will be recording the performance every 10 batch collected
 record_interval = 10
 
 ###############################################################################
@@ -843,14 +856,22 @@ record_interval = 10
 lr = 5e-4
 weight_decay = 0.0
 # UTD: Number of iterations of the inner loop
-update_to_data = 32
-batch_size = 128
+update_to_data = 4
+
+###############################################################################
+# Because we'll be sampling from a replay buffer that stores sub-trajectories
+# of length ``traj_len``, we need to compute how large the batch-size
+# is going to be based on the total number of elements we expect to find
+# divided by the trajectory length:
+batch_size = 128 // traj_len * frame_skip
+
 
 ###############################################################################
 # Model
 # ~~~~~
 
 gamma = 0.99
+lmbda = 0.2
 tau = 0.005  # Decay factor for the target network
 
 # Network specs
@@ -860,12 +881,11 @@ num_layers = 2
 ###############################################################################
 # Replay buffer
 # ~~~~~~~~~~~~~
-
-# If True, a Prioritized replay buffer will be used
-prb = True
+# If ``prb=True``, a Prioritized replay buffer will be used
+prb = False
+###############################################################################
 # Number of frames stored in the buffer
-traj_len_collector = frames_per_batch // env_per_collector
-buffer_size = min(total_frames, 1_000_000 // traj_len_collector)
+buffer_size = min(total_frames, 1_000_000 // traj_len)
 buffer_scratch_dir = "/tmp/"
 
 seed = 0
@@ -911,11 +931,20 @@ if device == torch.device("cpu"):
 #
 loss_module = DDPGLoss(actor, qnet)
 # let's use the TD(lambda) estimator!
-loss_module.make_value_estimator(ValueEstimators.TDLambda)
-target_net_updater = SoftUpdate(loss_module, eps=0.98)
+loss_module.make_value_estimator(ValueEstimators.TDLambda, gamma=gamma, lmbda=lmbda)
+target_net_updater = SoftUpdate(loss_module, eps=1 - tau)
 target_net_updater.init_()
 
 ###############################################################################
+# .. note::
+#   Off-policy usually dictates a TD(0) estimator. Here, we use a TD(:math:`\lambda`)
+#   estimator, which will introduce some bias as the trajectory that follows
+#   a certain state has been collected with an outdated policy.
+#   This trick, as the multi-step trick that can be used during data collection,
+#   are alternative versions of "hacks" that we usually find to work well in
+#   practice despite the fact that they introduce some bias in the return
+#   estimates.
+#
 # The policy is wrapped in a :class:`torchrl.modules.OrnsteinUhlenbeckProcessWrapper`
 # exploration module:
 
@@ -973,19 +1002,6 @@ create_env_fn = parallel_env_constructor(
 # - the devices used to store data before the data is passed to the main
 #   process.
 #
-# Collectors also accept post-processing hooks.
-# For instance, the :class:`torchrl.data.postprocs.MultiStep` class passed as
-# ``postproc`` makes it so that the rewards of the ``n`` upcoming steps are
-# summed (with some discount factor) and the next observation is changed to
-# be the n-step forward observation. One could pass other transforms too:
-# using :class:`tensordict.nn.TensorDictModule` and
-# :class:`tensordict.nn.TensorDictSequential` we can seamlessly append a
-# wide range of transforms to our collector.
-
-if n_steps_forward > 0:
-    multistep = MultiStep(n_steps=n_steps_forward, gamma=gamma)
-else:
-    multistep = None
 
 collector = MultiaSyncDataCollector(
     create_env_fn=[create_env_fn, create_env_fn],
@@ -995,7 +1011,6 @@ collector = MultiaSyncDataCollector(
     frames_per_batch=frames_per_batch,
     init_random_frames=init_random_frames,
     reset_at_each_iter=False,
-    postproc=multistep,
     split_trajs=True,
     device=device,  # device for execution
     storing_device=device,  # device where data will be stored and passed
@@ -1046,9 +1061,6 @@ rewards = []
 rewards_eval = []
 
 # Main loop
-norm_factor_training = (
-    sum(gamma**i for i in range(n_steps_forward)) if n_steps_forward else 1
-)
 
 collected_frames = 0
 pbar = tqdm.tqdm(total=total_frames)
@@ -1071,15 +1083,13 @@ for i, tensordict in enumerate(collector):
     if collected_frames >= init_random_frames:
         for _ in range(update_to_data):
             # sample from replay buffer
-            sampled_tensordict = replay_buffer.sample(batch_size).clone()
+            sampled_tensordict = replay_buffer.sample()
 
             # Compute loss
             loss_dict = loss_module(sampled_tensordict)
 
             # optimize
-            loss_val = sum(
-                value for key, value in loss_dict.items() if key.startswith("loss")
-            )
+            loss_val = loss_dict["loss_actor"] + loss_dict["loss_value"]
             loss_val.backward()
             optimizer.step()
             optimizer.zero_grad()
@@ -1093,9 +1103,7 @@ for i, tensordict in enumerate(collector):
     rewards.append(
         (
             i,
-            tensordict["next", "reward"].mean().item()
-            / norm_factor_training
-            / frame_skip,
+            tensordict["next", "reward"].mean().item() / frame_skip,
         )
     )
     td_record = recorder(None)
@@ -1103,7 +1111,7 @@ for i, tensordict in enumerate(collector):
         rewards_eval.append((i, td_record["r_evaluation"].item()))
     if len(rewards_eval):
         pbar.set_description(
-            f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f}), reward eval: reward: {rewards_eval[-1][1]: 4.4f}"
+            f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f}), reward eval: reward: {rewards_eval[-1][1]: 4.4f}, shape={sampled_tensordict.shape}"
         )
 
     # update the exploration strategy
@@ -1141,7 +1149,8 @@ plt.tight_layout()
 #
 # The key takeaways are:
 #
-# - How to use the :class:`torchrl.objectives.LossModule` class to register components;
+# - How to use the :class:`torchrl.objectives.LossModule` class to code up a new
+#   loss component;
 # - How to use (or not) a target network, and how to update its parameters;
 # - How to create an optimizer associated with a loss module.
 #

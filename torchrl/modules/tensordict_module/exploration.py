@@ -178,14 +178,21 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         self.register_buffer("std", torch.tensor([std]))
         self.register_buffer("sigma", torch.tensor([sigma_init]))
         self.action_key = action_key
-        self.spec = (
-            spec
-            if spec is not None
-            else policy.spec
-            if hasattr(policy, "spec")
-            else None
-        )
+        self.out_keys = list(self.td_module.out_keys)
+        if spec is not None:
+            if not isinstance(spec, CompositeSpec) and len(self.out_keys) == 1:
+                spec = CompositeSpec({self.out_keys[0]: spec})
+            elif not isinstance(spec, CompositeSpec):
+                raise ValueError(f"Cannot infer which key the spec is made for, got spec={spec} and out_keys={self.out_keys}.")
+            self._spec = spec
+        elif hasattr(self.td_module, "_spec"):
+            self._spec = self.td_module._spec.clone()
+        else:
+            self._spec = CompositeSpec({key: None for key in policy.in_keys})
+
         self.safe = safe
+        if self.safe:
+            self.register_forward_hook(_forward_hook_safe_action)
 
     def step(self, frames: int = 1) -> None:
         """A step of sigma decay.
@@ -341,7 +348,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         self.register_buffer("eps", torch.tensor([eps_init]))
         self.out_keys = list(self.td_module.out_keys) + self.ou.out_keys
         self._spec = CompositeSpec(
-            **self.td_module._spec, **{key: None for key in self.ou.out_keys}
+            **self.td_module._spec, **{key: None for key in self.ou.out_keys}, shape=self.td_module._spec.shape
         )
         if len(set(self.out_keys)) != len(self.out_keys):
             raise RuntimeError(f"Got multiple identical output keys: {self.out_keys}")

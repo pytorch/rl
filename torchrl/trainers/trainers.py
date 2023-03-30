@@ -1114,7 +1114,7 @@ class Recorder(TrainerHookBase):
             each iteration, otherwise the frame count can be underestimated.
             For logging, this parameter is important to normalize the reward.
             Finally, to compare different runs with different frame_skip,
-            one must normalize the frame count and rewards. Default is 1.
+            one must normalize the frame count and rewards. Defaults to ``1``.
         policy_exploration (ProbabilisticTDModule): a policy
             instance used for
 
@@ -1151,7 +1151,7 @@ class Recorder(TrainerHookBase):
         *,
         record_interval: int,
         record_frames: int,
-        frame_skip: int,
+        frame_skip: int = 1,
         policy_exploration: TensorDictModule,
         environment: EnvBase = None,
         exploration_mode: str = "random",

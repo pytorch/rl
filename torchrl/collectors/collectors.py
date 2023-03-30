@@ -569,15 +569,18 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids,
         )
 
+        with torch.no_grad():
+            self._tensordict_out = env.fake_tensordict()
         if (
             hasattr(self.policy, "spec")
             and self.policy.spec is not None
             and all(v is not None for v in self.policy.spec.values())
             and set(self.policy.spec.keys(True, True)) == set(self.policy.out_keys)
+            and any(key not in self._tensordict_out.keys(isinstance(key, tuple)) for key in self.policy.spec)
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
-            self._tensordict_out = env.fake_tensordict().to_tensordict()
+            # the policy could have more keys than the env:
             self._tensordict_out.update(self.policy.spec.zero())
             self._tensordict_out = (
                 self._tensordict_out.unsqueeze(-1)
@@ -589,7 +592,6 @@ class SyncDataCollector(DataCollectorBase):
             # determine the relevant keys with which to pre-populate _tensordict_out.
             # See #505 for additional context.
             with torch.no_grad():
-                self._tensordict_out = env.fake_tensordict()
                 self._tensordict_out = self._tensordict_out.to(self.device)
                 self._tensordict_out = self.policy(self._tensordict_out).unsqueeze(-1)
             self._tensordict_out = (
