@@ -58,7 +58,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         >>> print(explorative_policy(td).get("action"))
         tensor([[ 0.0000,  0.0000,  0.0000,  0.0000],
                 [ 0.0000,  0.0000,  0.0000,  0.0000],
-                [-0.6986, -0.9366, -0.5837,  0.8596],
+                [ 0.9055, -0.9277, -0.6295, -0.2532],
                 [ 0.0000,  0.0000,  0.0000,  0.0000],
                 [ 0.0000,  0.0000,  0.0000,  0.0000],
                 [ 0.0000,  0.0000,  0.0000,  0.0000],
@@ -86,13 +86,20 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
         self.action_key = action_key
-        self.spec = (
-            spec
-            if spec is not None
-            else policy.spec
-            if hasattr(policy, "spec")
-            else None
-        )
+        if spec is not None:
+            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
+                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
+            self._spec = spec
+        elif hasattr(self.td_module, "_spec"):
+            self._spec = self.td_module._spec.clone()
+            if action_key not in self._spec.keys():
+                self._spec[action_key] = None
+        elif hasattr(self.td_module, "spec"):
+            self._spec = self.td_module.spec.clone()
+            if action_key not in self._spec.keys():
+                self._spec[action_key] = None
+        else:
+            self._spec = CompositeSpec({key: None for key in policy.out_keys})
 
     def step(self, frames: int = 1) -> None:
         """A step of epsilon decay.
@@ -163,6 +170,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
     def __init__(
         self,
         policy: TensorDictModule,
+        *,
         sigma_init: float = 1.0,
         sigma_end: float = 0.1,
         annealing_num_steps: int = 1000,
@@ -183,18 +191,32 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         self.register_buffer("sigma", torch.tensor([sigma_init]))
         self.action_key = action_key
         self.out_keys = list(self.td_module.out_keys)
+        if action_key not in self.out_keys:
+            raise RuntimeError(
+                f"The action key {action_key} was not found in the td_module out_keys {self.td_module.out_keys}."
+            )
         if spec is not None:
             if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
-                spec = CompositeSpec({self.out_keys[0]: spec})
+                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
             self._spec = spec
         elif hasattr(self.td_module, "_spec"):
             self._spec = self.td_module._spec.clone()
+            if action_key not in self._spec.keys():
+                self._spec[action_key] = None
+        elif hasattr(self.td_module, "spec"):
+            self._spec = self.td_module.spec.clone()
+            if action_key not in self._spec.keys():
+                self._spec[action_key] = None
         else:
-            self._spec = CompositeSpec({key: None for key in policy.in_keys})
+            self._spec = CompositeSpec({key: None for key in policy.out_keys})
 
         self.safe = safe
         if self.safe:
             self.register_forward_hook(_forward_hook_safe_action)
+
+    @property
+    def spec(self):
+        return self._spec
 
     def step(self, frames: int = 1) -> None:
         """A step of sigma decay.
@@ -222,8 +244,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         ).to(action.device)
         action = action + noise * sigma
         spec = self.spec
-        if isinstance(spec, CompositeSpec):
-            spec = spec[self.action_key]
+        spec = spec[self.action_key]
         if spec is not None:
             action = spec.project(action)
         elif self.safe:
@@ -283,8 +304,11 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
             default: None
         n_steps_annealing (int): number of steps for the sigma annealing.
             default: 1000
-        key (str): key of the action to be modified.
+        action_key (str): key of the action to be modified.
             default: "action"
+        spec (TensorSpec, optional): if provided, the sampled action will be
+            projected onto the valid action space once explored. If not provided,
+            the exploration wrapper will attempt to recover it from the policy.
         safe (bool): if ``True``, actions that are out of bounds given the action specs will be projected in the space
             given the :obj:`TensorSpec.project` heuristic.
             default: True
@@ -315,6 +339,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     def __init__(
         self,
         policy: TensorDictModule,
+        *,
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
@@ -325,9 +350,16 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
         sigma_min: Optional[float] = None,
         n_steps_annealing: int = 1000,
-        key: str = "action",
+        action_key: str = "action",
+        spec: TensorSpec = None,
         safe: bool = True,
+        key: str = None,
     ):
+        if key is not None:
+            action_key = key
+            warnings.warn(
+                f"the 'key' keyword argument of {type(self)} has been renamed 'action_key'. The 'key' entry will be deprecated soon."
+            )
         super().__init__(policy)
         self.ou = _OrnsteinUhlenbeckProcess(
             theta=theta,
@@ -337,7 +369,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
             x0=x0,
             sigma_min=sigma_min,
             n_steps_annealing=n_steps_annealing,
-            key=key,
+            key=action_key,
         )
         self.register_buffer("eps_init", torch.tensor([eps_init]))
         self.register_buffer("eps_end", torch.tensor([eps_end]))
@@ -360,11 +392,21 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
                 dtype=torch.int64,
             ),
         }
-        self._spec = CompositeSpec(
-            **self.td_module._spec,
-            **ou_specs,
-            shape=self.td_module._spec.shape,
-        )
+        if spec is not None:
+            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
+                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
+            self._spec = spec
+        elif hasattr(self.td_module, "_spec"):
+            self._spec = self.td_module._spec.clone()
+            if action_key not in self._spec.keys():
+                self._spec[action_key] = None
+        elif hasattr(self.td_module, "spec"):
+            self._spec = self.td_module.spec.clone()
+            if action_key not in self._spec.keys():
+                self._spec[action_key] = None
+        else:
+            self._spec = CompositeSpec({key: None for key in policy.out_keys})
+        self._spec.update(ou_specs)
         if len(set(self.out_keys)) != len(self.out_keys):
             raise RuntimeError(f"Got multiple identical output keys: {self.out_keys}")
         self.safe = safe
