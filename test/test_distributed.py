@@ -419,7 +419,6 @@ class TestSyncCollector(DistributedCollectorBase):
 
 
 class TestRayCollector(DistributedCollectorBase):
-
     @classmethod
     def distributed_class(cls) -> type:
         return RayCollector
@@ -436,7 +435,7 @@ class TestRayCollector(DistributedCollectorBase):
         remote_configs = {
             "num_cpus": 1,
             "num_gpus": 0.0,
-            "memory": 1024 ** 2,
+            "memory": 1024**2,
         }
         return {"ray_init_config": ray_init_config, "remote_configs": remote_configs}
 
@@ -490,6 +489,7 @@ class TestRayCollector(DistributedCollectorBase):
             assert data.numel() == frames_per_batch
         collector.shutdown()
         assert total == 200
+
     @pytest.mark.parametrize(
         "collector_class",
         [
