@@ -192,6 +192,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             device (int, str or torch.device, optional): device where to place
                 the policy
             observation_spec (TensorSpec, optional): spec of the observations
+
         """
         # if create_env_fn is not None:
         #     if create_env_kwargs is None:
