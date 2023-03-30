@@ -7,7 +7,7 @@ env:
   n_samples_stats: 1000
   frame_skip: 1
   from_pixels: False
-  num_eval_envs: 1
+  num_envs: 1
   reward_scaling:
   noop: 1
   seed: 0

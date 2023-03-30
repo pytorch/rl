@@ -86,18 +86,22 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 target_net_updater.step()
 
             if r0 is None:
-                r0 = data["reward"].mean().item()
+                r0 = data["reward"].sum(1).mean().item()
+                episodes_collected = data["next"]["done"].sum().item()
+                r0 /= episodes_collected
             if l0 is None:
                 l0 = loss_val.item()
 
+            avg_return = data["reward"].sum(1).mean().item()
+            episodes_collected = data["next"]["done"].sum().item()
+            avg_return /= episodes_collected
+
             for key, value in loss_vals.items():
                 logger.log_scalar(key, value.item(), collected_frames)
-            logger.log_scalar(
-                "reward_training", data["reward"].mean().item(), collected_frames
-            )
+            logger.log_scalar("reward_training", avg_return, collected_frames)
 
             pbar.set_description(
-                f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['reward'].mean(): 4.4f} (init={r0: 4.4f})"
+                f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {avg_return: 4.4f} (init={r0: 4.4f})"
             )
             collector.update_policy_weights_()
         if (
