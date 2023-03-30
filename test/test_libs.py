@@ -1105,7 +1105,6 @@ class TestVmas:
 
         assert tensordict["next", "done"].squeeze(-1).squeeze(-1)[..., -1].all()
 
-
         _reset = env.done_spec.rand()
         while not _reset.any():
             _reset = env.done_spec.rand()
