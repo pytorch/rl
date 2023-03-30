@@ -29,8 +29,29 @@ from torchrl.modules.tensordict_module.actors import Actor, ProbabilisticActor
 from torchrl.modules.tensordict_module.exploration import (
     _OrnsteinUhlenbeckProcess,
     AdditiveGaussianWrapper,
+    EGreedyWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
+
+
+@pytest.mark.parametrize("eps_init", [0.0, 0.5, 1.0])
+class TestEGreedy:
+    def test_egreedy(self, eps_init):
+        torch.manual_seed(0)
+        spec = BoundedTensorSpec(1, 1, torch.Size([4]))
+        module = torch.nn.Linear(4, 4, bias=False)
+        policy = Actor(spec=spec, module=module)
+        explorative_policy = EGreedyWrapper(policy, eps_init=eps_init, eps_end=eps_init)
+        td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
+        action = explorative_policy(td).get("action")
+        if eps_init == 0:
+            assert (action == 0).all()
+        elif eps_init == 1:
+            assert (action == 1).all()
+        else:
+            assert (action == 1).any()
+            assert (action == 0).any()
+            assert ((action == 1) | (action == 0)).all()
 
 
 @pytest.mark.parametrize("device", get_available_devices())
