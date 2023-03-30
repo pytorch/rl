@@ -419,6 +419,10 @@ class TestSyncCollector(DistributedCollectorBase):
 
 
 class TestRayCollector(DistributedCollectorBase):
+    """A testing distributed data collector class that runs tests without using a Queue,
+        to avoid potential deadlocks when combining Ray and multiprocessing.
+    """
+
     @classmethod
     def distributed_class(cls) -> type:
         return RayCollector
