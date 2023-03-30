@@ -3,6 +3,7 @@ import warnings
 from typing import Callable, Dict, Iterator, List, OrderedDict, Union
 
 import torch
+import torch.nn as nn
 from ray._private.services import get_node_ip_address
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
@@ -341,6 +342,11 @@ class RayCollector(DataCollectorBase):
         collector_class.print_remote_collector_info = print_remote_collector_info
 
         self._local_policy = policy
+        if isinstance(self._local_policy, nn.Module):
+            policy_weights = TensorDict(dict(policy.named_parameters()), [])
+        else:
+            policy_weights = TensorDict({}, [])
+        self.policy_weights = policy_weights
         self.collector_class = collector_class
         self.collected_frames = 0
         self.split_trajs = split_trajs
@@ -582,23 +588,15 @@ class RayCollector(DataCollectorBase):
                 will be updated.
         """
         # Update agent weights
-        policy_weights_local_collector = {
-            "policy_state_dict": self.local_policy().state_dict()
-        }
-        policy_weights_local_collector_ref = ray.put(policy_weights_local_collector)
+        policy_weights_local_collector_ref = ray.put(self.policy_weights.detach())
 
         if worker_rank is None:
             for index, e in enumerate(self.remote_collectors()):
-                e.load_state_dict.remote(
-                    **{
-                        "state_dict": policy_weights_local_collector_ref,
-                        "strict": False,
-                    }
-                )
+                e.update_policy_weights_.remote(policy_weights_local_collector_ref)
                 self._batches_since_weight_update[index] = 0
         else:
-            self.remote_collectors()[worker_rank - 1].load_state_dict.remote(
-                **{"state_dict": policy_weights_local_collector_ref, "strict": False}
+            self.remote_collectors()[worker_rank - 1].update_policy_weights_.remote(
+                policy_weights_local_collector_ref
             )
             self._batches_since_weight_update[worker_rank - 1] = 0
 

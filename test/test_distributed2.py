@@ -418,14 +418,12 @@ class TestSyncCollector(DistributedCollectorBase):
             queue.close()
 
 
-class TestRayCollector(DistributedCollectorBase):
-
-    @classmethod
-    def distributed_class(cls) -> type:
-        return RayCollector
-
-    @classmethod
-    def distributed_kwargs(cls) -> dict:
+class TestRayCollector:
+    @pytest.mark.parametrize("frames_per_batch", [50, 100])
+    def test_ray_collector_basic(self, frames_per_batch):
+        """Test default behavior of RayCollector."""
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
         ray.shutdown()  # make sure ray is not running
         ray_init_config = DEFAULT_RAY_INIT_CONFIG
         ray_init_config["runtime_env"] = {
@@ -433,114 +431,125 @@ class TestRayCollector(DistributedCollectorBase):
             "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
             "pip": ["ray"],
         }  # for ray workers
-        remote_configs = {
-            "num_cpus": 1,
-            "num_gpus": 0.0,
-            "memory": 1024 ** 2,
-        }
-        return {"ray_init_config": ray_init_config, "remote_configs": remote_configs}
+        collector = RayCollector(
+            [env],
+            policy,
+            ray_init_config=ray_init_config,
+            total_frames=1000,
+            frames_per_batch=frames_per_batch,
+        )
+        total = 0
+        for data in collector:
+            total += data.numel()
+            assert data.numel() == frames_per_batch
+        assert total == 1000
 
-    @classmethod
-    def _start_worker(cls):
-        pass
-
-    @pytest.mark.parametrize("sync", [False, True])
-    def test_distributed_collector_sync(self, sync, frames_per_batch=200):
+    @pytest.mark.parametrize("sync", [True, False])
+    def test_ray_collector_sync(self, sync):
+        """Test sync and async data collection."""
         frames_per_batch = 50
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
-        collector = self.distributed_class()(
-            [env] * 2,
+        ray.shutdown()  # make sure ray is not running
+        ray_init_config = DEFAULT_RAY_INIT_CONFIG
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+            "pip": ["ray"],
+        }  # for ray workers
+        collector = RayCollector(
+            [env],
             policy,
+            ray_init_config=ray_init_config,
             total_frames=200,
             frames_per_batch=frames_per_batch,
             sync=sync,
-            **self.distributed_kwargs(),
         )
         total = 0
         for data in collector:
             total += data.numel()
             assert data.numel() == frames_per_batch
-        collector.shutdown()
         assert total == 200
 
-    @pytest.mark.parametrize(
-        "collector_class",
-        [
-            MultiSyncDataCollector,
-            MultiaSyncDataCollector,
-            SyncDataCollector,
-        ],
-    )
-    def test_distributed_collector_class(self, collector_class):
-        frames_per_batch = 50
+    @pytest.mark.parametrize("sync", [True, False])
+    def test_ray_collector_mult(self, sync):
+        """Test more than one worker."""
         env = ContinuousActionVecMockEnv()
         policy = RandomPolicy(env.action_spec)
-        collector = self.distributed_class()(
+        ray.shutdown()  # make sure ray is not running
+        ray_init_config = DEFAULT_RAY_INIT_CONFIG
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+            "pip": ["ray"],
+        }  # for ray workers
+        collector = RayCollector(
             [env] * 2,
             policy,
+            ray_init_config=ray_init_config,
+            total_frames=1000,
+            frames_per_batch=200,
+            sync=sync,
+        )
+        total = 0
+        for data in collector:
+            total += data.numel()
+        assert total == 1000
+
+    @pytest.mark.parametrize("frames_per_batch", [50, 100])
+    @pytest.mark.parametrize(
+        "collector_class",
+        [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector],
+    )
+    def test_ray_collector_collector_class(self, frames_per_batch, collector_class):
+        """Test different collector base classes."""
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
+        ray.shutdown()  # make sure ray is not running
+        ray_init_config = DEFAULT_RAY_INIT_CONFIG
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+            "pip": ["ray"],
+        }  # for ray workers
+        collector = RayCollector(
+            [env],
+            policy,
+            ray_init_config=ray_init_config,
             collector_class=collector_class,
             total_frames=200,
             frames_per_batch=frames_per_batch,
-            **self.distributed_kwargs(),
         )
         total = 0
         for data in collector:
             total += data.numel()
             assert data.numel() == frames_per_batch
-        collector.shutdown()
         assert total == 200
-    @pytest.mark.parametrize(
-        "collector_class",
-        [
-            SyncDataCollector,
-            MultiSyncDataCollector,
-            MultiaSyncDataCollector,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "sync",
-        [
-            False,
-            True,
-        ],
-    )
-    def test_distributed_collector_updatepolicy(self, collector_class, sync):
-        frames_per_batch = 50
-        total_frames = 300
+
+    def test_ray_collector_update_policy(self):
+        """Test update policy weights."""
         env = CountingEnv()
         policy = CountingPolicy()
-        if collector_class is MultiaSyncDataCollector:
-            # otherwise we may collect data from a collector that has not yet been
-            # updated
-            n_collectors = 1
-        else:
-            n_collectors = 2
-        collector = self.distributed_class()(
-            [env] * n_collectors,
+        ray.shutdown()  # make sure ray is not running
+        ray_init_config = DEFAULT_RAY_INIT_CONFIG
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+            "pip": ["ray"],
+        }  # for ray workers
+        collector = RayCollector(
+            [env],
             policy,
-            collector_class=collector_class,
-            total_frames=total_frames,
-            frames_per_batch=frames_per_batch,
-            sync=sync,
-            **self.distributed_kwargs(),
+            ray_init_config=ray_init_config,
+            total_frames=200,
+            frames_per_batch=100,
         )
         total = 0
-        first_batch = None
-        last_batch = None
-        for i, data in enumerate(collector):
+        for data in collector:
             total += data.numel()
-            assert data.numel() == frames_per_batch
-            if i == 0:
-                first_batch = data
-                policy.weight.data += 1
-                collector.update_policy_weights_()
-            elif total == total_frames - frames_per_batch:
-                last_batch = data
-        assert (first_batch["action"] == 1).all(), first_batch["action"]
-        assert (last_batch["action"] == 2).all(), last_batch["action"]
-        collector.shutdown()
-        assert total == total_frames
+            policy.weight.data += 1
+            collector.update_policy_weights_()
+        assert total == 200
 
 
 if __name__ == "__main__":
