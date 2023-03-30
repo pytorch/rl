@@ -999,13 +999,13 @@ class TestVmas:
 
         assert tdreset.batch_size == (num_envs,)
         assert tdreset["observation"].shape[1] == env.n_agents
-        assert tdreset["done"].shape[1] == 1
+        assert tdreset["done"].shape[1] == env.n_agents
 
         assert tdrollout.batch_size == (num_envs, n_rollout_samples)
         assert tdrollout["observation"].shape[2] == env.n_agents
         assert tdrollout["reward"].shape[2] == env.n_agents
         assert tdrollout["action"].shape[2] == env.n_agents
-        assert tdrollout["done"].shape[2] == 1
+        assert tdrollout["done"].shape[2] == env.n_agents
         del env
 
     @pytest.mark.parametrize("num_envs", [1, 20])
@@ -1103,7 +1103,14 @@ class TestVmas:
         env = ParallelEnv(n_workers, make_vmas)
         tensordict = env.rollout(max_steps=n_rollout_samples)
 
-        assert tensordict["next", "done"].squeeze(-1).squeeze(-1)[..., -1].all()
+        assert (
+            tensordict["next", "done"]
+            .sum(
+                tuple(range(tensordict.batch_dims, tensordict["next", "done"].ndim)),
+                dtype=torch.bool,
+            )[..., -1]
+            .all()
+        )
 
         _reset = env.done_spec.rand()
         while not _reset.any():
@@ -1115,7 +1122,7 @@ class TestVmas:
         assert not tensordict["done"][_reset].all().item()
         # vmas resets all the agent dimension if only one of the agents needs resetting
         # thus, here we check that where we did not reset any agent, all agents are still done
-        assert tensordict["done"].all(dim=1)[~_reset.any(dim=1)].all().item()
+        assert tensordict["done"].all(dim=2)[~_reset.any(dim=2)].all().item()
 
     @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
     @pytest.mark.parametrize("first", [0, 1])
