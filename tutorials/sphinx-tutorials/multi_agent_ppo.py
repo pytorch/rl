@@ -1,54 +1,38 @@
 import time
 from collections import defaultdict
-from copy import deepcopy
-from typing import Tuple
 
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import wandb
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
-from torchrl.collectors import SyncDataCollector, MultiSyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs import (
-    Compose,
-    DoubleToFloat,
-    ObservationNorm,
-    StepCounter,
-    TransformedEnv,
-)
-from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.libs.vmas import VmasEnv
-from torchrl.envs.utils import check_env_specs, set_exploration_mode, step_mdp
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.objectives import ClipPPOLoss, ValueEstimators, DDPGLoss
-from torchrl.objectives.value import GAE, TD0Estimator
-
+from torchrl.objectives import DDPGLoss, ValueEstimators
 from torchrl.record.loggers.wandb import WandbLogger
-from tqdm import tqdm
+
+
+def rendering_callback(env, td):
+    env.frames.append(env_test.render(mode="rgb_array", agent_index_focus=None))
 
 
 class AgentNet(nn.Module):
-    def __init__(
-        self,
-        n_outputs,
-        n_agents,
-        device,
-        share_params
-    ):
-
-        nn.Module.__init__(self)
+    def __init__(self, n_outputs, n_agents, device, share_params):
+        super().__init__()
         self.n_agents = n_agents
         self.n_outputs = n_outputs
         self.share_params = share_params
 
         self.agent_networks = nn.ModuleList(
             [
-                 nn.Sequential(
+                nn.Sequential(
+                    nn.LazyLinear(256, device=device),
+                    nn.Tanh(),
                     nn.LazyLinear(256, device=device),
                     nn.Tanh(),
                     nn.LazyLinear(n_outputs, device=device),
@@ -56,14 +40,9 @@ class AgentNet(nn.Module):
                 for _ in range(self.n_agents if self.share_params else 1)
             ]
         )
-        self.share_init_hetero_networks()
+        # self.share_init_hetero_networks()
 
-    def forward(
-        self,
-        *inputs: Tuple[torch.Tensor]
-    ):
-
-
+    def forward(self, *inputs):
         if len(inputs) > 1:
             tensor = torch.cat([*inputs], -1)
         else:
@@ -74,14 +53,12 @@ class AgentNet(nn.Module):
                 [net(tensor[..., i, :]) for i, net in enumerate(self.agent_networks)],
                 dim=-2,
             )
-
         else:
             logits = self.agent_networks[0](tensor)
 
         assert not logits.isnan().any()
-        # print(f"Inside actor tensor shape after {logits.shape}")
-        return logits
 
+        return logits
 
     def share_init_hetero_networks(self):
         for child in self.children():
@@ -95,7 +72,7 @@ class AgentNet(nn.Module):
 
 if __name__ == "__main__":
     device = "cpu" if not torch.has_cuda else "cuda:0"
-    vmas_device = device
+    vmas_device = "cpu"
 
     test = False
 
@@ -109,8 +86,10 @@ if __name__ == "__main__":
     n_iters = 500
     total_frames = frames_per_batch * n_iters
 
-    sub_batch_size = 4096 if not test else 10  # cardinality of the sub-samples gathered from the current data in the inner loop
-    num_epochs = 45 if not test else 2 # optimisation steps per batch of data collected
+    sub_batch_size = (
+        4096 if not test else 10
+    )  # cardinality of the sub-samples gathered from the current data in the inner loop
+    num_epochs = 45 if not test else 2  # optimisation steps per batch of data collected
     clip_epsilon = (
         0.2  # clip value for PPO loss: see the equation in the intro for more context.
     )
@@ -118,14 +97,10 @@ if __name__ == "__main__":
     lmbda = 0.9
     entropy_eps = 0
 
-    het_actor = True
-    het_critic = True
+    het_actor = False
+    het_critic = False
 
-    scenario_args = {
-        "n_agents": 4,
-        "same_goal": 1,
-        "collision_reward": -0.5
-    }
+    scenario_args = {"n_agents": 4, "same_goal": 1, "collision_reward": -0.5}
 
     env = VmasEnv(
         scenario_name="multi_goal",
@@ -134,7 +109,7 @@ if __name__ == "__main__":
         max_steps=max_steps,
         device=vmas_device,
         # Scenario kwargs
-        **scenario_args
+        **scenario_args,
     )
     env_test = VmasEnv(
         scenario_name="multi_goal",
@@ -143,7 +118,7 @@ if __name__ == "__main__":
         max_steps=max_steps,
         device=vmas_device,
         # Scenario kwargs
-        **scenario_args
+        **scenario_args,
     )
 
     # print("observation_spec:", env.observation_spec)
@@ -154,17 +129,11 @@ if __name__ == "__main__":
     # rollout = env.rollout(3)
     # print("rollout of three steps:", rollout)
     # print("Shape of the rollout TensorDict:", rollout.batch_size)
-    shared_net = nn.Sequential(
-        nn.Linear(env.observation_spec["observation"].shape[-1], 256, device=device),
-        nn.Tanh(),
-        nn.LazyLinear(256, device=device),
-        nn.Tanh(),
-    )
-
 
     actor_net = nn.Sequential(
-        shared_net,
-        AgentNet(2*env.action_spec.shape[-1],env.n_agents,device,share_params=het_actor),
+        AgentNet(
+            2 * env.action_spec.shape[-1], env.n_agents, device, share_params=het_actor
+        ),
         NormalParamExtractor(),
     )
 
@@ -185,18 +154,17 @@ if __name__ == "__main__":
         # we'll need the log-prob for the numerator of the importance weights
     )
 
-    value_net = nn.Sequential(
-        shared_net,
-        AgentNet(1, env.n_agents, device, share_params=het_critic),
-    )
+    module = AgentNet(1, env.n_agents, device, share_params=het_critic)
     value_module = ValueOperator(
-        module=value_net,
-        in_keys=["observation"],
+        module=module,
+        in_keys=["observation", "action"],
     )
+    # value_module = ValueOperator(
+    #     module=module,
+    #     in_keys=["observation"],
+    # )
 
-
-    policy_module(env.reset().to(device))
-    value_module(env.reset().to(device))
+    value_module(policy_module(env.reset().to(device)))
 
     # print("Running policy:", policy_module(env.reset()))
     # print("Running value:", value_module(env.reset()))
@@ -214,22 +182,22 @@ if __name__ == "__main__":
         storage=LazyTensorStorage(frames_per_batch),
         sampler=SamplerWithoutReplacement(),
         batch_size=sub_batch_size,
-        collate_fn=lambda x:x
+        collate_fn=lambda x: x,
     )
 
-    loss_module = ClipPPOLoss(
-        actor=policy_module,
-        critic=value_module,
-        advantage_key="advantage",
-        clip_epsilon=clip_epsilon,
-        entropy_bonus=bool(entropy_eps),
-        entropy_coef=entropy_eps,
-        # these keys match by default but we set this for completeness
-        critic_coef=1.0,
-        loss_critic_type="smooth_l1",
-        normalize_advantage=False
-    )
-
+    # loss_module = ClipPPOLoss(
+    #     actor=policy_module,
+    #     critic=value_module,
+    #     advantage_key="advantage",
+    #     clip_epsilon=clip_epsilon,
+    #     entropy_bonus=bool(entropy_eps),
+    #     entropy_coef=entropy_eps,
+    #     # these keys match by default but we set this for completeness
+    #     critic_coef=1.0,
+    #     loss_critic_type="smooth_l1",
+    #     normalize_advantage=False,
+    # )
+    loss_module = DDPGLoss(actor_network=policy_module, value_network=value_module)
 
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=gamma)
     # loss_module.make_value_estimator(ValueEstimators.GAE, gamma=gamma, lmbda=lmbda)
@@ -245,27 +213,36 @@ if __name__ == "__main__":
 
     # for i in range(n_iters):
     for i, tensordict_data in enumerate(collector):
-    #     env.reset()
-    #     tensordict_data = env.rollout(max_steps=max_steps, policy=deepcopy(policy_module).requires_grad_(False), break_when_any_done=False,auto_cast_to_device=True)
-
         print(f"Iteration {i}")
         # print(tensordict_data)
         print(f"Sampling took {time.time() - sampling_start}")
         tensordict_data = tensordict_data.to(device)
 
-        loss_module.value_estimator(tensordict_data, params=loss_module.critic_params.detach())
+        # Permute
+        # del tensordict_data["collector"]
+        # tensordict_data.batch_size = [*tensordict_data.batch_size, env.n_agents]
+        # tensordict_data = tensordict_data.permute(0, 2, 1)
+        # loss_module.value_estimator(
+        #     tensordict_data, params=loss_module.critic_params.detach()
+        # )
+        # tensordict_data = tensordict_data.permute(0, 2, 1)
+        # tensordict_data.batch_size = tensordict_data.batch_size[:-1]
+
         data_view = tensordict_data.reshape(-1)
         replay_buffer.extend(data_view)
         training_start = time.time()
-        for j in range(num_epochs):
+        for _ in range(num_epochs):
             # print(f"Inner epoch {j}")
 
             for _ in range(frames_per_batch // sub_batch_size):
                 subdata = replay_buffer.sample()
                 loss_vals = loss_module(subdata.to(device))
+
                 loss_value = (
-                    loss_vals["loss_objective"]
-                    + loss_vals["loss_critic"]
+                    # loss_vals["loss_objective"]
+                    # + loss_vals["loss_critic"]
+                    loss_vals["loss_actor"]
+                    + loss_vals["loss_value"]
                     # + loss_vals["loss_entropy"]
                 )
 
@@ -278,40 +255,21 @@ if __name__ == "__main__":
                 optim.zero_grad()
 
         logger.log_scalar(
-            "reward",
-            tensordict_data["next", "reward"].mean().item(),
-            step=i
+            "reward", tensordict_data["next", "reward"].mean().item(), step=i
         )
         print(f"Training took: {time.time() - training_start}")
 
         if i % 1 == 0:
-            # with set_exploration_mode("mean"), torch.no_grad():
-            # execute a rollout with the trained policy
-            tensordict = env_test.reset()
-            frames = []
-            for _ in range(max_steps):
-                tensordict = policy_module(tensordict.to(device)).to(vmas_device)
-                frames.append(
-                    env_test.render(mode="rgb_array", agent_index_focus=None)
+            with torch.no_grad():
+                env_test.frames = []
+                env_test.rollout(
+                    max_steps=max_steps,
+                    policy=policy_module,
+                    callback=rendering_callback,
+                    auto_cast_to_device=True,
                 )
-
-                tensordict = env_test.step(tensordict)
-                done = tensordict.get(("next", "done"))
-                if done.any():
-                    break
-                tensordict = step_mdp(
-                    tensordict,
-                    keep_other=True,
-                    exclude_action=False,
-                )
-
-            vid = np.transpose(frames, (0, 3, 1, 2))
-            logger.experiment.log(
-                {
-                    "video": wandb.Video(
-                        vid, fps=1 / env_test.world.dt, format="mp4"
-                    )
-                }
-            ),
+                vid = np.transpose(env_test.frames, (0, 3, 1, 2))
+                logger.experiment.log(
+                    {"video": wandb.Video(vid, fps=1 / env_test.world.dt, format="mp4")}
+                ),
         sampling_start = time.time()
-

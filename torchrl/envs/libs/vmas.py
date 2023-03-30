@@ -206,7 +206,10 @@ class VmasWrapper(_EnvWrapper):
         )  # UnboundedContinuousTensorSpec with shape = (n_agents, 1)
 
         done_spec = DiscreteTensorSpec(
-            n=2, shape=torch.Size((self.n_agents, 1)), dtype=torch.bool, device=self.device
+            n=2,
+            shape=torch.Size((self.n_agents, 1)),
+            dtype=torch.bool,
+            device=self.device,
         )  # shape = (1,1): first 1 says it is shared by all agents, second 1 says shape
 
         self.input_spec = CompositeSpec(action=multi_agent_action_spec).expand(
@@ -215,12 +218,10 @@ class VmasWrapper(_EnvWrapper):
         if len(info_specs):
             multi_agent_info_spec = torch.stack(info_specs, dim=0)
             observation_spec = CompositeSpec(
-                    observation=multi_agent_observation_spec, info=multi_agent_info_spec
-                )
-        else:
-            observation_spec = CompositeSpec(
-                observation=multi_agent_observation_spec
+                observation=multi_agent_observation_spec, info=multi_agent_info_spec
             )
+        else:
+            observation_spec = CompositeSpec(observation=multi_agent_observation_spec)
 
         self.output_spec = CompositeSpec(
             observation=observation_spec,
@@ -281,7 +282,9 @@ class VmasWrapper(_EnvWrapper):
 
         tensordict_out = torch.stack(agent_tds, dim=1).to_tensordict()
         tensordict_out.batch_size = self.batch_size
-        tensordict_out.set("done", dones.expand(*self.batch_size, self.n_agents, 1).clone())
+        tensordict_out.set(
+            "done", dones.expand(*self.batch_size, self.n_agents, 1).clone()
+        )
 
         return tensordict_out
 
@@ -316,7 +319,9 @@ class VmasWrapper(_EnvWrapper):
 
         tensordict_out = torch.stack(agent_tds, dim=1).to_tensordict()
         tensordict_out.batch_size = self.batch_size
-        tensordict_out.set("done", dones.expand(*self.batch_size, self.n_agents, 1).clone())
+        tensordict_out.set(
+            "done", dones.expand(*self.batch_size, self.n_agents, 1).clone()
+        )
 
         return tensordict_out.select().set("next", tensordict_out)
 

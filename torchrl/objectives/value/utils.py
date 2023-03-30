@@ -153,7 +153,7 @@ def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
 
     """
     # some reshaping code vendored from vec_td_lambda_return_estimate
-    gamma = gamma.view(-1, T)
+    gamma = gamma.reshape(-1, T)
     dtype = gamma.dtype
     device = gamma.device
     if rolling_gamma:
