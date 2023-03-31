@@ -594,7 +594,7 @@ class SyncDataCollector(DataCollectorBase):
             for key, spec in self.policy.spec.items(True, True):
                 if key in self._tensordict_out.keys(isinstance(key, tuple)):
                     continue
-                if spec.ndim < self._tensordict_out.ndim:
+                if self.policy.spec.ndim < self._tensordict_out.ndim:
                     spec = spec.expand(self._tensordict_out.shape)
                 self._tensordict_out.set(key, spec.zero())
             self._tensordict_out = (
@@ -602,16 +602,26 @@ class SyncDataCollector(DataCollectorBase):
                 .expand(*env.batch_size, self.frames_per_batch)
                 .clone()
             )
-        elif hasattr(self.policy, "spec") and self.policy.spec is not None:
+        elif (
+            hasattr(self.policy, "spec")
+            and self.policy.spec is not None
+            and all(v is not None for v in self.policy.spec.values(True, True))
+            and all(
+                key in self._tensordict_out.keys(isinstance(key, tuple))
+                for key in self.policy.spec.keys(True, True)
+            )
+        ):
             # reach this if the policy has specs and they match with the fake tensordict
             self._tensordict_out = (
                 self._tensordict_out.unsqueeze(-1)
                 .expand(*env.batch_size, self.frames_per_batch)
                 .clone()
             )
-        elif not hasattr(self.policy, "spec") or self.policy.spec is None:
+        else:
             # otherwise, we perform a small number of steps with the policy to
             # determine the relevant keys with which to pre-populate _tensordict_out.
+            # This is the safest thing to do if the spec has None fields or if there is
+            # no spec at all.
             # See #505 for additional context.
             with torch.no_grad():
                 self._tensordict_out = self._tensordict_out.to(self.device)

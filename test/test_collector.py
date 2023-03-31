@@ -920,7 +920,7 @@ def test_excluded_keys(collector_class, exclude):
     ],
 )
 @pytest.mark.parametrize("init_random_frames", [0, 50])
-@pytest.mark.parametrize("explicit_spec", [True, False])
+@pytest.mark.parametrize("explicit_spec", [False, True])
 @pytest.mark.parametrize("split_trajs", [True, False])
 def test_collector_output_keys(
     collector_class, init_random_frames, explicit_spec, split_trajs
