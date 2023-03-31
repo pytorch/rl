@@ -594,7 +594,7 @@ class SyncDataCollector(DataCollectorBase):
             for key, spec in self.policy.spec.items(True, True):
                 if key in self._tensordict_out.keys(isinstance(key, tuple)):
                     continue
-                if spec.ndim < self._tensordict_out.ndim:
+                if self.policy.spec.ndim < self._tensordict_out.ndim:
                     spec = spec.expand(self._tensordict_out.shape)
                 self._tensordict_out.set(key, spec.zero())
             self._tensordict_out = (
