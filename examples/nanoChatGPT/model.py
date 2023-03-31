@@ -6,15 +6,12 @@ https://github.com/openai/gpt-2/blob/master/src/model.py
 2) huggingface/transformers PyTorch implementation:
 https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py
 """
-
-import inspect
-import math
-from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
 from nanoGPT.model import GPT, GPTConfig
+from torch.nn import functional as F
+
+__all__ = ["GPT", "GPTConfig", "RLHF"]
 
 
 class RLHF(nn.Module):
@@ -88,17 +85,10 @@ class RLHF(nn.Module):
         # idx is (B, T) array of indices in the current context
         log_probs = torch.tensor([]).to(device)
         log_probs_ref = torch.tensor([]).to(device)
-        values = torch.tensor([]).to(device)
 
-        idx_cond_all = torch.zeros((idx.shape[0], block_size, max_new_tokens)).to(
-            device
-        )
         values_all = torch.zeros((idx.shape[0], max_new_tokens)).to(device)
-        actions_all = torch.zeros((idx.shape[0], max_new_tokens)).to(device)
-        rewards_all = torch.zeros((idx.shape[0],)).to(device)
-        log_probs_all = torch.zeros((idx.shape[0], max_new_tokens)).to(device)
         advantages_all = torch.zeros((idx.shape[0], max_new_tokens)).to(device)
-        returns_all = torch.zeros((idx.shape[0], max_new_tokens)).to(device)
+
         gamma = 1
         lam = 1
 
@@ -243,7 +233,6 @@ class RLHF(nn.Module):
 
         device = onehots.device
         t = onehots.shape[2]
-        b = onehots.shape[0]
         # b, t = idx.size()
         # assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
         pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(

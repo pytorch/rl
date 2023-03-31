@@ -261,12 +261,18 @@ def create_lr_scheduler(config):
 
 
 def train(
-    model, model_kwargs, optimizer, train_data, val_data, config, master_process=True
+    model,
+    model_kwargs,
+    optimizer,
+    train_data,
+    val_data,
+    config,
+    master_process=True,
+    ddp=False,
 ):
     # these will already have been set if resuming from previous checkpoint
     iter_num = config.setdefault("iter_num", 0)
     best_val_loss = config.setdefault("best_val_loss", 1e9)
-    ddp = isinstance(model.module, DDP)
 
     if config["decay_lr"]:
         lr_scheduler = create_lr_scheduler(config)
@@ -284,9 +290,8 @@ def train(
     next_batch = next(train_loader)  # fetch the very first batch
     t0 = time.time()
     local_iter_num = 0  # number of iterations in the lifetime of this process
-    raw_model = (
-        model.module.module if ddp else model.module
-    )  # unwrap DDP container if needed
+    # unwrap DDP container if needed, and unwrap TensorDictModule
+    raw_model = model.module.module if ddp else model.module
     running_mfu = -1.0
 
     while True:
@@ -402,12 +407,12 @@ if __name__ == "__main__":
     scaler = init_scaler(config)
     optimizer = init_optimizer(config)
 
-    # wrap model into DDP container
-    if ddp_config["is_ddp"]:
-        model = DDP(model, device_ids=[ddp_config["ddp_local_rank"]])
     model = TensorDictModule(
         model, in_keys=["prompt", "target"], out_keys=["logits", "loss"]
     )
+    # wrap model into DDP container
+    if ddp_config["is_ddp"]:
+        model = DDP(model, device_ids=[ddp_config["ddp_local_rank"]])
 
     train_data, val_data = create_datasets(config)
 
@@ -419,6 +424,7 @@ if __name__ == "__main__":
         val_data,
         config,
         master_process=ddp_config["master_process"],
+        ddp=ddp_config["is_ddp"],
     )
 
     if ddp_config["is_ddp"]:

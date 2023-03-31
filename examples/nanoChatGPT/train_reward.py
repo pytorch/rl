@@ -1,7 +1,6 @@
 import math
 import os
 import pickle
-import time
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional
@@ -10,7 +9,7 @@ import tiktoken
 import torch
 import torch.nn as nn
 from datasets import load_dataset
-from model import GPT, RLHF, GPTConfig
+from model import GPT, GPTConfig, RLHF
 from tensordict.nn import TensorDictModule
 from tensordict.prototype import tensorclass
 from torch.distributed import destroy_process_group
@@ -38,7 +37,6 @@ class PairwiseDataset:
     chosen: torch.Tensor
     rejected: torch.Tensor
     reward: Optional[torch.Tensor] = None
-    
 
     @classmethod
     def from_dataset(cls, dataset, max_length):
@@ -72,7 +70,11 @@ class PairwiseDataset:
             if chosen == rejected:
                 continue
 
-            data[i] = cls(chosen=torch.Tensor(chosen), rejected=torch.Tensor(rejected), batch_size=[])
+            data[i] = cls(
+                chosen=torch.Tensor(chosen),
+                rejected=torch.Tensor(rejected),
+                batch_size=[],
+            )
             i += 1
 
         # index because we will have skipped some datapoints
@@ -295,16 +297,14 @@ def train_reward_model(config):
             # fix the keys of the state dictionary :(
             # honestly no idea how checkpoints sometimes get this prefix, have to debug more
             unwanted_prefix = "_orig_mod."
-            for k, v in list(state_dict.items()):
+            for k in state_dict:
                 if k.startswith(unwanted_prefix):
                     state_dict[k[len(unwanted_prefix) :]] = state_dict.pop(k)
             model.load_state_dict(state_dict)
 
     model.to(config["device"])
 
-    model = TensorDictModule(
-        model, in_keys=["input"], out_keys=["reward"]
-    )
+    model = TensorDictModule(model, in_keys=["input"], out_keys=["reward"])
 
     # compile the model
     if config["compile"]:
@@ -320,7 +320,6 @@ def train_reward_model(config):
         model = DDP(model, device_ids=[config["ddp_local_rank"]])
 
     # training loop
-    t0 = time.time()
     local_iter_num = 0  # number of iterations in the lifetime of this process
     config["running_mfu"] = -1.0
     raw_model = (
@@ -377,21 +376,17 @@ def train_reward_model(config):
         batch = next(train_loader)
 
         # TODO: check why is different from std model (missing micro gradients)
-        
+
         # TODO: combine evaluate_loss function with this. it's almost the same thing
         # evaluate the loss
         reward_chosen = model(batch.chosen)
         reward_rejected = model(batch.rejected)
         loss = -torch.log(torch.sigmoid(reward_chosen - reward_rejected)).mean()
-        
+
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
 
-        # timing and logging
-        t1 = time.time()
-        # dt = t1 - t0
-        t0 = t1
         iter_num += 1
         local_iter_num += 1
 
