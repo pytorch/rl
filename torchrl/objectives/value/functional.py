@@ -515,16 +515,12 @@ def td_lambda_return_estimate(
         raise RuntimeError(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
-    for tensor in (next_state_value, reward, done):
-        if tensor.shape[-1] != 1:
-            raise RuntimeError(
-                "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
-            )
+
     not_done = 1 - done.to(next_state_value.dtype)
 
     returns = torch.empty_like(next_state_value)
 
-    T = returns.shape[-2]
+    *batch, T, lastdim = returns.shape
 
     # if gamma is not a tensor of the same shape as other inputs, we use rolling_gamma = True
     single_gamma = False
@@ -675,17 +671,13 @@ def vec_td_lambda_return_estimate(
 
     *batch, T, lastdim = shape
 
-    next_state_value = next_state_value.transpose(-2, -1)
+    next_state_value = next_state_value.transpose(-2, -1).unsqueeze(-2)
     if len(batch):
-        next_state_value = next_state_value.flatten(0, len(batch)+1)
+        next_state_value = next_state_value.flatten(0, len(batch))
 
-    done = done.transpose(-2, -1)
+    reward = reward.transpose(-2, -1).unsqueeze(-2)
     if len(batch):
-        done = done.flatten(0, len(batch)+1)
-
-    reward = reward.transpose(-2, -1)
-    if len(batch):
-        reward = reward.flatten(0, len(batch)+1)
+        reward = reward.flatten(0, len(batch))
 
     """Vectorized version of td_lambda_advantage_estimate"""
     device = reward.device
@@ -704,7 +696,7 @@ def vec_td_lambda_return_estimate(
         gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
 
         if not rolling_gamma:
-            done_follows_done = done[..., 1:][done[..., :-1]].all()
+            done_follows_done = done[..., 1:, :][done[..., :-1, :]].all()
             if not done_follows_done:
                 raise NotImplementedError(
                     "When using rolling_gamma=False and vectorized TD(lambda), "
@@ -761,7 +753,7 @@ def vec_td_lambda_return_estimate(
         out = _custom_conv1d(
             reward + (gammas * (1 - lambdas)).squeeze(-1) * next_state_value + v3, dec
         )
-        return out.view(shape)
+        return out.view(*batch, lastdim, T).transpose(-2, -1)
     else:
         v1 = _custom_conv1d(reward, dec)
 
@@ -777,7 +769,7 @@ def vec_td_lambda_return_estimate(
         v3 = next_state_value * not_done.view_as(next_state_value)
         v3[..., :-1] = 0
         v3 = _custom_conv1d(v3, dec * (gammas * lambdas).transpose(1, 2))
-        return (v1 + v2 + v3).view(shape)
+        return (v1 + v2 + v3).view(*batch, lastdim, T).transpose(-2, -1)
 
 
 def vec_td_lambda_advantage_estimate(
