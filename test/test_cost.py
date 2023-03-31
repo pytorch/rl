@@ -3730,59 +3730,114 @@ class TestValues:
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
-    @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+    @pytest.mark.parametrize("gamma", [0.1, 0.99])
+    @pytest.mark.parametrize("lmbda", [0.1, 0.99])
     @pytest.mark.parametrize("N", [(3,), (7, 3)])
-    @pytest.mark.parametrize("T", [3, 5, 200])
+    @pytest.mark.parametrize("T", [3, 100])
+    @pytest.mark.parametrize("feature_dim", [[5], [2, 5]])
     @pytest.mark.parametrize("random_gamma,rolling_gamma", [[False, None]])
     def test_tdlambda_multi(
-        self, device, gamma, lmbda, N, T, random_gamma, rolling_gamma
+        self, device, gamma, lmbda, N, T, random_gamma, rolling_gamma, feature_dim
     ):
         torch.manual_seed(0)
-        D = 5
-        done = torch.zeros(*N, T, D, device=device, dtype=torch.bool).bernoulli_(0.1)
-        reward = torch.randn(*N, T, D, device=device)
-        state_value = torch.randn(*N, T, D, device=device)
-        next_state_value = torch.randn(*N, T, D, device=device)
+        D = feature_dim
+        time_dim = -1 - len(D)
+        done = torch.zeros(*N, T, *D, device=device, dtype=torch.bool).bernoulli_(0.1)
+        reward = torch.randn(*N, T, *D, device=device)
+        state_value = torch.randn(*N, T, *D, device=device)
+        next_state_value = torch.randn(*N, T, *D, device=device)
         if random_gamma:
             gamma = torch.rand_like(reward) * gamma
 
         r1 = vec_td_lambda_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done, rolling_gamma
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            rolling_gamma,
+            time_dim=time_dim,
         )
         r2 = td_lambda_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done, rolling_gamma
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            rolling_gamma,
+            time_dim=time_dim,
         )
-        r3 = torch.cat(
-            [
-                vec_td_lambda_advantage_estimate(
-                    gamma,
-                    lmbda,
-                    state_value[..., i : i + 1],
-                    next_state_value[..., i : i + 1],
-                    reward[..., i : i + 1],
-                    done[..., i : i + 1],
-                    rolling_gamma,
-                )
-                for i in range(D)
-            ],
-            -1,
-        )
-        r4 = torch.cat(
-            [
-                td_lambda_advantage_estimate(
-                    gamma,
-                    lmbda,
-                    state_value[..., i : i + 1],
-                    next_state_value[..., i : i + 1],
-                    reward[..., i : i + 1],
-                    done[..., i : i + 1],
-                    rolling_gamma,
-                )
-                for i in range(D)
-            ],
-            -1,
-        )
+        if len(D) == 2:
+            r3 = torch.cat(
+                [
+                    vec_td_lambda_advantage_estimate(
+                        gamma,
+                        lmbda,
+                        state_value[..., i : i + 1, j],
+                        next_state_value[..., i : i + 1, j],
+                        reward[..., i : i + 1, j],
+                        done[..., i : i + 1, j],
+                        rolling_gamma,
+                        time_dim=-2,
+                    )
+                    for i in range(D[0])
+                    for j in range(D[1])
+                ],
+                -1,
+            ).unflatten(-1, D)
+            r4 = torch.cat(
+                [
+                    td_lambda_advantage_estimate(
+                        gamma,
+                        lmbda,
+                        state_value[..., i : i + 1, j],
+                        next_state_value[..., i : i + 1, j],
+                        reward[..., i : i + 1, j],
+                        done[..., i : i + 1, j],
+                        rolling_gamma,
+                        time_dim=-2,
+                    )
+                    for i in range(D[0])
+                    for j in range(D[1])
+                ],
+                -1,
+            ).unflatten(-1, D)
+        else:
+            r3 = torch.cat(
+                [
+                    vec_td_lambda_advantage_estimate(
+                        gamma,
+                        lmbda,
+                        state_value[..., i : i + 1],
+                        next_state_value[..., i : i + 1],
+                        reward[..., i : i + 1],
+                        done[..., i : i + 1],
+                        rolling_gamma,
+                        time_dim=-2,
+                    )
+                    for i in range(D[0])
+                ],
+                -1,
+            )
+            r4 = torch.cat(
+                [
+                    td_lambda_advantage_estimate(
+                        gamma,
+                        lmbda,
+                        state_value[..., i : i + 1],
+                        next_state_value[..., i : i + 1],
+                        reward[..., i : i + 1],
+                        done[..., i : i + 1],
+                        rolling_gamma,
+                        time_dim=-2,
+                    )
+                    for i in range(D[0])
+                ],
+                -1,
+            )
+
         torch.testing.assert_close(r4, r2, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(r3, r1, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
@@ -3790,8 +3845,7 @@ class TestValues:
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
     @pytest.mark.parametrize("N", [(3,), (7, 3)])
-    @pytest.mark.parametrize("T", [3, 5, 200])
-    # @pytest.mark.parametrize("random_gamma,rolling_gamma", [[True, False], [True, True], [False, None]])
+    @pytest.mark.parametrize("T", [3, 100])
     @pytest.mark.parametrize("random_gamma,rolling_gamma", [[False, None]])
     def test_td1(self, device, gamma, N, T, random_gamma, rolling_gamma):
         torch.manual_seed(0)
@@ -3812,56 +3866,108 @@ class TestValues:
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
+    @pytest.mark.parametrize("gamma", [0.1, 0.99])
     @pytest.mark.parametrize("N", [(3,), (7, 3)])
-    @pytest.mark.parametrize("T", [3, 5, 200])
-    # @pytest.mark.parametrize("random_gamma,rolling_gamma", [[True, False], [True, True], [False, None]])
+    @pytest.mark.parametrize("T", [3, 5])
+    @pytest.mark.parametrize("feature_dim", [[5], [2, 5]])
     @pytest.mark.parametrize("random_gamma,rolling_gamma", [[False, None]])
-    def test_td1_multi(self, device, gamma, N, T, random_gamma, rolling_gamma):
+    def test_td1_multi(
+        self, device, gamma, N, T, random_gamma, rolling_gamma, feature_dim
+    ):
         torch.manual_seed(0)
 
-        D = 5
-        done = torch.zeros(*N, T, D, device=device, dtype=torch.bool).bernoulli_(0.1)
-        reward = torch.randn(*N, T, D, device=device)
-        state_value = torch.randn(*N, T, D, device=device)
-        next_state_value = torch.randn(*N, T, D, device=device)
+        D = feature_dim
+        time_dim = -1 - len(D)
+        done = torch.zeros(*N, T, *D, device=device, dtype=torch.bool).bernoulli_(0.1)
+        reward = torch.randn(*N, T, *D, device=device)
+        state_value = torch.randn(*N, T, *D, device=device)
+        next_state_value = torch.randn(*N, T, *D, device=device)
         if random_gamma:
             gamma = torch.rand_like(reward) * gamma
 
         r1 = vec_td1_advantage_estimate(
-            gamma, state_value, next_state_value, reward, done, rolling_gamma
+            gamma,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            rolling_gamma,
+            time_dim=time_dim,
         )
         r2 = td1_advantage_estimate(
-            gamma, state_value, next_state_value, reward, done, rolling_gamma
+            gamma,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            rolling_gamma,
+            time_dim=time_dim,
         )
-        r3 = torch.cat(
-            [
-                vec_td1_advantage_estimate(
-                    gamma,
-                    state_value[..., i : i + 1],
-                    next_state_value[..., i : i + 1],
-                    reward[..., i : i + 1],
-                    done[..., i : i + 1],
-                    rolling_gamma,
-                )
-                for i in range(D)
-            ],
-            -1,
-        )
-        r4 = torch.cat(
-            [
-                td1_advantage_estimate(
-                    gamma,
-                    state_value[..., i : i + 1],
-                    next_state_value[..., i : i + 1],
-                    reward[..., i : i + 1],
-                    done[..., i : i + 1],
-                    rolling_gamma,
-                )
-                for i in range(D)
-            ],
-            -1,
-        )
+        if len(D) == 2:
+            r3 = torch.cat(
+                [
+                    vec_td1_advantage_estimate(
+                        gamma,
+                        state_value[..., i : i + 1, j],
+                        next_state_value[..., i : i + 1, j],
+                        reward[..., i : i + 1, j],
+                        done[..., i : i + 1, j],
+                        rolling_gamma,
+                        time_dim=-2,
+                    )
+                    for i in range(D[0])
+                    for j in range(D[1])
+                ],
+                -1,
+            ).unflatten(-1, D)
+            r4 = torch.cat(
+                [
+                    td1_advantage_estimate(
+                        gamma,
+                        state_value[..., i : i + 1, j],
+                        next_state_value[..., i : i + 1, j],
+                        reward[..., i : i + 1, j],
+                        done[..., i : i + 1, j],
+                        rolling_gamma,
+                        time_dim=-2,
+                    )
+                    for i in range(D[0])
+                    for j in range(D[1])
+                ],
+                -1,
+            ).unflatten(-1, D)
+        else:
+            r3 = torch.cat(
+                [
+                    vec_td1_advantage_estimate(
+                        gamma,
+                        state_value[..., i : i + 1],
+                        next_state_value[..., i : i + 1],
+                        reward[..., i : i + 1],
+                        done[..., i : i + 1],
+                        rolling_gamma,
+                        time_dim=-2,
+                    )
+                    for i in range(D[0])
+                ],
+                -1,
+            )
+            r4 = torch.cat(
+                [
+                    td1_advantage_estimate(
+                        gamma,
+                        state_value[..., i : i + 1],
+                        next_state_value[..., i : i + 1],
+                        reward[..., i : i + 1],
+                        done[..., i : i + 1],
+                        rolling_gamma,
+                        time_dim=-2,
+                    )
+                    for i in range(D[0])
+                ],
+                -1,
+            )
+
         torch.testing.assert_close(r4, r2, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(r3, r1, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
@@ -3895,52 +4001,103 @@ class TestValues:
     @pytest.mark.parametrize("gamma", [0.99, 0.5, 0.1])
     @pytest.mark.parametrize("lmbda", [0.99, 0.5, 0.1])
     @pytest.mark.parametrize("N", [(3,), (7, 3)])
-    @pytest.mark.parametrize("T", [200, 5, 3])
+    @pytest.mark.parametrize("T", [100, 3])
     @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+    @pytest.mark.parametrize("feature_dim", [[5], [2, 5]])
     @pytest.mark.parametrize("has_done", [True, False])
-    def test_gae_multidim(self, device, gamma, lmbda, N, T, dtype, has_done):
-        D = 5
+    def test_gae_multidim(
+        self, device, gamma, lmbda, N, T, dtype, has_done, feature_dim
+    ):
+        D = feature_dim
+        time_dim = -1 - len(D)
+
         torch.manual_seed(0)
 
-        done = torch.zeros(*N, T, D, device=device, dtype=torch.bool)
+        done = torch.zeros(*N, T, *D, device=device, dtype=torch.bool)
         if has_done:
             done = done.bernoulli_(0.1)
-        reward = torch.randn(*N, T, D, device=device, dtype=dtype)
-        state_value = torch.randn(*N, T, D, device=device, dtype=dtype)
-        next_state_value = torch.randn(*N, T, D, device=device, dtype=dtype)
+        reward = torch.randn(*N, T, *D, device=device, dtype=dtype)
+        state_value = torch.randn(*N, T, *D, device=device, dtype=dtype)
+        next_state_value = torch.randn(*N, T, *D, device=device, dtype=dtype)
 
         r1 = vec_generalized_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            time_dim=time_dim,
         )
         r2 = generalized_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            time_dim=time_dim,
         )
-        list3 = [
-            vec_generalized_advantage_estimate(
-                gamma,
-                lmbda,
-                state_value[..., i : i + 1],
-                next_state_value[..., i : i + 1],
-                reward[..., i : i + 1],
-                done[..., i : i + 1],
-            )
-            for i in range(D)
-        ]
-        list4 = [
-            generalized_advantage_estimate(
-                gamma,
-                lmbda,
-                state_value[..., i : i + 1],
-                next_state_value[..., i : i + 1],
-                reward[..., i : i + 1],
-                done[..., i : i + 1],
-            )
-            for i in range(D)
-        ]
-        list3 = list(zip(*list3))
-        list4 = list(zip(*list4))
+        if len(D) == 2:
+            r3 = [
+                vec_generalized_advantage_estimate(
+                    gamma,
+                    lmbda,
+                    state_value[..., i : i + 1, j],
+                    next_state_value[..., i : i + 1, j],
+                    reward[..., i : i + 1, j],
+                    done[..., i : i + 1, j],
+                    time_dim=-2,
+                )
+                for i in range(D[0])
+                for j in range(D[1])
+            ]
+            r4 = [
+                generalized_advantage_estimate(
+                    gamma,
+                    lmbda,
+                    state_value[..., i : i + 1, j],
+                    next_state_value[..., i : i + 1, j],
+                    reward[..., i : i + 1, j],
+                    done[..., i : i + 1, j],
+                    time_dim=-2,
+                )
+                for i in range(D[0])
+                for j in range(D[1])
+            ]
+        else:
+            r3 = [
+                vec_generalized_advantage_estimate(
+                    gamma,
+                    lmbda,
+                    state_value[..., i : i + 1],
+                    next_state_value[..., i : i + 1],
+                    reward[..., i : i + 1],
+                    done[..., i : i + 1],
+                    time_dim=-2,
+                )
+                for i in range(D[0])
+            ]
+            r4 = [
+                generalized_advantage_estimate(
+                    gamma,
+                    lmbda,
+                    state_value[..., i : i + 1],
+                    next_state_value[..., i : i + 1],
+                    reward[..., i : i + 1],
+                    done[..., i : i + 1],
+                    time_dim=-2,
+                )
+                for i in range(D[0])
+            ]
+
+        list3 = list(zip(*r3))
+        list4 = list(zip(*r4))
         r3 = [torch.cat(list3[0], -1), torch.cat(list3[1], -1)]
         r4 = [torch.cat(list4[0], -1), torch.cat(list4[1], -1)]
+        if len(D) == 2:
+            r3 = [r3[0].unflatten(-1, D), r3[1].unflatten(-1, D)]
+            r4 = [r4[0].unflatten(-1, D), r4[1].unflatten(-1, D)]
         torch.testing.assert_close(r2, r4, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(r1, r3, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
