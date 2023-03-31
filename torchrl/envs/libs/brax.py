@@ -381,7 +381,9 @@ class _BraxEnvStep(torch.autograd.Function):
         # build gradient tensordict with zeros in fields with no grad
         grad_next_state = TensorDict(
             source={
-                "pipeline_state": dict(zip(ctx.next_state["pipeline_state"].keys(), grad_next_qp_values)),
+                "pipeline_state": dict(
+                    zip(ctx.next_state["pipeline_state"].keys(), grad_next_qp_values)
+                ),
                 "obs": grad_next_obs,
                 "reward": grad_next_reward,
                 "done": torch.zeros_like(ctx.next_state["done"]),
