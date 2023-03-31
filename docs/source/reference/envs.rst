@@ -403,6 +403,8 @@ Libraries
     dm_control.DMControlWrapper
     gym.GymEnv
     gym.GymWrapper
+    gym.MOGymEnv
+    gym.MOGymWrapper
     habitat.HabitatEnv
     jumanji.JumanjiEnv
     jumanji.JumanjiWrapper

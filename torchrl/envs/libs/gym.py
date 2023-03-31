@@ -62,6 +62,15 @@ if _has_gym:
             GymPixelObservationWrapper as PixelObservationWrapper,
         )
 
+
+    _has_mo = True
+    MO_ERR = None
+    try:
+        import mo_gymnasium as mo_gym
+    except ModuleNotFoundError as err:
+        _has_mo = False
+        MO_ERR = err
+
 __all__ = ["GymWrapper", "GymEnv"]
 
 
@@ -504,3 +513,37 @@ class GymEnv(GymWrapper):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size}, device={self.device})"
+
+class MOGymWrapper(GymWrapper):
+    """FARAMA MO-Gymnasium environment wrapper.
+
+    Examples:
+        >>> import mo_gymnasium as mo_gym
+        >>> env = MOGymWrapper(mo_gym.make('minecart-v0'), frame_skip=4)
+        >>> td = env.rand_step()
+        >>> print(td)
+        >>> print(env.available_envs)
+
+    """
+    git_url = "https://github.com/Farama-Foundation/MO-Gymnasium"
+    libname = "mo-gymnasium"
+
+class MOGymEnv(GymEnv):
+    """FARAMA MO-Gymnasium environment wrapper.
+
+    Examples:
+        >>> env = MOGymEnv(env_name="minecart-v0", frame_skip=4)
+        >>> td = env.rand_step()
+        >>> print(td)
+        >>> print(env.available_envs)
+
+    """
+    git_url = "https://github.com/Farama-Foundation/MO-Gymnasium"
+    libname = "mo-gymnasium"
+
+    @property
+    def lib(self) -> ModuleType:
+        if _has_mo:
+            return mo_gym
+        else:
+            raise ImportError("MO-gymnasium not found, check installation") from MO_ERR
