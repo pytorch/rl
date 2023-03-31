@@ -56,6 +56,15 @@ except Exception as err:
     _has_d4rl = False
     D4RL_ERR = err
 
+MO_ERR = None
+try:
+    import mo_gymnasium  # noqa
+
+    _has_mo = True
+except Exception as err:
+    _has_mo = False
+    MO_ERR = err
+
 SKLEARN_ERR = None
 try:
     import sklearn  # noqa
@@ -98,13 +107,6 @@ IS_OSX = platform == "darwin"
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
-@pytest.mark.parametrize(
-    "env_name",
-    [
-        PONG_VERSIONED,
-        PENDULUM_VERSIONED,
-    ],
-)
 @pytest.mark.parametrize("frame_skip", [1, 3])
 @pytest.mark.parametrize(
     "from_pixels,pixels_only",
@@ -115,6 +117,13 @@ IS_OSX = platform == "darwin"
     ],
 )
 class TestGym:
+    @pytest.mark.parametrize(
+        "env_name",
+        [
+            PONG_VERSIONED,
+            PENDULUM_VERSIONED,
+        ],
+    )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
         if env_name == PONG_VERSIONED and not from_pixels:
             raise pytest.skip("already pixel")
@@ -173,6 +182,13 @@ class TestGym:
         assert final_seed0 == final_seed2
         assert_allclose_td(tdrollout[0], rollout2, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.parametrize(
+        "env_name",
+        [
+            PONG_VERSIONED,
+            PENDULUM_VERSIONED,
+        ],
+    )
     def test_gym_fake_td(self, env_name, frame_skip, from_pixels, pixels_only):
         if env_name == PONG_VERSIONED and not from_pixels:
             raise pytest.skip("already pixel")
@@ -189,6 +205,21 @@ class TestGym:
             from_pixels=from_pixels,
             pixels_only=pixels_only,
         )
+        check_env_specs(env)
+
+    @pytest.mark.skipif(not _has_mo, reason="MO-gymnasium not found")
+    def test_mo(self, frame_skip, from_pixels, pixels_only):
+        def make_env():
+            return GymEnv(
+                "minecart-v0",
+                frame_skip=frame_skip,
+                from_pixels=from_pixels,
+                pixels_only=pixels_only,
+            )
+
+        env = make_env()
+        check_env_specs(env)
+        env = SerialEnv(2, make_env)
         check_env_specs(env)
 
 
