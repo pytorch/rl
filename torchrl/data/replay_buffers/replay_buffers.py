@@ -235,7 +235,7 @@ class ReplayBuffer:
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
 
-        if self._transform is not None:
+        if self._transform is not None and len(self._transform):
             is_td = True
             if not isinstance(data, TensorDictBase):
                 data = TensorDict({"data": data}, [])
@@ -286,7 +286,7 @@ class ReplayBuffer:
         """
         if self._transform is not None and isinstance(data, TensorDictBase):
             data = self._transform.inv(data)
-        elif self._transform is not None:
+        elif self._transform is not None and len(self._transform):
             # Accepts transforms that act on "data" key
             data = self._transform.inv(TensorDict({"data": data}, [])).get("data")
         with self._replay_lock:
@@ -310,7 +310,7 @@ class ReplayBuffer:
             data = self._storage[index]
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
-        if self._transform is not None:
+        if self._transform is not None and len(self._transform):
             is_td = True
             if not isinstance(data, TensorDictBase):
                 data = TensorDict({"data": data}, [])

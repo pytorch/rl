@@ -31,8 +31,8 @@ from torchrl._utils import (
     _check_for_faulty_process,
     accept_remote_rref_udf_invocation,
     prod,
-    VERBOSE,
     RL_WARNINGS,
+    VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.tensor_specs import TensorSpec
