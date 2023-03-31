@@ -591,11 +591,12 @@ class SyncDataCollector(DataCollectorBase):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
             # the policy could have more keys than the env:
-            for key, spec in self.policy.spec.items(True, True):
+            policy_spec = self.policy.spec
+            if policy_spec.ndim < self._tensordict_out.ndim:
+                policy_spec = policy_spec.expand(self._tensordict_out.shape)
+            for key, spec in policy_spec.items(True, True):
                 if key in self._tensordict_out.keys(isinstance(key, tuple)):
                     continue
-                if self.policy.spec.ndim < self._tensordict_out.ndim:
-                    spec = spec.expand(self._tensordict_out.shape)
                 self._tensordict_out.set(key, spec.zero())
             self._tensordict_out = (
                 self._tensordict_out.unsqueeze(-1)
