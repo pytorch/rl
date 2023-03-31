@@ -3731,6 +3731,30 @@ class TestValues:
 
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
+    @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+    @pytest.mark.parametrize("N", [(3,), (7, 3)])
+    @pytest.mark.parametrize("T", [3, 5, 200])
+    @pytest.mark.parametrize("random_gamma,rolling_gamma", [[False, None]])
+    def test_tdlambda_multi(self, device, gamma, lmbda, N, T, random_gamma, rolling_gamma):
+        torch.manual_seed(0)
+        D = 5
+        done = torch.zeros(*N, T, D, device=device, dtype=torch.bool).bernoulli_(0.1)
+        reward = torch.randn(*N, T, D, device=device)
+        state_value = torch.randn(*N, T, D, device=device)
+        next_state_value = torch.randn(*N, T, D, device=device)
+        if random_gamma:
+            gamma = torch.rand_like(reward) * gamma
+
+        r1 = vec_td_lambda_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done, rolling_gamma
+        )
+        r2 = td_lambda_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done, rolling_gamma
+        )
+        torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
     @pytest.mark.parametrize("N", [(3,), (7, 3)])
     @pytest.mark.parametrize("T", [3, 5, 200])
     # @pytest.mark.parametrize("random_gamma,rolling_gamma", [[True, False], [True, True], [False, None]])
