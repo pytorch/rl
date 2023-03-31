@@ -62,7 +62,6 @@ if _has_gym:
             GymPixelObservationWrapper as PixelObservationWrapper,
         )
 
-
     _has_mo = True
     MO_ERR = None
     try:
@@ -514,6 +513,7 @@ class GymEnv(GymWrapper):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size}, device={self.device})"
 
+
 class MOGymWrapper(GymWrapper):
     """FARAMA MO-Gymnasium environment wrapper.
 
@@ -525,8 +525,10 @@ class MOGymWrapper(GymWrapper):
         >>> print(env.available_envs)
 
     """
+
     git_url = "https://github.com/Farama-Foundation/MO-Gymnasium"
     libname = "mo-gymnasium"
+
 
 class MOGymEnv(GymEnv):
     """FARAMA MO-Gymnasium environment wrapper.
@@ -538,6 +540,7 @@ class MOGymEnv(GymEnv):
         >>> print(env.available_envs)
 
     """
+
     git_url = "https://github.com/Farama-Foundation/MO-Gymnasium"
     libname = "mo-gymnasium"
 

@@ -36,8 +36,13 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
-from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, \
-    GymWrapper, MOGymEnv
+from torchrl.envs.libs.gym import (
+    _has_gym,
+    _is_from_pixels,
+    GymEnv,
+    GymWrapper,
+    MOGymEnv,
+)
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
