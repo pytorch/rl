@@ -580,19 +580,19 @@ class SyncDataCollector(DataCollectorBase):
             hasattr(self.policy, "spec")
             and self.policy.spec is not None
             and all(
-                v is not None for v in self.policy.spec.values()
+                v is not None for v in self.policy.spec.values(True, True)
             )  # if a spec is None, we don't know anything about it
             # and set(self.policy.spec.keys(True, True)) == set(self.policy.out_keys)
             and any(
                 key not in self._tensordict_out.keys(isinstance(key, tuple))
-                for key in self.policy.spec
+                for key in self.policy.spec.keys(True, True)
             )
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
             # the policy could have more keys than the env:
-            for key, spec in self.policy.spec.items():  # this may break for nested keys
-                if key in self._tensordict_out.keys():
+            for key, spec in self.policy.spec.items(True, True):
+                if key in self._tensordict_out.keys(isinstance(key, tuple)):
                     continue
                 if spec.ndim < self._tensordict_out.ndim:
                     spec = spec.expand(self._tensordict_out.shape)
