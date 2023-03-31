@@ -134,8 +134,8 @@ def roll_by_gather(mat: torch.Tensor, dim: int, shifts: torch.LongTensor):
 def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
     """Prepares a decay tensor for a matrix multiplication.
 
-    Given a tensor gamma of size [*batch, T, 1],
-    it will return a new tensor with size [*batch, T, T+1, 1].
+    Given a tensor gamma of size [*batch, T, D],
+    it will return a new tensor with size [*batch, T, T+1, D].
     In the rolling_gamma case, a rolling of the gamma values will be performed
     along the T axis, e.g.:
     [[ 1, g1, g2, g3],
@@ -153,6 +153,7 @@ def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
 
     """
     # some reshaping code vendored from vec_td_lambda_return_estimate
+    gamma = gamma.transpose(-2, -1).contiguous()
     gamma = gamma.view(-1, T)
     dtype = gamma.dtype
     device = gamma.device

@@ -101,6 +101,10 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         else:
             self._spec = CompositeSpec({key: None for key in policy.out_keys})
 
+    @property
+    def spec(self):
+        return self._spec
+
     def step(self, frames: int = 1) -> None:
         """A step of epsilon decay.
 
