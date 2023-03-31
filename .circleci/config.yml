@@ -1394,11 +1394,6 @@ workflows:
           cu_version: cu116
           name: unittest_linux_stable_gpu_py3.8
           python_version: '3.8'
-      # we test supported libs for 3.8 only
-      - unittest_linux_habitat_gpu:
-          cu_version: cu117
-          name: unittest_linux_habitat_gpu_py3.8
-          python_version: '3.8'
 #      - unittest_linux_d4rl_gpu:
 #          cu_version: cu117
 #          name: unittest_linux_d4rl_gpu_py3.8
@@ -1460,6 +1455,11 @@ workflows:
       - unittest_linux_stable_gpu:
           cu_version: cu116
           name: unittest_linux_stable_gpu_py3.9
+          python_version: '3.9'
+      # we test supported libs for 3.8 only
+      - unittest_linux_habitat_gpu:
+          cu_version: cu117
+          name: unittest_linux_habitat_gpu_py3.9
           python_version: '3.9'
 
       - unittest_macos_cpu:
