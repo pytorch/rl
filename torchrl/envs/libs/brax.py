@@ -243,8 +243,7 @@ class BraxWrapper(_EnvWrapper):
         # convert tensors to ndarrays
         action = tensordict.get("action")
         state = tensordict.get("state")
-        qp_keys = list(state.get("qp").keys())
-        qp_values = list(state.get("qp").values())
+        qp_keys, qp_values = zip(*state.get("pipeline_state").items())
 
         # call env step with autograd function
         next_state_nograd, next_obs, next_reward, *next_qp_values = _BraxEnvStep.apply(
@@ -261,7 +260,7 @@ class BraxWrapper(_EnvWrapper):
         next_state.set("reward", next_reward)
         next_state.set("done", next_done)
         next_done = next_done.bool()
-        next_state["qp"].update(dict(zip(qp_keys, next_qp_values)))
+        next_state.get("pipeline_state").update(dict(zip(qp_keys, next_qp_values)))
 
         # build result
         tensordict_out = TensorDict(
@@ -373,7 +372,7 @@ class _BraxEnvStep(torch.autograd.Function):
             next_state,  # no gradient
             next_state["obs"],
             next_state["reward"],
-            *next_state["qp"].values(),
+            *next_state["pipeline_state"].values(),
         )
 
     @staticmethod
@@ -382,7 +381,7 @@ class _BraxEnvStep(torch.autograd.Function):
         # build gradient tensordict with zeros in fields with no grad
         grad_next_state = TensorDict(
             source={
-                "qp": dict(zip(ctx.next_state["qp"].keys(), grad_next_qp_values)),
+                "pipeline_state": dict(zip(ctx.next_state["pipeline_state"].keys(), grad_next_qp_values)),
                 "obs": grad_next_obs,
                 "reward": grad_next_reward,
                 "done": torch.zeros_like(ctx.next_state["done"]),
