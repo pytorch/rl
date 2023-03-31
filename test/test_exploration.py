@@ -110,13 +110,20 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             tensordict = exploratory_policy(tensordict.clone())
             if i == 0:
                 assert (tensordict[exploratory_policy.ou.steps_key] == 1).all()
+            elif i == n_steps // 2 + 1:
+                assert (
+                    tensordict[exploratory_policy.ou.steps_key][: batch // 2] == 1
+                ).all()
             else:
-                assert not (tensordict[exploratory_policy.ou.steps_key] == 1).all()
+                assert not (tensordict[exploratory_policy.ou.steps_key] == 1).any()
 
             out.append(tensordict.clone())
             out_noexp.append(tensordict_noexp.clone())
             tensordict.set_("observation", torch.randn(batch, d_obs, device=device))
             tensordict["step_count"] += 1
+            if i == n_steps // 2:
+                tensordict["step_count"][: batch // 2] = 0
+
         out = torch.stack(out, 0)
         out_noexp = torch.stack(out_noexp, 0)
         assert (out_noexp.get("action") != out.get("action")).all()
@@ -127,12 +134,12 @@ class TestOrnsteinUhlenbeckProcessWrapper:
     @pytest.mark.parametrize("probabilistic", [True, False])
     def test_collector(self, device, parallel_spec, probabilistic, seed=0):
         torch.manual_seed(seed)
-        env = SerialEnv(2, ContinuousActionVecMockEnv)
+        env = SerialEnv(2, ContinuousActionVecMockEnv, device=device)
         # the module must work with the action spec of a single env or a serial env
         if parallel_spec:
             action_spec = env.action_spec
         else:
-            action_spec = ContinuousActionVecMockEnv().action_spec
+            action_spec = ContinuousActionVecMockEnv(device=device).action_spec
         d_act = action_spec.shape[-1]
         if probabilistic:
             net = NormalParamWrapper(nn.LazyLinear(2 * d_act)).to(device)
@@ -161,6 +168,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             policy=exploratory_policy,
             frames_per_batch=100,
             total_frames=1000,
+            device=device,
         )
         for _ in collector:
             # check that we can run the policy
@@ -294,12 +302,12 @@ class TestAdditiveGaussian:
     @pytest.mark.parametrize("parallel_spec", [True, False])
     def test_collector(self, device, parallel_spec, seed=0):
         torch.manual_seed(seed)
-        env = SerialEnv(2, ContinuousActionVecMockEnv)
+        env = SerialEnv(2, ContinuousActionVecMockEnv, device=device)
         # the module must work with the action spec of a single env or a serial env
         if parallel_spec:
             action_spec = env.action_spec
         else:
-            action_spec = ContinuousActionVecMockEnv().action_spec
+            action_spec = ContinuousActionVecMockEnv(device=device).action_spec
         d_act = action_spec.shape[-1]
         net = NormalParamWrapper(nn.LazyLinear(2 * d_act)).to(device)
         module = SafeModule(
@@ -321,6 +329,7 @@ class TestAdditiveGaussian:
             policy=exploratory_policy,
             frames_per_batch=100,
             total_frames=1000,
+            device=device,
         )
         for _ in collector:
             # check that we can run the policy
