@@ -86,6 +86,7 @@ class OneHotCategorical(D.Categorical):
 
 class MaskedCategorical(D.Categorical):
     """MaskedCategorical distribution.
+
     Reference:
     https://www.tensorflow.org/agents/api_docs/python/tf_agents/distributions/masked/MaskedCategorical
 
@@ -114,8 +115,11 @@ class MaskedCategorical(D.Categorical):
         super().__init__(logits=logits)
 
     def sample(
-        self, sample_shape: Union[torch.Size, Sequence[int]] = torch.Size()
+        self,
+        sample_shape: Optional[Union[torch.Size, Sequence[int]]] = None
     ) -> torch.Tensor:
+        if sample_shape is None:
+            sample_shape = torch.Size()
         ret = super().sample(sample_shape)
         if not self._sparse_mask:
             return ret
