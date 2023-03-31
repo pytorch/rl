@@ -2,8 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import math
+import warnings
 from numbers import Number
 from typing import Tuple, Union
 
@@ -16,11 +16,14 @@ from tensordict.tensordict import TensorDictBase
 from torch import Tensor
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.objectives import (
+    default_value_kwargs,
     distance_loss,
     hold_out_params,
-    next_state_value as get_next_state_value,
+    ValueEstimators,
 )
 from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import _GAMMA_LMBDA_DEPREC_WARNING
+from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
     from functorch import vmap
@@ -41,36 +44,49 @@ class REDQLoss_deprecated(LossModule):
 
     Args:
         actor_network (TensorDictModule): the actor to be trained
-        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
-        num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
-        sub_sample_len (int, optional): number of Q-value networks to be subsampled to evaluate the next state value
-            Default is 2.
-        gamma (Number, optional): gamma decay factor. Default is 0.99.
-        priotity_key (str, optional): Key where to write the priority value for prioritized replay buffers. Default is
-            `"td_error"`.
-        loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
-            "l1", Default is "smooth_l1".
+        qvalue_network (TensorDictModule): a single Q-value network that will
+            be multiplicated as many times as needed.
+        num_qvalue_nets (int, optional): Number of Q-value networks to be trained.
+            Default is ``10``.
+        sub_sample_len (int, optional): number of Q-value networks to be
+            subsampled to evaluate the next state value
+            Default is ``2``.
+        priority_key (str, optional): Key where to write the priority value
+            for prioritized replay buffers. Default is
+            ``"td_error"``.
+        loss_function (str, optional): loss function to be used for the Q-value.
+            Can be one of  ``"smooth_l1"``, ``"l2"``,
+            ``"l1"``, Default is ``"smooth_l1"``.
         alpha_init (float, optional): initial entropy multiplier.
-            Default is 1.0.
+            Default is ``1.0``.
         min_alpha (float, optional): min value of alpha.
-            Default is 0.1.
+            Default is ``0.1``.
         max_alpha (float, optional): max value of alpha.
-            Default is 10.0.
-        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is :obj:`False`.
-        target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
+            Default is ``10.0``.
+        fixed_alpha (bool, optional): whether alpha should be trained to match
+            a target entropy. Default is ``False``.
+        target_entropy (Union[str, Number], optional): Target entropy for the
+            stochastic policy. Default is "auto".
+        delay_qvalue (bool, optional): Whether to separate the target Q value
+            networks from the Q value networks used
+            for data collection. Default is ``False``.
+        gSDE (bool, optional): Knowing if gSDE is used is necessary to create
+            random noise variables.
+            Default is ``False``.
 
     """
 
     delay_actor: bool = False
+    default_value_estimator = ValueEstimators.TD0
 
     def __init__(
         self,
         actor_network: TensorDictModule,
         qvalue_network: TensorDictModule,
+        *,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
-        gamma: Number = 0.99,
-        priotity_key: str = "td_error",
+        priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         min_alpha: float = 0.1,
@@ -79,6 +95,7 @@ class REDQLoss_deprecated(LossModule):
         target_entropy: Union[str, Number] = "auto",
         delay_qvalue: bool = True,
         gSDE: bool = False,
+        gamma: float = None,
     ):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
@@ -102,8 +119,7 @@ class REDQLoss_deprecated(LossModule):
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
-        self.register_buffer("gamma", torch.tensor(gamma))
-        self.priority_key = priotity_key
+        self.priority_key = priority_key
         self.loss_function = loss_function
 
         try:
@@ -141,6 +157,10 @@ class REDQLoss_deprecated(LossModule):
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
         self.gSDE = gSDE
+
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            self.gamma = gamma
 
     @property
     def alpha(self):
@@ -197,7 +217,7 @@ class REDQLoss_deprecated(LossModule):
         tensordict_save = tensordict
 
         obs_keys = self.actor_network.in_keys
-        tensordict = tensordict.select("next", *obs_keys, "action")
+        tensordict = tensordict.clone(False).select("next", *obs_keys, "action")
 
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
@@ -227,17 +247,13 @@ class REDQLoss_deprecated(LossModule):
                 != sample_log_prob.shape
             ):
                 sample_log_prob = sample_log_prob.unsqueeze(-1)
-            state_value = (
+            next_state_value = (
                 next_td.get("state_action_value") - self.alpha * sample_log_prob
             )
-            state_value = state_value.min(0)[0]
+            next_state_value = next_state_value.min(0)[0]
 
-        tensordict.set("next.state_value", state_value)
-        target_value = get_next_state_value(
-            tensordict,
-            gamma=self.gamma,
-            pred_next_val=state_value,
-        )
+        tensordict.set(("next", "state_value"), next_state_value)
+        target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
         tensordict_expand = vmap(self.qvalue_network, (None, 0))(
             tensordict.select(*self.qvalue_network.in_keys),
             self.qvalue_network_params,
@@ -264,6 +280,32 @@ class REDQLoss_deprecated(LossModule):
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
         return alpha_loss
+
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+        hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
+        hp.update(hyperparams)
+        value_key = "state_value"
+        # we do not need a value network bc the next state value is already passed
+        if value_type == ValueEstimators.TD1:
+            self._value_estimator = TD1Estimator(
+                value_network=None, value_key=value_key, **hp
+            )
+        elif value_type == ValueEstimators.TD0:
+            self._value_estimator = TD0Estimator(
+                value_network=None, value_key=value_key, **hp
+            )
+        elif value_type == ValueEstimators.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.TDLambda:
+            self._value_estimator = TDLambdaEstimator(
+                value_network=None, value_key=value_key, **hp
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")
 
 
 class DoubleREDQLoss_deprecated(REDQLoss_deprecated):

@@ -52,7 +52,7 @@ class Actor(SafeModule):
             occur because of exploration policies or numerical under/overflow
             issues. If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
-            method. Default is :obj:`False`.
+            method. Default is ``False``.
 
     Examples:
         >>> import torch
@@ -142,7 +142,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             occur because of exploration policies or numerical under/overflow
             issues. If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
-            method. Default is :obj:`False`.
+            method. Default is ``False``.
         default_interaction_mode (str, optional): keyword-only argument.
             Default method to be used to retrieve
             the output value. Should be one of: 'mode', 'median', 'mean' or 'random'
@@ -586,7 +586,7 @@ class QValueActor(Actor):
             occur because of exploration policies or numerical under/overflow
             issues. If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
-            method. Default is :obj:`False`.
+            method. Default is ``False``.
         action_space (str, optional): The action space to be considered.
             Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
@@ -659,7 +659,7 @@ class DistributionalQValueActor(QValueActor):
             occur because of exploration policies or numerical under/overflow
             issues. If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
-            method. Default is :obj:`False`.
+            method. Default is ``False``.
         support (torch.Tensor): support of the action values.
         action_space (str, optional): The action space to be considered.
             Must be one of

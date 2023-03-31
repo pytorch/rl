@@ -603,11 +603,11 @@ class ReplayBufferTrainer(TrainerHookBase):
         replay_buffer (TensorDictReplayBuffer): replay buffer to be used.
         batch_size (int): batch size when sampling data from the
             latest collection or from the replay buffer.
-        memmap (bool, optional): if True, a memmap tensordict is created.
+        memmap (bool, optional): if ``True``, a memmap tensordict is created.
             Default is False.
         device (device, optional): device where the samples must be placed.
             Default is cpu.
-        flatten_tensordicts (bool, optional): if True, the tensordicts will be
+        flatten_tensordicts (bool, optional): if ``True``, the tensordicts will be
             flattened (or equivalently masked with the valid mask obtained from
             the collector) before being passed to the replay buffer. Otherwise,
             no transform will be achieved other than padding (see :obj:`max_dims` arg below).
@@ -792,8 +792,8 @@ class LogReward(TrainerHookBase):
 
     Args:
         logname (str, optional): name of the rewards to be logged. Default is :obj:`"r_training"`.
-        log_pbar (bool, optional): if True, the reward value will be logged on
-            the progression bar. Default is :obj:`False`.
+        log_pbar (bool, optional): if ``True``, the reward value will be logged on
+            the progression bar. Default is ``False``.
         reward_key (str or tuple, optional): the key where to find the reward
             in the input batch. Defaults to ``("next", "reward")``
 
@@ -1125,7 +1125,7 @@ class Recorder(TrainerHookBase):
         out_key (str, optional): reward key to set to the logger. Default is
             `"reward_evaluation"`.
         suffix (str, optional): suffix of the video to be recorded.
-        log_pbar (bool, optional): if True, the reward value will be logged on
+        log_pbar (bool, optional): if ``True``, the reward value will be logged on
             the progression bar. Default is `False`.
 
     """
@@ -1265,7 +1265,7 @@ class CountFramesLog(TrainerHookBase):
         frame_skip (int): frame skip of the environment. This argument is
             important to keep track of the total number of frames, not the
             apparent one.
-        log_pbar (bool, optional): if True, the reward value will be logged on
+        log_pbar (bool, optional): if ``True``, the reward value will be logged on
             the progression bar. Default is `False`.
 
     Examples:
