@@ -21,6 +21,7 @@ from .models import (
     DdpgMlpQNet,
     DistributionalDQNnet,
     DreamerActor,
+    DTActor,
     DuelingCnnDQNet,
     LSTMNet,
     MLP,

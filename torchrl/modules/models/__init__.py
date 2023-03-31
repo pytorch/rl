@@ -13,6 +13,7 @@ from .models import (
     DdpgMlpActor,
     DdpgMlpQNet,
     DistributionalDQNnet,
+    DTActor,
     DuelingCnnDQNet,
     LSTMNet,
     MLP,
