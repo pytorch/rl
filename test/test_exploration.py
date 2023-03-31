@@ -138,6 +138,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             2,
             ContinuousActionVecMockEnv,
         )
+        env = env.to(device)
         # the module must work with the action spec of a single env or a serial env
         if parallel_spec:
             action_spec = env.action_spec
@@ -309,6 +310,7 @@ class TestAdditiveGaussian:
             2,
             ContinuousActionVecMockEnv,
         )
+        env = env.to(device)
         # the module must work with the action spec of a single env or a serial env
         if parallel_spec:
             action_spec = env.action_spec
