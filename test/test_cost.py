@@ -3751,6 +3751,14 @@ class TestValues:
         r2 = td_lambda_advantage_estimate(
             gamma, lmbda, state_value, next_state_value, reward, done, rolling_gamma
         )
+        r3 = torch.cat([vec_td_lambda_advantage_estimate(
+            gamma, lmbda, state_value[..., i:i+1], next_state_value[..., i:i+1], reward[..., i:i+1], done[..., i:i+1], rolling_gamma
+        ) for i in range(D)], -1)
+        r4 = torch.cat([td_lambda_advantage_estimate(
+            gamma, lmbda, state_value[..., i:i+1], next_state_value[..., i:i+1], reward[..., i:i+1], done[..., i:i+1], rolling_gamma
+        ) for i in range(D)], -1)
+        torch.testing.assert_close(r4, r2, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(r3, r1, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("device", get_available_devices())

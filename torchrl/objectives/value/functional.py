@@ -672,13 +672,20 @@ def vec_td_lambda_return_estimate(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
     shape = next_state_value.shape
-    if not shape[-1] == 1:
-        raise RuntimeError("last dimension of inputs shape must be singleton")
 
-    T = shape[-2]
+    *batch, T, lastdim = shape
 
-    next_state_value = next_state_value.view(-1, 1, T)
-    reward = reward.view(-1, 1, T)
+    next_state_value = next_state_value.transpose(-2, -1)
+    if len(batch):
+        next_state_value = next_state_value.flatten(0, len(batch)+1)
+
+    done = done.transpose(-2, -1)
+    if len(batch):
+        done = done.flatten(0, len(batch)+1)
+
+    reward = reward.transpose(-2, -1)
+    if len(batch):
+        reward = reward.flatten(0, len(batch)+1)
 
     """Vectorized version of td_lambda_advantage_estimate"""
     device = reward.device
@@ -697,7 +704,7 @@ def vec_td_lambda_return_estimate(
         gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
 
         if not rolling_gamma:
-            done_follows_done = done[..., 1:, :][done[..., :-1, :]].all()
+            done_follows_done = done[..., 1:][done[..., :-1]].all()
             if not done_follows_done:
                 raise NotImplementedError(
                     "When using rolling_gamma=False and vectorized TD(lambda), "
