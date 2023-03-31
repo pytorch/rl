@@ -3779,6 +3779,60 @@ class TestValues:
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 0.5, 0.1])
+    @pytest.mark.parametrize("lmbda", [0.99, 0.5, 0.1])
+    @pytest.mark.parametrize("N", [(3,), (7, 3)])
+    @pytest.mark.parametrize("T", [200, 5, 3])
+    @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+    @pytest.mark.parametrize("has_done", [True, False])
+    def test_gae_multidim(self, device, gamma, lmbda, N, T, dtype, has_done):
+        D = 5
+        torch.manual_seed(0)
+
+        done = torch.zeros(*N, T, D, device=device, dtype=torch.bool)
+        if has_done:
+            done = done.bernoulli_(0.1)
+        reward = torch.randn(*N, T, D, device=device, dtype=dtype)
+        state_value = torch.randn(*N, T, D, device=device, dtype=dtype)
+        next_state_value = torch.randn(*N, T, D, device=device, dtype=dtype)
+
+        r1 = vec_generalized_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done
+        )
+        r2 = generalized_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done
+        )
+        list3 = [
+            vec_generalized_advantage_estimate(
+                gamma,
+                lmbda,
+                state_value[..., i : i + 1],
+                next_state_value[..., i : i + 1],
+                reward[..., i : i + 1],
+                done[..., i : i + 1],
+            )
+            for i in range(D)
+        ]
+        list4 = [
+            generalized_advantage_estimate(
+                gamma,
+                lmbda,
+                state_value[..., i : i + 1],
+                next_state_value[..., i : i + 1],
+                reward[..., i : i + 1],
+                done[..., i : i + 1],
+            )
+            for i in range(D)
+        ]
+        list3 = list(zip(*list3))
+        list4 = list(zip(*list4))
+        r3 = [torch.cat(list3[0], -1), torch.cat(list3[1], -1)]
+        r4 = [torch.cat(list4[0], -1), torch.cat(list4[1], -1)]
+        torch.testing.assert_close(r2, r4, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(r1, r3, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
+
+    @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
     @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
     @pytest.mark.parametrize("N", [(3,), (7, 3)])

@@ -59,17 +59,15 @@ def generalized_advantage_estimate(
         raise RuntimeError(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
-    for tensor in (next_state_value, state_value, reward, done):
-        if tensor.shape[-1] != 1:
-            raise RuntimeError(
-                "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
-            )
     dtype = next_state_value.dtype
     device = state_value.device
+    lastdim = next_state_value.shape[-1]
 
     not_done = 1 - done.to(dtype)
     *batch_size, time_steps = not_done.shape[:-1]
-    advantage = torch.empty(*batch_size, time_steps, 1, device=device, dtype=dtype)
+    advantage = torch.empty(
+        *batch_size, time_steps, lastdim, device=device, dtype=dtype
+    )
     prev_advantage = 0
     for t in reversed(range(time_steps)):
         delta = (
@@ -116,14 +114,9 @@ def vec_generalized_advantage_estimate(
         raise RuntimeError(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
-    for tensor in (next_state_value, state_value, reward, done):
-        if tensor.shape[-1] != 1:
-            raise RuntimeError(
-                "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
-            )
     dtype = state_value.dtype
     not_done = 1 - done.to(dtype)
-    *batch_size, time_steps = not_done.shape[:-1]
+    *batch_size, time_steps, lastdim = not_done.shape
 
     value = gamma * lmbda
     if isinstance(value, torch.Tensor):
@@ -147,7 +140,14 @@ def vec_generalized_advantage_estimate(
     elif not len(batch_size):
         td0 = td0.unsqueeze(0)
 
-    advantage = _custom_conv1d(td0.transpose(-2, -1), gammalmbdas)
+    td0_r = td0.transpose(-2, -1)
+    shapes = td0_r.shape[:2]
+    if lastdim != 1:
+        # then we flatten again the first dims and reset a singleton in between
+        td0_r = td0_r.flatten(0, 1).unsqueeze(1)
+    advantage = _custom_conv1d(td0_r, gammalmbdas)
+    if lastdim != 1:
+        advantage = advantage.squeeze(1).unflatten(0, shapes)
 
     if len(batch_size) > 1:
         advantage = advantage.unflatten(0, batch_size)
