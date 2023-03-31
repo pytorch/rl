@@ -134,7 +134,10 @@ class TestOrnsteinUhlenbeckProcessWrapper:
     @pytest.mark.parametrize("probabilistic", [True, False])
     def test_collector(self, device, parallel_spec, probabilistic, seed=0):
         torch.manual_seed(seed)
-        env = SerialEnv(2, ContinuousActionVecMockEnv, device=device)
+        env = SerialEnv(
+            2,
+            ContinuousActionVecMockEnv,
+        )
         # the module must work with the action spec of a single env or a serial env
         if parallel_spec:
             action_spec = env.action_spec
@@ -302,7 +305,10 @@ class TestAdditiveGaussian:
     @pytest.mark.parametrize("parallel_spec", [True, False])
     def test_collector(self, device, parallel_spec, seed=0):
         torch.manual_seed(seed)
-        env = SerialEnv(2, ContinuousActionVecMockEnv, device=device)
+        env = SerialEnv(
+            2,
+            ContinuousActionVecMockEnv,
+        )
         # the module must work with the action spec of a single env or a serial env
         if parallel_spec:
             action_spec = env.action_spec
