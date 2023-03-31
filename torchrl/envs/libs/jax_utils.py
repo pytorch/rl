@@ -91,11 +91,12 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
     """Converts a TensorDict to a namedtuple or a dataclass."""
     t = {}
     _fields = _get_object_fields(object_example)
-    for name in tensordict.keys():
+    for name, value in tensordict.items():
         example = _fields[name]
-        value = tensordict[name]
         if isinstance(value, TensorDictBase):
             t[name] = _tensordict_to_object(value, example)
+        elif value is None:
+            t[name] = value
         else:
             if value.dtype is torch.bool:
                 value = value.to(torch.uint8)
