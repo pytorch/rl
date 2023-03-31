@@ -838,7 +838,7 @@ class GAE(ValueEstimatorBase):
         """
         if tensordict.batch_dims < 1:
             raise RuntimeError(
-                "Expected input tensordict to have at least one dimensions, got"
+                "Expected input tensordict to have at least one dimensions, got "
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
         reward = tensordict.get(("next", "reward"))
