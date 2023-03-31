@@ -36,7 +36,6 @@ def init_ddp(ddp_backend, device=None):
         world_size = int(os.environ["WORLD_SIZE"])
         device = f"cuda:{ddp_local_rank}"
         torch.cuda.set_device(device)
-
         seed_offset = ddp_rank  # each process gets a different seed
         ddp_configs = {
             "is_ddp": ddp,
