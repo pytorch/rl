@@ -115,6 +115,8 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   fi
   echo "installing gymnasium"
   pip install "gymnasium[atari,accept-rom-license]"
+  pip install mo-gymnasium  # requires here bc needs mujoco-py
 else
   pip install "gymnasium[atari,accept-rom-license]"
+  pip install mo-gymnasium  # requires here bc needs mujoco-py
 fi

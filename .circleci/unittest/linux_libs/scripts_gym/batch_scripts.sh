@@ -120,7 +120,6 @@ do
     # install ale-py: manylinux names are broken for CentOS so we need to manually download and
     # rename them
     PY_VERSION=$(python --version)
-    pip install mo-gymnasium
     if [[ $PY_VERSION == *"3.7"* ]]; then
       wget https://files.pythonhosted.org/packages/ab/fd/6615982d9460df7f476cad265af1378057eee9daaa8e0026de4cedbaffbd/ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       pip install ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
@@ -144,7 +143,6 @@ do
     pip install gymnasium[atari]
   fi
 
-  python -c """import mo_gymnasium"
   $DIR/run_test.sh
 
   # delete the conda copy
