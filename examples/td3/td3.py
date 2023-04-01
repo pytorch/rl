@@ -60,33 +60,36 @@ def apply_env_transforms(env, reward_scaling=1.0):
 
 
 def make_replay_buffer(
+    batch_size,
     prb=False,
     buffer_size=1000000,
     buffer_scratch_dir="/tmp/",
     device="cpu",
-    make_replay_buffer=3,
+    prefetch=3,
 ):
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
             alpha=0.7,
             beta=0.5,
             pin_memory=False,
-            prefetch=make_replay_buffer,
+            prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
                 device=device,
             ),
+            batch_size=batch_size,
         )
     else:
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
-            prefetch=make_replay_buffer,
+            prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
                 device=device,
             ),
+            batch_size=batch_size,
         )
     return replay_buffer
 
@@ -239,7 +242,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Make Replay Buffer
     replay_buffer = make_replay_buffer(
-        prb=cfg.prb, buffer_size=cfg.buffer_size, device=device
+        batch_size=cfg.batch_size,
+        prb=cfg.prb,
+        buffer_size=cfg.buffer_size,
+        device=device,
     )
 
     # Optimizers

@@ -31,6 +31,7 @@ from torchrl._utils import (
     _check_for_faulty_process,
     accept_remote_rref_udf_invocation,
     prod,
+    RL_WARNINGS,
     VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
@@ -540,9 +541,12 @@ class SyncDataCollector(DataCollectorBase):
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
-            if total_frames % frames_per_batch != 0:
-                raise ValueError(
-                    f"total_frames ({total_frames}) must be divisible by frames_per_batch ({frames_per_batch})."
+            remainder = total_frames % frames_per_batch
+            if remainder != 0 and RL_WARNINGS:
+                warnings.warn(
+                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch})."
+                    f"This means {frames_per_batch - remainder} additional frames will be collected."
+                    "To silence this message, set the environment variable RL_WARNINGS to False."
                 )
         self.total_frames = total_frames
         self.reset_at_each_iter = reset_at_each_iter
@@ -550,10 +554,11 @@ class SyncDataCollector(DataCollectorBase):
         self.postproc = postproc
         if self.postproc is not None:
             self.postproc.to(self.storing_device)
-        if frames_per_batch % self.n_env != 0:
+        if frames_per_batch % self.n_env != 0 and RL_WARNINGS:
             warnings.warn(
                 f"frames_per_batch {frames_per_batch} is not exactly divisible by the number of batched environments {self.n_env}, "
-                f" this results in more frames_per_batch per iteration that requested"
+                f" this results in more frames_per_batch per iteration that requested."
+                "To silence this message, set the environment variable RL_WARNINGS to False."
             )
         self.requested_frames_per_batch = frames_per_batch
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
@@ -569,32 +574,62 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids,
         )
 
+        with torch.no_grad():
+            self._tensordict_out = env.fake_tensordict()
         if (
             hasattr(self.policy, "spec")
             and self.policy.spec is not None
-            and all(v is not None for v in self.policy.spec.values())
-            and set(self.policy.spec.keys(True, True)) == set(self.policy.out_keys)
+            and all(
+                v is not None for v in self.policy.spec.values(True, True)
+            )  # if a spec is None, we don't know anything about it
+            # and set(self.policy.spec.keys(True, True)) == set(self.policy.out_keys)
+            and any(
+                key not in self._tensordict_out.keys(isinstance(key, tuple))
+                for key in self.policy.spec.keys(True, True)
+            )
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
-            self._tensordict_out = env.fake_tensordict().to_tensordict()
-            self._tensordict_out.update(self.policy.spec.zero())
+            # the policy could have more keys than the env:
+            policy_spec = self.policy.spec
+            if policy_spec.ndim < self._tensordict_out.ndim:
+                policy_spec = policy_spec.expand(self._tensordict_out.shape)
+            for key, spec in policy_spec.items(True, True):
+                if key in self._tensordict_out.keys(isinstance(key, tuple)):
+                    continue
+                self._tensordict_out.set(key, spec.zero())
             self._tensordict_out = (
                 self._tensordict_out.unsqueeze(-1)
                 .expand(*env.batch_size, self.frames_per_batch)
-                .to_tensordict()
+                .clone()
+            )
+        elif (
+            hasattr(self.policy, "spec")
+            and self.policy.spec is not None
+            and all(v is not None for v in self.policy.spec.values(True, True))
+            and all(
+                key in self._tensordict_out.keys(isinstance(key, tuple))
+                for key in self.policy.spec.keys(True, True)
+            )
+        ):
+            # reach this if the policy has specs and they match with the fake tensordict
+            self._tensordict_out = (
+                self._tensordict_out.unsqueeze(-1)
+                .expand(*env.batch_size, self.frames_per_batch)
+                .clone()
             )
         else:
             # otherwise, we perform a small number of steps with the policy to
             # determine the relevant keys with which to pre-populate _tensordict_out.
+            # This is the safest thing to do if the spec has None fields or if there is
+            # no spec at all.
             # See #505 for additional context.
             with torch.no_grad():
-                self._tensordict_out = env.fake_tensordict()
                 self._tensordict_out = self._tensordict_out.to(self.device)
                 self._tensordict_out = self.policy(self._tensordict_out).unsqueeze(-1)
             self._tensordict_out = (
                 self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
-                .to_tensordict()
+                .clone()
                 .zero_()
             )
         # in addition to outputs of the policy, we add traj_ids and step_count to
@@ -1112,9 +1147,12 @@ class _MultiDataCollector(DataCollectorBase):
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
-            if total_frames % frames_per_batch != 0:
-                raise ValueError(
-                    f"total_frames ({total_frames}) must be divisible by frames_per_batch ({frames_per_batch})."
+            remainder = total_frames % frames_per_batch
+            if remainder != 0 and RL_WARNINGS:
+                warnings.warn(
+                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch})."
+                    f"This means {frames_per_batch - remainder} additional frames will be collected."
+                    "To silence this message, set the environment variable RL_WARNINGS to False."
                 )
         self.total_frames = total_frames
         self.reset_at_each_iter = reset_at_each_iter
@@ -1469,10 +1507,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     @property
     def frames_per_batch_worker(self):
-        if self.requested_frames_per_batch % self.num_workers != 0:
+        if self.requested_frames_per_batch % self.num_workers != 0 and RL_WARNINGS:
             warnings.warn(
                 f"frames_per_batch {self.requested_frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers},"
-                f" this results in more frames_per_batch per iteration that requested"
+                f" this results in more frames_per_batch per iteration that requested."
+                "To silence this message, set the environment variable RL_WARNINGS to False."
             )
         frames_per_batch_worker = -(
             -self.requested_frames_per_batch // self.num_workers
