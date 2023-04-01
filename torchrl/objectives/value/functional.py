@@ -43,11 +43,11 @@ def _transpose_time(fun):
         if time_dim != -2:
             args = [transpose_tensor(arg) for arg in args]
             kwargs = {k: transpose_tensor(item) for k, item in kwargs.items()}
-            out = fun(*args, **kwargs)
+            out = fun(*args, time_dim=-2, **kwargs)
             if isinstance(out, torch.Tensor):
                 return transpose_tensor(out)
             return tuple(transpose_tensor(_out) for _out in out)
-        return fun(*args, **kwargs)
+        return fun(*args, time_dim=time_dim, **kwargs)
 
     return transposed_fun
 
@@ -402,6 +402,7 @@ def td1_advantage_estimate(
     return advantage
 
 
+@_transpose_time
 def vec_td1_return_estimate(
     gamma,
     next_state_value,
