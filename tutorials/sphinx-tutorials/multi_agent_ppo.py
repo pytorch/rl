@@ -13,7 +13,7 @@ from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.objectives import DDPGLoss, ValueEstimators
+from torchrl.objectives import ClipPPOLoss, DDPGLoss, ValueEstimators
 from torchrl.record.loggers.wandb import WandbLogger
 
 
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     max_grad_norm = 40.0
 
     vmas_envs = 640 if not test else 1
-    max_steps = 100
+    max_steps = 200
     frames_per_batch = vmas_envs * max_steps
     # For a complete training, bring the number of frames up to 1M
     n_iters = 500
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     scenario_args = {"n_agents": 4, "same_goal": 1, "collision_reward": -0.5}
 
     env = VmasEnv(
-        scenario_name="multi_goal",
+        scenario_name="transport",
         num_envs=vmas_envs,
         continuous_actions=True,
         max_steps=max_steps,
@@ -112,7 +112,7 @@ if __name__ == "__main__":
         **scenario_args,
     )
     env_test = VmasEnv(
-        scenario_name="multi_goal",
+        scenario_name="transport",
         num_envs=1,
         continuous_actions=True,
         max_steps=max_steps,
@@ -155,14 +155,14 @@ if __name__ == "__main__":
     )
 
     module = AgentNet(1, env.n_agents, device, share_params=het_critic)
-    value_module = ValueOperator(
-        module=module,
-        in_keys=["observation", "action"],
-    )
     # value_module = ValueOperator(
     #     module=module,
-    #     in_keys=["observation"],
+    #     in_keys=["observation", "action"],
     # )
+    value_module = ValueOperator(
+        module=module,
+        in_keys=["observation"],
+    )
 
     value_module(policy_module(env.reset().to(device)))
 
@@ -185,22 +185,22 @@ if __name__ == "__main__":
         collate_fn=lambda x: x,
     )
 
-    # loss_module = ClipPPOLoss(
-    #     actor=policy_module,
-    #     critic=value_module,
-    #     advantage_key="advantage",
-    #     clip_epsilon=clip_epsilon,
-    #     entropy_bonus=bool(entropy_eps),
-    #     entropy_coef=entropy_eps,
-    #     # these keys match by default but we set this for completeness
-    #     critic_coef=1.0,
-    #     loss_critic_type="smooth_l1",
-    #     normalize_advantage=False,
-    # )
-    loss_module = DDPGLoss(actor_network=policy_module, value_network=value_module)
+    loss_module = ClipPPOLoss(
+        actor=policy_module,
+        critic=value_module,
+        advantage_key="advantage",
+        clip_epsilon=clip_epsilon,
+        entropy_bonus=bool(entropy_eps),
+        entropy_coef=entropy_eps,
+        # these keys match by default but we set this for completeness
+        critic_coef=1.0,
+        loss_critic_type="smooth_l1",
+        normalize_advantage=False,
+    )
+    # loss_module = DDPGLoss(actor_network=policy_module, value_network=value_module)
 
-    loss_module.make_value_estimator(ValueEstimators.TD0, gamma=gamma)
-    # loss_module.make_value_estimator(ValueEstimators.GAE, gamma=gamma, lmbda=lmbda)
+    # loss_module.make_value_estimator(ValueEstimators.TD0, gamma=gamma)
+    loss_module.make_value_estimator(ValueEstimators.GAE, gamma=gamma, lmbda=lmbda)
 
     optim = torch.optim.Adam(loss_module.parameters(), lr)
     # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -219,14 +219,15 @@ if __name__ == "__main__":
         tensordict_data = tensordict_data.to(device)
 
         # Permute
-        # del tensordict_data["collector"]
-        # tensordict_data.batch_size = [*tensordict_data.batch_size, env.n_agents]
-        # tensordict_data = tensordict_data.permute(0, 2, 1)
-        # loss_module.value_estimator(
-        #     tensordict_data, params=loss_module.critic_params.detach()
-        # )
-        # tensordict_data = tensordict_data.permute(0, 2, 1)
-        # tensordict_data.batch_size = tensordict_data.batch_size[:-1]
+        del tensordict_data["collector"]
+        tensordict_data.batch_size = [*tensordict_data.batch_size, env.n_agents]
+        tensordict_data = tensordict_data.permute(0, 2, 1)
+        with torch.no_grad():
+            loss_module.value_estimator(
+                tensordict_data, params=loss_module.critic_params.detach()
+            )
+        tensordict_data = tensordict_data.permute(0, 2, 1)
+        tensordict_data.batch_size = tensordict_data.batch_size[:-1]
 
         data_view = tensordict_data.reshape(-1)
         replay_buffer.extend(data_view)
@@ -239,10 +240,10 @@ if __name__ == "__main__":
                 loss_vals = loss_module(subdata.to(device))
 
                 loss_value = (
-                    # loss_vals["loss_objective"]
-                    # + loss_vals["loss_critic"]
-                    loss_vals["loss_actor"]
-                    + loss_vals["loss_value"]
+                    loss_vals["loss_objective"]
+                    + loss_vals["loss_critic"]
+                    # loss_vals["loss_actor"]
+                    # + loss_vals["loss_value"]
                     # + loss_vals["loss_entropy"]
                 )
 
