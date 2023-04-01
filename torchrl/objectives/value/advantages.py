@@ -489,7 +489,9 @@ class TD1Estimator(ValueEstimatorBase):
         next_value = step_td.get(self.value_key)
 
         done = tensordict.get(("next", "done"))
-        value_target = vec_td1_return_estimate(gamma, next_value, reward, done)
+        value_target = vec_td1_return_estimate(
+            gamma, next_value, reward, done, time_dim=tensordict.ndim - 1
+        )
         return value_target
 
 
@@ -684,9 +686,13 @@ class TDLambdaEstimator(ValueEstimatorBase):
 
         done = tensordict.get(("next", "done"))
         if self.vectorized:
-            val = vec_td_lambda_return_estimate(gamma, lmbda, next_value, reward, done)
+            val = vec_td_lambda_return_estimate(
+                gamma, lmbda, next_value, reward, done, time_dim=tensordict.ndim - 1
+            )
         else:
-            val = td_lambda_return_estimate(gamma, lmbda, next_value, reward, done)
+            val = td_lambda_return_estimate(
+                gamma, lmbda, next_value, reward, done, time_dim=tensordict.ndim - 1
+            )
         return val
 
 
@@ -875,7 +881,7 @@ class GAE(ValueEstimatorBase):
         next_value = step_td.get(self.value_key)
         done = tensordict.get(("next", "done"))
         adv, value_target = vec_generalized_advantage_estimate(
-            gamma, lmbda, value, next_value, reward, done
+            gamma, lmbda, value, next_value, reward, done, time_dim=tensordict.ndim - 1
         )
 
         if self.average_gae:
@@ -934,7 +940,7 @@ class GAE(ValueEstimatorBase):
         next_value = step_td.get(self.value_key)
         done = tensordict.get(("next", "done"))
         _, value_target = vec_generalized_advantage_estimate(
-            gamma, lmbda, value, next_value, reward, done
+            gamma, lmbda, value, next_value, reward, done, time_dim=tensordict.ndim - 1
         )
         return value_target
 
