@@ -82,8 +82,7 @@ def generalized_advantage_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
@@ -140,8 +139,7 @@ def vec_generalized_advantage_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
@@ -198,14 +196,12 @@ def vec_generalized_advantage_estimate(
 # -----
 
 
-@_transpose_time
 def td0_advantage_estimate(
     gamma: float,
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
-    time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """TD(0) advantage estimate of a trajectory.
 
@@ -217,23 +213,20 @@ def td0_advantage_estimate(
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
         done (Tensor): boolean flag for end of episode.
-        time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
         raise RuntimeError(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
-    not_done = 1 - done.to(next_state_value.dtype)
-    advantage = reward + gamma * not_done * next_state_value - state_value
+    returns = td0_return_estimate(gamma, next_state_value, reward, done)
+    advantage = returns - state_value
     return advantage
 
 
-@_transpose_time
 def td0_return_estimate(
     gamma: float,
     next_state_value: torch.Tensor,
@@ -251,7 +244,9 @@ def td0_return_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
-        time_dim (int): dimension where the time is unrolled. Defaults to -2.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
@@ -308,8 +303,7 @@ def td1_return_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
@@ -351,7 +345,6 @@ def td1_return_estimate(
     return returns
 
 
-@_transpose_time
 def td1_advantage_estimate(
     gamma: float,
     state_value: torch.Tensor,
@@ -393,8 +386,7 @@ def td1_advantage_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
@@ -403,12 +395,13 @@ def td1_advantage_estimate(
         )
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
-    returns = td1_return_estimate(gamma, next_state_value, reward, done, rolling_gamma)
+    returns = td1_return_estimate(
+        gamma, next_state_value, reward, done, rolling_gamma, time_dim=time_dim
+    )
     advantage = returns - state_value
     return advantage
 
 
-@_transpose_time
 def vec_td1_return_estimate(
     gamma,
     next_state_value,
@@ -448,8 +441,7 @@ def vec_td1_return_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     return vec_td_lambda_return_estimate(
@@ -459,10 +451,10 @@ def vec_td1_return_estimate(
         done=done,
         rolling_gamma=rolling_gamma,
         lmbda=1,
+        time_dim=time_dim,
     )
 
 
-@_transpose_time
 def vec_td1_advantage_estimate(
     gamma,
     state_value,
@@ -504,8 +496,7 @@ def vec_td1_advantage_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
@@ -513,7 +504,9 @@ def vec_td1_advantage_estimate(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
     return (
-        vec_td1_return_estimate(gamma, next_state_value, reward, done, rolling_gamma)
+        vec_td1_return_estimate(
+            gamma, next_state_value, reward, done, rolling_gamma, time_dim=time_dim
+        )
         - state_value
     )
 
@@ -565,8 +558,7 @@ def td_lambda_return_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
@@ -622,7 +614,6 @@ def td_lambda_return_estimate(
     return returns
 
 
-@_transpose_time
 def td_lambda_advantage_estimate(
     gamma: float,
     lmbda: float,
@@ -666,8 +657,7 @@ def td_lambda_advantage_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
@@ -677,7 +667,7 @@ def td_lambda_advantage_estimate(
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
     returns = td_lambda_return_estimate(
-        gamma, lmbda, next_state_value, reward, done, rolling_gamma
+        gamma, lmbda, next_state_value, reward, done, rolling_gamma, time_dim=time_dim
     )
     advantage = returns - state_value
     return advantage
@@ -728,8 +718,7 @@ def vec_td_lambda_return_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
@@ -841,7 +830,6 @@ def vec_td_lambda_return_estimate(
         return (v1 + v2 + v3).view(*batch, lastdim, T).transpose(-2, -1)
 
 
-@_transpose_time
 def vec_td_lambda_advantage_estimate(
     gamma,
     lmbda,
@@ -885,8 +873,7 @@ def vec_td_lambda_advantage_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
@@ -895,7 +882,13 @@ def vec_td_lambda_advantage_estimate(
         )
     return (
         vec_td_lambda_return_estimate(
-            gamma, lmbda, next_state_value, reward, done, rolling_gamma
+            gamma,
+            lmbda,
+            next_state_value,
+            reward,
+            done,
+            rolling_gamma,
+            time_dim=time_dim,
         )
         - state_value
     )
