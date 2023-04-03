@@ -826,6 +826,7 @@ for j, data in enumerate(data_collector):
                 next_value,
                 reward,
                 done,
+                time_dim=sampled_data_out.ndim - 1,
             ).pow(2)
             error = error.mean()
             error.backward()
