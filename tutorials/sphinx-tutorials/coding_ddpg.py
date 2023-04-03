@@ -1076,7 +1076,13 @@ for i, tensordict in enumerate(collector):
                 "state_action_value"
             ]
             advantage = vec_td_lambda_advantage_estimate(
-                gamma, lmbda, value, next_value, reward, done
+                gamma,
+                lmbda,
+                value,
+                next_value,
+                reward,
+                done,
+                time_dim=sampled_tensordict.ndim - 1,
             )
             # we sample from the values we have computed
             rand_idx = torch.randint(0, advantage.numel(), (batch_size,))
