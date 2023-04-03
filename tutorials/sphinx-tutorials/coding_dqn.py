@@ -398,7 +398,7 @@ def get_collector(
         device=device,
         storing_device=device,
         split_trajs=False,
-        postproc=MultiStep(5),
+        postproc=MultiStep(gamma=gamma, n_steps=5),
     )
     return data_collector
 
@@ -457,10 +457,6 @@ n_optim = 8
 # ~~~~~~~~~~~~~~
 # gamma decay factor
 gamma = 0.99
-
-###############################################################################
-# lambda decay factor (see second the part with TD(:math:`\lambda`)
-lmbda = 0.95
 
 ###############################################################################
 # Smooth target network update decay parameter.
