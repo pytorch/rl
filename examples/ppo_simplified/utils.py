@@ -281,7 +281,7 @@ def make_ppo_model(cfg):
     # 2.2 Define a shared Module and TensorDictModule (CNN + MLP)
 
     # Define shared net
-    common_module = CNN(obs_space)
+    common_module = CNN(obs_space, rgb_norm=False)
     dummy_obs = torch.zeros(8, *obs_space)
     common_module_output = common_module(dummy_obs)
     common_module = SafeModule(  # Like TensorDictModule
@@ -307,7 +307,7 @@ def make_ppo_model(cfg):
     policy_module = ProbabilisticActor(
         module=policy_module,
         in_keys=["logits"],
-        # out_keys=["action"],
+        out_keys=["action"],
         distribution_class=OneHotCategorical,
         distribution_kwargs={},
         return_log_prob=True,
