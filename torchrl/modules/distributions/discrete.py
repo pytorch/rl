@@ -6,7 +6,6 @@
 from math import prod
 from typing import Optional, Sequence, Union
 
-
 import torch
 import torch.distributions as D
 
@@ -40,6 +39,19 @@ class OneHotCategorical(D.Categorical):
     This class behaves excacly as torch.distributions.Categorical except that it reads and produces one-hot encodings
     of the discrete tensors.
 
+    Args:
+        logits (torch.Tensor): event log probabilities (unnormalized)
+        probs (torch.Tensor): event probabilities
+
+    Examples:
+        >>> torch.manual_seed(0)
+        >>> logits = torch.randn(4)
+        >>> dist = OneHotCategorical(logits=logits)
+        >>> print(dist.rsample((3,)))
+        tensor([[1., 0., 0., 0.],
+                [0., 0., 0., 1.],
+                [1., 0., 0., 0.]])
+
     """
 
     num_params: int = 1
@@ -48,7 +60,7 @@ class OneHotCategorical(D.Categorical):
         self,
         logits: Optional[torch.Tensor] = None,
         probs: Optional[torch.Tensor] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         logits = _treat_categorical_params(logits)
         probs = _treat_categorical_params(probs)
@@ -76,8 +88,14 @@ class OneHotCategorical(D.Categorical):
     def rsample(self, sample_shape: Union[torch.Size, Sequence] = None) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size([])
+        if hasattr(self, "logits") and self.logits is not None:
+            logits = self.logits
+            probs = None
+        else:
+            logits = None
+            probs = self.probs
         d = D.relaxed_categorical.RelaxedOneHotCategorical(
-            1.0, probs=self.probs, logits=self.logits
+            1.0, probs=probs, logits=logits
         )
         out = d.rsample(sample_shape)
         out.data.copy_((out == out.max(-1)[0].unsqueeze(-1)).to(out.dtype))
@@ -90,33 +108,78 @@ class MaskedCategorical(D.Categorical):
     Reference:
     https://www.tensorflow.org/agents/api_docs/python/tf_agents/distributions/masked/MaskedCategorical
 
+    Args:
+        logits (torch.Tensor): event log probabilities (unnormalized)
+        probs (torch.Tensor): event probabilities. If provided, the probabilities
+            corresponding to to masked items will be zeroed and the probability
+            re-normalized along its last dimension.
+        mask (torch.Tensor): A boolean mask of the same shape as ``logits``/``probs``
+            where ``False`` entries are the ones to be masked. Alternatively,
+            if ``sparse_mask`` is True, it represents the list of valid indices
+            in the distribution.
+        neg_inf (float, optional): TODO
+        sparse_mask: ``True`` when we only pass indices of True values in the mask
+            tensor.
+        padding_value: The padding value in the then mask tensor when
+            sparse_mask == True, the padding_value will be ignored.
 
-    sparse_mask: True when we only pass indices of True values in the mask
-        tensor.
-    padding_value: The padding value in the then mask tensor when
-        sparse_mask == True, the padding_value will be ignored.
+        >>> torch.manual_seed(0)
+        >>> logits = torch.randn(4) / 100  # almost equal probabilities
+        >>> mask = torch.tensor([True, False, True, True])
+        >>> dist = MaskedCategorical(logits=logits, mask=mask)
+        >>> sample = dist.sample((10,))
+        >>> print(sample)  # no `1` in the sample
+        tensor([2, 3, 0, 2, 2, 0, 2, 0, 2, 2])
+        >>> print(dist.log_prob(sample))
+        tensor([-1.1203, -1.0928, -1.0831, -1.1203, -1.1203, -1.0831, -1.1203, -1.0831,
+                -1.1203, -1.1203])
+        >>> print(dist.log_prob(torch.ones_like(sample)))
+        tensor([-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf])
+        >>> # with probabilities
+        >>> prob = torch.ones(10)
+        >>> prob = prob / prob.sum()
+        >>> mask = torch.tensor([False] + 9 * [True])  # first outcome is masked
+        >>> dist = MaskedCategorical(probs=prob, mask=mask)
+        >>> print(dist.log_prob(torch.arange(10)))
+        tensor([   -inf, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972,
+                -2.1972, -2.1972])
     """
 
-    # TODO: Design the APIs with probs, here we ony have logits.
-    def __init__(self,
-                 logits: torch.Tensor,
-                 mask: torch.Tensor,
-                 neg_inf: float = float("-inf"),
-                 sparse_mask: bool = False,
-                 padding_value: Optional[int] = None) -> None:
-        logits = self._mask_logits(logits,
-                                   mask,
-                                   neg_inf=neg_inf,
-                                   sparse_mask=sparse_mask,
-                                   padding_value=padding_value)
+    def __init__(
+        self,
+        logits: Optional[torch.Tensor] = None,
+        probs: Optional[torch.Tensor] = None,
+        mask: torch.Tensor = None,
+        neg_inf: float = float("-inf"),
+        sparse_mask: bool = False,
+        padding_value: Optional[int] = None,
+    ) -> None:
+        if mask is None:
+            raise ValueError(f"A mask must be provided for {type(self)}.")
+        if probs is not None:
+            if logits is not None:
+                raise ValueError(
+                    "Either `probs` or `logits` must be specified, but not both."
+                )
+            # unnormalized logits
+            probs = probs.clone()
+            probs[~mask] = 0
+            probs = probs / probs.sum(-1, keepdim=True)
+            logits = probs.log()
+        logits = self._mask_logits(
+            logits,
+            mask,
+            neg_inf=neg_inf,
+            sparse_mask=sparse_mask,
+            padding_value=padding_value,
+        )
         self._mask = mask
         self._sparse_mask = sparse_mask
         self._padding_value = padding_value
         super().__init__(logits=logits)
 
     def sample(
-        self,
-        sample_shape: Optional[Union[torch.Size, Sequence[int]]] = None
+        self, sample_shape: Optional[Union[torch.Size, Sequence[int]]] = None
     ) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size()
@@ -133,24 +196,27 @@ class MaskedCategorical(D.Categorical):
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         if not self._sparse_mask:
+            print("val", value)
             return super().log_prob(value)
-        value_size = value.size()
+        value_shape = value.shape
         mask_3d = self._mask.view(1, -1, self._num_events)
         value_3d = value.view(-1, mask_3d.size(1), 1)
         index = (mask_3d == value_3d).long().argmax(dim=-1, keepdim=True)
-        return super().log_prob(index.view(value_size))
+        return super().log_prob(index.view(value_shape))
 
     @staticmethod
-    def _mask_logits(logits: torch.Tensor,
-                     mask: torch.Tensor,
-                     neg_inf: float = float("-inf"),
-                     sparse_mask: bool = False,
-                     padding_value: Optional[int] = None) -> torch.Tensor:
+    def _mask_logits(
+        logits: torch.Tensor,
+        mask: torch.Tensor,
+        neg_inf: float = float("-inf"),
+        sparse_mask: bool = False,
+        padding_value: Optional[int] = None,
+    ) -> torch.Tensor:
         if not sparse_mask:
             return torch.where(mask, logits, neg_inf)
 
         if padding_value is not None:
-            padding_mask = (mask == padding_value)
+            padding_mask = mask == padding_value
             if padding_value != 0:
                 # Avoid invalid indices in mask.
                 mask = mask.masked_fill(padding_mask, 0)

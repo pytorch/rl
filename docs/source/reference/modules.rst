@@ -104,6 +104,7 @@ Distributions
     TruncatedNormal
     TanhDelta
     OneHotCategorical
+    MaskedCategorical
 
 Utils
 -----
