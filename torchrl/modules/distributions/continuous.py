@@ -276,7 +276,7 @@ class TruncatedNormal(D.Independent):
         return super().log_prob(value, **kwargs)
 
 
-class TanhNormal(D.TransformedDistribution):
+class TanhNormal(FasterTransformedDistribution):
     """Implements a TanhNormal distribution with location scaling.
 
     Location scaling prevents the location to be "too far" from 0 when a TanhTransform is applied, which ultimately
