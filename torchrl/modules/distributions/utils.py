@@ -8,7 +8,6 @@ from typing import Union
 import torch
 from torch import distributions as d
 from torch.distributions import (
-    Distribution,
     Independent,
     Transform,
     TransformedDistribution,
@@ -92,4 +91,6 @@ class FasterTransformedDistribution(TransformedDistribution):
         cut = len(forward_shape) - event_dim
         batch_shape = forward_shape[:cut]
         event_shape = forward_shape[cut:]
-        super(TransformedDistribution, self).__init__(batch_shape, event_shape, validate_args=validate_args)
+        super(TransformedDistribution, self).__init__(
+            batch_shape, event_shape, validate_args=validate_args
+        )
