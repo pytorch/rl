@@ -1211,7 +1211,7 @@ class Recorder(TrainerHookBase):
                     if key == ("next", "reward"):
                         mask = td_record["mask"]
                         mean_value = value[mask].mean() / self.frame_skip
-                        total_value = value.sum(dim=td_record.ndim).mean()
+                        total_value = value.sum(dim=td_record.ndim - 1).mean()
                         out[self.out_keys[key]] = mean_value
                         out["total_" + self.out_keys[key]] = total_value
                         continue
