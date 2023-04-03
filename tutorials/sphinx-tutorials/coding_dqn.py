@@ -582,7 +582,7 @@ trainer = Trainer(
 #   can be cumbersome to implement.
 buffer_hook = ReplayBufferTrainer(
     get_replay_buffer(buffer_size, n_optim, batch_size=batch_size),
-    flatten_tensordicts=False,
+    flatten_tensordicts=True,
 )
 buffer_hook.register(trainer)
 weight_updater = UpdateWeights(collector, update_weights_interval=1)
