@@ -15,7 +15,10 @@ from torchrl._torchrl import safetanh
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
-from torchrl.modules.distributions.utils import _cast_device
+from torchrl.modules.distributions.utils import (
+    _cast_device,
+    FasterTransformedDistribution,
+)
 from torchrl.modules.utils import mappings
 
 __all__ = [
@@ -485,7 +488,7 @@ class Delta(D.Distribution):
         return self.param
 
 
-class TanhDelta(D.TransformedDistribution):
+class TanhDelta(FasterTransformedDistribution):
     """Implements a Tanh transformed_in Delta distribution.
 
     Args:
