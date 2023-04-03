@@ -41,8 +41,7 @@ TorchRL trainer: A DQN example
 #   estimated return;
 # - how to collect data from your environment efficiently and store them
 #   in a replay buffer;
-# - how to store trajectories (and not transitions) in your replay buffer),
-#   and how to estimate returns using TD(lambda);
+# - how to use multi-step, a simple preprocessing step for off-policy algorithms;
 # - and finally how to evaluate your model.
 #
 # **Prerequisites**: We encourage you to get familiar with torchrl through the
@@ -57,7 +56,7 @@ TorchRL trainer: A DQN example
 # On a high level, the algorithm is quite simple: Q-learning consists in
 # learning a table of state-action values in such a way that, when
 # encountering any particular state, we know which action to pick just by
-# searching for the action with the highest value. This simple setting
+# searching for the one with the highest value. This simple setting
 # requires the actions and states to be
 # discrete, otherwise a lookup table cannot be built.
 #
@@ -84,21 +83,18 @@ TorchRL trainer: A DQN example
 # of this algorithm.
 
 # sphinx_gallery_start_ignore
-import os
-import uuid
 import warnings
-
-from torchrl.objectives import DQNLoss, SoftUpdate
-from torchrl.record.loggers.csv import CSVLogger
-from torchrl.trainers import Recorder, ReplayBufferTrainer, Trainer, UpdateWeights
 
 warnings.filterwarnings("ignore")
 # sphinx_gallery_end_ignore
 
+import os
+import uuid
+
 import torch
 from torch import nn
 from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
 from torchrl.envs import EnvCreator, ParallelEnv, RewardScaling, StepCounter
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
@@ -111,6 +107,16 @@ from torchrl.envs.transforms import (
     TransformedEnv,
 )
 from torchrl.modules import DuelingCnnDQNet, EGreedyWrapper, QValueActor
+
+from torchrl.objectives import DQNLoss, SoftUpdate
+from torchrl.record.loggers.csv import CSVLogger
+from torchrl.trainers import (
+    LogReward,
+    Recorder,
+    ReplayBufferTrainer,
+    Trainer,
+    UpdateWeights,
+)
 
 
 def is_notebook() -> bool:
@@ -244,7 +250,7 @@ def get_norm_stats():
     obs_norm_sd = test_env.transform[-1].state_dict()
     # let's check that normalizing constants have a size of ``[C, 1, 1]`` where
     # ``C=4`` (because of :class:`torchrl.envs.CatFrames`).
-    print(obs_norm_sd)
+    print("state dict of the observation norm:", obs_norm_sd)
     return obs_norm_sd
 
 
@@ -392,6 +398,7 @@ def get_collector(
         device=device,
         storing_device=device,
         split_trajs=False,
+        postproc=MultiStep(5),
     )
     return data_collector
 
@@ -448,8 +455,6 @@ n_optim = 8
 ###############################################################################
 # DQN parameters
 # ~~~~~~~~~~~~~~
-
-###############################################################################
 # gamma decay factor
 gamma = 0.99
 
@@ -459,9 +464,9 @@ lmbda = 0.95
 
 ###############################################################################
 # Smooth target network update decay parameter.
-# This loosely corresponds to a 1/(1-tau) interval with hard target network
+# This loosely corresponds to a 1/tau interval with hard target network
 # update
-tau = 0.005
+tau = 0.02
 
 ###############################################################################
 # Data collection and replay buffer
@@ -595,6 +600,7 @@ recorder = Recorder(
     exploration_mode="mode",
     log_keys=[("next", "reward")],
     out_keys={("next", "reward"): "rewards"},
+    log_pbar=True,
 )
 recorder.register(trainer)
 
@@ -608,6 +614,15 @@ recorder.register(trainer)
 #   for a detailed description of the trainer hooks.
 #
 trainer.register_op("post_optim", target_net_updater.step)
+
+###############################################################################
+# We can log the training rewards too. Note that this is of limited interest
+# with CartPole, as rewards are always 1. The discounted sum of rewards is miximised
+# not by getting higher rewards but by keeping the cart-pole alive for longer.
+# This will be reflected by the `total_rewards` value displayed in the progress bar.
+#
+log_reward = LogReward()
+log_reward.register(trainer)
 
 ###############################################################################
 # .. note::
