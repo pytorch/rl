@@ -39,7 +39,7 @@ def _cast_transform_device(transform, device):
         )
 
 
-class FasterTransformedDistribution(Distribution):
+class FasterTransformedDistribution(TransformedDistribution):
     """A faster implementation of TransformedDistribution."""
 
     __doc__ = __doc__ + TransformedDistribution.__doc__
@@ -92,4 +92,4 @@ class FasterTransformedDistribution(Distribution):
         cut = len(forward_shape) - event_dim
         batch_shape = forward_shape[:cut]
         event_shape = forward_shape[cut:]
-        super().__init__(batch_shape, event_shape, validate_args=validate_args)
+        super(TransformedDistribution, self).__init__(batch_shape, event_shape, validate_args=validate_args)
