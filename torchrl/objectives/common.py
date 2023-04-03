@@ -99,7 +99,9 @@ class LossModule(nn.Module):
             buffer_names = next(itertools.islice(zip(*module.named_buffers()), 1))
         except StopIteration:
             buffer_names = ()
-        params = make_functional(module, funs_to_decorate=funs_to_decorate, keep_params=True)
+        params = make_functional(
+            module, funs_to_decorate=funs_to_decorate, keep_params=True
+        )
         functional_module = module
 
         params_and_buffers = params

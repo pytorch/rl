@@ -267,7 +267,7 @@ class SoftUpdate(TargetNetUpdater):
         ],
         eps: float = 0.999,
     ):
-        if not (eps < 1.0 and eps > 0.0):
+        if not (eps <= 1.0 and eps >= 0.0):
             raise ValueError(
                 f"Got eps = {eps} when it was supposed to be between 0 and 1."
             )
