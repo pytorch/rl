@@ -26,41 +26,64 @@ from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
 from torchrl.envs.utils import _classproperty
 
+DEFAULT_GYM = None
 IMPORT_ERROR = None
-_has_gym = False
-try:
-    # rule of thumbs: gym precedes
-    import gym
+_has_gym = None
 
-    _has_gym = True
-except ImportError as err:
-    IMPORT_ERROR = err
-    try:
-        import gymnasium as gym
+def set_default_gym_backend(backend):
+    """Sets the gym-backend to a certain value.
 
-        _has_gym = True
-    except ImportError as err:
-        IMPORT_ERROR = err
+    Args:
+        backend (python module): the gym backend to use.
 
-if _has_gym:
-    try:
+    """
+    global DEFAULT_GYM
+    DEFAULT_GYM = backend
+
+def default_gym_backend():
+    global _has_gym
+    global IMPORT_ERROR
+    global DEFAULT_GYM
+    if DEFAULT_GYM is None:
         try:
-            from gym.wrappers.pixel_observation import PixelObservationWrapper
-        except ModuleNotFoundError:
-            from gymnasium.wrappers.pixel_observation import PixelObservationWrapper
+            # rule of thumbs: gym precedes
+            import gym
 
-        from torchrl.envs.libs.utils import (
-            GymPixelObservationWrapper as LegacyPixelObservationWrapper,
-        )
-    except ModuleNotFoundError:
-        warnings.warn(
-            f"gym {gym.__version__} does not provide the PixelObservationWrapper"
-            f"used by torchrl, which will be using a patched version. "
-            f"Consider updating gym to a newer version."
-        )
-        from torchrl.envs.libs.utils import (
-            GymPixelObservationWrapper as PixelObservationWrapper,
-        )
+            _has_gym = True
+        except ImportError as err:
+            IMPORT_ERROR = err
+            try:
+                import gymnasium as gym
+
+                _has_gym = True
+            except ImportError as err:
+                IMPORT_ERROR = err
+        DEFAULT_GYM = gym
+    return DEFAULT_GYM
+
+def get_pixel_obs():
+    gym = default_gym_backend()
+    if _has_gym:
+        try:
+            try:
+                from gym.wrappers.pixel_observation import PixelObservationWrapper
+            except ModuleNotFoundError:
+                from gymnasium.wrappers.pixel_observation import PixelObservationWrapper
+
+            from torchrl.envs.libs.utils import (
+                GymPixelObservationWrapper as LegacyPixelObservationWrapper,
+            )
+        except ModuleNotFoundError:
+            warnings.warn(
+                f"gym {gym.__version__} does not provide the PixelObservationWrapper"
+                f"used by torchrl, which will be using a patched version. "
+                f"Consider updating gym to a newer version."
+            )
+            from torchrl.envs.libs.utils import (
+                GymPixelObservationWrapper as PixelObservationWrapper,
+            )
+        return PixelObservationWrapper
+    raise IMPORT_ERROR
 
 __all__ = ["GymWrapper", "GymEnv"]
 
@@ -74,6 +97,7 @@ def _gym_to_torchrl_spec_transform(
     default TorchRL keys.
 
     """
+    gym = default_gym_backend()
     if isinstance(spec, gym.spaces.tuple.Tuple):
         raise NotImplementedError("gym.spaces.tuple.Tuple mapping not yet implemented")
     if isinstance(spec, gym.spaces.discrete.Discrete):
@@ -160,20 +184,24 @@ def _get_envs(to_dict=False) -> List:
 
 @implement_for("gym", None, "0.26.0")
 def _get_gym_envs():  # noqa: F811
+    gym = default_gym_backend()
     return gym.envs.registration.registry.env_specs.keys()
 
 
 @implement_for("gym", "0.26.0", None)
 def _get_gym_envs():  # noqa: F811
+    gym = default_gym_backend()
     return gym.envs.registration.registry.keys()
 
 
 @implement_for("gymnasium", "0.27.0", None)
 def _get_gym_envs():  # noqa: F811
+    gym = default_gym_backend()
     return gym.envs.registration.registry.keys()
 
 
 def _is_from_pixels(env):
+    gym = default_gym_backend()
     observation_spec = env.observation_space
     if isinstance(observation_spec, (Dict,)):
         if "pixels" in set(observation_spec.keys()):
@@ -189,7 +217,7 @@ def _is_from_pixels(env):
         and observation_spec.low.ndim == 3
     ):
         return True
-    elif isinstance(env, PixelObservationWrapper):
+    elif isinstance(env, get_pixel_obs()):
         return True
     return False
 
