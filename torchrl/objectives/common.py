@@ -6,11 +6,12 @@
 from __future__ import annotations
 
 import itertools
+from copy import deepcopy
 from typing import Iterator, List, Optional, Tuple, Union
 
 import torch
 
-from tensordict.nn import make_functional, TensorDictModule
+from tensordict.nn import make_functional, repopulate_module, TensorDictModule
 
 from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
@@ -98,10 +99,13 @@ class LossModule(nn.Module):
             buffer_names = next(itertools.islice(zip(*module.named_buffers()), 1))
         except StopIteration:
             buffer_names = ()
-        params = make_functional(
-            module, funs_to_decorate=funs_to_decorate, keep_params=True
-        )
-        functional_module = module
+        params = make_functional(module, funs_to_decorate=funs_to_decorate)
+        functional_module = deepcopy(module)
+        repopulate_module(module, params)
+        # params = make_functional(
+        #     module, funs_to_decorate=funs_to_decorate, keep_params=True
+        # )
+        # functional_module = module
 
         params_and_buffers = params
         # we transform the buffers in params to make sure they follow the device
