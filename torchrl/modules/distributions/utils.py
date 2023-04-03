@@ -7,11 +7,7 @@ from typing import Union
 
 import torch
 from torch import distributions as d
-from torch.distributions import (
-    Independent,
-    Transform,
-    TransformedDistribution,
-)
+from torch.distributions import Independent, Transform, TransformedDistribution
 
 
 def _cast_device(elt: Union[torch.Tensor, float], device) -> Union[torch.Tensor, float]:
