@@ -22,6 +22,7 @@ from torch import nn, optim
 
 from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict, VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
+from torchrl.collectors.utils import split_trajectories
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
@@ -1198,6 +1199,7 @@ class Recorder(TrainerHookBase):
                     auto_cast_to_device=True,
                     break_when_any_done=False,
                 ).clone()
+                td_record = split_trajectories(td_record)
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.train()
                 self.environment.train()
@@ -1207,8 +1209,9 @@ class Recorder(TrainerHookBase):
                 for key in self.log_keys:
                     value = td_record.get(key).float()
                     if key == ("next", "reward"):
-                        mean_value = value.mean() / self.frame_skip
-                        total_value = value.sum()
+                        mask = td_record["mask"]
+                        mean_value = value[mask].mean() / self.frame_skip
+                        total_value = value.sum(dim=td_record.ndim).mean()
                         out[self.out_keys[key]] = mean_value
                         out["total_" + self.out_keys[key]] = total_value
                         continue
