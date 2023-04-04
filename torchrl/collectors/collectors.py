@@ -771,7 +771,9 @@ class SyncDataCollector(DataCollectorBase):
                 _reset = None
                 td_reset = None
             td_reset = self.env.reset(td_reset)
-            reset_idx = done_or_terminated.squeeze(-1)
+            reset_idx = done_or_terminated
+            while reset_idx.ndim > self._tensordict.ndim:
+                reset_idx = reset_idx.any(-1)
             self._tensordict.get_sub_tensordict(reset_idx).update(
                 td_reset[reset_idx], inplace=True
             )
