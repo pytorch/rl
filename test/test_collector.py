@@ -1385,7 +1385,8 @@ class TestUpdateParams:
     @pytest.mark.parametrize(
         "collector", [MultiaSyncDataCollector, MultiSyncDataCollector]
     )
-    def test_param_sync(self, collector):
+    @pytest.mark.parametrize("give_weights", [True, False])
+    def test_param_sync(self, give_weights, collector):
         policy = TestUpdateParams.Policy()
         env = EnvCreator(TestUpdateParams.DummyEnv)
         device = env().device
@@ -1400,7 +1401,13 @@ class TestUpdateParams:
                     # update policy
                     policy.param.data += 1
                     policy.buf.data += 2
-                    col.update_policy_weights_()
+                    d = dict(policy.named_parameters())
+                    if give_weights:
+                        d.update(policy.named_buffers())
+                        p_w = TensorDict(d, [])
+                    else:
+                        p_w = None
+                    col.update_policy_weights_(p_w)
                     time.sleep(0.1)
                 elif i == 99:
                     if (data["action"] == 1).all():

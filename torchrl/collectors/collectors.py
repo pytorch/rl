@@ -1123,9 +1123,9 @@ class _MultiDataCollector(DataCollectorBase):
             )
             self._policy_dict[_device] = _policy
             if isinstance(_policy, nn.Module):
-                self._policy_weights_dict[_device] = TensorDict(
-                    dict(_policy.named_parameters()), []
-                )
+                param_dict = dict(_policy.named_parameters())
+                param_dict.update(_policy.named_buffers())
+                self._policy_weights_dict[_device] = TensorDict(param_dict, [])
             else:
                 self._policy_weights_dict[_device] = TensorDict({}, [])
 
