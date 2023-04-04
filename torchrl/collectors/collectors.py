@@ -771,21 +771,18 @@ class SyncDataCollector(DataCollectorBase):
                 _reset = None
                 td_reset = None
             td_reset = self.env.reset(td_reset)
-            reset_idx = done_or_terminated
-            while reset_idx.ndim > self._tensordict.ndim:
-                reset_idx = reset_idx.any(-1)
-            self._tensordict.get_sub_tensordict(reset_idx).update(
-                td_reset[reset_idx], inplace=True
-            )
-            done = self._tensordict[reset_idx].get("done")
-            if (_reset is None and done.any()) or (_reset is not None and done.any()):
-                raise RuntimeError(
-                    f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
-                )
             traj_done_or_terminated = done_or_terminated.sum(
                 tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
                 dtype=torch.bool,
             )
+            self._tensordict.get_sub_tensordict(traj_done_or_terminated).update(
+                td_reset[traj_done_or_terminated], inplace=True
+            )
+            done = self._tensordict[traj_done_or_terminated].get("done")
+            if (_reset is None and done.any()) or (_reset is not None and done.any()):
+                raise RuntimeError(
+                    f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
+                )
             traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
                 1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )
