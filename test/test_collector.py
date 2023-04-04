@@ -1342,8 +1342,8 @@ class TestUpdateParams:
                     state=UnboundedContinuousTensorSpec(shape=(), device=device)
                 )
             )
-            self.action_spec = UnboundedContinuousTensorSpec(shape=batch_size)
-            self.reward_spec = UnboundedContinuousTensorSpec(shape=(*batch_size, 1))
+            self.action_spec = UnboundedContinuousTensorSpec(shape=batch_size, device=device)
+            self.reward_spec = UnboundedContinuousTensorSpec(shape=(*batch_size, 1), device=device)
 
         def _step(
             self,
