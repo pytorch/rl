@@ -1126,6 +1126,7 @@ class _MultiDataCollector(DataCollectorBase):
                 param_dict = dict(_policy.named_parameters())
                 param_dict.update(_policy.named_buffers())
                 self._policy_weights_dict[_device] = TensorDict(param_dict, [])
+                print(f"self._policy_weights_dict[{_device}]", self._policy_weights_dict[_device])
             else:
                 self._policy_weights_dict[_device] = TensorDict({}, [])
 

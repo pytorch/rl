@@ -1401,8 +1401,8 @@ class TestUpdateParams:
                     # update policy
                     policy.param.data += 1
                     policy.buf.data += 2
-                    d = dict(policy.named_parameters())
                     if give_weights:
+                        d = dict(policy.named_parameters())
                         d.update(policy.named_buffers())
                         p_w = TensorDict(d, [])
                     else:
