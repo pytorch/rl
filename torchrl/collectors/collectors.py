@@ -775,11 +775,15 @@ class SyncDataCollector(DataCollectorBase):
                 tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
                 dtype=torch.bool,
             )
-            self._tensordict.get_sub_tensordict(traj_done_or_terminated).update(
-                td_reset[traj_done_or_terminated], inplace=True
-            )
-            done = self._tensordict[traj_done_or_terminated].get("done")
-            if (_reset is None and done.any()) or (_reset is not None and done.any()):
+            if td_reset.batch_dims:
+                self._tensordict.get_sub_tensordict(traj_done_or_terminated).update(
+                    td_reset[traj_done_or_terminated], inplace=True
+                )
+            else:
+                self._tensordict.update(td_reset, inplace=True)
+
+            done = self._tensordict.get("done")
+            if done.any():
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
                 )
