@@ -1398,6 +1398,7 @@ class TestUpdateParams:
                 # update policy
                 policy.param.data += 1
                 policy.buf.data += 1
+                col.update_policy_weights_()
             elif i == 99:
                 assert (data["action"] == 2).all()
 
