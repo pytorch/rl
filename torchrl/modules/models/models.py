@@ -1102,7 +1102,6 @@ class LSTMNet(nn.Module):
         hidden0_in: Optional[torch.Tensor] = None,
         hidden1_in: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-
         input = self.mlp(input)
         return self._lstm(input, hidden0_in, hidden1_in)
 
@@ -1150,17 +1149,17 @@ class DTActor(nn.Module):
         mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else {}
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
-        self.apply(dt_actor_weight_init)
+        # self.apply(dt_actor_weight_init)
 
-    def forward(self, observation: torch.Tensor) -> torch.Tensor:
-        out = self.mlp(observation)
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        out = self.mlp(hidden_state)
         mu, log_std = out.chunk(2, -1)
         log_std = torch.tanh(log_std)
         log_std = min(self.log_std_bounds) + 0.5 * (
             max(self.log_std_bounds) - min(self.log_std_bounds)
         ) * (log_std + 1.0)
         std = torch.exp(log_std)
-        return (mu, std)
+        return (mu, std, hidden_state)
 
 
 def dt_actor_weight_init(m):
