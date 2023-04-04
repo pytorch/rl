@@ -1392,16 +1392,24 @@ class TestUpdateParams:
         col = collector(
             env, policy, device=device, total_frames=1000, frames_per_batch=10
         )
-        for i, data in enumerate(col):
-            if i == 0:
-                assert (data["action"] == 0).all()
-                # update policy
-                policy.param.data += 1
-                policy.buf.data += 1
-                col.update_policy_weights_()
-            elif i == 99:
-                assert (data["action"] == 2).all()
-
+        try:
+            for i, data in enumerate(col):
+                if i == 0:
+                    assert (data["action"] == 0).all()
+                    # update policy
+                    policy.param.data += 1
+                    policy.buf.data += 2
+                    col.update_policy_weights_()
+                elif i == 99:
+                    if (data["action"] == 1).all():
+                        raise RuntimeError("Failed to update buffer")
+                    elif (data["action"] == 2).all():
+                        raise RuntimeError("Failed to update params")
+                    elif (data["action"] == 0).all():
+                        raise RuntimeError("Failed to update params and buffers")
+                    assert (data["action"] == 3).all()
+        finally:
+            col.shutdown()
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
