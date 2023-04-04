@@ -651,7 +651,6 @@ class SyncDataCollector(DataCollectorBase):
                 "Cannot split trajectories when reset_when_done is False."
             )
         self.split_trajs = split_trajs
-        self._has_been_done = None
         self._exclude_private_keys = True
         self.interruptor = interruptor
 
@@ -735,20 +734,14 @@ class SyncDataCollector(DataCollectorBase):
     def _step_and_maybe_reset(self) -> None:
         done = self._tensordict.get(("next", "done"))
         truncated = self._tensordict.get(("next", "truncated"), None)
-        if truncated is None:
-            truncated = torch.zeros_like(done)
-        traj_ids = self._tensordict.get(("collector", "traj_ids")).clone()
+        traj_ids = self._tensordict.get(("collector", "traj_ids"))
 
         self._tensordict = step_mdp(self._tensordict)
 
         if not self.reset_when_done:
-            done = torch.zeros_like(done)
-        done_or_terminated = done | truncated
-        # keep track of envs that have been done at least once
-        if self._has_been_done is None:
-            self._has_been_done = done_or_terminated
-        else:
-            self._has_been_done = self._has_been_done | done_or_terminated
+            return
+
+        done_or_terminated = (done | truncated) if truncated is not None else done
         if done_or_terminated.any():
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
