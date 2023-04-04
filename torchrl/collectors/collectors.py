@@ -2050,6 +2050,7 @@ def _main_async_collector(
                 dc.init_random_frames = -1
 
             d = next(dc_iter)
+            print('on worker', j, policy.param, d['action'])
             if pipe_child.poll(_MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.
                 # In that case, we skip the collected trajectory and get the message from main. This is faster than
