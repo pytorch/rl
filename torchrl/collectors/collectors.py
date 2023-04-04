@@ -741,7 +741,10 @@ class SyncDataCollector(DataCollectorBase):
         if not self.reset_when_done:
             return
 
-        done_or_terminated = (done | truncated) if truncated is not None else done
+        done_or_terminated = (
+            (done | truncated) if truncated is not None else done.clone()
+        )
+
         if done_or_terminated.any():
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
