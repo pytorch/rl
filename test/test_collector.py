@@ -1383,7 +1383,7 @@ class TestUpdateParams:
             return td
 
     @pytest.mark.parametrize(
-        "collector", [MultiaSyncDataCollector, MultiSyncDataCollector]
+        "collector", [MultiSyncDataCollector, MultiaSyncDataCollector]
     )
     @pytest.mark.parametrize("give_weights", [True, False])
     def test_param_sync(self, give_weights, collector):
