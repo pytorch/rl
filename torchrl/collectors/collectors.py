@@ -534,6 +534,18 @@ class SyncDataCollector(DataCollectorBase):
         self.env: EnvBase = self.env.to(self.device)
         self.max_frames_per_traj = max_frames_per_traj
         if self.max_frames_per_traj > 0:
+            # let's check that there is no StepCounter yet
+            for key in self.env.output_spec.keys(True, True):
+                if isinstance(key, str):
+                    key = (key,)
+                if "truncated" in key:
+                    raise ValueError(
+                        "A 'truncated' key is already present in the environment "
+                        "and the 'max_frames_per_traj' argument may conflict with "
+                        "a 'StepCounter' that has already been set. "
+                        "Possible solutions: Set max_frames_per_traj to 0 or "
+                        "remove the StepCounter limit from the environment transforms."
+                    )
             env = self.env = TransformedEnv(
                 self.env, StepCounter(max_steps=self.max_frames_per_traj)
             )
@@ -651,7 +663,6 @@ class SyncDataCollector(DataCollectorBase):
                 "Cannot split trajectories when reset_when_done is False."
             )
         self.split_trajs = split_trajs
-        self._has_been_done = None
         self._exclude_private_keys = True
         self.interruptor = interruptor
 
@@ -735,20 +746,17 @@ class SyncDataCollector(DataCollectorBase):
     def _step_and_maybe_reset(self) -> None:
         done = self._tensordict.get(("next", "done"))
         truncated = self._tensordict.get(("next", "truncated"), None)
-        if truncated is None:
-            truncated = torch.zeros_like(done)
-        traj_ids = self._tensordict.get(("collector", "traj_ids")).clone()
+        traj_ids = self._tensordict.get(("collector", "traj_ids"))
 
         self._tensordict = step_mdp(self._tensordict)
 
         if not self.reset_when_done:
-            done = torch.zeros_like(done)
-        done_or_terminated = done | truncated
-        # keep track of envs that have been done at least once
-        if self._has_been_done is None:
-            self._has_been_done = done_or_terminated
-        else:
-            self._has_been_done = self._has_been_done | done_or_terminated
+            return
+
+        done_or_terminated = (
+            (done | truncated) if truncated is not None else done.clone()
+        )
+
         if done_or_terminated.any():
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
@@ -759,18 +767,22 @@ class SyncDataCollector(DataCollectorBase):
                 _reset = None
                 td_reset = None
             td_reset = self.env.reset(td_reset)
-            self._tensordict.update(td_reset, inplace=True)
-            done = self._tensordict.get("done")
-            if (_reset is None and done.any()) or (
-                _reset is not None and done[_reset].any()
-            ):
-                raise RuntimeError(
-                    f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
-                )
             traj_done_or_terminated = done_or_terminated.sum(
                 tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
                 dtype=torch.bool,
             )
+            if td_reset.batch_dims:
+                self._tensordict.get_sub_tensordict(traj_done_or_terminated).update(
+                    td_reset[traj_done_or_terminated], inplace=True
+                )
+            else:
+                self._tensordict.update(td_reset, inplace=True)
+
+            done = self._tensordict.get("done")
+            if done.any():
+                raise RuntimeError(
+                    f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
+                )
             traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
                 1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )
