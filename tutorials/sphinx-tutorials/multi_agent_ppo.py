@@ -1,3 +1,4 @@
+import copy
 import time
 from collections import defaultdict
 
@@ -11,8 +12,14 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
+from torchrl.envs import ParallelEnv, SerialEnv
 from torchrl.envs.libs.vmas import VmasEnv
-from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
+from torchrl.modules import (
+    IndependentNormal,
+    ProbabilisticActor,
+    TanhNormal,
+    ValueOperator,
+)
 from torchrl.objectives import ClipPPOLoss, DDPGLoss, ValueEstimators
 from torchrl.record.loggers.wandb import WandbLogger
 
@@ -72,16 +79,19 @@ class AgentNet(nn.Module):
 
 if __name__ == "__main__":
     device = "cpu" if not torch.has_cuda else "cuda:0"
-    vmas_device = "cpu"
-
+    vmas_device = device
+    torch.manual_seed(0)
     test = False
 
     lr = 5e-5
     max_grad_norm = 40.0
 
-    vmas_envs = 640 if not test else 1
-    max_steps = 200
-    frames_per_batch = vmas_envs * max_steps
+    frames_per_batch = 60_000
+    n_parallel_envs = 5
+    max_steps = 100
+    vmas_envs = frames_per_batch // (n_parallel_envs * max_steps) if not test else 1
+
+
     # For a complete training, bring the number of frames up to 1M
     n_iters = 500
     total_frames = frames_per_batch * n_iters
@@ -102,17 +112,31 @@ if __name__ == "__main__":
 
     scenario_args = {"n_agents": 4, "same_goal": 1, "collision_reward": -0.5}
 
-    env = VmasEnv(
-        scenario_name="transport",
-        num_envs=vmas_envs,
-        continuous_actions=True,
-        max_steps=max_steps,
-        device=vmas_device,
-        # Scenario kwargs
-        **scenario_args,
+    env = ParallelEnv(
+        n_parallel_envs,
+        lambda: VmasEnv(
+            scenario_name="balance",
+            num_envs=vmas_envs,
+            continuous_actions=True,
+            max_steps=max_steps,
+            device=vmas_device,
+            # Scenario kwargs
+            **scenario_args,
+        ),
     )
+    env.start()
+    # env = VmasEnv(
+    #         scenario_name="balance",
+    #         num_envs=vmas_envs,
+    #         continuous_actions=True,
+    #         max_steps=max_steps,
+    #         device=vmas_device,
+    #         # Scenario kwargs
+    #         **scenario_args,
+    #     )
+    print(env.output_spec)
     env_test = VmasEnv(
-        scenario_name="transport",
+        scenario_name="balance",
         num_envs=1,
         continuous_actions=True,
         max_steps=max_steps,
@@ -141,17 +165,31 @@ if __name__ == "__main__":
         actor_net, in_keys=["observation"], out_keys=["loc", "scale"]
     )
 
-    policy_module = ProbabilisticActor(
+    policy = ProbabilisticActor(
         module=policy_module,
         spec=env.action_spec,
         in_keys=["loc", "scale"],
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": env.action_spec.space.minimum,
-            "max": env.action_spec.space.maximum,
+            # "tanh_loc": False,
+            "min": env.action_spec.space.minimum[0,0,...],
+            "max": env.action_spec.space.maximum[0,0,...],
         },
+        # safe=True,
         return_log_prob=True,
         # we'll need the log-prob for the numerator of the importance weights
+    )
+    test_policy = ProbabilisticActor(
+        module=policy_module,
+        spec=env_test.action_spec,
+        in_keys=["loc", "scale"],
+        distribution_class=TanhNormal,
+        distribution_kwargs={
+            # "tanh_loc": False,
+            "min": env_test.action_spec.space.minimum,
+            "max": env_test.action_spec.space.maximum,
+        },
+        # safe=True,
     )
 
     module = AgentNet(1, env.n_agents, device, share_params=het_critic)
@@ -164,14 +202,14 @@ if __name__ == "__main__":
         in_keys=["observation"],
     )
 
-    value_module(policy_module(env.reset().to(device)))
+    value_module(policy(env.reset().to(device)))
 
-    # print("Running policy:", policy_module(env.reset()))
+    # print("Running policy:", policy(env.reset()))
     # print("Running value:", value_module(env.reset()))
 
     collector = SyncDataCollector(
         env,
-        policy_module,
+        policy,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         split_trajs=False,
@@ -179,14 +217,14 @@ if __name__ == "__main__":
     )
 
     replay_buffer = ReplayBuffer(
-        storage=LazyTensorStorage(frames_per_batch),
+        storage=LazyTensorStorage(frames_per_batch, device=device),
         sampler=SamplerWithoutReplacement(),
         batch_size=sub_batch_size,
         collate_fn=lambda x: x,
     )
 
     loss_module = ClipPPOLoss(
-        actor=policy_module,
+        actor=policy,
         critic=value_module,
         advantage_key="advantage",
         clip_epsilon=clip_epsilon,
@@ -197,7 +235,7 @@ if __name__ == "__main__":
         loss_critic_type="smooth_l1",
         normalize_advantage=False,
     )
-    # loss_module = DDPGLoss(actor_network=policy_module, value_network=value_module)
+    # loss_module = DDPGLoss(actor_network=policy, value_network=value_module)
 
     # loss_module.make_value_estimator(ValueEstimators.TD0, gamma=gamma)
     loss_module.make_value_estimator(ValueEstimators.GAE, gamma=gamma, lmbda=lmbda)
@@ -208,36 +246,38 @@ if __name__ == "__main__":
     # )
 
     logs = defaultdict(list)
-    logger = WandbLogger(exp_name="mult_ppo_tutorial", project="torchrl")
+    logger = WandbLogger(exp_name="ind normal", project="torchrl")
     sampling_start = time.time()
 
     # for i in range(n_iters):
     for i, tensordict_data in enumerate(collector):
-        print(f"Iteration {i}")
-        # print(tensordict_data)
+        print(f"\nIteration {i}")
         print(f"Sampling took {time.time() - sampling_start}")
-        tensordict_data = tensordict_data.to(device)
 
-        # Permute
-        del tensordict_data["collector"]
-        tensordict_data.batch_size = [*tensordict_data.batch_size, env.n_agents]
-        tensordict_data = tensordict_data.permute(0, 2, 1)
-        with torch.no_grad():
-            loss_module.value_estimator(
-                tensordict_data, params=loss_module.critic_params.detach()
-            )
-        tensordict_data = tensordict_data.permute(0, 2, 1)
-        tensordict_data.batch_size = tensordict_data.batch_size[:-1]
-
+        reshape_start = time.time()
         data_view = tensordict_data.reshape(-1)
+        print(f"Reshape took {time.time() - reshape_start}")
+
+        extend_start = time.time()
         replay_buffer.extend(data_view)
+        print(f"Buffer extend took {time.time() - extend_start}")
+
         training_start = time.time()
-        for _ in range(num_epochs):
+        for j in range(num_epochs):
             # print(f"Inner epoch {j}")
 
-            for _ in range(frames_per_batch // sub_batch_size):
+            for k in range(frames_per_batch // sub_batch_size):
+                if k == 1 and j == 1:
+                    buffer_sample_start = time.time()
                 subdata = replay_buffer.sample()
+                if k == 1 and j == 1:
+                    print(f"Buffer sample took {time.time() - buffer_sample_start}")
+
+                if k == 1 and j == 1:
+                    loss_start = time.time()
                 loss_vals = loss_module(subdata.to(device))
+                if k == 1 and j == 1:
+                    print(f"Loss took {time.time() - loss_start}")
 
                 loss_value = (
                     loss_vals["loss_objective"]
@@ -262,10 +302,11 @@ if __name__ == "__main__":
 
         if i % 1 == 0:
             with torch.no_grad():
+                test_policy.load_state_dict(policy.state_dict())
                 env_test.frames = []
                 env_test.rollout(
                     max_steps=max_steps,
-                    policy=policy_module,
+                    policy=test_policy,
                     callback=rendering_callback,
                     auto_cast_to_device=True,
                 )
