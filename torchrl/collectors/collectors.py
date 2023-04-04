@@ -276,10 +276,8 @@ behaviour and more control you can consider writing your own TensorDictModule.
         get_weights_fn = None
         if policy_device != device:
             def get_weights_fn():
-                return dict(policy.named_parameters())
-            print("get_weights_fn", get_weights_fn)
+                return TensorDict(dict(policy.named_parameters()), []).detach()
             policy = deepcopy(policy).requires_grad_(False).to(device)
-            print("policy", policy)
         return policy, device, get_weights_fn
 
     def update_policy_weights_(
