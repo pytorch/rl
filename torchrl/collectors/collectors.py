@@ -534,6 +534,18 @@ class SyncDataCollector(DataCollectorBase):
         self.env: EnvBase = self.env.to(self.device)
         self.max_frames_per_traj = max_frames_per_traj
         if self.max_frames_per_traj > 0:
+            # let's check that there is no StepCounter yet
+            for key in self.env.output_spec.keys(True, True):
+                if isinstance(key, str):
+                    key = (key,)
+                if "truncated" in key:
+                    raise ValueError(
+                        "A 'truncated' key is already present in the environment "
+                        "and the 'max_frames_per_traj' argument may conflict with "
+                        "a 'StepCounter' that has already been set. "
+                        "Possible solutions: Set max_frames_per_traj to 0 or "
+                        "remove the StepCounter limit from the environment transforms."
+                    )
             env = self.env = TransformedEnv(
                 self.env, StepCounter(max_steps=self.max_frames_per_traj)
             )
@@ -759,11 +771,12 @@ class SyncDataCollector(DataCollectorBase):
                 _reset = None
                 td_reset = None
             td_reset = self.env.reset(td_reset)
-            self._tensordict.update(td_reset, inplace=True)
-            done = self._tensordict.get("done")
-            if (_reset is None and done.any()) or (
-                _reset is not None and done[_reset].any()
-            ):
+            reset_idx = done_or_terminated.squeeze(-1)
+            self._tensordict.get_sub_tensordict(reset_idx).update(
+                td_reset[reset_idx], inplace=True
+            )
+            done = self._tensordict[reset_idx].get("done")
+            if (_reset is None and done.any()) or (_reset is not None and done.any()):
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
                 )
