@@ -5,6 +5,7 @@
 
 import argparse
 import sys
+import time
 
 import numpy as np
 import pytest
@@ -1400,6 +1401,7 @@ class TestUpdateParams:
                     policy.param.data += 1
                     policy.buf.data += 2
                     col.update_policy_weights_()
+                    time.sleep(0.1)
                 elif i == 99:
                     if (data["action"] == 1).all():
                         raise RuntimeError("Failed to update buffer")
