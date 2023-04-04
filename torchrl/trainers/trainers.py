@@ -145,7 +145,7 @@ class Trainer:
         progress_bar: bool = True,
         seed: int = None,
         save_trainer_interval: int = 10000,
-        log_interval: int=10000,
+        log_interval: int = 10000,
         save_trainer_file: Optional[Union[str, pathlib.Path]] = None,
     ) -> None:
 

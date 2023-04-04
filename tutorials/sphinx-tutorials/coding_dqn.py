@@ -118,6 +118,7 @@ from torchrl.trainers import (
     UpdateWeights,
 )
 
+
 def is_notebook() -> bool:
     try:
         shell = get_ipython().__class__.__name__
@@ -129,6 +130,7 @@ def is_notebook() -> bool:
             return False  # Other type (?)
     except NameError:
         return False  # Probably standard Python interpreter
+
 
 ###############################################################################
 # Let's get started with the various pieces we need for our algorithm:
@@ -184,6 +186,7 @@ def is_notebook() -> bool:
 #   the :class:`torchrl.envs.ObservationNorm` transform.
 #
 
+
 def make_env(
     parallel=False,
     obs_norm_sd=None,
@@ -224,6 +227,7 @@ def make_env(
     )
     return env
 
+
 ###############################################################################
 # Compute normalizing constants
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -237,6 +241,7 @@ def make_env(
 # not all dimensions disappear in the process:
 #
 
+
 def get_norm_stats():
     test_env = make_env()
     test_env.transform[-1].init_stats(
@@ -247,6 +252,7 @@ def get_norm_stats():
     # ``C=4`` (because of :class:`torchrl.envs.CatFrames`).
     print("state dict of the observation norm:", obs_norm_sd)
     return obs_norm_sd
+
 
 ###############################################################################
 # Building the model (Deep Q-network)
@@ -270,6 +276,7 @@ def get_norm_stats():
 # values, pick up the one with the maximum value and write all those results
 # in the input :class:`tensordict.TensorDict`.
 #
+
 
 def make_model(dummy_env):
     cnn_kwargs = {
@@ -295,9 +302,7 @@ def make_model(dummy_env):
     ).to(device)
     net.value[-1].bias.data.fill_(init_bias)
 
-    actor = QValueActor(net, in_keys=["pixels"], spec=dummy_env.action_spec).to(
-        device
-    )
+    actor = QValueActor(net, in_keys=["pixels"], spec=dummy_env.action_spec).to(device)
     # init actor: because the model is composed of lazy conv/linear layers,
     # we must pass a fake batch of data through it to instantiate them.
     tensordict = dummy_env.fake_tensordict()
@@ -312,6 +317,7 @@ def make_model(dummy_env):
     )
 
     return actor, actor_explore
+
 
 ###############################################################################
 # Collecting and storing data
@@ -334,6 +340,7 @@ def make_model(dummy_env):
 # The only requirement of this storage is that the data passed to it at write
 # time must always have the same shape.
 
+
 def get_replay_buffer(buffer_size, n_optim, batch_size):
     replay_buffer = TensorDictReplayBuffer(
         batch_size=batch_size,
@@ -341,6 +348,7 @@ def get_replay_buffer(buffer_size, n_optim, batch_size):
         prefetch=n_optim,
     )
     return replay_buffer
+
 
 ###############################################################################
 # Data collector
@@ -372,6 +380,7 @@ def get_replay_buffer(buffer_size, n_optim, batch_size):
 # out training loop must account for. For simplicity, we set the devices to
 # the same value for all sub-collectors.
 
+
 def get_collector(
     obs_norm_sd,
     num_collectors,
@@ -399,6 +408,7 @@ def get_collector(
     )
     return data_collector
 
+
 ###############################################################################
 # Loss function
 # -------------
@@ -418,10 +428,12 @@ def get_collector(
 # in similar algorithms.
 #
 
+
 def get_loss_module(actor, gamma):
     loss_module = DQNLoss(actor, gamma=gamma, delay_value=True)
     target_updater = SoftUpdate(loss_module)
     return loss_module, target_updater
+
 
 ###############################################################################
 # Hyperparameters
@@ -566,7 +578,7 @@ trainer = Trainer(
     optimizer=optimizer,
     logger=logger,
     optim_steps_per_batch=n_optim,
-    log_interval = log_interval,
+    log_interval=log_interval,
 )
 
 ###############################################################################
@@ -635,6 +647,7 @@ trainer.train()
 ###############################################################################
 # We can now quickly check the CSVs with the results.
 
+
 def print_csv_files_in_folder(folder_path):
     """
     Find all CSV files in a folder and return the first 10 lines of each file as a string.
@@ -659,6 +672,7 @@ def print_csv_files_in_folder(folder_path):
                 output_str += line.strip() + "\n"
         output_str += "\n"
     return output_str
+
 
 print_csv_files_in_folder(logger.experiment.log_dir)
 
