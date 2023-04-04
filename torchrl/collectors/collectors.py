@@ -277,8 +277,6 @@ behaviour and more control you can consider writing your own TensorDictModule.
         if policy_device != device:
             get_weights_fn = policy.state_dict
             policy = deepcopy(policy).requires_grad_(False).to(device)
-            if device == torch.device("cpu"):
-                policy.share_memory()
         return policy, device, get_weights_fn
 
     def update_policy_weights_(

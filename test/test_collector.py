@@ -33,7 +33,7 @@ from torchrl.collectors.collectors import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv, StepCounter
+from torchrl.envs import EnvBase, EnvCreator, ParallelEnv, SerialEnv, StepCounter
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
@@ -1325,6 +1325,81 @@ def test_reset_heterogeneous_envs():
         data[1]["next", "truncated"].squeeze()
         == torch.tensor([False, False, True]).repeat(168)[:500]
     ).all()
+
+
+class TestUpdateParams:
+    class DummyEnv(EnvBase):
+        def __init__(self, batch_size=[]):
+            device = (
+                torch.device("cuda")
+                if torch.cuda.device_count()
+                else torch.device("cpu")
+            )
+            super().__init__(batch_size=batch_size, device=device)
+            self.state = torch.zeros(self.batch_size, device=device)
+            self.output_spec = CompositeSpec(
+                observation=CompositeSpec(
+                    state=UnboundedContinuousTensorSpec(shape=(), device=device)
+                )
+            )
+            self.action_spec = UnboundedContinuousTensorSpec(shape=batch_size)
+            self.reward_spec = UnboundedContinuousTensorSpec(shape=(*batch_size, 1))
+
+        def _step(
+            self,
+            tensordict,
+        ):
+            action = tensordict.get("action")
+            self.state += action
+            return TensorDict(
+                {
+                    "next": {
+                        "state": self.state.clone(),
+                        "reward": self.reward_spec.zero(),
+                        "done": self.done_spec.zero(),
+                    }
+                },
+                self.batch_size,
+            )
+
+        def _reset(self, tensordict=None):
+            self.state.zero_()
+            return TensorDict({"state": self.state.clone()}, self.batch_size)
+
+        def _set_seed(self, seed):
+            return seed
+
+    class Policy(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.param = nn.Parameter(torch.zeros(()))
+            self.register_buffer("buf", torch.zeros(()))
+            self.in_keys = []
+            self.out_keys = ["action"]
+
+        def forward(self, td):
+            td["action"] = (self.param + self.buf).expand(td.shape)
+            return td
+
+    @pytest.mark.parametrize(
+        "collector", [MultiaSyncDataCollector, MultiSyncDataCollector]
+    )
+    def test_param_sync(self, collector):
+        policy = TestUpdateParams.Policy()
+        env = EnvCreator(TestUpdateParams.DummyEnv)
+        device = env().device
+        env = [env]
+        col = collector(
+            env, policy, device=device, total_frames=1000, frames_per_batch=10
+        )
+        for i, data in enumerate(col):
+            if i == 0:
+                assert (data["action"] == 0).all()
+                # update policy
+                policy.param.data += 1
+                policy.buf.data += 1
+            elif i == 99:
+                assert (data["action"] == 2).all()
 
 
 if __name__ == "__main__":
