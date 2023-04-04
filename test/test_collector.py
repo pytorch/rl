@@ -1293,6 +1293,40 @@ class TestPreemptiveThreshold:
             assert trajectory_ids[trajectory_ids_mask].numel() < frames_per_batch
 
 
+def test_maxframes_error():
+    env = TransformedEnv(CountingEnv(), StepCounter(2))
+    _ = SyncDataCollector(
+        env, RandomPolicy(env.action_spec), total_frames=10_000, frames_per_batch=1000
+    )
+    with pytest.raises(ValueError):
+        _ = SyncDataCollector(
+            env,
+            RandomPolicy(env.action_spec),
+            total_frames=10_000,
+            frames_per_batch=1000,
+            max_frames_per_traj=2,
+        )
+
+
+def test_reset_heterogeneous_envs():
+    env1 = lambda: TransformedEnv(CountingEnv(), StepCounter(2))
+    env2 = lambda: TransformedEnv(CountingEnv(), StepCounter(3))
+    env = SerialEnv(2, [env1, env2])
+    c = SyncDataCollector(
+        env, RandomPolicy(env.action_spec), total_frames=10_000, frames_per_batch=1000
+    )
+    for data in c:  # noqa: B007
+        break
+    assert (
+        data[0]["next", "truncated"].squeeze()
+        == torch.tensor([False, True]).repeat(250)[:500]
+    ).all()
+    assert (
+        data[1]["next", "truncated"].squeeze()
+        == torch.tensor([False, False, True]).repeat(168)[:500]
+    ).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
