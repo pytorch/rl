@@ -284,7 +284,8 @@ class LossModule(nn.Module):
                     value_to_set = getattr(
                         self, "_sep_".join(["_target_" + network_name, *key])
                     )
-                    target_params.set(key, value_to_set)
+                    # _set is faster bc is bypasses the checks
+                    target_params._set(key, value_to_set)
                 return target_params
             else:
                 params = getattr(self, param_name)

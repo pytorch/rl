@@ -110,9 +110,11 @@ class Trainer:
             displayed using tqdm. If tqdm is not installed, this option
             won't have any effect. Default is :obj:`True`
         seed (int, optional): Seed to be used for the collector, pytorch and
-            numpy. Default is 42.
+            numpy. Default is ``None``.
         save_trainer_interval (int, optional): How often the trainer should be
-            saved to disk. Default is 10000.
+            saved to disk, in frame count. Default is 10000.
+        log_interval (int, optional): How often the values should be logged,
+            in frame count. Default is 10000.
         save_trainer_file (path, optional): path where to save the trainer.
             Default is None (no saving)
     """
@@ -124,7 +126,6 @@ class Trainer:
         cls._collected_frames: int = 0
         cls._last_log: Dict[str, Any] = {}
         cls._last_save: int = 0
-        cls._log_interval: int = 10000
         cls.collected_frames = 0
         cls._app_state = None
         return super().__new__(cls)
@@ -142,8 +143,9 @@ class Trainer:
         clip_grad_norm: bool = True,
         clip_norm: float = None,
         progress_bar: bool = True,
-        seed: int = 42,
+        seed: int = None,
         save_trainer_interval: int = 10000,
+        log_interval: int=10000,
         save_trainer_file: Optional[Union[str, pathlib.Path]] = None,
     ) -> None:
 
@@ -154,9 +156,12 @@ class Trainer:
         self.optimizer = optimizer
         self.logger = logger
 
+        self._log_interval = log_interval
+
         # seeding
         self.seed = seed
-        self.set_seed()
+        if seed is not None:
+            self.set_seed()
 
         # constants
         self.optim_steps_per_batch = optim_steps_per_batch
