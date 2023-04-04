@@ -71,6 +71,17 @@ class TrainerHookBase:
 
     @abc.abstractmethod
     def register(self, trainer: Trainer, name: str):
+        """Registers the hook in the trainer at a default location.
+
+        Args:
+            trainer (Trainer): the trainer where the hook must be registered.
+            name (str): the name of the hook.
+
+        .. note::
+          To register the hook at another location than the default, use
+          :meth:`torchrl.trainers.Trainer.register_op`.
+
+        """
         raise NotImplementedError
 
 

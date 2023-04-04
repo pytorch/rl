@@ -83,6 +83,7 @@ TorchRL trainer: A DQN example
 # of this algorithm.
 
 # sphinx_gallery_start_ignore
+import tempfile
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -159,19 +160,19 @@ def is_notebook() -> bool:
 # We will be using five transforms:
 #
 # - :class:`torchrl.envs.StepCounter` to count the number of steps in each trajectory;
-# - :class:`torchrl.envs.ToTensorImage` will convert a ``[W, H, C]`` uint8
+# - :class:`torchrl.envs.transforms.ToTensorImage` will convert a ``[W, H, C]`` uint8
 #   tensor in a floating point tensor in the ``[0, 1]`` space with shape
 #   ``[C, W, H]``;
-# - :class:`torchrl.envs.RewardScaling` to reduce the scale of the return;
-# - :class:`torchrl.envs.GrayScale` will turn our image into grayscale;
-# - :class:`torchrl.envs.Resize` will resize the image in a 64x64 format;
-# - :class:`torchrl.envs.CatFrames` will concatenate an arbitrary number of
+# - :class:`torchrl.envs.transforms.RewardScaling` to reduce the scale of the return;
+# - :class:`torchrl.envs.transforms.GrayScale` will turn our image into grayscale;
+# - :class:`torchrl.envs.transforms.Resize` will resize the image in a 64x64 format;
+# - :class:`torchrl.envs.transforms.CatFrames` will concatenate an arbitrary number of
 #   successive frames (``N=4``) in a single tensor along the channel dimension.
 #   This is useful as a single image does not carry information about the
 #   motion of the cartpole. Some memory about past observations and actions
 #   is needed, either via a recurrent neural network or using a stack of
 #   frames.
-# - :class:`torchrl.envs.ObservationNorm` which will normalize our observations
+# - :class:`torchrl.envs.transforms.ObservationNorm` which will normalize our observations
 #   given some custom summary statistics.
 #
 # In practice, our environment builder has two arguments:
@@ -265,9 +266,10 @@ def get_norm_stats():
 #
 # .. math::
 #
-#    val = b(obs) + v(obs) - \mathbb{E}[v(obs)]
+#    \mathbb{v} = b(obs) + v(obs) - \mathbb{E}[v(obs)]
 #
-# where :math:`b` is a :math:`\mathbb{R}^n \rightarrow 1` function and :math:`v` is a
+# where :math:`\mathbb{v}` is our vector of action values,
+# :math:`b` is a :math:`\mathbb{R}^n \rightarrow 1` function and :math:`v` is a
 # :math:`\mathbb{R}^n \rightarrow \mathbb{R}^m` function, for
 # :math:`n = \# obs` and :math:`m = \# actions`.
 #
@@ -354,8 +356,8 @@ def get_replay_buffer(buffer_size, n_optim, batch_size):
 # Data collector
 # ~~~~~~~~~~~~~~
 #
-# As in `PPO <https://pytorch.org/rl/tutorials/coding_ppo.html>` and
-# `DDPG <https://pytorch.org/rl/tutorials/coding_ddpg.html>`, we will be using
+# As in `PPO <https://pytorch.org/rl/tutorials/coding_ppo.html>`_ and
+# `DDPG <https://pytorch.org/rl/tutorials/coding_ddpg.html>`_, we will be using
 # a data collector as a dataloader in the outer loop.
 #
 # We choose the following configuration: we will be running a series of
@@ -473,7 +475,9 @@ tau = 0.02
 ###############################################################################
 # Data collection and replay buffer
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Values to be used for proper training have been commented.
+#
+# .. note::
+#   Values to be used for proper training have been commented.
 #
 # Total frames collected in the environment. In other implementations, the
 # user defines a maximum number of episodes.
@@ -562,7 +566,9 @@ optimizer = torch.optim.Adam(
     loss_module.parameters(), lr=lr, weight_decay=wd, betas=betas
 )
 exp_name = f"dqn_exp_{uuid.uuid1()}"
-logger = CSVLogger(exp_name=exp_name, log_dir="./")
+tmpdir = tempfile.TemporaryDirectory()
+logger = CSVLogger(exp_name=exp_name, log_dir=tmpdir.name)
+warnings.warn(f"log dir: {logger.experiment.log_dir}")
 
 ###############################################################################
 # We can control how often the scalars should be logged. Here we set this
@@ -616,7 +622,7 @@ recorder.register(trainer)
 ###############################################################################
 # - Any callable (including :class:`torchrl.trainers.TrainerHookBase`
 #   subclasses) can be registered using :meth:`torchrl.trainers.Trainer.register_op`.
-#   In this case, a location must be explicitely passed (). This method gives
+#   In this case, a location must be explicitly passed (). This method gives
 #   more control over the location of the hook but it also requires more
 #   understanding of the Trainer mechanism.
 #   Check the `trainer documentation <https://pytorch.org/rl/reference/trainers.html>`_
@@ -626,9 +632,11 @@ trainer.register_op("post_optim", target_net_updater.step)
 
 ###############################################################################
 # We can log the training rewards too. Note that this is of limited interest
-# with CartPole, as rewards are always 1. The discounted sum of rewards is miximised
-# not by getting higher rewards but by keeping the cart-pole alive for longer.
-# This will be reflected by the `total_rewards` value displayed in the progress bar.
+# with CartPole, as rewards are always 1. The discounted sum of rewards is
+# maximised not by getting higher rewards but by keeping the cart-pole alive
+# for longer.
+# This will be reflected by the `total_rewards` value displayed in the
+# progress bar.
 #
 log_reward = LogReward(log_pbar=True)
 log_reward.register(trainer)
@@ -636,7 +644,8 @@ log_reward.register(trainer)
 ###############################################################################
 # .. note::
 #   It is possible to link multiple optimizers to the trainer if needed.
-#   In this case, each optimizer will be tied to a field in the loss dictionary.
+#   In this case, each optimizer will be tied to a field in the loss
+#   dictionary.
 #   Check the :class:`torchrl.trainers.OptimizerHook` to learn more.
 #
 # Here we are, ready to train our algorithm! A simple call to
@@ -691,26 +700,10 @@ print_csv_files_in_folder(logger.experiment.log_dir)
 #
 # Possible improvements to this tutorial could include:
 #
-# - Using the :class:`torchrl.data.MultiStep`
-#   post-processing. Multi-step will project an action
-#   to the :math:`n^{th}` following step, and create a discounted sum of the
-#   rewards in between. This trick can make the algorithm noticeably less
-#   myopic (although the reward is then biased). To use this, simply
-#   create the collector with
-#
-#       >>> from torchrl.data.postprocs.postprocs import MultiStep
-#       >>> collector = CollectorClass(..., postproc=MultiStep(gamma, n))
-#
-#   where ``n`` is the number of looking-forward steps. Pay attention to the
-#   fact that the ``gamma`` factor has to be corrected by the number of
-#   steps till the next observation when being passed to
-#   ``vec_td_lambda_advantage_estimate``:
-#
-#       >>> gamma = gamma ** tensordict["steps_to_next_obs"]
-#
 # - A prioritized replay buffer could also be used. This will give a
 #   higher priority to samples that have the worst value accuracy.
-#   Learn more on the `replay buffer section <https://pytorch.org/rl/reference/data.html#composable-replay-buffers>`_
+#   Learn more on the
+#   `replay buffer section <https://pytorch.org/rl/reference/data.html#composable-replay-buffers>`_
 #   of the documentation.
 # - A distributional loss (see :class:`torchrl.objectives.DistributionalDQNLoss`
 #   for more information).
