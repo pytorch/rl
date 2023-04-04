@@ -1408,7 +1408,7 @@ class TestUpdateParams:
                     else:
                         p_w = None
                     col.update_policy_weights_(p_w)
-                    time.sleep(0.1)
+                    time.sleep(1.0)
                 elif i == 99:
                     if (data["action"] == 1).all():
                         raise RuntimeError("Failed to update buffer")
