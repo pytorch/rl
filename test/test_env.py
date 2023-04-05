@@ -1139,6 +1139,7 @@ class TestConcurrentEnvs:
             out_keys = ["action"]
             def forward(self, tensordict):
                 tensordict.set("action", spec.zero(*tensordict.shape, *spec.shape, device=device)+1)
+                return tensordict
         policy = Policy()
         # policy = SafeModule(
         #     nn.Linear(
