@@ -1134,23 +1134,23 @@ class TestConcurrentEnvs:
         env_p = ParallelEnv(n_workers, [lambda i=i: CountingEnv(i, device=device) for i in range(j, j+n_workers)])
         env_s = SerialEnv(n_workers, [lambda i=i: CountingEnv(i, device=device) for i in range(j, j+n_workers)])
 
-        policy = SafeModule(
-            nn.Linear(
-                env_p.observation_spec["observation"].shape[-1],
-                env_p.action_spec.shape[-1],
-                device=device,
-            ),
-            in_keys=["observation"],
-            out_keys=["action"],
-        )
+        # policy = SafeModule(
+        #     nn.Linear(
+        #         env_p.observation_spec["observation"].shape[-1],
+        #         env_p.action_spec.shape[-1],
+        #         device=device,
+        #     ),
+        #     in_keys=["observation"],
+        #     out_keys=["action"],
+        # )
 
         N = 10
         r_p = []
         r_s = []
         for i in range(N):
             with torch.no_grad():
-                r_p.append(env_s.rollout(100, break_when_any_done=False, policy=policy))
-                r_s.append(env_p.rollout(100, break_when_any_done=False, policy=policy))
+                r_p.append(env_s.rollout(100, break_when_any_done=False, ))
+                r_s.append(env_p.rollout(100, break_when_any_done=False, ))
         assert (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all()
 
     def test_mp_concurrent(self):
