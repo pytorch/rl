@@ -260,8 +260,6 @@ behaviour and more control you can consider writing your own TensorDictModule.
             )
 
         device = torch.device(device) if device is not None else policy_device
-        if device is None:
-            device = torch.device("cpu")
         get_weights_fn = None
         if policy_device != device:
             def get_weights_fn():
@@ -269,6 +267,13 @@ behaviour and more control you can consider writing your own TensorDictModule.
                 param_and_buf.update(dict(policy.named_buffers()))
                 return TensorDict(param_and_buf, []).apply(lambda x: x.data)
             policy = deepcopy(policy).requires_grad_(False).to(device)
+            # here things may break bc policy.to("cuda") gives us weights on cuda:0 (same
+            # but different)
+            try:
+                device = next(policy.parameters()).device
+            except StopIteration:  # noqa
+                pass
+
         return policy, device, get_weights_fn
 
     def update_policy_weights_(
