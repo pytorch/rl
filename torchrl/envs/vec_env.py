@@ -979,7 +979,12 @@ def _run_worker_pipe_shared_mem(
                 )
                 child_pipe.send(("reset_obs", None))
             else:
-                child_pipe.send(("reset_obs", _td.select(*tensordict.keys(True, True))))
+                child_pipe.send(
+                    (
+                        "reset_obs",
+                        _td.select(*tensordict.keys(True, True), strict=False),
+                    )
+                )
 
         elif cmd == "step":
             if not initialized:
