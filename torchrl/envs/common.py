@@ -668,8 +668,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
         try:
             policy_device = next(policy.parameters()).device
-        except AttributeError:
-            policy_device = "cpu"
+        except (StopIteration, AttributeError):
+            policy_device = self.device
 
         env_device = self.device
 
