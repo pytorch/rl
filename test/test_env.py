@@ -1114,6 +1114,56 @@ def test_info_dict_reader(device, seed=0):
     )
 
 
+class TestConcurrentEnvs:
+    """Concurrent parallel envs on multiple procs can interfere."""
+
+    @staticmethod
+    def main(j):
+        import torch
+        from torch import nn
+
+        from torchrl.envs import ParallelEnv
+        from torchrl.modules import SafeModule
+
+        device = "cpu" if not torch.cuda.device_count() else "cuda:0"
+
+        n_workers = 1
+        n_vectorized_envs = 600
+        n_agents = 4
+
+        env_p = ParallelEnv(n_workers, [lambda i=i: CountingEnv(i) for i in range(j, j+n_workers)])
+        env_s = SerialEnv(n_workers, [lambda i=i: CountingEnv(i) for i in range(j, j+n_workers)])
+
+        policy = SafeModule(
+            nn.Linear(
+                env_p.observation_spec["observation"].shape[-1],
+                env_p.action_spec.shape[-1],
+                device=device,
+            ),
+            in_keys=["observation"],
+            out_keys=["action"],
+            safe=True,
+        )
+
+        N = 10
+        r_p = []
+        r_s = []
+        for i in range(N):
+            with torch.no_grad():
+                r_p.append(env_s.rollout(100, break_when_any_done=False, policy=policy))
+                r_s.append(env_p.rollout(100, break_when_any_done=False, policy=policy))
+        assert (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all()
+
+    def test_mp_concurrent(self):
+        from torch import multiprocessing as mp
+        ps = []
+        for k in range(3, 10, 3):
+            p = mp.Process(target=type(self).main, args=(k,))
+            p.start()
+            ps.append(p)
+        for p in ps:
+            p.join()
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
