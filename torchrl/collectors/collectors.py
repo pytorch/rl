@@ -804,12 +804,8 @@ class SyncDataCollector(DataCollectorBase):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
-                    # print("policy device", self.policy.param.device, self.device)
-                    # print("0", self._tensordict.get("action", None), self.policy.param.item())
                     self.policy(self._tensordict)
-                    # print("1", self._tensordict.get("action", None))
                     self.env.step(self._tensordict)
-                    # print("2", self._tensordict.get("action", None))
 
                 # we must clone all the values, since the step / traj_id updates are done in-place
                 try:
@@ -1123,7 +1119,6 @@ class _MultiDataCollector(DataCollectorBase):
             _policy, _device, _get_weight_fn = self._get_policy_and_device(
                 policy=policy, device=_device, observation_spec=observation_spec
             )
-            print("proc", i, "policy device is", policy.param.device, "device", _device, "new policy device", _policy.param.device)
             self._policy_dict[_device] = _policy
             if isinstance(_policy, nn.Module):
                 param_dict = dict(_policy.named_parameters())
@@ -1210,7 +1205,7 @@ class _MultiDataCollector(DataCollectorBase):
                     policy_weights
                 )
             elif self._get_weights_fn_dict[_device] is not None:
-                self._policy_dict[_device].load_state_dict(
+                self._policy_dict[_device].update_(
                     self._get_weights_fn_dict[_device]()
                 )
 
@@ -2058,7 +2053,6 @@ def _main_async_collector(
                 inner_collector.init_random_frames = -1
 
             d = next(dc_iter)
-            print('on worker', j, policy.param, d['action'])
             if pipe_child.poll(_MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.
                 # In that case, we skip the collected trajectory and get the message from main. This is faster than
