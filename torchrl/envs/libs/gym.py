@@ -10,7 +10,11 @@ from typing import Dict, List
 from warnings import warn
 
 import torch
-from torch.utils._contextlib import _DecoratorContextManager
+
+try:
+    from torch.utils._contextlib import _DecoratorContextManager
+except ModuleNotFoundError:
+    from torchrl._utils import _DecoratorContextManager
 
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
