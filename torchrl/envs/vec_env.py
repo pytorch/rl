@@ -924,7 +924,7 @@ def _run_worker_pipe_shared_mem(
                 "env_fun_kwargs must be empty if an environment is passed to a process."
             )
         env = env_fun
-    is_cuda = torch.device(device).dtype == "cuda"
+    is_cuda = torch.device(device).type == "cuda"
     env = env.to(device)
 
     i = -1
