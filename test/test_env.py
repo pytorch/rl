@@ -1133,7 +1133,13 @@ class TestConcurrentEnvs:
 
         env_p = ParallelEnv(n_workers, [lambda i=i: CountingEnv(i, device=device) for i in range(j, j+n_workers)])
         env_s = SerialEnv(n_workers, [lambda i=i: CountingEnv(i, device=device) for i in range(j, j+n_workers)])
-
+        spec = env_p.action_spec
+        class Policy(nn.Module):
+            in_keys = []
+            out_keys = ["action"]
+            def forward(self, tensordict):
+                tensordict.set("action", spec.zero(*tensordict.shape, *spec.shape, device=device)+1)
+        policy = Policy()
         # policy = SafeModule(
         #     nn.Linear(
         #         env_p.observation_spec["observation"].shape[-1],
