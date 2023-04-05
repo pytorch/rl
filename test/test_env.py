@@ -1118,7 +1118,7 @@ class TestConcurrentEnvs:
     """Concurrent parallel envs on multiple procs can interfere."""
 
     @staticmethod
-    def main(j, q):
+    def main(j, q=None):
         import torch
         from torch import nn
 
@@ -1160,16 +1160,21 @@ class TestConcurrentEnvs:
                 r_s.append(env_p.rollout(100, break_when_any_done=False,policy=policy ))
 
         if (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all():
-            q.put("passed")
+            if q is not None:
+                q.put("passed")
+            else:
+                pass
         else:
-            q.put("failed")
+            if q is not None:
+                q.put("failed")
+            else:
+                raise RuntimeError()
 
     @pytest.mark.parametrize('nproc', [1, 3])
     def test_mp_concurrent(self, nproc):
         if nproc == 1:
             self.main(3)
         else:
-
             from torch import multiprocessing as mp
             q = mp.Queue(1)
             ps = []
