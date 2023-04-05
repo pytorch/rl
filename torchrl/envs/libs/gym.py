@@ -34,7 +34,7 @@ IMPORT_ERROR = None
 # check gym presence without importing it
 _has_gym = importlib.util.find_spec("gym") is not None
 if not _has_gym:
-    _has_gym = importlib.utils.find_spec("gymnasium") is not None
+    _has_gym = importlib.util.find_spec("gymnasium") is not None
 
 
 class set_gym_backend(_DecoratorContextManager):
