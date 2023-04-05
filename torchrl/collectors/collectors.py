@@ -1118,7 +1118,7 @@ class _MultiDataCollector(DataCollectorBase):
             _policy, _device, _get_weight_fn = self._get_policy_and_device(
                 policy=policy, device=_device, observation_spec=observation_spec
             )
-            print("proc", i, "policy device is", policy.param.device, "device", _device, "new policy device", _policy.device)
+            print("proc", i, "policy device is", policy.param.device, "device", _device, "new policy device", _policy.param.device)
             self._policy_dict[_device] = _policy
             if isinstance(_policy, nn.Module):
                 param_dict = dict(_policy.named_parameters())
