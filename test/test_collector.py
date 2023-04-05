@@ -5,7 +5,6 @@
 
 import argparse
 import sys
-import time
 
 import numpy as np
 import pytest
@@ -1327,15 +1326,11 @@ def test_reset_heterogeneous_envs():
         == torch.tensor([False, False, True]).repeat(168)[:500]
     ).all()
 
+
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No casting if no cuda")
 class TestUpdateParams:
     class DummyEnv(EnvBase):
-        def __init__(self, device, batch_size=[]):
-            # device = (
-            #     torch.device("cuda")
-            #     if torch.cuda.device_count()
-            #     else torch.device("cpu")
-            # )
+        def __init__(self, device, batch_size=[]):  # noqa: B006
             super().__init__(batch_size=batch_size, device=device)
             self.state = torch.zeros(self.batch_size, device=device)
             self.output_spec = CompositeSpec(
@@ -1390,8 +1385,18 @@ class TestUpdateParams:
         "collector", [MultiSyncDataCollector, MultiaSyncDataCollector]
     )
     @pytest.mark.parametrize("give_weights", [True, False])
-    @pytest.mark.parametrize("policy_device,env_device", [["cpu","cuda"], ["cuda","cpu"],["cpu", "cuda:0"],["cuda:0","cpu"],["cuda","cuda:0"],["cuda:0","cuda"]])
-    def test_param_sync(self, give_weights, collector,policy_device,env_device):
+    @pytest.mark.parametrize(
+        "policy_device,env_device",
+        [
+            ["cpu", "cuda"],
+            ["cuda", "cpu"],
+            ["cpu", "cuda:0"],
+            ["cuda:0", "cpu"],
+            ["cuda", "cuda:0"],
+            ["cuda:0", "cuda"],
+        ],
+    )
+    def test_param_sync(self, give_weights, collector, policy_device, env_device):
         policy = TestUpdateParams.Policy().to(policy_device)
 
         env = EnvCreator(lambda: TestUpdateParams.DummyEnv(device=env_device))
