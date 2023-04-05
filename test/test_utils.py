@@ -123,6 +123,15 @@ def test_implement_for_missing_version():
         implement_for_test_functions.missing_version()
 
 
+def test_implement_for_reset():
+    assert implement_for_test_functions.select_correct_version() == "0.3+"
+    _impl = implement_for._implementations
+    assert _impl is implement_for._implementations
+    implement_for.reset()
+    assert implement_for_test_functions.select_correct_version() == "0.3+"
+    assert _impl is not implement_for._implementations
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

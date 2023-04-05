@@ -5,9 +5,11 @@ import os
 import sys
 import time
 import warnings
+from copy import copy
 from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
+from typing import Callable, Union
 
 import numpy as np
 import torch
@@ -202,7 +204,9 @@ class implement_for:
     numpy vs jax-numpy etc).
 
     Args:
-        module_name: version is checked for the module with this name (e.g. "gym").
+        module_name (str or callable): version is checked for the module with this
+            name (e.g. "gym"). If a callable is provided, it should return the
+            module.
         from_version: version from which implementation is compatible. Can be open (None).
         to_version: version from which implementation is no longer compatible. Can be open (None).
 
@@ -212,7 +216,12 @@ class implement_for:
         ...     # Older gym versions will return x + 1
         ...     return x + 1
         ...
-        >>> @implement_for(“gym”, “0.14”, None)
+        >>> @implement_for(“gym”, “0.14”, "0.23")
+        >>> def fun(self, x):
+        ...     # More recent gym versions will return x + 2
+        ...     return x + 2
+        ...
+        >>> @implement_for(lambda: import_module(“gym”), “0.23", None)
         >>> def fun(self, x):
         ...     # More recent gym versions will return x + 2
         ...     return x + 2
@@ -228,18 +237,47 @@ class implement_for:
 
     # Stores pointers to fitting implementations: dict[func_name] = func_pointer
     _implementations = {}
+    _setters = []
 
     def __init__(
-        self, module_name: str, from_version: str = None, to_version: str = None
+        self,
+        module_name: Union[str, Callable],
+        from_version: str = None,
+        to_version: str = None,
     ):
         self.module_name = module_name
         self.from_version = from_version
         self.to_version = to_version
+        implement_for._setters.append(self)
+
+    @staticmethod
+    def check_version(version, from_version, to_version):
+        return (from_version is None or version >= from_version) and (
+            to_version is None or version < to_version
+        )
+
+    @staticmethod
+    def get_class_that_defined_method(f):
+        """Returns the class of a method, if it is defined, and None otherwise."""
+        return f.__globals__.get(f.__qualname__.split(".")[0], None)
+
+    @property
+    def func_name(self):
+        return f"{self.fn.__module__}.{self.fn.__name__}"
+
+    def module_set(self):
+        """Sets the function in its module, if it exists already."""
+        cls = self.get_class_that_defined_method(self.fn)
+        if cls is None:
+            # class not yet defined
+            return
+        setattr(cls, self.fn.__name__, self._implementations[self.func_name])
 
     def __call__(self, fn):
+        self.fn = fn
 
         # If the module is missing replace the function with the mock.
-        func_name = f"{fn.__module__}.{fn.__name__}"
+        func_name = self.func_name
         implementations = implement_for._implementations
 
         @wraps(fn)
@@ -252,35 +290,47 @@ class implement_for:
         if func_name in implementations:
             try:
                 # check that backends don't conflict
-                module = import_module(self.module_name)
+                if not callable(self.module_name):
+                    module = import_module(self.module_name)
+                else:
+                    module = self.module_name()
                 version = module.__version__
 
-                if (self.from_version is None or version >= self.from_version) and (
-                    self.to_version is None or version < self.to_version
-                ):
+                if self.check_version(version, self.from_version, self.to_version):
                     warnings.warn(
                         f"Got multiple backends for {func_name}. "
                         f"Using the last queried ({module} with version {version})."
                     )
                 else:
+                    self.module_set()
                     return implementations[func_name]
             except ModuleNotFoundError:
                 # then it's ok, there is no conflict
+                self.module_set()
                 return implementations[func_name]
         try:
             module = import_module(self.module_name)
             version = module.__version__
 
-            if (self.from_version is None or version >= self.from_version) and (
-                self.to_version is None or version < self.to_version
-            ):
+            if self.check_version(version, self.from_version, self.to_version):
                 implementations[func_name] = fn
+                self.module_set()
                 return fn
 
         except ModuleNotFoundError:
             return unsupported
 
         return unsupported
+
+    @classmethod
+    def reset(cls, setters=None):
+        if setters is None:
+            setters = copy(cls._setters)
+        cls._setters = []
+        cls._implementations = {}
+        for setter in setters:
+            setter(setter.fn)
+            cls._setters.append(setter)
 
 
 def accept_remote_rref_invocation(func):
