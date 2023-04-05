@@ -262,7 +262,7 @@ behaviour and more control you can consider writing your own TensorDictModule.
         device = torch.device(device) if device is not None else policy_device
         get_weights_fn = None
         if policy_device != device:
-            def get_weights_fn():
+            def get_weights_fn(policy=policy):
                 param_and_buf = dict(policy.named_parameters())
                 param_and_buf.update(dict(policy.named_buffers()))
                 return TensorDict(param_and_buf, []).apply(lambda x: x.data)
@@ -1205,7 +1205,7 @@ class _MultiDataCollector(DataCollectorBase):
                     policy_weights
                 )
             elif self._get_weights_fn_dict[_device] is not None:
-                self._policy_dict[_device].update_(
+                self._policy_weights_dict[_device].update_(
                     self._get_weights_fn_dict[_device]()
                 )
 
