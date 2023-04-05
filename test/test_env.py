@@ -1176,7 +1176,7 @@ class TestConcurrentEnvs:
             self.main(3)
         else:
             from torch import multiprocessing as mp
-            q = mp.Queue(1)
+            q = mp.Queue(3)
             ps = []
             try:
                 for k in range(3, 10, 3):
