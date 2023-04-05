@@ -1131,8 +1131,8 @@ class TestConcurrentEnvs:
         n_vectorized_envs = 600
         n_agents = 4
 
-        env_p = ParallelEnv(n_workers, [lambda i=i: CountingEnv(i) for i in range(j, j+n_workers)])
-        env_s = SerialEnv(n_workers, [lambda i=i: CountingEnv(i) for i in range(j, j+n_workers)])
+        env_p = ParallelEnv(n_workers, [lambda i=i: CountingEnv(i, device=device) for i in range(j, j+n_workers)])
+        env_s = SerialEnv(n_workers, [lambda i=i: CountingEnv(i, device=device) for i in range(j, j+n_workers)])
 
         policy = SafeModule(
             nn.Linear(
