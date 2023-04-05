@@ -118,7 +118,7 @@ class PPOLoss(LossModule):
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
         self.samples_mc_entropy = samples_mc_entropy
-        self.entropy_bonus = entropy_bonus and entropy_coef
+        self.entropy_bonus = entropy_bonus
         self.register_buffer(
             "entropy_coef", torch.tensor(entropy_coef, device=self.device)
         )
