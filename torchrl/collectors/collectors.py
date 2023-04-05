@@ -195,17 +195,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             observation_spec (TensorSpec, optional): spec of the observations
 
         """
-        # if create_env_fn is not None:
-        #     if create_env_kwargs is None:
-        #         create_env_kwargs = {}
-        #     self.create_env_fn = create_env_fn
-        #     if isinstance(create_env_fn, EnvBase):
-        #         env = create_env_fn
-        #     else:
-        #         env = self.create_env_fn(**create_env_kwargs)
-        # else:
-        #     env = None
-
         if policy is None:
             if not hasattr(self, "env") or self.env is None:
                 raise ValueError(
@@ -271,15 +260,24 @@ behaviour and more control you can consider writing your own TensorDictModule.
             )
 
         device = torch.device(device) if device is not None else policy_device
-        if device is None:
-            device = torch.device("cpu")
         get_weights_fn = None
         if policy_device != device:
-            get_weights_fn = policy.state_dict
-            policy = deepcopy(policy).requires_grad_(False).to(device)
-            if device == torch.device("cpu"):
-                policy.share_memory()
-        return policy, device, get_weights_fn
+            param_and_buf = dict(policy.named_parameters())
+            param_and_buf.update(dict(policy.named_buffers()))
+
+            def get_weights_fn(param_and_buf=param_and_buf):
+                return TensorDict(param_and_buf, []).apply(lambda x: x.data)
+
+            policy_cast = deepcopy(policy).requires_grad_(False).to(device)
+            # here things may break bc policy.to("cuda") gives us weights on cuda:0 (same
+            # but different)
+            try:
+                device = next(policy_cast.parameters()).device
+            except StopIteration:  # noqa
+                pass
+        else:
+            policy_cast = policy
+        return policy_cast, device, get_weights_fn
 
     def update_policy_weights_(
         self, policy_weights: Optional[TensorDictBase] = None
@@ -809,7 +807,8 @@ class SyncDataCollector(DataCollectorBase):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
-                    self.env.step(self.policy(self._tensordict))
+                    self.policy(self._tensordict)
+                    self.env.step(self._tensordict)
 
                 # we must clone all the values, since the step / traj_id updates are done in-place
                 try:
@@ -1125,9 +1124,9 @@ class _MultiDataCollector(DataCollectorBase):
             )
             self._policy_dict[_device] = _policy
             if isinstance(_policy, nn.Module):
-                self._policy_weights_dict[_device] = TensorDict(
-                    dict(_policy.named_parameters()), []
-                )
+                param_dict = dict(_policy.named_parameters())
+                param_dict.update(_policy.named_buffers())
+                self._policy_weights_dict[_device] = TensorDict(param_dict, [])
             else:
                 self._policy_weights_dict[_device] = TensorDict({}, [])
 
@@ -1209,7 +1208,7 @@ class _MultiDataCollector(DataCollectorBase):
                     policy_weights
                 )
             elif self._get_weights_fn_dict[_device] is not None:
-                self._policy_dict[_device].load_state_dict(
+                self._policy_weights_dict[_device].update_(
                     self._get_weights_fn_dict[_device]()
                 )
 
@@ -1977,9 +1976,17 @@ def _main_async_collector(
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
-    tensordict = data = d = data_in = dc = dc_iter = None
+    tensordict = data = d = data_in = inner_collector = dc_iter = None
 
-    dc = SyncDataCollector(
+    # send the policy to device
+    try:
+        policy = policy.to(device)
+    except Exception:
+        warnings.warn(
+            "Couldn't cast the policy onto the desired device on remote process. "
+            "If your policy is not a nn.Module instance you can probably ignore this warning."
+        )
+    inner_collector = SyncDataCollector(
         create_env_fn,
         create_env_kwargs=create_env_kwargs,
         policy=policy,
@@ -1998,7 +2005,7 @@ def _main_async_collector(
     )
     if verbose:
         print("Sync data collector created")
-    dc_iter = iter(dc)
+    dc_iter = iter(inner_collector)
     j = 0
     pipe_child.send("instantiated")
 
@@ -2046,9 +2053,9 @@ def _main_async_collector(
                 continue
         if msg in ("continue", "continue_random"):
             if msg == "continue_random":
-                dc.init_random_frames = float("inf")
+                inner_collector.init_random_frames = float("inf")
             else:
-                dc.init_random_frames = -1
+                inner_collector.init_random_frames = -1
 
             d = next(dc_iter)
             if pipe_child.poll(_MIN_TIMEOUT):
@@ -2084,14 +2091,14 @@ def _main_async_collector(
                 continue
 
         elif msg == "update":
-            dc.update_policy_weights_()
+            inner_collector.update_policy_weights_()
             pipe_child.send((j, "updated"))
             has_timed_out = False
             continue
 
         elif msg == "seed":
             data_in, static_seed = data_in
-            new_seed = dc.set_seed(data_in, static_seed=static_seed)
+            new_seed = inner_collector.set_seed(data_in, static_seed=static_seed)
             torch.manual_seed(data_in)
             np.random.seed(data_in)
             pipe_child.send((new_seed, "seeded"))
@@ -2099,12 +2106,12 @@ def _main_async_collector(
             continue
 
         elif msg == "reset":
-            dc.reset()
+            inner_collector.reset()
             pipe_child.send((j, "reset"))
             continue
 
         elif msg == "state_dict":
-            state_dict = dc.state_dict()
+            state_dict = inner_collector.state_dict()
             # send state_dict to cpu first
             state_dict = recursive_map_to_cpu(state_dict)
             pipe_child.send((state_dict, "state_dict"))
@@ -2113,15 +2120,15 @@ def _main_async_collector(
 
         elif msg == "load_state_dict":
             state_dict = data_in
-            dc.load_state_dict(state_dict)
+            inner_collector.load_state_dict(state_dict)
             pipe_child.send((j, "loaded"))
             has_timed_out = False
             continue
 
         elif msg == "close":
             del tensordict, data, d, data_in
-            dc.shutdown()
-            del dc, dc_iter
+            inner_collector.shutdown()
+            del inner_collector, dc_iter
             pipe_child.send("closed")
             if verbose:
                 print(f"collector {idx} closed")
