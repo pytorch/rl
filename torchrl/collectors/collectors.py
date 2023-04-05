@@ -264,7 +264,6 @@ behaviour and more control you can consider writing your own TensorDictModule.
             device = torch.device("cpu")
         get_weights_fn = None
         if policy_device != device:
-            print("policy device", policy_device, "real device", device)
             def get_weights_fn():
                 param_and_buf = dict(policy.named_parameters())
                 param_and_buf.update(dict(policy.named_buffers()))
@@ -1973,9 +1972,15 @@ def _main_async_collector(
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
-    tensordict = data = d = data_in = dc = dc_iter = None
+    tensordict = data = d = data_in = inner_collector = dc_iter = None
 
-    dc = SyncDataCollector(
+    # send the policy to device
+    try:
+        policy = policy.to(device)
+    except Exception:
+        warnings.warn("Couldn't cast the policy onto the desired device on remote process. "
+                      "If your policy is not a nn.Module instance you can probably ignore this warning.")
+    inner_collector = SyncDataCollector(
         create_env_fn,
         create_env_kwargs=create_env_kwargs,
         policy=policy,
@@ -1994,7 +1999,7 @@ def _main_async_collector(
     )
     if verbose:
         print("Sync data collector created")
-    dc_iter = iter(dc)
+    dc_iter = iter(inner_collector)
     j = 0
     pipe_child.send("instantiated")
 
@@ -2042,9 +2047,9 @@ def _main_async_collector(
                 continue
         if msg in ("continue", "continue_random"):
             if msg == "continue_random":
-                dc.init_random_frames = float("inf")
+                inner_collector.init_random_frames = float("inf")
             else:
-                dc.init_random_frames = -1
+                inner_collector.init_random_frames = -1
 
             d = next(dc_iter)
             print('on worker', j, policy.param, d['action'])
@@ -2081,14 +2086,14 @@ def _main_async_collector(
                 continue
 
         elif msg == "update":
-            dc.update_policy_weights_()
+            inner_collector.update_policy_weights_()
             pipe_child.send((j, "updated"))
             has_timed_out = False
             continue
 
         elif msg == "seed":
             data_in, static_seed = data_in
-            new_seed = dc.set_seed(data_in, static_seed=static_seed)
+            new_seed = inner_collector.set_seed(data_in, static_seed=static_seed)
             torch.manual_seed(data_in)
             np.random.seed(data_in)
             pipe_child.send((new_seed, "seeded"))
@@ -2096,12 +2101,12 @@ def _main_async_collector(
             continue
 
         elif msg == "reset":
-            dc.reset()
+            inner_collector.reset()
             pipe_child.send((j, "reset"))
             continue
 
         elif msg == "state_dict":
-            state_dict = dc.state_dict()
+            state_dict = inner_collector.state_dict()
             # send state_dict to cpu first
             state_dict = recursive_map_to_cpu(state_dict)
             pipe_child.send((state_dict, "state_dict"))
@@ -2110,15 +2115,15 @@ def _main_async_collector(
 
         elif msg == "load_state_dict":
             state_dict = data_in
-            dc.load_state_dict(state_dict)
+            inner_collector.load_state_dict(state_dict)
             pipe_child.send((j, "loaded"))
             has_timed_out = False
             continue
 
         elif msg == "close":
             del tensordict, data, d, data_in
-            dc.shutdown()
-            del dc, dc_iter
+            inner_collector.shutdown()
+            del inner_collector, dc_iter
             pipe_child.send("closed")
             if verbose:
                 print(f"collector {idx} closed")
