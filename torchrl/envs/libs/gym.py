@@ -31,7 +31,10 @@ from torchrl.envs.utils import _classproperty
 
 DEFAULT_GYM = None
 IMPORT_ERROR = None
-_has_gym = None
+# check gym presence without importing it
+_has_gym = importlib.util.find_spec("gym") is not None
+if not _has_gym:
+    _has_gym = importlib.utils.find_spec("gymnasium") is not None
 
 
 class set_gym_backend(_DecoratorContextManager):
@@ -87,23 +90,19 @@ def gym_backend(submodule=None):
         >>> wrappers = gym_backend('wrappers')
         >>> print(wrappers)
     """
-    global _has_gym
     global IMPORT_ERROR
     global DEFAULT_GYM
     if DEFAULT_GYM is None:
         try:
             # rule of thumbs: gym precedes
             import gym
-
-            _has_gym = True
         except ImportError as err:
             IMPORT_ERROR = err
             try:
                 import gymnasium as gym
-
-                _has_gym = True
             except ImportError as err:
                 IMPORT_ERROR = err
+                gym = None
         DEFAULT_GYM = gym
     if submodule is not None:
         if not submodule.startswith("."):
@@ -112,9 +111,6 @@ def gym_backend(submodule=None):
             return submodule
     return DEFAULT_GYM
 
-
-# TODO: remove this
-_has_gym = gym_backend() is not None
 
 __all__ = ["GymWrapper", "GymEnv"]
 
