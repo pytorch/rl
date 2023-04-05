@@ -171,8 +171,12 @@ class MaskedCategorical(D.Categorical):
         super().__init__(logits=logits)
 
     def sample(
-        self, sample_shape: Union[torch.Size, Sequence[int]] = torch.Size()
+        self,
+        sample_shape: Optional[Union[torch.Size, Sequence[int]]] = None
     ) -> torch.Tensor:
+        if sample_shape is None:
+            sample_shape = torch.Size()
+
         ret = super().sample(sample_shape)
         if not self._sparse_mask:
             return ret
@@ -191,16 +195,17 @@ class MaskedCategorical(D.Categorical):
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         if not self._sparse_mask:
             return super().log_prob(value)
-        size = value.size()
+
         idx_3d = self._mask.view(1, -1, self._num_events)
         val_3d = value.view(-1, idx_3d.size(1), 1)
         mask = (idx_3d == val_3d)
         idx = mask.int().argmax(dim=-1, keepdim=True)
-        ret = super().log_prob(idx)
+        ret = super().log_prob(idx.view_as(value))
         # Fill masked values with neg_inf.
+        ret.resize_as_(val_3d)
         ret.masked_fill_(torch.logical_not(mask.any(dim=-1, keepdim=True)),
                          self._neg_inf)
-        return ret.view(size)
+        return ret.resize_as_(value)
 
     @staticmethod
     def _mask_probs(probs: torch.Tensor,
