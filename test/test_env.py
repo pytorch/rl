@@ -1142,7 +1142,6 @@ class TestConcurrentEnvs:
             ),
             in_keys=["observation"],
             out_keys=["action"],
-            safe=True,
         )
 
         N = 10
