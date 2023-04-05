@@ -1155,8 +1155,8 @@ class TestConcurrentEnvs:
         r_s = []
         for i in range(N):
             with torch.no_grad():
-                r_p.append(env_s.rollout(100, break_when_any_done=False, ))
-                r_s.append(env_p.rollout(100, break_when_any_done=False, ))
+                r_p.append(env_s.rollout(100, break_when_any_done=False,policy=policy ))
+                r_s.append(env_p.rollout(100, break_when_any_done=False,policy=policy ))
         assert (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all()
 
     def test_mp_concurrent(self):
