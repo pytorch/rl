@@ -5,9 +5,10 @@
 
 import argparse
 
-import numpy as np
 import pytest
 import torch
+import torch.nn.functional as F
+
 from _utils_internal import get_available_devices
 from tensordict.tensordict import TensorDictBase
 from torch import autograd, nn
@@ -298,6 +299,50 @@ class TestMaskedCategorical:
             assert (dist.log_prob(torch.ones_like(sample)) == neg_inf).all()
         else:
             assert (dist.log_prob(torch.ones_like(sample)) > -float("inf")).all()
+
+
+    @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
+    def test_sample(self, neg_inf: float = float("-inf")) -> None:
+        torch.manual_seed(0)
+        logits = torch.randn(4)
+        probs = F.softmax(logits, dim=-1)
+        mask = torch.tensor([True, False, True, True])
+        ref_probs = torch.where(mask, probs, 0.0)
+        ref_probs /= ref_probs.sum(dim=-1, keepdim=True)
+
+        dist = MaskedCategorical(probs=probs,
+                                 mask=mask,
+                                 neg_inf=neg_inf,
+                                 sparse_mask=False)
+        num_samples = 10000
+        samples = dist.sample([num_samples])
+        sample_probs = torch.bincount(samples) / num_samples
+        torch.testing.assert_close(sample_probs,
+                                   ref_probs,
+                                   rtol=1e-5,
+                                   atol=1e-2)
+
+    @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
+    def test_sample_sparse(self, neg_inf: float = float("-inf")) -> None:
+        torch.manual_seed(0)
+        logits = torch.randn(4)
+        probs = F.softmax(logits, dim=-1)
+        mask = torch.tensor([True, False, True, True])
+        sparse_mask = torch.tensor([0, 2, 3])
+        ref_probs = torch.where(mask, probs, 0.0)
+        ref_probs /= ref_probs.sum(dim=-1, keepdim=True)
+
+        dist = MaskedCategorical(logits=logits,
+                                 mask=sparse_mask,
+                                 neg_inf=neg_inf,
+                                 sparse_mask=True)
+        num_samples = 10000
+        samples = dist.sample([num_samples])
+        sample_probs = torch.bincount(samples) / num_samples
+        torch.testing.assert_close(sample_probs,
+                                   ref_probs,
+                                   rtol=1e-5,
+                                   atol=1e-2)
 
 
 if __name__ == "__main__":
