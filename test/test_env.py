@@ -1180,7 +1180,7 @@ class TestConcurrentEnvs:
                     p.start()
                     msg = q.get(timeout=100)
                     assert msg == "passed"
-            finally::
+            finally:
                 for p in ps:
                     p.join()
 
