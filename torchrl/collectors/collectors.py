@@ -264,8 +264,11 @@ behaviour and more control you can consider writing your own TensorDictModule.
             device = torch.device("cpu")
         get_weights_fn = None
         if policy_device != device:
+            print("policy device", policy_device, "real device", device)
             def get_weights_fn():
-                return TensorDict(dict(policy.named_parameters()), []).detach()
+                param_and_buf = dict(policy.named_parameters())
+                param_and_buf.update(dict(policy.named_buffers()))
+                return TensorDict(param_and_buf, []).apply(lambda x: x.data)
             policy = deepcopy(policy).requires_grad_(False).to(device)
         return policy, device, get_weights_fn
 
