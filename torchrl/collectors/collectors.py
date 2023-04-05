@@ -808,7 +808,7 @@ class SyncDataCollector(DataCollectorBase):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
-                    print("0", self._tensordict.get("action", None))
+                    print("0", self._tensordict.get("action", None), self.policy.param.item())
                     self.policy(self._tensordict)
                     print("1", self._tensordict.get("action", None))
                     self.env.step(self._tensordict)
