@@ -438,7 +438,6 @@ class Trainer:
 
         for batch in self.collector:
             batch = self._process_batch_hook(batch)
-            self._pre_steps_log_hook(batch)
             current_frames = (
                 batch.get(("collector", "mask"), torch.tensor(batch.numel()))
                 .sum()
@@ -446,6 +445,7 @@ class Trainer:
                 * self.frame_skip
             )
             self.collected_frames += current_frames
+            self._pre_steps_log_hook(batch)
 
             if self.collected_frames > self.collector.init_random_frames:
                 self.optim_steps(batch)
@@ -506,7 +506,7 @@ class Trainer:
         collected_frames = self.collected_frames
         for key, item in kwargs.items():
             self._log_dict[key].append(item)
-
+            print(f"collected_frames {collected_frames}, self._last_log.get({key}, 0) {self._last_log.get(key, 0)}, self._log_interval {self._log_interval}")
             if (collected_frames - self._last_log.get(key, 0)) > self._log_interval:
                 self._last_log[key] = collected_frames
                 _log = True
@@ -514,6 +514,7 @@ class Trainer:
                 _log = False
             method = LOGGER_METHODS.get(key, "log_scalar")
             if _log and self.logger is not None:
+                print("logging!", key, self.logger.experiment.log_dir)
                 getattr(self.logger, method)(key, item, step=collected_frames)
             if method == "log_scalar" and self.progress_bar and log_pbar:
                 if isinstance(item, torch.Tensor):
