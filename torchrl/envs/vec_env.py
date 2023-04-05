@@ -934,8 +934,6 @@ def _run_worker_pipe_shared_mem(
     tensordict = None
     _td = None
 
-    reset_keys = None
-
     while True:
         try:
             cmd, data = child_pipe.recv()
@@ -976,7 +974,9 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 _td.pin_memory()
             if not is_cuda:
-                tensordict.update_(_td.select(*tensordict.keys(True, True), strict=False))
+                tensordict.update_(
+                    _td.select(*tensordict.keys(True, True), strict=False)
+                )
                 child_pipe.send(("reset_obs", None))
             else:
                 child_pipe.send(("reset_obs", _td.select(*tensordict.keys(True, True))))
