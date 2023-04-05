@@ -147,76 +147,94 @@ class MaskedCategorical(D.Categorical):
 
     def __init__(
         self,
-        logits: Optional[torch.Tensor] = None,
         probs: Optional[torch.Tensor] = None,
-        mask: torch.Tensor = None,
+        logits: Optional[torch.Tensor] = None,
+        mask: Optional[torch.Tensor] = None,
         neg_inf: float = float("-inf"),
         sparse_mask: bool = False,
         padding_value: Optional[int] = None,
     ) -> None:
-        if mask is None:
-            raise ValueError(f"A mask must be provided for {type(self)}.")
-        if probs is not None:
-            if logits is not None:
-                raise ValueError(
-                    "Either `probs` or `logits` must be specified, but not both."
-                )
-            # unnormalized logits
-            probs = probs.clone()
-            probs[~mask] = 0
-            probs = probs / probs.sum(-1, keepdim=True)
-            logits = probs.log()
-        logits = self._mask_logits(
-            logits,
-            mask,
-            neg_inf=neg_inf,
-            sparse_mask=sparse_mask,
-            padding_value=padding_value,
-        )
+        if (probs is None) == (logits is None):
+            raise ValueError(
+                "Either `probs` or `logits` must be specified, but not both.")
+
+        if logits is None:
+            logits = self._mask_probs(probs, mask, sparse_mask,
+                                      padding_value).log()
+        else:
+            logits = self._mask_logits(logits, mask, neg_inf, sparse_mask,
+                                       padding_value)
+
         self._mask = mask
-        self._sparse_mask = sparse_mask
+        self._sparse_mask = (mask is not None) and sparse_mask
+        self._neg_inf = neg_inf
         self._padding_value = padding_value
         super().__init__(logits=logits)
 
     def sample(
-        self, sample_shape: Optional[Union[torch.Size, Sequence[int]]] = None
+        self, sample_shape: Union[torch.Size, Sequence[int]] = torch.Size()
     ) -> torch.Tensor:
-        if sample_shape is None:
-            sample_shape = torch.Size()
         ret = super().sample(sample_shape)
         if not self._sparse_mask:
             return ret
 
-        ret_size = ret.size()
+        size = ret.size()
         outer_dim = prod(sample_shape)
         inner_dim = prod(self._mask.size()[:-1])
-        mask_3d = self._mask.expand(outer_dim, inner_dim, -1)
-        ret = mask_3d.gather(dim=-1, index=ret.view(outer_dim, inner_dim, 1))
-        return ret.view(ret_size)
+        idx_3d = self._mask.expand(outer_dim, inner_dim, -1)
+        ret = idx_3d.gather(dim=-1, index=ret.view(outer_dim, inner_dim, 1))
+        return ret.view(size)
 
+    # TODO: Improve performance here.
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         if not self._sparse_mask:
-            print("val", value)
             return super().log_prob(value)
-        value_shape = value.shape
-        mask_3d = self._mask.view(1, -1, self._num_events)
-        value_3d = value.view(-1, mask_3d.size(1), 1)
-        index = (mask_3d == value_3d).long().argmax(dim=-1, keepdim=True)
-        return super().log_prob(index.view(value_shape))
+        size = value.size()
+        idx_3d = self._mask.view(1, -1, self._num_events)
+        val_3d = value.view(-1, idx_3d.size(1), 1)
+        mask = (idx_3d == val_3d)
+        idx = mask.int().argmax(dim=-1, keepdim=True)
+        ret = super().log_prob(idx)
+        # Fill masked values with neg_inf.
+        ret.masked_fill_(torch.logical_not(mask.any(dim=-1, keepdim=True)),
+                         self._neg_inf)
+        return ret.view(size)
 
     @staticmethod
-    def _mask_logits(
-        logits: torch.Tensor,
-        mask: torch.Tensor,
-        neg_inf: float = float("-inf"),
-        sparse_mask: bool = False,
-        padding_value: Optional[int] = None,
-    ) -> torch.Tensor:
+    def _mask_probs(probs: torch.Tensor,
+                    mask: Optional[torch.Tensor] = None,
+                    sparse_mask: bool = False,
+                    padding_value: Optional[int] = None) -> torch.Tensor:
+        if mask is None:
+            return probs
+
+        if not sparse_mask:
+            return torch.where(mask, probs, 0.0)
+
+        if padding_value is not None:
+            padding_mask = (mask == padding_value)
+            if padding_value != 0:
+                # Avoid invalid indices in mask.
+                mask = mask.masked_fill(padding_mask, 0)
+        probs = probs.gather(dim=-1, index=mask)
+        if padding_value is not None:
+            probs.masked_fill_(padding_mask, 0.0)
+        return probs
+
+    @staticmethod
+    def _mask_logits(logits: torch.Tensor,
+                     mask: Optional[torch.Tensor] = None,
+                     neg_inf: float = float("-inf"),
+                     sparse_mask: bool = False,
+                     padding_value: Optional[int] = None) -> torch.Tensor:
+        if mask is None:
+            return logits
+
         if not sparse_mask:
             return torch.where(mask, logits, neg_inf)
 
         if padding_value is not None:
-            padding_mask = mask == padding_value
+            padding_mask = (mask == padding_value)
             if padding_value != 0:
                 # Avoid invalid indices in mask.
                 mask = mask.masked_fill(padding_mask, 0)
