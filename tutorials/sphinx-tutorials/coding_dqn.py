@@ -659,19 +659,18 @@ trainer.train()
 
 def print_csv_files_in_folder(folder_path):
     """
-    Find all CSV files in a folder and return the first 10 lines of each file as a string.
+    Find all CSV files in a folder and prints the first 10 lines of each file.
 
     Args:
         folder_path (str): The relative path to the folder.
 
-    Returns:
-        str: A string containing the first 10 lines of each CSV file in the folder.
     """
     csv_files = []
     output_str = ""
-    for file in os.listdir(folder_path):
-        if file.endswith(".csv"):
-            csv_files.append(os.path.join(folder_path, file))
+    for dirpath, _, filenames in os.walk(folder_path):
+        for file in filenames:
+            if file.endswith(".csv"):
+                csv_files.append(os.path.join(dirpath, file))
     for csv_file in csv_files:
         output_str += f"File: {csv_file}\n"
         with open(csv_file, "r") as f:
@@ -680,10 +679,10 @@ def print_csv_files_in_folder(folder_path):
                     break
                 output_str += line.strip() + "\n"
         output_str += "\n"
-    return output_str
+    print(output_str)
 
 
-print_csv_files_in_folder(logger.experiment.log_dir)
+print_csv_files_in_folder("/var/folders/zs/9lq15k8x61l1g0c_sf__63c80000gn/T/tmpejpilvhb/dqn_exp_6d35f974-d3c2-11ed-8df6-acde48001122")
 
 ###############################################################################
 # Conclusion and possible improvements
