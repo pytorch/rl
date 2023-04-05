@@ -1327,15 +1327,15 @@ def test_reset_heterogeneous_envs():
         == torch.tensor([False, False, True]).repeat(168)[:500]
     ).all()
 
-
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="No casting if no cuda")
 class TestUpdateParams:
     class DummyEnv(EnvBase):
-        def __init__(self, batch_size=[]):
-            device = (
-                torch.device("cuda")
-                if torch.cuda.device_count()
-                else torch.device("cpu")
-            )
+        def __init__(self, device, batch_size=[]):
+            # device = (
+            #     torch.device("cuda")
+            #     if torch.cuda.device_count()
+            #     else torch.device("cpu")
+            # )
             super().__init__(batch_size=batch_size, device=device)
             self.state = torch.zeros(self.batch_size, device=device)
             self.output_spec = CompositeSpec(
@@ -1343,8 +1343,12 @@ class TestUpdateParams:
                     state=UnboundedContinuousTensorSpec(shape=(), device=device)
                 )
             )
-            self.action_spec = UnboundedContinuousTensorSpec(shape=batch_size, device=device)
-            self.reward_spec = UnboundedContinuousTensorSpec(shape=(*batch_size, 1), device=device)
+            self.action_spec = UnboundedContinuousTensorSpec(
+                shape=batch_size, device=device
+            )
+            self.reward_spec = UnboundedContinuousTensorSpec(
+                shape=(*batch_size, 1), device=device
+            )
 
         def _step(
             self,
@@ -1386,13 +1390,15 @@ class TestUpdateParams:
         "collector", [MultiSyncDataCollector, MultiaSyncDataCollector]
     )
     @pytest.mark.parametrize("give_weights", [True, False])
-    def test_param_sync(self, give_weights, collector):
-        policy = TestUpdateParams.Policy()
-        env = EnvCreator(TestUpdateParams.DummyEnv)
+    @pytest.mark.parametrize("policy_device,env_device", [["cpu","cuda"], ["cuda","cpu"],["cpu", "cuda:0"],["cuda:0","cpu"],["cuda","cuda:0"],["cuda:0","cuda"]])
+    def test_param_sync(self, give_weights, collector,policy_device,env_device):
+        policy = TestUpdateParams.Policy().to(policy_device)
+
+        env = EnvCreator(lambda: TestUpdateParams.DummyEnv(device=env_device))
         device = env().device
         env = [env]
         col = collector(
-            env, policy, device=device, total_frames=1000, frames_per_batch=10
+            env, policy, device=device, total_frames=200, frames_per_batch=10
         )
         try:
             for i, data in enumerate(col):
@@ -1408,7 +1414,7 @@ class TestUpdateParams:
                     else:
                         p_w = None
                     col.update_policy_weights_(p_w)
-                elif i == 99:
+                elif i == 20:
                     if (data["action"] == 1).all():
                         raise RuntimeError("Failed to update buffer")
                     elif (data["action"] == 2).all():
@@ -1418,6 +1424,7 @@ class TestUpdateParams:
                     assert (data["action"] == 3).all()
         finally:
             col.shutdown()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

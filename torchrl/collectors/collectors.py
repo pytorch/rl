@@ -262,19 +262,22 @@ behaviour and more control you can consider writing your own TensorDictModule.
         device = torch.device(device) if device is not None else policy_device
         get_weights_fn = None
         if policy_device != device:
-            def get_weights_fn(policy=policy):
-                param_and_buf = dict(policy.named_parameters())
-                param_and_buf.update(dict(policy.named_buffers()))
+            param_and_buf = dict(policy.named_parameters())
+            param_and_buf.update(dict(policy.named_buffers()))
+
+            def get_weights_fn(param_and_buf=param_and_buf):
                 return TensorDict(param_and_buf, []).apply(lambda x: x.data)
-            policy = deepcopy(policy).requires_grad_(False).to(device)
+
+            policy_cast = deepcopy(policy).requires_grad_(False).to(device)
             # here things may break bc policy.to("cuda") gives us weights on cuda:0 (same
             # but different)
             try:
-                device = next(policy.parameters()).device
+                device = next(policy_cast.parameters()).device
             except StopIteration:  # noqa
                 pass
-
-        return policy, device, get_weights_fn
+        else:
+            policy_cast = policy
+        return policy_cast, device, get_weights_fn
 
     def update_policy_weights_(
         self, policy_weights: Optional[TensorDictBase] = None
@@ -1979,8 +1982,10 @@ def _main_async_collector(
     try:
         policy = policy.to(device)
     except Exception:
-        warnings.warn("Couldn't cast the policy onto the desired device on remote process. "
-                      "If your policy is not a nn.Module instance you can probably ignore this warning.")
+        warnings.warn(
+            "Couldn't cast the policy onto the desired device on remote process. "
+            "If your policy is not a nn.Module instance you can probably ignore this warning."
+        )
     inner_collector = SyncDataCollector(
         create_env_fn,
         create_env_kwargs=create_env_kwargs,
