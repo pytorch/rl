@@ -808,7 +808,11 @@ class SyncDataCollector(DataCollectorBase):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
-                    self.env.step(self.policy(self._tensordict))
+                    print("0", self._tensordict.get("action", None))
+                    self.policy(self._tensordict)
+                    print("1", self._tensordict.get("action", None))
+                    self.env.step(self._tensordict)
+                    print("2", self._tensordict.get("action", None))
 
                 # we must clone all the values, since the step / traj_id updates are done in-place
                 try:
