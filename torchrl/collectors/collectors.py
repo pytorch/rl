@@ -195,17 +195,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             observation_spec (TensorSpec, optional): spec of the observations
 
         """
-        # if create_env_fn is not None:
-        #     if create_env_kwargs is None:
-        #         create_env_kwargs = {}
-        #     self.create_env_fn = create_env_fn
-        #     if isinstance(create_env_fn, EnvBase):
-        #         env = create_env_fn
-        #     else:
-        #         env = self.create_env_fn(**create_env_kwargs)
-        # else:
-        #     env = None
-
         if policy is None:
             if not hasattr(self, "env") or self.env is None:
                 raise ValueError(
@@ -808,6 +797,7 @@ class SyncDataCollector(DataCollectorBase):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
+                    print("policy device", self.policy.param.device, self.device)
                     print("0", self._tensordict.get("action", None), self.policy.param.item())
                     self.policy(self._tensordict)
                     print("1", self._tensordict.get("action", None))
