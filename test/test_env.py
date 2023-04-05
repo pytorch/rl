@@ -1118,7 +1118,7 @@ class TestConcurrentEnvs:
     """Concurrent parallel envs on multiple procs can interfere."""
 
     @staticmethod
-    def main(j):
+    def main(j, q):
         import torch
         from torch import nn
 
@@ -1158,21 +1158,31 @@ class TestConcurrentEnvs:
             with torch.no_grad():
                 r_p.append(env_s.rollout(100, break_when_any_done=False,policy=policy ))
                 r_s.append(env_p.rollout(100, break_when_any_done=False,policy=policy ))
-        assert (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all()
+
+        if (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all():
+            q.put("passed")
+        else:
+            q.put("failed")
 
     @pytest.mark.parametrize('nproc', [1, 3])
     def test_mp_concurrent(self, nproc):
         if nproc == 1:
             self.main(3)
         else:
+
             from torch import multiprocessing as mp
+            q = mp.Queue(1)
             ps = []
-            for k in range(3, 10, 3):
-                p = mp.Process(target=type(self).main, args=(k,))
-                p.start()
-                ps.append(p)
-            for p in ps:
-                p.join()
+            try:
+                for k in range(3, 10, 3):
+                    p = mp.Process(target=type(self).main, args=(k, q))
+                    ps.append(p)
+                    p.start()
+                    msg = q.get(timeout=100)
+                    assert msg == "passed"
+            finally::
+                for p in ps:
+                    p.join()
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
