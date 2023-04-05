@@ -8,6 +8,7 @@ from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 from torchrl.envs.utils import _selective_unsqueeze
 
+IMPORT_ERR = None
 try:
     import vmas
 
@@ -16,7 +17,7 @@ try:
 except ImportError as err:
 
     _has_vmas = False
-    IMPORT_ERR = str(err)
+    IMPORT_ERR = err
 
 __all__ = ["VmasWrapper", "VmasEnv"]
 
