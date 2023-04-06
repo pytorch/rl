@@ -11,39 +11,6 @@ permissions:
   contents: write
 
 jobs:
-  benchmark_cpu:
-    name: CPU Pytest benchmark
-    runs-on: ubuntu-20.04
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: 3.8
-      - name: Setup Environment
-        run: |
-          python -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu 
-          python -m pip install git+https://github.com/pytorch-labs/tensordict 
-          python -m pip install -e .
-          python -m pip install pytest pytest-benchmark
-          python -m pip install dm_control
-      - name: Run benchmarks
-        run: |
-          cd benchmarks/
-          python -m pytest --benchmark-json output.json
-      - name: Store benchmark results
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: CPU Benchmark Results
-          tool: 'pytest'
-          output-file-path: benchmarks/output.json
-          fail-on-alert: true
-          alert-threshold: '200%'
-          alert-comment-cc-users: '@vmoens'
-          comment-on-alert: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          gh-pages-branch: gh-pages
-          auto-push: true
-
 
   benchmark_gpu:
     name: GPU Pytest benchmark
@@ -95,7 +62,7 @@ jobs:
         echo /usr/local/bin >> $GITHUB_PATH
     - name: Setup Environment
       run: |
-        python -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118 
+        python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118 
         python -m pip install git+https://github.com/pytorch-labs/tensordict 
         python -m pip install -e .
         python -m pip install pytest pytest-benchmark
@@ -118,4 +85,36 @@ jobs:
         gh-pages-branch: gh-pages
         auto-push: true
 
-    
+  benchmark_cpu:
+    name: CPU Pytest benchmark
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.8
+      - name: Setup Environment
+        run: |
+          python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu 
+          python -m pip install git+https://github.com/pytorch-labs/tensordict 
+          python -m pip install -e .
+          python -m pip install pytest pytest-benchmark
+          python -m pip install dm_control
+      - name: Run benchmarks
+        run: |
+          cd benchmarks/
+          python -m pytest --benchmark-json output.json
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: CPU Benchmark Results
+          tool: 'pytest'
+          output-file-path: benchmarks/output.json
+          fail-on-alert: true
+          alert-threshold: '200%'
+          alert-comment-cc-users: '@vmoens'
+          comment-on-alert: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-pages-branch: gh-pages
+          auto-push: true
+
