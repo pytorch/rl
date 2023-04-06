@@ -1179,8 +1179,9 @@ del collector
 # We make a simple plot of the average rewards during training. We can observe
 # that our policy learned quite well to solve the task.
 #
-# **Note**: As already mentioned above, to get a more reasonable performance,
-# use a greater value for ``total_frames`` e.g. 1M.
+# .. note::
+#   As already mentioned above, to get a more reasonable performance,
+#   use a greater value for ``total_frames`` e.g. 1M.
 
 from matplotlib import pyplot as plt
 

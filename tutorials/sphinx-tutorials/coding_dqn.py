@@ -486,7 +486,7 @@ tau = 0.02
 # However, one can easily get the same restriction on number of episodes by
 # breaking the training loop when a certain number
 # episodes has been collected.
-total_frames = 10_000  # 500000
+total_frames = 5_000  # 500000
 
 ###############################################################################
 # Random frames used to initialize the replay buffer.
