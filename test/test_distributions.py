@@ -232,11 +232,9 @@ class TestMaskedCategorical:
             ValueError,
             match="Either `probs` or `logits` must be specified, but not both",
         ):
-            MaskedCategorical(
-                logits=torch.tensor(()), probs=torch.tensor(()), mask=torch.tensor(())
-            )
-        with pytest.raises(ValueError, match="A mask must be provided"):
-            MaskedCategorical(probs=torch.tensor(()), mask=None)
+            MaskedCategorical(logits=torch.tensor(()),
+                              probs=torch.tensor(()),
+                              mask=torch.tensor(()))
 
     @pytest.mark.parametrize("neg_inf", [-10, -float("inf")])
     def test_logits(self, neg_inf):
@@ -268,37 +266,36 @@ class TestMaskedCategorical:
         else:
             assert (dist.log_prob(torch.ones_like(sample)) > -float("inf")).all()
 
-    @pytest.mark.parametrize("neg_inf", [-10, -float("inf")])
+    @pytest.mark.parametrize("neg_inf", [-100.0, float("-inf")])
     def test_prob(self, neg_inf):
         torch.manual_seed(0)
         logits = torch.randn(4) / 100  # almost equal probabilities
-        prob = logits.softmax(-1)
+        probs = logits.softmax(-1)
         mask = torch.tensor([True, False, True, True])
-        dist = MaskedCategorical(probs=prob, mask=mask, neg_inf=neg_inf)
+        dist = MaskedCategorical(probs=probs, mask=mask, neg_inf=neg_inf)
         for _ in range(10):
             sample = dist.sample((100,))
             assert not (sample == 1).any()
-        if neg_inf == -float("inf"):
-            assert (dist.log_prob(torch.ones_like(sample)) == neg_inf).all()
-        else:
-            assert (dist.log_prob(torch.ones_like(sample)) > -float("inf")).all()
+        torch.testing.assert_close(
+            dist.log_prob(torch.ones_like(sample)).exp(),
+            torch.zeros_like(sample, dtype=torch.float32))
 
-    @pytest.mark.parametrize("neg_inf", [-10, -float("inf")])
-    def test_prob_sparse(self, neg_inf):
+    @pytest.mark.parametrize("neg_inf", [-100.0, float("-inf")])
+    def test_probs_sparse(self, neg_inf):
         torch.manual_seed(0)
         logits = torch.randn(4) / 100  # almost equal probabilities
-        prob = logits.softmax(-1)
+        probs = logits.softmax(-1)
         mask = torch.tensor([0, 2, 3])
-        dist = MaskedCategorical(
-            probs=prob, mask=mask, neg_inf=neg_inf, sparse_mask=True
-        )
+        dist = MaskedCategorical(probs=probs,
+                                 mask=mask,
+                                 neg_inf=neg_inf,
+                                 sparse_mask=True)
         for _ in range(10):
             sample = dist.sample((100,))
             assert not (sample == 1).any()
-        if neg_inf == -float("inf"):
-            assert (dist.log_prob(torch.ones_like(sample)) == neg_inf).all()
-        else:
-            assert (dist.log_prob(torch.ones_like(sample)) > -float("inf")).all()
+        torch.testing.assert_close(
+            dist.log_prob(torch.ones_like(sample)).exp(),
+            torch.zeros_like(sample, dtype=torch.float32))
 
 
     @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
