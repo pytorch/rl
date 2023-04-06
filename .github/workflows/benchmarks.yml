@@ -1,6 +1,6 @@
 name: Continuous Benchmark
 on:
-  pull_request:
+#  pull_request:
   workflow_run:
     workflows: ["Generate documentation"]
     types:
