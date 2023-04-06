@@ -90,7 +90,7 @@ jobs:
         $HOME/miniconda/bin/conda info
         $HOME/miniconda/bin/activate build_binary
     - name: Setup git
-      run: git config --global --add safe.directory /__w/rl/torchrl
+      run: git config --global --add safe.directory /__w/rl/rl
     - name: setup Path
       run: |
         echo /usr/local/bin >> $GITHUB_PATH
