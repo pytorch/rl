@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 from functools import wraps
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 from tensordict import MemmapTensor, TensorDictBase
@@ -23,7 +23,7 @@ __all__ = [
     "vec_td_lambda_advantage_estimate",
 ]
 
-from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor
+from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor, _fast_gae
 
 
 def _transpose_time(fun):
@@ -116,8 +116,8 @@ def generalized_advantage_estimate(
 
 @_transpose_time
 def vec_generalized_advantage_estimate(
-    gamma: float,
-    lmbda: float,
+    gamma: Union[float, torch.Tensor],
+    lmbda: Union[float, torch.Tensor],
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
@@ -151,19 +151,34 @@ def vec_generalized_advantage_estimate(
     *batch_size, time_steps, lastdim = not_done.shape
 
     value = gamma * lmbda
+
+    #print(f"{value = }")
+
     if isinstance(value, torch.Tensor):
         # create tensor while ensuring that gradients are passed
-        gammalmbdas = torch.ones_like(not_done) * not_done * value
+        gammalmbdas = not_done * value
     else:
-        gammalmbdas = torch.full_like(not_done, value) * not_done
+        # when gamma and lmbda are scalars, use fast_gae implementation
+        return _fast_gae(
+            reward=reward,
+            state_value=state_value,
+            next_state_value=next_state_value,
+            done=done,
+            gamma=gamma,
+            lmbda=lmbda
+        )
+        #gammalmbdas = torch.full_like(not_done, value) * not_done
+
     gammalmbdas = _make_gammas_tensor(gammalmbdas, time_steps, True)
     gammalmbdas = gammalmbdas.cumprod(-2)
-    # first_below_thr = gammalmbdas < 1e-7
-    # # if we have multiple gammas, we only want to truncate if _all_ of
-    # # the geometric sequences fall below the threshold
-    # first_below_thr = first_below_thr.all(axis=0)
-    # if first_below_thr.any():
-    #     gammalmbdas = gammalmbdas[..., :first_below_thr, :]
+
+    first_below_thr = gammalmbdas < 1e-7
+    # if we have multiple gammas, we only want to truncate if _all_ of
+    # the geometric sequences fall below the threshold
+    first_below_thr = first_below_thr.flatten(0, 1).all(0).all(-1)
+    if first_below_thr.any():
+        first_below_thr = torch.where(first_below_thr)[0][0].item()
+        gammalmbdas = gammalmbdas[..., :first_below_thr, :]
 
     td0 = reward + not_done * gamma * next_state_value - state_value
 

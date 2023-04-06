@@ -78,3 +78,5 @@ def test_values(benchmark, val_fn, has_lmbda, has_state_value):
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+    # vec_td_lambda_return_estimate(**setup_value_fn(True, False)()[1])
+    # vec_generalized_advantage_estimate(**setup_value_fn(True, True)()[1])
