@@ -682,7 +682,7 @@ def print_csv_files_in_folder(folder_path):
     print(output_str)
 
 
-print_csv_files_in_folder("/var/folders/zs/9lq15k8x61l1g0c_sf__63c80000gn/T/tmpejpilvhb/dqn_exp_6d35f974-d3c2-11ed-8df6-acde48001122")
+print_csv_files_in_folder(logger.experiment.log_dir)
 
 ###############################################################################
 # Conclusion and possible improvements
