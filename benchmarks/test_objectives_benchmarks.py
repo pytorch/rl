@@ -1,0 +1,76 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+import pytest
+import torch
+from torchrl.objectives.value.functional import (
+    generalized_advantage_estimate,
+    td0_return_estimate,
+    td1_return_estimate,
+    td_lambda_return_estimate,
+    vec_generalized_advantage_estimate,
+    vec_td1_return_estimate,
+    vec_td_lambda_return_estimate,
+)
+
+
+class setup_value_fn:
+    def __init__(self, has_lmbda, has_state_value):
+        self.has_lmbda = has_lmbda
+        self.has_state_value = has_state_value
+
+    def __call__(
+        self,
+        b=[
+            300,
+        ],
+        t=500,
+        d=1,
+        gamma=0.95,
+        lmbda=0.95,
+    ):
+        torch.manual_seed(0)
+        device = "cuda:0" if torch.cuda.device_count() else "cpu"
+        values = torch.randn(*b, t, d, device=device)
+        next_values = torch.randn(*b, t, d, device=device)
+        reward = torch.randn(*b, t, d, device=device).bernoulli_()
+        done = torch.zeros(*b, t, d, dtype=torch.bool, device=device)
+        kwargs = {
+            "gamma": gamma,
+            "next_state_value": next_values,
+            "reward": reward,
+            "done": done,
+        }
+        if self.has_lmbda:
+            kwargs["lmbda"] = lmbda
+
+        if self.has_state_value:
+            kwargs["state_value"] = values
+
+        return ((), kwargs)
+
+
+@pytest.mark.parametrize(
+    "val_fn,has_lmbda,has_state_value",
+    [
+        [generalized_advantage_estimate, True, True],
+        [vec_generalized_advantage_estimate, True, True],
+        [td0_return_estimate, False, False],
+        [td1_return_estimate, False, False],
+        [vec_td1_return_estimate, False, False],
+        [td_lambda_return_estimate, True, False],
+        [vec_td_lambda_return_estimate, True, False],
+    ],
+)
+def test_values(benchmark, val_fn, has_lmbda, has_state_value):
+    benchmark.pedantic(
+        val_fn,
+        setup=setup_value_fn(
+            has_lmbda=has_lmbda,
+            has_state_value=has_state_value,
+        ),
+        iterations=1,
+        rounds=500,
+    )

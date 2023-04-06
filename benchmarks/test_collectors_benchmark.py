@@ -1,3 +1,7 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 import pytest
 import torch.cuda
 
@@ -149,6 +153,7 @@ def test_async(benchmark):
     benchmark.pedantic(
         execute_collector, setup=async_collector_setup, iterations=1, rounds=5
     )
+
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="no rendering without cuda")
 def test_single_pixels(benchmark):
