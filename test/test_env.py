@@ -32,6 +32,9 @@ from mocking_classes import (
 from packaging import version
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
+
+from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector, \
+    MultiSyncDataCollector
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
@@ -45,6 +48,9 @@ from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
+import torch
+from torch import nn
+from torchrl.envs import ParallelEnv
 
 gym_version = None
 if _has_gym:
@@ -1114,43 +1120,28 @@ def test_info_dict_reader(device, seed=0):
     )
 
 
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
 class TestConcurrentEnvs:
     """Concurrent parallel envs on multiple procs can interfere."""
 
+    class Policy(nn.Module):
+        in_keys = []
+        out_keys = ["action"]
+        def __init__(self, spec):
+            super().__init__()
+            self.spec = spec
+        def forward(self, tensordict):
+            tensordict.set("action", self.spec.zero() + 1)
+            return tensordict
+
     @staticmethod
-    def main(j, q=None):
-        import torch
-        from torch import nn
-
-        from torchrl.envs import ParallelEnv
-        from torchrl.modules import SafeModule
-
+    def main_penv(j, q=None):
         device = "cpu" if not torch.cuda.device_count() else "cuda:0"
-
         n_workers = 1
-        n_vectorized_envs = 600
-        n_agents = 4
-
         env_p = ParallelEnv(n_workers, [lambda i=i: CountingEnv(i, device=device) for i in range(j, j+n_workers)])
         env_s = SerialEnv(n_workers, [lambda i=i: CountingEnv(i, device=device) for i in range(j, j+n_workers)])
         spec = env_p.action_spec
-        class Policy(nn.Module):
-            in_keys = []
-            out_keys = ["action"]
-            def forward(self, tensordict):
-                tensordict.set("action", spec.zero()+1)
-                return tensordict
-        policy = Policy()
-        # policy = SafeModule(
-        #     nn.Linear(
-        #         env_p.observation_spec["observation"].shape[-1],
-        #         env_p.action_spec.shape[-1],
-        #         device=device,
-        #     ),
-        #     in_keys=["observation"],
-        #     out_keys=["action"],
-        # )
-
+        policy = TestConcurrentEnvs.Policy(spec)
         N = 10
         r_p = []
         r_s = []
@@ -1170,17 +1161,79 @@ class TestConcurrentEnvs:
             else:
                 raise RuntimeError()
 
+    @staticmethod
+    def main_collector(j, q=None):
+        device = "cpu" if not torch.cuda.device_count() else "cuda:0"
+        N = 10
+        n_workers = 1
+        class Policy(nn.Module):
+            in_keys = []
+            out_keys = ["action"]
+            def forward(self, tensordict):
+                tensordict.set("action", spec.zero()+1)
+                return tensordict
+        make_envs = [lambda i=i: CountingEnv(i, device=device) for i in range(j, j+n_workers)]
+        spec = make_envs[0]().action_spec
+        policy = TestConcurrentEnvs.Policy(spec)
+        collector = MultiSyncDataCollector(make_envs, policy, frames_per_batch=n_workers*100, total_frames=N*n_workers*100)
+        single_collectors = [SyncDataCollector(
+            make_envs[i](),
+            policy,
+            frames_per_batch=n_workers * 100,
+            total_frames=N * n_workers * 100
+            ) for i in range(n_workers)]
+        collector = iter(collector)
+        single_collectors = [iter(sc) for sc in single_collectors]
+
+        r_p = []
+        r_s = []
+        for i in range(N):
+            with torch.no_grad():
+                r_p.append(next(collector))
+                r_s.append(torch.cat([next(sc) for sc in single_collectors]))
+
+        if (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all():
+            if q is not None:
+                q.put("passed")
+            else:
+                pass
+        else:
+            if q is not None:
+                q.put("failed")
+            else:
+                raise RuntimeError()
+
     @pytest.mark.parametrize('nproc', [1, 3])
     def test_mp_concurrent(self, nproc):
         if nproc == 1:
-            self.main(3)
+            self.main_penv(3)
         else:
             from torch import multiprocessing as mp
             q = mp.Queue(3)
             ps = []
             try:
                 for k in range(3, 10, 3):
-                    p = mp.Process(target=type(self).main, args=(k, q))
+                    p = mp.Process(target=type(self).main_penv, args=(k, q))
+                    ps.append(p)
+                    p.start()
+                for i in range(3):
+                    msg = q.get(timeout=100)
+                    assert msg == "passed"
+            finally:
+                for p in ps:
+                    p.join()
+
+    @pytest.mark.parametrize('nproc', [1, 3])
+    def test_mp_collector(self, nproc):
+        if nproc == 1:
+            self.main_collector(3)
+        else:
+            from torch import multiprocessing as mp
+            q = mp.Queue(3)
+            ps = []
+            try:
+                for k in range(3, 10, 3):
+                    p = mp.Process(target=type(self).main_collector, args=(k, q))
                     ps.append(p)
                     p.start()
                 for i in range(3):
