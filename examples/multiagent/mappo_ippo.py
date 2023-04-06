@@ -2,22 +2,18 @@ import time
 
 import numpy as np
 import torch
-from tensordict.nn import TensorDictModule
-from tensordict.nn.distributions import NormalParamExtractor
-from torch import nn
 
 import wandb
 from models.mlp import MultiAgentMLP
+from tensordict.nn import TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
+from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
-from torchrl.modules import (
-    ProbabilisticActor,
-    TanhNormal,
-    ValueOperator,
-)
+from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
@@ -204,13 +200,20 @@ if __name__ == "__main__":
         sampling_time = time.time() - sampling_start
         print(f"Sampling took {sampling_time}")
 
+        with torch.no_grad():
+            loss_module.value_estimator(
+                tensordict_data,
+                params=loss_module.critic_params.detach(),
+                target_params=loss_module.target_critic_params,
+            )
+
         data_view = tensordict_data.reshape(-1)
         replay_buffer.extend(data_view)
 
         training_tds = []
         training_start = time.time()
-        for j in range(config["num_epochs"]):
-            for k in range(frames_per_batch // config["minibatch_size"]):
+        for _ in range(config["num_epochs"]):
+            for _ in range(frames_per_batch // config["minibatch_size"]):
                 subdata = replay_buffer.sample()
                 loss_vals = loss_module(subdata)
                 training_tds.append(loss_vals.detach())
