@@ -302,7 +302,7 @@ class TestMaskedCategorical:
 
 
     @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
-    def test_sample(self, neg_inf: float = float("-inf")) -> None:
+    def test_sample(self, neg_inf: float) -> None:
         torch.manual_seed(0)
         logits = torch.randn(4)
         probs = F.softmax(logits, dim=-1)
@@ -323,7 +323,7 @@ class TestMaskedCategorical:
                                    atol=1e-2)
 
     @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
-    def test_sample_sparse(self, neg_inf: float = float("-inf")) -> None:
+    def test_sample_sparse(self, neg_inf: float) -> None:
         torch.manual_seed(0)
         logits = torch.randn(4)
         probs = F.softmax(logits, dim=-1)
