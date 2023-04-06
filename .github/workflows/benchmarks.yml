@@ -21,12 +21,15 @@ jobs:
           python-version: 3.8
       - name: Setup Environment
         run: |
-          pip install -e .
-          pip install pytest pytest-benchmark
+        python -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu 
+        python -m pip install git+https://github.com/pytorch-labs/tensordict 
+        python -m pip install -e .
+        python -m pip install pytest pytest-benchmark
+        python -m pip install dm_control
       - name: Run benchmarks
         run: |
           cd benchmarks/
-          python -m pytest --rank 0 --benchmark-json output.json
+          python -m pytest --benchmark-json output.json
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         with:
@@ -100,7 +103,7 @@ jobs:
     - name: Run benchmarks
       run: |
         cd benchmarks/
-        python -m pytest --rank 0 --benchmark-json output.json
+        python -m pytest --benchmark-json output.json
     - name: Store benchmark results
       uses: benchmark-action/github-action-benchmark@v1
       with:
