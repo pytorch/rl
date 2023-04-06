@@ -37,7 +37,7 @@ from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector, \
     MultiSyncDataCollector
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
-    UnboundedContinuousTensorSpec,
+    UnboundedContinuousTensorSpec, CompositeSpec,
 )
 from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator
 from torchrl.envs.gym_like import default_info_dict_reader
@@ -1131,7 +1131,7 @@ class TestConcurrentEnvs:
             super().__init__()
             self.spec = spec
         def forward(self, tensordict):
-            tensordict.set("action", self.spec.zero() + 1)
+            tensordict.set("action", self.spec["action"].zero() + 1)
             return tensordict
 
     @staticmethod
@@ -1141,7 +1141,7 @@ class TestConcurrentEnvs:
         env_p = ParallelEnv(n_workers, [lambda i=i: CountingEnv(i, device=device) for i in range(j, j+n_workers)])
         env_s = SerialEnv(n_workers, [lambda i=i: CountingEnv(i, device=device) for i in range(j, j+n_workers)])
         spec = env_p.action_spec
-        policy = TestConcurrentEnvs.Policy(spec)
+        policy = TestConcurrentEnvs.Policy(CompositeSpec(action=spec))
         N = 10
         r_p = []
         r_s = []
@@ -1166,15 +1166,9 @@ class TestConcurrentEnvs:
         device = "cpu" if not torch.cuda.device_count() else "cuda:0"
         N = 10
         n_workers = 1
-        class Policy(nn.Module):
-            in_keys = []
-            out_keys = ["action"]
-            def forward(self, tensordict):
-                tensordict.set("action", spec.zero()+1)
-                return tensordict
         make_envs = [lambda i=i: CountingEnv(i, device=device) for i in range(j, j+n_workers)]
         spec = make_envs[0]().action_spec
-        policy = TestConcurrentEnvs.Policy(spec)
+        policy = TestConcurrentEnvs.Policy(CompositeSpec(action=spec))
         collector = MultiSyncDataCollector(make_envs, policy, frames_per_batch=n_workers*100, total_frames=N*n_workers*100)
         single_collectors = [SyncDataCollector(
             make_envs[i](),
