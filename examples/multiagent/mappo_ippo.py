@@ -26,11 +26,14 @@ def rendering_callback(env, td):
 if __name__ == "__main__":
     # Device
     training_device = "cpu" if not torch.has_cuda else "cuda:0"
-    vmas_device = training_device
+    vmas_device = "cpu"
 
     # Seeding
     seed = 0
     torch.manual_seed(seed)
+
+    # Log
+    log = True
 
     # Sampling
     frames_per_batch = 60_000  # Frames sampled each sampling iteration
@@ -72,7 +75,7 @@ if __name__ == "__main__":
 
     model_config = {
         "shared_parameters": True,
-        "centralised_critic": False,  # MAPPO if True, IPPO if False
+        "centralised_critic": True,  # MAPPO if True, IPPO if False
     }
 
     # Create env and env_test
@@ -177,20 +180,21 @@ if __name__ == "__main__":
     optim = torch.optim.Adam(loss_module.parameters(), config["lr"])
 
     # Logging
-    config.update({"model": model_config, "env": env_config})
-    model_name = (
-        ("Het" if not model_config["shared_parameters"] else "")
-        + ("MA" if model_config["centralised_critic"] else "I")
-        + "PPO"
-    )
-    logger = WandbLogger(
-        exp_name=generate_exp_name(env_config["scenario_name"], model_name),
-        project=f"torchrl_{env_config['scenario_name']}",
-        group=model_name,
-        save_code=True,
-        config=config,
-    )
-    wandb.run.log_code(".")
+    if log:
+        config.update({"model": model_config, "env": env_config})
+        model_name = (
+            ("Het" if not model_config["shared_parameters"] else "")
+            + ("MA" if model_config["centralised_critic"] else "I")
+            + "PPO"
+        )
+        logger = WandbLogger(
+            exp_name=generate_exp_name(env_config["scenario_name"], model_name),
+            project=f"torchrl_{env_config['scenario_name']}",
+            group=model_name,
+            save_code=True,
+            config=config,
+        )
+        wandb.run.log_code(".")
 
     total_time = 0
     sampling_start = time.time()
@@ -238,45 +242,50 @@ if __name__ == "__main__":
         print(f"Training took: {training_time}")
 
         # More logs
-        training_tds = torch.stack(training_tds)
-        logger.experiment.log(
-            {
-                f"train/learner/{key}": value.mean().item()
-                for key, value in training_tds.items()
-            },
-            commit=False,
-        )
-        if "info" in tensordict_data.keys():
+        if log:
+            training_tds = torch.stack(training_tds)
             logger.experiment.log(
                 {
-                    f"train/info/{key}": value.mean().item()
-                    for key, value in tensordict_data["info"].items()
+                    f"train/learner/{key}": value.mean().item()
+                    for key, value in training_tds.items()
                 },
                 commit=False,
             )
-        iteration_time = sampling_time + training_time
-        total_time += iteration_time
-        logger.experiment.log(
-            {
-                "train/reward/reward_min": tensordict_data["next", "reward"]
-                .min()
-                .item(),
-                "train/reward/reward_mean": tensordict_data["next", "reward"]
-                .mean()
-                .item(),
-                "train/reward/reward_max": tensordict_data["next", "reward"]
-                .max()
-                .item(),
-                "train/sampling_time": sampling_time,
-                "train/training_time": training_time,
-                "train/iteration_time": iteration_time,
-                "train/total_time": total_time,
-                "train/training_iteration": i,
-            },
-            commit=False,
-        )
+            if "info" in tensordict_data.keys():
+                logger.experiment.log(
+                    {
+                        f"train/info/{key}": value.mean().item()
+                        for key, value in tensordict_data["info"].items()
+                    },
+                    commit=False,
+                )
+            iteration_time = sampling_time + training_time
+            total_time += iteration_time
+            logger.experiment.log(
+                {
+                    "train/reward/reward_min": tensordict_data["next", "reward"]
+                    .min()
+                    .item(),
+                    "train/reward/reward_mean": tensordict_data["next", "reward"]
+                    .mean()
+                    .item(),
+                    "train/reward/reward_max": tensordict_data["next", "reward"]
+                    .max()
+                    .item(),
+                    "train/sampling_time": sampling_time,
+                    "train/training_time": training_time,
+                    "train/iteration_time": iteration_time,
+                    "train/total_time": total_time,
+                    "train/training_iteration": i,
+                },
+                commit=False,
+            )
 
-        if config["evaluation_episodes"] > 0 and i % config["evaluation_interval"] == 0:
+        if (
+            config["evaluation_episodes"] > 0
+            and i % config["evaluation_interval"] == 0
+            and log
+        ):
             evaluation_start = time.time()
             with torch.no_grad():
                 rollouts = []
@@ -324,6 +333,6 @@ if __name__ == "__main__":
                     },
                     commit=False,
                 )
-
-        logger.experiment.log({}, commit=True)
+        if log:
+            logger.experiment.log({}, commit=True)
         sampling_start = time.time()
