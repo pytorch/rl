@@ -153,17 +153,19 @@ def vec_generalized_advantage_estimate(
     value = gamma * lmbda
     if isinstance(value, torch.Tensor):
         # create tensor while ensuring that gradients are passed
-        gammalmbdas = torch.ones_like(not_done) * not_done * value
+        gammalmbdas = not_done * value
     else:
         gammalmbdas = torch.full_like(not_done, value) * not_done
     gammalmbdas = _make_gammas_tensor(gammalmbdas, time_steps, True)
     gammalmbdas = gammalmbdas.cumprod(-2)
-    # first_below_thr = gammalmbdas < 1e-7
-    # # if we have multiple gammas, we only want to truncate if _all_ of
-    # # the geometric sequences fall below the threshold
-    # first_below_thr = first_below_thr.all(axis=0)
-    # if first_below_thr.any():
-    #     gammalmbdas = gammalmbdas[..., :first_below_thr, :]
+
+    first_below_thr = gammalmbdas < 1e-7
+    # if we have multiple gammas, we only want to truncate if _all_ of
+    # the geometric sequences fall below the threshold
+    first_below_thr = first_below_thr.flatten(0, 1).all(0).all(-1)
+    if first_below_thr.any():
+        first_below_thr = torch.where(first_below_thr)[0][0].item()
+        gammalmbdas = gammalmbdas[..., :first_below_thr, :]
 
     td0 = reward + not_done * gamma * next_state_value - state_value
 

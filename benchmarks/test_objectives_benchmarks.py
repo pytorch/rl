@@ -34,8 +34,8 @@ class setup_value_fn:
         device = "cuda:0" if torch.cuda.device_count() else "cpu"
         values = torch.randn(b, t, d, device=device)
         next_values = torch.randn(b, t, d, device=device)
-        reward = torch.randn(b, t, d, device=device).bernoulli_()
-        done = torch.zeros(b, t, d, dtype=torch.bool, device=device)
+        reward = torch.randn(b, t, d, device=device)
+        done = torch.zeros(b, t, d, dtype=torch.bool, device=device).bernoulli_(0.1)
         kwargs = {
             "gamma": gamma,
             "next_state_value": next_values,
@@ -78,3 +78,5 @@ def test_values(benchmark, val_fn, has_lmbda, has_state_value):
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+    # vec_td_lambda_return_estimate(**setup_value_fn(True, False)()[1])
+    # vec_generalized_advantage_estimate(**setup_value_fn(True, True)()[1])
