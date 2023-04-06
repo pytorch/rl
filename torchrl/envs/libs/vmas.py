@@ -419,7 +419,7 @@ class VmasEnv(VmasWrapper):
 
     def __init__(
         self,
-        scenario: Union[str, vmas.simulator.scenario.BaseScenario],
+        scenario: Union[str, "vmas.simulator.scenario.BaseScenario"],
         num_envs: int,
         continuous_actions: bool = True,
         max_steps: Optional[int] = None,
@@ -446,7 +446,7 @@ class VmasEnv(VmasWrapper):
 
     def _build_env(
         self,
-        scenario: Union[str, vmas.simulator.scenario.BaseScenario],
+        scenario: Union[str, "vmas.simulator.scenario.BaseScenario"],
         num_envs: int,
         continuous_actions: bool,
         max_steps: Optional[int],
