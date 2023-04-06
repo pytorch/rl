@@ -345,7 +345,6 @@ class _BraxEnvStep(torch.autograd.Function):
     def forward(ctx, env: BraxWrapper, state_td, action_tensor, *qp_values):
 
         # convert tensors to ndarrays
-        print(state_td)
         state_obj = _tensordict_to_object(state_td, env._state_example)
         action_nd = _tensor_to_ndarray(action_tensor)
 
@@ -380,13 +379,32 @@ class _BraxEnvStep(torch.autograd.Function):
     def backward(ctx, _, grad_next_obs, grad_next_reward, *grad_next_qp_values):
 
         # build gradient tensordict with zeros in fields with no grad
-        if grad_next_reward is None:
-            grad_next_reward = torch.zeros((*ctx.env.batch_size, 1), device=ctx.env.device)
+        # if grad_next_reward is None:
+        #     raise RuntimeError("grad_next_reward")
+        #     grad_next_reward = torch.zeros((*ctx.env.batch_size, 1), device=ctx.env.device)
+        # if grad_next_obs is None:
+        #     raise RuntimeError("grad_next_obs")
+        # if any(val is None for val in grad_next_qp_values):
+        #     raise RuntimeError("grad_next_qp_values")
+
+        pipeline_state = dict(
+            zip(ctx.next_state["pipeline_state"].keys(), grad_next_qp_values)
+        )
+        none_keys = []
+
+        def _make_none(key, val):
+            if val is not None:
+                return val
+            none_keys.append(key)
+            return torch.zeros_like(ctx.next_state["pipeline_state"][key])
+
+        pipeline_state = {
+            key: _make_none(key, val) for key, val in pipeline_state.items()
+        }
+
         grad_next_state_td = TensorDict(
             source={
-                "pipeline_state": dict(
-                    zip(ctx.next_state["pipeline_state"].keys(), grad_next_qp_values)
-                ),
+                "pipeline_state": pipeline_state,
                 "obs": grad_next_obs,
                 "reward": grad_next_reward,
                 "done": torch.zeros_like(ctx.next_state["done"]),
@@ -399,11 +417,11 @@ class _BraxEnvStep(torch.autograd.Function):
             },
             device=ctx.env.device,
             batch_size=ctx.env.batch_size,
-            # _run_checks=False,
         )
-        print(grad_next_state_td)
         # convert tensors to ndarrays
-        grad_next_state_obj = _tensordict_to_object(grad_next_state_td, ctx.env._state_example)
+        grad_next_state_obj = _tensordict_to_object(
+            grad_next_state_td, ctx.env._state_example
+        )
 
         # flatten batch size
         grad_next_state_flat = _tree_flatten(grad_next_state_obj, ctx.env.batch_size)
@@ -417,8 +435,13 @@ class _BraxEnvStep(torch.autograd.Function):
 
         # convert ndarrays to tensors
         grad_state_qp = _object_to_tensordict(
-            grad_state.qp, device=ctx.env.device, batch_size=ctx.env.batch_size
+            grad_state.pipeline_state,
+            device=ctx.env.device,
+            batch_size=ctx.env.batch_size,
         )
         grad_action = _ndarray_to_tensor(grad_action)
-
+        grad_state_qp = {
+            key: val if key not in none_keys else None
+            for key, val in grad_state_qp.items()
+        }
         return (None, None, grad_action, *grad_state_qp.values())
