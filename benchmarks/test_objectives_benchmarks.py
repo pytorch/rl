@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import argparse
 
 import pytest
 import torch
@@ -23,9 +24,7 @@ class setup_value_fn:
 
     def __call__(
         self,
-        b=[
-            300,
-        ],
+        b=300,
         t=500,
         d=1,
         gamma=0.95,
@@ -33,10 +32,10 @@ class setup_value_fn:
     ):
         torch.manual_seed(0)
         device = "cuda:0" if torch.cuda.device_count() else "cpu"
-        values = torch.randn(*b, t, d, device=device)
-        next_values = torch.randn(*b, t, d, device=device)
-        reward = torch.randn(*b, t, d, device=device).bernoulli_()
-        done = torch.zeros(*b, t, d, dtype=torch.bool, device=device)
+        values = torch.randn(b, t, d, device=device)
+        next_values = torch.randn(b, t, d, device=device)
+        reward = torch.randn(b, t, d, device=device).bernoulli_()
+        done = torch.zeros(b, t, d, dtype=torch.bool, device=device)
         kwargs = {
             "gamma": gamma,
             "next_state_value": next_values,
@@ -72,5 +71,10 @@ def test_values(benchmark, val_fn, has_lmbda, has_state_value):
             has_state_value=has_state_value,
         ),
         iterations=1,
-        rounds=500,
+        rounds=50,
     )
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
