@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import torch
 
+import torchrl
 from _utils_internal import (
     _make_multithreaded_env,
     CARTPOLE_VERSIONED,
@@ -44,7 +45,6 @@ from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
-
 
 D4RL_ERR = None
 try:
@@ -924,17 +924,27 @@ class TestBrax:
 
 
 @pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
-@pytest.mark.parametrize(
-    "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
-)
 class TestVmas:
+    @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
+    def test_all_vmas_scenarios(self, scenario_name):
+        env = VmasEnv(
+            scenario=scenario_name,
+            num_envs=4,
+        )
+        env.set_seed(0)
+        env.reset()
+        env.rollout(10)
+
+    @pytest.mark.parametrize(
+        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+    )
     def test_vmas_seeding(self, scenario_name):
         final_seed = []
         tdreset = []
         tdrollout = []
         for _ in range(2):
             env = VmasEnv(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=4,
             )
             final_seed.append(env.set_seed(0))
@@ -949,6 +959,7 @@ class TestVmas:
     @pytest.mark.parametrize(
         "batch_size", [(), (12,), (12, 2), (12, 3), (12, 3, 1), (12, 3, 4)]
     )
+    @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
     def test_vmas_batch_size_error(self, scenario_name, batch_size):
         num_envs = 12
         n_agents = 2
@@ -958,7 +969,7 @@ class TestVmas:
                 match="Batch size used in constructor is not compatible with vmas.",
             ):
                 _ = VmasEnv(
-                    scenario_name=scenario_name,
+                    scenario=scenario_name,
                     num_envs=num_envs,
                     n_agents=n_agents,
                     batch_size=batch_size,
@@ -969,14 +980,14 @@ class TestVmas:
                 match="Batch size used in constructor does not match vmas batch size.",
             ):
                 _ = VmasEnv(
-                    scenario_name=scenario_name,
+                    scenario=scenario_name,
                     num_envs=num_envs,
                     n_agents=n_agents,
                     batch_size=batch_size,
                 )
         else:
             _ = VmasEnv(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=num_envs,
                 n_agents=n_agents,
                 batch_size=batch_size,
@@ -984,11 +995,14 @@ class TestVmas:
 
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
+    @pytest.mark.parametrize(
+        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+    )
     def test_vmas_batch_size(self, scenario_name, num_envs, n_agents):
         torch.manual_seed(0)
         n_rollout_samples = 5
         env = VmasEnv(
-            scenario_name=scenario_name,
+            scenario=scenario_name,
             num_envs=num_envs,
             n_agents=n_agents,
         )
@@ -1011,11 +1025,14 @@ class TestVmas:
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
     @pytest.mark.parametrize("continuous_actions", [True, False])
+    @pytest.mark.parametrize(
+        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+    )
     def test_vmas_spec_rollout(
         self, scenario_name, num_envs, n_agents, continuous_actions
     ):
         env = VmasEnv(
-            scenario_name=scenario_name,
+            scenario=scenario_name,
             num_envs=num_envs,
             n_agents=n_agents,
             continuous_actions=continuous_actions,
@@ -1035,20 +1052,26 @@ class TestVmas:
 
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
+    @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
     def test_vmas_repr(self, scenario_name, num_envs, n_agents):
+        if n_agents == 1 and scenario_name == "balance":
+            return
         env = VmasEnv(
-            scenario_name=scenario_name,
+            scenario=scenario_name,
             num_envs=num_envs,
             n_agents=n_agents,
         )
         assert str(env) == (
-            f"{VmasEnv.__name__}(env={env._env}, num_envs={num_envs}, n_agents={env.n_agents},"
-            f" batch_size={torch.Size((num_envs,))}, device={env.device}) (scenario_name={scenario_name})"
+            f"{VmasEnv.__name__}(num_envs={num_envs}, n_agents={env.n_agents},"
+            f" batch_size={torch.Size((num_envs,))}, device={env.device}) (scenario={scenario_name})"
         )
 
     @pytest.mark.parametrize("num_envs", [1, 10])
     @pytest.mark.parametrize("n_workers", [1, 3])
     @pytest.mark.parametrize("continuous_actions", [True, False])
+    @pytest.mark.parametrize(
+        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+    )
     def test_vmas_parallel(
         self,
         scenario_name,
@@ -1062,7 +1085,7 @@ class TestVmas:
 
         def make_vmas():
             env = VmasEnv(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=num_envs,
                 n_agents=n_agents,
                 continuous_actions=continuous_actions,
@@ -1079,6 +1102,9 @@ class TestVmas:
 
     @pytest.mark.parametrize("num_envs", [1, 10])
     @pytest.mark.parametrize("n_workers", [1, 3])
+    @pytest.mark.parametrize(
+        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+    )
     def test_vmas_reset(
         self,
         scenario_name,
@@ -1092,7 +1118,7 @@ class TestVmas:
 
         def make_vmas():
             env = VmasEnv(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=num_envs,
                 n_agents=n_agents,
                 max_steps=max_steps,
@@ -1126,13 +1152,16 @@ class TestVmas:
 
     @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
     @pytest.mark.parametrize("first", [0, 1])
+    @pytest.mark.parametrize(
+        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+    )
     def test_to_device(self, scenario_name: str, first: int):
         torch.manual_seed(0)
         devices = get_available_devices()
 
         def make_vmas():
             env = VmasEnv(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=7,
                 n_agents=3,
                 seed=0,

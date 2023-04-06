@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
@@ -65,38 +65,37 @@ class VmasWrapper(_EnvWrapper):
         ...  )
         >>>  print(env.rollout(10))
         TensorDict(
-             fields={
-                 action: Tensor(torch.Size([5, 32, 10, 2]), dtype=torch.float64),
-                 done: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.bool),
-                 info: TensorDict(
-                     fields={
-                         cohesion_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
-                         collision_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
-                         separation_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
-                         velocity_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32)},
-                     batch_size=torch.Size([5, 32, 10]),
-                     device=cpu,
-                     is_shared=False),
-                 next: TensorDict(
-                     fields={
-                         info: TensorDict(
-                             fields={
-                                 cohesion_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
-                                 collision_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
-                                 separation_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
-                                 velocity_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32)},
-                             batch_size=torch.Size([5, 32, 10]),
-                             device=cpu,
-                             is_shared=False),
-                         observation: Tensor(torch.Size([5, 32, 10, 18]), dtype=torch.float32)},
-                     batch_size=torch.Size([5, 32, 10]),
-                     device=cpu,
-                     is_shared=False),
-                 observation: Tensor(torch.Size([5, 32, 10, 18]), dtype=torch.float32),
-                 reward: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32)},
-             batch_size=torch.Size([5, 32, 10]),
-             device=cpu,
-             is_shared=False)
+            fields={
+                action: Tensor(shape=torch.Size([32, 10, 5, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                info: TensorDict(
+                    fields={
+                        agent_collision_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        agent_distance_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([32, 10, 5]),
+                    device=cpu,
+                    is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        info: TensorDict(
+                            fields={
+                                agent_collision_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                                agent_distance_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([32, 10, 5]),
+                            device=cpu,
+                            is_shared=False),
+                        observation: Tensor(shape=torch.Size([32, 10, 5, 18]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([32, 10]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([32, 10, 5, 18]), device=cpu, dtype=torch.float32, is_shared=False),
+                reward: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([32, 10]),
+            device=cpu,
+            is_shared=False)
+
     """
 
     git_url = "https://github.com/proroklab/VectorizedMultiAgentSimulator"
@@ -210,7 +209,7 @@ class VmasWrapper(_EnvWrapper):
             shape=torch.Size((self.n_agents, 1)),
             dtype=torch.bool,
             device=self.device,
-        )  # shape = (1,1): first 1 says it is shared by all agents, second 1 says shape
+        )  # shape = (n_agents, 1)
 
         self.input_spec = CompositeSpec(action=multi_agent_action_spec).expand(
             self.batch_size
@@ -282,10 +281,7 @@ class VmasWrapper(_EnvWrapper):
 
         tensordict_out = torch.stack(agent_tds, dim=1).to_tensordict()
         tensordict_out.batch_size = self.batch_size
-        tensordict_out.set(
-            "done", dones.expand(*self.batch_size, self.n_agents, 1).clone()
-        )
-
+        tensordict_out.set("done", dones)
         return tensordict_out
 
     def _step(
@@ -319,9 +315,7 @@ class VmasWrapper(_EnvWrapper):
 
         tensordict_out = torch.stack(agent_tds, dim=1).to_tensordict()
         tensordict_out.batch_size = self.batch_size
-        tensordict_out.set(
-            "done", dones.expand(*self.batch_size, self.n_agents, 1).clone()
-        )
+        tensordict_out.set("done", dones)
 
         return tensordict_out.select().set("next", tensordict_out)
 
@@ -349,7 +343,7 @@ class VmasWrapper(_EnvWrapper):
 
     def read_done(self, done):
         done = _selective_unsqueeze(done, batch_size=torch.Size((self.num_envs,)))
-        done = done.unsqueeze(-1)  # Done is shared by all agents
+        done = done.unsqueeze(-1).expand(*self.batch_size, self.n_agents, 1)
         return done
 
     def read_reward(self, rewards):
@@ -364,7 +358,7 @@ class VmasWrapper(_EnvWrapper):
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(env={self._env}, num_envs={self.num_envs}, n_agents={self.n_agents},"
+            f"{self.__class__.__name__}(num_envs={self.num_envs}, n_agents={self.n_agents},"
             f" batch_size={self.batch_size}, device={self.device})"
         )
 
@@ -378,7 +372,7 @@ class VmasEnv(VmasWrapper):
 
     Examples:
         >>>  env = VmasEnv(
-        ...      scenario_name="flocking",
+        ...      scenario="flocking",
         ...      num_envs=32,
         ...      continuous_actions=True,
         ...      max_steps=200,
@@ -425,7 +419,7 @@ class VmasEnv(VmasWrapper):
 
     def __init__(
         self,
-        scenario_name: str,
+        scenario: Union[str, vmas.simulator.scenario.BaseScenario],
         num_envs: int,
         continuous_actions: bool = True,
         max_steps: Optional[int] = None,
@@ -437,7 +431,7 @@ class VmasEnv(VmasWrapper):
                 f"vmas python package was not found. Please install this dependency. "
                 f"More info: {self.git_url}."
             ) from IMPORT_ERR
-        kwargs["scenario_name"] = scenario_name
+        kwargs["scenario"] = scenario
         kwargs["num_envs"] = num_envs
         kwargs["continuous_actions"] = continuous_actions
         kwargs["max_steps"] = max_steps
@@ -445,27 +439,27 @@ class VmasEnv(VmasWrapper):
         super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):
-        if "scenario_name" not in kwargs:
-            raise TypeError("Could not find environment key 'scenario_name' in kwargs.")
+        if "scenario" not in kwargs:
+            raise TypeError("Could not find environment key 'scenario' in kwargs.")
         if "num_envs" not in kwargs:
             raise TypeError("Could not find environment key 'num_envs' in kwargs.")
 
     def _build_env(
         self,
-        scenario_name: str,
+        scenario: Union[str, vmas.simulator.scenario.BaseScenario],
         num_envs: int,
         continuous_actions: bool,
         max_steps: Optional[int],
         seed: Optional[int],
         **scenario_kwargs,
     ) -> "vmas.simulator.environment.environment.Environment":
-        self.scenario_name = scenario_name
+        self.scenario_name = scenario
         from_pixels = scenario_kwargs.pop("from_pixels", False)
         pixels_only = scenario_kwargs.pop("pixels_only", False)
 
         return super()._build_env(
             env=vmas.make_env(
-                scenario=scenario_name,
+                scenario=scenario,
                 num_envs=num_envs,
                 device=self.device,
                 continuous_actions=continuous_actions,
@@ -479,4 +473,4 @@ class VmasEnv(VmasWrapper):
         )
 
     def __repr__(self):
-        return f"{super().__repr__()} (scenario_name={self.scenario_name})"
+        return f"{super().__repr__()} (scenario={self.scenario_name})"
