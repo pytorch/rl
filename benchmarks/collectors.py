@@ -1,5 +1,4 @@
 import torch.cuda
-import tqdm
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.collectors import (
@@ -128,7 +127,7 @@ def async_collector_setup_pixels():
 
 
 def execute_collector(c):
-    ## will run for 9 iterations (1 during setup)
+    # will run for 9 iterations (1 during setup)
     for _ in c:
         continue
 
