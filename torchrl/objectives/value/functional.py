@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 from functools import wraps
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 from tensordict import MemmapTensor, TensorDictBase
@@ -23,7 +23,7 @@ __all__ = [
     "vec_td_lambda_advantage_estimate",
 ]
 
-from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor
+from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor, _fast_gae
 
 
 def _transpose_time(fun):
@@ -116,8 +116,8 @@ def generalized_advantage_estimate(
 
 @_transpose_time
 def vec_generalized_advantage_estimate(
-    gamma: float,
-    lmbda: float,
+    gamma: Union[float, torch.Tensor],
+    lmbda: Union[float, torch.Tensor],
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
@@ -151,11 +151,24 @@ def vec_generalized_advantage_estimate(
     *batch_size, time_steps, lastdim = not_done.shape
 
     value = gamma * lmbda
+
+    #print(f"{value = }")
+
     if isinstance(value, torch.Tensor):
         # create tensor while ensuring that gradients are passed
         gammalmbdas = not_done * value
     else:
-        gammalmbdas = torch.full_like(not_done, value) * not_done
+        # when gamma and lmbda are scalars, use fast_gae implementation
+        return _fast_gae(
+            reward=reward,
+            state_value=state_value,
+            next_state_value=next_state_value,
+            done=done,
+            gamma=gamma,
+            lmbda=lmbda
+        )
+        #gammalmbdas = torch.full_like(not_done, value) * not_done
+
     gammalmbdas = _make_gammas_tensor(gammalmbdas, time_steps, True)
     gammalmbdas = gammalmbdas.cumprod(-2)
 
