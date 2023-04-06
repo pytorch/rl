@@ -1,3 +1,4 @@
+import pytest
 import torch.cuda
 
 from torchrl.collectors import SyncDataCollector
@@ -149,19 +150,21 @@ def test_async(benchmark):
         execute_collector, setup=async_collector_setup, iterations=1, rounds=5
     )
 
-
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="no rendering without cuda")
 def test_single_pixels(benchmark):
     benchmark.pedantic(
         execute_collector, setup=single_collector_setup_pixels, iterations=1, rounds=5
     )
 
 
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="no rendering without cuda")
 def test_sync_pixels(benchmark):
     benchmark.pedantic(
         execute_collector, setup=sync_collector_setup_pixels, iterations=1, rounds=5
     )
 
 
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="no rendering without cuda")
 def test_async_pixels(benchmark):
     benchmark.pedantic(
         execute_collector, setup=async_collector_setup_pixels, iterations=1, rounds=5
