@@ -45,9 +45,7 @@ if __name__ == "__main__":
 
     scenario_name = "balance"
     env_config = {
-        "n_agents": 4,
-        "same_goal": 1,
-        "collision_reward": -0.5,
+        "n_agents": 3,
     }
 
     config = {
@@ -72,18 +70,18 @@ if __name__ == "__main__":
         "max_grad_norm": 40.0,
         "training_device": training_device,
         # Evaluation
-        "evaluation_interval": 5,
+        "evaluation_interval": 20,
         "evaluation_episodes": 5,
     }
 
     model_config = {
         "shared_parameters": True,
-        "centralised_critic": False,
+        "centralised_critic": False,  # MAPPO if True, IPPO if False
     }
 
     # Create env and env_test
     env = VmasEnv(
-        scenario_name=scenario_name,
+        scenario=scenario_name,
         num_envs=vmas_envs,
         continuous_actions=True,
         max_steps=max_steps,
@@ -93,7 +91,7 @@ if __name__ == "__main__":
         **env_config,
     )
     env_test = VmasEnv(
-        scenario_name=scenario_name,
+        scenario=scenario_name,
         num_envs=1,
         continuous_actions=True,
         max_steps=max_steps,
@@ -113,7 +111,7 @@ if __name__ == "__main__":
             centralised=False,
             share_params=model_config["shared_parameters"],
             device=training_device,
-            depth=3,
+            depth=2,
             num_cells=256,
             activation_class=nn.Tanh,
         ),
@@ -142,7 +140,7 @@ if __name__ == "__main__":
         centralised=model_config["centralised_critic"],
         share_params=model_config["shared_parameters"],
         device=training_device,
-        depth=3,
+        depth=2,
         num_cells=256,
         activation_class=nn.Tanh,
     )
