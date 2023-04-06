@@ -1258,7 +1258,7 @@ class TestConcurrentEnvs:
                     assert msg == "passed"
             finally:
                 for p in ps:
-                    p.join()
+                    p.join(timeout=2)
 
 
 if __name__ == "__main__":
