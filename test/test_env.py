@@ -34,10 +34,7 @@ from packaging import version
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 
-from torchrl.collectors import (
-    MultiSyncDataCollector,
-    SyncDataCollector,
-)
+from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     OneHotDiscreteTensorSpec,
