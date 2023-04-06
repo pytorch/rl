@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from .generic import DEFAULT_SLURM_CONF, DistributedDataCollector
+from .ray import RayCollector
 from .rpc import RPCDataCollector
 from .sync import DistributedSyncDataCollector
 from .utils import submitit_delayed_launcher
