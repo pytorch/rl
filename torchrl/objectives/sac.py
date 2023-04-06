@@ -313,7 +313,7 @@ class SACLoss(LossModule):
                     "1": self.target_value_network_params,
                 }
             },
-            [],
+            torch.Size([]),
             _run_checks=False,
         )
         with set_exploration_mode("mode"):
