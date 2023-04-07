@@ -114,7 +114,6 @@ provides more information on how to design a custom environment from scratch.
     EnvBase
     GymLikeEnv
     EnvMetaData
-    Specs
 
 Vectorized envs
 ---------------
