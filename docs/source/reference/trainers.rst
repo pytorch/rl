@@ -73,7 +73,7 @@ Hooks can be split into 3 categories: **data processing** (:obj:`"batch_process"
 - **Data processing** hooks update a tensordict of data. Hooks :obj:`__call__` method should accept
   a :obj:`TensorDict` object as input and update it given some strategy.
   Examples of such hooks include Replay Buffer extension (:obj:`ReplayBufferTrainer.extend`), data normalization (including normalization
-  constants update), data subsampling (:class:`torchrl.trainers.BatchSubSampler`) and such.
+  constants update), data subsampling (:doc:`BatchSubSampler`) and such.
 
 - **Logging** hooks take a batch of data presented as a :obj:`TensorDict` and write in the logger
   some information retrieved from that data. Examples include the :obj:`Recorder` hook, the reward

@@ -715,8 +715,7 @@ class DistributionalQValueActor(QValueActor):
 class ActorValueOperator(SafeSequential):
     """Actor-value operator.
 
-    This class wraps together an actor and a value model that share a common
-    observation embedding network:
+    This class wraps together an actor and a value model that share a common observation embedding network:
 
     .. aafig::
         :aspect: 60
@@ -724,30 +723,22 @@ class ActorValueOperator(SafeSequential):
         :proportional:
         :textual:
 
-            +---------------+
-            |Observation (s)|
-            +---------------+
-                     |
-                     v
-                   common
-                     |
-                     v
-           +------------------+
-           |    Hidden state  |
-           +------------------+
-            |                |
-            v                v
-         actor             critic
-           |                 |
-           v                 v
-       +-------------+  +------------+
-       |Action (a(s))|  |Value (V(s))|
-       +-------------+  +------------+
-
-    .. note::
-      For a similar class that returns an action and a Quality value :math:`Q(s, a)`
-      see :class:`~.ActorCriticOperator`. For a version without common embeddig
-      refet to :class:`~.ActorCriticWrapper`.
+            +-------------+
+            |"Observation"|
+            +-------------+
+                   |
+                   v
+            +--------------+
+            |"hidden state"|
+            +--------------+
+            |      |       |
+            v      |       v
+            actor  |       critic
+            |      |       |
+            v      |       v
+         +--------+|+-------+
+         |"action"|||"value"|
+         +--------+|+-------+
 
     To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
     will both return a stand-alone TDModule with the dedicated functionality.
@@ -764,13 +755,17 @@ class ActorValueOperator(SafeSequential):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.modules import ProbabilisticActor, SafeModule
+        >>> from torchrl.data import UnboundedContinuousTensorSpec, BoundedTensorSpec
         >>> from torchrl.modules import ValueOperator, TanhNormal, ActorValueOperator, NormalParamWrapper
+        >>> spec_hidden = UnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
         >>> td_module_hidden = SafeModule(
         ...    module=module_hidden,
+        ...    spec=spec_hidden,
         ...    in_keys=["observation"],
         ...    out_keys=["hidden"],
         ...    )
+        >>> spec_action = BoundedTensorSpec(-1, 1, torch.Size([8]))
         >>> module_action = TensorDictModule(
         ...     NormalParamWrapper(torch.nn.Linear(4, 8)),
         ...     in_keys=["hidden"],
@@ -778,6 +773,7 @@ class ActorValueOperator(SafeSequential):
         ...     )
         >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
+        ...    spec=spec_action,
         ...    in_keys=["loc", "scale"],
         ...    out_keys=["action"],
         ...    distribution_class=TanhNormal,
@@ -858,8 +854,7 @@ class ActorValueOperator(SafeSequential):
 class ActorCriticOperator(ActorValueOperator):
     """Actor-critic operator.
 
-    This class wraps together an actor and a value model that share a common
-    observation embedding network:
+    This class wraps together an actor and a value model that share a common observation embedding network:
 
     .. aafig::
         :aspect: 60
@@ -867,58 +862,51 @@ class ActorCriticOperator(ActorValueOperator):
         :proportional:
         :textual:
 
-                +---------------+
-                |Observation (s)|
-                +---------------+
-                         |
-                         v
-                      common
-                         |
-                         v
-               +------------------+
-               |    Hidden state  |
-               +------------------+
-                |                |
-                v                v
-             actor  ------>   critic
-               |                 |
-               v                 v
-       +-------------+  +----------------+
-       |Action (a(s))|  |Quality (Q(s,a))|
-       +-------------+  +----------------+
-
-    .. note::
-      For a similar class that returns an action and a state-value :math:`V(s)`
-      see :class:`~.ActorValueOperator`.
-
+          +-----------+
+          |Observation|
+          +-----------+
+            |
+            v
+            actor
+            |
+            v
+        +------+
+        |action| --> critic
+        +------+      |
+                      v
+                   +-----+
+                   |value|
+                   +-----+
 
     To facilitate the workflow, this  class comes with a get_policy_operator() method, which
     will both return a stand-alone TDModule with the dedicated functionality. The get_critic_operator will return the
     parent object, as the value is computed based on the policy output.
 
     Args:
-        common_operator (TensorDictModule): a common operator that reads
-            observations and produces a hidden variable
-        policy_operator (TensorDictModule): a policy operator that reads the
-            hidden variable and returns an action
-        value_operator (TensorDictModule): a value operator, that reads the
-            hidden variable and returns a value
+        common_operator (TensorDictModule): a common operator that reads observations and produces a hidden variable
+        policy_operator (TensorDictModule): a policy operator that reads the hidden variable and returns an action
+        value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.modules import ProbabilisticActor
+        >>> from torchrl.data import UnboundedContinuousTensorSpec, BoundedTensorSpec
         >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper, MLP
+        >>> spec_hidden = UnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
         >>> td_module_hidden = SafeModule(
         ...    module=module_hidden,
+        ...    spec=spec_hidden,
         ...    in_keys=["observation"],
         ...    out_keys=["hidden"],
         ...    )
+        >>> spec_action = BoundedTensorSpec(-1, 1, torch.Size([8]))
         >>> module_action = NormalParamWrapper(torch.nn.Linear(4, 8))
         >>> module_action = TensorDictModule(module_action, in_keys=["hidden"], out_keys=["loc", "scale"])
         >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
+        ...    spec=spec_action,
         ...    in_keys=["loc", "scale"],
         ...    out_keys=["action"],
         ...    distribution_class=TanhNormal,
@@ -976,17 +964,8 @@ class ActorCriticOperator(ActorValueOperator):
 
     """
 
-    def __init__(
-        self,
-        common_operator: TensorDictModule,
-        policy_operator: TensorDictModule,
-        value_operator: TensorDictModule,
-    ):
-        super().__init__(
-            common_operator,
-            policy_operator,
-            value_operator,
-        )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         if self[2].out_keys[0] == "state_value":
             raise RuntimeError(
                 "Value out_key is state_value, which may lead to errors in downstream usages"
@@ -1019,18 +998,17 @@ class ActorCriticWrapper(SafeSequential):
         :proportional:
         :textual:
 
-               +---------------+
-               |Observation (s)|
-               +---------------+
-                |     |   |
-                v     |   v
-                actor |   critic
-                |     |   |
-                v     |   v
-       +-------------+|+------------+
-       |Action (a(s))|||Value (V(s))|
-       +-------------+|+------------+
-
+          +-----------+
+          |Observation|
+          +-----------+
+          |     |   |
+          v     |   v
+          actor |   critic
+          |     |   |
+          v     |   v
+        +------+|+-------+
+        |action||| value |
+        +------+|+-------+
 
     To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
     will both return a stand-alone TDModule with the dedicated functionality.
@@ -1043,6 +1021,7 @@ class ActorCriticWrapper(SafeSequential):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.data import UnboundedContinuousTensorSpec, BoundedTensorSpec
         >>> from torchrl.modules import (
         ...      ActorCriticWrapper,
         ...      ProbabilisticActor,
@@ -1050,6 +1029,7 @@ class ActorCriticWrapper(SafeSequential):
         ...      TanhNormal,
         ...      ValueOperator,
         ...  )
+        >>> action_spec = BoundedTensorSpec(-1, 1, torch.Size([8]))
         >>> action_module = TensorDictModule(
         ...        NormalParamWrapper(torch.nn.Linear(4, 8)),
         ...        in_keys=["observation"],
@@ -1057,6 +1037,7 @@ class ActorCriticWrapper(SafeSequential):
         ...    )
         >>> td_module_action = ProbabilisticActor(
         ...    module=action_module,
+        ...    spec=action_spec,
         ...    in_keys=["loc", "scale"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,

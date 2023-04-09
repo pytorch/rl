@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
 from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
-from tensordict.utils import expand_as_right
+from tensordict.utils import expand_right
 
 from torchrl.data.utils import DEVICE_TYPING
 
@@ -708,8 +708,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
         return index
 
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
-        if not isinstance(self._sampler, PrioritizedSampler):
-            return
         priority = torch.tensor(
             [self._get_priority(td) for td in data],
             dtype=torch.float,
@@ -755,7 +753,19 @@ class TensorDictReplayBuffer(ReplayBuffer):
         data, info = super().sample(batch_size, return_info=True)
         if include_info in (True, None):
             for k, v in info.items():
-                data.set(k, expand_as_right(torch.tensor(v, device=data.device), data))
+                data.set(k, torch.tensor(v, device=data.device))
+        if "_batch_size" in data.keys():
+            # we need to reset the batch-size
+            shape = data.pop("_batch_size")
+            shape = shape[0]
+            shape = torch.Size([data.shape[0], *shape])
+            # we may need to update some values in the data
+            for key, value in data.items():
+                if value.ndim >= len(shape):
+                    continue
+                value = expand_right(value, shape)
+                data.set(key, value)
+            data.batch_size = shape
         if return_info:
             return data, info
         return data

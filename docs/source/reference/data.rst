@@ -218,7 +218,7 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
 Utils
 -----
 
-.. currentmodule:: torchrl.data
+.. currentmodule:: torchrl.data.datasets
 
 .. autosummary::
     :toctree: generated/

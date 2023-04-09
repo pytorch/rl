@@ -9,10 +9,8 @@ from .actors import (
     ActorCriticWrapper,
     ActorValueOperator,
     DistributionalQValueActor,
-    DistributionalQValueHook,
     ProbabilisticActor,
     QValueActor,
-    QValueHook,
     ValueOperator,
 )
 from .common import SafeModule

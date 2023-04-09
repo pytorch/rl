@@ -132,12 +132,10 @@ class TD0Estimator(ValueEstimatorBase):
             before the TD is computed.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
-
             .. note::
               The proper way to make the function call non-differentiable is to
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
-
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
@@ -321,12 +319,10 @@ class TD1Estimator(ValueEstimatorBase):
             before the TD is computed.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
-
             .. note::
               The proper way to make the function call non-differentiable is to
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
-
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
@@ -510,12 +506,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
             before the TD is computed.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
-
             .. note::
               The proper way to make the function call non-differentiable is to
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
-
         vectorized (bool, optional): whether to use the vectorized version of the
             lambda return. Default is `True`.
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
@@ -716,12 +710,10 @@ class GAE(ValueEstimatorBase):
             Default is ``False``.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
-
             .. note::
               The proper way to make the function call non-differentiable is to
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
-
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
