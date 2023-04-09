@@ -602,8 +602,7 @@ for i, tensordict_data in enumerate(collector):
         # We'll need an "advantage" signal to make PPO work.
         # We re-compute it at each epoch as its value depends on the value
         # network which is updated in the inner loop.
-        with torch.no_grad():
-            advantage_module(tensordict_data)
+        advantage_module(tensordict_data)
         data_view = tensordict_data.reshape(-1)
         replay_buffer.extend(data_view.cpu())
         for _ in range(frames_per_batch // sub_batch_size):

@@ -32,7 +32,7 @@ TensorDict modules
 
 Hooks
 -----
-.. currentmodule:: torchrl.modules
+.. currentmodule:: torchrl.modules.tensordict_module.actors
 
 .. autosummary::
     :toctree: generated/

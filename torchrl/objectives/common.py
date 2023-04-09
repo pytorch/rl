@@ -102,10 +102,6 @@ class LossModule(nn.Module):
         params = make_functional(module, funs_to_decorate=funs_to_decorate)
         functional_module = deepcopy(module)
         repopulate_module(module, params)
-        # params = make_functional(
-        #     module, funs_to_decorate=funs_to_decorate, keep_params=True
-        # )
-        # functional_module = module
 
         params_and_buffers = params
         # we transform the buffers in params to make sure they follow the device
@@ -284,8 +280,7 @@ class LossModule(nn.Module):
                     value_to_set = getattr(
                         self, "_sep_".join(["_target_" + network_name, *key])
                     )
-                    # _set is faster bc is bypasses the checks
-                    target_params._set(key, value_to_set)
+                    target_params.set(key, value_to_set)
                 return target_params
             else:
                 params = getattr(self, param_name)
@@ -397,7 +392,7 @@ class LossModule(nn.Module):
         this method.
 
         Args:
-            value_type (ValueEstimators): A :class:`torchrl.objectives.utils.ValueEstimators`
+            value_type (ValueEstimators): A :class:`torchrl.objectives.utils.ValueFunctions`
                 enum type indicating the value function to use.
             **hyperparams: hyperparameters to use for the value function.
                 If not provided, the value indicated by

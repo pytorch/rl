@@ -18,7 +18,7 @@ from torchrl.envs.utils import step_mdp
 _GAMMA_LMBDA_DEPREC_WARNING = (
     "Passing gamma / lambda parameters through the loss constructor "
     "is deprecated and will be removed soon. To customize your value function, "
-    "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
+    "run `loss_module.make_value_estimator(ValueFunctions.<value_fun>, gamma=val)`."
 )
 
 
@@ -45,7 +45,7 @@ def default_value_kwargs(value_type: ValueEstimators):
 
     Args:
         value_type (Enum.value): the value function type, from the
-        :class:`torchrl.objectives.utils.ValueEstimators` class.
+        :class:`torchrl.objectives.utils.ValueFunctions` class.
 
     Examples:
         >>> kwargs = default_value_kwargs(ValueEstimators.TDLambda)
@@ -242,18 +242,15 @@ class TargetNetUpdater:
 
 
 class SoftUpdate(TargetNetUpdater):
-    r"""A soft-update class for target network update in Double DQN/DDPG.
+    """A soft-update class for target network update in Double DQN/DDPG.
 
     This was proposed in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf
 
     Args:
         loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
         eps (scalar): epsilon in the update equation:
-            .. math::
-
-                \theta_t = \theta_{t-1} * \epsilon + \theta_t * (1-\epsilon)
-
-            Defaults to 0.999
+            param = prev_param * eps + new_param * (1-eps)
+            default: 0.999
     """
 
     def __init__(
@@ -267,7 +264,7 @@ class SoftUpdate(TargetNetUpdater):
         ],
         eps: float = 0.999,
     ):
-        if not (eps <= 1.0 and eps >= 0.0):
+        if not (eps < 1.0 and eps > 0.0):
             raise ValueError(
                 f"Got eps = {eps} when it was supposed to be between 0 and 1."
             )
