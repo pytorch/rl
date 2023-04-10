@@ -281,7 +281,7 @@ class TestBinarizeReward(TransformBase):
         batch = [20]
         torch.manual_seed(0)
         br = BinarizeReward()
-        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
         rb.append_transform(br)
         reward = torch.randn(*batch, 1, device=device)
         misc = torch.randn(*batch, 1, device=device)
@@ -419,7 +419,7 @@ class TestCatFrames(TransformBase):
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
         cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
-        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
         rb.append_transform(cat_frames)
         rb.extend(td)
         with pytest.raises(
@@ -651,7 +651,7 @@ class TestR3M(TransformBase):
             out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
-        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
         rb.append_transform(r3m)
         td = TensorDict({"pixels": torch.randint(255, (10, 244, 244, 3))}, [10])
         rb.extend(td)
@@ -1027,7 +1027,7 @@ class TestStepCounter(TransformBase):
 
     def test_transform_rb(self):
         transform = StepCounter(10)
-        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
         td = TensorDict({"a": torch.randn(10)}, [10])
         rb.extend(td)
         rb.append_transform(transform)
@@ -1345,7 +1345,7 @@ class TestCatTensors(TransformBase):
             dim=-1,
             del_keys=True,
         )
-        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
         rb.append_transform(ct)
         td = (
             TensorDict(
@@ -1525,7 +1525,7 @@ class TestCenterCrop(TransformBase):
             batch,
         )
         td.set("dont touch", dont_touch.clone())
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(cc)
         rb.extend(td)
         td = rb.sample(10)
@@ -1668,7 +1668,7 @@ class TestDiscreteActionProjection(TransformBase):
 
     @pytest.mark.parametrize("include_forward", [True, False])
     def test_transform_rb(self, include_forward):
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         t = DiscreteActionProjection(7, 10, include_forward=include_forward)
         rb.append_transform(t)
         td = TensorDict(
@@ -1863,7 +1863,7 @@ class TestDoubleToFloat(TransformBase):
     def test_transform_rb(
         self,
     ):
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         t = DoubleToFloat(in_keys=["observation"], in_keys_inv=["action"])
         rb.append_transform(t)
         td = TensorDict(
@@ -2029,7 +2029,7 @@ class TestExcludeTransform(TransformBase):
 
     def test_transform_rb(self):
         t = ExcludeTransform("a")
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict(
             {
@@ -2193,7 +2193,7 @@ class TestSelectTransform(TransformBase):
 
     def test_transform_rb(self):
         t = SelectTransform("b", "c")
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict(
             {
@@ -2377,7 +2377,7 @@ class TestFlattenObservation(TransformBase):
     def test_transform_rb(self, out_keys):
         t = FlattenObservation(-3, -1, out_keys=out_keys)
         td = TensorDict({"pixels": torch.randint(255, (10, 10, 3))}, []).expand(10)
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         rb.extend(td)
         td = rb.sample(2)
@@ -2480,7 +2480,7 @@ class TestFrameSkipTransform(TransformBase):
 
     def test_transform_rb(self):
         t = FrameSkipTransform(2)
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         tensordict = TensorDict({"a": torch.zeros(10)}, [10])
         rb.extend(tensordict)
@@ -2678,7 +2678,7 @@ class TestGrayScale(TransformBase):
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
     def test_transform_rb(self, out_keys):
         td = TensorDict({"pixels": torch.rand(3, 12, 12)}, []).expand(3)
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(GrayScale(out_keys=out_keys))
         rb.extend(td)
         r = rb.sample(3)
@@ -2751,7 +2751,7 @@ class TestNoop(TransformBase):
 
     def test_transform_rb(self):
         t = NoopResetEnv()
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict({}, [10])
         rb.extend(td)
@@ -3025,7 +3025,7 @@ class TestObservationNorm(TransformBase):
                 standard_normal=standard_normal,
             )
         )
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(t)
 
         obs = torch.randn(7)
@@ -3449,7 +3449,7 @@ class TestResize(TransformBase):
 
     def test_transform_rb(self):
         t = Resize(20, 21, in_keys=["pixels"])
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict({"pixels": torch.randn(3, 32, 32)}, []).expand(10)
         rb.extend(td)
@@ -3527,7 +3527,7 @@ class TestRewardClipping(TransformBase):
 
     def test_transform_rb(self):
         t = RewardClipping(-0.1, 0.1)
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         td = TensorDict({"reward": torch.randn(10)}, []).expand(10)
         rb.append_transform(t)
         rb.extend(td)
@@ -3677,7 +3677,7 @@ class TestRewardScaling(TransformBase):
         loc = 0.5
         scale = 1.5
         t = RewardScaling(0.5, 1.5, standard_normal=standard_normal)
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         reward = torch.randn(10)
         td = TensorDict({"reward": reward}, []).expand(10)
         rb.append_transform(t)
@@ -3768,7 +3768,7 @@ class TestRewardSum(TransformBase):
         self,
     ):
         t = RewardSum()
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         reward = torch.randn(10)
         td = TensorDict({("next", "reward"): reward}, []).expand(10)
         rb.append_transform(t)
@@ -4102,7 +4102,7 @@ class TestUnsqueezeTransform(TransformBase):
             out_keys=out_keys,
             allow_positive_dim=True,
         )
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict(
             {"observation": TensorDict({"stuff": torch.randn(3, 4)}, [3, 4])}, []
@@ -4349,7 +4349,7 @@ class TestSqueezeTransform(TransformBase):
             out_keys=out_keys,
             allow_positive_dim=True,
         )
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict(
             {"observation": TensorDict({"stuff": torch.randn(3, 1, 4)}, [3, 1, 4])}, []
@@ -4544,7 +4544,7 @@ class TestToTensorImage(TransformBase):
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
     def test_transform_rb(self, out_keys):
         t = ToTensorImage(in_keys=["pixels"], out_keys=out_keys)
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict({"pixels": torch.randint(255, (21, 22, 3))}, [])
         rb.extend(td.expand(10))
@@ -4587,7 +4587,7 @@ class TestTensorDictPrimer(TransformBase):
     def test_transform_rb(self):
         batch_size = (2,)
         t = TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([*batch_size, 3]))
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict({"a": torch.zeros(())}, [])
         rb.extend(td.expand(10))
@@ -4882,7 +4882,7 @@ class TestTimeMaxPool(TransformBase):
             in_keys=["observation"],
             T=3,
         )
-        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
         rb.append_transform(t)
         rb.extend(td)
         with pytest.raises(
@@ -5010,7 +5010,7 @@ class TestgSDE(TransformBase):
         action_dim = 5
         batch_size = (2,)
         t = gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=batch_size)
-        rb = ReplayBuffer(LazyTensorStorage(10))
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict({"a": torch.zeros(())}, [])
         rb.extend(td.expand(10))
@@ -5158,7 +5158,7 @@ class TestVIP(TransformBase):
             out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
-        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
         rb.append_transform(vip)
         td = TensorDict({"pixels": torch.randint(255, (10, 244, 244, 3))}, [10])
         rb.extend(td)
@@ -6583,7 +6583,7 @@ class TestRenameTransform(TransformBase):
         else:
             t = RenameTransform(["a"], ["b"], ["a"], ["b"], create_copy=create_copy)
             tensordict = TensorDict({"b": torch.randn(())}, []).expand(10)
-        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
         rb.append_transform(t)
         rb.extend(tensordict)
         assert "a" in rb._storage._storage.keys()
@@ -6679,7 +6679,7 @@ class TestInitTracker(TransformBase):
     def test_transform_rb(self):
         batch = [1]
         device = "cpu"
-        rb = ReplayBuffer(LazyTensorStorage(20))
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
         rb.append_transform(InitTracker())
         reward = torch.randn(*batch, 1, device=device)
         misc = torch.randn(*batch, 1, device=device)

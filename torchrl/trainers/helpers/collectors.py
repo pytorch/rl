@@ -373,7 +373,7 @@ class OnPolicyCollectorConfig:
     # If the collector device differs from the policy device (cuda:0 if available), then the
     # weights of the collector policy are synchronized with collector.update_policy_weights_().
     pin_memory: bool = False
-    # if True, the data collector will call pin_memory before dispatching tensordicts onto the passing device
+    # if ``True``, the data collector will call pin_memory before dispatching tensordicts onto the passing device
     frames_per_batch: int = 1000
     # number of steps executed in the environment per collection.
     # This value represents how many steps will the data collector execute and return in *each*

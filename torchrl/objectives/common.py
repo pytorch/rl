@@ -18,6 +18,8 @@ from torch import nn, Tensor
 from torch.nn import Parameter
 
 from torchrl.modules.utils import Buffer
+from torchrl.objectives.utils import ValueEstimators
+from torchrl.objectives.value import ValueEstimatorBase
 
 _has_functorch = False
 try:
@@ -37,16 +39,27 @@ except ImportError:
 class LossModule(nn.Module):
     """A parent class for RL losses.
 
-    LossModule inherits from nn.Module. It is designed to read an input TensorDict and return another tensordict
-    with loss keys named "loss_*".
-    Splitting the loss in its component can then be used by the trainer to log the various loss values throughout
+    LossModule inherits from nn.Module. It is designed to read an input
+    TensorDict and return another tensordict
+    with loss keys named ``"loss_*"``.
+
+    Splitting the loss in its component can then be used by the trainer to log
+    the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
 
+    :cvar defaylt_value_type: The default value type of the class.
+        Losses that require a value estimation are equipped with a default value
+        pointer. This class attribute indicates which value estimator will be
+        used if none other is specified.
+        The value estimator can be changed using the :meth:`~.make_value_estimator` method.
     """
+
+    default_value_estimator: ValueEstimators = None
 
     def __init__(self):
         super().__init__()
         self._param_maps = {}
+        self._value_estimator = None
         # self.register_forward_pre_hook(_parameters_to_tensordict)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -75,6 +88,7 @@ class LossModule(nn.Module):
         compare_against: Optional[List[Parameter]] = None,
         funs_to_decorate=None,
     ) -> None:
+        """Converts a module to functional to be used in the loss."""
         if funs_to_decorate is None:
             funs_to_decorate = ["forward"]
         # To make it robust to device casting, we must register list of
@@ -348,3 +362,66 @@ class LossModule(nn.Module):
 
     def cpu(self) -> LossModule:
         return self.to(torch.device("cpu"))
+
+    @property
+    def value_estimator(self) -> ValueEstimatorBase:
+        """The value function blends in the reward and value estimate(s) from upcoming state(s)/state-action pair(s) into a target value estimate for the value network."""
+        out = self._value_estimator
+        if out is None:
+            self._default_value_estimator()
+            return self._value_estimator
+        return out
+
+    @value_estimator.setter
+    def value_estimator(self, value):
+        self._value_estimator = value
+
+    def _default_value_estimator(self):
+        """A value-function constructor when none is provided.
+
+        No kwarg should be present as default parameters should be retrieved
+        from :obj:`torchrl.objectives.utils.DEFAULT_VALUE_FUN_PARAMS`.
+
+        """
+        self.make_value_estimator(self.default_value_estimator)
+
+    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+        """Value-function constructor.
+
+        If the non-default value function is wanted, it must be built using
+        this method.
+
+        Args:
+            value_type (ValueEstimators): A :class:`torchrl.objectives.utils.ValueFunctions`
+                enum type indicating the value function to use.
+            **hyperparams: hyperparameters to use for the value function.
+                If not provided, the value indicated by
+                :func:`torchrl.objectives.utils.default_value_kwargs` will be
+                used.
+
+        Examples:
+            >>> # initialize the DQN loss
+            >>> dqn_loss = DQNLoss(actor)
+            >>> dqn_loss.make_value_estimator(
+            ...     ValueEstimators.TD1,
+            ...     gamma=0.9)
+
+        """
+        if value_type == ValueEstimators.TD1:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.TD0:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.TDLambda:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")

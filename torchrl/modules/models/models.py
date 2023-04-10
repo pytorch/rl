@@ -172,7 +172,6 @@ class MLP(nn.Sequential):
 
         _out_features_num = out_features
         if not isinstance(out_features, Number):
-            print(out_features, type(out_features))
             _out_features_num = prod(out_features)
         self.out_features = out_features
         self._out_features_num = _out_features_num
@@ -671,7 +670,7 @@ class DistributionalDQNnet(nn.Module):
 
 
 def ddpg_init_last_layer(
-    last_layer: nn.Module,
+    module: nn.Sequential,
     scale: float = 6e-4,
     device: Optional[DEVICE_TYPING] = None,
 ) -> None:
@@ -681,6 +680,12 @@ def ddpg_init_last_layer(
     https://arxiv.org/pdf/1509.02971.pdf
 
     """
+    for last_layer in reversed(module):
+        if isinstance(last_layer, (nn.Linear, nn.Conv2d)):
+            break
+    else:
+        raise RuntimeError("Could not find a nn.Linear / nn.Conv2d to initialize.")
+
     last_layer.weight.data.copy_(
         torch.rand_like(last_layer.weight.data, device=device) * scale - scale / 2
     )
@@ -725,7 +730,7 @@ class DdpgCnnActor(nn.Module):
             'bias_last_layer': True,
         }
         use_avg_pooling (bool, optional): if ``True``, a nn.AvgPooling layer is
-            used to aggregate the output. Default is :obj:`False`.
+            used to aggregate the output. Default is ``False``.
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
 
@@ -768,7 +773,7 @@ class DdpgCnnActor(nn.Module):
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.convnet = ConvNet(device=device, **conv_net_default_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp[-1], 6e-4, device=device)
+        ddpg_init_last_layer(self.mlp, 6e-4, device=device)
 
     def forward(self, observation: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         hidden = self.convnet(observation)
@@ -817,7 +822,7 @@ class DdpgMlpActor(nn.Module):
         mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else {}
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp[-1], 6e-3, device=device)
+        ddpg_init_last_layer(self.mlp, 6e-3, device=device)
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         action = self.mlp(observation)
@@ -898,7 +903,7 @@ class DdpgCnnQNet(nn.Module):
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.convnet = ConvNet(device=device, **conv_net_default_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp[-1], 6e-4, device=device)
+        ddpg_init_last_layer(self.mlp, 6e-4, device=device)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         hidden = torch.cat([self.convnet(observation), action], -1)
@@ -918,23 +923,23 @@ class DdpgMlpQNet(nn.Module):
     Args:
         mlp_net_kwargs_net1 (dict, optional): kwargs for MLP.
             Default: {
-            'in_features': None,
-            'out_features': 400,
-            'depth': 0,
-            'num_cells': [],
-            'activation_class': nn.ELU,
-            'bias_last_layer': True,
-            'activate_last_layer': True,
-        }
+                'in_features': None,
+                'out_features': 400,
+                'depth': 0,
+                'num_cells': [],
+                'activation_class': nn.ELU,
+                'bias_last_layer': True,
+                'activate_last_layer': True,
+            }
         mlp_net_kwargs_net2
             Default: {
-            'in_features': None,
-            'out_features': 1,
-            'depth': 1,
-            'num_cells': [300, ],
-            'activation_class': nn.ELU,
-            'bias_last_layer': True,
-        }
+                'in_features': None,
+                'out_features': 1,
+                'depth': 1,
+                'num_cells': [300, ],
+                'activation_class': nn.ELU,
+                'bias_last_layer': True,
+            }
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
 
@@ -974,7 +979,7 @@ class DdpgMlpQNet(nn.Module):
         )
         mlp2_net_default_kwargs.update(mlp_net_kwargs_net2)
         self.mlp2 = MLP(device=device, **mlp2_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp2[-1], 6e-3, device=device)
+        ddpg_init_last_layer(self.mlp2, 6e-3, device=device)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         value = self.mlp2(torch.cat([self.mlp1(observation), action], -1))

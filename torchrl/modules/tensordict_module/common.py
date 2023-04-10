@@ -71,7 +71,14 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
         for _spec, _key in zip(values, keys):
             if _spec is None:
                 continue
-            if not _spec.is_in(tensordict_out.get(_key)):
+            item = tensordict_out.get(_key, None)
+            if item is None:
+                # this will happen when an exploration (e.g. OU) writes a key only
+                # during exploration, but is missing otherwise.
+                # it's fine since what we want here it to make sure that a key
+                # is within bounds if it is present
+                continue
+            if not _spec.is_in(item):
                 try:
                     tensordict_out.set_(
                         _key,
@@ -119,7 +126,7 @@ class SafeModule(TensorDictModule):
             occur because of exploration policies or numerical under/overflow issues.
             If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
-            method. Default is :obj:`False`.
+            method. Default is ``False``.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can
         be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional

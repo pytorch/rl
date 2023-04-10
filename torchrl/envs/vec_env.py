@@ -30,7 +30,6 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
-from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 
 try:
     # Libraries necessary for MultiThreadedEnv
@@ -107,7 +106,7 @@ class _BatchedEnv(EnvBase):
             needed, which comes with a slight compute overhead;
         create_env_kwargs (dict or list of dicts, optional): kwargs to be used with the environments being created;
         pin_memory (bool): if True and device is "cpu", calls :obj:`pin_memory` on the tensordicts when created.
-        share_individual_td (bool, optional): if True, a different tensordict is created for every process/worker and a lazy
+        share_individual_td (bool, optional): if ``True``, a different tensordict is created for every process/worker and a lazy
             stack is returned.
             default = None (False if single task);
         shared_memory (bool): whether or not the returned tensordict will be placed in shared memory;
@@ -119,9 +118,9 @@ class _BatchedEnv(EnvBase):
             It is assumed that all environments will run on the same device as a common shared
             tensordict will be used to pass data from process to process. The device can be
             changed after instantiation using :obj:`env.to(device)`.
-        allow_step_when_done (bool, optional): if True, batched environments can
+        allow_step_when_done (bool, optional): if ``True``, batched environments can
             execute steps after a done state is encountered.
-            Defaults to :obj:`False`.
+            Defaults to ``False``.
 
     """
 
@@ -1104,6 +1103,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return tensordict_out.select().set("next", tensordict_out)
 
     def _get_input_spec(self) -> TensorSpec:
+        # local import to avoid importing gym in the script
+        from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
+
         # Envpool provides Gym-compatible specs as env.spec.action_space and
         # DM_Control-compatible specs as env.spec.action_spec(). We use the Gym ones.
 
@@ -1128,6 +1130,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         )
 
     def _get_observation_spec(self) -> TensorSpec:
+        # local import to avoid importing gym in the script
+        from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
+
         # Gym specs produced by EnvPool don't contain batch_size, we add it to satisfy checks in EnvBase
         observation_spec = _gym_to_torchrl_spec_transform(
             self._env.spec.observation_space,
