@@ -581,7 +581,7 @@ jobs:
           command: |
             curl -Os https://uploader.codecov.io/latest/linux/codecov
             chmod +x codecov
-            ./codecov -t ${CODECOV_TOKEN} -r ./ -F sklearn-gpu
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -F sklearn-gpu
 #            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F sklearn-gpu -C $CIRCLE_SHA1
       - run:
           name: Post Process
@@ -639,7 +639,7 @@ jobs:
           command: |
             curl -Os https://uploader.codecov.io/latest/linux/codecov
             chmod +x codecov
-            ./codecov -t ${CODECOV_TOKEN} -r ./ -F sklearn-gpu
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -F sklearn-gpu
 #            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F sklearn-gpu -C $CIRCLE_SHA1
       - run:
           name: Post Process
@@ -733,7 +733,7 @@ jobs:
           command: |
             curl -Os https://uploader.codecov.io/latest/linux/codecov
             chmod +x codecov
-            ./codecov -t ${CODECOV_TOKEN} -r ./ -Z -F sklearn-gpu
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F sklearn-gpu
 #            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F sklearn-gpu -C $CIRCLE_SHA1
       - run:
           name: Post Process
