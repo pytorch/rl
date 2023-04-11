@@ -14,6 +14,7 @@ import torch
 from tensordict.memmap import MemmapTensor
 from tensordict.prototype import is_tensorclass
 from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
+from tensordict.utils import expand_right
 
 from torchrl._utils import _CKPT_BACKEND, VERBOSE
 from torchrl.data.replay_buffers.utils import INT_CLASSES
@@ -423,10 +424,42 @@ def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
         return mem_map_tensor._tensor
 
 
+def _reset_batch_size(x):
+    """Resets the batch size of a tensordict.
+
+    In some cases we save the original shape of the tensordict as a tensor (or memmap tensor).
+
+    This function will read that tensor, extract its items and reset the shape
+    of the tensordict to it. If items have an incompatible shape (e.g. "index")
+    they will be expanded to the right to match it.
+
+    """
+    shape = x.pop("_batch_size", None)
+    if shape is not None:
+        # we need to reset the batch-size
+        if isinstance(shape, MemmapTensor):
+            shape = shape.as_tensor()
+        locked = x.is_locked
+        if locked:
+            x.unlock_()
+        shape = [s.item() for s in shape[0]]
+        shape = torch.Size([x.shape[0], *shape])
+        # we may need to update some values in the data
+        for key, value in x.items():
+            if value.ndim >= len(shape):
+                continue
+            value = expand_right(value, shape)
+            x.set(key, value)
+        x.batch_size = shape
+        if locked:
+            x.lock_()
+    return x
+
+
 def _collate_list_tensordict(x):
     out = torch.stack(x, 0)
     if isinstance(out, TensorDictBase):
-        return out.to_tensordict()
+        return _reset_batch_size(out.to_tensordict())
     return out
 
 
@@ -436,7 +469,7 @@ def _collate_list_tensors(*x):
 
 def _collate_contiguous(x):
     if isinstance(x, TensorDictBase):
-        return x.to_tensordict()
+        return _reset_batch_size(x).to_tensordict()
     return x.clone()
 
 

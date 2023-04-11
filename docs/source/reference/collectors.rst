@@ -88,7 +88,7 @@ node or across multiple nodes.
 
 .. note::
   *Choosing the sub-collector*: All distributed collectors support the various single machine collectors.
-  One may wonder why using a :class:`MultiSyncDataCollector` or a :class:`torchrl.envs.ParallelEnv`
+  One may wonder why using a :class:`MultiSyncDataCollector` or a :class:`~torchrl.envs.ParallelEnv`
   instead. In general, multiprocessed collectors have a lower IO footprint than
   parallel environments which need to communicate at each step. Yet, the model specs
   play a role in the opposite direction, since using parallel environments will
@@ -116,6 +116,7 @@ node or across multiple nodes.
     RPCDataCollector
     DistributedSyncDataCollector
     submitit_delayed_launcher
+    RayCollector
 
 
 Helper functions
