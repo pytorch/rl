@@ -336,6 +336,7 @@ class LossModule(nn.Module):
                     value_to_set = getattr(
                         self, "_sep_".join(["_target_" + network_name, *key])
                     )
+                    # _set is faster bc is bypasses the checks
                     target_params._set(key, value_to_set)
                 return target_params
             else:
@@ -448,11 +449,11 @@ class LossModule(nn.Module):
         this method.
 
         Args:
-            value_type (ValueEstimators): A :class:`torchrl.objectives.utils.ValueFunctions`
+            value_type (ValueEstimators): A :class:`~torchrl.objectives.utils.ValueEstimators`
                 enum type indicating the value function to use.
             **hyperparams: hyperparameters to use for the value function.
                 If not provided, the value indicated by
-                :func:`torchrl.objectives.utils.default_value_kwargs` will be
+                :func:`~torchrl.objectives.utils.default_value_kwargs` will be
                 used.
 
         Examples:
