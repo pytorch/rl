@@ -13,7 +13,14 @@ import sys
 import time
 
 import pytest
-import ray
+try:
+    import ray
+    _has_ray = True
+    RAY_ERR = None
+except ModuleNotFoundError as err:
+    _has_ray = False
+    RAY_ERR = err
+
 import torch
 
 from mocking_classes import ContinuousActionVecMockEnv, CountingEnv
@@ -417,7 +424,7 @@ class TestSyncCollector(DistributedCollectorBase):
                 proc.terminate()
             queue.close()
 
-
+@pytest.mark.skipif(not _has_ray, reason=f"Ray not found (error: {RAY_ERR})")
 class TestRayCollector(DistributedCollectorBase):
     """A testing distributed data collector class that runs tests without using a Queue,
     to avoid potential deadlocks when combining Ray and multiprocessing.
