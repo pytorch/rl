@@ -32,7 +32,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
-from torchrl.envs.transforms.utils import check_finite
+from torchrl.envs.transforms.utils import check_finite, compute_reward2go
 from torchrl.envs.utils import _sort_keys, step_mdp
 
 try:
@@ -3607,3 +3607,53 @@ class RenameTransform(Transform):
             if not self.create_copy:
                 del input_spec[in_key]
         return input_spec
+
+
+class Reward2GoTransform(Transform):
+    """Calculates the reward to go based on the episode reward and a discount factor.
+
+    As the Reward2GoTransform is only an inverse transform the in_keys will be directly used for the in_keys_inv.
+
+    Args:
+        in_keys (list of str/tuples of str): the entries to rename
+        gamma (float or torch.Tensor): the discount factor
+
+    """
+
+    def __init__(
+        self,
+        gamma: Optional[Union[float, torch.Tensor]] = 1.0,
+        in_keys: Optional[Sequence[str]] = None,
+    ):
+        if in_keys is None:
+            in_keys = ["reward"]
+        out_keys = ["reward_to_go"]
+        super().__init__(
+            in_keys=in_keys,
+            in_keys_inv=in_keys,
+            out_keys_inv=out_keys,
+        )
+
+        if not isinstance(gamma, torch.Tensor):
+            gamma = torch.tensor(gamma)
+
+        self.register_buffer("gamma", gamma)
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        episode_ends = torch.where(tensordict.get(("next", "done")))[0]
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+            if in_key in tensordict.keys(include_nested=isinstance(in_key, tuple)):
+                item = self._inv_apply_transform(tensordict.get(in_key), episode_ends)
+                tensordict.set(
+                    out_key,
+                    item,
+                )
+        return tensordict
+
+    def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
+        return reward
+
+    def _inv_apply_transform(
+        self, reward: torch.Tensor, episode_ends: torch.Tensor
+    ) -> torch.Tensor:
+        return compute_reward2go(reward, episode_ends, self.gamma)
