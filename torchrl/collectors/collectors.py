@@ -1977,10 +1977,11 @@ def _main_async_collector(
     try:
         policy = policy.to(device)
     except Exception:
-        warnings.warn(
-            "Couldn't cast the policy onto the desired device on remote process. "
-            "If your policy is not a nn.Module instance you can probably ignore this warning."
-        )
+        if RL_WARNINGS:
+            warnings.warn(
+                "Couldn't cast the policy onto the desired device on remote process. "
+                "If your policy is not a nn.Module instance you can probably ignore this warning."
+            )
     inner_collector = SyncDataCollector(
         create_env_fn,
         create_env_kwargs=create_env_kwargs,
