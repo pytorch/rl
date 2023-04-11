@@ -1151,7 +1151,7 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            curl -Os https://uploader.codecov.io/latest/macos/codecov
             chmod +x codecov
             ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F macos-cpu
       - run:
