@@ -735,8 +735,8 @@ jobs:
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_envpool/post_process.sh
       - store_test_results:
           path: test-results
-    post-steps:
       - codecov/upload
+
   unittest_linux_brax_gpu:
     <<: *binary_common
     machine:
