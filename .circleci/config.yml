@@ -1,5 +1,9 @@
 version: 2.1
 
+orbs:
+  codecov: codecov/codecov@3.2.3
+  node: circleci/node@4.7.0
+
 executors:
   windows-cpu:
     machine:
@@ -722,16 +726,17 @@ jobs:
       - run:
           name: Run tests
           command: bash .circleci/unittest/linux_libs/scripts_envpool/run_test.sh
-      - run:
-          name: Codecov upload
-          command: |
-            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F linux-envpool -C $CIRCLE_SHA1
+#      - run:
+#          name: Codecov upload
+#          command: |
+#            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F linux-envpool -C $CIRCLE_SHA1
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_envpool/post_process.sh
       - store_test_results:
           path: test-results
-
+    post-steps:
+      - codecov/upload
   unittest_linux_brax_gpu:
     <<: *binary_common
     machine:
