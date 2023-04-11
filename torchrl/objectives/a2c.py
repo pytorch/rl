@@ -83,7 +83,7 @@ class A2CLoss(LossModule):
         self.convert_to_functional(
             actor, "actor", funs_to_decorate=["forward", "get_dist"]
         )
-        self.convert_to_functional(critic, "critic", compare_against=actor.parameters())
+        self.convert_to_functional(critic, "critic")
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
         self.samples_mc_entropy = samples_mc_entropy

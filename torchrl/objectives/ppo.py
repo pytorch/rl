@@ -114,7 +114,7 @@ class PPOLoss(LossModule):
         )
         # we want to make sure there are no duplicates in the params: the
         # params of critic must be refs to actor if they're shared
-        self.convert_to_functional(critic, "critic", compare_against=actor.parameters())
+        self.convert_to_functional(critic, "critic")
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
         self.samples_mc_entropy = samples_mc_entropy
