@@ -581,7 +581,7 @@ jobs:
           command: |
             curl -Os https://uploader.codecov.io/latest/linux/codecov
             chmod +x codecov
-            ./codecov -t ${CODECOV_TOKEN} -F sklearn-gpu
+            ./codecov -t ${CODECOV_TOKEN} -r ./ -F sklearn-gpu
 #            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F sklearn-gpu -C $CIRCLE_SHA1
       - run:
           name: Post Process
@@ -639,7 +639,7 @@ jobs:
           command: |
             curl -Os https://uploader.codecov.io/latest/linux/codecov
             chmod +x codecov
-            ./codecov -t ${CODECOV_TOKEN} -F sklearn-gpu
+            ./codecov -t ${CODECOV_TOKEN} -r ./ -F sklearn-gpu
 #            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F sklearn-gpu -C $CIRCLE_SHA1
       - run:
           name: Post Process
@@ -686,7 +686,7 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F linux-jumanji -C $CIRCLE_SHA1
+            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F linux-jumanji
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_jumanji/post_process.sh
@@ -733,7 +733,7 @@ jobs:
           command: |
             curl -Os https://uploader.codecov.io/latest/linux/codecov
             chmod +x codecov
-            ./codecov -t ${CODECOV_TOKEN} -F sklearn-gpu
+            ./codecov -t ${CODECOV_TOKEN} -r ./ -Z -F sklearn-gpu
 #            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F sklearn-gpu -C $CIRCLE_SHA1
       - run:
           name: Post Process
