@@ -696,9 +696,9 @@ plt.show()
 #
 # * From an efficiency perspective,
 #   we could run several simulations in parallel to speed up data collection.
-#   Check :class:`torchrl.envs.ParallelEnv` for further information.
+#   Check :class:`~torchrl.envs.ParallelEnv` for further information.
 #
-# * From a logging perspective, one could add a :class:`torchrl.record.VideoRecorder` transform to
+# * From a logging perspective, one could add a :class:`~torchrl.record.VideoRecorder` transform to
 #   the environment after asking for rendering to get a visual rendering of the
 #   inverted pendulum in action. Check :py:mod:`torchrl.record` to
 #   know more.

@@ -397,11 +397,11 @@ class LossModule(nn.Module):
         this method.
 
         Args:
-            value_type (ValueEstimators): A :class:`torchrl.objectives.utils.ValueEstimators`
+            value_type (ValueEstimators): A :class:`~torchrl.objectives.utils.ValueEstimators`
                 enum type indicating the value function to use.
             **hyperparams: hyperparameters to use for the value function.
                 If not provided, the value indicated by
-                :func:`torchrl.objectives.utils.default_value_kwargs` will be
+                :func:`~torchrl.objectives.utils.default_value_kwargs` will be
                 used.
 
         Examples:

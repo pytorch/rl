@@ -68,8 +68,8 @@ does not mean storing 1M frames but 1M trajectories.
 
 When sampling trajectories, it may be desirable to sample sub-trajectories
 to diversify learning or make the sampling more efficient.
-To do this, we provide a custom :class:`torchrl.envs.Transform` class named
-:class:`torchrl.envs.RandomCropTensorDict`. Here is an example of how this class
+To do this, we provide a custom :class:`~torchrl.envs.Transform` class named
+:class:`~torchrl.envs.RandomCropTensorDict`. Here is an example of how this class
 can be used:
 
 .. code-block::Python
@@ -104,7 +104,7 @@ Datasets
 --------
 
 TorchRL provides wrappers around offline RL datasets.
-These data are presented a :class:`torchrl.data.ReplayBuffer` instances, which
+These data are presented a :class:`~torchrl.data.ReplayBuffer` instances, which
 means that they can be customized at will with transforms, samplers and storages.
 By default, datasets are stored as memory mapped tensors, allowing them to be
 promptly sampled with virtually no memory footprint.

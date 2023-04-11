@@ -79,7 +79,7 @@ class TrainerHookBase:
 
         .. note::
           To register the hook at another location than the default, use
-          :meth:`torchrl.trainers.Trainer.register_op`.
+          :meth:`~torchrl.trainers.Trainer.register_op`.
 
         """
         raise NotImplementedError
@@ -1118,7 +1118,7 @@ class BatchSubSampler(TrainerHookBase):
 
 
 class Recorder(TrainerHookBase):
-    """Recorder hook for :class:`torchrl.trainers.Trainer`.
+    """Recorder hook for :class:`~torchrl.trainers.Trainer`.
 
     Args:
         record_interval (int): total number of optimisation steps

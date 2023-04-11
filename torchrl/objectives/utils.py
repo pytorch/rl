@@ -45,7 +45,7 @@ def default_value_kwargs(value_type: ValueEstimators):
 
     Args:
         value_type (Enum.value): the value function type, from the
-        :class:`torchrl.objectives.utils.ValueEstimators` class.
+        :class:`~torchrl.objectives.utils.ValueEstimators` class.
 
     Examples:
         >>> kwargs = default_value_kwargs(ValueEstimators.TDLambda)

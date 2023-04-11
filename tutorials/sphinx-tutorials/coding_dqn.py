@@ -7,7 +7,7 @@ TorchRL trainer: A DQN example
 """
 
 ##############################################################################
-# TorchRL provides a generic :class:`torchrl.trainers.Trainer` class to handle
+# TorchRL provides a generic :class:`~torchrl.trainers.Trainer` class to handle
 # your training loop. The trainer executes a nested loop where the outer loop
 # is the data collection and the inner loop consumes this data or some data
 # retrieved from the replay buffer to train the model.
@@ -26,7 +26,7 @@ TorchRL trainer: A DQN example
 # The trainer is fully customisable and offers a large set of functionalities.
 # The tutorial is organised around its construction.
 # We will be detailing how to build each of the components of the library first,
-# and then put the pieces together using the :class:`torchrl.trainers.Trainer`
+# and then put the pieces together using the :class:`~torchrl.trainers.Trainer`
 # class.
 #
 # Along the road, we will also focus on some other aspects of the library:
@@ -36,7 +36,7 @@ TorchRL trainer: A DQN example
 #   and parallel execution. Unlike what we did in the
 #   `DDPG tutorial <https://pytorch.org/rl/tutorials/coding_ddpg.html>`_, we
 #   will normalize the pixels and not the state vector.
-# - how to design a :class:`torchrl.modules.QValueActor` object, i.e. an actor
+# - how to design a :class:`~torchrl.modules.QValueActor` object, i.e. an actor
 #   that estimates the action values and picks up the action with the highest
 #   estimated return;
 # - how to collect data from your environment efficiently and store them
@@ -159,32 +159,32 @@ def is_notebook() -> bool:
 #
 # We will be using five transforms:
 #
-# - :class:`torchrl.envs.StepCounter` to count the number of steps in each trajectory;
-# - :class:`torchrl.envs.transforms.ToTensorImage` will convert a ``[W, H, C]`` uint8
+# - :class:`~torchrl.envs.StepCounter` to count the number of steps in each trajectory;
+# - :class:`~torchrl.envs.transforms.ToTensorImage` will convert a ``[W, H, C]`` uint8
 #   tensor in a floating point tensor in the ``[0, 1]`` space with shape
 #   ``[C, W, H]``;
-# - :class:`torchrl.envs.transforms.RewardScaling` to reduce the scale of the return;
-# - :class:`torchrl.envs.transforms.GrayScale` will turn our image into grayscale;
-# - :class:`torchrl.envs.transforms.Resize` will resize the image in a 64x64 format;
-# - :class:`torchrl.envs.transforms.CatFrames` will concatenate an arbitrary number of
+# - :class:`~torchrl.envs.transforms.RewardScaling` to reduce the scale of the return;
+# - :class:`~torchrl.envs.transforms.GrayScale` will turn our image into grayscale;
+# - :class:`~torchrl.envs.transforms.Resize` will resize the image in a 64x64 format;
+# - :class:`~torchrl.envs.transforms.CatFrames` will concatenate an arbitrary number of
 #   successive frames (``N=4``) in a single tensor along the channel dimension.
 #   This is useful as a single image does not carry information about the
 #   motion of the cartpole. Some memory about past observations and actions
 #   is needed, either via a recurrent neural network or using a stack of
 #   frames.
-# - :class:`torchrl.envs.transforms.ObservationNorm` which will normalize our observations
+# - :class:`~torchrl.envs.transforms.ObservationNorm` which will normalize our observations
 #   given some custom summary statistics.
 #
 # In practice, our environment builder has two arguments:
 #
 # - ``parallel``: determines whether multiple environments have to be run in
 #   parallel. We stack the transforms after the
-#   :class:`torchrl.envs.ParallelEnv` to take advantage
+#   :class:`~torchrl.envs.ParallelEnv` to take advantage
 #   of vectorization of the operations on device, although this would
 #   technically work with every single environment attached to its own set of
 #   transforms.
 # - ``obs_norm_sd`` will contain the normalizing constants for
-#   the :class:`torchrl.envs.ObservationNorm` transform.
+#   the :class:`~torchrl.envs.ObservationNorm` transform.
 #
 
 
@@ -237,7 +237,7 @@ def make_env(
 # with a full ``[C, W, H]`` normalizing mask, but with simpler ``[C, 1, 1]``
 # shaped set of normalizing constants (loc and scale parameters).
 # We will be using the ``reduce_dim`` argument
-# of :meth:`torchrl.envs.ObservationNorm.init_stats` to instruct which
+# of :meth:`~torchrl.envs.ObservationNorm.init_stats` to instruct which
 # dimensions must be reduced, and the ``keep_dims`` parameter to ensure that
 # not all dimensions disappear in the process:
 #
@@ -250,7 +250,7 @@ def get_norm_stats():
     )
     obs_norm_sd = test_env.transform[-1].state_dict()
     # let's check that normalizing constants have a size of ``[C, 1, 1]`` where
-    # ``C=4`` (because of :class:`torchrl.envs.CatFrames`).
+    # ``C=4`` (because of :class:`~torchrl.envs.CatFrames`).
     print("state dict of the observation norm:", obs_norm_sd)
     return obs_norm_sd
 
@@ -259,7 +259,7 @@ def get_norm_stats():
 # Building the model (Deep Q-network)
 # -----------------------------------
 #
-# The following function builds a :class:`torchrl.modules.DuelingCnnDQNet`
+# The following function builds a :class:`~torchrl.modules.DuelingCnnDQNet`
 # object which is a simple CNN followed by a two-layer MLP. The only trick used
 # here is that the action values (i.e. left and right action value) are
 # computed using
@@ -273,7 +273,7 @@ def get_norm_stats():
 # :math:`\mathbb{R}^n \rightarrow \mathbb{R}^m` function, for
 # :math:`n = \# obs` and :math:`m = \# actions`.
 #
-# Our network is wrapped in a :class:`torchrl.modules.QValueActor`,
+# Our network is wrapped in a :class:`~torchrl.modules.QValueActor`,
 # which will read the state-action
 # values, pick up the one with the maximum value and write all those results
 # in the input :class:`tensordict.TensorDict`.
@@ -335,7 +335,7 @@ def make_model(dummy_env):
 # could improve the performance significantly.
 #
 # We place the storage on disk using
-# :class:`torchrl.data.replay_buffers.storages.LazyMemmapStorage` class. This
+# :class:`~torchrl.data.replay_buffers.storages.LazyMemmapStorage` class. This
 # storage is created in a lazy manner: it will only be instantiated once the
 # first batch of data is passed to it.
 #
@@ -537,7 +537,7 @@ init_bias = 2.0
 # Building a Trainer
 # ------------------
 #
-# TorchRL's :class:`torchrl.trainers.Trainer` class constructor takes the
+# TorchRL's :class:`~torchrl.trainers.Trainer` class constructor takes the
 # following keyword-only arguments:
 #
 # - ``collector``
@@ -593,10 +593,10 @@ trainer = Trainer(
 #
 # Registering hooks can be achieved in two separate ways:
 #
-# - If the hook has it, the :meth:`torchrl.trainers.TrainerHookBase.register`
+# - If the hook has it, the :meth:`~torchrl.trainers.TrainerHookBase.register`
 #   method is the first choice. One just needs to provide the trainer as input
 #   and the hook will be registered with a default name at a default location.
-#   For some hooks, the registration can be quite complex: :class:`torchrl.trainers.ReplayBufferTrainer`
+#   For some hooks, the registration can be quite complex: :class:`~torchrl.trainers.ReplayBufferTrainer`
 #   requires 3 hooks (``extend``, ``sample`` and ``update_priority``) which
 #   can be cumbersome to implement.
 buffer_hook = ReplayBufferTrainer(
@@ -620,8 +620,8 @@ recorder = Recorder(
 recorder.register(trainer)
 
 ###############################################################################
-# - Any callable (including :class:`torchrl.trainers.TrainerHookBase`
-#   subclasses) can be registered using :meth:`torchrl.trainers.Trainer.register_op`.
+# - Any callable (including :class:`~torchrl.trainers.TrainerHookBase`
+#   subclasses) can be registered using :meth:`~torchrl.trainers.Trainer.register_op`.
 #   In this case, a location must be explicitly passed (). This method gives
 #   more control over the location of the hook but it also requires more
 #   understanding of the Trainer mechanism.
@@ -646,7 +646,7 @@ log_reward.register(trainer)
 #   It is possible to link multiple optimizers to the trainer if needed.
 #   In this case, each optimizer will be tied to a field in the loss
 #   dictionary.
-#   Check the :class:`torchrl.trainers.OptimizerHook` to learn more.
+#   Check the :class:`~torchrl.trainers.OptimizerHook` to learn more.
 #
 # Here we are, ready to train our algorithm! A simple call to
 # ``trainer.train()`` and we'll be getting our results logged in.
@@ -694,7 +694,7 @@ print_csv_files_in_folder(logger.experiment.log_dir)
 #   them in the trainer;
 # - How to code a DQN algorithm, including how to create a policy that picks
 #   up the action with the highest value with
-#   :class:`torchrl.modules.QValueNetwork`;
+#   :class:`~torchrl.modules.QValueNetwork`;
 # - How to build a multiprocessed data collector;
 #
 # Possible improvements to this tutorial could include:
@@ -704,6 +704,6 @@ print_csv_files_in_folder(logger.experiment.log_dir)
 #   Learn more on the
 #   `replay buffer section <https://pytorch.org/rl/reference/data.html#composable-replay-buffers>`_
 #   of the documentation.
-# - A distributional loss (see :class:`torchrl.objectives.DistributionalDQNLoss`
+# - A distributional loss (see :class:`~torchrl.objectives.DistributionalDQNLoss`
 #   for more information).
-# - More fancy exploration techniques, such as :class:`torchrl.modules.NoisyLinear` layers and such.
+# - More fancy exploration techniques, such as :class:`~torchrl.modules.NoisyLinear` layers and such.

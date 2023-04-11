@@ -81,8 +81,8 @@ class PPOLoss(LossModule):
         >>> losses = ppo_loss(data)
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
-      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
-      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+      The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
         >>> ppo_loss = PPOLoss(actor, critic)
         >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
@@ -288,8 +288,8 @@ class ClipPPOLoss(PPOLoss):
         >>> losses = ppo_loss(data)
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
-      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
-      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+      The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
         >>> ppo_loss = ClipPPOLoss(actor, critic)
         >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
@@ -443,8 +443,8 @@ class KLPENPPOLoss(PPOLoss):
         >>> losses = ppo_loss(data)
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
-      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
-      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+      The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
         >>> ppo_loss = KLPENPPOLoss(actor, critic)
         >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)

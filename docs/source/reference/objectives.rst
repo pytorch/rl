@@ -70,7 +70,7 @@ follow a similar structure:
   >>> kwargs = {"gamma": 0.9, "lmbda": 0.9}
   >>> loss_module.make_value_estimator(ValueEstimators.TDLambda, **kwargs)
 
-The :class:`torchrl.objectives.ValueEstimators` class enumerates the value
+The :class:`~torchrl.objectives.ValueEstimators` class enumerates the value
 estimators to choose from. This makes it easy for the users to rely on
 auto-completion to make their choice.
 

@@ -56,8 +56,8 @@ class ReinforceLoss(LossModule):
         >>> losses = reinforce_loss(data)
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
-      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
-      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+      The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
         >>> reinforce_loss = ReinforceLoss(actor, critic)
         >>> reinforce_loss.make_value_estimator(ValueEstimators.TDLambda)

@@ -58,8 +58,8 @@ class A2CLoss(LossModule):
       input tensordict, the advantage will be computed by the :meth:`~.forward`
       method.
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
-      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
-      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+      The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
     """
 

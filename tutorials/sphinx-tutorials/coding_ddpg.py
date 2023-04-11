@@ -70,7 +70,7 @@ device = (
 )
 
 ###############################################################################
-# torchrl :class:`torchrl.objectives.LossModule`
+# torchrl :class:`~torchrl.objectives.LossModule`
 # ----------------------------------------------
 #
 # TorchRL provides a series of losses to use in your training scripts.
@@ -103,8 +103,8 @@ device = (
 # The ``__init__`` method
 # ~~~~~~~~~~~~~~~~~~~~~~~
 #
-# The parent class of all losses is :class:`torchrl.objectives.LossModule`.
-# As many other components of the library, its :meth:`torchrl.objectives.LossModule.forward` method expects
+# The parent class of all losses is :class:`~torchrl.objectives.LossModule`.
+# As many other components of the library, its :meth:`~torchrl.objectives.LossModule.forward` method expects
 # as input a :class:`tensordict.TensorDict` instance sampled from an experience
 # replay buffer, or any similar data structure. Using this format makes it
 # possible to re-use the module across
@@ -117,7 +117,7 @@ device = (
 # of the class independently and we'll be populating the class at a later
 # stage.
 #
-# Let us start with the :meth:`torchrl.objectives.LossModule.__init__`
+# Let us start with the :meth:`~torchrl.objectives.LossModule.__init__`
 # method. DDPG aims at solving a control task with a simple strategy:
 # training a policy to output actions that maximise the value predicted by
 # a value network. Hence, our loss module needs to receive two networks in its
@@ -129,7 +129,7 @@ device = (
 # value estimate is maximised.
 #
 # The crucial step of the :meth:`LossModule.__init__` method is the call to
-# :meth:`torchrl.LossModule.convert_to_functional`. This method will extract
+# :meth:`~torchrl.LossModule.convert_to_functional`. This method will extract
 # the parameters from the module and convert it to a functional module.
 # Strictly speaking, this is not necessary and one may perfectly code all
 # the losses without it. However, we encourage its usage for the following
@@ -146,7 +146,7 @@ device = (
 # for the value model that do not match exactly the current configuration is
 # that they provide a pessimistic bound on the value function being computed.
 # Pay attention to the ``create_target_params`` keyword argument below: this
-# argument tells the :meth:`torchrl.objectives.LossModule.convert_to_functional`
+# argument tells the :meth:`~torchrl.objectives.LossModule.convert_to_functional`
 # method to create a set of target parameters in the loss module to be used
 # for target value computation. If this is set to ``False`` (see the actor network
 # for instance) the ``target_actor_network_params`` attribute will still be
@@ -200,7 +200,7 @@ def _init(
 # intermediate estimator (TD(:math:`\lambda`)) can also be used to compromise
 # bias and variance.
 # TorchRL makes it easy to use one or the other estimator via the
-# :class:`torchrl.objectives.utils.ValueEstimators` Enum class, which contains
+# :class:`~torchrl.objectives.utils.ValueEstimators` Enum class, which contains
 # pointers to all the value estimators implemented. Let us define the default
 # value function here. We will take the simplest version (TD(0)), and show later
 # on how this can be changed.
@@ -246,7 +246,7 @@ def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
 
 ###############################################################################
 # The ``make_value_estimator`` method can but does not need to be called: if
-# not, the :class:`torchrl.objectives.LossModule` will query this method with
+# not, the :class:`~torchrl.objectives.LossModule` will query this method with
 # its default estimator.
 #
 # The actor loss method
@@ -259,7 +259,7 @@ def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
 #
 # When computing this value, we must make sure to take the value parameters out
 # of the graph, otherwise the actor and value loss will be mixed up.
-# For this, the :func:`torchrl.objectives.utils.hold_out_params` function
+# For this, the :func:`~torchrl.objectives.utils.hold_out_params` function
 # can be used.
 
 
@@ -466,12 +466,12 @@ def make_env(from_pixels=False):
 #   both ways: when calling :func:`env.step`, our actions will need to be
 #   represented in double precision, and the output will need to be transformed
 #   to single precision.
-#   The :class:`torchrl.envs.DoubleToFloat` transform does exactly this: the
+#   The :class:`~torchrl.envs.DoubleToFloat` transform does exactly this: the
 #   ``in_keys`` list refers to the keys that will need to be transformed from
 #   double to float, while the ``in_keys_inv`` refers to those that need to
 #   be transformed to double before being passed to the environment.
 #
-# - We concatenate the state keys together using the :class:`torchrl.envs.CatTensors`
+# - We concatenate the state keys together using the :class:`~torchrl.envs.CatTensors`
 #   transform.
 #
 # - Finally, we also leave the possibility of normalizing the states: we will
@@ -690,13 +690,13 @@ from torchrl.data import CompositeSpec
 # also be used.
 #
 #
-# The Q-Value network is wrapped in a :class:`torchrl.modules.ValueOperator`
+# The Q-Value network is wrapped in a :class:`~torchrl.modules.ValueOperator`
 # that automatically sets the ``out_keys`` to ``"state_action_value`` for q-value
 # networks and ``state_value`` for other value networks.
 #
 # TorchRL provides a built-in version of the DDPG networks as presented in the
-# original paper. These can be found under :class:`torchrl.modules.DdpgMlpActor`
-# and :class:`torchrl.modules.DdpgMlpQNet`.
+# original paper. These can be found under :class:`~torchrl.modules.DdpgMlpActor`
+# and :class:`~torchrl.modules.DdpgMlpQNet`.
 #
 # Since we use lazy modules, it is necessary to materialize the lazy modules
 # before being able to move the policy from device to device and achieve other
@@ -769,7 +769,7 @@ actor, qnet = make_ddpg_actor(
 # Exploration
 # ~~~~~~~~~~~
 #
-# The policy is wrapped in a :class:`torchrl.modules.OrnsteinUhlenbeckProcessWrapper`
+# The policy is wrapped in a :class:`~torchrl.modules.OrnsteinUhlenbeckProcessWrapper`
 # exploration module, as suggesed in the original paper.
 # Let's define the number of frames before OU noise reaches its minimum value
 annealing_frames = 1_000_000
@@ -796,7 +796,7 @@ if device == torch.device("cpu"):
 # number of workers etc).
 #
 # Here we will use
-# :class:`torchrl.collectors.MultiaSyncDataCollector`, a data collector that
+# :class:`~torchrl.collectors.MultiaSyncDataCollector`, a data collector that
 # will be executed in an async manner (i.e. data will be collected while
 # the policy is being optimized). With the :class:`MultiaSyncDataCollector`,
 # multiple workers are running rollouts separately. When a batch is asked, it
@@ -811,7 +811,7 @@ if device == torch.device("cpu"):
 #   environments, like dm_control ones).
 #   .. note::
 #     The ``max_frames_per_traj`` passed to the collector will have the effect
-#     of registering a new :class:`torchrl.envs.StepCounter` transform
+#     of registering a new :class:`~torchrl.envs.StepCounter` transform
 #     with the environment used for inference. We can achieve the same result
 #     manually, as we do in this script.
 #
@@ -1052,7 +1052,7 @@ loss_module.make_value_estimator(ValueEstimators.TDLambda, gamma=gamma, lmbda=lm
 #
 # Target networks are a crucial part of off-policy RL algorithms.
 # Updating the target network parameters is made easy thanks to the
-# :class:`torchrl.objectives.HardUpdate` and :class:`torchrl.objectives.SoftUpdate`
+# :class:`~torchrl.objectives.HardUpdate` and :class:`~torchrl.objectives.SoftUpdate`
 # classes. They're built with the loss module as argument, and the update is
 # achieved via a call to `updater.step()` at the appropriate location in the
 # training loop.
@@ -1202,7 +1202,7 @@ plt.tight_layout()
 #
 # The key takeaways are:
 #
-# - How to use the :class:`torchrl.objectives.LossModule` class to code up a new
+# - How to use the :class:`~torchrl.objectives.LossModule` class to code up a new
 #   loss component;
 # - How to use (or not) a target network, and how to update its parameters;
 # - How to create an optimizer associated with a loss module.
