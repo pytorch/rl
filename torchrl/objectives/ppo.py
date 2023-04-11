@@ -346,6 +346,11 @@ class ClipPPOLoss(PPOLoss):
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.advantage_key)
+        if self.normalize_advantage and advantage.numel() > 1:
+            loc = advantage.mean().item()
+            scale = advantage.std().clamp_min(1e-6).item()
+            advantage = (advantage - loc) / scale
+            
         log_weight, dist = self._log_weight(tensordict)
         # ESS for logging
         with torch.no_grad():
@@ -364,10 +369,6 @@ class ClipPPOLoss(PPOLoss):
         gain1 = log_weight.exp() * advantage
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
-        if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean().item()
-            scale = advantage.std().clamp_min(1e-6).item()
-            advantage = (advantage - loc) / scale
         gain2 = log_weight_clip.exp() * advantage
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
