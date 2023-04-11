@@ -13,8 +13,10 @@ import sys
 import time
 
 import pytest
+
 try:
     import ray
+
     _has_ray = True
     RAY_ERR = None
 except ModuleNotFoundError as err:
@@ -423,6 +425,7 @@ class TestSyncCollector(DistributedCollectorBase):
             if proc.is_alive():
                 proc.terminate()
             queue.close()
+
 
 @pytest.mark.skipif(not _has_ray, reason=f"Ray not found (error: {RAY_ERR})")
 class TestRayCollector(DistributedCollectorBase):
