@@ -1,9 +1,5 @@
 version: 2.1
 
-orbs:
-  codecov: codecov/codecov@3.2.3
-  node: circleci/node@4.7.0
-
 executors:
   windows-cpu:
     machine:
@@ -583,7 +579,10 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F d4rl-gpu -C $CIRCLE_SHA1
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -F sklearn-gpu
+#            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F sklearn-gpu -C $CIRCLE_SHA1
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_d4rl/post_process.sh
@@ -638,7 +637,10 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F sklearn-gpu -C $CIRCLE_SHA1
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -F sklearn-gpu
+#            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F sklearn-gpu -C $CIRCLE_SHA1
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_sklearn/post_process.sh
@@ -726,16 +728,18 @@ jobs:
       - run:
           name: Run tests
           command: bash .circleci/unittest/linux_libs/scripts_envpool/run_test.sh
-#      - run:
-#          name: Codecov upload
-#          command: |
-#            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F linux-envpool -C $CIRCLE_SHA1
+      - run:
+          name: Codecov upload
+          command: |
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -F sklearn-gpu
+#            bash <(curl -s https://codecov.io/bash) -Z -C $CIRCLE_SHA1 -F sklearn-gpu -C $CIRCLE_SHA1
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_envpool/post_process.sh
       - store_test_results:
           path: test-results
-      - codecov/upload
 
   unittest_linux_brax_gpu:
     <<: *binary_common
