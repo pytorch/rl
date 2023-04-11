@@ -114,7 +114,9 @@ class PPOLoss(LossModule):
         )
         # we want to make sure there are no duplicates in the params: the
         # params of critic must be refs to actor if they're shared
-        self.convert_to_functional(critic, "critic", compare_against=self.actor_params)
+        # self.convert_to_functional(critic, "critic", compare_against=self.actor_params)  # Value network update is not correct
+        # self.convert_to_functional(critic, "critic")  # Value network update is not correct either
+        self.critic = critic
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
         self.samples_mc_entropy = samples_mc_entropy
@@ -169,7 +171,7 @@ class PPOLoss(LossModule):
             tensordict_select = tensordict.select(*self.critic.in_keys)
             state_value = self.critic(
                 tensordict_select,
-                params=self.critic_params,
+                # params=self.critic_params,
             ).get("state_value")
             loss_value = distance_loss(
                 target_return,
