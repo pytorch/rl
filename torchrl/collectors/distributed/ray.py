@@ -4,7 +4,6 @@ from typing import Callable, Dict, Iterator, List, OrderedDict, Union
 
 import torch
 import torch.nn as nn
-from ray._private.services import get_node_ip_address
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
 from torchrl.collectors import MultiaSyncDataCollector
@@ -22,6 +21,7 @@ logger = logging.getLogger(__name__)
 RAY_ERR = None
 try:
     import ray
+    from ray._private.services import get_node_ip_address
 
     _has_ray = True
 except ImportError as err:
