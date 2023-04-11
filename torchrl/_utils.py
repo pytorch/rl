@@ -266,7 +266,7 @@ class implement_for:
 
     @property
     def func_name(self):
-        return f"{self.fn.__module__}.{self.fn.__name__}"
+        return self.fn.__name__
 
     def module_set(self):
         """Sets the function in its module, if it exists already."""
@@ -274,7 +274,9 @@ class implement_for:
         if cls is None:
             # class not yet defined
             return
-        setattr(cls, self.fn.__name__, self._implementations[self.func_name])
+        if cls.__class__.__name__ == "function":
+            cls = inspect.getmodule(self.fn)
+        setattr(cls, self.fn.__name__, self.fn)
 
     def __call__(self, fn):
         self.fn = fn
@@ -299,7 +301,11 @@ class implement_for:
                     module = self.module_name()
                 version = module.__version__
 
-                if self.check_version(version, self.from_version, self.to_version):
+                if (
+                    self.check_version(version, self.from_version, self.to_version)
+                    and VERBOSE
+                ):
+                    # we do not use RL_WARNINGS here because it's utterly verbose
                     warnings.warn(
                         f"Got multiple backends for {func_name}. "
                         f"Using the last queried ({module} with version {version})."

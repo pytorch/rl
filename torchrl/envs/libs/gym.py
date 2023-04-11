@@ -66,6 +66,13 @@ class set_gym_backend(_DecoratorContextManager):
                 self.backend.__version__, setter.from_version, setter.to_version
             )
             if check_module and check_version:
+                print(
+                    "setter",
+                    setter.func_name,
+                    setter.module_name,
+                    setter.from_version,
+                    setter.to_version,
+                )
                 setter(setter.fn)
 
     def __enter__(self):

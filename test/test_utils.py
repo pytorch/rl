@@ -6,7 +6,9 @@ import argparse
 import os
 
 import pytest
+
 from torchrl._utils import get_binary_env_var, implement_for
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 
 
 @pytest.mark.parametrize("value", ["True", "1", "true"])
@@ -130,6 +132,33 @@ def test_implement_for_reset():
     implement_for.reset()
     assert implement_for_test_functions.select_correct_version() == "0.3+"
     assert _impl is not implement_for._implementations
+
+
+def test_gym013():
+    try:
+        import gym
+        import gymnasium
+    except ModuleNotFoundError:
+        raise pytest.skip("Cannot test gym vs gymnasium")
+
+    import _utils_internal
+    from torchrl.envs.utils import check_env_specs
+
+    with set_gym_backend(gymnasium):
+        _utils_internal._set_gym_environments()
+        pendulum = GymEnv(_utils_internal.PENDULUM_VERSIONED)
+        check_env_specs(pendulum)
+        assert isinstance(pendulum._env.action_space, gymnasium.spaces.Box)
+    with set_gym_backend(gym):
+        _utils_internal._set_gym_environments()
+        pendulum = GymEnv(_utils_internal.PENDULUM_VERSIONED)
+        check_env_specs(pendulum)
+        assert isinstance(pendulum._env.action_space, gym.spaces.Box)
+    with set_gym_backend(gymnasium):
+        _utils_internal._set_gym_environments()
+        pendulum = GymEnv(_utils_internal.PENDULUM_VERSIONED)
+        check_env_specs(pendulum)
+        assert isinstance(pendulum._env.action_space, gymnasium.spaces.Box)
 
 
 if __name__ == "__main__":
