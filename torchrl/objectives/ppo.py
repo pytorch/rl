@@ -350,7 +350,7 @@ class ClipPPOLoss(PPOLoss):
             loc = advantage.mean().item()
             scale = advantage.std().clamp_min(1e-6).item()
             advantage = (advantage - loc) / scale
-            
+
         log_weight, dist = self._log_weight(tensordict)
         # ESS for logging
         with torch.no_grad():
