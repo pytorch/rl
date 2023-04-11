@@ -62,6 +62,7 @@ from torchrl.envs import (
     RandomCropTensorDict,
     RenameTransform,
     Resize,
+    Reward2GoTransform,
     RewardClipping,
     RewardScaling,
     RewardSum,
@@ -3843,6 +3844,102 @@ class TestRewardSum(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for RewardSum")
+
+
+class TestReward2Go(TransformBase):
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.parametrize("done_flags", [1, 5])
+    def test_transform_rb(self, done_flags, gamma):
+        device = "cpu"
+        batch = [20]
+        torch.manual_seed(0)
+        r2g = Reward2GoTransform(gamma=gamma)
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
+        rb.append_transform(r2g)
+        done = torch.zeros(*batch, 1, dtype=torch.bool)
+        done_flags = torch.randint(0, *batch, size=(done_flags,))
+        done[done_flags] = True
+        reward = torch.randn(*batch, 1, device=device)
+        misc = torch.randn(*batch, 1, device=device)
+
+        td = TensorDict(
+            {"misc": misc, "reward": reward, "next": {"done": done}},
+            batch,
+            device=device,
+        )
+        rb.extend(td)
+        sample = rb.sample(20)
+        assert sample["reward_to_go"].shape == (20, 1)
+        assert sample["reward_to_go"].all() != 0
+
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.parametrize("done_flags", [1, 5])
+    def test_transform_inverse(self, gamma, done_flags):
+        device = "cpu"
+        batch = [20]
+        torch.manual_seed(0)
+        done = torch.zeros(*batch, 1, dtype=torch.bool)
+        done_flags = torch.randint(0, *batch, size=(done_flags,))
+        done[done_flags] = True
+        reward = torch.randn(*batch, 1, device=device)
+        misc = torch.randn(*batch, 1, device=device)
+        r2g = Reward2GoTransform(gamma=gamma)
+        td = TensorDict(
+            {"misc": misc, "reward": reward, "next": {"done": done}},
+            batch,
+            device=device,
+        )
+        td = r2g.inv(td)
+        assert td["reward_to_go"].shape == (20, 1)
+        assert td["reward_to_go"].all() != 0
+
+    def test_transform(self):
+        raise pytest.skip("No inverse for Reward2Go")
+
+    def test_transform_env(self):
+        raise pytest.skip("No environment transform for Reward2Go")
+
+    def test_parallel_trans_env_check(self):
+        raise pytest.skip("No environment transform for Reward2Go")
+
+    def test_single_trans_env_check(self):
+        raise pytest.skip("No environment transform for Reward2Go")
+
+    def test_serial_trans_env_check(self):
+        raise pytest.skip("No environment transform for Reward2Go")
+
+    def test_trans_serial_env_check(self):
+        raise pytest.skip("No environment transform for Reward2Go")
+
+    def test_trans_parallel_env_check(self):
+        raise pytest.skip("No environment transform for Reward2Go")
+
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.parametrize("done_flags", [1, 5])
+    def test_transform_no_env(self, gamma, done_flags):
+        device = "cpu"
+        batch = [20]
+        torch.manual_seed(0)
+        done = torch.zeros(*batch, 1, dtype=torch.bool)
+        done_flags = torch.randint(0, *batch, size=(done_flags,))
+        done[done_flags] = True
+        reward = torch.randn(*batch, 1, device=device)
+        misc = torch.randn(*batch, 1, device=device)
+        r2g = Reward2GoTransform(gamma=gamma)
+        td = TensorDict(
+            {"misc": misc, "reward": reward, "next": {"done": done}},
+            batch,
+            device=device,
+        )
+        td = r2g.inv(td)
+        assert td["reward_to_go"].shape == (20, 1)
+        assert td["reward_to_go"].all() != 0
+
+    def test_transform_compose(self):
+        raise pytest.skip("No model transform for Reward2Go")
+
+    def test_transform_model(self):
+        raise pytest.skip("No model transform for Reward2Go")
 
 
 class TestUnsqueezeTransform(TransformBase):
