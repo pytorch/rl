@@ -102,7 +102,7 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
 
 
 class SafeModule(TensorDictModule):
-    """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`torchrl.data.TensorSpec` as argument to control the output domain.
+    """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`~torchrl.data.TensorSpec` as argument to control the output domain.
 
     Args:
         module (nn.Module): a nn.Module used to map the input to the output
