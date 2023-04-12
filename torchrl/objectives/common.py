@@ -178,15 +178,15 @@ class LossModule(nn.Module):
                 "expanding params is only possible when functorch is installed,"
                 "as this feature requires calls to the vmap operator."
             )
+        if compare_against is not None:
+            compare_against = set(compare_against)
+        else:
+            compare_against = set()
         if expand_dim:
             # Expands the dims of params and buffers.
             # If the param already exist in the module, we return a simple expansion of the
             # original one. Otherwise, we expand and resample it.
             # For buffers, a cloned expansion (or equivalently a repeat) is returned.
-            if compare_against is not None:
-                compare_against = set(compare_against)
-            else:
-                compare_against = set()
 
             def _compare_and_expand(param):
 
@@ -237,7 +237,7 @@ class LossModule(nn.Module):
                         break
                 else:
                     raise RuntimeError("parameter not found")
-                if compare_against is not None and p in set(compare_against):
+                if compare_against is not None and p in compare_against:
                     _param_name = _param_name + "_detached"
                 setattr(self, "_sep_".join([module_name, key]), _param_name)
         prev_set_buffers = set(self.buffers())
