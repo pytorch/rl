@@ -12,14 +12,10 @@ Both state and pixel-based environments are supported.
 
 The helper functions are coded in the utils.py associated with this script.
 """
-
+import tqdm
+import hydra
 import torch
 from torch.optim.lr_scheduler import LinearLR
-
-import hydra
-import tqdm
-from tensordict import TensorDict
-from torchrl.envs.utils import set_exploration_mode
 from torchrl.trainers.helpers.envs import correct_for_frame_skip
 
 
@@ -70,13 +66,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
     r0 = None
     l0 = None
     for data in collector:
+
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch
         pbar.update(data.numel())
         data_view = data.reshape(-1)
+
+        # Compute GAE
         with torch.no_grad():
             data_view = adv_module(data_view)
+
+        # Update the data buffer
         data_buffer.extend(data_view)
+
+        # Logging
         episode_rewards = data["next"]["episode_reward"][data["next"]["done"]]
         if len(episode_rewards) > 0:
             logger.log_scalar("reward_training", episode_rewards.mean().item(), collected_frames)
@@ -84,16 +87,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for epoch in range(cfg.loss.ppo_epochs):
             for _ in range(frames_in_batch // cfg.loss.mini_batch_size):
 
+                # Get a data batch
                 batch = data_buffer.sample().to(model_device)
 
+                # Forward pass PPO loss
                 loss = loss_module(batch)
                 loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
 
+                # Backward pass
                 loss_sum.backward()
-                bn = torch.nn.utils.clip_grad_norm_(list(actor.parameters()) + list(critic.parameters()), max_norm=0.5)
+                grad_norm = torch.nn.utils.clip_grad_norm_(list(actor.parameters()) + list(critic.parameters()), max_norm=0.5)
                 optim.step()
                 scheduler.step()
                 optim.zero_grad()
+
+                # Logging
                 if r0 is None:
                     r0 = data["reward"].mean().item()
                 if l0 is None:
@@ -103,8 +111,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 pbar.set_description(
                     f"loss: {loss_sum.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['reward'].mean(): 4.4f} (init={r0: 4.4f})"
                 )
-                logger.log_scalar("bn", bn.item(), collected_frames)
+                logger.log_scalar("grad_norm", grad_norm.item(), collected_frames)
+
         collector.update_policy_weights_()
+
+        # Test current policy
         if (
             collected_frames - frames_in_batch
         ) // record_interval < collected_frames // record_interval:

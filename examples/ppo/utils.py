@@ -5,7 +5,7 @@ import torch.optim
 import torch.distributions as dist
 from tensordict.nn import TensorDictModule
 
-from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
     CompositeSpec,
     LazyMemmapStorage,
@@ -29,7 +29,6 @@ from torchrl.envs import (
     StepCounter
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     ConvNet,
     MLP,
@@ -233,7 +232,6 @@ def make_collector(cfg, policy):
         frames_per_batch=collector_cfg.frames_per_batch,
         total_frames=collector_cfg.total_frames,
         device=collector_cfg.collector_devices,
-        init_random_frames=collector_cfg.init_random_frames,
         max_frames_per_traj=collector_cfg.max_frames_per_traj,
     )
     return collector
