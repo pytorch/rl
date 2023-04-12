@@ -91,7 +91,7 @@ class RPCDataCollector(DataCollectorBase):
 
     Args:
         create_env_fn (Callable or List[Callabled]): list of Callables, each returning an
-            instance of :class:`torchrl.envs.EnvBase`.
+            instance of :class:`~torchrl.envs.EnvBase`.
         policy (Callable, optional): Instance of TensorDictModule class.
             Must accept TensorDictBase object as input.
             If ``None`` is provided, the policy used will be a
@@ -121,12 +121,12 @@ class RPCDataCollector(DataCollectorBase):
             at the beginning of a batch collection.
             Defaults to ``False``.
         postproc (Callable, optional): A post-processing transform, such as
-            a :class:`torchrl.envs.Transform` or a :class:`torchrl.data.postprocs.MultiStep`
+            a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
             instance.
             Defaults to ``None``.
         split_trajs (bool, optional): Boolean indicating whether the resulting
             TensorDict should be split according to the trajectories.
-            See :func:`torchrl.collectors.utils.split_trajectories` for more
+            See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
         exploration_mode (str, optional): interaction mode to be used when
@@ -137,20 +137,20 @@ class RPCDataCollector(DataCollectorBase):
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
         collector_class (type or str, optional): a collector class for the remote node. Can be
-            :class:`torchrl.collectors.SyncDataCollector`,
-            :class:`torchrl.collectors.MultiSyncDataCollector`,
-            :class:`torchrl.collectors.MultiaSyncDataCollector`
+            :class:`~torchrl.collectors.SyncDataCollector`,
+            :class:`~torchrl.collectors.MultiSyncDataCollector`,
+            :class:`~torchrl.collectors.MultiaSyncDataCollector`
             or a derived class of these. The strings "single", "sync" and
             "async" correspond to respective class.
-            Defaults to :class:`torchrl.collectors.SyncDataCollector`.
+            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
 
             .. note::
 
               Support for :class:`MultiSyncDataCollector` and :class:`MultiaSyncDataCollector`
-              is experimental, and :class:`torchrl.collectors.SyncDataCollector`
+              is experimental, and :class:`~torchrl.collectors.SyncDataCollector`
               should always be preferred. If multiple simultaneous environment
               need to be executed on a single node, consider using a
-              :class:`torchrl.envs.ParallelEnv` instance.
+              :class:`~torchrl.envs.ParallelEnv` instance.
 
         collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
             remote data-collector. If a list is provided, each element will
@@ -179,7 +179,7 @@ class RPCDataCollector(DataCollectorBase):
             updated.
             Defaults to ``False``, ie. updates have to be executed manually
             through
-            :meth:`torchrl.collectors.distributed.DistributedDataCollector.update_policy_weights_`.
+            :meth:`~torchrl.collectors.distributed.DistributedDataCollector.update_policy_weights_`.
         max_weight_update_interval (int, optional): the maximum number of
             batches that can be collected before the policy weights of a worker
             is updated.
@@ -279,10 +279,10 @@ class RPCDataCollector(DataCollectorBase):
 
         self.num_workers_per_collector = num_workers_per_collector
         self.total_frames = total_frames
-        if slurm_kwargs is None:
-            self.slurm_kwargs = copy(DEFAULT_SLURM_CONF)
-        else:
-            self.slurm_kwargs = copy(DEFAULT_SLURM_CONF).update(slurm_kwargs)
+        self.slurm_kwargs = copy(DEFAULT_SLURM_CONF)
+        if slurm_kwargs is not None:
+            self.slurm_kwargs.update(slurm_kwargs)
+
         collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
         self.collector_kwargs = (
             deepcopy(collector_kwargs)
