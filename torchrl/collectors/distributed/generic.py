@@ -48,13 +48,13 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
     os.environ["MASTER_PORT"] = str(tcpport)
 
     if verbose:
-        print("Rank0 IP address:", rank0_ip, "\ttcp port:", tcpport)
-        print(f"node with rank {rank} -- launching distributed")
+        print(f"Rank0 IP address: '{rank0_ip}' \ttcp port: '{tcpport}'")
+        print(f"node with rank {rank} with world_size {world_size} -- launching distributed")
     torch.distributed.init_process_group(
         backend,
         rank=rank,
         world_size=world_size,
-        timeout=timedelta(MAX_TIME_TO_CONNECT),
+        # timeout=timedelta(MAX_TIME_TO_CONNECT),
         init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
     if verbose:
@@ -473,8 +473,8 @@ class DistributedDataCollector(DataCollectorBase):
     ):
         if self._VERBOSE:
             print(
-                f"launching main node with tcp port {self.tcp_port} and "
-                f"IP {self.IPAddr}."
+                f"launching main node with tcp port '{self.tcp_port}' and "
+                f"IP '{self.IPAddr}'. rank: 0, world_size: {world_size}."
             )
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = str(self.tcp_port)
@@ -484,7 +484,7 @@ class DistributedDataCollector(DataCollectorBase):
             backend,
             rank=0,
             world_size=world_size,
-            timeout=timedelta(MAX_TIME_TO_CONNECT),
+            # timeout=timedelta(MAX_TIME_TO_CONNECT),
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
         if self._VERBOSE:
