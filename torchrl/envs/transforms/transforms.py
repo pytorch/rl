@@ -3654,7 +3654,7 @@ class RenameTransform(Transform):
 class Reward2GoTransform(Transform):
     """Calculates the reward to go based on the episode reward and a discount factor.
 
-    As the Reward2GoTransform is only an inverse transform the in_keys will be directly used for the in_keys_inv.
+    As the :class:`~.Reward2GoTransform` is only an inverse transform the ``in_keys`` will be directly used for the ``in_keys_inv``.
     The reward-to-go can be only calculated once the episode is finished. Therefore, the transform should be applied to the replay buffer
     and not to the collector.
 
@@ -3684,7 +3684,15 @@ class Reward2GoTransform(Transform):
         self.register_buffer("gamma", gamma)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        episode_ends = torch.where(tensordict.get(("next", "done")))[0]
+        done = tensordict.get(("next", "done"))
+        truncated = tensordict.get(("next", "truncated"), None)
+        if truncated is not None:
+            done_or_truncated = done | truncated
+        else:
+            done_or_truncated = done
+        if not done_or_truncated.any(-2).all():
+            raise RuntimeError("No episode ends found")
+        episode_ends = torch.where(done)[0]
         assert episode_ends.shape[0] > 0, "No episode ends found"
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
             if in_key in tensordict.keys(include_nested=isinstance(in_key, tuple)):
