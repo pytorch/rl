@@ -53,7 +53,7 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
     torch.distributed.init_process_group(
         backend,
         rank=rank,
-        # world_size=world_size,
+        world_size=world_size,
         timeout=timedelta(MAX_TIME_TO_CONNECT),
         init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
@@ -483,7 +483,7 @@ class DistributedDataCollector(DataCollectorBase):
         torch.distributed.init_process_group(
             backend,
             rank=0,
-            # world_size=world_size,
+            world_size=world_size,
             timeout=timedelta(MAX_TIME_TO_CONNECT),
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
