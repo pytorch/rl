@@ -279,10 +279,10 @@ class RPCDataCollector(DataCollectorBase):
 
         self.num_workers_per_collector = num_workers_per_collector
         self.total_frames = total_frames
-        if slurm_kwargs is None:
-            self.slurm_kwargs = copy(DEFAULT_SLURM_CONF)
-        else:
-            self.slurm_kwargs = copy(DEFAULT_SLURM_CONF).update(slurm_kwargs)
+        self.slurm_kwargs = copy(DEFAULT_SLURM_CONF)
+        if slurm_kwargs is not None:
+            self.slurm_kwargs.update(slurm_kwargs)
+
         collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
         self.collector_kwargs = (
             deepcopy(collector_kwargs)
