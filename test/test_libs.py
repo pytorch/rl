@@ -117,11 +117,13 @@ IS_OSX = platform == "darwin"
 class TestGym:
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
         if env_name == PONG_VERSIONED and not from_pixels:
-            raise pytest.skip("already pixel")
+            # raise pytest.skip("already pixel")
+            # we don't skip because that would raise an exception
+            return
         elif (
             env_name != PONG_VERSIONED
             and from_pixels
-            and (not torch.has_cuda or not torch.cuda.device_count())
+            and torch.cuda.device_count() < 1
         ):
             raise pytest.skip("no cuda device")
 
