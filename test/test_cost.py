@@ -2407,6 +2407,7 @@ class TestPPO:
             actor,
             value,
             loss_critic_type="l2",
+            separate_losses=True,
         )
 
         if advantage is not None:

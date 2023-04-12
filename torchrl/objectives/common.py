@@ -237,7 +237,7 @@ class LossModule(nn.Module):
                         break
                 else:
                     raise RuntimeError("parameter not found")
-                if compare_against is not None and p in compare_against:
+                if compare_against is not None and p in set(compare_against):
                     _param_name = _param_name + "_detached"
                 setattr(self, "_sep_".join([module_name, key]), _param_name)
         prev_set_buffers = set(self.buffers())

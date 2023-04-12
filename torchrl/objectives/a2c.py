@@ -49,6 +49,10 @@ class A2CLoss(LossModule):
         critic_coef (float): the weight of the critic loss.
         loss_critic_type (str): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -78,12 +82,19 @@ class A2CLoss(LossModule):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         gamma: float = None,
+        separate_losses: bool = False,
     ):
         super().__init__()
         self.convert_to_functional(
             actor, "actor", funs_to_decorate=["forward", "get_dist"]
         )
-        self.convert_to_functional(critic, "critic")
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor.parameters())
+        else:
+            policy_params = None
+        self.convert_to_functional(critic, "critic", compare_against=policy_params)
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
         self.samples_mc_entropy = samples_mc_entropy
