@@ -3642,7 +3642,15 @@ class Reward2GoTransform(Transform):
         self.register_buffer("gamma", gamma)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        episode_ends = torch.where(tensordict.get(("next", "done")))[0]
+        done = tensordict.get(("next", "done"))
+        truncated = tensordict.get(("next", "truncated"), None)
+        if truncated is not None:
+            done_or_truncated = done | truncated
+        else:
+            done_or_truncated = done
+        if not done_or_truncated.any(-2).all():
+            raise RuntimeError("No episode ends found")
+        episode_ends = torch.where(done)[0]
         assert episode_ends.shape[0] > 0, "No episode ends found"
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
             if in_key in tensordict.keys(include_nested=isinstance(in_key, tuple)):
