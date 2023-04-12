@@ -36,6 +36,8 @@ from torchrl.envs.utils import _sort_keys
 
 
 _has_envpool = importlib.util.find_spec("envpool")
+
+
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):
         if self.is_closed:
@@ -1035,7 +1037,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def __init__(
         self,
-        env: Optional["envpool.python.envpool.EnvPoolMixin"] = None,
+        env: Optional["envpool.python.envpool.EnvPoolMixin"] = None,  # noqa: F821
         **kwargs,
     ):
         if not _has_envpool:
@@ -1058,14 +1060,15 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
         import envpool
+
         if not isinstance(env, (envpool.python.envpool.EnvPoolMixin,)):
             raise TypeError("env is not of type 'envpool.python.envpool.EnvPoolMixin'.")
 
-    def _build_env(self, env: "envpool.python.envpool.EnvPoolMixin"):
+    def _build_env(self, env: "envpool.python.envpool.EnvPoolMixin"):  # noqa: F821
         return env
 
     def _make_specs(
-        self, env: "envpool.python.envpool.EnvPoolMixin"
+        self, env: "envpool.python.envpool.EnvPoolMixin"  # noqa: F821
     ) -> None:  # noqa: F821
         self.input_spec = self._get_input_spec()
         self.output_spec = self._get_output_spec()
@@ -1162,11 +1165,14 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _transform_reset_output(
         self,
-        envpool_output: Tuple[Union["treevalue.TreeValue", np.ndarray], Any],
+        envpool_output: Tuple[
+            Union["treevalue.TreeValue", np.ndarray], Any  # noqa: F821
+        ],
         reset_workers: Optional[torch.Tensor],
     ):
         """Process output of envpool env.reset."""
         import treevalue
+
         observation, _ = envpool_output
         if reset_workers is not None:
             # Only specified workers were reset - need to set observation buffer values only for them
@@ -1203,7 +1209,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return tensordict_out
 
     def _treevalue_or_numpy_to_tensor_or_dict(
-        self, x: Union["treevalue.TreeValue", np.ndarray]
+        self, x: Union["treevalue.TreeValue", np.ndarray]  # noqa: F821
     ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
         """Converts observation returned by EnvPool.
 
@@ -1212,18 +1218,22 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         arbitrary depth if necessary.
         """
         import treevalue
+
         if isinstance(x, treevalue.TreeValue):
             ret = self._treevalue_to_dict(x)
         else:
             ret = {"observation": torch.tensor(x)}
         return ret
 
-    def _treevalue_to_dict(self, tv: "treevalue.TreeValue") -> Dict[str, Any]:
+    def _treevalue_to_dict(
+        self, tv: "treevalue.TreeValue"  # noqa: F821
+    ) -> Dict[str, Any]:
         """Converts TreeValue to a dictionary.
 
         Currently only supports depth 1 trees, but can easily be extended to arbitrary depth if necessary.
         """
         import treevalue
+
         return {k[0]: torch.tensor(v) for k, v in treevalue.flatten(tv)}
 
     def _set_seed(self, seed: Optional[int]):
@@ -1278,6 +1288,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         create_env_kwargs: Optional[Dict[str, Any]],
     ) -> Any:
         import envpool
+
         create_env_kwargs = create_env_kwargs or {}
         env = envpool.make(
             task_id=env_name,
