@@ -1,6 +1,7 @@
 import subprocess
 import time
 
+from torchrl._utils import VERBOSE
 from torchrl.collectors.distributed.default_configs import (
     DEFAULT_SLURM_CONF,
     DEFAULT_SLURM_CONF_MAIN,
@@ -64,7 +65,7 @@ class submitit_delayed_launcher:
         ...
     """
 
-    _VERBOSE = False  # for debugging
+    _VERBOSE = VERBOSE  # for debugging
 
     def __init__(
         self,

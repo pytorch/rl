@@ -16,6 +16,7 @@ import torch.cuda
 from tensordict import TensorDict
 from torch import multiprocessing as mp, nn
 
+from torchrl._utils import VERBOSE
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
@@ -350,7 +351,7 @@ class DistributedDataCollector(DataCollectorBase):
         tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
     """
 
-    _VERBOSE = False  # for debugging
+    _VERBOSE = VERBOSE  # for debugging
 
     def __init__(
         self,
@@ -475,14 +476,17 @@ class DistributedDataCollector(DataCollectorBase):
                 f"launching main node with tcp port {self.tcp_port} and "
                 f"IP {self.IPAddr}."
             )
-        TCP_PORT = self.tcp_port
+        os.environ["MASTER_ADDR"] = str(self.IPAddr)
+        os.environ["MASTER_PORT"] = str(self.tcp_port)
+
         torch.distributed.init_process_group(
             backend,
             rank=0,
             world_size=world_size,
             timeout=timedelta(MAX_TIME_TO_CONNECT),
-            init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
+            # init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
+        TCP_PORT = self.tcp_port
         if self._VERBOSE:
             print("main initiated! Launching store...", end="\t")
         self._store = torch.distributed.TCPStore(
