@@ -79,4 +79,4 @@ if [[ $OSTYPE != 'darwin'* ]]; then
 else
   pip install "gym[atari,accept-rom-license]"
 fi
-pip install envpool
+pip install envpool, treevalue
