@@ -55,7 +55,7 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
         rank=rank,
         world_size=world_size,
         timeout=timedelta(MAX_TIME_TO_CONNECT),
-        # init_method=f"tcp://{rank0_ip}:{tcpport}",
+        init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
     if verbose:
         print(f"Connected!\nNode with rank {rank} -- creating store")
@@ -479,14 +479,14 @@ class DistributedDataCollector(DataCollectorBase):
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = str(self.tcp_port)
 
+        TCP_PORT = self.tcp_port
         torch.distributed.init_process_group(
             backend,
             rank=0,
             world_size=world_size,
             timeout=timedelta(MAX_TIME_TO_CONNECT),
-            # init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
+            init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
-        TCP_PORT = self.tcp_port
         if self._VERBOSE:
             print("main initiated! Launching store...", end="\t")
         self._store = torch.distributed.TCPStore(
