@@ -940,6 +940,63 @@ class ToTensorImage(ObservationTransform):
         return spec
 
 
+class TargetReturn(Transform):
+    """Sets a target return for the agent to achieve in the environment.
+
+    Target return can be used in goal-conditioned RL algorithms to set a target that should be achieved at the end of an episode by the agent like Upside-Down RL or Decision Transformer.
+
+    Args:
+        target_return (float): target return to be achieved by the agent.
+        mode (str): mode to be used to update the target return. Can be either "reduce" or "constant". Default: "reduce".
+
+    """
+
+    def __init__(
+        self,
+        target_return: float,
+        mode: str = "reduce",
+    ):
+        super().__init__(in_keys=["reward"], out_keys=["target_return"])
+        self.in_key = "reward"
+        self.out_key = "target_return"
+        self.target_return = target_return
+        self.mode = mode
+
+    def reset(self, tensordict: TensorDict):
+        init_target_return = torch.full(
+            size=(tensordict.batch_size[0], 1),
+            fill_value=self.target_return,
+            dtype=torch.float32,
+        )
+        tensordict.set(self.out_key, init_target_return)
+        return tensordict
+
+    def _call(self, tensordict: TensorDict) -> TensorDict:
+        new_target_return = self._apply_transform(
+            tensordict[self.in_key], tensordict[self.out_key]
+        )
+        tensordict.set(self.out_key, new_target_return)
+        return tensordict
+
+    def _step(self, tensordict: TensorDict) -> TensorDict:
+        next_tensordict = tensordict.get("next")
+        next_tensordict.set(self.out_key, tensordict[self.out_key])
+        next_tensordict = self._call(next_tensordict)
+        tensordict.set("next", next_tensordict)
+        return tensordict
+
+    def _apply_transform(
+        self, reward: torch.Tensor, target_return: torch.Tensor
+    ) -> torch.Tensor:
+        if self.mode == "reduce":
+            target_return = target_return - reward
+            return target_return
+        elif self.mode == "constant":
+            return target_return
+        else:
+            raise ValueError("Unknown mode: {}".format(self.mode))
+
+
 class RewardClipping(Transform):
     """Clips the reward between `clamp_min` and `clamp_max`.
 
