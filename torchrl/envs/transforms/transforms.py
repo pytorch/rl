@@ -964,9 +964,10 @@ class TargetReturn(Transform):
 
     def reset(self, tensordict: TensorDict):
         init_target_return = torch.full(
-            size=(tensordict.batch_size[0], 1),
+            size=(*tensordict.batch_size, 1),
             fill_value=self.target_return,
             dtype=torch.float32,
+            device=tensordict.device,
         )
         tensordict.set(self.out_key, init_target_return)
         return tensordict
@@ -995,6 +996,27 @@ class TargetReturn(Transform):
             return target_return
         else:
             raise ValueError("Unknown mode: {}".format(self.mode))
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError(
+            FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
+        )
+
+    def transform_observation_spec(
+        self, observation_spec: CompositeSpec
+    ) -> CompositeSpec:
+        if not isinstance(observation_spec, CompositeSpec):
+            raise ValueError(
+                f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
+            )
+        observation_spec[self.out_key] = UnboundedDiscreteTensorSpec(
+            shape=self.parent.reward_spec.shape,
+            dtype=self.parent.reward_spec.dtype,
+            device=self.parent.reward_spec.device,
+        )
+        observation_spec[self.out_key].space.max = self.target_return
+
+        return observation_spec
 
 
 class RewardClipping(Transform):

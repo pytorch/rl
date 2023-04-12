@@ -69,6 +69,7 @@ from torchrl.envs import (
     SerialEnv,
     SqueezeTransform,
     StepCounter,
+    TargetReturn,
     TensorDictPrimer,
     TimeMaxPool,
     ToTensorImage,
@@ -1072,7 +1073,6 @@ class TestStepCounter(TransformBase):
             assert torch.all(td.get("truncated"))
         td = step_counter.reset(td)
         if reset_workers:
-
             assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
             assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
         else:
@@ -4371,6 +4371,148 @@ class TestSqueezeTransform(TransformBase):
         r = env.rollout(3)
         r2 = GymEnv(HALFCHEETAH_VERSIONED).rollout(3)
         assert (r.zero_() == r2.zero_()).all()
+
+
+class TestTargetReturn(TransformBase):
+    @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_env(self, batch, mode, device):
+        torch.manual_seed(0)
+        t = TargetReturn(target_return=10.0, mode=mode)
+        next_reward = torch.rand((*batch, 1))
+        td = TensorDict(
+            {
+                "reward": torch.rand((*batch, 1)),
+                "next": {
+                    "reward": next_reward,
+                },
+            },
+            device=device,
+            batch_size=batch,
+        )
+        td = t.reset(td)
+        td = t._step(td)
+        # assert td["target_return"].shape == torch.Size(batch)
+        if mode == "reduce":
+            assert (td["target_return"] == 10.0).all()
+            assert (td["next"]["target_return"] + td["next"]["reward"] == 10.0).all()
+
+        else:
+            assert (td["target_return"] == 10.0).all()
+            assert (td["next"]["target_return"] == 10.0).all()
+
+    @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_compose(self, batch, mode, device):
+        torch.manual_seed(0)
+        t = Compose(TargetReturn(target_return=10.0, mode=mode))
+        next_reward = torch.rand((*batch, 1))
+        td = TensorDict(
+            {
+                "reward": torch.rand((*batch, 1)),
+                "next": {
+                    "reward": next_reward,
+                },
+            },
+            device=device,
+            batch_size=batch,
+        )
+        td = t.reset(td)
+        td = t._step(td)
+        # assert td["target_return"].shape == torch.Size(batch)
+        if mode == "reduce":
+            assert (td["target_return"] == 10.0).all()
+            assert (td["next"]["target_return"] + td["next"]["reward"] == 10.0).all()
+
+        else:
+            assert (td["target_return"] == 10.0).all()
+            assert (td["next"]["target_return"] == 10.0).all()
+
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_single_trans_env_check(self, mode, device):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            TargetReturn(target_return=10.0, mode=mode).to(device),
+            device=device,
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_serial_trans_env_check(self, mode, device):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                TargetReturn(target_return=10.0, mode=mode).to(device),
+                device=device,
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_parallel_trans_env_check(self, mode, device):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                TargetReturn(target_return=10.0, mode=mode).to(device),
+                device=device,
+            )
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_trans_serial_env_check(self, mode, device):
+        env = TransformedEnv(
+            SerialEnv(2, DiscreteActionConvMockEnvNumpy).to(device),
+            TargetReturn(target_return=10.0, mode=mode).to(device),
+            device=device,
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_trans_parallel_env_check(self, mode, device):
+        env = TransformedEnv(
+            ParallelEnv(2, DiscreteActionConvMockEnvNumpy).to(device),
+            TargetReturn(target_return=10.0, mode=mode),
+            device=device,
+        )
+        check_env_specs(env)
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse method for TargetReturn")
+
+    def test_transform_no_env(self):
+        raise pytest.skip("No inverse method for TargetReturn")
+
+    def test_transform_model(
+        self,
+    ):
+        t = TargetReturn(target_return=10.0)
+        model = nn.Sequential(t, nn.Identity())
+        reward = torch.randn(10)
+        td = TensorDict({("next", "reward"): reward}, [])
+        with pytest.raises(NotImplementedError):
+            model(td)
+
+    def test_transform_rb(
+        self,
+    ):
+        t = TargetReturn(target_return=10.0)
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        reward = torch.randn(10)
+        td = TensorDict({("next", "reward"): reward}, []).expand(10)
+        rb.append_transform(t)
+        rb.extend(td)
+        with pytest.raises(NotImplementedError):
+            _ = rb.sample(2)
 
 
 class TestToTensorImage(TransformBase):
