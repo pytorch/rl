@@ -88,7 +88,54 @@ class LossModule(nn.Module):
         compare_against: Optional[List[Parameter]] = None,
         funs_to_decorate=None,
     ) -> None:
-        """Converts a module to functional to be used in the loss."""
+        """Converts a module to functional to be used in the loss.
+
+        Args:
+            module (TensorDictModule or compatible): a stateful tensordict module.
+                This module will be made functional, yet still stateful, meaning
+                that it will be callable with the following alternative signatures:
+
+                >>> module(tensordict)
+                >>> module(tensordict, params=params)
+
+                ``params`` is a :class:`tensordict.TensorDict` instance with parameters
+                stuctured as the output of :func:`tensordict.nn.make_functional`
+                is.
+            module_name (str): name where the module will be found.
+                The parameters of the module will be found under ``loss_module.<module_name>_params``
+                whereas the module will be found under ``loss_module.<module_name>``.
+            expand_dim (int, optional): if provided, the parameters of the module
+                will be expanded ``N`` times, where ``N = expand_dim`` along the
+                first dimension. This option is to be used whenever a target
+                network with more than one configuration is to be used.
+
+                .. note::
+                  If a ``compare_against`` list of values is provided, the
+                  resulting parameters will simply be a detached expansion
+                  of the original parameters. If ``compare_against`` is not
+                  provided, the value of the parameters will be resampled uniformly
+                  between the minimum and maximum value of the parameter content.
+
+             create_target_params (bool, optional): if ``True``, a detached
+                copy of the parameter will be available to feed a target network
+                under the name ``loss_module.<module_name>_target_params``.
+                If ``False`` (default), this attribute will still be available
+                but it will be a detached instance of the parameters, not a copy.
+                In other words, any modification of the parameter value
+                will directly be reflected in the target parameters.
+            compare_against (iterable of parameters, optional): if provided,
+                this list of parameters will be used as a comparison set for
+                the parameters of the module. If the parameters are expanded
+                (``expand_dim > 0``), the resulting parameters for the module
+                will be a simple expansion of the original parameter. Otherwise,
+                the resulting parameters will be a detached version of the
+                original parameters. If ``None``, the resulting parameters
+                will carry gradients as expected.
+            funs_to_decorate (list of str, optional): if provided, the list of
+                methods of ``module`` to make functional, ie the list of
+                methods that will accept the ``params`` keyword argument.
+
+        """
         if funs_to_decorate is None:
             funs_to_decorate = ["forward"]
         # To make it robust to device casting, we must register list of
@@ -102,10 +149,6 @@ class LossModule(nn.Module):
         params = make_functional(module, funs_to_decorate=funs_to_decorate)
         functional_module = deepcopy(module)
         repopulate_module(module, params)
-        # params = make_functional(
-        #     module, funs_to_decorate=funs_to_decorate, keep_params=True
-        # )
-        # functional_module = module
 
         params_and_buffers = params
         # we transform the buffers in params to make sure they follow the device
@@ -135,15 +178,15 @@ class LossModule(nn.Module):
                 "expanding params is only possible when functorch is installed,"
                 "as this feature requires calls to the vmap operator."
             )
+        if compare_against is not None:
+            compare_against = set(compare_against)
+        else:
+            compare_against = set()
         if expand_dim:
             # Expands the dims of params and buffers.
             # If the param already exist in the module, we return a simple expansion of the
             # original one. Otherwise, we expand and resample it.
             # For buffers, a cloned expansion (or equivalently a repeat) is returned.
-            if compare_against is not None:
-                compare_against = set(compare_against)
-            else:
-                compare_against = set()
 
             def _compare_and_expand(param):
 
@@ -186,11 +229,16 @@ class LossModule(nn.Module):
             if parameter not in prev_set_params:
                 setattr(self, "_sep_".join([module_name, key]), parameter)
             else:
+                # if the parameter is already present, we register a string pointing
+                # to is instead. If the string ends with a '_detached' suffix, the
+                # value will be detached
                 for _param_name, p in self.named_parameters():
                     if parameter is p:
                         break
                 else:
                     raise RuntimeError("parameter not found")
+                if compare_against is not None and p in compare_against:
+                    _param_name = _param_name + "_detached"
                 setattr(self, "_sep_".join([module_name, key]), _param_name)
         prev_set_buffers = set(self.buffers())
         for key, buffer in buffers.items():
@@ -259,8 +307,12 @@ class LossModule(nn.Module):
                         key = (key,)
                     value_to_set = getattr(self, "_sep_".join([network_name, *key]))
                     if isinstance(value_to_set, str):
-                        value_to_set = getattr(self, value_to_set).detach()
-                    params.set(key, value_to_set)
+                        if value_to_set.endswith("_detached"):
+                            value_to_set = value_to_set[:-9]
+                            value_to_set = getattr(self, value_to_set).detach()
+                        else:
+                            value_to_set = getattr(self, value_to_set)
+                    params._set(key, value_to_set)
                 return params
             else:
                 params = getattr(self, param_name)
