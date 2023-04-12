@@ -3612,7 +3612,7 @@ class RenameTransform(Transform):
 class Reward2GoTransform(Transform):
     """Calculates the reward to go based on the episode reward and a discount factor.
 
-    As the Reward2GoTransform is only an inverse transform the in_keys will be directly used for the in_keys_inv.
+    As the :class:`~.Reward2GoTransform` is only an inverse transform the ``in_keys`` will be directly used for the ``in_keys_inv``.
     The reward-to-go can be only calculated once the episode is finished. Therefore, the transform should be applied to the replay buffer
     and not to the collector.
 
