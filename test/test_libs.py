@@ -121,9 +121,7 @@ class TestGym:
             # we don't skip because that would raise an exception
             return
         elif (
-            env_name != PONG_VERSIONED
-            and from_pixels
-            and torch.cuda.device_count() < 1
+            env_name != PONG_VERSIONED and from_pixels and torch.cuda.device_count() < 1
         ):
             raise pytest.skip("no cuda device")
 
