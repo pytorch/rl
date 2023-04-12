@@ -375,6 +375,7 @@ Helpers
     set_exploration_mode
     exploration_mode
     check_env_specs
+    make_composite_from_td
 
 Domain-specific
 ---------------
