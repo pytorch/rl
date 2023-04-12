@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 from collections import OrderedDict
@@ -31,19 +32,10 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
-try:
-    # Libraries necessary for MultiThreadedEnv
-    import envpool
-
-    import treevalue
-
-    _has_envpool = True
-except ImportError as err:
-    _has_envpool = False
-    IMPORT_ERR_ENVPOOL = err
 from torchrl.envs.utils import _sort_keys
 
 
+_has_envpool = importlib.util.find_spec("envpool")
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):
         if self.is_closed:
@@ -1049,7 +1041,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         if not _has_envpool:
             raise ImportError(
                 "envpool python package or one of its dependencies (gym, treevalue) were not found. Please install these dependencies."
-            ) from IMPORT_ERR_ENVPOOL
+            )
         if env is not None:
             kwargs["env"] = env
             self.num_workers = env.config["num_envs"]
@@ -1065,6 +1057,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
+        import envpool
         if not isinstance(env, (envpool.python.envpool.EnvPoolMixin,)):
             raise TypeError("env is not of type 'envpool.python.envpool.EnvPoolMixin'.")
 
@@ -1173,6 +1166,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         reset_workers: Optional[torch.Tensor],
     ):
         """Process output of envpool env.reset."""
+        import treevalue
         observation, _ = envpool_output
         if reset_workers is not None:
             # Only specified workers were reset - need to set observation buffer values only for them
@@ -1217,6 +1211,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         to a tensor or a dictionary of tensors. Currently only supports depth 1 trees, but can easily be extended to
         arbitrary depth if necessary.
         """
+        import treevalue
         if isinstance(x, treevalue.TreeValue):
             ret = self._treevalue_to_dict(x)
         else:
@@ -1228,6 +1223,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
         Currently only supports depth 1 trees, but can easily be extended to arbitrary depth if necessary.
         """
+        import treevalue
         return {k[0]: torch.tensor(v) for k, v in treevalue.flatten(tv)}
 
     def _set_seed(self, seed: Optional[int]):
@@ -1281,6 +1277,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         num_workers: int,
         create_env_kwargs: Optional[Dict[str, Any]],
     ) -> Any:
+        import envpool
         create_env_kwargs = create_env_kwargs or {}
         env = envpool.make(
             task_id=env_name,
