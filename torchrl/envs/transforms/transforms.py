@@ -3706,9 +3706,17 @@ class Reward2GoTransform(Transform):
         return tensordict
 
     def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
-        return reward
+        raise ValueError(
+            "The Reward2GoTransform is only an inverse transform and can only be applied to the replay buffer and not to the collector or the environment."
+        )
 
     def _inv_apply_transform(
         self, reward: torch.Tensor, episode_ends: torch.Tensor
     ) -> torch.Tensor:
         return compute_reward2go(reward, episode_ends, self.gamma)
+
+    def set_container(self, container):
+        if isinstance(container, EnvBase) or container.parent is not None:
+            raise ValueError(
+                "The Reward2GoTransform is only an inverse transform and can only be applied to the replay buffer and not to the collector or the environment."
+            )
