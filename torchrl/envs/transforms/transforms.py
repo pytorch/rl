@@ -3660,7 +3660,7 @@ class Reward2GoTransform(Transform):
 
     Args:
         in_keys (list of str/tuples of str): the entries to rename
-        gamma (float or torch.Tensor): the discount factor
+        gamma (float or torch.Tensor): the discount factor. Defaults to 1.0.
 
     """
 
