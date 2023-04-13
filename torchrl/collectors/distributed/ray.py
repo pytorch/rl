@@ -4,7 +4,6 @@ from typing import Callable, Dict, Iterator, List, OrderedDict, Union
 
 import torch
 import torch.nn as nn
-from ray._private.services import get_node_ip_address
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
 from torchrl.collectors import MultiaSyncDataCollector
@@ -22,6 +21,7 @@ logger = logging.getLogger(__name__)
 RAY_ERR = None
 try:
     import ray
+    from ray._private.services import get_node_ip_address
 
     _has_ray = True
 except ImportError as err:
@@ -115,7 +115,7 @@ class RayCollector(DataCollectorBase):
 
     Args:
         create_env_fn (Callable or List[Callabled]): list of Callables, each returning an
-            instance of :class:`torchrl.envs.EnvBase`.
+            instance of :class:`~torchrl.envs.EnvBase`.
         policy (Callable): Instance of TensorDictModule class.
             Must accept TensorDictBase object as input.
         frames_per_batch (int): A keyword-only argument representing the
@@ -141,12 +141,12 @@ class RayCollector(DataCollectorBase):
             at the beginning of a batch collection.
             Defaults to ``False``.
         postproc (Callable, optional): A post-processing transform, such as
-            a :class:`torchrl.envs.Transform` or a :class:`torchrl.data.postprocs.MultiStep`
+            a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
             instance.
             Defaults to ``None``.
         split_trajs (bool, optional): Boolean indicating whether the resulting
             TensorDict should be split according to the trajectories.
-            See :func:`torchrl.collectors.utils.split_trajectories` for more
+            See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
         exploration_mode (str, optional): interaction mode to be used when
@@ -157,11 +157,11 @@ class RayCollector(DataCollectorBase):
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
         collector_class (Python class): a collector class to be remotely instantiated. Can be
-            :class:`torchrl.collectors.SyncDataCollector`,
-            :class:`torchrl.collectors.MultiSyncDataCollector`,
-            :class:`torchrl.collectors.MultiaSyncDataCollector`
+            :class:`~torchrl.collectors.SyncDataCollector`,
+            :class:`~torchrl.collectors.MultiSyncDataCollector`,
+            :class:`~torchrl.collectors.MultiaSyncDataCollector`
             or a derived class of these.
-            Defaults to :class:`torchrl.collectors.SyncDataCollector`.
+            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
         collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
             remote data-collector. If a list is provided, each element will
             correspond to an individual set of keyword arguments for the
