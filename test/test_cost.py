@@ -4887,6 +4887,7 @@ class TestAdv:
 class TestBase:
     @pytest.mark.parametrize("expand_dim", [None, 2])
     @pytest.mark.parametrize("compare_against", [True, False])
+    @pytest.mark.skipif(not _has_functorch, reason="functorch is needed for expansion")
     def test_convert_to_func(self, compare_against, expand_dim):
         class MyLoss(LossModule):
             def __init__(self, compare_against, expand_dim):
