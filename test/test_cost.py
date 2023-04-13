@@ -2407,6 +2407,7 @@ class TestPPO:
             actor,
             value,
             loss_critic_type="l2",
+            separate_losses=True,
         )
 
         if advantage is not None:
@@ -4881,6 +4882,53 @@ class TestAdv:
         )
         td = module(td.clone(False))
         assert td["advantage"].is_leaf
+
+
+class TestBase:
+    @pytest.mark.parametrize("expand_dim", [None, 2])
+    @pytest.mark.parametrize("compare_against", [True, False])
+    @pytest.mark.skipif(not _has_functorch, reason="functorch is needed for expansion")
+    def test_convert_to_func(self, compare_against, expand_dim):
+        class MyLoss(LossModule):
+            def __init__(self, compare_against, expand_dim):
+                super().__init__()
+                module1 = nn.Linear(3, 4)
+                module2 = nn.Linear(3, 4)
+                module3 = nn.Linear(3, 4)
+                module_a = TensorDictModule(
+                    nn.Sequential(module1, module2), in_keys=["a"], out_keys=["c"]
+                )
+                module_b = TensorDictModule(
+                    nn.Sequential(module1, module3), in_keys=["b"], out_keys=["c"]
+                )
+                self.convert_to_functional(module_a, "module_a")
+                self.convert_to_functional(
+                    module_b,
+                    "module_b",
+                    compare_against=module_a.parameters() if compare_against else [],
+                    expand_dim=expand_dim,
+                )
+
+        loss_module = MyLoss(compare_against=compare_against, expand_dim=expand_dim)
+
+        for key in ["module.0.bias", "module.0.weight"]:
+            if compare_against:
+                assert not loss_module.module_b_params.flatten_keys()[key].requires_grad
+            else:
+                assert loss_module.module_b_params.flatten_keys()[key].requires_grad
+            if expand_dim:
+                assert (
+                    loss_module.module_b_params.flatten_keys()[key].shape[0]
+                    == expand_dim
+                )
+            else:
+                assert (
+                    loss_module.module_b_params.flatten_keys()[key].shape[0]
+                    != expand_dim
+                )
+
+        for key in ["module.1.bias", "module.1.weight"]:
+            loss_module.module_b_params.flatten_keys()[key].requires_grad
 
 
 if __name__ == "__main__":
