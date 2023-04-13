@@ -22,7 +22,8 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 20 --error-for-skips
-python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 20 -k 'test_gym or test_dm_control_pixels or test_dm_control' --error-for-skips
+python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 20 -k
+'test_gym and test_dm_control_pixels and test_dm_control' --error-for-skips
 MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 20 -k 'test_libs' --error-for-skips
 coverage combine
 coverage xml -i
