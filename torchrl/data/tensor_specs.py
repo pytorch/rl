@@ -2265,7 +2265,7 @@ class CompositeSpec(TensorSpec):
             return
         elif not isinstance(key, str):
             raise TypeError(f"Got key of type {type(key)} when a string was expected.")
-        
+
         if key in {"shape", "device", "dtype", "space"}:
             raise AttributeError(f"CompositeSpec has no key {key}")
         del self._specs[key]
