@@ -1854,7 +1854,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                     f"The last value of the shape must match nvec.shape[-1] for transform of type {self.__class__}. "
                     f"Got nvec.shape[-1]={sum(nvec)} and shape={shape}."
                 )
-        # self.nvec = self.nvec.expand(shape)
+        self.nvec = self.nvec.expand(shape)
 
         space = BoxList.from_nvec(self.nvec)
         super(DiscreteTensorSpec, self).__init__(
