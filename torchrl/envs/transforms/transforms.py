@@ -3691,12 +3691,11 @@ class Reward2GoTransform(Transform):
         else:
             done_or_truncated = done
         if not done_or_truncated.any(-2).all():
-            raise RuntimeError("No episode ends found")
-        episode_ends = torch.where(done)[0]
-        if episode_ends.shape[0] == 0:
             raise RuntimeError(
                 "No episode ends found to calculate the reward to go. Make sure that the number of frames_per_batch is larger than number of steps per episode."
             )
+        episode_ends = torch.where(done)[0]
+
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
             if in_key in tensordict.keys(include_nested=isinstance(in_key, tuple)):
                 item = self._inv_apply_transform(tensordict.get(in_key), episode_ends)
