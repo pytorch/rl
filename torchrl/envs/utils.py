@@ -12,7 +12,7 @@ from tensordict.nn.probabilistic import (  # noqa
     #       See more details: https://github.com/pytorch/rl/issues/1016
     interaction_mode as exploration_mode,
     interaction_type as exploration_type,
-    InteractionType,
+    InteractionType as ExplorationType,
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
