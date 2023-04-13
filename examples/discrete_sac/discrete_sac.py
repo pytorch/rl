@@ -34,7 +34,7 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 
 def env_maker(env_name, frame_skip=1, device="cpu", from_pixels=False):
     return GymEnv(
-        env_name, "run", device=device, frame_skip=frame_skip, from_pixels=from_pixels
+        env_name, device=device, frame_skip=frame_skip, from_pixels=from_pixels
     )
 
 

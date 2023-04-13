@@ -52,27 +52,22 @@ _is_osx = sys.platform.startswith("darwin")
 
 
 class RandomPolicy:
-    """A random policy for data collectors."""
+    """A random policy for data collectors.
+
+    This is a wrapper around the action_spec.rand method.
+
+    Args:
+        action_spec: TensorSpec object describing the action specs
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data.tensor_specs import BoundedTensorSpec
+        >>> action_spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
+        >>> actor = RandomPolicy(spec=action_spec)
+        >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
+    """
 
     def __init__(self, action_spec: TensorSpec):
-        """Random policy for a given action_spec.
-
-        This is a wrapper around the action_spec.rand method.
-
-
-        $ python example_google.py
-
-        Args:
-            action_spec: TensorSpec object describing the action specs
-
-        Examples:
-            >>> from tensordict import TensorDict
-            >>> from torchrl.data.tensor_specs import BoundedTensorSpec
-            >>> action_spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
-            >>> actor = RandomPolicy(spec=action_spec)
-            >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
-
-        """
         self.action_spec = action_spec
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
@@ -335,15 +330,15 @@ behaviour and more control you can consider writing your own TensorDictModule.
 
 @accept_remote_rref_udf_invocation
 class SyncDataCollector(DataCollectorBase):
-    """Generic data collector for RL problems. Requires and environment constructor and a policy.
+    """Generic data collector for RL problems. Requires an environment constructor and a policy.
 
     Args:
         create_env_fn (Callable): a callable that returns an instance of
-            :class:`torchrl.envs.EnvBase` class.
+            :class:`~torchrl.envs.EnvBase` class.
         policy (Callable): Policy to be executed in the environment.
             Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
             If ``None`` is provided, the policy used will be a
-            :class:`RandomPolicy` instance with the environment
+            :class:`~torchrl.collectors.RandomPolicy` instance with the environment
             ``action_spec``.
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
@@ -383,12 +378,12 @@ class SyncDataCollector(DataCollectorBase):
             at the beginning of a batch collection.
             Defaults to ``False``.
         postproc (Callable, optional): A post-processing transform, such as
-            a :class:`torchrl.envs.Transform` or a :class:`torchrl.data.postprocs.MultiStep`
+            a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
             instance.
             Defaults to ``None``.
         split_trajs (bool, optional): Boolean indicating whether the resulting
             TensorDict should be split according to the trajectories.
-            See :func:`torchrl.collectors.utils.split_trajectories` for more
+            See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
         exploration_mode (str, optional): interaction mode to be used when
@@ -936,7 +931,7 @@ class _MultiDataCollector(DataCollectorBase):
 
     Args:
         create_env_fn (List[Callabled]): list of Callables, each returning an
-            instance of :class:`torchrl.envs.EnvBase`.
+            instance of :class:`~torchrl.envs.EnvBase`.
         policy (Callable, optional): Instance of TensorDictModule class.
             Must accept TensorDictBase object as input.
             If ``None`` is provided, the policy used will be a
@@ -987,12 +982,12 @@ class _MultiDataCollector(DataCollectorBase):
             at the beginning of a batch collection.
             Defaults to ``False``.
         postproc (Callable, optional): A post-processing transform, such as
-            a :class:`torchrl.envs.Transform` or a :class:`torchrl.data.postprocs.MultiStep`
+            a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
             instance.
             Defaults to ``None``.
         split_trajs (bool, optional): Boolean indicating whether the resulting
             TensorDict should be split according to the trajectories.
-            See :func:`torchrl.collectors.utils.split_trajectories` for more
+            See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
         exploration_mode (str, optional): interaction mode to be used when
