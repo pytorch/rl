@@ -150,8 +150,6 @@ feed a tensor-to-tensor map that given a certain state (the input tensor),
 outputs a list of action values to choose from. The wrapper will write the
 resulting action in the input tensordict along with the list of action values.
 
-.. code-block::Python
-
     >>> import torch
     >>> from tensordict import TensorDict
     >>> from tensordict.nn.functional_modules import make_functional
@@ -185,8 +183,6 @@ Hence, for a state space of dimension M, an action space of dimension N and a nu
 the value network encodes a :math:`\mathbb{R}^{M} \rightarrow \mathbb{R}^{N \times B}`
 map. The following example shows how this works in TorchRL with the :class:`~torchrl.modules.tensordict_module.DistributionalQValueActor`
 class:
-
-.. code-block::Python
 
         >>> import torch
         >>> from tensordict import TensorDict
@@ -294,19 +290,36 @@ Models
 ------
 .. currentmodule:: torchrl.modules
 
+TorchRL provides a series of useful "regular" (ie non-tensordict) nn.Module
+classes for RL usage.
+
+Regular modules
+~~~~~~~~~~~~~~~
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
     MLP
     ConvNet
+    LSTMNet
+
+Algorithm-specific modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These networks implement sub-networks that have shown to be useful for specific
+algorithms, such as DQN, DDPG or Dreamer.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
     DuelingCnnDQNet
     DistributionalDQNnet
     DdpgCnnActor
     DdpgCnnQNet
     DdpgMlpActor
     DdpgMlpQNet
-    LSTMNet
     DreamerActor
     ObsEncoder
     ObsDecoder
@@ -317,6 +330,10 @@ Models
 Exploration
 -----------
 .. currentmodule:: torchrl.modules
+
+Noisy linear layers are a popular way of exploring the environment without
+altering the actions, but by integrating the stochasticity in the weight
+configuration.
 
 .. autosummary::
     :toctree: generated/
@@ -342,6 +359,10 @@ Planners
 
 Distributions
 -------------
+.. currentmodule:: torchrl.modules
+
+Some distributions are typically used in RL scripts.
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template_noinherit.rst
