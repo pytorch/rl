@@ -5,7 +5,6 @@
 
 import argparse
 
-import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
@@ -234,8 +233,12 @@ class TestMaskedCategorical:
             MaskedCategorical(
                 logits=torch.tensor(()), probs=torch.tensor(()), mask=torch.tensor(())
             )
-        with pytest.raises(ValueError, match="A mask must be provided"):
+        with pytest.raises(ValueError, match="must be provided"):
             MaskedCategorical(probs=torch.tensor(()), mask=None)
+        with pytest.raises(ValueError, match="must be provided"):
+            MaskedCategorical(
+                probs=torch.tensor(()), mask=torch.tensor(()), indices=torch.tensor(())
+            )
 
     @pytest.mark.parametrize("neg_inf", [-10, -float("inf")])
     def test_logits(self, neg_inf):
@@ -255,9 +258,11 @@ class TestMaskedCategorical:
     def test_logits_sparse(self, neg_inf):
         torch.manual_seed(0)
         logits = torch.randn(4) / 100  # almost equal probabilities
-        mask = torch.tensor([0, 2, 3])
+        indices = torch.tensor([0, 2, 3])
         dist = MaskedCategorical(
-            logits=logits, mask=mask, neg_inf=neg_inf, sparse_mask=True
+            logits=logits,
+            indices=indices,
+            neg_inf=neg_inf,
         )
         for _ in range(10):
             sample = dist.sample((100,))
@@ -287,9 +292,11 @@ class TestMaskedCategorical:
         torch.manual_seed(0)
         logits = torch.randn(4) / 100  # almost equal probabilities
         prob = logits.softmax(-1)
-        mask = torch.tensor([0, 2, 3])
+        indices = torch.tensor([0, 2, 3])
         dist = MaskedCategorical(
-            probs=prob, mask=mask, neg_inf=neg_inf, sparse_mask=True
+            probs=prob,
+            indices=indices,
+            neg_inf=neg_inf,
         )
         for _ in range(10):
             sample = dist.sample((100,))

@@ -116,10 +116,11 @@ class MaskedCategorical(D.Categorical):
         mask (torch.Tensor): A boolean mask of the same shape as ``logits``/``probs``
             where ``False`` entries are the ones to be masked. Alternatively,
             if ``sparse_mask`` is True, it represents the list of valid indices
-            in the distribution.
-        neg_inf (float, optional): TODO
-        sparse_mask: ``True`` when we only pass indices of True values in the mask
-            tensor.
+            in the distribution. Exclusive with ``indices``.
+        indices (torch.Tensor): A dense index tensor representing which actions
+            must be taken into account. Exclusive with ``mask``.
+        neg_inf (float, optional): The log-probability value allocated to
+            invalid (out-of-mask) indices. Defaults to -inf.
         padding_value: The padding value in the then mask tensor when
             sparse_mask == True, the padding_value will be ignored.
 
@@ -150,12 +151,20 @@ class MaskedCategorical(D.Categorical):
         logits: Optional[torch.Tensor] = None,
         probs: Optional[torch.Tensor] = None,
         mask: torch.Tensor = None,
+        indices: torch.Tensor = None,
         neg_inf: float = float("-inf"),
-        sparse_mask: bool = False,
         padding_value: Optional[int] = None,
     ) -> None:
+        if not ((mask is None) ^ (indices is None)):
+            raise ValueError(
+                f"A ``mask`` or some ``indices`` must be provided for {type(self)}, but not both."
+            )
         if mask is None:
-            raise ValueError(f"A mask must be provided for {type(self)}.")
+            mask = indices
+            sparse_mask = True
+        else:
+            sparse_mask = False
+
         if probs is not None:
             if logits is not None:
                 raise ValueError(
@@ -173,6 +182,7 @@ class MaskedCategorical(D.Categorical):
             sparse_mask=sparse_mask,
             padding_value=padding_value,
         )
+        self.neg_inf = neg_inf
         self._mask = mask
         self._sparse_mask = sparse_mask
         self._padding_value = padding_value
@@ -196,13 +206,15 @@ class MaskedCategorical(D.Categorical):
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         if not self._sparse_mask:
-            print("val", value)
             return super().log_prob(value)
         value_shape = value.shape
         mask_3d = self._mask.view(1, -1, self._num_events)
         value_3d = value.view(-1, mask_3d.size(1), 1)
-        index = (mask_3d == value_3d).long().argmax(dim=-1, keepdim=True)
-        return super().log_prob(index.view(value_shape))
+        non_valid_event = (mask_3d != value_3d).all(-1).view(value_shape)
+        log_probs = super().log_prob(value)
+        if non_valid_event.any():
+            log_probs[non_valid_event] = self.neg_inf
+        return log_probs
 
     @staticmethod
     def _mask_logits(
