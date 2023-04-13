@@ -16,7 +16,38 @@ def check_finite(tensor: torch.Tensor):
 def compute_reward2go(
     reward: torch.Tensor, episode_ends: torch.Tensor, gamma: float = 1.0
 ) -> torch.Tensor:
-    """Compute the discounted cumulative sum of rewards given the episode ends."""
+    """Compute the discounted cumulative sum of rewards given multiple trajectories and the episode ends.
+
+    Args:
+    reward (torch.Tensor): A tensor of shape [T, 1] containing the rewards
+        received at each time step over multiple trajectories.
+    episode_ends (torch.Tensor): A tensor of shape [num_episodes] where
+        num_episodes is the number of episodes in the sequence. The i-th element
+        of this tensor should be the index of the last time step of the i-th episode,
+        i.e. episode_ends[..., i] - episode_ends[..., i-1] is the length of the i-th episode.
+        The last element of this tensor should be equal to T, the total number of time steps.
+    gamma (float, optional): The discount factor to use for computing the
+        discounted cumulative sum of rewards. Defaults to 1.0.
+
+    Returns:
+        torch.Tensor: A tensor of shape [T, 1] containing the discounted cumulative
+            sum of rewards (reward-to-go) at each time step.
+
+    Example:
+        >>> reward = torch.tensor([[1.], [1.], [1.], [1.], [1.], [1.], [1.], [1.], [1.], [1.]])
+        >>> episode_ends = torch.tensor([3, 7])
+        >>> compute_reward2go(reward, episode_ends, gamma=1.)
+        tensor([[3.],
+                [2.],
+                [1.],
+                [4.],
+                [3.],
+                [2.],
+                [1.],
+                [3.],
+                [2.],
+                [1.]])
+    """
     episode_ends = torch.concat(
         [episode_ends, torch.tensor([reward.shape[0]])]
     )  # add the last episode end
