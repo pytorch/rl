@@ -49,9 +49,11 @@ class SACLoss(LossModule):
             This module typically outputs a ``"state_action_value"`` entry.
         value_network (TensorDictModule, optional): V(s) parametric model.
             This module typically outputs a ``"state_value"`` entry.
+
             .. note::
               If not provided, the second version of SAC is assumed, where
               only the Q-Value network is needed.
+
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
             Defaults to ``2``.
         priority_key (str, optional): tensordict key where to write the
@@ -313,7 +315,7 @@ class SACLoss(LossModule):
                     "1": self.target_value_network_params,
                 }
             },
-            [],
+            torch.Size([]),
             _run_checks=False,
         )
         with set_exploration_mode("mode"):

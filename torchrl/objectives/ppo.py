@@ -42,27 +42,31 @@ class PPOLoss(LossModule):
     Args:
         actor (ProbabilisticTensorDictSequential): policy operator.
         critic (ValueOperator): value operator.
-        advantage_key (str): the input tensordict key where the advantage is
+        advantage_key (str, optional): the input tensordict key where the advantage is
             expected to be written.
             Defaults to ``"advantage"``.
-        value_target_key (str): the input tensordict key where the target state
+        value_target_key (str, optional): the input tensordict key where the target state
             value is expected to be written. Defaults to ``"value_target"``.
-        entropy_bonus (bool): if ``True``, an entropy bonus will be added to the
+        entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
-        samples_mc_entropy (int): if the distribution retrieved from the policy
+        samples_mc_entropy (int, optional): if the distribution retrieved from the policy
             operator does not have a closed form
             formula for the entropy, a Monte-Carlo estimate will be used.
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (scalar): entropy multiplier when computing the total loss.
+        entropy_coef (scalar, optional): entropy multiplier when computing the total loss.
             Defaults to ``0.01``.
-        critic_coef (scalar): critic loss multiplier when computing the total
+        critic_coef (scalar, optional): critic loss multiplier when computing the total
             loss. Defaults to ``1.0``.
-        loss_critic_type (str): loss function for the value discrepancy.
+        loss_critic_type (str, optional): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
-        normalize_advantage (bool): if ``True``, the advantage will be normalized
+        normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
             before being used. Defaults to ``False``.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -81,8 +85,8 @@ class PPOLoss(LossModule):
         >>> losses = ppo_loss(data)
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
-      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
-      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+      The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
         >>> ppo_loss = PPOLoss(actor, critic)
         >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
@@ -107,18 +111,23 @@ class PPOLoss(LossModule):
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
         gamma: float = None,
+        separate_losses: bool = False,
     ):
         super().__init__()
         self.convert_to_functional(
             actor, "actor", funs_to_decorate=["forward", "get_dist"]
         )
-        # we want to make sure there are no duplicates in the params: the
-        # params of critic must be refs to actor if they're shared
-        self.convert_to_functional(critic, "critic", compare_against=self.actor_params)
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor.parameters())
+        else:
+            policy_params = None
+        self.convert_to_functional(critic, "critic", compare_against=policy_params)
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
         self.samples_mc_entropy = samples_mc_entropy
-        self.entropy_bonus = entropy_bonus and entropy_coef
+        self.entropy_bonus = entropy_bonus
         self.register_buffer(
             "entropy_coef", torch.tensor(entropy_coef, device=self.device)
         )
@@ -248,28 +257,32 @@ class ClipPPOLoss(PPOLoss):
     Args:
         actor (ProbabilisticTensorDictSequential): policy operator.
         critic (ValueOperator): value operator.
-        advantage_key (str): the input tensordict key where the advantage is expected to be written.
+        advantage_key (str, optional): the input tensordict key where the advantage is expected to be written.
             Defaults to ``"advantage"``.
-        value_target_key (str): the input tensordict key where the target state
+        value_target_key (str, optional): the input tensordict key where the target state
             value is expected to be written. Defaults to ``"value_target"``.
-        clip_epsilon (scalar): weight clipping threshold in the clipped PPO loss equation.
+        clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.
             default: 0.2
-        entropy_bonus (bool): if ``True``, an entropy bonus will be added to the
+        entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
-        samples_mc_entropy (int): if the distribution retrieved from the policy
+        samples_mc_entropy (int, optional): if the distribution retrieved from the policy
             operator does not have a closed form
             formula for the entropy, a Monte-Carlo estimate will be used.
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (scalar): entropy multiplier when computing the total loss.
+        entropy_coef (scalar, optional): entropy multiplier when computing the total loss.
             Defaults to ``0.01``.
-        critic_coef (scalar): critic loss multiplier when computing the total
+        critic_coef (scalar, optional): critic loss multiplier when computing the total
             loss. Defaults to ``1.0``.
-        loss_critic_type (str): loss function for the value discrepancy.
+        loss_critic_type (str, optional): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
-        normalize_advantage (bool): if ``True``, the advantage will be normalized
+        normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
             before being used. Defaults to ``False``.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -288,8 +301,8 @@ class ClipPPOLoss(PPOLoss):
         >>> losses = ppo_loss(data)
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
-      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
-      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+      The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
         >>> ppo_loss = ClipPPOLoss(actor, critic)
         >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
@@ -312,6 +325,7 @@ class ClipPPOLoss(PPOLoss):
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = True,
         gamma: float = None,
+        separate_losses: bool = False,
         **kwargs,
     ):
         super(ClipPPOLoss, self).__init__(
@@ -325,6 +339,7 @@ class ClipPPOLoss(PPOLoss):
             loss_critic_type=loss_critic_type,
             normalize_advantage=normalize_advantage,
             gamma=gamma,
+            separate_losses=separate_losses,
             **kwargs,
         )
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
@@ -346,6 +361,11 @@ class ClipPPOLoss(PPOLoss):
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.advantage_key)
+        if self.normalize_advantage and advantage.numel() > 1:
+            loc = advantage.mean().item()
+            scale = advantage.std().clamp_min(1e-6).item()
+            advantage = (advantage - loc) / scale
+
         log_weight, dist = self._log_weight(tensordict)
         # ESS for logging
         with torch.no_grad():
@@ -364,10 +384,6 @@ class ClipPPOLoss(PPOLoss):
         gain1 = log_weight.exp() * advantage
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
-        if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean().item()
-            scale = advantage.std().clamp_min(1e-6).item()
-            advantage = (advantage - loc) / scale
         gain2 = log_weight_clip.exp() * advantage
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
@@ -424,6 +440,10 @@ class KLPENPPOLoss(PPOLoss):
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
             before being used. Defaults to ``False``.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
 
     .. note:
@@ -443,8 +463,8 @@ class KLPENPPOLoss(PPOLoss):
         >>> losses = ppo_loss(data)
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
-      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
-      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+      The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
         >>> ppo_loss = KLPENPPOLoss(actor, critic)
         >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
@@ -471,6 +491,7 @@ class KLPENPPOLoss(PPOLoss):
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = True,
         gamma: float = None,
+        separate_losses: bool = False,
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
@@ -484,6 +505,7 @@ class KLPENPPOLoss(PPOLoss):
             loss_critic_type=loss_critic_type,
             normalize_advantage=normalize_advantage,
             gamma=gamma,
+            separate_losses=separate_losses,
             **kwargs,
         )
 

@@ -15,7 +15,10 @@ from torchrl._torchrl import safetanh
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
-from torchrl.modules.distributions.utils import _cast_device
+from torchrl.modules.distributions.utils import (
+    _cast_device,
+    FasterTransformedDistribution,
+)
 from torchrl.modules.utils import mappings
 
 __all__ = [
@@ -273,7 +276,7 @@ class TruncatedNormal(D.Independent):
         return super().log_prob(value, **kwargs)
 
 
-class TanhNormal(D.TransformedDistribution):
+class TanhNormal(FasterTransformedDistribution):
     """Implements a TanhNormal distribution with location scaling.
 
     Location scaling prevents the location to be "too far" from 0 when a TanhTransform is applied, which ultimately
@@ -485,7 +488,7 @@ class Delta(D.Distribution):
         return self.param
 
 
-class TanhDelta(D.TransformedDistribution):
+class TanhDelta(FasterTransformedDistribution):
     """Implements a Tanh transformed_in Delta distribution.
 
     Args:
