@@ -36,7 +36,9 @@ class submitit_delayed_launcher:
             collector whereas ``"rpc"`` requires a :class:`RPCDataCollector`.
             Defaults to ``"distributed"``.
         backend (str, optional): torch.distributed backend in case ``framework``
-            points to ``"distributed"``.
+            points to ``"distributed"``. This value must match the one passed to
+            the collector, otherwise main and satellite nodes will fail to
+            reach the rendezvous and hang forever (ie no exception will be raised!)
             Defaults to ``'gloo'``.
         tcpport (int or str, optional): the TCP port to use.
             Defaults to :obj:`torchrl.collectors.distributed.default_configs.TCP_PORT`
