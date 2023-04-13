@@ -3854,8 +3854,7 @@ class TestReward2Go(TransformBase):
         batch = [20]
         torch.manual_seed(0)
         r2g = Reward2GoTransform(gamma=gamma)
-        rb = ReplayBuffer(storage=LazyTensorStorage(20))
-        rb.append_transform(r2g)
+        rb = ReplayBuffer(storage=LazyTensorStorage(20), transform=r2g)
         done = torch.zeros(*batch, 1, dtype=torch.bool)
         done_flags = torch.randint(0, *batch, size=(done_flags,))
         done[done_flags] = True
@@ -3870,7 +3869,7 @@ class TestReward2Go(TransformBase):
         rb.extend(td)
         sample = rb.sample(20)
         assert sample["reward_to_go"].shape == (20, 1)
-        assert sample["reward_to_go"].all() != 0
+        assert (sample["reward_to_go"] != 0).all()
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
@@ -3893,26 +3892,91 @@ class TestReward2Go(TransformBase):
         assert td["reward_to_go"].shape == (20, 1)
         assert td["reward_to_go"].all() != 0
 
-    def test_transform(self):
-        raise pytest.skip("No inverse for Reward2Go")
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.parametrize("done_flags", [1, 5])
+    def test_transform(self, gamma, done_flags):
+        device = "cpu"
+        batch = [20]
+        torch.manual_seed(0)
+        done = torch.zeros(*batch, 1, dtype=torch.bool)
+        done_flags = torch.randint(0, *batch, size=(done_flags,))
+        done[done_flags] = True
+        reward = torch.randn(*batch, 1, device=device)
+        misc = torch.randn(*batch, 1, device=device)
+        r2g = Reward2GoTransform(gamma=gamma)
+        td = TensorDict(
+            {"misc": misc, "reward": reward, "next": {"done": done}},
+            batch,
+            device=device,
+        )
+        td_out = r2g(td)
+        # assert that no transforms are done in the forward pass
+        assert (td_out == td).all()
 
-    def test_transform_env(self):
-        raise pytest.skip("No environment transform for Reward2Go")
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.xfail(raises=ValueError)
+    def test_transform_env(self, gamma):
+        t = Reward2GoTransform(gamma=gamma)
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), t)
+        env.set_seed(0)
+        torch.manual_seed(0)
+        env.base_env.rollout(3)
 
-    def test_parallel_trans_env_check(self):
-        raise pytest.skip("No environment transform for Reward2Go")
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.xfail(raises=ValueError)
+    def test_parallel_trans_env_check(self, gamma):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                Reward2GoTransform(gamma=gamma),
+            )
 
-    def test_single_trans_env_check(self):
-        raise pytest.skip("No environment transform for Reward2Go")
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+        env.rollout(3)
 
-    def test_serial_trans_env_check(self):
-        raise pytest.skip("No environment transform for Reward2Go")
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.xfail(raises=ValueError)
+    def test_single_trans_env_check(self, gamma):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Reward2GoTransform(gamma=gamma),
+        )
+        check_env_specs(env)
+        env.rollout(3)
 
-    def test_trans_serial_env_check(self):
-        raise pytest.skip("No environment transform for Reward2Go")
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.xfail(raises=ValueError)
+    def test_serial_trans_env_check(self, gamma):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                Reward2GoTransform(gamma=gamma),
+            )
 
-    def test_trans_parallel_env_check(self):
-        raise pytest.skip("No environment transform for Reward2Go")
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+        env.rollout(3)
+
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.xfail(raises=ValueError)
+    def test_trans_serial_env_check(self, gamma):
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv),
+            Reward2GoTransform(gamma=gamma),
+        )
+        check_env_specs(env)
+        env.rollout(3)
+
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.xfail(raises=ValueError)
+    def test_trans_parallel_env_check(self, gamma):
+        env = TransformedEnv(
+            ParallelEnv(2, ContinuousActionVecMockEnv),
+            Reward2GoTransform(gamma=gamma),
+        )
+        check_env_specs(env)
+        env.rollout(3)
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
@@ -3935,8 +3999,26 @@ class TestReward2Go(TransformBase):
         assert td["reward_to_go"].shape == (20, 1)
         assert td["reward_to_go"].all() != 0
 
-    def test_transform_compose(self):
-        raise pytest.skip("No model transform for Reward2Go")
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.parametrize("done_flags", [1, 5])
+    def test_transform_compose(self, gamma, done_flags):
+        t = Compose(Reward2GoTransform(gamma=gamma))
+        device = "cpu"
+        batch = [20]
+        torch.manual_seed(0)
+        done = torch.zeros(*batch, 1, dtype=torch.bool)
+        done_flags = torch.randint(0, *batch, size=(done_flags,))
+        done[done_flags] = True
+        reward = torch.randn(*batch, 1, device=device)
+        misc = torch.randn(*batch, 1, device=device)
+        r2g = Reward2GoTransform(gamma=gamma)
+        td = TensorDict(
+            {"misc": misc, "reward": reward, "next": {"done": done}},
+            batch,
+            device=device,
+        )
+        td_out = r2g(td)
+        assert (td_out == td).all()
 
     def test_transform_model(self):
         raise pytest.skip("No model transform for Reward2Go")

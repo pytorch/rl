@@ -3705,7 +3705,10 @@ class Reward2GoTransform(Transform):
                 )
         return tensordict
 
-    def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise ValueError(
             "The Reward2GoTransform is only an inverse transform and can only be applied to the replay buffer and not to the collector or the environment."
         )
