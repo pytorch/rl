@@ -28,7 +28,20 @@ def compute_reward2go(
     return torch.vstack(r2gs)
 
 
-def discounted_cumsum(reward: torch.Tensor, gamma: float):
-    """Compute the discounted cumulative sum of rewards."""
-    discount = torch.pow(gamma, torch.arange(reward.shape[0])).unsqueeze(-1)
-    return torch.cumsum(reward * discount, dim=0).flip(0)
+def discounted_cumsum(reward: torch.Tensor, gamma: float = 1.0):
+    """Compute the discounted cumulative sum of rewards.
+
+    Args:
+        reward (torch.Tensor): A tensor of shape [*B, T, 1] containing the rewards
+            received at each time step, where *B denotes zero or more batch dimensions.
+        gamma (float): The discount factor to use for computing the discounted cumulative sum
+            of rewards. Defaults to 1.0
+
+    Returns:
+        torch.Tensor: A tensor of shape [*B, T, 1] containing the discounted cumulative
+            sum of rewards at each time step.
+    """
+    discount = torch.pow(
+        gamma, torch.arange(reward.shape[-2], device=reward.device)
+    ).unsqueeze(-1)
+    return torch.cumsum(reward * discount, dim=(-2)).flip(-2)
