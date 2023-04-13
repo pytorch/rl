@@ -23,7 +23,7 @@ import pytest
 import torch
 from _utils_internal import dtype_fixture, get_available_devices  # noqa
 from mocking_classes import ContinuousActionConvMockEnv
-from tensordict.nn import get_functional, TensorDictModule
+from tensordict.nn import get_functional, NormalParamExtractor, TensorDictModule
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from tensordict.tensordict import assert_allclose_td, TensorDict
@@ -2235,6 +2235,33 @@ class TestPPO:
         )
         return actor.to(device), value.to(device)
 
+    def _create_mock_actor_value_shared(
+        self, batch=2, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # Actor
+        action_spec = BoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        base_layer = nn.Linear(obs_dim, 5)
+        common = TensorDictModule(
+            base_layer, in_keys=["observation"], out_keys=["hidden"]
+        )
+        net = nn.Sequential(nn.Linear(5, 2 * action_dim), NormalParamExtractor())
+        module = SafeModule(net, in_keys=["hidden"], out_keys=["loc", "scale"])
+        actor_head = ProbabilisticActor(
+            module=module,
+            distribution_class=TanhNormal,
+            in_keys=["loc", "scale"],
+            spec=action_spec,
+        )
+        module = nn.Linear(5, 1)
+        value_head = ValueOperator(
+            module=module,
+            in_keys=["hidden"],
+        )
+        model = ActorValueOperator(common, actor_head, value_head).to(device)
+        return model, model.get_policy_operator(), model.get_value_operator()
+
     def _create_mock_distributional_actor(
         self, batch=2, obs_dim=3, action_dim=4, atoms=0, vmin=1, vmax=5
     ):
@@ -2443,6 +2470,76 @@ class TestPPO:
                 assert "critic" in name
         actor.zero_grad()
         assert counter == 4
+
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    @pytest.mark.parametrize(
+        "advantage",
+        (
+            "gae",
+            "td",
+            "td_lambda",
+        ),
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("separate_losses", [True, False])
+    def test_ppo_shared_seq(self, loss_class, device, advantage, separate_losses):
+        """Tests PPO with shared module with and without passing twice across the common module."""
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_ppo(device=device)
+
+        model, actor, value = self._create_mock_actor_value_shared(device=device)
+        value2 = value[-1]  # prune the common module
+        if advantage == "gae":
+            advantage = GAE(
+                gamma=0.9,
+                lmbda=0.9,
+                value_network=value,
+            )
+        elif advantage == "td":
+            advantage = TD1Estimator(
+                gamma=0.9,
+                value_network=value,
+            )
+        elif advantage == "td_lambda":
+            advantage = TDLambdaEstimator(
+                gamma=0.9,
+                lmbda=0.9,
+                value_network=value,
+            )
+        else:
+            raise NotImplementedError
+        loss_fn = loss_class(
+            actor,
+            value,
+            loss_critic_type="l2",
+            separate_losses=separate_losses,
+            entropy_coef=0.0,
+        )
+
+        loss_fn2 = loss_class(
+            actor,
+            value2,
+            loss_critic_type="l2",
+            separate_losses=separate_losses,
+            entropy_coef=0.0,
+        )
+
+        if advantage is not None:
+            advantage(td)
+        loss = loss_fn(td).exclude("entropy")
+        sum(val for key, val in loss.items() if key.startswith("loss_")).backward()
+        grad = TensorDict(dict(model.named_parameters()), []).apply(
+            lambda x: x.grad.clone()
+        )
+        loss2 = loss_fn2(td).exclude("entropy")
+        model.zero_grad()
+        sum(val for key, val in loss2.items() if key.startswith("loss_")).backward()
+        grad2 = TensorDict(dict(model.named_parameters()), []).apply(
+            lambda x: x.grad.clone()
+        )
+        assert_allclose_td(loss, loss2)
+        assert_allclose_td(grad, grad2)
+        model.zero_grad()
 
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found, {FUNCTORCH_ERR}"
