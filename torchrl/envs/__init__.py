@@ -47,4 +47,11 @@ from .transforms import (
     VIPRewardTransform,
     VIPTransform,
 )
+from .utils import (
+    check_env_specs,
+    exploration_mode,
+    make_composite_from_td,
+    set_exploration_mode,
+    step_mdp,
+)
 from .vec_env import MultiThreadedEnv, ParallelEnv, SerialEnv

@@ -396,15 +396,14 @@ class GymEnv(GymWrapper):
 
     """
 
-    def __init__(self, env_name, disable_env_checker=None, **kwargs):
+    def __init__(self, env_name, **kwargs):
         kwargs["env_name"] = env_name
-        self._set_gym_args(kwargs, disable_env_checker)
+        self._set_gym_args(kwargs)
         super().__init__(**kwargs)
 
     @implement_for("gym", None, "0.24.0")
-    def _set_gym_args(  # noqa: F811
-        self, kwargs, disable_env_checker: bool = None
-    ) -> None:
+    def _set_gym_args(self, kwargs) -> None:  # noqa: F811
+        disable_env_checker = kwargs.pop("disable_env_checker", None)
         if disable_env_checker is not None:
             raise RuntimeError(
                 "disable_env_checker should only be set if gym version is > 0.24"
@@ -412,19 +411,17 @@ class GymEnv(GymWrapper):
 
     @implement_for("gym", "0.24.0", None)
     def _set_gym_args(  # noqa: F811
-        self, kwargs, disable_env_checker: bool = None
+        self,
+        kwargs,
     ) -> None:
-        kwargs["disable_env_checker"] = (
-            disable_env_checker if disable_env_checker is not None else True
-        )
+        kwargs.setdefault("disable_env_checker", True)
 
     @implement_for("gymnasium", "0.27.0", None)
     def _set_gym_args(  # noqa: F811
-        self, kwargs, disable_env_checker: bool = None
+        self,
+        kwargs,
     ) -> None:
-        kwargs["disable_env_checker"] = (
-            disable_env_checker if disable_env_checker is not None else True
-        )
+        kwargs.setdefault("disable_env_checker", True)
 
     def _build_env(
         self,

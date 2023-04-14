@@ -16,6 +16,7 @@ import torch.cuda
 from tensordict import TensorDict
 from torch import multiprocessing as mp, nn
 
+from torchrl._utils import VERBOSE
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
@@ -47,14 +48,18 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
     os.environ["MASTER_PORT"] = str(tcpport)
 
     if verbose:
-        print("Rank0 IP address:", rank0_ip, "\ttcp port:", tcpport)
-        print(f"node with rank {rank} -- launching distributed")
+        print(
+            f"Rank0 IP address: '{rank0_ip}' \ttcp port: '{tcpport}', backend={backend}."
+        )
+        print(
+            f"node with rank {rank} with world_size {world_size} -- launching distributed"
+        )
     torch.distributed.init_process_group(
         backend,
         rank=rank,
         world_size=world_size,
         timeout=timedelta(MAX_TIME_TO_CONNECT),
-        # init_method=f"tcp://{rank0_ip}:{tcpport}",
+        init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
     if verbose:
         print(f"Connected!\nNode with rank {rank} -- creating store")
@@ -350,7 +355,7 @@ class DistributedDataCollector(DataCollectorBase):
         tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
     """
 
-    _VERBOSE = False  # for debugging
+    _VERBOSE = VERBOSE  # for debugging
 
     def __init__(
         self,
@@ -472,9 +477,12 @@ class DistributedDataCollector(DataCollectorBase):
     ):
         if self._VERBOSE:
             print(
-                f"launching main node with tcp port {self.tcp_port} and "
-                f"IP {self.IPAddr}."
+                f"launching main node with tcp port '{self.tcp_port}' and "
+                f"IP '{self.IPAddr}'. rank: 0, world_size: {world_size}, backend={backend}."
             )
+        os.environ["MASTER_ADDR"] = str(self.IPAddr)
+        os.environ["MASTER_PORT"] = str(self.tcp_port)
+
         TCP_PORT = self.tcp_port
         torch.distributed.init_process_group(
             backend,
@@ -619,8 +627,8 @@ class DistributedDataCollector(DataCollectorBase):
 
     def _init_workers(self):
 
-        hostname = socket.gethostname()
         if self.launcher != "mp":
+            hostname = socket.gethostname()
             IPAddr = socket.gethostbyname(hostname)
         else:
             IPAddr = "localhost"

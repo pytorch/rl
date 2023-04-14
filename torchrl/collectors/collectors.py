@@ -330,7 +330,7 @@ behaviour and more control you can consider writing your own TensorDictModule.
 
 @accept_remote_rref_udf_invocation
 class SyncDataCollector(DataCollectorBase):
-    """Generic data collector for RL problems. Requires and environment constructor and a policy.
+    """Generic data collector for RL problems. Requires an environment constructor and a policy.
 
     Args:
         create_env_fn (Callable): a callable that returns an instance of

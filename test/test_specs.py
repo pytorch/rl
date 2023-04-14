@@ -581,6 +581,13 @@ class TestComposite:
         )
         assert ts["nested_cp"]["nested_cp"]["obs"] is None
 
+    def test_nested_composite_spec_delitem(self, is_complete, device, dtype):
+        ts = self._composite_spec(is_complete, device, dtype)
+        ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
+        ts["nested_cp"]["nested_cp"] = self._composite_spec(is_complete, device, dtype)
+        del ts["nested_cp", "nested_cp", "obs"]
+        assert ("nested_cp", "nested_cp", "obs") not in ts.keys(True, True)
+
     def test_nested_composite_spec_update(self, is_complete, device, dtype):
         ts = self._composite_spec(is_complete, device, dtype)
         ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
