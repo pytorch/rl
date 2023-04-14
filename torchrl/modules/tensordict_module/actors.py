@@ -3,10 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional, Sequence, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union, List
 
 import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
+from tensordict import TensorDictBase
 from torch import nn
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
@@ -311,6 +312,8 @@ class ValueOperator(TensorDictModule):
         )
 
 
+
+
 class QValueHook:
     """Q-Value hook for Q-value policies.
 
@@ -326,6 +329,12 @@ class QValueHook:
         var_nums (int, optional): if ``action_space = "mult_one_hot"``,
             this value represents the cardinality of each
             action component.
+        in_keys (list of str or tuple of str, optional): to be used when hooked on
+            a TensorDictModule. The input key representing the action value. Defaults
+            to ``["action_value"]``.
+        out_keys (list of str or tuple of str, optional): to be used when hooked on
+            a TensorDictModule. The output keys representing the actions, action values
+            and chosen action value. Defaults to ``["action", "action_value", "chosen_action_value"]``.
 
     Examples:
         >>> import torch
@@ -358,6 +367,8 @@ class QValueHook:
         self,
         action_space: str,
         var_nums: Optional[int] = None,
+        in_keys: Union[List[str], List[Tuple[str]]] = None,
+        out_keys: Union[List[str], List[Tuple[str]]] = None,
     ):
         self.action_space = action_space
         self.var_nums = var_nums
@@ -374,19 +385,46 @@ class QValueHook:
             raise ValueError(
                 f"action_space must be one of {list(self.action_func_mapping.keys())}"
             )
+        if in_keys is None:
+            in_keys = ["action_value"]
+        self.in_keys = in_keys
+        if out_keys is None:
+            out_keys = ["action", "action_value", "chosen_action_value"]
+        self.out_keys = out_keys
 
     def __call__(
         self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        if isinstance(values, tuple):
-            values = values[0]
-        action = self.action_func_mapping[self.action_space](values)
+        td_input = isinstance(values, TensorDictBase)
+        if td_input:
+            action_values = values.get(self.in_keys[0], None)
+            if action_values is None:
+                raise KeyError(
+                    f"Action value key {self.in_keys[0]} not found in {values}."
+                    )
+        else:
+            if isinstance(values, tuple):
+                action_values = action_values[0]
+            else:
+                action_values = values
+
+        action = self.action_func_mapping[self.action_space](action_values)
 
         action_value_func = self.action_value_func_mapping.get(
             self.action_space, self._default_action_value
         )
-        chosen_action_value = action_value_func(values, action)
-        return action, values, chosen_action_value
+        chosen_action_value = action_value_func(action_values, action)
+        if not td_input:
+            return action, action_values, chosen_action_value
+        values.update(
+            dict(
+                zip(
+                    self.out_keys,
+                    (action, action_values, chosen_action_value)
+                    )
+                )
+            )
+        return values
 
     @staticmethod
     def _one_hot(value: torch.Tensor) -> torch.Tensor:
@@ -397,7 +435,11 @@ class QValueHook:
     def _categorical(value: torch.Tensor) -> torch.Tensor:
         return torch.argmax(value, dim=-1).to(torch.long)
 
-    def _mult_one_hot(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
+    def _mult_one_hot(
+        self,
+        value: torch.Tensor,
+        support: torch.Tensor
+        ) -> torch.Tensor:
         values = value.split(self.var_nums, dim=-1)
         return torch.cat(
             [
@@ -571,11 +613,6 @@ class QValueActor(Actor):
             contains more than one element, the values will be passed in the
             order given by the in_keys iterable.
             Defaults to ``["observation"]``.
-        out_keys (iterable of str): keys to be written to the input tensordict.
-            The length of out_keys must match the
-            number of tensors returned by the embedded module. Using "_" as a
-            key avoid writing tensor to output.
-            Defaults to ``["action"]``.
         spec (TensorSpec, optional): Keyword-only argument.
             Specs of the output tensor. If the module
             outputs multiple output tensors,
@@ -590,6 +627,12 @@ class QValueActor(Actor):
         action_space (str, optional): The action space to be considered.
             Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
+
+    .. note::
+        ``out_keys`` cannot be passed. If the module is a :class:`tensordict.nn.TensorDictModule`
+        instance, the out_keys will be updated accordingly. For regular
+        :class:`torch.nn.Module` instance, the triplet ``["action", "action_value", "chosen_action_value"]``
+        will be used.
 
     Examples:
         >>> import torch
@@ -617,15 +660,54 @@ class QValueActor(Actor):
 
     """
 
-    def __init__(self, *args, action_space: str = "one_hot", **kwargs):
+    @classmethod
+    def __new__(
+        cls,
+        a,
+        module,
+        in_keys=None,
+        spec=None,
+        safe=False,
+        action_space: str = "one_hot"
+        ):
+        print(module)
+        if isinstance(module, TensorDictModule):
+            out_keys = [
+                "action",
+                "action_value",
+                "chosen_action_value",
+            ]
+            module.register_forward_hook(
+                QValueHook(action_space, out_keys=out_keys)
+                )
+            print("here!")
+            return module
+        return super().__new__(cls)
+
+    def __init__(
+        self,
+        module,
+        in_keys=None,
+        spec=None,
+        safe=False,
+        action_space: str = "one_hot"
+        ):
         out_keys = [
             "action",
             "action_value",
             "chosen_action_value",
         ]
-        super().__init__(*args, out_keys=out_keys, **kwargs)
+        if isinstance(module, TensorDictModule):
+            out_keys += module.out_keys
+        super().__init__(
+            module=module,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            spec=spec,
+            safe=safe
+            )
         self.action_space = action_space
-        self.module.register_forward_hook(QValueHook(self.action_space))
+        self.register_forward_hook(QValueHook(self.action_space))
 
 
 class DistributionalQValueActor(QValueActor):
