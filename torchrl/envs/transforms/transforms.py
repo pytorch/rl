@@ -3661,10 +3661,15 @@ class Reward2GoTransform(Transform):
     and not to the collector.
 
     Args:
-        in_keys (list of str/tuples of str): the entries to rename
+        in_keys (list of str/tuples of str): the entries to rename.
         gamma (float or torch.Tensor): the discount factor. Defaults to 1.0.
 
     """
+
+    ENV_ERR = (
+        "The Reward2GoTransform is only an inverse transform and can "
+        "only be applied to the replay buffer and not to the collector or the environment."
+    )
 
     def __init__(
         self,
@@ -3672,7 +3677,7 @@ class Reward2GoTransform(Transform):
         in_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
-            in_keys = ["reward"]
+            in_keys = [("next", "reward")]
         out_keys = ["reward_to_go"]
         super().__init__(
             in_keys=in_keys,
@@ -3696,32 +3701,32 @@ class Reward2GoTransform(Transform):
             raise RuntimeError(
                 "No episode ends found to calculate the reward to go. Make sure that the number of frames_per_batch is larger than number of steps per episode."
             )
-        episode_ends = torch.where(done)[0]
-
+        found = False
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-            if in_key in tensordict.keys(include_nested=isinstance(in_key, tuple)):
-                item = self._inv_apply_transform(tensordict.get(in_key), episode_ends)
+            if in_key in tensordict.keys(include_nested=True):
+                found = True
+                item = self._inv_apply_transform(
+                    tensordict.get(in_key), done_or_truncated
+                )
                 tensordict.set(
                     out_key,
                     item,
                 )
+        if not found:
+            raise KeyError(f"Could not find any of the input keys {self.in_keys}.")
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return tensordict
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        raise ValueError(
-            "The Reward2GoTransform is only an inverse transform and can only be applied to the replay buffer and not to the collector or the environment."
-        )
+        raise ValueError(self.ENV_ERR)
 
     def _inv_apply_transform(
-        self, reward: torch.Tensor, episode_ends: torch.Tensor
+        self, reward: torch.Tensor, done: torch.Tensor
     ) -> torch.Tensor:
-        return compute_reward2go(reward, episode_ends, self.gamma)
+        return compute_reward2go(reward, done, self.gamma)
 
     def set_container(self, container):
         if isinstance(container, EnvBase) or container.parent is not None:
-            raise ValueError(
-                "The Reward2GoTransform is only an inverse transform and can only be applied to the replay buffer and not to the collector or the environment."
-            )
+            raise ValueError(self.ENV_ERR)

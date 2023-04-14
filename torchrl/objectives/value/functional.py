@@ -900,66 +900,120 @@ def vec_td_lambda_advantage_estimate(
 # ------------
 
 
+def _flatten_batch(tensor):
+    """Because we mark the end of each batch with a truncated signal, we can concatenate them.
+
+    Args:
+        tensor (torch.Tensor): a tensor of shape [B, T]
+    """
+    return tensor.flatten(0, 1)
+
+
+def _get_num_per_traj(dones_and_truncated):
+    """Because we mark the end of each batch with a truncated signal, we can concatenate them.
+
+    Args:
+        dones_and_truncated (torch.Tensor): A done or truncated mark of shape [B, T]
+
+    Returns:
+        A list of integers representing the number of steps in each trajectories
+    """
+    dones_and_truncated = dones_and_truncated.clone()
+    dones_and_truncated[..., -1] = 1
+    dones_and_truncated = _flatten_batch(dones_and_truncated)
+    # traj_ids = dones_and_truncated.cumsum(0)
+    num_per_traj = torch.ones_like(dones_and_truncated).cumsum(0)[dones_and_truncated]
+    num_per_traj[1:] -= num_per_traj[:-1].clone()
+    return num_per_traj
+
+
+def _split_and_pad_sequence2(tensor, splits):
+    """Given a tensor of size [B, T] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax]."""
+    tensor = _flatten_batch(tensor)
+    max_val = max(splits)
+    mask = torch.zeros(len(splits), max_val, dtype=torch.bool)
+    mask.scatter_(index=max_val - torch.tensor(splits).unsqueeze(-1), dim=1, value=1)
+    mask = mask.cumsum(-1).flip(-1).bool()
+    empty_tensor = torch.zeros(len(splits), max_val, dtype=tensor.dtype)
+    empty_tensor[mask] = tensor
+    return empty_tensor
+
+
+def _inv_pad_sequence(tensor, splits):
+    """Inverses a pad_sequence operation.
+
+    Examples:
+        >>> rewards = torch.randn(100, 20)
+        >>> num_per_traj = _get_num_per_traj(torch.zeros(100, 20).bernoulli_(0.1))
+        >>> padded = _split_and_pad_sequence(rewards, num_per_traj.tolist())
+        >>> reconstructed = _inv_pad_sequence(padded, num_per_traj)
+        >>> assert (reconstructed==rewards).all()
+    """
+    offset = torch.ones_like(splits) * tensor.shape[-1]
+    offset[0] = 0
+    offset = offset.cumsum(0)
+    z = torch.zeros(tensor.numel(), dtype=torch.bool)
+
+    ones = offset + splits
+    while ones[-1] == len(z):
+        ones = ones[:-1]
+    z[ones] = 1
+    z[offset[1:]] = torch.bitwise_xor(
+        z[offset[1:]], torch.ones_like(z[offset[1:]])
+    )  # make sure that the longest is accounted for
+    idx = z.cumsum(0) % 2 == 0
+    return tensor.view(-1)[idx]
+
+
+@_transpose_time
 def compute_reward2go(
-    reward: torch.Tensor, episode_ends: torch.Tensor, gamma: float = 1.0
-) -> torch.Tensor:
+    reward,
+    done,
+    gamma,
+    time_dim: int = -2,
+):
     """Compute the discounted cumulative sum of rewards given multiple trajectories and the episode ends.
 
     Args:
-    reward (torch.Tensor): A tensor of shape [T, 1] containing the rewards
-        received at each time step over multiple trajectories.
-    episode_ends (torch.Tensor): A tensor of shape [num_episodes] where
-        num_episodes is the number of episodes in the sequence. The i-th element
-        of this tensor should be the index of the last time step of the i-th episode,
-        i.e. episode_ends[..., i] - episode_ends[..., i-1] is the length of the i-th episode.
-        The last element of this tensor should be equal to T, the total number of time steps.
-    gamma (float, optional): The discount factor to use for computing the
-        discounted cumulative sum of rewards. Defaults to 1.0.
+        reward (torch.Tensor): A tensor containing the rewards
+            received at each time step over multiple trajectories.
+        done (torch.Tensor): A tensor with done (or truncated) states.
+        gamma (float, optional): The discount factor to use for computing the
+            discounted cumulative sum of rewards. Defaults to 1.0.
+        time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     Returns:
-        torch.Tensor: A tensor of shape [T, 1] containing the discounted cumulative
+        torch.Tensor: A tensor of shape [B, T] containing the discounted cumulative
             sum of rewards (reward-to-go) at each time step.
 
-    Example:
-        >>> reward = torch.tensor([[1.], [1.], [1.], [1.], [1.], [1.], [1.], [1.], [1.], [1.]])
-        >>> episode_ends = torch.tensor([3, 7])
-        >>> compute_reward2go(reward, episode_ends, gamma=1.)
-        tensor([[3.],
-                [2.],
-                [1.],
-                [4.],
-                [3.],
-                [2.],
-                [1.],
-                [3.],
-                [2.],
-                [1.]])
+    Examples:
+        >>> reward = torch.ones(1, 10)
+        >>> done = torch.zeros(1, 10, dtype=torch.bool)
+        >>> done[:, [3, 7]] = True
+        >>> reward_sum(reward, done, 0.99)
+        tensor([[3.9404, 2.9701, 1.9900, 1.0000, 3.9404, 2.9701, 1.9900, 1.0000, 1.9900,
+                 1.0000]])
+
     """
-    episode_ends = torch.concat(
-        [episode_ends, torch.tensor([reward.shape[0]])]
-    )  # add the last episode end
-    start_idx = 0
-    r2gs = []
-    for idx in episode_ends:
-        r2gs.append(discounted_cumsum(reward[start_idx:idx], gamma))
-        start_idx = idx
-    return torch.vstack(r2gs)
+    shape = reward.shape
+    if shape != done.shape:
+        raise ValueError("reward and done must share the same shape")
+    # place time at dim -1
+    reward = reward.transpose(-2, -1)
+    done = done.transpose(-2, -1)
+    # flatten if needed
+    if reward.ndim > 2:
+        reward = reward.flatten(0, -2)
+        done = done.flatten(0, -2)
 
-
-def discounted_cumsum(reward: torch.Tensor, gamma: float = 1.0):
-    """Compute the discounted cumulative sum of rewards.
-
-    Args:
-        reward (torch.Tensor): A tensor of shape [*B, T, 1] containing the rewards
-            received at each time step, where *B denotes zero or more batch dimensions.
-        gamma (float): The discount factor to use for computing the discounted cumulative sum
-            of rewards. Defaults to 1.0
-
-    Returns:
-        torch.Tensor: A tensor of shape [*B, T, 1] containing the discounted cumulative
-            sum of rewards at each time step.
-    """
-    discount = torch.pow(
-        gamma, torch.arange(reward.shape[-2], device=reward.device)
-    ).unsqueeze(-1)
-    return torch.cumsum(reward * discount, dim=(-2)).flip(-2)
+    num_per_traj = _get_num_per_traj(done)
+    td0_flat = _split_and_pad_sequence2(reward, num_per_traj)
+    gammas = torch.ones_like(td0_flat[0])
+    gammas[1:] = gamma
+    gammas[1:] = gammas[1:].cumprod(0)
+    gammas = gammas.unsqueeze(-1)
+    cumsum = _custom_conv1d(td0_flat.unsqueeze(1), gammas)
+    cumsum = _inv_pad_sequence(cumsum, num_per_traj).view_as(reward)
+    if len(shape) > 2:
+        cumsum = cumsum.view(shape)
+    return cumsum
