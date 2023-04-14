@@ -257,10 +257,10 @@ class TestMaskedCategorical:
             logits = None
 
         if sparse:
-            indices = torch.tensor([0, 2, 3])
+            indices = torch.tensor([0, 2, 3], device=device)
             mask = None
         else:
-            mask = torch.tensor([True, False, True, True])
+            mask = torch.tensor([True, False, True, True], device=device)
             indices = None
         dist = MaskedCategorical(
             logits=logits, probs=probs, indices=indices, mask=mask, neg_inf=neg_inf
