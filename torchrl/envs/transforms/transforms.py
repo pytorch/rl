@@ -2102,7 +2102,7 @@ class CatTensors(Transform):
             )
 
         if isinstance(observation_spec, CompositeSpec) and len(
-            [key for key in self.in_keys if key not in observation_spec]
+            [key for key in self.in_keys if key not in observation_spec.keys(True)]
         ):
             raise ValueError(
                 "CatTensor got a list of keys that does not match the keys in observation_spec. "
@@ -2136,7 +2136,8 @@ class CatTensors(Transform):
         )
         if self._del_keys:
             for key in self.keys_to_exclude:
-                del observation_spec[key]
+                if key in observation_spec.keys(True):
+                    del observation_spec[key]
         return observation_spec
 
     def __repr__(self) -> str:
@@ -2602,6 +2603,13 @@ class VecNorm(Transform):
             default: 0.99
         eps (number, optional): lower bound of the running standard
             deviation (for numerical underflow). Default is 1e-4.
+        shapes (List[torch.Size], optional): if provided, represents the shape
+            of each in_keys. Its length must match the one of ``in_keys``.
+            Each shape must match the trailing dimension of the corresponding
+            entry.
+            If not, the feature dimensions of the entry (ie all dims that do
+            not belong to the tensordict batch-size) will be considered as
+            feature dimension.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -2629,6 +2637,7 @@ class VecNorm(Transform):
         lock: mp.Lock = None,
         decay: float = 0.9999,
         eps: float = 1e-4,
+        shapes: List[torch.Size] = None,
     ) -> None:
         if lock is None:
             lock = mp.Lock()
@@ -2656,7 +2665,13 @@ class VecNorm(Transform):
 
         self.lock = lock
         self.decay = decay
+        self.shapes = shapes
         self.eps = eps
+
+    def _key_str(self, key):
+        if not isinstance(key, str):
+            key = "_".join(key)
+        return key
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.lock is not None:
@@ -2681,17 +2696,44 @@ class VecNorm(Transform):
     forward = _call
 
     def _init(self, tensordict: TensorDictBase, key: str) -> None:
-        if self._td is None or key + "_sum" not in self._td.keys():
-            td_view = tensordict.view(-1)
-            td_select = td_view[0]
-            d = {key + "_sum": torch.zeros_like(td_select.get(key))}
-            d.update({key + "_ssq": torch.zeros_like(td_select.get(key))})
+        key_str = self._key_str(key)
+        if self._td is None or key_str + "_sum" not in self._td.keys():
+            if key is not key_str and key_str in tensordict.keys():
+                raise RuntimeError(
+                    f"Conflicting key names: {key_str} from VecNorm and input tensordict keys."
+                )
+            if self.shapes is None:
+                td_view = tensordict.view(-1)
+                td_select = td_view[0]
+                item = td_select.get(key)
+                d = {key_str + "_sum": torch.zeros_like(item)}
+                d.update({key_str + "_ssq": torch.zeros_like(item)})
+            else:
+                idx = 0
+                for in_key in self.in_keys:
+                    if in_key != key:
+                        idx += 1
+                    else:
+                        break
+                shape = self.shapes[idx]
+                item = tensordict.get(key)
+                d = {
+                    key_str
+                    + "_sum": torch.zeros(shape, device=item.device, dtype=item.dtype)
+                }
+                d.update(
+                    {
+                        key_str
+                        + "_ssq": torch.zeros(
+                            shape, device=item.device, dtype=item.dtype
+                        )
+                    }
+                )
+
             d.update(
                 {
-                    key
-                    + "_count": torch.zeros(
-                        1, device=td_select.get(key).device, dtype=torch.float
-                    )
+                    key_str
+                    + "_count": torch.zeros(1, device=item.device, dtype=torch.float)
                 }
             )
             if self._td is None:
@@ -2702,6 +2744,7 @@ class VecNorm(Transform):
             pass
 
     def _update(self, key, value, N) -> torch.Tensor:
+        key = self._key_str(key)
         _sum = self._td.get(key + "_sum")
         _ssq = self._td.get(key + "_ssq")
         _count = self._td.get(key + "_count")

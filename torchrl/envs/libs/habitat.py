@@ -53,14 +53,12 @@ class HabitatEnv(GymEnv):
     """
 
     @_wrap_import_error
-    def __init__(self, env_name, disable_env_checker=None, **kwargs):
+    def __init__(self, env_name, **kwargs):
         device_num = torch.device(kwargs.pop("device", 0)).index
         kwargs["override_options"] = [
             f"habitat.simulator.habitat_sim_v0.gpu_device_id={device_num}",
         ]
-        super().__init__(
-            env_name=env_name, disable_env_checker=disable_env_checker, **kwargs
-        )
+        super().__init__(env_name=env_name, **kwargs)
 
     @classproperty
     def available_envs(cls):

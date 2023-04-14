@@ -31,6 +31,7 @@ from torchrl._utils import (
     _check_for_faulty_process,
     accept_remote_rref_udf_invocation,
     prod,
+    RL_WARNINGS,
     VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
@@ -51,27 +52,22 @@ _is_osx = sys.platform.startswith("darwin")
 
 
 class RandomPolicy:
-    """A random policy for data collectors."""
+    """A random policy for data collectors.
+
+    This is a wrapper around the action_spec.rand method.
+
+    Args:
+        action_spec: TensorSpec object describing the action specs
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data.tensor_specs import BoundedTensorSpec
+        >>> action_spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
+        >>> actor = RandomPolicy(spec=action_spec)
+        >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
+    """
 
     def __init__(self, action_spec: TensorSpec):
-        """Random policy for a given action_spec.
-
-        This is a wrapper around the action_spec.rand method.
-
-
-        $ python example_google.py
-
-        Args:
-            action_spec: TensorSpec object describing the action specs
-
-        Examples:
-            >>> from tensordict import TensorDict
-            >>> from torchrl.data.tensor_specs import BoundedTensorSpec
-            >>> action_spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
-            >>> actor = RandomPolicy(spec=action_spec)
-            >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
-
-        """
         self.action_spec = action_spec
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
@@ -194,17 +190,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             observation_spec (TensorSpec, optional): spec of the observations
 
         """
-        # if create_env_fn is not None:
-        #     if create_env_kwargs is None:
-        #         create_env_kwargs = {}
-        #     self.create_env_fn = create_env_fn
-        #     if isinstance(create_env_fn, EnvBase):
-        #         env = create_env_fn
-        #     else:
-        #         env = self.create_env_fn(**create_env_kwargs)
-        # else:
-        #     env = None
-
         if policy is None:
             if not hasattr(self, "env") or self.env is None:
                 raise ValueError(
@@ -270,15 +255,24 @@ behaviour and more control you can consider writing your own TensorDictModule.
             )
 
         device = torch.device(device) if device is not None else policy_device
-        if device is None:
-            device = torch.device("cpu")
         get_weights_fn = None
         if policy_device != device:
-            get_weights_fn = policy.state_dict
-            policy = deepcopy(policy).requires_grad_(False).to(device)
-            if device == torch.device("cpu"):
-                policy.share_memory()
-        return policy, device, get_weights_fn
+            param_and_buf = dict(policy.named_parameters())
+            param_and_buf.update(dict(policy.named_buffers()))
+
+            def get_weights_fn(param_and_buf=param_and_buf):
+                return TensorDict(param_and_buf, []).apply(lambda x: x.data)
+
+            policy_cast = deepcopy(policy).requires_grad_(False).to(device)
+            # here things may break bc policy.to("cuda") gives us weights on cuda:0 (same
+            # but different)
+            try:
+                device = next(policy_cast.parameters()).device
+            except StopIteration:  # noqa
+                pass
+        else:
+            policy_cast = policy
+        return policy_cast, device, get_weights_fn
 
     def update_policy_weights_(
         self, policy_weights: Optional[TensorDictBase] = None
@@ -336,15 +330,15 @@ behaviour and more control you can consider writing your own TensorDictModule.
 
 @accept_remote_rref_udf_invocation
 class SyncDataCollector(DataCollectorBase):
-    """Generic data collector for RL problems. Requires and environment constructor and a policy.
+    """Generic data collector for RL problems. Requires an environment constructor and a policy.
 
     Args:
         create_env_fn (Callable): a callable that returns an instance of
-            :class:`torchrl.envs.EnvBase` class.
+            :class:`~torchrl.envs.EnvBase` class.
         policy (Callable): Policy to be executed in the environment.
             Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
             If ``None`` is provided, the policy used will be a
-            :class:`RandomPolicy` instance with the environment
+            :class:`~torchrl.collectors.RandomPolicy` instance with the environment
             ``action_spec``.
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
@@ -384,12 +378,12 @@ class SyncDataCollector(DataCollectorBase):
             at the beginning of a batch collection.
             Defaults to ``False``.
         postproc (Callable, optional): A post-processing transform, such as
-            a :class:`torchrl.envs.Transform` or a :class:`torchrl.data.postprocs.MultiStep`
+            a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
             instance.
             Defaults to ``None``.
         split_trajs (bool, optional): Boolean indicating whether the resulting
             TensorDict should be split according to the trajectories.
-            See :func:`torchrl.collectors.utils.split_trajectories` for more
+            See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
         exploration_mode (str, optional): interaction mode to be used when
@@ -533,6 +527,18 @@ class SyncDataCollector(DataCollectorBase):
         self.env: EnvBase = self.env.to(self.device)
         self.max_frames_per_traj = max_frames_per_traj
         if self.max_frames_per_traj > 0:
+            # let's check that there is no StepCounter yet
+            for key in self.env.output_spec.keys(True, True):
+                if isinstance(key, str):
+                    key = (key,)
+                if "truncated" in key:
+                    raise ValueError(
+                        "A 'truncated' key is already present in the environment "
+                        "and the 'max_frames_per_traj' argument may conflict with "
+                        "a 'StepCounter' that has already been set. "
+                        "Possible solutions: Set max_frames_per_traj to 0 or "
+                        "remove the StepCounter limit from the environment transforms."
+                    )
             env = self.env = TransformedEnv(
                 self.env, StepCounter(max_steps=self.max_frames_per_traj)
             )
@@ -540,9 +546,12 @@ class SyncDataCollector(DataCollectorBase):
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
-            if total_frames % frames_per_batch != 0:
-                raise ValueError(
-                    f"total_frames ({total_frames}) must be divisible by frames_per_batch ({frames_per_batch})."
+            remainder = total_frames % frames_per_batch
+            if remainder != 0 and RL_WARNINGS:
+                warnings.warn(
+                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch})."
+                    f"This means {frames_per_batch - remainder} additional frames will be collected."
+                    "To silence this message, set the environment variable RL_WARNINGS to False."
                 )
         self.total_frames = total_frames
         self.reset_at_each_iter = reset_at_each_iter
@@ -550,10 +559,11 @@ class SyncDataCollector(DataCollectorBase):
         self.postproc = postproc
         if self.postproc is not None:
             self.postproc.to(self.storing_device)
-        if frames_per_batch % self.n_env != 0:
+        if frames_per_batch % self.n_env != 0 and RL_WARNINGS:
             warnings.warn(
                 f"frames_per_batch {frames_per_batch} is not exactly divisible by the number of batched environments {self.n_env}, "
-                f" this results in more frames_per_batch per iteration that requested"
+                f" this results in more frames_per_batch per iteration that requested."
+                "To silence this message, set the environment variable RL_WARNINGS to False."
             )
         self.requested_frames_per_batch = frames_per_batch
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
@@ -569,32 +579,62 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids,
         )
 
+        with torch.no_grad():
+            self._tensordict_out = env.fake_tensordict()
         if (
             hasattr(self.policy, "spec")
             and self.policy.spec is not None
-            and all(v is not None for v in self.policy.spec.values())
-            and set(self.policy.spec.keys(True, True)) == set(self.policy.out_keys)
+            and all(
+                v is not None for v in self.policy.spec.values(True, True)
+            )  # if a spec is None, we don't know anything about it
+            # and set(self.policy.spec.keys(True, True)) == set(self.policy.out_keys)
+            and any(
+                key not in self._tensordict_out.keys(isinstance(key, tuple))
+                for key in self.policy.spec.keys(True, True)
+            )
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
-            self._tensordict_out = env.fake_tensordict().to_tensordict()
-            self._tensordict_out.update(self.policy.spec.zero())
+            # the policy could have more keys than the env:
+            policy_spec = self.policy.spec
+            if policy_spec.ndim < self._tensordict_out.ndim:
+                policy_spec = policy_spec.expand(self._tensordict_out.shape)
+            for key, spec in policy_spec.items(True, True):
+                if key in self._tensordict_out.keys(isinstance(key, tuple)):
+                    continue
+                self._tensordict_out.set(key, spec.zero())
             self._tensordict_out = (
                 self._tensordict_out.unsqueeze(-1)
                 .expand(*env.batch_size, self.frames_per_batch)
-                .to_tensordict()
+                .clone()
+            )
+        elif (
+            hasattr(self.policy, "spec")
+            and self.policy.spec is not None
+            and all(v is not None for v in self.policy.spec.values(True, True))
+            and all(
+                key in self._tensordict_out.keys(isinstance(key, tuple))
+                for key in self.policy.spec.keys(True, True)
+            )
+        ):
+            # reach this if the policy has specs and they match with the fake tensordict
+            self._tensordict_out = (
+                self._tensordict_out.unsqueeze(-1)
+                .expand(*env.batch_size, self.frames_per_batch)
+                .clone()
             )
         else:
             # otherwise, we perform a small number of steps with the policy to
             # determine the relevant keys with which to pre-populate _tensordict_out.
+            # This is the safest thing to do if the spec has None fields or if there is
+            # no spec at all.
             # See #505 for additional context.
             with torch.no_grad():
-                self._tensordict_out = env.fake_tensordict()
                 self._tensordict_out = self._tensordict_out.to(self.device)
                 self._tensordict_out = self.policy(self._tensordict_out).unsqueeze(-1)
             self._tensordict_out = (
                 self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
-                .to_tensordict()
+                .clone()
                 .zero_()
             )
         # in addition to outputs of the policy, we add traj_ids and step_count to
@@ -616,7 +656,6 @@ class SyncDataCollector(DataCollectorBase):
                 "Cannot split trajectories when reset_when_done is False."
             )
         self.split_trajs = split_trajs
-        self._has_been_done = None
         self._exclude_private_keys = True
         self.interruptor = interruptor
 
@@ -700,20 +739,17 @@ class SyncDataCollector(DataCollectorBase):
     def _step_and_maybe_reset(self) -> None:
         done = self._tensordict.get(("next", "done"))
         truncated = self._tensordict.get(("next", "truncated"), None)
-        if truncated is None:
-            truncated = torch.zeros_like(done)
-        traj_ids = self._tensordict.get(("collector", "traj_ids")).clone()
+        traj_ids = self._tensordict.get(("collector", "traj_ids"))
 
         self._tensordict = step_mdp(self._tensordict)
 
         if not self.reset_when_done:
-            done = torch.zeros_like(done)
-        done_or_terminated = done | truncated
-        # keep track of envs that have been done at least once
-        if self._has_been_done is None:
-            self._has_been_done = done_or_terminated
-        else:
-            self._has_been_done = self._has_been_done | done_or_terminated
+            return
+
+        done_or_terminated = (
+            (done | truncated) if truncated is not None else done.clone()
+        )
+
         if done_or_terminated.any():
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
@@ -724,18 +760,22 @@ class SyncDataCollector(DataCollectorBase):
                 _reset = None
                 td_reset = None
             td_reset = self.env.reset(td_reset)
-            self._tensordict.update(td_reset, inplace=True)
-            done = self._tensordict.get("done")
-            if (_reset is None and done.any()) or (
-                _reset is not None and done[_reset].any()
-            ):
-                raise RuntimeError(
-                    f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
-                )
             traj_done_or_terminated = done_or_terminated.sum(
                 tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
                 dtype=torch.bool,
             )
+            if td_reset.batch_dims:
+                self._tensordict.get_sub_tensordict(traj_done_or_terminated).update(
+                    td_reset[traj_done_or_terminated], inplace=True
+                )
+            else:
+                self._tensordict.update(td_reset, inplace=True)
+
+            done = self._tensordict.get("done")
+            if done.any():
+                raise RuntimeError(
+                    f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
+                )
             traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
                 1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )
@@ -762,7 +802,8 @@ class SyncDataCollector(DataCollectorBase):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
-                    self.env.step(self.policy(self._tensordict))
+                    self.policy(self._tensordict)
+                    self.env.step(self._tensordict)
 
                 # we must clone all the values, since the step / traj_id updates are done in-place
                 try:
@@ -890,7 +931,7 @@ class _MultiDataCollector(DataCollectorBase):
 
     Args:
         create_env_fn (List[Callabled]): list of Callables, each returning an
-            instance of :class:`torchrl.envs.EnvBase`.
+            instance of :class:`~torchrl.envs.EnvBase`.
         policy (Callable, optional): Instance of TensorDictModule class.
             Must accept TensorDictBase object as input.
             If ``None`` is provided, the policy used will be a
@@ -941,12 +982,12 @@ class _MultiDataCollector(DataCollectorBase):
             at the beginning of a batch collection.
             Defaults to ``False``.
         postproc (Callable, optional): A post-processing transform, such as
-            a :class:`torchrl.envs.Transform` or a :class:`torchrl.data.postprocs.MultiStep`
+            a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
             instance.
             Defaults to ``None``.
         split_trajs (bool, optional): Boolean indicating whether the resulting
             TensorDict should be split according to the trajectories.
-            See :func:`torchrl.collectors.utils.split_trajectories` for more
+            See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
         exploration_mode (str, optional): interaction mode to be used when
@@ -1078,9 +1119,9 @@ class _MultiDataCollector(DataCollectorBase):
             )
             self._policy_dict[_device] = _policy
             if isinstance(_policy, nn.Module):
-                self._policy_weights_dict[_device] = TensorDict(
-                    dict(_policy.named_parameters()), []
-                )
+                param_dict = dict(_policy.named_parameters())
+                param_dict.update(_policy.named_buffers())
+                self._policy_weights_dict[_device] = TensorDict(param_dict, [])
             else:
                 self._policy_weights_dict[_device] = TensorDict({}, [])
 
@@ -1112,9 +1153,12 @@ class _MultiDataCollector(DataCollectorBase):
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
-            if total_frames % frames_per_batch != 0:
-                raise ValueError(
-                    f"total_frames ({total_frames}) must be divisible by frames_per_batch ({frames_per_batch})."
+            remainder = total_frames % frames_per_batch
+            if remainder != 0 and RL_WARNINGS:
+                warnings.warn(
+                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch})."
+                    f"This means {frames_per_batch - remainder} additional frames will be collected."
+                    "To silence this message, set the environment variable RL_WARNINGS to False."
                 )
         self.total_frames = total_frames
         self.reset_at_each_iter = reset_at_each_iter
@@ -1159,7 +1203,7 @@ class _MultiDataCollector(DataCollectorBase):
                     policy_weights
                 )
             elif self._get_weights_fn_dict[_device] is not None:
-                self._policy_dict[_device].load_state_dict(
+                self._policy_weights_dict[_device].update_(
                     self._get_weights_fn_dict[_device]()
                 )
 
@@ -1469,10 +1513,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     @property
     def frames_per_batch_worker(self):
-        if self.requested_frames_per_batch % self.num_workers != 0:
+        if self.requested_frames_per_batch % self.num_workers != 0 and RL_WARNINGS:
             warnings.warn(
                 f"frames_per_batch {self.requested_frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers},"
-                f" this results in more frames_per_batch per iteration that requested"
+                f" this results in more frames_per_batch per iteration that requested."
+                "To silence this message, set the environment variable RL_WARNINGS to False."
             )
         frames_per_batch_worker = -(
             -self.requested_frames_per_batch // self.num_workers
@@ -1926,9 +1971,18 @@ def _main_async_collector(
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
-    tensordict = data = d = data_in = dc = dc_iter = None
+    tensordict = data = d = data_in = inner_collector = dc_iter = None
 
-    dc = SyncDataCollector(
+    # send the policy to device
+    try:
+        policy = policy.to(device)
+    except Exception:
+        if RL_WARNINGS:
+            warnings.warn(
+                "Couldn't cast the policy onto the desired device on remote process. "
+                "If your policy is not a nn.Module instance you can probably ignore this warning."
+            )
+    inner_collector = SyncDataCollector(
         create_env_fn,
         create_env_kwargs=create_env_kwargs,
         policy=policy,
@@ -1947,7 +2001,7 @@ def _main_async_collector(
     )
     if verbose:
         print("Sync data collector created")
-    dc_iter = iter(dc)
+    dc_iter = iter(inner_collector)
     j = 0
     pipe_child.send("instantiated")
 
@@ -1995,9 +2049,9 @@ def _main_async_collector(
                 continue
         if msg in ("continue", "continue_random"):
             if msg == "continue_random":
-                dc.init_random_frames = float("inf")
+                inner_collector.init_random_frames = float("inf")
             else:
-                dc.init_random_frames = -1
+                inner_collector.init_random_frames = -1
 
             d = next(dc_iter)
             if pipe_child.poll(_MIN_TIMEOUT):
@@ -2033,14 +2087,14 @@ def _main_async_collector(
                 continue
 
         elif msg == "update":
-            dc.update_policy_weights_()
+            inner_collector.update_policy_weights_()
             pipe_child.send((j, "updated"))
             has_timed_out = False
             continue
 
         elif msg == "seed":
             data_in, static_seed = data_in
-            new_seed = dc.set_seed(data_in, static_seed=static_seed)
+            new_seed = inner_collector.set_seed(data_in, static_seed=static_seed)
             torch.manual_seed(data_in)
             np.random.seed(data_in)
             pipe_child.send((new_seed, "seeded"))
@@ -2048,12 +2102,12 @@ def _main_async_collector(
             continue
 
         elif msg == "reset":
-            dc.reset()
+            inner_collector.reset()
             pipe_child.send((j, "reset"))
             continue
 
         elif msg == "state_dict":
-            state_dict = dc.state_dict()
+            state_dict = inner_collector.state_dict()
             # send state_dict to cpu first
             state_dict = recursive_map_to_cpu(state_dict)
             pipe_child.send((state_dict, "state_dict"))
@@ -2062,15 +2116,15 @@ def _main_async_collector(
 
         elif msg == "load_state_dict":
             state_dict = data_in
-            dc.load_state_dict(state_dict)
+            inner_collector.load_state_dict(state_dict)
             pipe_child.send((j, "loaded"))
             has_timed_out = False
             continue
 
         elif msg == "close":
             del tensordict, data, d, data_in
-            dc.shutdown()
-            del dc, dc_iter
+            inner_collector.shutdown()
+            del inner_collector, dc_iter
             pipe_child.send("closed")
             if verbose:
                 print(f"collector {idx} closed")

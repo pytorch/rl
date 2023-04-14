@@ -71,7 +71,14 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
         for _spec, _key in zip(values, keys):
             if _spec is None:
                 continue
-            if not _spec.is_in(tensordict_out.get(_key)):
+            item = tensordict_out.get(_key, None)
+            if item is None:
+                # this will happen when an exploration (e.g. OU) writes a key only
+                # during exploration, but is missing otherwise.
+                # it's fine since what we want here it to make sure that a key
+                # is within bounds if it is present
+                continue
+            if not _spec.is_in(item):
                 try:
                     tensordict_out.set_(
                         _key,
@@ -95,7 +102,7 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
 
 
 class SafeModule(TensorDictModule):
-    """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`torchrl.data.TensorSpec` as argument to control the output domain.
+    """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`~torchrl.data.TensorSpec` as argument to control the output domain.
 
     Args:
         module (nn.Module): a nn.Module used to map the input to the output

@@ -14,6 +14,7 @@ import torch
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
+RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
 
 
 class timeit:

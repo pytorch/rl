@@ -821,12 +821,12 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
             n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
@@ -1065,12 +1065,12 @@ class BoundedTensorSpec(TensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
             minimum=self.space.minimum.expand(shape).clone(),
@@ -1260,12 +1260,12 @@ class UnboundedContinuousTensorSpec(TensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
 
@@ -1347,12 +1347,12 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
 
@@ -1537,12 +1537,12 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
             nvec=nvecs, shape=shape, device=self.device, dtype=self.dtype
@@ -1676,12 +1676,12 @@ class DiscreteTensorSpec(TensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
             n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
@@ -1762,12 +1762,12 @@ class BinaryDiscreteTensorSpec(DiscreteTensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
             n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
@@ -1981,12 +1981,12 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
             nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype
@@ -2257,13 +2257,26 @@ class CompositeSpec(TensorSpec):
             yield k
 
     def __delitem__(self, key: str) -> None:
+        if isinstance(key, tuple) and len(key) > 1:
+            del self._specs[key[0]][key[1:]]
+            return
+        elif isinstance(key, tuple):
+            del self._specs[key[0]]
+            return
+        elif not isinstance(key, str):
+            raise TypeError(
+                f"Got key of type {type(key)} when a string or a tuple of strings was expected."
+            )
+
+        if key in {"shape", "device", "dtype", "space"}:
+            raise AttributeError(f"CompositeSpec has no key {key}")
         del self._specs[key]
 
     def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
         if isinstance(vals, TensorDict):
             out = vals.select()  # create and empty tensordict similar to vals
         else:
-            out = TensorDict({}, [], _run_checks=False)
+            out = TensorDict({}, torch.Size([]), _run_checks=False)
         for key, item in vals.items():
             if item is None:
                 raise RuntimeError(
@@ -2437,7 +2450,10 @@ class CompositeSpec(TensorSpec):
         except RuntimeError:
             device = self._device
         return self.__class__(
-            {key: item.clone() for key, item in self.items()},
+            {
+                key: item.clone() if item is not None else None
+                for key, item in self.items()
+            },
             device=device,
             shape=self.shape,
         )
@@ -2498,11 +2514,11 @@ class CompositeSpec(TensorSpec):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(val < 0 for val in shape):
-            raise ValueError("CompositeSpec.extend does not support negative shapes.")
+            raise ValueError("CompositeSpec.expand does not support negative shapes.")
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         try:
             device = self.device

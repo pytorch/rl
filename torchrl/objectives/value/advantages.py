@@ -132,10 +132,12 @@ class TD0Estimator(ValueEstimatorBase):
             before the TD is computed.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
+
             .. note::
               The proper way to make the function call non-differentiable is to
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
+
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
@@ -319,10 +321,12 @@ class TD1Estimator(ValueEstimatorBase):
             before the TD is computed.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
+
             .. note::
               The proper way to make the function call non-differentiable is to
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
+
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
@@ -489,7 +493,9 @@ class TD1Estimator(ValueEstimatorBase):
         next_value = step_td.get(self.value_key)
 
         done = tensordict.get(("next", "done"))
-        value_target = vec_td1_return_estimate(gamma, next_value, reward, done)
+        value_target = vec_td1_return_estimate(
+            gamma, next_value, reward, done, time_dim=tensordict.ndim - 1
+        )
         return value_target
 
 
@@ -504,10 +510,12 @@ class TDLambdaEstimator(ValueEstimatorBase):
             before the TD is computed.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
+
             .. note::
               The proper way to make the function call non-differentiable is to
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
+
         vectorized (bool, optional): whether to use the vectorized version of the
             lambda return. Default is `True`.
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
@@ -684,9 +692,13 @@ class TDLambdaEstimator(ValueEstimatorBase):
 
         done = tensordict.get(("next", "done"))
         if self.vectorized:
-            val = vec_td_lambda_return_estimate(gamma, lmbda, next_value, reward, done)
+            val = vec_td_lambda_return_estimate(
+                gamma, lmbda, next_value, reward, done, time_dim=tensordict.ndim - 1
+            )
         else:
-            val = td_lambda_return_estimate(gamma, lmbda, next_value, reward, done)
+            val = td_lambda_return_estimate(
+                gamma, lmbda, next_value, reward, done, time_dim=tensordict.ndim - 1
+            )
         return val
 
 
@@ -704,10 +716,12 @@ class GAE(ValueEstimatorBase):
             Default is ``False``.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
+
             .. note::
               The proper way to make the function call non-differentiable is to
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
+
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
@@ -838,7 +852,7 @@ class GAE(ValueEstimatorBase):
         """
         if tensordict.batch_dims < 1:
             raise RuntimeError(
-                "Expected input tensordict to have at least one dimensions, got"
+                "Expected input tensordict to have at least one dimensions, got "
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
         reward = tensordict.get(("next", "reward"))
@@ -875,7 +889,7 @@ class GAE(ValueEstimatorBase):
         next_value = step_td.get(self.value_key)
         done = tensordict.get(("next", "done"))
         adv, value_target = vec_generalized_advantage_estimate(
-            gamma, lmbda, value, next_value, reward, done
+            gamma, lmbda, value, next_value, reward, done, time_dim=tensordict.ndim - 1
         )
 
         if self.average_gae:
@@ -934,7 +948,7 @@ class GAE(ValueEstimatorBase):
         next_value = step_td.get(self.value_key)
         done = tensordict.get(("next", "done"))
         _, value_target = vec_generalized_advantage_estimate(
-            gamma, lmbda, value, next_value, reward, done
+            gamma, lmbda, value, next_value, reward, done, time_dim=tensordict.ndim - 1
         )
         return value_target
 

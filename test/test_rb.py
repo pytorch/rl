@@ -850,6 +850,7 @@ def test_smoke_replay_buffer_transform(transform):
         return
 
     rb._transform = mock.MagicMock()
+    rb._transform.__len__ = lambda *args: 3
     rb.sample()
     assert rb._transform.called
 
@@ -875,6 +876,7 @@ def test_smoke_replay_buffer_transform_no_inkeys(transform):
     rb.sample()
 
     rb._transform = mock.MagicMock()
+    rb._transform.__len__ = lambda *args: 3
     rb.sample()
     assert rb._transform.called
 

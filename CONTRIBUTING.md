@@ -6,7 +6,19 @@ possible.
 Install the library as suggested in the README. For advanced features,
 it is preferable to install the nightly built of pytorch.
 
-Make sure you install torchrl in develop mode by running
+TorchRL and TensorDict are being developed jointly. Stable releases are tied
+together such that you can safely install the latest version of both libraries.
+For TorchRL development, we recommend installing tensordict nightly
+
+```
+pip install tensordict-nightly
+```
+or the git version of the library:
+```
+pip install git+https://github.com/pytorch-labs/tensordict
+```
+
+Once cloned, make sure you install torchrl in develop mode by running
 ```
 python setup.py develop
 ```

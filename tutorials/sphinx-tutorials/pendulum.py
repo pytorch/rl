@@ -138,12 +138,12 @@ DEFAULT_Y = 1.0
 # position), the angular velocity is close to 0 (no motion) and the torque is
 # 0 too.
 #
-# Coding the effect of an action: :func:`torchrl.envs.EnvBase._step`
+# Coding the effect of an action: :func:`~torchrl.envs.EnvBase._step`
 # ------------------------------------------------------------------
 #
 # The step method is the first thing to consider, as it will encode
 # the simulation that is of interest to us. In TorchRL, the
-# :class:`torchrl.envs.EnvBase` class has a :meth:`EnvBase.step`
+# :class:`~torchrl.envs.EnvBase` class has a :meth:`EnvBase.step`
 # method that receives a :class:`tensordict.TensorDict`
 # instance with an ``"action"`` entry indicating what action is to be taken.
 #
@@ -161,8 +161,8 @@ DEFAULT_Y = 1.0
 #   3. write the set of observation value along with the reward and done state
 #      at the corresponding entries in a new :class:`TensorDict`.
 #
-# Next, the :meth:`torchrl.envs.EnvBase.step` method will merge the output
-# of :meth:`torchrl.envs.EnvBase.step` in the input tensordict to enforce
+# Next, the :meth:`~torchrl.envs.EnvBase.step` method will merge the output
+# of :meth:`~torchrl.envs.EnvBase.step` in the input tensordict to enforce
 # input/output consistency.
 #
 # Typically, for stateful environments, this will look like
@@ -262,18 +262,18 @@ def angle_normalize(x):
 
 
 ######################################################################
-# Resetting the simulator: :func:`torchrl.envs.EnvBase._reset`
+# Resetting the simulator: :func:`~torchrl.envs.EnvBase._reset`
 # ------------------------------------------------------------
 #
 # The second method we need to care about is the
-# :meth:`torchrl.envs.EnvBase._reset` method. Like
-# :meth:`torchrl.envs.EnvBase._step`, it should write the observation entries
+# :meth:`~torchrl.envs.EnvBase._reset` method. Like
+# :meth:`~torchrl.envs.EnvBase._step`, it should write the observation entries
 # and possibly a done state in the tensordict it outputs (if the done state is
 # omitted, it will be filled as ``False`` by the parent method
-# :meth:`torchrl.envs.EnvBase.reset`). In some contexts, it is required that
+# :meth:`~torchrl.envs.EnvBase.reset`). In some contexts, it is required that
 # the ``_reset`` method receives a command from the function that called
 # it (e.g. in multi-agent settings we may want to indicate which agents need
-# to be reset). This is why the :meth:`torchrl.envs.EnvBase._reset` method
+# to be reset). This is why the :meth:`~torchrl.envs.EnvBase._reset` method
 # also expects a tensordict as input, albeit it may perfectly be empty or
 # ``None``.
 #
@@ -343,7 +343,7 @@ def _reset(self, tensordict):
 #
 # There are four specs that we must code in our environment:
 #
-# * :obj:`EnvBase.observation_spec`: This will be a :class:`torchrl.data.CompositeSpec`
+# * :obj:`EnvBase.observation_spec`: This will be a :class:`~torchrl.data.CompositeSpec`
 #   instance where each key is an observation (a :class:`CompositeSpec` can be
 #   viewed as a dictionary of specs).
 # * :obj:`EnvBase.action_spec`: It can be any type of spec, but it is required
@@ -376,7 +376,7 @@ def _reset(self, tensordict):
 # In other words, the ``observation_spec`` and related properties are
 # convenient shortcuts to the content of the output and input spec containers.
 #
-# TorchRL offers multiple :class:`torchrl.data.TensorSpec`
+# TorchRL offers multiple :class:`~torchrl.data.TensorSpec`
 # `subclasses <https://pytorch.org/rl/reference/data.html#tensorspec>`_ to
 # encode the environment's input and output characteristics.
 #
@@ -463,7 +463,7 @@ def _set_seed(self, seed: Optional[int]):
 
 
 ######################################################################
-# Wrapping things together: the :class:`torchrl.envs.EnvBase` class
+# Wrapping things together: the :class:`~torchrl.envs.EnvBase` class
 # -----------------------------------------------------------------
 #
 # We can finally put together the pieces and design our environment class.
@@ -541,7 +541,7 @@ class PendulumEnv(EnvBase):
 # Testing our environment
 # -----------------------
 #
-# TorchRL provides a simple function :func:`torchrl.envs.utils.check_env_specs`
+# TorchRL provides a simple function :func:`~torchrl.envs.utils.check_env_specs`
 # to check that a (transformed) environment has an input/output structure that
 # matches the one dictated by its specs.
 # Let us try it out:
@@ -616,10 +616,10 @@ env = TransformedEnv(
 #
 # A transform can be used in two settings: on its own, it can be used as a
 # :class:`torch.nn.Module`. It can also be used appended to a
-# :class:`torchrl.envs.TransformedEnv`. The structure of the class allows to
+# :class:`~torchrl.envs.TransformedEnv`. The structure of the class allows to
 # customize the behaviour in the different contexts.
 #
-# A :class:`torchrl.envs.Transform` skeleton can be summarized as follows:
+# A :class:`~torchrl.envs.Transform` skeleton can be summarized as follows:
 #
 # .. code-block::
 #
@@ -897,7 +897,7 @@ plot()
 #   We saw how these methods and classes interact with the
 #   :class:`tensordict.TensorDict` class;
 # * how to test that an environment is properly coded using
-#   :func:`torchrl.envs.utils.check_env_specs`;
+#   :func:`~torchrl.envs.utils.check_env_specs`;
 # * How to append transforms in the context of stateless environments and how
 #   to write custom transformations;
 # * How to train a policy on a fully differentiable simulator.
