@@ -3951,9 +3951,9 @@ class TestReward2Go(TransformBase):
     def test_transform_env(self, gamma):
         t = Reward2GoTransform(gamma=gamma)
         with pytest.raises(ValueError, match=Reward2GoTransform.ENV_ERR):
-            env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), t)
+            _ = TransformedEnv(GymEnv(PENDULUM_VERSIONED), t)
         t = Compose(t)
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED))
+        _ = TransformedEnv(GymEnv(PENDULUM_VERSIONED))
         env.append_transform(t)
 
         env.set_seed(0)
@@ -3970,12 +3970,12 @@ class TestReward2Go(TransformBase):
             )
 
         with pytest.raises(ValueError, match=Reward2GoTransform.ENV_ERR):
-            env = ParallelEnv(2, make_env)
+            _ = ParallelEnv(2, make_env)
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     def test_single_trans_env_check(self, gamma):
         with pytest.raises(ValueError, match=Reward2GoTransform.ENV_ERR):
-            env = TransformedEnv(
+            _ = TransformedEnv(
                 ContinuousActionVecMockEnv(),
                 Reward2GoTransform(gamma=gamma),
             )
@@ -3989,12 +3989,12 @@ class TestReward2Go(TransformBase):
             )
 
         with pytest.raises(ValueError, match=Reward2GoTransform.ENV_ERR):
-            env = SerialEnv(2, make_env)
+            _ = SerialEnv(2, make_env)
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     def test_trans_serial_env_check(self, gamma):
         with pytest.raises(ValueError, match=Reward2GoTransform.ENV_ERR):
-            env = TransformedEnv(
+            _ = TransformedEnv(
                 SerialEnv(2, ContinuousActionVecMockEnv),
                 Reward2GoTransform(gamma=gamma),
             )
@@ -4002,7 +4002,7 @@ class TestReward2Go(TransformBase):
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     def test_trans_parallel_env_check(self, gamma):
         with pytest.raises(ValueError, match=Reward2GoTransform.ENV_ERR):
-            env = TransformedEnv(
+            _ = TransformedEnv(
                 ParallelEnv(2, ContinuousActionVecMockEnv),
                 Reward2GoTransform(gamma=gamma),
             )
