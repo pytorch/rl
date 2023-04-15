@@ -212,9 +212,9 @@ def init_stats(env, n_samples_stats, from_pixels):
 
 
 def make_test_env(env_cfg):
-    env = make_transformed_env(
-        ParallelEnv(1, EnvCreator(lambda: make_base_env(env_cfg))), env_cfg
-    )
+    env_cfg.num_envs = 1
+    state_dict = get_stats(env_cfg)
+    env = make_parallel_env(env_cfg, state_dict=state_dict)
     return env
 
 

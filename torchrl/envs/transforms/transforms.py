@@ -2919,6 +2919,7 @@ class RewardSum(Transform):
                 "the out_keys must be specified for non-conventional in-keys in RewardSum."
             )
 
+        self._last_sum = collections.defaultdict()
         super().__init__(in_keys=in_keys, out_keys=out_keys)
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -2934,8 +2935,8 @@ class RewardSum(Transform):
         )
         if _reset.any():
             for in_key, out_key in zip(self.in_keys, self.out_keys):
-                if out_key in tensordict.keys():
-                    value = tensordict[out_key]
+                if out_key in self._last_sum.keys():
+                    value = self._last_sum[out_key]
                     tensordict[out_key] = value.masked_fill(
                         expand_as_right(_reset, value), 0.0
                     )
@@ -2954,7 +2955,6 @@ class RewardSum(Transform):
                             f"observation_spec with keys "
                             f"{list(self.parent.observation_spec.keys(True))}. "
                         ) from err
-
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -2966,6 +2966,7 @@ class RewardSum(Transform):
                 if out_key not in tensordict.keys():
                     tensordict.set(("next", out_key), torch.zeros_like(reward))
                 tensordict["next", out_key] = tensordict[out_key] + reward
+                self._last_sum[out_key] = tensordict["next", out_key].clone()
         return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -3040,6 +3041,7 @@ class StepCounter(Transform):
             raise ValueError("max_steps should have a value greater or equal to one.")
         self.max_steps = max_steps
         self.truncated_key = truncated_key
+        self._last_count = collections.defaultdict()
         super().__init__([])
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -3057,10 +3059,7 @@ class StepCounter(Transform):
         )
         if _reset is None:
             _reset = torch.ones_like(done)
-        step_count = tensordict.get(
-            "step_count",
-            default=None,
-        )
+        step_count = self._last_count.get("step_count", None)
         if step_count is None:
             step_count = torch.zeros_like(done, dtype=torch.int64)
 
@@ -3084,6 +3083,7 @@ class StepCounter(Transform):
         if self.max_steps is not None:
             truncated = next_step_count >= self.max_steps
             tensordict.set(("next", self.truncated_key), truncated)
+        self._last_count["step_count"] = next_step_count
         return tensordict
 
     def transform_observation_spec(

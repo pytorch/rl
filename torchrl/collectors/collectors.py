@@ -742,7 +742,6 @@ class SyncDataCollector(DataCollectorBase):
         traj_ids = self._tensordict.get(("collector", "traj_ids"))
 
         self._tensordict = step_mdp(self._tensordict)
-
         if not self.reset_when_done:
             return
 
@@ -755,7 +754,7 @@ class SyncDataCollector(DataCollectorBase):
             # to `reset()`.
             if len(self.env.batch_size):
                 _reset = done_or_terminated
-                td_reset = self._tensordict.select().set("_reset", _reset)
+                td_reset = self._tensordict.set("_reset", _reset)
             else:
                 _reset = None
                 td_reset = None

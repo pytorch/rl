@@ -25,6 +25,8 @@ from tensordict import TensorDict
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.trainers.helpers.envs import correct_for_frame_skip
 
+from torchrl.collectors.collectors import RandomPolicy
+
 from utils import (
     get_stats,
     make_collector,
@@ -76,10 +78,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         collected_frames += frames_in_batch
         pbar.update(data.numel())
         data_view = data.reshape(-1)
-        data_view = adv_module(data_view)  # TODO: modify after losses refactor
+        with torch.no_grad():
+            data_view = adv_module(data_view)  # TODO: modify after losses refactor
         data_buffer.extend(data_view)
-        episode_rewards = data_view["episode_reward"][data_view["done"]] # TODO: done is always False, why?
-        episode_rewards = data_view["episode_reward"][data_view["next"]["done"]]
+        episode_rewards = data["next"]["episode_reward"][data["next"]["done"]]
         if len(episode_rewards) > 0:
             logger.log_scalar("reward_training", episode_rewards.mean().item(), collected_frames)
 
@@ -136,7 +138,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 ########################################################################################################
 
                 loss_val.backward()
-                torch.nn.utils.clip_grad_norm_(list(actor.parameters()) + list(critic.parameters()), max_norm=0.5)
+                bn = torch.nn.utils.clip_grad_norm_(list(actor.parameters()) + list(critic.parameters()), max_norm=0.5)
                 optim.step()
                 scheduler.step()
                 optim.zero_grad()
@@ -149,21 +151,26 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 pbar.set_description(
                     f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['reward'].mean(): 4.4f} (init={r0: 4.4f})"
                 )
-
+                logger.log_scalar("bn", bn.item(), collected_frames)
         collector.update_policy_weights_()
         if (
             collected_frames - frames_in_batch
         ) // record_interval < collected_frames // record_interval:
 
-            with set_exploration_mode("random"):
+            with torch.no_grad():
+                test_env.eval()
+                actor.eval()
                 td_record = test_env.rollout(
                     policy=actor,
+                    # policy=RandomPolicy(test_env.action_spec),
                     max_steps=10_000_000,
                     auto_reset=True,
                     auto_cast_to_device=True,
                     break_when_any_done=True,
                 ).clone()
                 logger.log_scalar("reward_testing", td_record["reward"].sum().item(), collected_frames)
+                logger.log_scalar("step_count_testing", td_record["next"]["step_count"][0][-1].item(), collected_frames)
+                actor.train()
 
 
 if __name__ == "__main__":
