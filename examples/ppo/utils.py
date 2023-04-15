@@ -32,7 +32,6 @@ from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.modules import (
     ConvNet,
     MLP,
-    SafeModule,
     ProbabilisticActor,
     ValueOperator,
     ActorValueOperator,
@@ -257,76 +256,83 @@ def make_data_buffer(cfg):
 
 
 def make_ppo_model(cfg):
+
     env_cfg = cfg.env
-    model_cfg = cfg.model
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
     # we must initialize the observation norm transform
     # init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
 
-    import gym
-    import numpy as np
-    import torch.nn as nn
-    from pytorchrl.agent.actors.utils import init
-    from pytorchrl.agent.actors.feature_extractors import CNN
+    # TODO: for now assume discrete action space
+    model_cfg = cfg.model
+    num_actions = proof_environment.specs["action_spec"].space.n
 
-    # 2.1 Define input keys
+    # Define input keys
     in_keys = ["pixels"]
-    obs_space = (4, 84, 84)  # obs_space.shape
-    act_space = gym.spaces.Discrete(6)
 
-    # 2.2 Define a shared Module and TensorDictModule (CNN + MLP)
+    # Define a shared Module and TensorDictModule (CNN + MLP)
+    common_cnn = ConvNet(
+        activation_class=torch.nn.ReLU,
+        num_cells=[32, 64, 64],
+        kernel_sizes=[8, 4, 3],
+        strides=[4, 2, 1],
+    )
+    common_cnn_output = common_cnn(
+        torch.ones_like(proof_environment["pixels"]))
+    common_mlp = MLP(
+        in_features=common_cnn_output.shape[-1],
+        activation_class=torch.nn.ReLU,
+        activate_last_layer=True,
+        out_features=448,
+        num_cells=[256])
+    common_mlp_output = common_mlp(common_cnn_output)
 
-    # Define shared net
-    common_module = CNN(obs_space, rgb_norm=False)
-    dummy_obs = torch.zeros(8, *obs_space)
-    common_module_output = common_module(dummy_obs)
-    common_module = SafeModule(  # Like TensorDictModule
-        module=common_module,
+    # Define shared net as TensorDictModule
+    common_module = TensorDictModule(
+        module=torch.nn.Sequential(common_cnn, common_mlp),
         in_keys=in_keys,
         out_keys=["common_features"],
     )
 
-    # Define one head for the policy
-    init_ = lambda m: init(
-        m,
-        nn.init.orthogonal_,
-        lambda x: nn.init.constant_(x, 0),
-        gain=np.sqrt(0.01))
-
-    policy_net = init_(nn.Linear(common_module_output.shape[-1], act_space.n))
+    # Define on head for the policy
+    policy_net = MLP(
+        in_features=common_mlp_output.shape[-1],
+        out_features=num_actions,
+        num_cells=[]
+    )
     policy_module = TensorDictModule(
         module=policy_net,
         in_keys=["common_features"],
         out_keys=["logits"],
     )
 
+    # Add probabilistic sampling of the actions
     policy_module = ProbabilisticActor(
-        module=policy_module,
+        policy_module,
         in_keys=["logits"],
         out_keys=["action"],
-        default_interaction_mode="random",
         distribution_class=OneHotCategorical,
         distribution_kwargs={},
         return_log_prob=True,
     )
 
-    # Define one head for the value
-    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=np.sqrt(0.01))
-    value_net = init_(nn.Linear(common_module_output.shape[-1], 1))
+    # Define another head for the value
+    value_net = MLP(
+        in_features=common_mlp_output.shape[-1],
+        out_features=1,
+        num_cells=[]
+    )
     value_module = ValueOperator(
         value_net,
         in_keys=["common_features"],
-        out_keys=["state_value"],
     )
 
-    # 2.5 Wrap modules in a single ActorCritic operator
+    # Wrap modules in a single ActorCritic operator
     actor_critic = ActorValueOperator(
         common_operator=common_module,
         policy_operator=policy_module,
         value_operator=value_module,
     )
 
-    # 2.6 Initialize the model by running a forward pass
     with torch.no_grad():
         td = proof_environment.rollout(max_steps=100, break_when_any_done=False)
         td = actor_critic(td)
