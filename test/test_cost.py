@@ -438,7 +438,7 @@ class TestDQN:
             assert_allclose_td(target_value, target_value2)
         else:
             for key, val in target_value.flatten_keys(",").items():
-                if key in ("support",):
+                if "support" in key:
                     continue
                 assert not (val == target_value2[tuple(key.split(","))]).any(), key
 

@@ -897,6 +897,8 @@ class QValueActor(SafeSequential):
         action_space: str = "one_hot",
         action_value_key=None,
     ):
+        self.action_space = action_space
+        self.action_value_key = action_value_key
         if action_value_key is None:
             action_value_key = "action_value"
         out_keys = [
@@ -1023,6 +1025,8 @@ class DistributionalQValueActor(QValueActor):
         action_value_key: str = "action_value",
         make_log_softmax: bool = True,
     ):
+        self.action_space = action_space
+        self.action_value_key = action_value_key
         out_keys = [
             "action",
             action_value_key,
@@ -1064,6 +1068,7 @@ class DistributionalQValueActor(QValueActor):
             super(QValueActor, self).__init__(module, log_softmax_module, qvalue)
         else:
             super(QValueActor, self).__init__(module, qvalue)
+        self.register_buffer("support", support)
 
 
 class ActorValueOperator(SafeSequential):
