@@ -753,12 +753,8 @@ class SyncDataCollector(DataCollectorBase):
         if done_or_terminated.any():
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
-            if len(self.env.batch_size):
-                _reset = done_or_terminated
-                td_reset = self._tensordict.select().set("_reset", _reset)
-            else:
-                _reset = None
-                td_reset = None
+            _reset = done_or_terminated
+            td_reset = self._tensordict.select().set("_reset", _reset)
             td_reset = self.env.reset(td_reset)
             traj_done_or_terminated = done_or_terminated.sum(
                 tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
