@@ -53,12 +53,9 @@ _is_osx = sys.platform.startswith("darwin")
 
 class RandomPolicy:
     """A random policy for data collectors.
-
     This is a wrapper around the action_spec.rand method.
-
     Args:
         action_spec: TensorSpec object describing the action specs
-
     Examples:
         >>> from tensordict import TensorDict
         >>> from torchrl.data.tensor_specs import BoundedTensorSpec
@@ -76,7 +73,6 @@ class RandomPolicy:
 
 class _Interruptor:
     """A class for managing the collection state of a process.
-
     This class provides methods to start and stop collection, and to check
     whether collection has been stopped. The collection state is protected
     by a lock to ensure thread-safety.
@@ -103,7 +99,6 @@ class _Interruptor:
 
 class _InterruptorManager(SyncManager):
     """A custom SyncManager for managing the collection state of a process.
-
     This class extends the SyncManager class and allows to share an Interruptor object
     between processes.
     """
@@ -175,11 +170,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         observation_spec: TensorSpec = None,
     ) -> Tuple[TensorDictModule, torch.device, Union[None, Callable[[], dict]]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
-
         From a policy and a device, assigns the self.device attribute to
         the desired device and maps the policy onto it or (if the device is
         ommitted) assigns the self.device attribute to the policy device.
-
         Args:
             create_env_fn (Callable or list of callables): an env creator
                 function (or a list of creators)
@@ -188,7 +181,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             device (int, str or torch.device, optional): device where to place
                 the policy
             observation_spec (TensorSpec, optional): spec of the observations
-
         """
         if policy is None:
             if not hasattr(self, "env") or self.env is None:
@@ -278,11 +270,9 @@ behaviour and more control you can consider writing your own TensorDictModule.
         self, policy_weights: Optional[TensorDictBase] = None
     ) -> None:
         """Updates the policy weights if the policy of the data collector and the trained policy live on different devices.
-
         Args:
             policy_weights (TensorDictBase, optional): if provided, a TensorDict containing
                 the weights of the policy to be used for the udpdate.
-
         """
         if policy_weights is not None:
             self.policy_weights.apply(lambda x: x.data).update_(policy_weights)
@@ -331,7 +321,6 @@ behaviour and more control you can consider writing your own TensorDictModule.
 @accept_remote_rref_udf_invocation
 class SyncDataCollector(DataCollectorBase):
     """Generic data collector for RL problems. Requires an environment constructor and a policy.
-
     Args:
         create_env_fn (Callable): a callable that returns an instance of
             :class:`~torchrl.envs.EnvBase` class.
@@ -404,7 +393,6 @@ class SyncDataCollector(DataCollectorBase):
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
-
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from tensordict.nn import TensorDictModule
@@ -450,7 +438,6 @@ class SyncDataCollector(DataCollectorBase):
             device=cpu,
             is_shared=False)
         >>> del collector
-
     """
 
     def __init__(
@@ -671,16 +658,13 @@ class SyncDataCollector(DataCollectorBase):
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
-
         Args:
             seed (int): integer representing the seed to be used for the environment.
             static_seed(bool, optional): if ``True``, the seed is not incremented.
                 Defaults to False
-
         Returns:
             Output seed. This is useful when more than one environment is contained in the DataCollector, as the
             seed will be incremented for each of these. The resulting seed is the seed of the last environment.
-
         Examples:
             >>> from torchrl.envs import ParallelEnv
             >>> from torchrl.envs.libs.gym import GymEnv
@@ -688,15 +672,12 @@ class SyncDataCollector(DataCollectorBase):
             >>> env_fn_parallel = ParallelEnv(6, env_fn)
             >>> collector = SyncDataCollector(env_fn_parallel)
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
-
         """
         return self.env.set_seed(seed, static_seed=static_seed)
 
     def iterator(self) -> Iterator[TensorDictBase]:
         """Iterates through the DataCollector.
-
         Yields: TensorDictBase objects containing (chunks of) trajectories
-
         """
         total_frames = self.total_frames
         i = -1
@@ -742,6 +723,7 @@ class SyncDataCollector(DataCollectorBase):
         traj_ids = self._tensordict.get(("collector", "traj_ids"))
 
         self._tensordict = step_mdp(self._tensordict)
+
         if not self.reset_when_done:
             return
 
@@ -752,12 +734,8 @@ class SyncDataCollector(DataCollectorBase):
         if done_or_terminated.any():
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
-            if len(self.env.batch_size):
-                _reset = done_or_terminated
-                td_reset = self._tensordict.set("_reset", _reset)
-            else:
-                _reset = None
-                td_reset = None
+            _reset = done_or_terminated
+            td_reset = self._tensordict.select().set("_reset", _reset)
             td_reset = self.env.reset(td_reset)
             traj_done_or_terminated = done_or_terminated.sum(
                 tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
@@ -785,10 +763,8 @@ class SyncDataCollector(DataCollectorBase):
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
-
         Returns:
             TensorDictBase containing the computed rollout.
-
         """
         if self.reset_at_each_iter:
             self._tensordict.update(self.env.reset(), inplace=True)
@@ -873,11 +849,9 @@ class SyncDataCollector(DataCollectorBase):
 
     def state_dict(self) -> OrderedDict:
         """Returns the local state_dict of the data collector (environment and policy).
-
         Returns:
             an ordered dictionary with fields :obj:`"policy_state_dict"` and
             `"env_state_dict"`.
-
         """
         if isinstance(self.env, TransformedEnv):
             env_state_dict = self.env.transform.state_dict()
@@ -899,11 +873,9 @@ class SyncDataCollector(DataCollectorBase):
 
     def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
         """Loads a state_dict on the environment and policy.
-
         Args:
             state_dict (OrderedDict): ordered dictionary containing the fields
                 `"policy_state_dict"` and :obj:`"env_state_dict"`.
-
         """
         strict = kwargs.get("strict", True)
         if strict or "env_state_dict" in state_dict:
@@ -927,7 +899,6 @@ class SyncDataCollector(DataCollectorBase):
 
 class _MultiDataCollector(DataCollectorBase):
     """Runs a given number of DataCollectors on separate processes.
-
     Args:
         create_env_fn (List[Callabled]): list of Callables, each returning an
             instance of :class:`~torchrl.envs.EnvBase`.
@@ -1303,24 +1274,20 @@ also that the state dict is synchronised across processes if needed."""
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
-
         Args:
             seed: integer representing the seed to be used for the environment.
             static_seed (bool, optional): if ``True``, the seed is not incremented.
                 Defaults to False
-
         Returns:
             Output seed. This is useful when more than one environment is
             contained in the DataCollector, as the seed will be incremented for
             each of these. The resulting seed is the seed of the last
             environment.
-
         Examples:
             >>> env_fn = lambda: GymEnv("Pendulum-v0")
             >>> env_fn_parallel = lambda: ParallelEnv(6, env_fn)
             >>> collector = SyncDataCollector(env_fn_parallel)
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
-
         """
         _check_for_faulty_process(self.procs)
         for idx in range(self.num_workers):
@@ -1334,11 +1301,9 @@ also that the state dict is synchronised across processes if needed."""
 
     def reset(self, reset_idx: Optional[Sequence[bool]] = None) -> None:
         """Resets the environments to a new initial state.
-
         Args:
             reset_idx: Optional. Sequence indicating which environments have
                 to be reset. If None, all environments are reset.
-
         """
         _check_for_faulty_process(self.procs)
 
@@ -1355,9 +1320,7 @@ also that the state dict is synchronised across processes if needed."""
 
     def state_dict(self) -> OrderedDict:
         """Returns the state_dict of the data collector.
-
         Each field represents a worker containing its own state_dict.
-
         """
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "state_dict"))
@@ -1372,11 +1335,9 @@ also that the state dict is synchronised across processes if needed."""
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         """Loads the state_dict on the workers.
-
         Args:
             state_dict (OrderedDict): state_dict of the form
                 ``{"worker0": state_dict0, "worker1": state_dict1}``.
-
         """
         for idx in range(self.num_workers):
             self.pipes[idx].send((state_dict[f"worker{idx}"], "load_state_dict"))
@@ -1389,9 +1350,7 @@ also that the state dict is synchronised across processes if needed."""
 @accept_remote_rref_udf_invocation
 class MultiSyncDataCollector(_MultiDataCollector):
     """Runs a given number of DataCollectors on separate processes synchronously.
-
     .. aafig::
-
             +----------------------------------------------------------------------+
             |            "MultiSyncDataCollector"                 |                |
             |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
@@ -1424,14 +1383,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
             |                       "yield batch of traj 2"------->"collect, train"|
             |                                                     |                |
             +----------------------------------------------------------------------+
-
     Envs can be identical or different.
-
     The collection starts when the next item of the collector is queried,
     and no environment step is computed in between the reception of a batch of
     trajectory and the start of the next collection.
     This class can be safely used with online RL algorithms.
-
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs import StepCounter
@@ -1479,7 +1435,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
             is_shared=False)
         >>> collector.shutdown()
         >>> del collector
-
     """
 
     __doc__ += _MultiDataCollector.__doc__
@@ -1626,10 +1581,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 @accept_remote_rref_udf_invocation
 class MultiaSyncDataCollector(_MultiDataCollector):
     """Runs a given number of DataCollectors on separate processes asynchronously.
-
     .. aafig::
-
-
             +----------------------------------------------------------------------+
             |           "MultiConcurrentCollector"                |                |
             |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
@@ -1654,13 +1606,10 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             |        |        | "yield batch 3" |                 |"collect, train"|
             |        |        |                 |                 |                |
             +----------------------------------------------------------------------+
-
     Environment types can be identical or different.
-
     The collection keeps on occuring on all processes even between the time
     the batch of rollouts is collected and the next call to the iterator.
     This class can be safely used with offline RL algorithms.
-
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from tensordict.nn import TensorDictModule
@@ -1707,7 +1656,6 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             is_shared=False)
         >>> collector.shutdown()
         >>> del collector
-
     """
 
     __doc__ += _MultiDataCollector.__doc__
@@ -1834,13 +1782,11 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 @accept_remote_rref_udf_invocation
 class aSyncDataCollector(MultiaSyncDataCollector):
     """Runs a single DataCollector on a separate process.
-
     This is mostly useful for offline RL paradigms where the policy being
     trained can differ from the policy used to collect data. In online
     settings, a regular DataCollector should be preferred. This class is
     merely a wrapper around a MultiaSyncDataCollector where a single process
     is being created.
-
     Args:
         create_env_fn (Callabled): Callable returning an instance of EnvBase
         policy (Callable, optional): Instance of TensorDictModule class.
@@ -1887,7 +1833,6 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         update_at_each_batch (bool): if ``True``, the policy weights will be updated every time a batch of trajectories
             is collected.
             default=False
-
     """
 
     def __init__(
