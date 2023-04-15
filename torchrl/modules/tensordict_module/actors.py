@@ -16,6 +16,7 @@ from tensordict.nn import (
 from torch import nn
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
@@ -34,9 +35,6 @@ class Actor(SafeModule):
     Args:
         module (nn.Module): a :class:`torch.nn.Module` used to map the input to
             the output parameter space.
-            Can be a functional module, in which case the
-            :meth:`torch.nn.Module.forward` method will expect
-            the params (and possibly) buffers keyword arguments.
         in_keys (iterable of str, optional): keys to be read from input
             tensordict and passed to the module. If it
             contains more than one element, the values will be passed in the
@@ -126,9 +124,6 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
     Args:
         module (nn.Module): a :class:`torch.nn.Module` used to map the input to
             the output parameter space.
-            Can be a functional module, in which case the
-            :meth:`torch.nn.Module.forward` method will expect
-            the params (and possibly) buffers keyword arguments.
         in_keys (str or iterable of str or dict): key(s) that will be read from the
             input TensorDict and used to build the distribution. Importantly, if it's an
             iterable of string or a string, those keys must match the keywords used by
@@ -249,9 +244,6 @@ class ValueOperator(TensorDictModule):
     Args:
         module (nn.Module): a :class:`torch.nn.Module` used to map the input to
             the output parameter space.
-            Can be a functional module, in which case the
-            :meth:`torch.nn.Module.forward` method will expect
-            the params (and possibly) buffers keyword arguments.
         in_keys (iterable of str, optional): keys to be read from input
             tensordict and passed to the module. If it
             contains more than one element, the values will be passed in the
@@ -497,6 +489,9 @@ class DistributionalQValueModule(QValueModule):
     component (i.e. the resulting greedy action), following a given
     action space (one-hot, binary or categorical).
     It works with both tensordict and regular tensors.
+
+    The input action value is expected to be the result of a log-softmax
+    operation.
 
     For more details regarding Distributional DQN, refer to "A Distributional Perspective on Reinforcement Learning",
     https://arxiv.org/pdf/1707.06887.pdf
@@ -950,9 +945,11 @@ class DistributionalQValueActor(QValueActor):
     Args:
         module (nn.Module): a :class:`torch.nn.Module` used to map the input to
             the output parameter space.
-            Can be a functional module, in which case the
-            :meth:`torch.nn.Module.forward` method will expect
-            the params (and possibly) buffers keyword arguments.
+            If the module isn't of type :class:`torchrl.modules.DistributionalDQNnet`,
+            :class:`~.DistributionalQValueActor` will ensure that a log-softmax
+            operation is applied to the action value tensor along dimension ``-2``.
+            This can be deactivated by turning off the ``make_log_softmax``
+            keyword argument.
         in_keys (iterable of str, optional): keys to be read from input
             tensordict and passed to the module. If it
             contains more than one element, the values will be passed in the
@@ -978,6 +975,9 @@ class DistributionalQValueActor(QValueActor):
         action_space (str, optional): The action space to be considered.
             Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
+        make_log_softmax (bool, optional): if ``True`` and if the module is not
+            of type :class:`torchrl.modules.DistributionalDQNnet`, a log-softmax
+            operation will be applied along dimension -2 of the action value tensor.
 
     Examples:
         >>> import torch
@@ -1020,7 +1020,8 @@ class DistributionalQValueActor(QValueActor):
         spec=None,
         safe=False,
         action_space: str = "one_hot",
-        action_value_key="action_value",
+        action_value_key: str = "action_value",
+        make_log_softmax: bool = True,
     ):
         out_keys = [
             "action",
@@ -1046,6 +1047,7 @@ class DistributionalQValueActor(QValueActor):
         else:
             spec = CompositeSpec(action=spec, shape=spec.shape[:-1])
         spec[action_value_key] = None
+
         qvalue = DistributionalQValueModule(
             action_value_key=action_value_key,
             out_keys=out_keys,
@@ -1054,8 +1056,14 @@ class DistributionalQValueActor(QValueActor):
             action_space=action_space,
             support=support,
         )
-
-        super(QValueActor, self).__init__(module, qvalue)
+        self.make_log_softmax = make_log_softmax
+        if make_log_softmax and not isinstance(module, DistributionalDQNnet):
+            log_softmax_module = DistributionalDQNnet(
+                in_keys=qvalue.in_keys, out_keys=qvalue.in_keys
+            )
+            super(QValueActor, self).__init__(module, log_softmax_module, qvalue)
+        else:
+            super(QValueActor, self).__init__(module, qvalue)
 
 
 class ActorValueOperator(SafeSequential):
