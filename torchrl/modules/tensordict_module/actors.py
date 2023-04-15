@@ -399,7 +399,11 @@ class QValueModule(TensorDictModuleBase):
             action_value_key = "action_value"
         self.in_keys = [action_value_key]
         if out_keys is None:
-            out_keys = ["action", "action_value", "chosen_action_value"]
+            out_keys = ["action", action_value_key, "chosen_action_value"]
+        elif action_value_key not in out_keys:
+            raise RuntimeError(
+                f"Expected the action-value key to be '{action_value_key}' but got {out_keys[1]} instead."
+            )
         self.out_keys = out_keys
         super().__init__()
         self.register_spec(safe=safe, spec=spec)
@@ -526,8 +530,10 @@ class DistributionalQValueModule(QValueModule):
         spec: TensorSpec = None,
         safe: bool = False,
     ):
+        if action_value_key is None:
+            action_value_key = "action_value"
         if out_keys is None:
-            out_keys = ["action", "action_value"]
+            out_keys = ["action", action_value_key]
         super().__init__(
             action_space=action_space,
             action_value_key=action_value_key,
@@ -841,11 +847,13 @@ class QValueActor(SafeSequential):
         spec=None,
         safe=False,
         action_space: str = "one_hot",
-        action_value_key="action_value",
+        action_value_key=None,
     ):
+        if action_value_key is None:
+            action_value_key = "action_value"
         out_keys = [
             "action",
-            "action_value",
+            action_value_key,
             "chosen_action_value",
         ]
         if isinstance(module, TensorDictModuleBase):
@@ -867,7 +875,7 @@ class QValueActor(SafeSequential):
                 spec["action"] = None
         else:
             spec = CompositeSpec(action=spec, shape=spec.shape[:-1])
-        spec["action_value"] = None
+        spec[action_value_key] = None
         spec["chosen_action_value"] = None
         qvalue = QValueModule(
             action_value_key=action_value_key,
@@ -959,7 +967,7 @@ class DistributionalQValueActor(QValueActor):
     ):
         out_keys = [
             "action",
-            "action_value",
+            action_value_key,
         ]
         if isinstance(module, TensorDictModuleBase):
             if action_value_key not in module.out_keys:
@@ -980,7 +988,7 @@ class DistributionalQValueActor(QValueActor):
                 spec["action"] = None
         else:
             spec = CompositeSpec(action=spec, shape=spec.shape[:-1])
-        spec["action_value"] = None
+        spec[action_value_key] = None
         qvalue = DistributionalQValueModule(
             action_value_key=action_value_key,
             out_keys=out_keys,

@@ -12,15 +12,8 @@ from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
 from torch import nn
-from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-)
-from torchrl.modules import (
-    CEMPlanner,
-    LSTMNet,
-    SafeModule,
-    ValueOperator,
-)
+from torchrl.data.tensor_specs import BoundedTensorSpec
+from torchrl.modules import CEMPlanner, LSTMNet, SafeModule, ValueOperator
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
 from torchrl.modules.models.model_based import (
     DreamerActor,

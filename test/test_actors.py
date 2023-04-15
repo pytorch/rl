@@ -9,13 +9,14 @@ import torch
 
 from _utils_internal import get_available_devices
 from tensordict import TensorDict
-
+from tensordict.nn import TensorDictModule
 from torch import nn
 
 from torchrl.data import DiscreteTensorSpec, OneHotDiscreteTensorSpec
 from torchrl.modules import MLP, SafeModule
 from torchrl.modules.tensordict_module.actors import (
     ActorValueOperator,
+    DistributionalQValueActor,
     DistributionalQValueHook,
     DistributionalQValueModule,
     ProbabilisticActor,
@@ -68,7 +69,60 @@ class TestQValue:
         # test tensor, tensordict
         td = module(TensorDict({key: in_values}, []))
         action = td["action"]
-        values = td["action_value"]
+        values = td[key]
+        if key != "action_value_keys":
+            assert "action_value_keys" not in td.keys()
+        chosen_action_value = td["chosen_action_value"]
+        assert (torch.tensor(expected_action, dtype=torch.long) == action).all()
+        assert (values == in_values).all()
+        assert (torch.tensor([100.0]) == chosen_action_value).all()
+
+    @pytest.mark.parametrize(
+        "action_space, expected_action",
+        (
+            ("one_hot", [0, 0, 1, 0, 0]),
+            ("categorical", 2),
+        ),
+    )
+    @pytest.mark.parametrize("model_type", ["td", "nn"])
+    @pytest.mark.parametrize("key", ["somekey", None])
+    def test_qvalue_actor_0_dim_batch(
+        self, action_space, expected_action, key, model_type
+    ):
+        if model_type == "nn":
+            model = nn.Identity()
+        else:
+            out_keys = ["action_value"] if key is None else [key]
+            model = TensorDictModule(
+                nn.Identity(),
+                in_keys=["observation"],
+                out_keys=out_keys,
+            )
+        if key is not None:
+            module = QValueActor(model, action_space=action_space, action_value_key=key)
+        else:
+            module = QValueActor(model, action_space=action_space)
+            key = "action_value"
+
+        in_values = torch.tensor([1.0, -1.0, 100.0, -2.0, -3.0])
+        # test tensor
+        action, values, chosen_action_value = module(in_values)
+        assert (torch.tensor(expected_action, dtype=torch.long) == action).all()
+        assert (values == in_values).all()
+        assert (torch.tensor([100.0]) == chosen_action_value).all()
+
+        # test tensor, keyword
+        action, values, chosen_action_value = module(**{"observation": in_values})
+        assert (torch.tensor(expected_action, dtype=torch.long) == action).all()
+        assert (values == in_values).all()
+        assert (torch.tensor([100.0]) == chosen_action_value).all()
+
+        # test tensor, tensordict
+        td = module(TensorDict({"observation": in_values}, []))
+        action = td["action"]
+        values = td[key]
+        if key != "action_value_keys":
+            assert "action_value_keys" not in td.keys()
         chosen_action_value = td["chosen_action_value"]
         assert (torch.tensor(expected_action, dtype=torch.long) == action).all()
         assert (values == in_values).all()
@@ -169,7 +223,82 @@ class TestQValue:
         # tensor, tensordict
         td = module(TensorDict({key: in_values}, []))
         action = td["action"]
-        values = td["action_value"]
+        values = td[key]
+        if key != "action_value":
+            assert "action_value" not in td.keys()
+        expected_action = torch.tensor(expected_action, dtype=torch.long)
+
+        assert action.shape == expected_action.shape
+        assert (action == expected_action).all()
+        assert values.shape == in_values.shape
+        assert (values == in_values).all()
+
+    @pytest.mark.parametrize(
+        "action_space, expected_action",
+        (
+            ("one_hot", [0, 0, 1, 0, 0]),
+            ("categorical", 2),
+        ),
+    )
+    @pytest.mark.parametrize("model_type", ["td", "nn"])
+    @pytest.mark.parametrize("key", ["somekey", None])
+    def test_distributional_qvalue_actor_0_dim_batch(
+        self, action_space, expected_action, key, model_type
+    ):
+        support = torch.tensor([-2.0, 0.0, 2.0])
+        if model_type == "nn":
+            model = nn.Identity()
+        else:
+            if key is not None:
+                model = TensorDictModule(
+                    nn.Identity(), in_keys=["observation"], out_keys=[key]
+                )
+            else:
+                model = TensorDictModule(
+                    nn.Identity(), in_keys=["observation"], out_keys=["action_value"]
+                )
+
+        if key is not None:
+            module = DistributionalQValueActor(
+                model, action_space=action_space, support=support, action_value_key=key
+            )
+        else:
+            key = "action_value"
+            module = DistributionalQValueActor(
+                model, action_space=action_space, support=support
+            )
+
+        in_values = torch.nn.LogSoftmax(dim=-1)(
+            torch.tensor(
+                [
+                    [1.0, -1.0, 11.0, -2.0, 30.0],
+                    [1.0, -1.0, 1.0, -2.0, -3.0],
+                    [1.0, -1.0, 10.0, -2.0, -3.0],
+                ]
+            )
+        )
+        # tensor
+        action, values = module(in_values)
+        expected_action = torch.tensor(expected_action, dtype=torch.long)
+
+        assert action.shape == expected_action.shape
+        assert (action == expected_action).all()
+        assert values.shape == in_values.shape
+        assert (values == in_values).all()
+
+        # tensor, keyword
+        action, values = module(observation=in_values)
+        expected_action = torch.tensor(expected_action, dtype=torch.long)
+
+        assert action.shape == expected_action.shape
+        assert (action == expected_action).all()
+        assert values.shape == in_values.shape
+        assert (values == in_values).all()
+
+        # tensor, tensordict
+        td = module(TensorDict({"observation": in_values}, []))
+        action = td["action"]
+        values = td[key]
         expected_action = torch.tensor(expected_action, dtype=torch.long)
 
         assert action.shape == expected_action.shape
