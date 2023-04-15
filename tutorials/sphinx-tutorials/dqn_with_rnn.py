@@ -27,6 +27,8 @@ from torchrl.trainers import (
     Trainer,
     UpdateWeights,
 )
+
+
 def make_env(
     parallel=False,
     obs_norm_sd=None,
@@ -77,6 +79,7 @@ def get_norm_stats():
     # ``C=4`` (because of :class:`~torchrl.envs.CatFrames`).
     print("state dict of the observation norm:", obs_norm_sd)
     return obs_norm_sd
+
 
 class DuelingCnnDQNet(nn.Module):
     """Dueling CNN Q-network.
@@ -150,6 +153,7 @@ class DuelingCnnDQNet(nn.Module):
         advantage = self.advantage(x)
         value = self.value(x)
         return value + advantage - advantage.mean(dim=-1, keepdim=True)
+
 
 def make_model(dummy_env):
     cnn_kwargs = {
