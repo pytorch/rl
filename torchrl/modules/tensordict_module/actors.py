@@ -16,7 +16,6 @@ from tensordict.nn import (
 from torch import nn
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
-from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
@@ -320,11 +319,10 @@ class ValueOperator(TensorDictModule):
 class QValueModule(TensorDictModuleBase):
     """Q-Value TensorDictModule for Q-value policies.
 
-    Given a the output of a regular nn.Module, representing the values of the
-    different discrete actions available,
-    a QValueHook will transform these values into their argmax component (i.e.
-    the resulting greedy action).
-    Currently, this is returned as a one-hot encoding.
+    This module processes a tensor containing action value into is argmax
+    component (i.e. the resulting greedy action), following a given
+    action space (one-hot, binary or categorical).
+    It works with both tensordict and regular tensors.
 
     Args:
         action_space (str): Action space. Must be one of
@@ -345,6 +343,12 @@ class QValueModule(TensorDictModuleBase):
             If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
             method. Default is ``False``.
+
+    Returns:
+        if the input is a single tensor, a triplet containing the chosen action,
+        the values and the value of the chose action is returned. If a tensordict
+        is provided, it is updated with these entries at the keys indicated by the
+        ``out_keys`` field.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -489,9 +493,11 @@ class QValueModule(TensorDictModuleBase):
 class DistributionalQValueModule(QValueModule):
     """Distributional Q-Value hook for Q-value policies.
 
-    Given a the output of a mapping operator, representing the values of the different discrete actions available,
-    a DistributionalQValueHook will transform these values into their argmax component using the provided support.
-    Currently, this is returned as a one-hot encoding.
+    This module processes a tensor containing action value logits into is argmax
+    component (i.e. the resulting greedy action), following a given
+    action space (one-hot, binary or categorical).
+    It works with both tensordict and regular tensors.
+
     For more details regarding Distributional DQN, refer to "A Distributional Perspective on Reinforcement Learning",
     https://arxiv.org/pdf/1707.06887.pdf
 
@@ -517,7 +523,37 @@ class DistributionalQValueModule(QValueModule):
             method. Default is ``False``.
 
     Examples:
-        TODO
+        >>> from tensordict import TensorDict
+        >>> torch.manual_seed(0)
+        >>> action_space = "categorical"
+        >>> action_value_key = "my_action_value"
+        >>> support = torch.tensor([-1, 0.0, 1.0]) # the action value is between -1 and 1
+        >>> actor = DistributionalQValueModule(action_space, support=support, action_value_key=action_value_key)
+        >>> # This module works with both tensordict and regular tensors:
+        >>> value = torch.full((3, 4), -100)
+        >>> # the first bin (-1) of the first action is high: there's a high chance that it has a low value
+        >>> value[0, 0] = 0
+        >>> # the second bin (0) of the second action is high: there's a high chance that it has an intermediate value
+        >>> value[1, 1] = 0
+        >>> # the third bin (0) of the thid action is high: there's a high chance that it has an high value
+        >>> value[2, 2] = 0
+        >>> actor(my_action_value=value)
+        (tensor(2), tensor([[   0, -100, -100, -100],
+                [-100,    0, -100, -100],
+                [-100, -100,    0, -100]]))
+        >>> actor(value)
+        (tensor(2), tensor([[   0, -100, -100, -100],
+                [-100,    0, -100, -100],
+                [-100, -100,    0, -100]]))
+        >>> actor(TensorDict({action_value_key: value}, []))
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                my_action_value: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
     """
 
     def __init__(
@@ -626,11 +662,10 @@ class DistributionalQValueModule(QValueModule):
 class QValueHook:
     """Q-Value hook for Q-value policies.
 
-    Given a the output of a regular nn.Module, representing the values of the
+    Given the output of a regular nn.Module, representing the values of the
     different discrete actions available,
     a QValueHook will transform these values into their argmax component (i.e.
     the resulting greedy action).
-    Currently, this is returned as a one-hot encoding.
 
     Args:
         action_space (str): Action space. Must be one of
@@ -700,9 +735,11 @@ class QValueHook:
 class DistributionalQValueHook(QValueHook):
     """Distributional Q-Value hook for Q-value policies.
 
-    Given a the output of a mapping operator, representing the values of the different discrete actions available,
-    a DistributionalQValueHook will transform these values into their argmax component using the provided support.
-    Currently, this is returned as a one-hot encoding.
+    Given the output of a mapping operator, representing the log-probability of the
+    different action value bin available,
+    a DistributionalQValueHook will transform these values into their argmax
+    component using the provided support.
+
     For more details regarding Distributional DQN, refer to "A Distributional Perspective on Reinforcement Learning",
     https://arxiv.org/pdf/1707.06887.pdf
 
@@ -773,7 +810,7 @@ class DistributionalQValueHook(QValueHook):
 
 
 class QValueActor(SafeSequential):
-    """DQN Actor subclass.
+    """A Q-Value actor class.
 
     This class appends a :class:`~.QValueModule` after the input module
     such that the action values are used to select an action.
@@ -822,18 +859,34 @@ class QValueActor(SafeSequential):
         >>> from torchrl.data import OneHotDiscreteTensorSpec
         >>> from torchrl.modules.tensordict_module.actors import QValueActor
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
+        >>> # with a regular nn.Module
         >>> module = nn.Linear(4, 4)
-        >>> params= make_functional(module)
         >>> action_spec = OneHotDiscreteTensorSpec(4)
         >>> qvalue_actor = QValueActor(module=module, spec=action_spec)
-        >>> qvalue_actor(td, params=params)
+        >>> td = qvalue_actor(td)
         >>> print(td)
         TensorDict(
             fields={
-                action: Tensor(torch.Size([5, 4]), dtype=torch.int64),
-                action_value: Tensor(torch.Size([5, 4]), dtype=torch.float32),
-                chosen_action_value: Tensor(torch.Size([5, 1]), dtype=torch.float32),
-                observation: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
+                action: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.int64, is_shared=False),
+                action_value: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                chosen_action_value: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([5]),
+            device=None,
+            is_shared=False)
+        >>> # with a TensorDictModule
+        >>> td = TensorDict({'obs': torch.randn(5, 4)}, [5])
+        >>> module = TensorDictModule(lambda x: x, in_keys=["obs"], out_keys=["action_value"])
+        >>> action_spec = OneHotDiscreteTensorSpec(4)
+        >>> qvalue_actor = QValueActor(module=module, spec=action_spec)
+        >>> td = qvalue_actor(td)
+        >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.int64, is_shared=False),
+                action_value: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                chosen_action_value: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([5]),
             device=None,
             is_shared=False)
@@ -889,9 +942,10 @@ class QValueActor(SafeSequential):
 
 
 class DistributionalQValueActor(QValueActor):
-    """Distributional DQN Actor subclass.
+    """A Distributional DQN actor class.
 
-    This class hooks the module such that it returns a one-hot encoding of the argmax value on its support.
+    This class appends a :class:`~.QValueModule` after the input module
+    such that the action values are used to select an action.
 
     Args:
         module (nn.Module): a :class:`torch.nn.Module` used to map the input to
@@ -941,7 +995,10 @@ class DistributionalQValueActor(QValueActor):
         ...     TensorDictModule(lambda x: x.log_softmax(-2), ["action_value"], ["action_value"]),
         ... )
         >>> action_spec = OneHotDiscreteTensorSpec(4)
-        >>> qvalue_actor = DistributionalQValueActor(module=module, spec=action_spec, support=torch.arange(nbins))
+        >>> qvalue_actor = DistributionalQValueActor(
+        ...     module=module,
+        ...     spec=action_spec,
+        ...     support=torch.arange(nbins))
         >>> td = qvalue_actor(td)
         >>> print(td)
         TensorDict(
