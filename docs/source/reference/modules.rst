@@ -376,6 +376,7 @@ Some distributions are typically used in RL scripts.
     TruncatedNormal
     TanhDelta
     OneHotCategorical
+    MaskedCategorical
 
 Utils
 -----

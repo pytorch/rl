@@ -7,8 +7,14 @@ from __future__ import annotations
 import pkg_resources
 import torch
 from tensordict.nn.probabilistic import (  # noqa
+    # Note: the `set_/interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
+    #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
+    #       See more details: https://github.com/pytorch/rl/issues/1016
     interaction_mode as exploration_mode,
+    interaction_type as exploration_type,
+    InteractionType as ExplorationType,
     set_interaction_mode as set_exploration_mode,
+    set_interaction_type as set_exploration_type,
 )
 from tensordict.tensordict import TensorDictBase
 

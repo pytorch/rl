@@ -440,9 +440,9 @@ And it is `functorch` and `torch.compile` compatible!
 
   ```python
   policy_explore = EGreedyWrapper(policy)
-  with set_exploration_mode("random"):
+  with set_exploration_type(ExplorationType.RANDOM):
       tensordict = policy_explore(tensordict)  # will use eps-greedy
-  with set_exploration_mode("mode"):
+  with set_exploration_type(ExplorationType.MODE):
       tensordict = policy_explore(tensordict)  # will not use eps-greedy
   ```
   </details>

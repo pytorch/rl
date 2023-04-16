@@ -68,7 +68,7 @@ class PPOLoss(LossModule):
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
 
-    .. note:
+    .. note::
       The advantage (typically GAE) can be computed by the loss function or
       in the training loop. The latter option is usually preferred, but this is
       up to the user to choose which option is to be preferred.
@@ -92,6 +92,22 @@ class PPOLoss(LossModule):
         >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
         >>> data = next(datacollector)
         >>> losses = ppo_loss(data)
+
+    .. note::
+      If the actor and the value function share parameters, one can avoid
+      calling the common module multiple times by passing only the head of the
+      value network to the PPO loss module:
+
+        >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])
+        >>> actor_head = SomeActor(in_keys=["hidden"])
+        >>> value_head = SomeValue(in_keys=["hidden"])
+        >>> # first option, with 2 calls on the common module
+        >>> model = ActorCriticOperator(common, actor_head, value_head)
+        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
+        >>> # second option, with a single call to the common module
+        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
+
+      This will work regardless of whether separate_losses is activated or not.
 
     """
 
@@ -128,6 +144,7 @@ class PPOLoss(LossModule):
         self.value_target_key = value_target_key
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus
+        self.separate_losses = separate_losses
         self.register_buffer(
             "entropy_coef", torch.tensor(entropy_coef, device=self.device)
         )
@@ -158,9 +175,8 @@ class PPOLoss(LossModule):
         action = tensordict.get("action")
         if action.requires_grad:
             raise RuntimeError("tensordict stored action requires grad.")
-        tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
 
-        dist = self.actor.get_dist(tensordict_clone, params=self.actor_params)
+        dist = self.actor.get_dist(tensordict, params=self.actor_params)
         log_prob = dist.log_prob(action)
 
         prev_log_prob = tensordict.get("sample_log_prob")
@@ -173,11 +189,12 @@ class PPOLoss(LossModule):
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         # TODO: if the advantage is gathered by forward, this introduces an
         # overhead that we could easily reduce.
+        if self.separate_losses:
+            tensordict = tensordict.detach()
         try:
             target_return = tensordict.get(self.value_target_key)
-            tensordict_select = tensordict.select(*self.critic.in_keys)
             state_value = self.critic(
-                tensordict_select,
+                tensordict,
                 params=self.critic_params,
             ).get("state_value")
             loss_value = distance_loss(
@@ -308,6 +325,22 @@ class ClipPPOLoss(PPOLoss):
         >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
         >>> data = next(datacollector)
         >>> losses = ppo_loss(data)
+
+    .. note::
+      If the actor and the value function share parameters, one can avoid
+      calling the common module multiple times by passing only the head of the
+      value network to the PPO loss module:
+
+        >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])
+        >>> actor_head = SomeActor(in_keys=["hidden"])
+        >>> value_head = SomeValue(in_keys=["hidden"])
+        >>> # first option, with 2 calls on the common module
+        >>> model = ActorCriticOperator(common, actor_head, value_head)
+        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
+        >>> # second option, with a single call to the common module
+        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
+
+      This will work regardless of whether separate_losses is activated or not.
 
     """
 
@@ -471,6 +504,22 @@ class KLPENPPOLoss(PPOLoss):
         >>> data = next(datacollector)
         >>> losses = ppo_loss(data)
 
+    .. note::
+      If the actor and the value function share parameters, one can avoid
+      calling the common module multiple times by passing only the head of the
+      value network to the PPO loss module:
+
+        >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])
+        >>> actor_head = SomeActor(in_keys=["hidden"])
+        >>> value_head = SomeValue(in_keys=["hidden"])
+        >>> # first option, with 2 calls on the common module
+        >>> model = ActorCriticOperator(common, actor_head, value_head)
+        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
+        >>> # second option, with a single call to the common module
+        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
+
+      This will work regardless of whether separate_losses is activated or not.
+
     """
 
     def __init__(
@@ -542,12 +591,8 @@ class KLPENPPOLoss(PPOLoss):
         log_weight, dist = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
 
-        tensordict_clone = tensordict.select(
-            *self.actor.in_keys, *self.actor.out_keys
-        ).clone()
-
-        previous_dist = self.actor.build_dist_from_params(tensordict_clone)
-        current_dist = self.actor.get_dist(tensordict_clone, params=self.actor_params)
+        previous_dist = self.actor.build_dist_from_params(tensordict)
+        current_dist = self.actor.get_dist(tensordict, params=self.actor_params)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:

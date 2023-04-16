@@ -284,7 +284,7 @@ class TestQValue:
         assert action.shape == expected_action.shape
         assert (action == expected_action).all()
         assert values.shape == in_values.shape
-        assert (values == in_values).all()
+        assert (values == in_values.log_softmax(-2)).all()
 
         # tensor, keyword
         action, values = module(observation=in_values)
@@ -293,7 +293,7 @@ class TestQValue:
         assert action.shape == expected_action.shape
         assert (action == expected_action).all()
         assert values.shape == in_values.shape
-        assert (values == in_values).all()
+        assert (values == in_values.log_softmax(-2)).all()
 
         # tensor, tensordict
         td = module(TensorDict({"observation": in_values}, []))
@@ -304,7 +304,7 @@ class TestQValue:
         assert action.shape == expected_action.shape
         assert (action == expected_action).all()
         assert values.shape == in_values.shape
-        assert (values == in_values).all()
+        assert (values == in_values.log_softmax(-2)).all()
 
     @pytest.mark.parametrize(
         "action_space, expected_action",
