@@ -22,8 +22,7 @@ from torchrl.trainers.helpers.envs import correct_for_frame_skip
 from utils import (
     get_stats,
     make_collector,
-    make_ppo_model,
-    make_policy,  # needed ???
+    make_ppo_models,
     make_logger,
     make_loss,
     make_optim,
@@ -39,7 +38,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # cfg = correct_for_frame_skip(cfg)
     model_device = cfg.optim.device
 
-    actor, critic = make_ppo_model(cfg)
+    actor, critic = make_ppo_models(cfg)
     actor = actor.to(model_device)
     critic = critic.to(model_device)
 

@@ -2,8 +2,9 @@ from copy import deepcopy
 
 import torch.nn
 import torch.optim
-import torch.distributions as dist
 from tensordict.nn import TensorDictModule
+
+from torchrl.data.tensor_specs import DiscreteBox
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
@@ -254,77 +255,20 @@ def make_data_buffer(cfg):
 # TorchRL comes in handy at this point, as the high-level interactions with
 # these models is unchanged, regardless of the modality.
 
-
-def make_ppo_model(cfg):
+def make_ppo_models(cfg):
 
     env_cfg = cfg.env
+    model_cfg = cfg.model
+    from_pixels = env_cfg.from_pixels
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
+
     # we must initialize the observation norm transform
     # init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
 
-    # TODO: for now assume discrete action space
-    model_cfg = cfg.model
-    num_actions = proof_environment.specs["action_spec"].space.n
-
-    # Define input keys
-    in_keys = ["pixels"]
-
-    # Define a shared Module and TensorDictModule (CNN + MLP)
-    common_cnn = ConvNet(
-        activation_class=torch.nn.ReLU,
-        num_cells=[32, 64, 64],
-        kernel_sizes=[8, 4, 3],
-        strides=[4, 2, 1],
-    )
-    common_cnn_output = common_cnn(
-        torch.ones_like(proof_environment["pixels"]))
-    common_mlp = MLP(
-        in_features=common_cnn_output.shape[-1],
-        activation_class=torch.nn.ReLU,
-        activate_last_layer=True,
-        out_features=448,
-        num_cells=[256])
-    common_mlp_output = common_mlp(common_cnn_output)
-
-    # Define shared net as TensorDictModule
-    common_module = TensorDictModule(
-        module=torch.nn.Sequential(common_cnn, common_mlp),
-        in_keys=in_keys,
-        out_keys=["common_features"],
-    )
-
-    # Define on head for the policy
-    policy_net = MLP(
-        in_features=common_mlp_output.shape[-1],
-        out_features=num_actions,
-        num_cells=[]
-    )
-    policy_module = TensorDictModule(
-        module=policy_net,
-        in_keys=["common_features"],
-        out_keys=["logits"],
-    )
-
-    # Add probabilistic sampling of the actions
-    policy_module = ProbabilisticActor(
-        policy_module,
-        in_keys=["logits"],
-        out_keys=["action"],
-        distribution_class=OneHotCategorical,
-        distribution_kwargs={},
-        return_log_prob=True,
-    )
-
-    # Define another head for the value
-    value_net = MLP(
-        in_features=common_mlp_output.shape[-1],
-        out_features=1,
-        num_cells=[]
-    )
-    value_module = ValueOperator(
-        value_net,
-        in_keys=["common_features"],
-    )
+    if not from_pixels:
+        common_module, policy_module, value_module = make_ppo_modules_state(model_cfg, proof_environment)
+    else:
+        common_module, policy_module, value_module = make_ppo_modules_pixels(model_cfg, proof_environment)
 
     # Wrap modules in a single ActorCritic operator
     actor_critic = ActorValueOperator(
@@ -345,17 +289,83 @@ def make_ppo_model(cfg):
 
 
 def make_ppo_modules_state(model_cfg, proof_environment):
-    actor_net, value_net = None, None
-    return actor_net, value_net
+    raise NotImplementedError
 
 
 def make_ppo_modules_pixels(model_cfg, proof_environment):
-    actor_net, value_net = None, None
-    return actor_net, value_net
 
+    # Define input shape
+    input_shape = proof_environment.specs["output_spec"]["observation"]["pixels"].shape
 
-def make_policy(policy_cfg):
-    return make_ppo_model(policy_cfg)
+    # Define distribution class and kwargs
+    if isinstance(proof_environment.specs["input_spec"]["action"].space, DiscreteBox):
+        num_ouputs = proof_environment.specs["input_spec"]["action"].space.n
+        distribution_class = OneHotCategorical
+        distribution_kwargs = {}
+    else:
+        raise NotImplementedError
+
+    # Define input keys
+    in_keys = ["pixels"]
+
+    # Define a shared Module and TensorDictModule (CNN + MLP)
+    common_cnn = ConvNet(
+        activation_class=torch.nn.ReLU,
+        num_cells=[32, 64, 64],
+        kernel_sizes=[8, 4, 3],
+        strides=[4, 2, 1],
+    )
+    common_cnn_output = common_cnn(
+        torch.ones(input_shape))
+    common_mlp = MLP(
+        in_features=common_cnn_output.shape[-1],
+        activation_class=torch.nn.ReLU,
+        activate_last_layer=True,
+        out_features=448,
+        num_cells=[256])
+    common_mlp_output = common_mlp(common_cnn_output)
+
+    # Define shared net as TensorDictModule
+    common_module = TensorDictModule(
+        module=torch.nn.Sequential(common_cnn, common_mlp),
+        in_keys=in_keys,
+        out_keys=["common_features"],
+    )
+
+    # Define on head for the policy
+    policy_net = MLP(
+        in_features=common_mlp_output.shape[-1],
+        out_features=num_ouputs,
+        num_cells=[]
+    )
+    policy_module = TensorDictModule(
+        module=policy_net,
+        in_keys=["common_features"],
+        out_keys=["logits"],
+    )
+
+    # Add probabilistic sampling of the actions
+    policy_module = ProbabilisticActor(
+        policy_module,
+        in_keys=["logits"],
+        distribution_class=distribution_class,
+        distribution_kwargs=distribution_kwargs,
+        return_log_prob=True,
+        default_interaction_mode="random",
+    )
+
+    # Define another head for the value
+    value_net = MLP(
+        in_features=common_mlp_output.shape[-1],
+        out_features=1,
+        num_cells=[]
+    )
+    value_module = ValueOperator(
+        value_net,
+        in_keys=["common_features"],
+    )
+
+    return common_module, policy_module, value_module
 
 
 # ====================================================================

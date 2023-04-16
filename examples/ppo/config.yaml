@@ -48,5 +48,5 @@ loss:
   gae_lamdda: 0.95
   clip_epsilon: 0.1
   critic_coef: 0.5
-  entropy_coef: 0.0001
+  entropy_coef: 0.01
   loss_critic_type: l2
