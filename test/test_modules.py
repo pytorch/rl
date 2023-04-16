@@ -12,20 +12,8 @@ from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
 from torch import nn
-from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    DiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
-)
-from torchrl.modules import (
-    ActorValueOperator,
-    CEMPlanner,
-    LSTMNet,
-    ProbabilisticActor,
-    QValueActor,
-    SafeModule,
-    ValueOperator,
-)
+from torchrl.data.tensor_specs import BoundedTensorSpec
+from torchrl.modules import CEMPlanner, LSTMNet, SafeModule, ValueOperator
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
 from torchrl.modules.models.model_based import (
     DreamerActor,
@@ -195,120 +183,6 @@ def test_noisy(layer_class, device, seed=0):
     torch.testing.assert_close(y2, y3)
     with pytest.raises(AssertionError):
         torch.testing.assert_close(y1, y2)
-
-
-@pytest.mark.parametrize("device", get_available_devices())
-def test_value_based_policy(device):
-    torch.manual_seed(0)
-    obs_dim = 4
-    action_dim = 5
-    action_spec = OneHotDiscreteTensorSpec(action_dim)
-
-    def make_net():
-        net = MLP(in_features=obs_dim, out_features=action_dim, depth=2, device=device)
-        for mod in net.modules():
-            if hasattr(mod, "bias") and mod.bias is not None:
-                mod.bias.data.zero_()
-        return net
-
-    actor = QValueActor(spec=action_spec, module=make_net(), safe=True)
-    obs = torch.zeros(2, obs_dim, device=device)
-    td = TensorDict(batch_size=[2], source={"observation": obs})
-    action = actor(td).get("action")
-    assert (action.sum(-1) == 1).all()
-
-    actor = QValueActor(spec=action_spec, module=make_net(), safe=False)
-    obs = torch.randn(2, obs_dim, device=device)
-    td = TensorDict(batch_size=[2], source={"observation": obs})
-    action = actor(td).get("action")
-    assert (action.sum(-1) == 1).all()
-
-    actor = QValueActor(spec=action_spec, module=make_net(), safe=False)
-    obs = torch.zeros(2, obs_dim, device=device)
-    td = TensorDict(batch_size=[2], source={"observation": obs})
-    action = actor(td).get("action")
-    with pytest.raises(AssertionError):
-        assert (action.sum(-1) == 1).all()
-
-
-@pytest.mark.parametrize("device", get_available_devices())
-def test_value_based_policy_categorical(device):
-    torch.manual_seed(0)
-    obs_dim = 4
-    action_dim = 5
-    action_spec = DiscreteTensorSpec(action_dim)
-
-    def make_net():
-        net = MLP(in_features=obs_dim, out_features=action_dim, depth=2, device=device)
-        for mod in net.modules():
-            if hasattr(mod, "bias") and mod.bias is not None:
-                mod.bias.data.zero_()
-        return net
-
-    actor = QValueActor(
-        spec=action_spec, module=make_net(), safe=True, action_space="categorical"
-    )
-    obs = torch.zeros(2, obs_dim, device=device)
-    td = TensorDict(batch_size=[2], source={"observation": obs})
-    action = actor(td).get("action")
-    assert (0 <= action).all() and (action < action_dim).all()
-
-    actor = QValueActor(
-        spec=action_spec, module=make_net(), safe=False, action_space="categorical"
-    )
-    obs = torch.randn(2, obs_dim, device=device)
-    td = TensorDict(batch_size=[2], source={"observation": obs})
-    action = actor(td).get("action")
-    assert (0 <= action).all() and (action < action_dim).all()
-
-
-@pytest.mark.parametrize("device", get_available_devices())
-def test_actorcritic(device):
-    common_module = SafeModule(
-        module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"], spec=None
-    ).to(device)
-    module = SafeModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
-    policy_operator = ProbabilisticActor(
-        module=module, in_keys=["param"], spec=None, return_log_prob=True
-    ).to(device)
-    value_operator = ValueOperator(nn.Linear(4, 1), in_keys=["hidden"]).to(device)
-    op = ActorValueOperator(
-        common_operator=common_module,
-        policy_operator=policy_operator,
-        value_operator=value_operator,
-    ).to(device)
-    td = TensorDict(
-        source={"obs": torch.randn(4, 3)},
-        batch_size=[
-            4,
-        ],
-    ).to(device)
-    td_total = op(td.clone())
-    policy_op = op.get_policy_operator()
-    td_policy = policy_op(td.clone())
-    value_op = op.get_value_operator()
-    td_value = value_op(td)
-    torch.testing.assert_close(td_total.get("action"), td_policy.get("action"))
-    torch.testing.assert_close(
-        td_total.get("sample_log_prob"), td_policy.get("sample_log_prob")
-    )
-    torch.testing.assert_close(td_total.get("state_value"), td_value.get("state_value"))
-
-    value_params = set(
-        list(op.get_value_operator().parameters()) + list(op.module[0].parameters())
-    )
-    value_params2 = set(value_op.parameters())
-    assert len(value_params.difference(value_params2)) == 0 and len(
-        value_params.intersection(value_params2)
-    ) == len(value_params)
-
-    policy_params = set(
-        list(op.get_policy_operator().parameters()) + list(op.module[0].parameters())
-    )
-    policy_params2 = set(policy_op.parameters())
-    assert len(policy_params.difference(policy_params2)) == 0 and len(
-        policy_params.intersection(policy_params2)
-    ) == len(policy_params)
 
 
 @pytest.mark.parametrize("device", get_available_devices())
