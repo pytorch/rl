@@ -875,8 +875,7 @@ jobs:
             - env
       - run:
           name: Install torchrl, run tests
-          command: |
-            docker run -t --env=CUDA_VISIBLE_DEVICES="" --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_libs/scripts_gym/batch_scripts.sh
+          command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_gym/batch_scripts.sh
       - run:
           name: Codecov upload
           command: |
