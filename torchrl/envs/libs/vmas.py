@@ -226,9 +226,7 @@ class VmasWrapper(_EnvWrapper):
             done=done_spec,
         )
 
-        self.input_spec = self.unbatched_input_spec.expand(
-            self.batch_size
-        )
+        self.input_spec = self.unbatched_input_spec.expand(self.batch_size)
         self.output_spec = self.unbatched_output_spec.expand(self.batch_size)
 
     def _check_kwargs(self, kwargs: Dict):
