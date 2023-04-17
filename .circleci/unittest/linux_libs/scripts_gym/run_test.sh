@@ -23,6 +23,6 @@ export MKL_THREADING_LAYER=GNU
 
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 20
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 20 -k 'test_gym'
-MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 20 -k 'test_libs AND gym' --error-for-skips
+MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 -k "gym" --error-for-skips
 coverage combine
 coverage xml -i
