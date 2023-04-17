@@ -1,5 +1,3 @@
-
-
 # task and env
 env:
   env_name: HalfCheetah-v4
@@ -7,7 +5,7 @@ env:
   env_library: gym
   frame_skip: 1
   num_envs: 1
-  noop: 0
+  noop: 1
   reward_scaling: 1.0
   from_pixels: False
   n_samples_stats: 3
@@ -37,11 +35,6 @@ optim:
   device: cuda
   lr: 2.0e-4
   weight_decay: 0.0
-  lr_scheduler: ""
-
-# Policy and model
-model:
-  shared_network: True
 
 # loss
 loss:

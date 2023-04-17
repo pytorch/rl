@@ -20,13 +20,11 @@ from torchrl.trainers.helpers.envs import correct_for_frame_skip
 
 
 from utils import (
-    get_stats,
     make_collector,
     make_ppo_models,
     make_logger,
     make_loss,
     make_optim,
-    make_recorder,
     make_data_buffer,
     make_test_env,
 )
@@ -35,7 +33,7 @@ from utils import (
 @hydra.main(config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    # cfg = correct_for_frame_skip(cfg)
+    cfg = correct_for_frame_skip(cfg)
     model_device = cfg.optim.device
 
     actor, critic = make_ppo_models(cfg)
@@ -53,7 +51,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     scheduler = LinearLR(optim, total_iters=total_network_updates, start_factor=1.0, end_factor=0.1)
 
     logger = make_logger(cfg.logger)
-    recorder = make_recorder(cfg, logger, actor)
     test_env = make_test_env(cfg.env)
 
     record_interval = cfg.recorder.interval
@@ -78,7 +75,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Update the data buffer
         data_buffer.extend(data_view)
 
-        # Logging
+        # Log end-of-episode accumulated rewards for training
         episode_rewards = data["next"]["episode_reward"][data["next"]["done"]]
         if len(episode_rewards) > 0:
             logger.log_scalar("reward_training", episode_rewards.mean().item(), collected_frames)
@@ -130,7 +127,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     break_when_any_done=True,
                 ).clone()
                 logger.log_scalar("reward_testing", td_record["reward"].sum().item(), collected_frames)
-                logger.log_scalar("step_count_testing", td_record["next"]["step_count"][0][-1].item(), collected_frames)
                 actor.train()
 
 

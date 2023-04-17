@@ -14,7 +14,7 @@ env:
 collector:
   async_collection: 0
   frames_per_batch: 1024
-  total_frames: 10_000_000
+  total_frames: 40_000_000
   collector_devices: cuda  # [cpu,cpu,cpu,cpu]
   num_collectors: 1
   max_frames_per_traj: -1
@@ -35,11 +35,6 @@ optim:
   device: cuda
   lr: 2.5e-4
   weight_decay: 0.0
-  lr_scheduler: ""
-
-# Policy and model
-model:
-  shared_network: True
 
 # loss
 loss:

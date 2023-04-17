@@ -111,8 +111,6 @@ def make_transformed_env_pixels(base_env, env_cfg):
     env.append_transform(CatFrames(N=4, dim=-3))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
-    # obs_norm = ObservationNorm(in_keys=["pixels"])
-    # env.append_transform(obs_norm)
 
     if env_library is DMControlEnv:
         double_to_float_list += [
@@ -156,9 +154,8 @@ def make_transformed_env_states(base_env, env_cfg):
     env.append_transform(CatTensors(in_keys=selected_keys, out_key=out_key))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
-
-    # obs_norm = ObservationNorm(in_keys=[out_key])
-    # env.append_transform(obs_norm)
+    obs_norm = ObservationNorm(in_keys=[out_key])
+    env.append_transform(obs_norm)
 
     if env_library is DMControlEnv:
         double_to_float_list += [
@@ -192,9 +189,7 @@ def make_parallel_env(env_cfg, state_dict):
 
 
 def get_stats(env_cfg):
-    from_pixels = env_cfg.from_pixels
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    # init_stats(env, env_cfg.n_samples_stats, from_pixels)
     return env.state_dict()
 
 
@@ -266,7 +261,7 @@ def make_ppo_models(cfg):
 
     if not from_pixels:
         # we must initialize the observation norm transform
-        # init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
+        init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
         common_module, policy_module, value_module = make_ppo_modules_state(model_cfg, proof_environment)
     else:
         common_module, policy_module, value_module = make_ppo_modules_pixels(model_cfg, proof_environment)
@@ -419,7 +414,7 @@ def make_ppo_modules_pixels(model_cfg, proof_environment):
     policy_net = MLP(
         in_features=common_mlp_output.shape[-1],
         out_features=num_outputs,
-        num_cells=[]
+        num_cells=[256]
     )
     policy_module = TensorDictModule(
         module=policy_net,
@@ -443,7 +438,7 @@ def make_ppo_modules_pixels(model_cfg, proof_environment):
     value_net = MLP(
         in_features=common_mlp_output.shape[-1],
         out_features=1,
-        num_cells=[]
+        num_cells=[256]
     )
     value_module = ValueOperator(
         value_net,
@@ -505,22 +500,3 @@ def make_logger(logger_cfg):
     )
     return logger
 
-
-def make_recorder(cfg, logger, policy) -> Recorder:
-    env_cfg = deepcopy(cfg.env)
-    # env = make_transformed_env(make_base_env(env_cfg, from_pixels=True), env_cfg)
-    env = make_transformed_env(
-        ParallelEnv(1, EnvCreator(lambda: make_base_env(env_cfg))), env_cfg
-    )
-    if cfg.recorder.video:
-        env.insert_transform(
-            0, VideoRecorder(logger=logger, tag=cfg.logger.exp_name, in_keys=["pixels"])
-        )
-    return Recorder(
-        record_interval=1,
-        record_frames=cfg.recorder.frames,
-        frame_skip=env_cfg.frame_skip,
-        policy_exploration=policy,
-        recorder=env,
-        exploration_mode="mean",
-    )
