@@ -3697,10 +3697,55 @@ class Reward2GoTransform(Transform):
                  [2.9701],
                  [1.9900],
                  [1.0000]]])
-        >>> # Using this transform as part of an env will raise an exception
+
+    One can also use this transform directly with a collector: make sure to
+    append the `inv` method of the transform.
+
+    Examples:
+        >>> from torchrl.collectors import SyncDataCollector, RandomPolicy
         >>> from torchrl.envs.libs.gym import GymEnv
+        >>> t = Reward2GoTransform(gamma=0.99, out_keys=["reward_to_go"])
+        >>> env = GymEnv("Pendulum-v1")
+        >>> collector = SyncDataCollector(
+        ...     env,
+        ...     RandomPolicy(env.action_spec),
+        ...     frames_per_batch=200,
+        ...     total_frames=-1,
+        ...     postproc=t.inv
+        ... )
+        >>> for data in collector:
+        ...     break
+        >>> print(data)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                collector: TensorDict(
+                    fields={
+                        traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([200]),
+                    device=cpu,
+                    is_shared=False),
+                done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([200]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                reward_to_go: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([200]),
+            device=cpu,
+            is_shared=False)
+
+    Using this transform as part of an env will raise an exception
+
+    Examples:
         >>> t = Reward2GoTransform(gamma=0.99)
-        >>> TransformedEnv(GymEnv("Pendulum-v1"), t)
+        >>> TransformedEnv(GymEnv("Pendulum-v1"), t)  # crashes
 
     """
 

@@ -927,7 +927,7 @@ def _get_num_per_traj(dones_and_truncated):
     return num_per_traj
 
 
-def _split_and_pad_sequence2(tensor, splits):
+def _split_and_pad_sequence(tensor, splits):
     """Given a tensor of size [B, T] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax]."""
     tensor = _flatten_batch(tensor)
     max_val = max(splits)
@@ -961,8 +961,9 @@ def _inv_pad_sequence(tensor, splits):
     z = torch.zeros(tensor.numel(), dtype=torch.bool)
 
     ones = offset + splits
-    while ones[-1] == len(z):
-        ones = ones[:-1]
+    ones = ones[ones < tensor.numel()]
+    # while ones[-1] == tensor.numel():
+    #     ones = ones[:-1]
     z[ones] = 1
     z[offset[1:]] = torch.bitwise_xor(
         z[offset[1:]], torch.ones_like(z[offset[1:]])
@@ -996,14 +997,24 @@ def compute_reward2go(
         >>> reward = torch.ones(1, 10)
         >>> done = torch.zeros(1, 10, dtype=torch.bool)
         >>> done[:, [3, 7]] = True
-        >>> reward_sum(reward, done, 0.99)
-        tensor([[3.9404, 2.9701, 1.9900, 1.0000, 3.9404, 2.9701, 1.9900, 1.0000, 1.9900,
-                 1.0000]])
+        >>> compute_reward2go(reward, done, 0.99, time_dim=-1)
+        tensor([[3.9404],
+                [2.9701],
+                [1.9900],
+                [1.0000],
+                [3.9404],
+                [2.9701],
+                [1.9900],
+                [1.0000],
+                [1.9900],
+                [1.0000]])
 
     """
     shape = reward.shape
     if shape != done.shape:
-        raise ValueError("reward and done must share the same shape")
+        raise ValueError(
+            f"reward and done must share the same shape, got {reward.shape} and {done.shape}"
+        )
     # place time at dim -1
     reward = reward.transpose(-2, -1)
     done = done.transpose(-2, -1)
@@ -1013,13 +1024,14 @@ def compute_reward2go(
         done = done.flatten(0, -2)
 
     num_per_traj = _get_num_per_traj(done)
-    td0_flat = _split_and_pad_sequence2(reward, num_per_traj)
+    td0_flat = _split_and_pad_sequence(reward, num_per_traj)
     gammas = torch.ones_like(td0_flat[0])
     gammas[1:] = gamma
     gammas[1:] = gammas[1:].cumprod(0)
     gammas = gammas.unsqueeze(-1)
     cumsum = _custom_conv1d(td0_flat.unsqueeze(1), gammas)
-    cumsum = _inv_pad_sequence(cumsum, num_per_traj).view_as(reward)
-    if len(shape) > 2:
+    cumsum = _inv_pad_sequence(cumsum, num_per_traj)
+    cumsum = cumsum.view_as(reward)
+    if cumsum.shape != shape:
         cumsum = cumsum.view(shape)
     return cumsum
