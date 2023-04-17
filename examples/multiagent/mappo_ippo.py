@@ -121,12 +121,12 @@ if __name__ == "__main__":
     )
     policy = ProbabilisticActor(
         module=policy_module,
-        spec=env.action_spec,
+        spec=env.unbatched_input_spec["action"],
         in_keys=["loc", "scale"],
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": env.action_spec.space.minimum[0, ...],
-            "max": env.action_spec.space.maximum[0, ...],
+            "min": env.unbatched_input_spec["action"].space.minimum,
+            "max": env.unbatched_input_spec["action"].space.maximum,
         },
         return_log_prob=True,
     )
