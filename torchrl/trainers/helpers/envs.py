@@ -384,6 +384,7 @@ def get_stats_random_rollout(
             the cfg object.
         key (str, optional): if provided, the stats of this key will be gathered.
             If not, it is expected that only one key exists in `env.observation_spec`.
+
     """
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
@@ -452,6 +453,7 @@ def initialize_observation_norm_transforms(
     key: Union[str, Tuple[str, ...]] = None,
 ):
     """Calls :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
+
     If an :obj:`ObservationNorm` already has non-null :obj:`loc` or :obj:`scale`, a call to :obj:`initialize_observation_norm_transforms` will be a no-op.
     Similarly, if the transformed environment does not contain any :obj:`ObservationNorm`, a call to this function will have no effect.
     If no key is provided but the observations of the :obj:`EnvBase` contains more than one key, an exception will
