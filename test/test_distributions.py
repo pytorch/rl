@@ -311,7 +311,7 @@ class TestMaskedCategorical:
         logits = torch.randn(4)
         probs = F.softmax(logits, dim=-1)
         mask = torch.tensor([True, False, True, True])
-        ref_probs = torch.where(mask, probs, 0.0)
+        ref_probs = probs.masked_fill(~mask, 0.0)
         ref_probs /= ref_probs.sum(dim=-1, keepdim=True)
 
         dist = MaskedCategorical(
@@ -331,7 +331,7 @@ class TestMaskedCategorical:
         probs = F.softmax(logits, dim=-1)
         mask = torch.tensor([True, False, True, True])
         indices = torch.tensor([0, 2, 3])
-        ref_probs = torch.where(mask, probs, 0.0)
+        ref_probs = probs.masked_fill(~mask, 0.0)
         ref_probs /= ref_probs.sum(dim=-1, keepdim=True)
 
         dist = MaskedCategorical(
