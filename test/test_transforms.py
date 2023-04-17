@@ -798,7 +798,7 @@ class TestR3M(TransformBase):
         transformed_env = TransformedEnv(base_env, r3m)
         td = transformed_env.reset()
         assert td.device == device
-        exp_keys = {"vec", "done", "pixels_orig", "reward"}
+        exp_keys = {"vec", "done", "pixels_orig"}
         if tensor_pixels_key:
             exp_keys.add(tensor_pixels_key[0])
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
@@ -857,12 +857,12 @@ class TestR3M(TransformBase):
         td = transformed_env.reset()
         assert td.device == device
         if stack_images:
-            exp_keys = {"pixels_orig", "done", "vec", "reward"}
+            exp_keys = {"pixels_orig", "done", "vec"}
             # assert td["vec"].shape[0] == 2
             assert td["vec"].ndimension() == 1 + parallel
             assert set(td.keys()) == exp_keys
         else:
-            exp_keys = {"pixels_orig", "done", "vec", "vec2", "reward"}
+            exp_keys = {"pixels_orig", "done", "vec", "vec2"}
             assert td["vec"].shape[0 + parallel] != 2
             assert td["vec"].ndimension() == 1 + parallel
             assert td["vec2"].shape[0 + parallel] != 2
@@ -900,7 +900,7 @@ class TestR3M(TransformBase):
         td = transformed_env.reset()
         assert td.device == device
         assert td.batch_size == torch.Size([4])
-        exp_keys = {"vec", "done", "pixels_orig", "reward"}
+        exp_keys = {"vec", "done", "pixels_orig"}
         if tensor_pixels_key:
             exp_keys.add(tensor_pixels_key)
         assert set(td.keys(True)) == exp_keys
@@ -984,7 +984,7 @@ class TestR3M(TransformBase):
             list(transformed_env.input_spec.keys())
             + list(transformed_env.observation_spec.keys())
             + [("next", key) for key in transformed_env.observation_spec.keys()]
-            + [("next", "reward"), ("next", "done"), "done", "reward", "next"]
+            + [("next", "reward"), ("next", "done"), "done", "next"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 
@@ -5215,7 +5215,7 @@ class TestVIP(TransformBase):
         transformed_env = TransformedEnv(base_env, vip)
         td = transformed_env.reset()
         assert td.device == device
-        exp_keys = {"vec", "done", "pixels_orig", "reward"}
+        exp_keys = {"vec", "done", "pixels_orig"}
         if tensor_pixels_key:
             exp_keys.add(tensor_pixels_key[0])
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
@@ -5268,12 +5268,12 @@ class TestVIP(TransformBase):
         td = transformed_env.reset()
         assert td.device == device
         if stack_images:
-            exp_keys = {"pixels_orig", "done", "vec", "reward"}
+            exp_keys = {"pixels_orig", "done", "vec"}
             # assert td["vec"].shape[0] == 2
             assert td["vec"].ndimension() == 1 + parallel
             assert set(td.keys()) == exp_keys
         else:
-            exp_keys = {"pixels_orig", "done", "vec", "vec2", "reward"}
+            exp_keys = {"pixels_orig", "done", "vec", "vec2"}
             assert td["vec"].shape[0 + parallel] != 2
             assert td["vec"].ndimension() == 1 + parallel
             assert td["vec2"].shape[0 + parallel] != 2
@@ -5311,7 +5311,7 @@ class TestVIP(TransformBase):
         td = transformed_env.reset()
         assert td.device == device
         assert td.batch_size == torch.Size([4])
-        exp_keys = {"vec", "done", "pixels_orig", "reward"}
+        exp_keys = {"vec", "done", "pixels_orig"}
         if tensor_pixels_key:
             exp_keys.add(tensor_pixels_key)
         assert set(td.keys()) == exp_keys
@@ -5369,7 +5369,6 @@ class TestVIP(TransformBase):
             "pixels_orig",
             "goal_embedding",
             "goal_image",
-            "reward",
         }
         if tensor_pixels_key:
             exp_keys.add(tensor_pixels_key)
@@ -5481,7 +5480,7 @@ class TestVIP(TransformBase):
             list(transformed_env.input_spec.keys())
             + list(transformed_env.observation_spec.keys())
             + [("next", key) for key in transformed_env.observation_spec.keys()]
-            + [("next", "reward"), ("next", "done"), "done", "reward", "next"]
+            + [("next", "reward"), ("next", "done"), "done", "next"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 
