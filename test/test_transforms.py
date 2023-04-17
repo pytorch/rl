@@ -3858,7 +3858,7 @@ class TestReward2Go(TransformBase):
         torch.manual_seed(0)
         r2g = Reward2GoTransform(gamma=gamma)
         rb = ReplayBuffer(storage=LazyTensorStorage(batch), transform=r2g)
-        done = torch.zeros(*batch_size, 1, dtype=torch.bool)
+        done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
         for i in range(batch):
             while not done[i].any():
                 done[i] = done[i].bernoulli_(0.1)
@@ -3881,7 +3881,7 @@ class TestReward2Go(TransformBase):
         device = "cpu"
         batch = [20]
         torch.manual_seed(0)
-        done = torch.zeros(*batch, 1, dtype=torch.bool)
+        done = torch.zeros(*batch, 1, dtype=torch.bool, device=device)
         done_flags = torch.randint(0, *batch, size=(done_flags,))
         done[done_flags] = True
         reward = torch.randn(*batch, 1, device=device)
@@ -3905,7 +3905,7 @@ class TestReward2Go(TransformBase):
         batch_size = [batch, t]
         torch.manual_seed(0)
         r2g = Reward2GoTransform(gamma=gamma)
-        done = torch.zeros(*batch_size, 1, dtype=torch.bool)
+        done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
         for i in range(batch):
             while not done[i].any():
                 done[i] = done[i].bernoulli_(0.1)
@@ -3931,7 +3931,7 @@ class TestReward2Go(TransformBase):
         batch_size = [batch, t]
         torch.manual_seed(0)
         r2g = Reward2GoTransform(gamma=gamma)
-        done = torch.zeros(*batch_size, 1, dtype=torch.bool)
+        done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
         for i in range(batch):
             while not done[i].any():
                 done[i] = done[i].bernoulli_(0.1)
