@@ -336,6 +336,7 @@ to be able to create this other composition:
     RewardClipping
     RewardScaling
     RewardSum
+    Reward2GoTransform
     SelectTransform
     SqueezeTransform
     StepCounter
