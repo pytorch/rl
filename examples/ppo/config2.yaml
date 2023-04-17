@@ -1,19 +1,21 @@
+
+
 # task and env
 env:
-  env_name: PongNoFrameskip-v4
+  env_name: HalfCheetah-v4
   env_task: ""
   env_library: gym
-  frame_skip: 4
-  num_envs: 8
-  noop: 1
+  frame_skip: 1
+  num_envs: 1
+  noop: 0
   reward_scaling: 1.0
-  from_pixels: True
+  from_pixels: False
   n_samples_stats: 3
 
 # collector
 collector:
   async_collection: 0
-  frames_per_batch: 1024
+  frames_per_batch: 2048
   total_frames: 10_000_000
   collector_devices: cuda  # [cpu,cpu,cpu,cpu]
   num_collectors: 1
@@ -33,7 +35,7 @@ logger:
 # Optim
 optim:
   device: cuda
-  lr: 2.5e-4
+  lr: 2.0e-4
   weight_decay: 0.0
   lr_scheduler: ""
 
@@ -44,10 +46,10 @@ model:
 # loss
 loss:
   gamma: 0.99
-  mini_batch_size: 256
-  ppo_epochs: 3
+  mini_batch_size: 64
+  ppo_epochs: 10
   gae_lamdda: 0.95
-  clip_epsilon: 0.1
+  clip_epsilon: 0.2
   critic_coef: 0.5
-  entropy_coef: 0.01
+  entropy_coef: 0.0
   loss_critic_type: l2

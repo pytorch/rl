@@ -111,7 +111,6 @@ def make_transformed_env_pixels(base_env, env_cfg):
     env.append_transform(CatFrames(N=4, dim=-3))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
-
     # obs_norm = ObservationNorm(in_keys=["pixels"])
     # env.append_transform(obs_norm)
 
@@ -195,7 +194,7 @@ def make_parallel_env(env_cfg, state_dict):
 def get_stats(env_cfg):
     from_pixels = env_cfg.from_pixels
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    init_stats(env, env_cfg.n_samples_stats, from_pixels)
+    # init_stats(env, env_cfg.n_samples_stats, from_pixels)
     return env.state_dict()
 
 
@@ -297,14 +296,14 @@ def make_ppo_modules_state(model_cfg, proof_environment):
     input_shape = env_specs["output_spec"]["observation"]["observation_vector"].shape
 
     # Define distribution class and kwargs
-    discrete_actions = False
+    continuous_actions = False
     if isinstance(env_specs["input_spec"]["action"].space, DiscreteBox):
-        discrete_actions = True
         num_outputs = env_specs["input_spec"]["action"].space.n
         distribution_class = OneHotCategorical
         distribution_kwargs = {}
     else:  # is ContinuousBox
-        num_outputs = env_specs["input_spec"]["action"].shape
+        continuous_actions = True
+        num_outputs = env_specs["input_spec"]["action"].shape[-1] * 2
         distribution_class = TanhNormal
         distribution_kwargs = {
             "min": env_specs["input_spec"]["action"].space.minimum,
@@ -314,7 +313,7 @@ def make_ppo_modules_state(model_cfg, proof_environment):
 
     # Define input keys
     in_keys = ["observation_vector"]
-    shared_features_size = 448
+    shared_features_size = 256
 
     # Define a shared Module and TensorDictModule
     common_mlp = MLP(
@@ -322,7 +321,7 @@ def make_ppo_modules_state(model_cfg, proof_environment):
         activation_class=torch.nn.ReLU,
         activate_last_layer=True,
         out_features=shared_features_size,
-        num_cells=[256])
+        num_cells=[256, 256])
     common_module = TensorDictModule(
         module=common_mlp,
         in_keys=in_keys,
@@ -335,19 +334,19 @@ def make_ppo_modules_state(model_cfg, proof_environment):
         out_features=num_outputs,
         num_cells=[]
     )
-    if not discrete_actions:
+    if continuous_actions:
         policy_net = NormalParamWrapper(policy_net)
 
     policy_module = TensorDictModule(
         module=policy_net,
         in_keys=["common_features"],
-        out_keys=["loc", "scale"] if not discrete_actions else ["logits"],
+        out_keys=["loc", "scale"] if continuous_actions else ["logits"],
     )
 
     # Add probabilistic sampling of the actions
     policy_module = ProbabilisticActor(
         policy_module,
-        in_keys=["loc", "scale"] if not discrete_actions else ["logits"],
+        in_keys=["loc", "scale"] if continuous_actions else ["logits"],
         spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
         safe=True,
         distribution_class=distribution_class,
@@ -405,8 +404,8 @@ def make_ppo_modules_pixels(model_cfg, proof_environment):
         in_features=common_cnn_output.shape[-1],
         activation_class=torch.nn.ReLU,
         activate_last_layer=True,
-        out_features=448,
-        num_cells=[256])
+        out_features=512,
+        num_cells=[])
     common_mlp_output = common_mlp(common_cnn_output)
 
     # Define shared net as TensorDictModule

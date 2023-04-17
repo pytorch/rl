@@ -42,34 +42,27 @@ LIBS = {
 
 def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
     """Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.
-
     This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targetting a total number of frames
     of 1M but actually collecting frame_skip * 1M frames.
-
     Args:
         cfg (DictConfig): DictConfig containing some frame-counting argument, including:
             "max_frames_per_traj", "total_frames", "frames_per_batch", "record_frames", "annealing_frames",
             "init_random_frames", "init_env_steps"
-
     Returns:
          the input DictConfig, modified in-place.
-
     """
     # Adapt all frame counts wrt frame_skip
-    if cfg.frame_skip != 1:
-        fields = [
-            "max_frames_per_traj",
-            "total_frames",
-            "frames_per_batch",
-            "record_frames",
-            "annealing_frames",
-            "init_random_frames",
-            "init_env_steps",
-            "noops",
-        ]
-        for field in fields:
-            if hasattr(cfg, field):
-                setattr(cfg, field, getattr(cfg, field) // cfg.frame_skip)
+    frame_skip = cfg.env.frame_skip
+
+    if frame_skip != 1:
+        cfg.collector.max_frames_per_traj //= frame_skip
+        cfg.collector.total_frames //= frame_skip
+        cfg.collector.frames_per_batch //= frame_skip
+        cfg.collector.init_random_frames //= frame_skip
+        cfg.collector.init_env_steps //= frame_skip
+        cfg.recorder.record_frames //= frame_skip
+        cfg.model.annealing_frames //= frame_skip
+        cfg.env.noops //= frame_skip
     return cfg
 
 
@@ -226,7 +219,6 @@ def transformed_env_constructor(
     obs_norm_state_dict: Optional[dict] = None,
 ) -> Union[Callable, EnvCreator]:
     """Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
-
     Args:
         cfg (DictConfig): a DictConfig containing the arguments of the script.
         video_tag (str, optional): video tag to be passed to the Logger object
@@ -244,7 +236,7 @@ def transformed_env_constructor(
         custom_env (EnvBase, optional): if an existing environment needs to be
             transformed_in, it can be passed directly to this helper. `custom_env_maker`
             and `custom_env` are exclusive features.
-        return_transformed_envs (bool, optional): if ``True``, a transformed_in environment
+        return_transformed_envs (bool, optional): if True, a transformed_in environment
             is returned.
         action_dim_gsde (int, Optional): if gSDE is used, this can present the action dim to initialize the noise.
             Make sure this is indicated in environment executed in parallel.
@@ -332,7 +324,6 @@ def parallel_env_constructor(
     cfg: "DictConfig", **kwargs  # noqa: F821
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
-
     Args:
         cfg (DictConfig): config containing user-defined arguments
         kwargs: keyword arguments for the `transformed_env_constructor` method.
@@ -378,7 +369,6 @@ def get_stats_random_rollout(
     key: Optional[str] = None,
 ):
     """Gathers stas (loc and scale) from an environment using random rollouts.
-
     Args:
         cfg (DictConfig): a config object with `init_env_steps` field, indicating
             the total number of frames to be collected to compute the stats.
@@ -387,7 +377,6 @@ def get_stats_random_rollout(
             the cfg object.
         key (str, optional): if provided, the stats of this key will be gathered.
             If not, it is expected that only one key exists in `env.observation_spec`.
-
     """
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
@@ -456,12 +445,10 @@ def initialize_observation_norm_transforms(
     key: Union[str, Tuple[str, ...]] = None,
 ):
     """Calls :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
-
     If an :obj:`ObservationNorm` already has non-null :obj:`loc` or :obj:`scale`, a call to :obj:`initialize_observation_norm_transforms` will be a no-op.
     Similarly, if the transformed environment does not contain any :obj:`ObservationNorm`, a call to this function will have no effect.
     If no key is provided but the observations of the :obj:`EnvBase` contains more than one key, an exception will
     be raised.
-
     Args:
         proof_environment (EnvBase instance, optional): if provided, this env will
             be used ot execute the rollouts. If not, it will be created using
@@ -469,7 +456,6 @@ def initialize_observation_norm_transforms(
         num_iter (int): Number of iterations used for initializing the :obj:`ObservationNorms`
         key (str, optional): if provided, the stats of this key will be gathered.
             If not, it is expected that only one key exists in `env.observation_spec`.
-
     """
     if not isinstance(proof_environment.transform, Compose) and not isinstance(
         proof_environment.transform, ObservationNorm
@@ -495,10 +481,8 @@ def initialize_observation_norm_transforms(
 
 def retrieve_observation_norms_state_dict(proof_environment: TransformedEnv):
     """Traverses the transforms of the environment and retrieves the :obj:`ObservationNorm` state dicts.
-
     Returns a list of tuple (idx, state_dict) for each :obj:`ObservationNorm` transform in proof_environment
     If the environment transforms do not contain any :obj:`ObservationNorm`, returns an empty list
-
     Args:
         proof_environment (EnvBase instance, optional): the :obj:``TransformedEnv` to retrieve the :obj:`ObservationNorm`
             state dict from
@@ -556,7 +540,7 @@ class EnvConfig:
     max_frames_per_traj: int = 1000
     # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
     batch_transform: bool = False
-    # if ``True``, the transforms will be applied to the parallel env, and not to each individual env.\
+    # if True, the transforms will be applied to the parallel env, and not to each individual env.\
     image_size: int = 84
     # if True and environment has discrete action space, then it is encoded as categorical values rather than one-hot.
     categorical_action_encoding: bool = False
