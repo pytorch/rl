@@ -7,10 +7,17 @@ from __future__ import annotations
 import pkg_resources
 import torch
 from tensordict.nn.probabilistic import (  # noqa
+    # Note: the `set_/interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
+    #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
+    #       See more details: https://github.com/pytorch/rl/issues/1016
     interaction_mode as exploration_mode,
+    interaction_type as exploration_type,
+    InteractionType as ExplorationType,
     set_interaction_mode as set_exploration_mode,
+    set_interaction_type as set_exploration_type,
 )
 from tensordict.tensordict import TensorDictBase
+
 
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
@@ -361,3 +368,48 @@ def _sort_keys(element):
     if isinstance(element, tuple):
         return "_-|-_".join(element)
     return element
+
+
+def make_composite_from_td(data):
+    """Creates a CompositeSpec instance from a tensordict, assuming all values are unbounded.
+
+    Args:
+        data (tensordict.TensorDict): a tensordict to be mapped onto a CompositeSpec.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> data = TensorDict({
+        ...     "obs": torch.randn(3),
+        ...     "action": torch.zeros(2, dtype=torch.int),
+        ...     "next": {"obs": torch.randn(3), "reward": torch.randn(1)}
+        ... }, [])
+        >>> spec = make_composite_from_td(data)
+        >>> print(spec)
+        CompositeSpec(
+            obs: UnboundedContinuousTensorSpec(
+                 shape=torch.Size([3]), space=None, device=cpu, dtype=torch.float32, domain=continuous),
+            action: UnboundedContinuousTensorSpec(
+                 shape=torch.Size([2]), space=None, device=cpu, dtype=torch.int32, domain=continuous),
+            next: CompositeSpec(
+                obs: UnboundedContinuousTensorSpec(
+                     shape=torch.Size([3]), space=None, device=cpu, dtype=torch.float32, domain=continuous),
+                reward: UnboundedContinuousTensorSpec(
+                     shape=torch.Size([1]), space=ContinuousBox(minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True), maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)), device=cpu, dtype=torch.float32, domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+        >>> assert (spec.zero() == data.zero_()).all()
+    """
+    from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
+
+    # custom funtion to convert a tensordict in a similar spec structure
+    # of unbounded values.
+    composite = CompositeSpec(
+        {
+            key: make_composite_from_td(tensor)
+            if isinstance(tensor, TensorDictBase)
+            else UnboundedContinuousTensorSpec(
+                dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
+            )
+            for key, tensor in data.items()
+        },
+        shape=data.shape,
+    )
+    return composite

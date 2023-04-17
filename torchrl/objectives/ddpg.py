@@ -99,12 +99,6 @@ class DDPGLoss(LossModule):
             a tuple of 2 tensors containing the DDPG loss.
 
         """
-        if not input_tensordict.device == self.device:
-            raise RuntimeError(
-                f"Got device={input_tensordict.device} but "
-                f"actor_network.device={self.device} (self.device={self.device})"
-            )
-
         loss_value, td_error, pred_val, target_value = self._loss_value(
             input_tensordict,
         )

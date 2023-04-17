@@ -602,7 +602,8 @@ for i, tensordict_data in enumerate(collector):
         # We'll need an "advantage" signal to make PPO work.
         # We re-compute it at each epoch as its value depends on the value
         # network which is updated in the inner loop.
-        advantage_module(tensordict_data)
+        with torch.no_grad():
+            advantage_module(tensordict_data)
         data_view = tensordict_data.reshape(-1)
         replay_buffer.extend(data_view.cpu())
         for _ in range(frames_per_batch // sub_batch_size):
@@ -695,9 +696,9 @@ plt.show()
 #
 # * From an efficiency perspective,
 #   we could run several simulations in parallel to speed up data collection.
-#   Check :class:`torchrl.envs.ParallelEnv` for further information.
+#   Check :class:`~torchrl.envs.ParallelEnv` for further information.
 #
-# * From a logging perspective, one could add a :class:`torchrl.record.VideoRecorder` transform to
+# * From a logging perspective, one could add a :class:`~torchrl.record.VideoRecorder` transform to
 #   the environment after asking for rendering to get a visual rendering of the
 #   inverted pendulum in action. Check :py:mod:`torchrl.record` to
 #   know more.
