@@ -3950,9 +3950,9 @@ class TestReward2Go(TransformBase):
     def test_transform_env(self, gamma):
         t = Reward2GoTransform(gamma=gamma)
         with pytest.raises(ValueError, match=Reward2GoTransform.ENV_ERR):
-            _ = TransformedEnv(GymEnv(PENDULUM_VERSIONED), t)
+            _ = TransformedEnv(CountingBatchedEnv(), t)
         t = Compose(t)
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED))
+        env = TransformedEnv(CountingBatchedEnv())
         env.append_transform(t)
 
         env.set_seed(0)
