@@ -9,7 +9,7 @@ The goal is to be able to swap environments in an experiment with little or no e
 even if these environments are simulated using different libraries.
 TorchRL offers some out-of-the-box environment wrappers under :obj:`torchrl.envs.libs`,
 which we hope can be easily imitated for other libraries.
-The parent class :class:`torchrl.envs.EnvBase` is a :class:`torch.nn.Module` subclass that implements
+The parent class :class:`~torchrl.envs.EnvBase` is a :class:`torch.nn.Module` subclass that implements
 some typical environment methods using :class:`tensordict.TensorDict` as a data organiser. This allows this
 class to be generic and to handle an arbitrary number of input and outputs, as well as
 nested or batched data structures.
@@ -26,18 +26,18 @@ Each env will have the following attributes:
   This is especially useful for transforms (see below). For parametric environments (e.g.
   model-based environments), the device does represent the hardware that will be used to
   compute the operations.
-- :obj:`env.input_spec`: a :class:`torchrl.data.CompositeSpec` object containing
+- :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
   all the input keys (:obj:`"action"` and others).
-- :obj:`env.output_spec`: a :class:`torchrl.data.CompositeSpec` object containing
+- :obj:`env.output_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
   all the output keys (:obj:`"observation"`, :obj:`"reward"` and :obj:`"done"`).
-- :obj:`env.observation_spec`: a :class:`torchrl.data.CompositeSpec` object
+- :obj:`env.observation_spec`: a :class:`~torchrl.data.CompositeSpec` object
   containing all the observation key-spec pairs.
   This is a pointer to ``env.output_spec["observation"]``.
-- :obj:`env.action_spec`: a :class:`torchrl.data.TensorSpec` object
+- :obj:`env.action_spec`: a :class:`~torchrl.data.TensorSpec` object
   representing the action spec. This is a pointer to ``env.input_spec["action"]``.
-- :obj:`env.reward_spec`: a :class:`torchrl.data.TensorSpec` object representing
+- :obj:`env.reward_spec`: a :class:`~torchrl.data.TensorSpec` object representing
   the reward spec. This is a pointer to ``env.output_spec["reward"]``.
-- :obj:`env.done_spec`: a :class:`torchrl.data.TensorSpec` object representing
+- :obj:`env.done_spec`: a :class:`~torchrl.data.TensorSpec` object representing
   the done-flag spec. This is a pointer to ``env.output_spec["done"]``.
 
 Importantly, the environment spec shapes should contain the batch size, e.g.
@@ -100,7 +100,7 @@ function.
 .. note::
 
   In some contexts, it can be useful to mark the first step of a trajectory.
-  TorchRL provides such functionality through the :class:`torchrl.envs.InitTracker`
+  TorchRL provides such functionality through the :class:`~torchrl.envs.InitTracker`
   transform.
 
 
@@ -114,7 +114,6 @@ provides more information on how to design a custom environment from scratch.
     EnvBase
     GymLikeEnv
     EnvMetaData
-    Specs
 
 Vectorized envs
 ---------------
@@ -132,7 +131,7 @@ Of course, a :class:`ParallelEnv` will have a batch size that corresponds to its
 
 It is important that your environment specs match the input and output that it sends and receives, as
 :class:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
-Check the :func:`torchrl.envs.utils.check_env_specs` method for a sanity check.
+Check the :func:`~torchrl.envs.utils.check_env_specs` method for a sanity check.
 
 .. code-block::
    :caption: Parallel environment
@@ -373,9 +372,12 @@ Helpers
 
     step_mdp
     get_available_libraries
-    set_exploration_mode
-    exploration_mode
+    set_exploration_mode #deprecated
+    set_exploration_type
+    exploration_mode #deprecated
+    exploration_type
     check_env_specs
+    make_composite_from_td
 
 Domain-specific
 ---------------

@@ -48,6 +48,8 @@ from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
+from torchrl.envs.utils import check_env_specs, make_composite_from_td, step_mdp
+from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
@@ -1262,6 +1264,25 @@ class TestConcurrentEnvs:
             finally:
                 for p in ps:
                     p.join()
+
+
+def test_make_spec_from_td():
+    data = TensorDict(
+        {
+            "obs": torch.randn(3),
+            "action": torch.zeros(2, dtype=torch.int),
+            "next": {
+                "obs": torch.randn(3),
+                "reward": torch.randn(1),
+                "done": torch.zeros(1, dtype=torch.bool),
+            },
+        },
+        [],
+    )
+    spec = make_composite_from_td(data)
+    assert (spec.zero() == data.zero_()).all()
+    for key, val in data.items(True, True):
+        assert val.dtype is spec[key].dtype
 
 
 if __name__ == "__main__":

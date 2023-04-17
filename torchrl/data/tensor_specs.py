@@ -2257,13 +2257,26 @@ class CompositeSpec(TensorSpec):
             yield k
 
     def __delitem__(self, key: str) -> None:
+        if isinstance(key, tuple) and len(key) > 1:
+            del self._specs[key[0]][key[1:]]
+            return
+        elif isinstance(key, tuple):
+            del self._specs[key[0]]
+            return
+        elif not isinstance(key, str):
+            raise TypeError(
+                f"Got key of type {type(key)} when a string or a tuple of strings was expected."
+            )
+
+        if key in {"shape", "device", "dtype", "space"}:
+            raise AttributeError(f"CompositeSpec has no key {key}")
         del self._specs[key]
 
     def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
         if isinstance(vals, TensorDict):
             out = vals.select()  # create and empty tensordict similar to vals
         else:
-            out = TensorDict({}, [], _run_checks=False)
+            out = TensorDict({}, torch.Size([]), _run_checks=False)
         for key, item in vals.items():
             if item is None:
                 raise RuntimeError(
