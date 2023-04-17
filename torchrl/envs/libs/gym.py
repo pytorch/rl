@@ -54,7 +54,7 @@ if _has_gym:
         )
     except ModuleNotFoundError:
         warnings.warn(
-            f"gym {gym.__version__} does not provide the PixelObservationWrapper"
+            f"gym {gym.__version__} does not provide the PixelObservationWrapper "
             f"used by torchrl, which will be using a patched version. "
             f"Consider updating gym to a newer version."
         )
