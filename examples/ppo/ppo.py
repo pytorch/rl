@@ -16,7 +16,6 @@ import hydra
 import torch
 import tqdm
 from torch.optim.lr_scheduler import LinearLR
-from torchrl.trainers.helpers.envs import correct_for_frame_skip
 
 from utils import (
     make_collector,
