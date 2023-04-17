@@ -45,9 +45,7 @@ from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
-from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.envs.utils import check_env_specs, make_composite_from_td, step_mdp
-from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
