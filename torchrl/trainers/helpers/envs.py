@@ -55,7 +55,6 @@ def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
          the input DictConfig, modified in-place.
 
     """
-
     # Adapt all frame counts wrt frame_skip
     frame_skip = cfg.env.frame_skip
 
@@ -376,7 +375,7 @@ def get_stats_random_rollout(
     key: Optional[str] = None,
 ):
     """Gathers stas (loc and scale) from an environment using random rollouts.
-    
+
     Args:
         cfg (DictConfig): a config object with `init_env_steps` field, indicating
             the total number of frames to be collected to compute the stats.
@@ -457,6 +456,7 @@ def initialize_observation_norm_transforms(
     Similarly, if the transformed environment does not contain any :obj:`ObservationNorm`, a call to this function will have no effect.
     If no key is provided but the observations of the :obj:`EnvBase` contains more than one key, an exception will
     be raised.
+
     Args:
         proof_environment (EnvBase instance, optional): if provided, this env will
             be used ot execute the rollouts. If not, it will be created using
@@ -464,6 +464,7 @@ def initialize_observation_norm_transforms(
         num_iter (int): Number of iterations used for initializing the :obj:`ObservationNorms`
         key (str, optional): if provided, the stats of this key will be gathered.
             If not, it is expected that only one key exists in `env.observation_spec`.
+
     """
     if not isinstance(proof_environment.transform, Compose) and not isinstance(
         proof_environment.transform, ObservationNorm
@@ -489,8 +490,10 @@ def initialize_observation_norm_transforms(
 
 def retrieve_observation_norms_state_dict(proof_environment: TransformedEnv):
     """Traverses the transforms of the environment and retrieves the :obj:`ObservationNorm` state dicts.
+
     Returns a list of tuple (idx, state_dict) for each :obj:`ObservationNorm` transform in proof_environment
     If the environment transforms do not contain any :obj:`ObservationNorm`, returns an empty list
+
     Args:
         proof_environment (EnvBase instance, optional): the :obj:``TransformedEnv` to retrieve the :obj:`ObservationNorm`
             state dict from
@@ -548,7 +551,7 @@ class EnvConfig:
     max_frames_per_traj: int = 1000
     # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
     batch_transform: bool = False
-    # if True, the transforms will be applied to the parallel env, and not to each individual env.\
+    # if ``True``, the transforms will be applied to the parallel env, and not to each individual env.\
     image_size: int = 84
     # if True and environment has discrete action space, then it is encoded as categorical values rather than one-hot.
     categorical_action_encoding: bool = False
