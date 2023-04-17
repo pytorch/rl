@@ -958,22 +958,23 @@ def _inv_pad_sequence(tensor, splits):
     offset = torch.ones_like(splits) * tensor.shape[-1]
     offset[0] = 0
     offset = offset.cumsum(0)
-    z = torch.zeros(tensor.numel(), dtype=torch.bool)
+    z = torch.zeros(tensor.numel(), dtype=torch.bool, device=offset.device)
 
     ones = offset + splits
     ones = ones[ones < tensor.numel()]
     # while ones[-1] == tensor.numel():
     #     ones = ones[:-1]
     z[ones] = 1
+    z_idx = z[offset[1:]]
     z[offset[1:]] = torch.bitwise_xor(
-        z[offset[1:]], torch.ones_like(z[offset[1:]])
+        z_idx, torch.ones_like(z_idx)
     )  # make sure that the longest is accounted for
     idx = z.cumsum(0) % 2 == 0
     return tensor.view(-1)[idx]
 
 
 @_transpose_time
-def compute_reward2go(
+def reward2go(
     reward,
     done,
     gamma,
@@ -997,7 +998,7 @@ def compute_reward2go(
         >>> reward = torch.ones(1, 10)
         >>> done = torch.zeros(1, 10, dtype=torch.bool)
         >>> done[:, [3, 7]] = True
-        >>> compute_reward2go(reward, done, 0.99, time_dim=-1)
+        >>> reward2go(reward, done, 0.99, time_dim=-1)
         tensor([[3.9404],
                 [2.9701],
                 [1.9900],

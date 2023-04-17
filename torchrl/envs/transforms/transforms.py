@@ -34,7 +34,7 @@ from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
 from torchrl.envs.utils import _sort_keys, step_mdp
-from torchrl.objectives.value.functional import compute_reward2go
+from torchrl.objectives.value.functional import reward2go
 
 try:
     from torchvision.transforms.functional import center_crop
@@ -3811,7 +3811,7 @@ class Reward2GoTransform(Transform):
     def _inv_apply_transform(
         self, reward: torch.Tensor, done: torch.Tensor
     ) -> torch.Tensor:
-        return compute_reward2go(reward, done, self.gamma)
+        return reward2go(reward, done, self.gamma)
 
     def set_container(self, container):
         if isinstance(container, EnvBase) or container.parent is not None:
