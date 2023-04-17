@@ -78,7 +78,7 @@ if __name__ == "__main__":
     }
 
     model_config = {
-        "shared_parameters": True,
+        "shared_parameters": False, # MADDPG paper does not use shared params because reward function can be different
         "centralised_critic": True,  # MAPPO if True, IPPO if False
     }
 
