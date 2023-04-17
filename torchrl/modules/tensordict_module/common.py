@@ -102,7 +102,7 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
 
 
 class SafeModule(TensorDictModule):
-    """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`torchrl.data.TensorSpec` as argument to control the output domain.
+    """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`~torchrl.data.TensorSpec` as argument to control the output domain.
 
     Args:
         module (nn.Module): a nn.Module used to map the input to the output
@@ -206,7 +206,9 @@ class SafeModule(TensorDictModule):
         safe: bool = False,
     ):
         super().__init__(module, in_keys, out_keys)
+        self.register_spec(safe=safe, spec=spec)
 
+    def register_spec(self, safe, spec):
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):

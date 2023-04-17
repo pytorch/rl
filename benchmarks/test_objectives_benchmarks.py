@@ -34,8 +34,8 @@ class setup_value_fn:
         device = "cuda:0" if torch.cuda.device_count() else "cpu"
         values = torch.randn(b, t, d, device=device)
         next_values = torch.randn(b, t, d, device=device)
-        reward = torch.randn(b, t, d, device=device).bernoulli_()
-        done = torch.zeros(b, t, d, dtype=torch.bool, device=device)
+        reward = torch.randn(b, t, d, device=device)
+        done = torch.zeros(b, t, d, dtype=torch.bool, device=device).bernoulli_(0.1)
         kwargs = {
             "gamma": gamma,
             "next_state_value": next_values,
