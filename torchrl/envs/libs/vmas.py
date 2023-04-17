@@ -211,9 +211,6 @@ class VmasWrapper(_EnvWrapper):
             device=self.device,
         )  # shape = (n_agents, 1)
 
-        self.input_spec = CompositeSpec(action=multi_agent_action_spec).expand(
-            self.batch_size
-        )
         if len(info_specs):
             multi_agent_info_spec = torch.stack(info_specs, dim=0)
             observation_spec = CompositeSpec(
@@ -222,11 +219,17 @@ class VmasWrapper(_EnvWrapper):
         else:
             observation_spec = CompositeSpec(observation=multi_agent_observation_spec)
 
-        self.output_spec = CompositeSpec(
+        self.unbatched_input_spec = CompositeSpec(action=multi_agent_action_spec)
+        self.unbatched_output_spec = CompositeSpec(
             observation=observation_spec,
             reward=multi_agent_reward_spec,
             done=done_spec,
-        ).expand(self.batch_size)
+        )
+
+        self.input_spec = self.unbatched_input_spec.expand(
+            self.batch_size
+        )
+        self.output_spec = self.unbatched_output_spec.expand(self.batch_size)
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
