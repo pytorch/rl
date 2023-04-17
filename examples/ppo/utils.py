@@ -4,7 +4,7 @@ import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
 
-from torchrl.data.tensor_specs import DiscreteBox
+from torchrl.data.tensor_specs import DiscreteBox, ContinuousBox
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
@@ -27,7 +27,7 @@ from torchrl.envs import (
     ToTensorImage,
     TransformedEnv,
     RewardSum,
-    StepCounter
+    StepCounter,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.modules import (
@@ -37,6 +37,8 @@ from torchrl.modules import (
     ValueOperator,
     ActorValueOperator,
     OneHotCategorical,
+    TanhNormal,
+    NormalParamWrapper,
 )
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value.advantages import GAE
@@ -98,7 +100,6 @@ def make_transformed_env_pixels(base_env, env_cfg):
     env = TransformedEnv(base_env)
 
     reward_scaling = env_cfg.reward_scaling
-
     env.append_transform(RewardScaling(0.0, reward_scaling))
 
     double_to_float_list = []
@@ -154,9 +155,11 @@ def make_transformed_env_states(base_env, env_cfg):
     ]
     out_key = "observation_vector"
     env.append_transform(CatTensors(in_keys=selected_keys, out_key=out_key))
+    env.append_transform(RewardSum())
+    env.append_transform(StepCounter())
 
-    obs_norm = ObservationNorm(in_keys=[out_key])
-    env.append_transform(obs_norm)
+    # obs_norm = ObservationNorm(in_keys=[out_key])
+    # env.append_transform(obs_norm)
 
     if env_library is DMControlEnv:
         double_to_float_list += [
@@ -192,7 +195,7 @@ def make_parallel_env(env_cfg, state_dict):
 def get_stats(env_cfg):
     from_pixels = env_cfg.from_pixels
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    # init_stats(env, env_cfg.n_samples_stats, from_pixels)
+    init_stats(env, env_cfg.n_samples_stats, from_pixels)
     return env.state_dict()
 
 
@@ -262,10 +265,9 @@ def make_ppo_models(cfg):
     from_pixels = env_cfg.from_pixels
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
 
-    # we must initialize the observation norm transform
-    # init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
-
     if not from_pixels:
+        # we must initialize the observation norm transform
+        # init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
         common_module, policy_module, value_module = make_ppo_modules_state(model_cfg, proof_environment)
     else:
         common_module, policy_module, value_module = make_ppo_modules_pixels(model_cfg, proof_environment)
@@ -289,21 +291,103 @@ def make_ppo_models(cfg):
 
 
 def make_ppo_modules_state(model_cfg, proof_environment):
-    raise NotImplementedError
+
+    # Define input shape
+    env_specs = proof_environment.specs
+    input_shape = env_specs["output_spec"]["observation"]["observation_vector"].shape
+
+    # Define distribution class and kwargs
+    discrete_actions = False
+    if isinstance(env_specs["input_spec"]["action"].space, DiscreteBox):
+        discrete_actions = True
+        num_outputs = env_specs["input_spec"]["action"].space.n
+        distribution_class = OneHotCategorical
+        distribution_kwargs = {}
+    else:  # is ContinuousBox
+        num_outputs = env_specs["input_spec"]["action"].shape
+        distribution_class = TanhNormal
+        distribution_kwargs = {
+            "min": env_specs["input_spec"]["action"].space.minimum,
+            "max": env_specs["input_spec"]["action"].space.maximum,
+            "tanh_loc": False,
+        }
+
+    # Define input keys
+    in_keys = ["observation_vector"]
+    shared_features_size = 448
+
+    # Define a shared Module and TensorDictModule
+    common_mlp = MLP(
+        in_features=input_shape[-1],
+        activation_class=torch.nn.ReLU,
+        activate_last_layer=True,
+        out_features=shared_features_size,
+        num_cells=[256])
+    common_module = TensorDictModule(
+        module=common_mlp,
+        in_keys=in_keys,
+        out_keys=["common_features"],
+    )
+
+    # Define on head for the policy
+    policy_net = MLP(
+        in_features=shared_features_size,
+        out_features=num_outputs,
+        num_cells=[]
+    )
+    if not discrete_actions:
+        policy_net = NormalParamWrapper(policy_net)
+
+    policy_module = TensorDictModule(
+        module=policy_net,
+        in_keys=["common_features"],
+        out_keys=["loc", "scale"] if not discrete_actions else ["logits"],
+    )
+
+    # Add probabilistic sampling of the actions
+    policy_module = ProbabilisticActor(
+        policy_module,
+        in_keys=["loc", "scale"] if not discrete_actions else ["logits"],
+        spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
+        safe=True,
+        distribution_class=distribution_class,
+        distribution_kwargs=distribution_kwargs,
+        return_log_prob=True,
+        default_interaction_mode="random",
+    )
+
+    # Define another head for the value
+    value_net = MLP(
+        in_features=shared_features_size,
+        out_features=1,
+        num_cells=[]
+    )
+    value_module = ValueOperator(
+        value_net,
+        in_keys=["common_features"],
+    )
+
+    return common_module, policy_module, value_module
 
 
 def make_ppo_modules_pixels(model_cfg, proof_environment):
 
     # Define input shape
-    input_shape = proof_environment.specs["output_spec"]["observation"]["pixels"].shape
+    env_specs = proof_environment.specs
+    input_shape = env_specs["output_spec"]["observation"]["pixels"].shape
 
     # Define distribution class and kwargs
-    if isinstance(proof_environment.specs["input_spec"]["action"].space, DiscreteBox):
-        num_ouputs = proof_environment.specs["input_spec"]["action"].space.n
+    if isinstance(env_specs["input_spec"]["action"].space, DiscreteBox):
+        num_outputs = env_specs["input_spec"]["action"].space.n
         distribution_class = OneHotCategorical
         distribution_kwargs = {}
-    else:
-        raise NotImplementedError
+    else:  # is ContinuousBox
+        num_outputs = env_specs["input_spec"]["action"].shape
+        distribution_class = TanhNormal
+        distribution_kwargs = {
+            "min": env_specs["input_spec"]["action"].space.minimum,
+            "max": env_specs["input_spec"]["action"].space.maximum,
+        }
 
     # Define input keys
     in_keys = ["pixels"]
@@ -335,7 +419,7 @@ def make_ppo_modules_pixels(model_cfg, proof_environment):
     # Define on head for the policy
     policy_net = MLP(
         in_features=common_mlp_output.shape[-1],
-        out_features=num_ouputs,
+        out_features=num_outputs,
         num_cells=[]
     )
     policy_module = TensorDictModule(
@@ -348,6 +432,8 @@ def make_ppo_modules_pixels(model_cfg, proof_environment):
     policy_module = ProbabilisticActor(
         policy_module,
         in_keys=["logits"],
+        spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
+        safe=True,
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,

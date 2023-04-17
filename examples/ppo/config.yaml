@@ -8,6 +8,7 @@ env:
   noop: 1
   reward_scaling: 1.0
   from_pixels: True
+  # n_samples_stats: 3
 
 # collector
 collector:
