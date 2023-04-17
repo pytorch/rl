@@ -31,8 +31,12 @@ from utils import (
 @hydra.main(config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    model_device = cfg.optim.device
+    # Correct for frame_skip
+    cfg.collector.total_frames = cfg.collector.total_frames // cfg.env.frame_skip
+    cfg.collector.frames_per_batch = cfg.collector.frames_per_batch // cfg.env.frame_skip
+    cfg.loss.mini_batch_size = cfg.loss.mini_batch_size // cfg.env.frame_skip
 
+    model_device = cfg.optim.device
     actor, critic = make_ppo_models(cfg)
     actor = actor.to(model_device)
     critic = critic.to(model_device)

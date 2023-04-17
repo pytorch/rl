@@ -12,18 +12,11 @@ env:
 
 # collector
 collector:
-  async_collection: 0
-  frames_per_batch: 1024
-  total_frames: 10_000_000
+  frames_per_batch: 4096
+  total_frames: 40_000_000
   collector_devices: cuda  # [cpu,cpu,cpu,cpu]
   num_collectors: 1
   max_frames_per_traj: -1
-
-# eval
-recorder:
-  video: False
-  interval: 10000  # record interval in frames
-  frames: 10000
 
 # logger
 logger:
@@ -39,7 +32,7 @@ optim:
 # loss
 loss:
   gamma: 0.99
-  mini_batch_size: 256
+  mini_batch_size: 1024
   ppo_epochs: 3
   gae_lamdda: 0.95
   clip_epsilon: 0.1
