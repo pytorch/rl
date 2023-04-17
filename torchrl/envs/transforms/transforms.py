@@ -8,7 +8,7 @@ from __future__ import annotations
 import collections
 import multiprocessing as mp
 import warnings
-from copy import copy
+from copy import copy, deepcopy
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
@@ -3661,8 +3661,46 @@ class Reward2GoTransform(Transform):
     and not to the collector.
 
     Args:
-        in_keys (list of str/tuples of str): the entries to rename.
+        in_keys (list of str/tuples of str): the entries to rename. Defaults to
+            ``("next", "reward")`` if none is provided.
+        out_keys (list of str/tuples of str): the entries to rename. Defaults to
+            the values of ``in_keys`` if none is provided.
         gamma (float or torch.Tensor): the discount factor. Defaults to 1.0.
+
+    Examples:
+        >>> # Using this transform as part of a replay buffer
+        >>> from torchrl.data import ReplayBuffer, LazyTensorStorage
+        >>> torch.manual_seed(0)
+        >>> r2g = Reward2GoTransform(gamma=0.99, out_keys=["reward_to_go"])
+        >>> rb = ReplayBuffer(storage=LazyTensorStorage(100), transform=r2g)
+        >>> batch, timesteps = 4, 5
+        >>> done = torch.zeros(batch, timesteps, 1, dtype=torch.bool)
+        >>> for i in range(batch):
+        ...     while not done[i].any():
+        ...         done[i] = done[i].bernoulli_(0.1)
+        >>> reward = torch.ones(batch, timesteps, 1)
+        >>> td = TensorDict(
+        ...     {"next": {"done": done, "reward": reward}},
+        ...     [batch, timesteps],
+        ... )
+        >>> rb.extend(td)
+        >>> sample = rb.sample(1)
+        >>> print(sample["next", "reward"])
+        tensor([[[1.],
+                 [1.],
+                 [1.],
+                 [1.],
+                 [1.]]])
+        >>> print(sample["reward_to_go"])
+        tensor([[[4.9010],
+                 [3.9404],
+                 [2.9701],
+                 [1.9900],
+                 [1.0000]]])
+        >>> # Using this transform as part of an env will raise an exception
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> t = Reward2GoTransform(gamma=0.99)
+        >>> TransformedEnv(GymEnv("Pendulum-v1"), t)
 
     """
 
@@ -3675,10 +3713,13 @@ class Reward2GoTransform(Transform):
         self,
         gamma: Optional[Union[float, torch.Tensor]] = 1.0,
         in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
             in_keys = [("next", "reward")]
-        out_keys = ["reward_to_go"]
+        if out_keys is None:
+            out_keys = deepcopy(in_keys)
+        # out_keys = ["reward_to_go"]
         super().__init__(
             in_keys=in_keys,
             in_keys_inv=in_keys,

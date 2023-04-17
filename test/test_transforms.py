@@ -3852,11 +3852,11 @@ class TestReward2Go(TransformBase):
     @pytest.mark.parametrize("done_flags", [1, 5])
     @pytest.mark.parametrize("t", [3, 20])
     def test_transform_rb(self, done_flags, gamma, t, device):
-        torch.manual_seed(0)
         batch = 10
         batch_size = [batch, t]
         torch.manual_seed(0)
-        r2g = Reward2GoTransform(gamma=gamma)
+        out_key = "reward2go"
+        r2g = Reward2GoTransform(gamma=gamma, out_keys=[out_key])
         rb = ReplayBuffer(storage=LazyTensorStorage(batch), transform=r2g)
         done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
         for i in range(batch):
@@ -3872,8 +3872,8 @@ class TestReward2Go(TransformBase):
         )
         rb.extend(td)
         sample = rb.sample(13)
-        assert sample["reward_to_go"].shape == (13, t, 1)
-        assert (sample["reward_to_go"] != 0).all()
+        assert sample[out_key].shape == (13, t, 1)
+        assert (sample[out_key] != 0).all()
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
@@ -3899,12 +3899,12 @@ class TestReward2Go(TransformBase):
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
     def test_transform_inverse(self, gamma, done_flags, device):
-        torch.manual_seed(0)
         batch = 10
         t = 20
         batch_size = [batch, t]
         torch.manual_seed(0)
-        r2g = Reward2GoTransform(gamma=gamma)
+        out_key = "reward2go"
+        r2g = Reward2GoTransform(gamma=gamma, out_keys=[out_key])
         done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
         for i in range(batch):
             while not done[i].any():
@@ -3918,14 +3918,13 @@ class TestReward2Go(TransformBase):
             device=device,
         )
         td = r2g.inv(td)
-        assert td["reward_to_go"].shape == (batch, t, 1)
-        assert (td["reward_to_go"] != 0).all()
+        assert td[out_key].shape == (batch, t, 1)
+        assert (td[out_key] != 0).all()
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
     def test_transform(self, gamma, done_flags):
         device = "cpu"
-        torch.manual_seed(0)
         batch = 10
         t = 20
         batch_size = [batch, t]
@@ -4014,9 +4013,10 @@ class TestReward2Go(TransformBase):
         torch.manual_seed(0)
         batch = 10
         t = 20
+        out_key = "reward2go"
         batch_size = [batch, t]
         torch.manual_seed(0)
-        r2g = Reward2GoTransform(gamma=gamma)
+        r2g = Reward2GoTransform(gamma=gamma, out_keys=[out_key])
         done = torch.zeros(*batch_size, 1, dtype=torch.bool)
         for i in range(batch):
             while not done[i].any():
@@ -4029,17 +4029,18 @@ class TestReward2Go(TransformBase):
             device=device,
         )
         td = r2g.inv(td)
-        assert td["reward_to_go"].shape == (batch, t, 1)
-        assert td["reward_to_go"].all() != 0
+        assert td[out_key].shape == (batch, t, 1)
+        assert td[out_key].all() != 0
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
     def test_transform_compose(self, gamma, done_flags):
-        compose = Compose(Reward2GoTransform(gamma=gamma))
         device = "cpu"
         torch.manual_seed(0)
         batch = 10
         t = 20
+        out_key = "reward2go"
+        compose = Compose(Reward2GoTransform(gamma=gamma, out_keys=[out_key]))
         batch_size = [batch, t]
         torch.manual_seed(0)
         done = torch.zeros(*batch_size, 1, dtype=torch.bool)
@@ -4056,7 +4057,7 @@ class TestReward2Go(TransformBase):
         td_out = compose(td.clone())
         assert (td_out == td).all()
         td_out = compose.inv(td.clone())
-        assert "reward_to_go" in td_out.keys()
+        assert out_key in td_out.keys()
 
     def test_transform_model(self):
         raise pytest.skip("No model transform for Reward2Go")
