@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
+from tensordict.nn import InteractionType
 
 from torch import nn, optim
 from torchrl.collectors import MultiSyncDataCollector
@@ -168,7 +169,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_mode="random",
+        default_interaction_type=InteractionType.RANDOM,
         return_log_prob=False,
     )
 

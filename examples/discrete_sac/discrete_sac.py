@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
+from tensordict.nn import InteractionType
 
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
@@ -134,7 +135,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         out_keys=["action"],
         distribution_class=OneHotCategorical,
         distribution_kwargs={},
-        default_interaction_mode="random",
+        default_interaction_type=InteractionType.RANDOM,
         return_log_prob=False,
     ).to(device)
 

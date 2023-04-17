@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
-from tensordict.nn import TensorDictModule
+from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torch import nn, optim
@@ -147,7 +147,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_mode="random",
+        default_interaction_type=InteractionType.RANDOM,
         return_log_prob=False,
     )
 

@@ -7,6 +7,7 @@ import argparse
 from copy import deepcopy
 
 from packaging import version as pack_version
+from tensordict.nn import InteractionType
 
 _has_functorch = True
 try:
@@ -3112,7 +3113,7 @@ class TestDreamer:
             SafeProbabilisticModule(
                 in_keys=["loc", "scale"],
                 out_keys="action",
-                default_interaction_mode="random",
+                default_interaction_type=InteractionType.RANDOM,
                 distribution_class=TanhNormal,
             ),
         )

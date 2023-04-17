@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import torch
+from tensordict.nn import InteractionType
 from torch import distributions as d, nn
 
 from torchrl.data.tensor_specs import (
@@ -608,7 +609,7 @@ def make_a2c_model(
             spec=CompositeSpec(action=action_spec),
             module=actor_module,
             in_keys=dist_in_keys,
-            default_interaction_mode="random",
+            default_interaction_type=InteractionType.RANDOM,
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
@@ -688,7 +689,7 @@ def make_a2c_model(
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
-            default_interaction_mode="random",
+            default_interaction_type=InteractionType.RANDOM,
         )
 
         value_net = MLP(
@@ -903,7 +904,7 @@ def make_ppo_model(
             spec=CompositeSpec(action=action_spec),
             module=actor_module,
             in_keys=dist_in_keys,
-            default_interaction_mode="random",
+            default_interaction_type=InteractionType.RANDOM,
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
@@ -983,7 +984,7 @@ def make_ppo_model(
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
-            default_interaction_mode="random",
+            default_interaction_type=InteractionType.RANDOM,
         )
 
         value_net = MLP(
@@ -1198,7 +1199,7 @@ def make_sac_model(
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_mode="random",
+        default_interaction_type=InteractionType.RANDOM,
         return_log_prob=False,
     )
 
@@ -1441,7 +1442,7 @@ def make_redq_model(
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_mode="random",
+        default_interaction_type=InteractionType.RANDOM,
         return_log_prob=True,
     )
     qvalue = ValueOperator(
@@ -1665,7 +1666,7 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
         SafeProbabilisticModule(
             in_keys=["loc", "scale"],
             out_keys=[action_key],
-            default_interaction_mode="random",
+            default_interaction_type=InteractionType.RANDOM,
             distribution_class=TanhNormal,
             spec=CompositeSpec(**{action_key: proof_environment.action_spec}),
         ),
@@ -1713,7 +1714,7 @@ def _dreamer_make_actor_real(
             SafeProbabilisticModule(
                 in_keys=["loc", "scale"],
                 out_keys=[action_key],
-                default_interaction_mode="random",
+                default_interaction_type=InteractionType.RANDOM,
                 distribution_class=TanhNormal,
                 spec=CompositeSpec(
                     **{action_key: proof_environment.action_spec.to("cpu")}
