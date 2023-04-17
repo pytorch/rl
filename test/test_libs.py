@@ -1017,7 +1017,7 @@ class TestVmas:
 
         assert tdrollout.batch_size == (num_envs, n_rollout_samples)
         assert tdrollout["observation"].shape[2] == env.n_agents
-        assert tdrollout["reward"].shape[2] == env.n_agents
+        assert tdrollout["next", "reward"].shape[2] == env.n_agents
         assert tdrollout["action"].shape[2] == env.n_agents
         assert tdrollout["done"].shape[2] == env.n_agents
         del env
