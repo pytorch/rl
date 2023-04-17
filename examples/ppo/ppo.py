@@ -32,8 +32,6 @@ from utils import (
 @hydra.main(config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    # Correct for frame skip
-    cfg = correct_for_frame_skip(cfg.collector)
     model_device = cfg.optim.device
 
     actor, critic = make_ppo_models(cfg)
