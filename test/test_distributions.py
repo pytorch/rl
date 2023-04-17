@@ -242,7 +242,7 @@ class TestMaskedCategorical:
                 probs=torch.tensor(()), mask=torch.tensor(()), indices=torch.tensor(())
             )
 
-    @pytest.mark.parametrize("neg_inf", [-10, -float("inf")])
+    @pytest.mark.parametrize("neg_inf", [-10.0, -float("inf")])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("sparse", [True, False])
     @pytest.mark.parametrize("logits", [True, False])
@@ -276,7 +276,7 @@ class TestMaskedCategorical:
         else:
             assert (dist.log_prob(torch.ones_like(sample)) > -float("inf")).all()
 
-    @pytest.mark.parametrize("neg_inf", [-10, -float("inf")])
+    @pytest.mark.parametrize("neg_inf", [-10.0, -float("inf")])
     @pytest.mark.parametrize("sparse", [True, False])
     @pytest.mark.parametrize("logits", [True, False])
     def test_backprop(self, neg_inf, sparse, logits):
