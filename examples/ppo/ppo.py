@@ -131,7 +131,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             with torch.no_grad():
                 test_env.eval()
                 actor.eval()
-                td_record = test_env.rollout(
+                # Generate a complete episode
+                td_test = test_env.rollout(
                     policy=actor,
                     max_steps=10_000_000,
                     auto_reset=True,
@@ -139,7 +140,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     break_when_any_done=True,
                 ).clone()
                 logger.log_scalar(
-                    "reward_testing", td_record["reward"].sum().item(), collected_frames
+                    "reward_testing", td_test["reward"].sum().item(), collected_frames
                 )
                 actor.train()
 

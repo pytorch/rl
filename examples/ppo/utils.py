@@ -249,7 +249,6 @@ def make_data_buffer(cfg):
 def make_ppo_models(cfg):
 
     env_cfg = cfg.env
-    model_cfg = cfg.model
     from_pixels = env_cfg.from_pixels
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
 
@@ -259,11 +258,11 @@ def make_ppo_models(cfg):
             proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels
         )
         common_module, policy_module, value_module = make_ppo_modules_state(
-            model_cfg, proof_environment
+            proof_environment
         )
     else:
         common_module, policy_module, value_module = make_ppo_modules_pixels(
-            model_cfg, proof_environment
+            proof_environment
         )
 
     # Wrap modules in a single ActorCritic operator
@@ -284,7 +283,7 @@ def make_ppo_models(cfg):
     return actor, critic
 
 
-def make_ppo_modules_state(model_cfg, proof_environment):
+def make_ppo_modules_state(proof_environment):
 
     # Define input shape
     env_specs = proof_environment.specs
@@ -359,7 +358,7 @@ def make_ppo_modules_state(model_cfg, proof_environment):
     return common_module, policy_module, value_module
 
 
-def make_ppo_modules_pixels(model_cfg, proof_environment):
+def make_ppo_modules_pixels(proof_environment):
 
     # Define input shape
     env_specs = proof_environment.specs
