@@ -931,10 +931,16 @@ def _split_and_pad_sequence2(tensor, splits):
     """Given a tensor of size [B, T] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax]."""
     tensor = _flatten_batch(tensor)
     max_val = max(splits)
-    mask = torch.zeros(len(splits), max_val, dtype=torch.bool)
-    mask.scatter_(index=max_val - torch.tensor(splits).unsqueeze(-1), dim=1, value=1)
+    mask = torch.zeros(len(splits), max_val, dtype=torch.bool, device=tensor.device)
+    mask.scatter_(
+        index=max_val - torch.tensor(splits, device=tensor.device).unsqueeze(-1),
+        dim=1,
+        value=1,
+    )
     mask = mask.cumsum(-1).flip(-1).bool()
-    empty_tensor = torch.zeros(len(splits), max_val, dtype=tensor.dtype)
+    empty_tensor = torch.zeros(
+        len(splits), max_val, dtype=tensor.dtype, device=tensor.device
+    )
     empty_tensor[mask] = tensor
     return empty_tensor
 
