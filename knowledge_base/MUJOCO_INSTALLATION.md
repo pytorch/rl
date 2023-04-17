@@ -29,7 +29,7 @@ to enable fast rendering:
 $ sudo apt-get install libglfw3 libglew2.0 libgl1-mesa-glx libosmesa6
 ```
 If you don't, these libraries can be installed via conda but be aware of the fact
-that this is not the indented workflow and things may not work as expected:
+that this is not the intended workflow and things may not work as expected:
 ```shell
 $ conda activate mujoco_env
 $ conda install -c conda-forge glew

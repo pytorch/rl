@@ -2181,7 +2181,7 @@ class CatTensors(Transform):
             )
 
         if isinstance(observation_spec, CompositeSpec) and len(
-            [key for key in self.in_keys if key not in observation_spec]
+            [key for key in self.in_keys if key not in observation_spec.keys(True)]
         ):
             raise ValueError(
                 "CatTensor got a list of keys that does not match the keys in observation_spec. "
@@ -2215,7 +2215,8 @@ class CatTensors(Transform):
         )
         if self._del_keys:
             for key in self.keys_to_exclude:
-                del observation_spec[key]
+                if key in observation_spec.keys(True):
+                    del observation_spec[key]
         return observation_spec
 
     def __repr__(self) -> str:

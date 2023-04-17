@@ -14,6 +14,7 @@ from typing import OrderedDict
 import torch.cuda
 from tensordict import TensorDict
 from torch import multiprocessing as mp, nn
+from torchrl._utils import VERBOSE
 
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
@@ -54,7 +55,7 @@ def _distributed_init_collection_node(
     collector_kwargs,
     update_interval,
     total_frames,
-    verbose=False,
+    verbose=VERBOSE,
 ):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = str(tcpport)
