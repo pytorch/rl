@@ -1,18 +1,12 @@
-from copy import deepcopy
-
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
 
-from torchrl.data.tensor_specs import DiscreteBox, ContinuousBox
-
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import (
-    CompositeSpec,
-    LazyMemmapStorage,
-    TensorDictReplayBuffer,
-)
+from torchrl.data import CompositeSpec, LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
+
+from torchrl.data.tensor_specs import DiscreteBox
 from torchrl.envs import (
     CatFrames,
     CatTensors,
@@ -24,29 +18,26 @@ from torchrl.envs import (
     ParallelEnv,
     Resize,
     RewardScaling,
-    ToTensorImage,
-    TransformedEnv,
     RewardSum,
     StepCounter,
+    ToTensorImage,
+    TransformedEnv,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.modules import (
+    ActorValueOperator,
     ConvNet,
     MLP,
-    ProbabilisticActor,
-    ValueOperator,
-    ActorValueOperator,
-    OneHotCategorical,
-    TanhNormal,
     NormalParamWrapper,
+    OneHotCategorical,
+    ProbabilisticActor,
+    TanhNormal,
+    ValueOperator,
 )
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value.advantages import GAE
-from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.trainers import Recorder
 from torchrl.trainers.helpers.envs import LIBS
-from torchrl.trainers.helpers.models import ACTIVATIONS
 
 
 DEFAULT_REWARD_SCALING = {
@@ -64,12 +55,15 @@ DEFAULT_REWARD_SCALING = {
 # Environment utils
 # -----------------
 
+
 def make_base_env(env_cfg, from_pixels=None):
     env_library = LIBS[env_cfg.env_library]
     env_kwargs = {
         "env_name": env_cfg.env_name,
         "frame_skip": env_cfg.frame_skip,
-        "from_pixels": env_cfg.from_pixels if from_pixels is None else from_pixels,  # for rendering
+        "from_pixels": env_cfg.from_pixels
+        if from_pixels is None
+        else from_pixels,  # for rendering
         "pixels_only": False,
     }
     if env_library is DMControlEnv:
@@ -81,10 +75,7 @@ def make_base_env(env_cfg, from_pixels=None):
 
 def make_transformed_env(base_env, env_cfg):
     if env_cfg.noop > 1:
-        base_env = TransformedEnv(
-            env=base_env,
-            transform=NoopResetEnv(env_cfg.noop)
-        )
+        base_env = TransformedEnv(env=base_env, transform=NoopResetEnv(env_cfg.noop))
     from_pixels = env_cfg.from_pixels
     if from_pixels:
         return make_transformed_env_pixels(base_env, env_cfg)
@@ -218,6 +209,7 @@ def make_test_env(env_cfg):
 # Collector and replay buffer
 # ---------------------------
 
+
 def make_collector(cfg, policy):
     env_cfg = cfg.env
     collector_cfg = cfg.collector
@@ -239,7 +231,8 @@ def make_data_buffer(cfg):
     cfg_loss = cfg.loss
     sampler = SamplerWithoutReplacement()
     return TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(cfg_collector.frames_per_batch), sampler=sampler,
+        storage=LazyMemmapStorage(cfg_collector.frames_per_batch),
+        sampler=sampler,
         batch_size=cfg_loss.mini_batch_size,
     )
 
@@ -252,6 +245,7 @@ def make_data_buffer(cfg):
 # TorchRL comes in handy at this point, as the high-level interactions with
 # these models is unchanged, regardless of the modality.
 
+
 def make_ppo_models(cfg):
 
     env_cfg = cfg.env
@@ -261,10 +255,16 @@ def make_ppo_models(cfg):
 
     if not from_pixels:
         # we must initialize the observation norm transform
-        init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
-        common_module, policy_module, value_module = make_ppo_modules_state(model_cfg, proof_environment)
+        init_stats(
+            proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels
+        )
+        common_module, policy_module, value_module = make_ppo_modules_state(
+            model_cfg, proof_environment
+        )
     else:
-        common_module, policy_module, value_module = make_ppo_modules_pixels(model_cfg, proof_environment)
+        common_module, policy_module, value_module = make_ppo_modules_pixels(
+            model_cfg, proof_environment
+        )
 
     # Wrap modules in a single ActorCritic operator
     actor_critic = ActorValueOperator(
@@ -316,7 +316,8 @@ def make_ppo_modules_state(model_cfg, proof_environment):
         activation_class=torch.nn.ReLU,
         activate_last_layer=True,
         out_features=shared_features_size,
-        num_cells=[256, 256])
+        num_cells=[256, 256],
+    )
     common_module = TensorDictModule(
         module=common_mlp,
         in_keys=in_keys,
@@ -325,9 +326,7 @@ def make_ppo_modules_state(model_cfg, proof_environment):
 
     # Define on head for the policy
     policy_net = MLP(
-        in_features=shared_features_size,
-        out_features=num_outputs,
-        num_cells=[]
+        in_features=shared_features_size, out_features=num_outputs, num_cells=[]
     )
     if continuous_actions:
         policy_net = NormalParamWrapper(policy_net)
@@ -351,11 +350,7 @@ def make_ppo_modules_state(model_cfg, proof_environment):
     )
 
     # Define another head for the value
-    value_net = MLP(
-        in_features=shared_features_size,
-        out_features=1,
-        num_cells=[]
-    )
+    value_net = MLP(in_features=shared_features_size, out_features=1, num_cells=[])
     value_module = ValueOperator(
         value_net,
         in_keys=["common_features"],
@@ -393,14 +388,14 @@ def make_ppo_modules_pixels(model_cfg, proof_environment):
         kernel_sizes=[8, 4, 3],
         strides=[4, 2, 1],
     )
-    common_cnn_output = common_cnn(
-        torch.ones(input_shape))
+    common_cnn_output = common_cnn(torch.ones(input_shape))
     common_mlp = MLP(
         in_features=common_cnn_output.shape[-1],
         activation_class=torch.nn.ReLU,
         activate_last_layer=True,
         out_features=512,
-        num_cells=[])
+        num_cells=[],
+    )
     common_mlp_output = common_mlp(common_cnn_output)
 
     # Define shared net as TensorDictModule
@@ -414,7 +409,7 @@ def make_ppo_modules_pixels(model_cfg, proof_environment):
     policy_net = MLP(
         in_features=common_mlp_output.shape[-1],
         out_features=num_outputs,
-        num_cells=[256]
+        num_cells=[256],
     )
     policy_module = TensorDictModule(
         module=policy_net,
@@ -436,9 +431,7 @@ def make_ppo_modules_pixels(model_cfg, proof_environment):
 
     # Define another head for the value
     value_net = MLP(
-        in_features=common_mlp_output.shape[-1],
-        out_features=1,
-        num_cells=[256]
+        in_features=common_mlp_output.shape[-1], out_features=1, num_cells=[256]
     )
     value_module = ValueOperator(
         value_net,
@@ -495,8 +488,5 @@ def make_optim(optim_cfg, actor_network, value_network):
 def make_logger(logger_cfg):
     exp_name = generate_exp_name("PPO", logger_cfg.exp_name)
     logger_cfg.exp_name = exp_name
-    logger = get_logger(
-        logger_cfg.backend, logger_name="ppo", experiment_name=exp_name
-    )
+    logger = get_logger(logger_cfg.backend, logger_name="ppo", experiment_name=exp_name)
     return logger
-

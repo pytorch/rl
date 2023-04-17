@@ -12,20 +12,19 @@ Both state and pixel-based environments are supported.
 
 The helper functions are coded in the utils.py associated with this script.
 """
-import tqdm
 import hydra
 import torch
+import tqdm
 from torch.optim.lr_scheduler import LinearLR
 from torchrl.trainers.helpers.envs import correct_for_frame_skip
 
-
 from utils import (
     make_collector,
-    make_ppo_models,
+    make_data_buffer,
     make_logger,
     make_loss,
     make_optim,
-    make_data_buffer,
+    make_ppo_models,
     make_test_env,
 )
 
@@ -42,13 +41,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     collector = make_collector(cfg, policy=actor)
     data_buffer = make_data_buffer(cfg)
-    loss_module, adv_module = make_loss(cfg.loss, actor_network=actor, value_network=critic)
+    loss_module, adv_module = make_loss(
+        cfg.loss, actor_network=actor, value_network=critic
+    )
     optim = make_optim(cfg.optim, actor_network=actor, value_network=critic)
 
     batch_size = cfg.collector.total_frames * cfg.env.num_envs
     num_mini_batches = batch_size // cfg.loss.mini_batch_size
-    total_network_updates = (cfg.collector.total_frames // batch_size) * cfg.loss.ppo_epochs * num_mini_batches
-    scheduler = LinearLR(optim, total_iters=total_network_updates, start_factor=1.0, end_factor=0.1)
+    total_network_updates = (
+        (cfg.collector.total_frames // batch_size)
+        * cfg.loss.ppo_epochs
+        * num_mini_batches
+    )
+    scheduler = LinearLR(
+        optim, total_iters=total_network_updates, start_factor=1.0, end_factor=0.1
+    )
 
     logger = make_logger(cfg.logger)
     test_env = make_test_env(cfg.env)
@@ -78,9 +85,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Log end-of-episode accumulated rewards for training
         episode_rewards = data["next"]["episode_reward"][data["next"]["done"]]
         if len(episode_rewards) > 0:
-            logger.log_scalar("reward_training", episode_rewards.mean().item(), collected_frames)
+            logger.log_scalar(
+                "reward_training", episode_rewards.mean().item(), collected_frames
+            )
 
-        for epoch in range(cfg.loss.ppo_epochs):
+        for _ in range(cfg.loss.ppo_epochs):
             for _ in range(frames_in_batch // cfg.loss.mini_batch_size):
 
                 # Get a data batch
@@ -88,11 +97,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # Forward pass PPO loss
                 loss = loss_module(batch)
-                loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+                loss_sum = (
+                    loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+                )
 
                 # Backward pass
                 loss_sum.backward()
-                grad_norm = torch.nn.utils.clip_grad_norm_(list(actor.parameters()) + list(critic.parameters()), max_norm=0.5)
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    list(actor.parameters()) + list(critic.parameters()), max_norm=0.5
+                )
                 optim.step()
                 scheduler.step()
                 optim.zero_grad()
@@ -126,7 +139,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     auto_cast_to_device=True,
                     break_when_any_done=True,
                 ).clone()
-                logger.log_scalar("reward_testing", td_record["reward"].sum().item(), collected_frames)
+                logger.log_scalar(
+                    "reward_testing", td_record["reward"].sum().item(), collected_frames
+                )
                 actor.train()
 
 
