@@ -26,6 +26,7 @@ from .transforms import (
     RandomCropTensorDict,
     RenameTransform,
     Resize,
+    Reward2GoTransform,
     RewardClipping,
     RewardScaling,
     RewardSum,
