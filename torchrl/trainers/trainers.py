@@ -1200,7 +1200,7 @@ class Recorder(TrainerHookBase):
         self.log_pbar = log_pbar
 
     @torch.inference_mode()
-    def __call__(self, batch: TensorDictBase) -> Dict:
+    def __call__(self, batch: TensorDictBase = None) -> Dict:
         out = None
         if self._count % self.record_interval == 0:
             with set_exploration_mode(self.exploration_mode):
