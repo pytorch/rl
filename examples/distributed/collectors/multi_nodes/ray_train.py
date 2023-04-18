@@ -207,7 +207,9 @@ if __name__ == "__main__":
             # execute a rollout with the trained policy
             eval_rollout = env.rollout(1000, policy_module)
             logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
-            logs["eval reward (sum)"].append(eval_rollout["next", "reward"].sum().item())
+            logs["eval reward (sum)"].append(
+                eval_rollout["next", "reward"].sum().item()
+            )
             logs["eval step_count"].append(eval_rollout["step_count"].max().item())
             eval_str = f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} (init: {logs['eval reward (sum)'][0]: 4.4f}), eval step-count: {logs['eval step_count'][-1]}"
             del eval_rollout
