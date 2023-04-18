@@ -934,9 +934,9 @@ class CountingEnv(EnvBase):
             device=self.device,
         )
 
-        self.count = torch.zeros(
+        self.register_buffer('count', torch.zeros(
             (*self.batch_size, 1), device=self.device, dtype=torch.int
-        )
+        ))
 
     def _set_seed(self, seed: Optional[int]):
         torch.manual_seed(seed)
