@@ -345,7 +345,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor_model_explore,
                 auto_cast_to_device=True,
             )
-            eval_reward = eval_rollout["reward"].sum(-2).mean().item()
+            eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
             rewards_eval.append((i, eval_reward))
             eval_str = f"eval cumulative reward: {rewards_eval[-1][1]: 4.4f} (init: {rewards_eval[0][1]: 4.4f})"
             logger.log_scalar("test_reward", rewards_eval[-1][1], step=collected_frames)
