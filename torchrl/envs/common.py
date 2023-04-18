@@ -510,11 +510,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "done",
                 self.done_spec.zero(leading_dim),
             )
-        if self.reward_spec is not None and "reward" not in tensordict_reset.keys():
-            tensordict_reset.set(
-                "reward",
-                self.reward_spec.zero(leading_dim),
-            )
 
         if (_reset is None and tensordict_reset.get("done").any()) or (
             _reset is not None and tensordict_reset.get("done")[_reset].any()
@@ -813,7 +808,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             {
                 **fake_in_out,
                 "done": fake_done.clone(),
-                "reward": fake_reward.clone(),
                 "next": next_output,
             },
             batch_size=self.batch_size,
