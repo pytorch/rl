@@ -12,7 +12,7 @@ from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from torchrl._utils import VERBOSE
+from torchrl._utils import VERBOSE, RL_WARNINGS
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
@@ -141,10 +141,11 @@ def make_trainer(
 
     """
     if cfg is None:
-        warn(
-            "Getting default cfg for the trainer. "
-            "This should be only used for debugging."
-        )
+        if RL_WARNINGS:
+            warn(
+                "Getting default cfg for the trainer. "
+                "This should be only used for debugging."
+            )
         cfg = TrainerConfig()
         cfg.frame_skip = 1
         cfg.total_frames = 1000

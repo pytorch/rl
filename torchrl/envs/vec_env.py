@@ -21,7 +21,7 @@ from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 
-from torchrl._utils import _check_for_faulty_process, VERBOSE
+from torchrl._utils import _check_for_faulty_process, VERBOSE, RL_WARNINGS
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
@@ -476,10 +476,11 @@ class _BatchedEnv(EnvBase):
             else [meta_data.to(device) for meta_data in self.meta_data]
         )
         if not self.is_closed:
-            warn(
-                "Casting an open environment to another device requires closing and re-opening it. "
-                "This may have unexpected and unwanted effects (e.g. on seeding etc.)"
-            )
+            if RL_WARNINGS:
+                warn(
+                    "Casting an open environment to another device requires closing and re-opening it. "
+                    "This may have unexpected and unwanted effects (e.g. on seeding etc.)"
+                )
             # the tensordicts must be re-created on device
             super().to(device)
             self.close()

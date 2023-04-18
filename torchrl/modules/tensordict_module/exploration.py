@@ -362,7 +362,9 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         if key is not None:
             action_key = key
             warnings.warn(
-                f"the 'key' keyword argument of {type(self)} has been renamed 'action_key'. The 'key' entry will be deprecated soon."
+                f"the 'key' keyword argument of {type(self)} has been renamed 'action_key'. "
+                f"The 'key' entry will be deprecated soon.",
+                category=DeprecationWarning,
             )
         super().__init__(policy)
         self.ou = _OrnsteinUhlenbeckProcess(

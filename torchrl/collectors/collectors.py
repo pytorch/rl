@@ -1057,7 +1057,8 @@ class _MultiDataCollector(DataCollectorBase):
                 raise ValueError("Cannot pass both devices and device")
             warnings.warn(
                 "`devices` keyword argument will soon be deprecated from multiprocessed collectors. "
-                "Please use `device` instead."
+                "Please use `device` instead.",
+                category=DeprecationWarning,
             )
             device = devices
         if storing_devices is not None:

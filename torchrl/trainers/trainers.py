@@ -20,7 +20,8 @@ from tensordict.tensordict import pad, TensorDictBase
 from tensordict.utils import expand_right
 from torch import nn, optim
 
-from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict, VERBOSE
+from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict, VERBOSE, \
+    RL_WARNINGS
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
@@ -179,7 +180,7 @@ class Trainer:
         self.total_frames = total_frames
         self.clip_grad_norm = clip_grad_norm
         self.clip_norm = clip_norm
-        if progress_bar and not _has_tqdm:
+        if progress_bar and not _has_tqdm and RL_WARNINGS:
             warnings.warn(
                 "tqdm library not found. "
                 "Consider installing tqdm to use the Trainer progress bar."
@@ -662,7 +663,8 @@ class ReplayBufferTrainer(TrainerHookBase):
             warnings.warn(
                 "flatten_tensordicts default value will soon be changed "
                 "to False for a faster execution. Make sure your "
-                "code is robust to this change."
+                "code is robust to this change.",
+                category=DeprecationWarning,
             )
         self.flatten_tensordicts = flatten_tensordicts
         self.max_dims = max_dims

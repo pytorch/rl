@@ -255,9 +255,9 @@ class implement_for:
                 module = import_module(self.module_name)
                 version = module.__version__
 
-                if (self.from_version is None or version >= self.from_version) and (
+                if RL_WARNINGS and ((self.from_version is None or version >= self.from_version) and (
                     self.to_version is None or version < self.to_version
-                ):
+                )):
                     warnings.warn(
                         f"Got multiple backends for {func_name}. "
                         f"Using the last queried ({module} with version {version})."
