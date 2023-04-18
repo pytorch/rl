@@ -397,7 +397,7 @@ class OnPolicyCollectorConfig:
     # for each of these parallel wrappers. If env_per_collector=num_workers, no parallel wrapper is created
     seed: int = 42
     # seed used for the environment, pytorch and numpy.
-    exploration_mode: str = ""
+    exploration_mode: str = "random"
     # exploration mode of the data collector.
     async_collection: bool = False
     # whether data collection should be done asynchrously. Asynchrounous data collection means
