@@ -39,14 +39,19 @@ from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode, step_mdp
+from torchrl.envs.utils import (
+    _convert_exploration_type,
+    ExplorationType,
+    set_exploration_type,
+    step_mdp,
+)
 from torchrl.envs.vec_env import _BatchedEnv
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
 
-DEFAULT_EXPLORATION_MODE: str = "random"
+DEFAULT_EXPLORATION_TYPE: ExplorationType = ExplorationType.RANDOM
 
 _is_osx = sys.platform.startswith("darwin")
 
@@ -386,10 +391,10 @@ class SyncDataCollector(DataCollectorBase):
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
-        exploration_mode (str, optional): interaction mode to be used when
-            collecting data. Must be one of ``"random"``, ``"mode"`` or
-            ``"mean"``.
-            Defaults to ``"random"``
+        exploration_type (ExplorationType, optional): interaction mode to be used when
+            collecting data. Must be one of ``ExplorationType.RANDOM``, ``ExplorationType.MODE`` or
+            ``ExplorationType.MEAN``.
+            Defaults to ``ExplorationType.RANDOM``
         return_same_td (bool, optional): if ``True``, the same TensorDict
             will be returned at each iteration, with its values
             updated. This feature should be used cautiously: if the same
@@ -475,13 +480,15 @@ class SyncDataCollector(DataCollectorBase):
         reset_at_each_iter: bool = False,
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: Optional[bool] = None,
-        exploration_mode: str = DEFAULT_EXPLORATION_MODE,
+        exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
+        exploration_mode=None,
         return_same_td: bool = False,
         reset_when_done: bool = True,
         interruptor=None,
     ):
         self.closed = True
 
+        exploration_type = _convert_exploration_type(exploration_mode, exploration_type)
         if create_env_kwargs is None:
             create_env_kwargs = {}
         if not isinstance(create_env_fn, EnvBase):
@@ -567,8 +574,8 @@ class SyncDataCollector(DataCollectorBase):
             )
         self.requested_frames_per_batch = frames_per_batch
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
-        self.exploration_mode = (
-            exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
+        self.exploration_type = (
+            exploration_type if exploration_type else DEFAULT_EXPLORATION_TYPE
         )
         self.return_same_td = return_same_td
 
@@ -793,7 +800,7 @@ class SyncDataCollector(DataCollectorBase):
         # self._tensordict.fill_(("collector", "step_count"), 0)
         self._tensordict_out.fill_(("collector", "traj_ids"), -1)
 
-        with set_exploration_mode(self.exploration_mode):
+        with set_exploration_type(self.exploration_type):
             for j in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
@@ -917,7 +924,7 @@ class SyncDataCollector(DataCollectorBase):
             f"\n{env_str},"
             f"\n{policy_str},"
             f"\n{td_out_str},"
-            f"\nexploration={self.exploration_mode})"
+            f"\nexploration={self.exploration_type})"
         )
         return string
 
@@ -986,10 +993,10 @@ class _MultiDataCollector(DataCollectorBase):
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
-        exploration_mode (str, optional): interaction mode to be used when
-            collecting data. Must be one of ``"random"``, ``"mode"`` or
-            ``"mean"``.
-            Defaults to ``"random"``
+        exploration_type (ExplorationType, optional): interaction mode to be used when
+            collecting data. Must be one of ``ExplorationType.RANDOM``, ``ExplorationType.MODE`` or
+            ``ExplorationType.MEAN``.
+            Defaults to ``ExplorationType.RANDOM``
         return_same_td (bool, optional): if ``True``, the same TensorDict
             will be returned at each iteration, with its values
             updated. This feature should be used cautiously: if the same
@@ -1026,13 +1033,15 @@ class _MultiDataCollector(DataCollectorBase):
         reset_at_each_iter: bool = False,
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: Optional[bool] = None,
-        exploration_mode: str = DEFAULT_EXPLORATION_MODE,
+        exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
+        exploration_mode=None,
         reset_when_done: bool = True,
         preemptive_threshold: float = None,
         update_at_each_batch: bool = False,
         devices=None,
         storing_devices=None,
     ):
+        exploration_type = _convert_exploration_type(exploration_mode, exploration_type)
         self.closed = True
         self.create_env_fn = create_env_fn
         self.num_workers = len(create_env_fn)
@@ -1171,7 +1180,7 @@ class _MultiDataCollector(DataCollectorBase):
         self.split_trajs = split_trajs
         self.init_random_frames = init_random_frames
         self.update_at_each_batch = update_at_each_batch
-        self.exploration_mode = exploration_mode
+        self.exploration_type = exploration_type
         self.frames_per_worker = np.inf
         if preemptive_threshold is not None:
             if _is_osx:
@@ -1234,7 +1243,7 @@ class _MultiDataCollector(DataCollectorBase):
                 "reset_at_each_iter": self.reset_at_each_iter,
                 "device": _device,
                 "storing_device": _storing_device,
-                "exploration_mode": self.exploration_mode,
+                "exploration_type": self.exploration_type,
                 "reset_when_done": self.reset_when_done,
                 "idx": i,
                 "interruptor": self.interruptor,
@@ -1960,7 +1969,7 @@ def _main_async_collector(
     device: Optional[Union[torch.device, str, int]],
     storing_device: Optional[Union[torch.device, str, int]],
     idx: int = 0,
-    exploration_mode: str = DEFAULT_EXPLORATION_MODE,
+    exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
     reset_when_done: bool = True,
     verbose: bool = VERBOSE,
     interruptor=None,
@@ -1990,7 +1999,7 @@ def _main_async_collector(
         split_trajs=False,
         device=device,
         storing_device=storing_device,
-        exploration_mode=exploration_mode,
+        exploration_type=exploration_type,
         reset_when_done=reset_when_done,
         return_same_td=True,
         interruptor=interruptor,

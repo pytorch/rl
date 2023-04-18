@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
+from tensordict.nn import InteractionType
 
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
@@ -22,7 +23,7 @@ from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import EnvCreator, ParallelEnv
 
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, SafeModule
 from torchrl.modules.distributions import OneHotCategorical
 
@@ -134,7 +135,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         out_keys=["action"],
         distribution_class=OneHotCategorical,
         distribution_kwargs={},
-        default_interaction_mode="random",
+        default_interaction_type=InteractionType.RANDOM,
         return_log_prob=False,
     ).to(device)
 
@@ -224,7 +225,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         new_collected_epochs = len(np.unique(tensordict["collector"]["traj_ids"]))
         if r0 is None:
             r0 = (
-                tensordict["reward"].sum().item()
+                tensordict["next", "reward"].sum().item()
                 / new_collected_epochs
                 / cfg.env_per_collector
             )
@@ -284,7 +285,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         rewards.append(
             (
                 i,
-                tensordict["reward"].sum().item()
+                tensordict["next", "reward"].sum().item()
                 / cfg.env_per_collector
                 / new_collected_epochs,
             )
@@ -307,8 +308,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 }
             )
 
-        with set_exploration_mode(
-            "random"
+        with set_exploration_type(
+            ExplorationType.RANDOM
         ), torch.no_grad():  # TODO: exploration mode to mean causes nans
 
             eval_rollout = test_env.rollout(
@@ -316,7 +317,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 policy=actor,
                 auto_cast_to_device=True,
             ).clone()
-            eval_reward = eval_rollout["reward"].sum(-2).mean().item()
+            eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
             rewards_eval.append((i, eval_reward))
             eval_str = f"eval cumulative reward: {rewards_eval[-1][1]: 4.4f} (init: {rewards_eval[0][1]: 4.4f})"
             metrics.update({"test_reward": rewards_eval[-1][1]})
