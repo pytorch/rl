@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
-from tensordict.nn import InteractionType, TensorDictModule
+from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torch import nn, optim
@@ -20,7 +20,7 @@ from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuff
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
 from torchrl.modules.distributions import TanhNormal
 
@@ -147,7 +147,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_type=InteractionType.RANDOM,
+        default_interaction_type=ExplorationType.RANDOM,
         return_log_prob=False,
     )
 
@@ -309,7 +309,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for key, value in train_log.items():
             logger.log_scalar(key, value, step=collected_frames)
 
-        with set_exploration_mode("mean"), torch.no_grad():
+        with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
             eval_rollout = test_env.rollout(
                 max_steps=cfg.max_frames_per_traj,
                 policy=model[0],

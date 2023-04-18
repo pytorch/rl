@@ -20,7 +20,7 @@ from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import TensorDictPrimer, TransformedEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     ActorValueOperator,
     NoisyLinear,
@@ -405,7 +405,7 @@ def make_ddpg_actor(
     module = torch.nn.ModuleList([actor, value]).to(device)
 
     # init
-    with torch.no_grad(), set_exploration_mode("random"):
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         td = proof_environment.rollout(max_steps=1000)
         td = td.to(device)
         module[0](td)
@@ -702,7 +702,7 @@ def make_a2c_model(
         )
         actor_value = ActorCriticWrapper(policy_po, value_po).to(device)
 
-    with torch.no_grad(), set_exploration_mode("random"):
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         td = proof_environment.rollout(max_steps=1000)
         td_device = td.to(device)
         td_device = actor_value(td_device)  # for init
@@ -997,7 +997,7 @@ def make_ppo_model(
         )
         actor_value = ActorCriticWrapper(policy_po, value_po).to(device)
 
-    with torch.no_grad(), set_exploration_mode("random"):
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         td = proof_environment.rollout(max_steps=1000)
         td_device = td.to(device)
         td_device = actor_value(td_device)  # for init
@@ -1214,7 +1214,7 @@ def make_sac_model(
     model = nn.ModuleList([actor, qvalue, value]).to(device)
 
     # init nets
-    with torch.no_grad(), set_exploration_mode("random"):
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         td = proof_environment.reset()
         td = td.to(device)
         for net in model:
@@ -1452,7 +1452,7 @@ def make_redq_model(
     model = nn.ModuleList([actor, qvalue]).to(device)
 
     # init nets
-    with torch.no_grad(), set_exploration_mode("random"):
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         td = proof_environment.rollout(1000)
         td = td.to(device)
         for net in model:
@@ -1520,7 +1520,7 @@ def make_dreamer(
     world_model = _dreamer_make_world_model(
         obs_encoder, obs_decoder, rssm_prior, rssm_posterior, reward_module
     ).to(device)
-    with torch.no_grad(), set_exploration_mode("random"):
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         tensordict = proof_environment.rollout(4)
         tensordict = tensordict.to_tensordict().to(device)
         tensordict = tensordict.to(device)
@@ -1549,7 +1549,7 @@ def make_dreamer(
 
     value_model = _dreamer_make_value_model(cfg.mlp_num_units, value_key)
     value_model = value_model.to(device)
-    with torch.no_grad(), set_exploration_mode("random"):
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         tensordict = model_based_env.rollout(4)
         tensordict = tensordict.to(device)
         tensordict = actor_simulator(tensordict)

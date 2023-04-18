@@ -18,8 +18,23 @@ from tensordict.nn.probabilistic import (  # noqa
 )
 from tensordict.tensordict import TensorDictBase
 
-
+__all__ = [
+    "exploration_mode",
+    "exploration_type",
+    "set_exploration_mode",
+    "set_exploration_type",
+    "ExplorationType",
+    "check_env_specs",
+    "step_mdp",
+    "make_composite_from_td",
+]
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
+
+
+def _convert_exploration_type(exploration_mode, exploration_type):
+    if exploration_mode is not None:
+        return ExplorationType.from_str(exploration_mode)
+    return exploration_type
 
 
 class _classproperty(property):

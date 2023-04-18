@@ -18,7 +18,7 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.data import BoundedTensorSpec, CompositeSpec
 from torchrl.envs import SerialEnv
 from torchrl.envs.transforms.transforms import gSDENoise
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import set_exploration_type
 from torchrl.modules import SafeModule, SafeSequential
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import (
@@ -410,10 +410,10 @@ def test_gsde(
         assert spec.is_in(td.get("action"))
 
     if not safe:
-        with set_exploration_mode(exploration_mode):
+        with set_exploration_type(exploration_type):
             action1 = module(td).get("action")
         action2 = actor(td.exclude("action")).get("action")
-        if gSDE or exploration_mode == "mode":
+        if gSDE or exploration_type == InteractionType.MODE:
             torch.testing.assert_close(action1, action2)
         else:
             with pytest.raises(AssertionError):
@@ -438,7 +438,7 @@ def test_gsde_init(sigma_init, state_dim, action_dim, mean, std, device, learn_s
     _eps = torch.randn(
         100000, *state_dim[:-1], action_dim, state_dim[-1], device=device
     )
-    with set_exploration_mode("random"):
+    with set_exploration_type(InteractionType.RANDOM):
         mu, sigma, action_out, _eps = gsde_lazy(action, state, _eps)
     sigma_init = sigma_init if sigma_init else 1.0
     assert (

@@ -27,7 +27,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import RewardScaling
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     AdditiveGaussianWrapper,
     MLP,
@@ -192,7 +192,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model = nn.ModuleList([actor, qvalue]).to(device)
 
     # init nets
-    with torch.no_grad(), set_exploration_mode("random"):
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         td = eval_env.reset()
         td = td.to(device)
         for net in model:
@@ -337,7 +337,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for key, value in train_log.items():
             logger.log_scalar(key, value, step=collected_frames)
 
-        with set_exploration_mode("mean"), torch.no_grad():
+        with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
             eval_rollout = eval_env.rollout(
                 cfg.max_frames_per_traj // cfg.frame_skip,
                 actor_model_explore,

@@ -49,8 +49,11 @@ from .transforms import (
 from .utils import (
     check_env_specs,
     exploration_mode,
+    exploration_type,
+    ExplorationType,
     make_composite_from_td,
     set_exploration_mode,
+    set_exploration_type,
     step_mdp,
 )
 from .vec_env import MultiThreadedEnv, ParallelEnv, SerialEnv

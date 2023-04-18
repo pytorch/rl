@@ -18,6 +18,7 @@ from torchrl.collectors.collectors import (
 from torchrl.data import MultiStep
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
+from torchrl.envs.utils import ExplorationType
 
 
 def sync_async_collector(
@@ -302,7 +303,7 @@ def make_collector_offpolicy(
         "init_random_frames": cfg.init_random_frames,
         "split_trajs": True,
         # trajectories must be separated if multi-step is used
-        "exploration_mode": cfg.exploration_mode,
+        "exploration_type": ExplorationType.from_str(cfg.exploration_mode),
     }
 
     collector = collector_helper(**collector_helper_kwargs)

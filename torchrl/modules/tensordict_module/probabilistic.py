@@ -7,6 +7,7 @@ import warnings
 from typing import Optional, Sequence, Type, Union
 
 from tensordict.nn import (
+    InteractionType,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     TensorDictModule,
@@ -101,7 +102,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         spec: Optional[TensorSpec] = None,
         safe: bool = False,
         default_interaction_mode: str = None,
-        default_interaction_type: str = "mode",
+        default_interaction_type: str = InteractionType.MODE,
         distribution_class: Type = Delta,
         distribution_kwargs: Optional[dict] = None,
         return_log_prob: bool = False,

@@ -23,7 +23,7 @@ from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import EnvCreator, ParallelEnv
 
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, SafeModule
 from torchrl.modules.distributions import OneHotCategorical
 
@@ -308,8 +308,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 }
             )
 
-        with set_exploration_mode(
-            "random"
+        with set_exploration_type(
+            ExplorationType.RANDOM
         ), torch.no_grad():  # TODO: exploration mode to mean causes nans
 
             eval_rollout = test_env.rollout(

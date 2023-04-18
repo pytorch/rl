@@ -13,18 +13,18 @@ from tensordict.nn import make_functional, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
+from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
+
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
+from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
-
-from ..envs.utils import set_exploration_mode, step_mdp
-from .common import LossModule
-from .value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
     from functorch import vmap
@@ -281,7 +281,7 @@ class SACLoss(LossModule):
 
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
         # KL lossa
-        with set_exploration_mode("random"):
+        with set_exploration_type(ExplorationType.RANDOM):
             dist = self.actor_network.get_dist(
                 tensordict,
                 params=self.actor_network_params,
@@ -318,7 +318,7 @@ class SACLoss(LossModule):
             torch.Size([]),
             _run_checks=False,
         )
-        with set_exploration_mode("mode"):
+        with set_exploration_type(ExplorationType.MODE):
             target_value = self.value_estimator.value_estimate(
                 tensordict, target_params=target_params
             ).squeeze(-1)
@@ -366,7 +366,7 @@ class SACLoss(LossModule):
         tensordict = tensordict.clone(False)
         # get actions and log-probs
         with torch.no_grad():
-            with set_exploration_mode("random"):
+            with set_exploration_type(ExplorationType.RANDOM):
                 dist = self.actor_network.get_dist(tensordict, params=actor_params)
                 tensordict.set("action", dist.rsample())
                 log_prob = dist.log_prob(tensordict.get("action"))
@@ -592,7 +592,7 @@ class DiscreteSACLoss(LossModule):
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
         tensordict_actor = tensordict_actor.contiguous()
 
-        with set_exploration_mode("random"):
+        with set_exploration_type(ExplorationType.RANDOM):
             # vmap doesn't support sampling, so we take it out from the vmap
             td_params = vmap(self.actor_network.get_dist_params)(
                 tensordict_actor,
