@@ -929,7 +929,7 @@ class CountingEnv(EnvBase):
             device=self.device,
         )
         self.input_spec = CompositeSpec(
-            action=BinaryDiscreteTensorSpec(n=1, shape=[*self.batch_size, 1]),
+            action=BinaryDiscreteTensorSpec(n=1, shape=[*self.batch_size, 1], device=self.device),
             shape=self.batch_size,
             device=self.device,
         )
