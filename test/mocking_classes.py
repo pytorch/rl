@@ -917,7 +917,7 @@ class CountingEnv(EnvBase):
                 *self.batch_size,
                 1,
             ),
-            device = self.device,
+            device=self.device,
         )
         self.done_spec = DiscreteTensorSpec(
             2,
@@ -929,14 +929,17 @@ class CountingEnv(EnvBase):
             device=self.device,
         )
         self.input_spec = CompositeSpec(
-            action=BinaryDiscreteTensorSpec(n=1, shape=[*self.batch_size, 1], device=self.device),
+            action=BinaryDiscreteTensorSpec(
+                n=1, shape=[*self.batch_size, 1], device=self.device
+            ),
             shape=self.batch_size,
             device=self.device,
         )
 
-        self.register_buffer('count', torch.zeros(
-            (*self.batch_size, 1), device=self.device, dtype=torch.int
-        ))
+        self.register_buffer(
+            "count",
+            torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int),
+        )
 
     def _set_seed(self, seed: Optional[int]):
         torch.manual_seed(seed)
