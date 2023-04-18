@@ -247,7 +247,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         collector.update_policy_weights_()
 
         if r0 is None:
-            r0 = tensordict["reward"].sum(-1).mean().item()
+            r0 = tensordict["next", "reward"].sum(-1).mean().item()
         pbar.update(tensordict.numel())
 
         if "mask" in tensordict.keys():
@@ -293,7 +293,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             if cfg.prb:
                 replay_buffer.update_priority(sampled_tensordict)
 
-        rewards.append((i, tensordict["reward"].sum().item() / cfg.env_per_collector))
+        rewards.append(
+            (i, tensordict["next", "reward"].sum().item() / cfg.env_per_collector)
+        )
         train_log = {
             "train_reward": rewards[-1][1],
             "collected_frames": collected_frames,

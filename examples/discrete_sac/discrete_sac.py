@@ -225,7 +225,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         new_collected_epochs = len(np.unique(tensordict["collector"]["traj_ids"]))
         if r0 is None:
             r0 = (
-                tensordict["reward"].sum().item()
+                tensordict["next", "reward"].sum().item()
                 / new_collected_epochs
                 / cfg.env_per_collector
             )
@@ -285,7 +285,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         rewards.append(
             (
                 i,
-                tensordict["reward"].sum().item()
+                tensordict["next", "reward"].sum().item()
                 / cfg.env_per_collector
                 / new_collected_epochs,
             )
