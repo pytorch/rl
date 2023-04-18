@@ -981,28 +981,12 @@ class TargetReturn(Transform):
             device=tensordict.device,
         )
 
-        done = tensordict.get("done", None)
-        if done is None:
-            done = torch.ones(
-                self.parent.done_spec.shape,
-                dtype=self.parent.done_spec.dtype,
-                device=self.parent.done_spec.device,
-            )
-        _reset = tensordict.get(
-            "_reset",
-            # TODO: decide if using done here, or using a default `True` tensor
-            default=None,
-        )
-        if _reset is None:
-            _reset = torch.ones_like(done)
-
         for out_key in self.out_keys:
             target_return = tensordict.get(out_key, default=None)
 
             if target_return is None:
                 target_return = init_target_return
 
-            target_return[_reset] = 0
             tensordict.set(
                 out_key,
                 target_return,
@@ -1020,11 +1004,7 @@ class TargetReturn(Transform):
         return tensordict
 
     def _step(self, tensordict: TensorDict) -> TensorDict:
-        next_tensordict = tensordict.get("next")
-        # next_tensordict.set(self.out_keys, tensordict[self.out_keys])
-        next_tensordict = self._call(next_tensordict)
-        tensordict.set("next", next_tensordict)
-        return tensordict
+        return self._call(tensordict)
 
     def _apply_transform(
         self, reward: torch.Tensor, target_return: torch.Tensor
@@ -1041,22 +1021,6 @@ class TargetReturn(Transform):
         raise NotImplementedError(
             FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
         )
-
-    def transform_observation_spec(
-        self, observation_spec: CompositeSpec
-    ) -> CompositeSpec:
-        if not isinstance(observation_spec, CompositeSpec):
-            raise ValueError(
-                f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
-            )
-        observation_spec[self.out_key] = UnboundedDiscreteTensorSpec(
-            shape=self.parent.reward_spec.shape,
-            dtype=self.parent.reward_spec.dtype,
-            device=self.parent.reward_spec.device,
-        )
-        observation_spec[self.out_key].space.max = self.target_return
-
-        return observation_spec
 
 
 class RewardClipping(Transform):
