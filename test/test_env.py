@@ -1171,7 +1171,7 @@ class TestConcurrentEnvs:
             ],
         )
         spec = env_p.action_spec
-        policy = TestConcurrentEnvs.Policy(CompositeSpec(action=spec))
+        policy = TestConcurrentEnvs.Policy(CompositeSpec(action=spec.to(device)))
         N = 10
         r_p = []
         r_s = []
