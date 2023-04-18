@@ -984,7 +984,6 @@ def test_collector_output_keys(
     keys = {
         "action",
         "done",
-        "reward",
         "collector",
         "hidden1",
         "hidden2",

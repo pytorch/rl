@@ -202,6 +202,7 @@ Returns
     functional.vec_td_lambda_advantage_estimate
     functional.generalized_advantage_estimate
     functional.vec_generalized_advantage_estimate
+    functional.reward2go
 
 
 Utils
