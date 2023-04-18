@@ -944,11 +944,28 @@ class ToTensorImage(ObservationTransform):
 class TargetReturn(Transform):
     """Sets a target return for the agent to achieve in the environment.
 
-    Target return can be used in goal-conditioned RL algorithms to set a target that should be achieved at the end of an episode by the agent like Upside-Down RL or Decision Transformer.
+    In goal-conditioned RL, the :class:`~.TargetReturn` is defined as the
+    expected cumulative reward obtained from the current state to the goal state
+    or the end of the episode. It is used as an input for the policy to guide its behaviour.
+    For a trained policy typically the maximum return in the environment is chosen as the target return.
+    However, as it used as input to the policy module, it should be scaled accordingly.
+    With the :class:`~.TargetReturn` transform, the tensordict can be updated to include the
+    user specified target return. The mode parameter can be used to specify whether the target return
+    gets updated at every step by subtracting the reward achieved each step or remains constant.
+    :class:`~.TargetReturn` should be only used during inference when interacting with the environment.
+    For training hindsight return relabeling like the reward-to-go should used to update the target return
+    to the actually achieved return.
 
     Args:
         target_return (float): target return to be achieved by the agent.
         mode (str): mode to be used to update the target return. Can be either "reduce" or "constant". Default: "reduce".
+
+    Examples:
+        >>> transform = TargetReturn(10.0, mode="reduce")
+        >>> r = torch.ones(10, 1)
+        >>> td = TensorDict({'next': {"reward": r}}, [10])
+        >>> td = transform.reset(td)
+        >>> td = transform.step(td)
 
     """
 
