@@ -951,14 +951,24 @@ class TargetReturn(Transform):
 
     """
 
+    MODES = ["reduce", "constant"]
+    MODE_ERR = "Mode can only be 'reduce' or 'constant'."
+
     def __init__(
         self,
         target_return: float,
         mode: str = "reduce",
+        in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
-        super().__init__(in_keys=["reward"], out_keys=["target_return"])
-        self.in_key = "reward"
-        self.out_key = "target_return"
+        if in_keys is None:
+            in_keys = [("next", "reward")]
+        if out_keys is None:
+            out_keys = [("next", "target_return")]
+        if mode not in self.MODES:
+            raise ValueError(self.MODE_ERR)
+
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.target_return = target_return
         self.mode = mode
 
@@ -969,19 +979,48 @@ class TargetReturn(Transform):
             dtype=torch.float32,
             device=tensordict.device,
         )
-        tensordict.set(self.out_key, init_target_return)
+
+        done = tensordict.get("done", None)
+        if done is None:
+            done = torch.ones(
+                self.parent.done_spec.shape,
+                dtype=self.parent.done_spec.dtype,
+                device=self.parent.done_spec.device,
+            )
+        _reset = tensordict.get(
+            "_reset",
+            # TODO: decide if using done here, or using a default `True` tensor
+            default=None,
+        )
+        if _reset is None:
+            _reset = torch.ones_like(done)
+
+        for out_key in self.out_keys:
+            target_return = tensordict.get(out_key, default=None)
+
+            if target_return is None:
+                target_return = init_target_return
+
+            target_return[_reset] = 0
+            tensordict.set(
+                out_key,
+                target_return,
+            )
         return tensordict
 
     def _call(self, tensordict: TensorDict) -> TensorDict:
-        new_target_return = self._apply_transform(
-            tensordict[self.in_key], tensordict[self.out_key]
-        )
-        tensordict.set(self.out_key, new_target_return)
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            is_tuple = isinstance(in_key, tuple)
+            if in_key in tensordict.keys(include_nested=is_tuple):
+                target_return = self._apply_transform(
+                    tensordict.get(in_key), tensordict.get(out_key)
+                )
+                tensordict.set(out_key, target_return)
         return tensordict
 
     def _step(self, tensordict: TensorDict) -> TensorDict:
         next_tensordict = tensordict.get("next")
-        next_tensordict.set(self.out_key, tensordict[self.out_key])
+        # next_tensordict.set(self.out_keys, tensordict[self.out_keys])
         next_tensordict = self._call(next_tensordict)
         tensordict.set("next", next_tensordict)
         return tensordict
