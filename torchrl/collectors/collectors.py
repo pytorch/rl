@@ -557,7 +557,7 @@ class SyncDataCollector(DataCollectorBase):
         self.reset_at_each_iter = reset_at_each_iter
         self.init_random_frames = init_random_frames
         self.postproc = postproc
-        if self.postproc is not None:
+        if self.postproc is not None and hasattr(self.postproc, "to"):
             self.postproc.to(self.storing_device)
         if frames_per_batch % self.n_env != 0 and RL_WARNINGS:
             warnings.warn(

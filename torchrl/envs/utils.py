@@ -31,7 +31,7 @@ def step_mdp(
     tensordict: TensorDictBase,
     next_tensordict: TensorDictBase = None,
     keep_other: bool = True,
-    exclude_reward: bool = False,
+    exclude_reward: bool = True,
     exclude_done: bool = False,
     exclude_action: bool = True,
 ) -> TensorDictBase:
@@ -51,7 +51,7 @@ def step_mdp(
         exclude_reward (bool, optional): if ``True``, the :obj:`"reward"` key will be discarded
             from the resulting tensordict. If ``False``, it will be copied (and replaced)
             from the ``"next"`` entry (if present).
-            Default is ``False``.
+            Default is ``True``.
         exclude_done (bool, optional): if ``True``, the :obj:`"done"` key will be discarded
             from the resulting tensordict. If ``False``, it will be copied (and replaced)
             from the ``"next"`` entry (if present).
