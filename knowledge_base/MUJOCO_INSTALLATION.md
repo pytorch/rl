@@ -218,3 +218,7 @@ RuntimeError: Failed to initialize OpenGL
    _Solution_: Make sure you have installed mujoco and all its dependencies (see instructions above).
    Make sure you have set the `MUJOCO_GL=egl`.
    Make sure you have a GPU accessible on your machine.
+
+6. `cannot find -lGL: No such file or directory`
+
+   _Solution_: call `conda install -c anaconda mesa-libgl-devel-cos6-x86_64`
