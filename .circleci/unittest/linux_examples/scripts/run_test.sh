@@ -88,16 +88,14 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   record_frames=4 \
   buffer_size=120
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
-  total_frames=48 \
-  batch_size=10 \
-  frames_per_batch=16 \
-  num_workers=4 \
-  env_per_collector=2 \
-  collector_devices=cuda:0 \
-  optim_steps_per_batch=1 \
-  record_video=True \
-  record_frames=4 \
-  lr_scheduler=
+  env.num_envs=1 \
+  collector.total_frames=48 \
+  collector.frames_per_batch=16 \
+  collector.collector_devices=cuda:0 \
+  loss.mini_batch_size=10 \
+  loss.ppo_epochs=1 \
+  logger.log_interval=4 \
+  optim.lr_scheduler=False
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
   total_frames=200 \
   init_random_frames=10 \
@@ -190,16 +188,14 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   record_frames=4 \
   buffer_size=120
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
-  total_frames=48 \
-  batch_size=10 \
-  frames_per_batch=16 \
-  num_workers=2 \
-  env_per_collector=1 \
-  collector_devices=cuda:0 \
-  optim_steps_per_batch=1 \
-  record_video=True \
-  record_frames=4 \
-  lr_scheduler=
+  env.num_envs=1 \
+  collector.total_frames=48 \
+  collector.frames_per_batch=16 \
+  collector.collector_devices=cuda:0 \
+  loss.mini_batch_size=10 \
+  loss.ppo_epochs=1 \
+  logger.log_interval=4 \
+  optim.lr_scheduler=False
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
   total_frames=200 \
   init_random_frames=10 \
