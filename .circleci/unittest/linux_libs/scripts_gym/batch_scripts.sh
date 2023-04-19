@@ -14,9 +14,9 @@ conda activate ./env
 $DIR/install.sh
 
 # Extracted from run_test.sh to run once.
-yum makecache && yum install glew freeglut-devel xorg-x11-server-Xvfb -y
+yum makecache && yum install glew  xorg-x11-server-Xvfb glew-devel -y
 #conda install -c conda-forge glew -y
-
+#  freeglut-devel
 #  zlib-devel \
 #  mesa-libGL \
 #  mesa-libGL-devel \
