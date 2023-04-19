@@ -94,6 +94,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   collector.collector_devices=cuda:0 \
   loss.mini_batch_size=10 \
   loss.ppo_epochs=1 \
+  logger.backend= \
   logger.log_interval=4 \
   optim.lr_scheduler=False
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
@@ -194,6 +195,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   collector.collector_devices=cuda:0 \
   loss.mini_batch_size=10 \
   loss.ppo_epochs=1 \
+  logger.backend= \
   logger.log_interval=4 \
   optim.lr_scheduler=False
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \

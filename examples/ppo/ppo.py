@@ -61,7 +61,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             optim, total_iters=total_network_updates, start_factor=1.0, end_factor=0.1
         )
 
-    logger = make_logger(cfg.logger)
+    logger = None
+    if cfg.logger.backend:
+        logger = make_logger(cfg.logger)
     test_env = make_test_env(cfg.env)
     record_interval = cfg.logger.log_interval
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
@@ -86,7 +88,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Log end-of-episode accumulated rewards for training
         episode_rewards = data["next"]["episode_reward"][data["next"]["done"]]
-        if len(episode_rewards) > 0:
+        if logger is not None and len(episode_rewards) > 0:
             logger.log_scalar(
                 "reward_training", episode_rewards.mean().item(), collected_frames
             )
@@ -118,17 +120,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     r0 = data["reward"].mean().item()
                 if l0 is None:
                     l0 = loss_sum.item()
-                for key, value in loss.items():
-                    logger.log_scalar(key, value.item(), collected_frames)
                 pbar.set_description(
                     f"loss: {loss_sum.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['reward'].mean(): 4.4f} (init={r0: 4.4f})"
                 )
-                logger.log_scalar("grad_norm", grad_norm.item(), collected_frames)
+                if logger is not None:
+                    for key, value in loss.items():
+                        logger.log_scalar(key, value.item(), collected_frames)
+                    logger.log_scalar("grad_norm", grad_norm.item(), collected_frames)
 
         collector.update_policy_weights_()
 
         # Test current policy
-        if (
+        if logger is not None and (
             collected_frames - frames_in_batch
         ) // record_interval < collected_frames // record_interval:
 
