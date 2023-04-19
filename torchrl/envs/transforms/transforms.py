@@ -1064,6 +1064,25 @@ class TargetReturn(Transform):
             FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
         )
 
+    def transform_observation_spec(
+        self, observation_spec: CompositeSpec
+    ) -> CompositeSpec:
+        if not isinstance(observation_spec, CompositeSpec):
+            raise ValueError(
+                f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
+            )
+
+        target_return_spec = UnboundedDiscreteTensorSpec(
+            shape=self.parent.reward_spec.shape,
+            dtype=self.parent.reward_spec.dtype,
+            device=self.parent.reward_spec.device,
+        )
+        observation_spec["next"] = CompositeSpec({"target_return": target_return_spec})
+
+        observation_spec[("next", "target_return")].space.max = self.target_return
+
+        return observation_spec
+
 
 class RewardClipping(Transform):
     """Clips the reward between `clamp_min` and `clamp_max`.
