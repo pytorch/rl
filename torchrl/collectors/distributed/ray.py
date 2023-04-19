@@ -9,7 +9,7 @@ from tensordict.tensordict import TensorDictBase
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
-    DEFAULT_EXPLORATION_MODE,
+    DEFAULT_EXPLORATION_TYPE,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
@@ -149,9 +149,9 @@ class RayCollector(DataCollectorBase):
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
-        exploration_mode (str, optional): interaction mode to be used when
-            collecting data. Must be one of ``"random"``, ``"mode"`` or
-            ``"mean"``.
+        exploration_type (str, optional): interaction mode to be used when
+            collecting data. Must be one of ``ExplorationType.RANDOM``, ``ExplorationType.MODE`` or
+            ``ExplorationType.MEAN``.
             Defaults to ``"random"``
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
@@ -241,7 +241,7 @@ class RayCollector(DataCollectorBase):
         reset_at_each_iter=False,
         postproc=None,
         split_trajs=False,
-        exploration_mode=DEFAULT_EXPLORATION_MODE,
+        exploration_type=DEFAULT_EXPLORATION_TYPE,
         reset_when_done=True,
         collector_class: Callable[[TensorDict], TensorDict] = SyncDataCollector,
         collector_kwargs: Union[Dict, List[Dict]] = None,
@@ -386,7 +386,7 @@ class RayCollector(DataCollectorBase):
                     "torchrl's repo."
                 )
             collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
-            collector_kwarg["exploration_mode"] = exploration_mode
+            collector_kwarg["exploration_type"] = exploration_type
             collector_kwarg["reset_when_done"] = reset_when_done
             collector_kwarg["split_trajs"] = False
             collector_kwarg["frames_per_batch"] = self._frames_per_batch_corrected

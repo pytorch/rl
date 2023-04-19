@@ -14,7 +14,7 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
-from torchrl.envs.utils import set_exploration_mode, step_mdp
+from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
@@ -190,7 +190,7 @@ class REDQLoss(LossModule):
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
         tensordict_actor = tensordict_actor.contiguous()
 
-        with set_exploration_mode("random"):
+        with set_exploration_type(ExplorationType.RANDOM):
             if self.gSDE:
                 tensordict_actor.set(
                     "_eps_gSDE",
