@@ -14,14 +14,12 @@ conda activate ./env
 $DIR/install.sh
 
 # Extracted from run_test.sh to run once.
-yum makecache && yum install glew  xorg-x11-server-Xvfb glew-devel -y
+yum makecache && yum install glew  xorg-x11-server-Xvfb glew-devel mesa-libEGL mesa-libEGL-devel -y
 #conda install -c conda-forge glew -y
 #  freeglut-devel
 #  zlib-devel \
 #  mesa-libGL \
 #  mesa-libGL-devel \
-#  mesa-libEGL \
-#  mesa-libEGL-devel \
 #  glfw \
 #  mesa-libOSMesa-devel \
 #  glew \
