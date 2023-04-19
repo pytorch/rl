@@ -18,8 +18,8 @@ import hydra
 @hydra.main(config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    import tqdm
     import torch
+    import tqdm
     from utils import (
         make_collector,
         make_data_buffer,

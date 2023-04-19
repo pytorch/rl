@@ -325,9 +325,7 @@ def make_ppo_modules_state(proof_environment):
 
     # Define on head for the policy
     policy_net = MLP(
-        in_features=shared_features_size,
-        out_features=num_outputs,
-        num_cells=[]
+        in_features=shared_features_size, out_features=num_outputs, num_cells=[]
     )
     if continuous_actions:
         policy_net = NormalParamWrapper(policy_net)
@@ -351,10 +349,7 @@ def make_ppo_modules_state(proof_environment):
     )
 
     # Define another head for the value
-    value_net = MLP(
-        in_features=shared_features_size,
-        out_features=1,
-        num_cells=[])
+    value_net = MLP(in_features=shared_features_size, out_features=1, num_cells=[])
     value_module = ValueOperator(
         value_net,
         in_keys=["common_features"],
