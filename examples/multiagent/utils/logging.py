@@ -1,0 +1,98 @@
+import numpy as np
+import torch
+import wandb
+from tensordict import TensorDict, TensorDictBase
+
+from torchrl.envs.libs.vmas import VmasEnv
+from torchrl.record.loggers.wandb import WandbLogger
+
+
+def log_training(
+    logger: WandbLogger,
+    training_tds: TensorDictBase,
+    sampling_td: TensorDictBase,
+    sampling_time: float,
+    training_time: float,
+    total_time: float,
+    iteration: int,
+):
+    logger.experiment.log(
+        {
+            f"train/learner/{key}": value.mean().item()
+            for key, value in training_tds.items()
+        },
+        commit=False,
+    )
+    if "info" in sampling_td.keys():
+        logger.experiment.log(
+            {
+                f"train/info/{key}": value.mean().item()
+                for key, value in sampling_td["info"].items()
+            },
+            commit=False,
+        )
+
+    logger.experiment.log(
+        {
+            "train/reward/reward_min": sampling_td["next", "reward"]
+            .mean(-2)  # Agents
+            .min()
+            .item(),
+            "train/reward/reward_mean": sampling_td["next", "reward"].mean().item(),
+            "train/reward/reward_max": sampling_td["next", "reward"]
+            .mean(-2)  # Agents
+            .max()
+            .item(),
+            "train/sampling_time": sampling_time,
+            "train/training_time": training_time,
+            "train/iteration_time": training_time + sampling_time,
+            "train/total_time": total_time,
+            "train/training_iteration": iteration,
+        },
+        commit=False,
+    )
+
+
+def log_evaluation(
+    logger: WandbLogger,
+    rollouts: TensorDictBase,
+    env_test: VmasEnv,
+    evaluation_time: float,
+):
+    rollouts = list(rollouts.unbind(0))
+    for k, r in enumerate(rollouts):
+        next_done = r["next"]["done"].sum(
+            tuple(range(r.batch_dims, r["next", "done"].ndim)),
+            dtype=torch.bool,
+        )
+        done_index = next_done.nonzero(as_tuple=True)[0][
+            0
+        ]  # First done index for this traj
+        rollouts[k] = r[: done_index + 1]
+
+    vid = np.transpose(env_test.frames, (0, 3, 1, 2))
+    logger.experiment.log(
+        {
+            "eval/video": wandb.Video(vid, fps=1 / env_test.world.dt, format="mp4"),
+        },
+        commit=False,
+    ),
+
+    logger.experiment.log(
+        {
+            "eval/episode_reward_min": min(
+                [td["next", "reward"].sum(0).mean() for td in rollouts]
+            ),
+            "eval/episode_reward_max": max(
+                [td["next", "reward"].sum(0).mean() for td in rollouts]
+            ),
+            "eval/episode_reward_mean": sum(
+                [td["next", "reward"].sum(0).mean() for td in rollouts]
+            )
+            / len(rollouts),
+            "eval/episode_len_mean": sum([td.batch_size[0] for td in rollouts])
+            / len(rollouts),
+            "eval/evaluation_time": evaluation_time,
+        },
+        commit=False,
+    )

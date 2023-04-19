@@ -1,10 +1,11 @@
 import time
 
-import numpy as np
 import torch
-
 import wandb
+
 from models.mlp import MultiAgentMLP
+from utils.logging import log_training, log_evaluation
+
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
@@ -70,12 +71,12 @@ if __name__ == "__main__":
         "training_device": training_device,
         # Evaluation
         "evaluation_interval": 20,
-        "evaluation_episodes": 5,
+        "evaluation_episodes": 200,
     }
 
     model_config = {
         "shared_parameters": True,
-        "centralised_critic": True,  # MAPPO if True, IPPO if False
+        "centralised_critic": False,  # MAPPO if True, IPPO if False
     }
 
     # Create env and env_test
@@ -91,7 +92,7 @@ if __name__ == "__main__":
     )
     env_test = VmasEnv(
         scenario=scenario_name,
-        num_envs=1,
+        num_envs=config["evaluation_episodes"],
         continuous_actions=True,
         max_steps=max_steps,
         device=vmas_device,
@@ -241,44 +242,20 @@ if __name__ == "__main__":
         training_time = time.time() - training_start
         print(f"Training took: {training_time}")
 
+        iteration_time = sampling_time + training_time
+        total_time += iteration_time
+        training_tds = torch.stack(training_tds)
+
         # More logs
         if log:
-            training_tds = torch.stack(training_tds)
-            logger.experiment.log(
-                {
-                    f"train/learner/{key}": value.mean().item()
-                    for key, value in training_tds.items()
-                },
-                commit=False,
-            )
-            if "info" in tensordict_data.keys():
-                logger.experiment.log(
-                    {
-                        f"train/info/{key}": value.mean().item()
-                        for key, value in tensordict_data["info"].items()
-                    },
-                    commit=False,
-                )
-            iteration_time = sampling_time + training_time
-            total_time += iteration_time
-            logger.experiment.log(
-                {
-                    "train/reward/reward_min": tensordict_data["next", "reward"]
-                    .min()
-                    .item(),
-                    "train/reward/reward_mean": tensordict_data["next", "reward"]
-                    .mean()
-                    .item(),
-                    "train/reward/reward_max": tensordict_data["next", "reward"]
-                    .max()
-                    .item(),
-                    "train/sampling_time": sampling_time,
-                    "train/training_time": training_time,
-                    "train/iteration_time": iteration_time,
-                    "train/total_time": total_time,
-                    "train/training_iteration": i,
-                },
-                commit=False,
+            log_training(
+                logger,
+                training_tds,
+                tensordict_data,
+                sampling_time,
+                training_time,
+                total_time,
+                i,
             )
 
         if (
@@ -288,51 +265,25 @@ if __name__ == "__main__":
         ):
             evaluation_start = time.time()
             with torch.no_grad():
-                rollouts = []
-                for _ in range(config["evaluation_episodes"] - 1):
-                    rollouts.append(
-                        env_test.rollout(
-                            max_steps=max_steps,
-                            policy=policy,
-                            auto_cast_to_device=True,
-                        )
-                    )
-
                 env_test.frames = []
-                rollouts.append(
-                    env_test.rollout(
-                        max_steps=max_steps,
-                        policy=policy,
-                        callback=rendering_callback,
-                        auto_cast_to_device=True,
-                    )
+                rollouts = env_test.rollout(
+                    max_steps=max_steps,
+                    policy=policy,
+                    callback=rendering_callback,
+                    auto_cast_to_device=True,
+                    break_when_any_done=False,  # We are running vectorized evaluation we do not want it to stop when just one env is done
                 )
-                vid = np.transpose(env_test.frames, (0, 3, 1, 2))
-                logger.experiment.log(
-                    {
-                        "eval/video": wandb.Video(
-                            vid, fps=1 / env_test.world.dt, format="mp4"
-                        ),
-                    },
-                    commit=False,
-                ),
+
                 evaluation_time = time.time() - evaluation_start
                 print(f"Evaluation took: {evaluation_time}")
 
-                logger.experiment.log(
-                    {
-                        "eval/episode_reward_mean": sum(
-                            [td["next", "reward"].sum(1).mean() for td in rollouts]
-                        )
-                        / len(rollouts),
-                        "eval/episode_len_mean": sum(
-                            [td.batch_size[1] for td in rollouts]
-                        )
-                        / len(rollouts),
-                        "eval/evaluation_time": evaluation_time,
-                    },
-                    commit=False,
+                log_evaluation(
+                    logger,
+                    rollouts,
+                    env_test,
+                    evaluation_time,
                 )
+
         if log:
             logger.experiment.log({}, commit=True)
         sampling_start = time.time()
