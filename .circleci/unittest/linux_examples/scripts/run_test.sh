@@ -91,7 +91,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   env.num_envs=1 \
   collector.total_frames=48 \
   collector.frames_per_batch=16 \
-  collector.collector_devices=cuda:0 \
+  collector.collector_device=cuda:0 \
   loss.mini_batch_size=10 \
   loss.ppo_epochs=1 \
   logger.backend= \
@@ -192,7 +192,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   env.num_envs=1 \
   collector.total_frames=48 \
   collector.frames_per_batch=16 \
-  collector.collector_devices=cuda:0 \
+  collector.collector_device=cuda:0 \
   loss.mini_batch_size=10 \
   loss.ppo_epochs=1 \
   logger.backend= \
