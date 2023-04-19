@@ -9,7 +9,7 @@ from torchrl.record.loggers.wandb import WandbLogger
 
 def log_training(
     logger: WandbLogger,
-    training_tds: TensorDictBase,
+    training_td: TensorDictBase,
     sampling_td: TensorDictBase,
     sampling_time: float,
     training_time: float,
@@ -19,7 +19,7 @@ def log_training(
     logger.experiment.log(
         {
             f"train/learner/{key}": value.mean().item()
-            for key, value in training_tds.items()
+            for key, value in training_td.items()
         },
         commit=False,
     )
