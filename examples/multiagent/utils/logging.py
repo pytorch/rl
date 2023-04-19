@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import wandb
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDictBase
 
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.record.loggers.wandb import WandbLogger

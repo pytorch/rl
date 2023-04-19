@@ -1,8 +1,7 @@
 import time
+
 import torch
 import wandb
-
-from utils.logging import log_evaluation, log_training
 from models.mlp import MultiAgentMLP
 
 from tensordict.nn import TensorDictModule
@@ -22,6 +21,8 @@ from torchrl.modules import (
 from torchrl.objectives import DDPGLoss, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
+
+from utils.logging import log_evaluation, log_training
 
 
 def rendering_callback(env, td):

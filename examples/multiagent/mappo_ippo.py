@@ -4,7 +4,6 @@ import torch
 import wandb
 
 from models.mlp import MultiAgentMLP
-from utils.logging import log_training, log_evaluation
 
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
@@ -18,6 +17,7 @@ from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
+from utils.logging import log_evaluation, log_training
 
 
 def rendering_callback(env, td):
