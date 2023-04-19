@@ -145,8 +145,8 @@ def make_transformed_env_states(base_env, env_cfg):
     env.append_transform(CatTensors(in_keys=selected_keys, out_key=out_key))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
-    obs_norm = ObservationNorm(in_keys=[out_key])
-    env.append_transform(obs_norm)
+    # obs_norm = ObservationNorm(in_keys=[out_key])
+    # env.append_transform(obs_norm)
 
     if env_library is DMControlEnv:
         double_to_float_list += [
@@ -254,9 +254,9 @@ def make_ppo_models(cfg):
 
     if not from_pixels:
         # we must initialize the observation norm transform
-        init_stats(
-            proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels
-        )
+        # init_stats(
+        #     proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels
+        # )
         common_module, policy_module, value_module = make_ppo_modules_state(
             proof_environment
         )
@@ -312,10 +312,10 @@ def make_ppo_modules_state(proof_environment):
     # Define a shared Module and TensorDictModule
     common_mlp = MLP(
         in_features=input_shape[-1],
-        activation_class=torch.nn.ReLU,
+        activation_class=torch.nn.Tanh,
         activate_last_layer=True,
         out_features=shared_features_size,
-        num_cells=[256, 256],
+        num_cells=[64, 64],
     )
     common_module = TensorDictModule(
         module=common_mlp,
@@ -325,7 +325,9 @@ def make_ppo_modules_state(proof_environment):
 
     # Define on head for the policy
     policy_net = MLP(
-        in_features=shared_features_size, out_features=num_outputs, num_cells=[]
+        in_features=shared_features_size,
+        out_features=num_outputs,
+        num_cells=[]
     )
     if continuous_actions:
         policy_net = NormalParamWrapper(policy_net)
@@ -349,7 +351,10 @@ def make_ppo_modules_state(proof_environment):
     )
 
     # Define another head for the value
-    value_net = MLP(in_features=shared_features_size, out_features=1, num_cells=[])
+    value_net = MLP(
+        in_features=shared_features_size,
+        out_features=1,
+        num_cells=[])
     value_module = ValueOperator(
         value_net,
         in_keys=["common_features"],

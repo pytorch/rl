@@ -13,23 +13,22 @@ Both state and pixel-based environments are supported.
 The helper functions are coded in the utils.py associated with this script.
 """
 import hydra
-import torch
-import tqdm
-from torch.optim.lr_scheduler import LinearLR
-
-from utils import (
-    make_collector,
-    make_data_buffer,
-    make_logger,
-    make_loss,
-    make_optim,
-    make_ppo_models,
-    make_test_env,
-)
 
 
 @hydra.main(config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
+
+    import tqdm
+    import torch
+    from utils import (
+        make_collector,
+        make_data_buffer,
+        make_logger,
+        make_loss,
+        make_optim,
+        make_ppo_models,
+        make_test_env,
+    )
 
     # Correct for frame_skip
     cfg.collector.total_frames = cfg.collector.total_frames // cfg.env.frame_skip
@@ -57,15 +56,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
         * cfg.loss.ppo_epochs
         * num_mini_batches
     )
-    scheduler = LinearLR(
-        optim, total_iters=total_network_updates, start_factor=1.0, end_factor=0.1
-    )
+
+    scheduler = None
+    if cfg.optim.lr_scheduler:
+        scheduler = torch.optim.lr_scheduler.LinearLR(
+            optim, total_iters=total_network_updates, start_factor=1.0, end_factor=0.1
+        )
 
     logger = make_logger(cfg.logger)
     test_env = make_test_env(cfg.env)
-
-    record_interval = cfg.recorder.interval
-
+    record_interval = cfg.logger.log_interval
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     collected_frames = 0
 
@@ -75,7 +75,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     for data in collector:
 
         frames_in_batch = data.numel()
-        collected_frames += frames_in_batch
+        collected_frames += frames_in_batch * cfg.env.frame_skip
         pbar.update(data.numel())
         data_view = data.reshape(-1)
 
@@ -111,7 +111,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     list(actor.parameters()) + list(critic.parameters()), max_norm=0.5
                 )
                 optim.step()
-                scheduler.step()
+                if scheduler is not None:
+                    scheduler.step()
                 optim.zero_grad()
 
                 # Logging
