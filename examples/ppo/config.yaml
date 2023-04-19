@@ -14,7 +14,7 @@ env:
 collector:
   frames_per_batch: 4096
   total_frames: 40_000_000
-  collector_devices: cuda  # [cpu,cpu,cpu,cpu]
+  collector_device: cuda  # cpu
   max_frames_per_traj: -1
 
 # logger
