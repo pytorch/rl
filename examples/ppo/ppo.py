@@ -10,7 +10,7 @@ import torch.cuda
 from hydra.core.config_store import ConfigStore
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.value import GAE
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -98,7 +98,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     loss_module = make_ppo_loss(model, cfg)
     if cfg.gSDE:
-        with torch.no_grad(), set_exploration_mode("random"):
+        with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
             # get dimensions to build the parallel env
             proof_td = model(proof_env.reset().to(device))
         action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]

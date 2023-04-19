@@ -16,6 +16,7 @@ from torchrl._utils import VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
+from torchrl.envs.utils import ExplorationType
 from torchrl.modules import reset_noise
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
@@ -272,7 +273,7 @@ def make_trainer(
             policy_exploration=policy_exploration,
             recorder=recorder,
             record_interval=cfg.record_interval,
-            exploration_mode="random",
+            exploration_type=ExplorationType.RANDOM,
             suffix="exploration",
             out_keys={("next", "reward"): "r_evaluation_exploration"},
         )

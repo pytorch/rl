@@ -2759,7 +2759,7 @@ class TestNoop(TransformBase):
         rb.sample(1)
 
     def test_transform_inverse(self):
-        raise pytest.skip("No inversee for NoopResetEnv")
+        raise pytest.skip("No inverse for NoopResetEnv")
 
     @pytest.mark.parametrize("random", [True, False])
     @pytest.mark.parametrize("compose", [True, False])

@@ -16,7 +16,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs.utils import exploration_mode
+from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 
 __all__ = [
@@ -124,7 +124,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = self.td_module.forward(tensordict)
-        if exploration_mode() == "random" or exploration_mode() is None:
+        if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
             out = tensordict.get(self.td_module.out_keys[0])
             eps = self.eps.item()
             cond = (torch.rand(tensordict.shape, device=tensordict.device) < eps).to(
@@ -260,7 +260,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = self.td_module.forward(tensordict)
-        if exploration_mode() == "random" or exploration_mode() is None:
+        if exploration_type() is ExplorationType.RANDOM or exploration_type() is None:
             out = tensordict.get(self.action_key)
             out = self._add_noise(out)
             tensordict.set(self.action_key, out)
@@ -446,7 +446,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = super().forward(tensordict)
-        if exploration_mode() == "random" or exploration_mode() is None:
+        if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
             if "step_count" not in tensordict.keys():
                 warnings.warn(
                     f"The tensordict passed to {self.__class__.__name__} appears to be "

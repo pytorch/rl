@@ -7,7 +7,7 @@ from __future__ import annotations
 import pkg_resources
 import torch
 from tensordict.nn.probabilistic import (  # noqa
-    # Note: the `set_/interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
+    # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
     #       See more details: https://github.com/pytorch/rl/issues/1016
     interaction_mode as exploration_mode,
@@ -18,8 +18,23 @@ from tensordict.nn.probabilistic import (  # noqa
 )
 from tensordict.tensordict import TensorDictBase
 
-
+__all__ = [
+    "exploration_mode",
+    "exploration_type",
+    "set_exploration_mode",
+    "set_exploration_type",
+    "ExplorationType",
+    "check_env_specs",
+    "step_mdp",
+    "make_composite_from_td",
+]
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
+
+
+def _convert_exploration_type(exploration_mode, exploration_type):
+    if exploration_mode is not None:
+        return ExplorationType.from_str(exploration_mode)
+    return exploration_type
 
 
 class _classproperty(property):

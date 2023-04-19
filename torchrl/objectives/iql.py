@@ -10,17 +10,17 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
+from torchrl.envs.utils import ExplorationType, set_exploration_type
+
 from torchrl.modules import ProbabilisticActor
+from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
-
-from ..envs.utils import set_exploration_mode
-from .common import LossModule
-from .value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
     from functorch import vmap
@@ -167,7 +167,7 @@ class IQLLoss(LossModule):
 
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
         # KL loss
-        with set_exploration_mode("mode"):
+        with set_exploration_type(ExplorationType.MODE):
             dist = self.actor_network.get_dist(
                 tensordict,
                 params=self.actor_network_params,
