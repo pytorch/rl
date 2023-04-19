@@ -149,7 +149,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     break_when_any_done=True,
                 ).clone()
                 logger.log_scalar(
-                    "reward_testing", td_test["next"]["reward"].sum().item(), collected_frames
+                    "reward_testing",
+                    td_test["next"]["reward"].sum().item(),
+                    collected_frames,
                 )
                 actor.train()
 
