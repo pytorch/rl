@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import itertools
 from copy import deepcopy
 from typing import Iterator, List, Optional, Tuple, Union
 
@@ -55,6 +54,7 @@ class LossModule(nn.Module):
     """
 
     default_value_estimator: ValueEstimators = None
+    SEP = "_sep_"
 
     def __init__(self):
         super().__init__()
@@ -142,11 +142,16 @@ class LossModule(nn.Module):
         # tensors as lazy calls to `getattr(self, name_of_tensor)`.
         # Otherwise, casting the module to a device will keep old references
         # to uncast tensors
-        try:
-            buffer_names = next(itertools.islice(zip(*module.named_buffers()), 1))
-        except StopIteration:
-            buffer_names = ()
+        sep = self.SEP
         params = make_functional(module, funs_to_decorate=funs_to_decorate)
+        # buffer_names = next(itertools.islice(zip(*module.named_buffers()), 1))
+        buffer_names = []
+        for key, value in params.items(True, True):
+            # we just consider all that is not param as a buffer, but if the module has been made
+            # functional and the params have been replaced this may break
+            if not isinstance(value, nn.Parameter):
+                key = sep.join(key) if not isinstance(key, str) else key
+                buffer_names.append(key)
         functional_module = deepcopy(module)
         repopulate_module(module, params)
 
@@ -165,14 +170,13 @@ class LossModule(nn.Module):
         # separate params and buffers
         params_and_buffers = params_and_buffers.apply(create_buffers)
         for key in params_and_buffers.keys(True):
-            if "_sep_" in key:
+            if sep in key:
                 raise KeyError(
                     f"The key {key} contains the '_sep_' pattern which is prohibited. Consider renaming the parameter / buffer."
                 )
-        params_and_buffers_flat = params_and_buffers.flatten_keys("_sep_")
+        params_and_buffers_flat = params_and_buffers.flatten_keys(sep)
         buffers = params_and_buffers_flat.select(*buffer_names)
         params = params_and_buffers_flat.exclude(*buffer_names)
-
         if expand_dim and not _has_functorch:
             raise ImportError(
                 "expanding params is only possible when functorch is installed,"
@@ -214,8 +218,8 @@ class LossModule(nn.Module):
                 batch_size=[expand_dim, *buffers.shape],
             )
 
-            params_and_buffers.update(params.unflatten_keys("_sep_"))
-            params_and_buffers.update(buffers.unflatten_keys("_sep_"))
+            params_and_buffers.update(params.unflatten_keys(sep))
+            params_and_buffers.update(buffers.unflatten_keys(sep))
             params_and_buffers.batch_size = params.batch_size
 
             # self.params_to_map = params_to_map
@@ -227,7 +231,7 @@ class LossModule(nn.Module):
         # register parameters and buffers
         for key, parameter in params.items():
             if parameter not in prev_set_params:
-                setattr(self, "_sep_".join([module_name, key]), parameter)
+                setattr(self, sep.join([module_name, key]), parameter)
             else:
                 # if the parameter is already present, we register a string pointing
                 # to is instead. If the string ends with a '_detached' suffix, the
@@ -239,18 +243,18 @@ class LossModule(nn.Module):
                     raise RuntimeError("parameter not found")
                 if compare_against is not None and p in compare_against:
                     _param_name = _param_name + "_detached"
-                setattr(self, "_sep_".join([module_name, key]), _param_name)
+                setattr(self, sep.join([module_name, key]), _param_name)
         prev_set_buffers = set(self.buffers())
         for key, buffer in buffers.items():
             if buffer not in prev_set_buffers:
-                self.register_buffer("_sep_".join([module_name, key]), buffer)
+                self.register_buffer(sep.join([module_name, key]), buffer)
             else:
                 for _buffer_name, b in self.named_buffers():
                     if buffer is b:
                         break
                 else:
                     raise RuntimeError("buffer not found")
-                setattr(self, "_sep_".join([module_name, key]), _buffer_name)
+                setattr(self, sep.join([module_name, key]), _buffer_name)
 
         setattr(self, "_" + param_name, params_and_buffers)
         setattr(
@@ -270,10 +274,10 @@ class LossModule(nn.Module):
                 # find the param name
                 for name, param in self.named_parameters():
                     if param.data.data_ptr() == value.data_ptr() and param is not value:
-                        self._param_maps[name] = "_sep_".join([module_name, *key])
+                        self._param_maps[name] = sep.join([module_name, *key])
                         break
                 else:
-                    raise RuntimeError("did not find matching param.")
+                    raise RuntimeError(f"key {key} did not find matching param.")
 
         name_params_target = "_target_" + module_name
         if create_target_params:
@@ -283,7 +287,7 @@ class LossModule(nn.Module):
             for (key, val) in target_params_items:
                 if not isinstance(key, tuple):
                     key = (key,)
-                name = "_sep_".join([name_params_target, *key])
+                name = sep.join([name_params_target, *key])
                 self.register_buffer(name, Buffer(val))
                 target_params_list.append((name, key))
             setattr(self, name_params_target + "_params", target_params)
@@ -305,7 +309,7 @@ class LossModule(nn.Module):
                 for key in params.keys(True, True):
                     if not isinstance(key, tuple):
                         key = (key,)
-                    value_to_set = getattr(self, "_sep_".join([network_name, *key]))
+                    value_to_set = getattr(self, self.SEP.join([network_name, *key]))
                     if isinstance(value_to_set, str):
                         if value_to_set.endswith("_detached"):
                             value_to_set = value_to_set[:-9]
@@ -334,7 +338,7 @@ class LossModule(nn.Module):
                     if not isinstance(key, tuple):
                         key = (key,)
                     value_to_set = getattr(
-                        self, "_sep_".join(["_target_" + network_name, *key])
+                        self, self.SEP.join(["_target_" + network_name, *key])
                     )
                     # _set is faster bc is bypasses the checks
                     target_params._set(key, value_to_set)

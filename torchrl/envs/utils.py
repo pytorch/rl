@@ -7,13 +7,34 @@ from __future__ import annotations
 import pkg_resources
 import torch
 from tensordict.nn.probabilistic import (  # noqa
+    # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
+    #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
+    #       See more details: https://github.com/pytorch/rl/issues/1016
     interaction_mode as exploration_mode,
+    interaction_type as exploration_type,
+    InteractionType as ExplorationType,
     set_interaction_mode as set_exploration_mode,
+    set_interaction_type as set_exploration_type,
 )
 from tensordict.tensordict import TensorDictBase
 
-
+__all__ = [
+    "exploration_mode",
+    "exploration_type",
+    "set_exploration_mode",
+    "set_exploration_type",
+    "ExplorationType",
+    "check_env_specs",
+    "step_mdp",
+    "make_composite_from_td",
+]
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
+
+
+def _convert_exploration_type(exploration_mode, exploration_type):
+    if exploration_mode is not None:
+        return ExplorationType.from_str(exploration_mode)
+    return exploration_type
 
 
 class _classproperty(property):
@@ -25,7 +46,7 @@ def step_mdp(
     tensordict: TensorDictBase,
     next_tensordict: TensorDictBase = None,
     keep_other: bool = True,
-    exclude_reward: bool = False,
+    exclude_reward: bool = True,
     exclude_done: bool = False,
     exclude_action: bool = True,
 ) -> TensorDictBase:
@@ -45,7 +66,7 @@ def step_mdp(
         exclude_reward (bool, optional): if ``True``, the :obj:`"reward"` key will be discarded
             from the resulting tensordict. If ``False``, it will be copied (and replaced)
             from the ``"next"`` entry (if present).
-            Default is ``False``.
+            Default is ``True``.
         exclude_done (bool, optional): if ``True``, the :obj:`"done"` key will be discarded
             from the resulting tensordict. If ``False``, it will be copied (and replaced)
             from the ``"next"`` entry (if present).

@@ -10,7 +10,7 @@ import tqdm
 from torch import nn
 
 from torchrl.envs.libs.openml import OpenMLEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import DistributionalQValueActor, EGreedyWrapper, MLP, QValueActor
 from torchrl.objectives import DistributionalDQNLoss, DQNLoss
 
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     init_r = None
     init_loss = None
     for i in pbar:
-        with set_exploration_mode("random"):
+        with set_exploration_type(ExplorationType.RANDOM):
             data = env.step(policy(env.reset()))
         loss_vals = loss(data)
         loss_val = sum(

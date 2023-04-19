@@ -6,8 +6,6 @@
 
 This is a self-contained example of a PPO training script.
 
-It works across Gym and DM-control over a variety of tasks.
-
 Both state and pixel-based environments are supported.
 
 The helper functions are coded in the utils.py associated with this script.

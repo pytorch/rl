@@ -9,7 +9,7 @@ from tensordict.nn import TensorDictModule
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.envs.utils import set_exploration_mode, step_mdp
+from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
@@ -124,7 +124,7 @@ class TD3Loss(LossModule):
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
         tensordict_actor = tensordict_actor.contiguous()
 
-        with set_exploration_mode("mode"):
+        with set_exploration_type(ExplorationType.MODE):
             actor_output_td = vmap(self.actor_network)(
                 tensordict_actor,
                 actor_params,

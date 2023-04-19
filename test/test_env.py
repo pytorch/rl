@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import torch
 import yaml
+
 from _utils_internal import (
     _make_envs,
     CARTPOLE_VERSIONED,
@@ -32,17 +33,19 @@ from mocking_classes import (
 from packaging import version
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
+
+from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data.tensor_specs import (
+    CompositeSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator
+from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ParallelEnv, SerialEnv
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
 from torchrl.envs.utils import check_env_specs, make_composite_from_td, step_mdp
-from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
@@ -260,7 +263,7 @@ class TestModelBasedEnvBase:
             ("next", key) for key in (*mb_env.observation_spec.keys(), "reward", "done")
         }
         expected_keys = expected_keys.union(set(mb_env.input_spec.keys()))
-        expected_keys = expected_keys.union({"done", "next", "reward"})
+        expected_keys = expected_keys.union({"done", "next"})
         assert set(rollout.keys(True)) == expected_keys
         assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 
@@ -1131,6 +1134,150 @@ def test_make_spec_from_td():
     assert (spec.zero() == data.zero_()).all()
     for key, val in data.items(True, True):
         assert val.dtype is spec[key].dtype
+
+
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
+class TestConcurrentEnvs:
+    """Concurrent parallel envs on multiple procs can interfere."""
+
+    class Policy(nn.Module):
+        in_keys = []
+        out_keys = ["action"]
+
+        def __init__(self, spec):
+            super().__init__()
+            self.spec = spec
+
+        def forward(self, tensordict):
+            tensordict.set("action", self.spec["action"].zero() + 1)
+            return tensordict
+
+    @staticmethod
+    def main_penv(j, q=None):
+        device = "cpu" if not torch.cuda.device_count() else "cuda:0"
+        n_workers = 1
+        env_p = ParallelEnv(
+            n_workers,
+            [
+                lambda i=i: CountingEnv(i, device=device)
+                for i in range(j, j + n_workers)
+            ],
+        )
+        env_s = SerialEnv(
+            n_workers,
+            [
+                lambda i=i: CountingEnv(i, device=device)
+                for i in range(j, j + n_workers)
+            ],
+        )
+        spec = env_p.action_spec
+        policy = TestConcurrentEnvs.Policy(CompositeSpec(action=spec.to(device)))
+        N = 10
+        r_p = []
+        r_s = []
+        for _ in range(N):
+            with torch.no_grad():
+                r_p.append(env_s.rollout(100, break_when_any_done=False, policy=policy))
+                r_s.append(env_p.rollout(100, break_when_any_done=False, policy=policy))
+
+        if (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all():
+            if q is not None:
+                q.put("passed")
+            else:
+                pass
+        else:
+            if q is not None:
+                q.put("failed")
+            else:
+                raise RuntimeError()
+
+    @staticmethod
+    def main_collector(j, q=None):
+        device = "cpu" if not torch.cuda.device_count() else "cuda:0"
+        N = 10
+        n_workers = 1
+        make_envs = [
+            lambda i=i: CountingEnv(i, device=device) for i in range(j, j + n_workers)
+        ]
+        spec = make_envs[0]().action_spec
+        policy = TestConcurrentEnvs.Policy(CompositeSpec(action=spec))
+        collector = MultiSyncDataCollector(
+            make_envs,
+            policy,
+            frames_per_batch=n_workers * 100,
+            total_frames=N * n_workers * 100,
+        )
+        single_collectors = [
+            SyncDataCollector(
+                make_envs[i](),
+                policy,
+                frames_per_batch=n_workers * 100,
+                total_frames=N * n_workers * 100,
+            )
+            for i in range(n_workers)
+        ]
+        collector = iter(collector)
+        single_collectors = [iter(sc) for sc in single_collectors]
+
+        r_p = []
+        r_s = []
+        for _ in range(N):
+            with torch.no_grad():
+                r_p.append(next(collector))
+                r_s.append(torch.cat([next(sc) for sc in single_collectors]))
+
+        if (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all():
+            if q is not None:
+                q.put("passed")
+            else:
+                pass
+        else:
+            if q is not None:
+                q.put("failed")
+            else:
+                raise RuntimeError()
+
+    @pytest.mark.parametrize("nproc", [1, 3])
+    def test_mp_concurrent(self, nproc):
+        if nproc == 1:
+            self.main_penv(3)
+        else:
+            from torch import multiprocessing as mp
+
+            q = mp.Queue(3)
+            ps = []
+            try:
+                for k in range(3, 10, 3):
+                    p = mp.Process(target=type(self).main_penv, args=(k, q))
+                    ps.append(p)
+                    p.start()
+                for _ in range(3):
+                    msg = q.get(timeout=100)
+                    assert msg == "passed"
+            finally:
+                for p in ps:
+                    p.join()
+
+    @pytest.mark.parametrize("nproc", [1, 3])
+    def test_mp_collector(self, nproc):
+        if nproc == 1:
+            self.main_collector(3)
+        else:
+            from torch import multiprocessing as mp
+
+            q = mp.Queue(3)
+            ps = []
+            try:
+                for k in range(3, 10, 3):
+                    p = mp.Process(target=type(self).main_collector, args=(k, q))
+                    ps.append(p)
+                    p.start()
+                for _ in range(3):
+                    msg = q.get(timeout=100)
+                    assert msg == "passed"
+            finally:
+                for p in ps:
+                    p.join(timeout=2)
 
 
 if __name__ == "__main__":

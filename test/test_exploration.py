@@ -10,6 +10,7 @@ import torch
 from _utils_internal import get_available_devices
 from mocking_classes import ContinuousActionVecMockEnv
 from scipy.stats import ttest_1samp
+from tensordict.nn import InteractionType
 from tensordict.tensordict import TensorDict
 from torch import nn
 
@@ -17,7 +18,7 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.data import BoundedTensorSpec, CompositeSpec
 from torchrl.envs import SerialEnv
 from torchrl.envs.transforms.transforms import gSDENoise
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import set_exploration_type
 from torchrl.modules import SafeModule, SafeSequential
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import (
@@ -91,7 +92,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             module=module,
             in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
-            default_interaction_mode="random",
+            default_interaction_type=InteractionType.RANDOM,
         ).to(device)
         exploratory_policy = OrnsteinUhlenbeckProcessWrapper(policy)
 
@@ -156,7 +157,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
                 module=module,
                 in_keys=["loc", "scale"],
                 distribution_class=TanhNormal,
-                default_interaction_mode="random",
+                default_interaction_type=InteractionType.RANDOM,
                 spec=action_spec,
             ).to(device)
         else:
@@ -212,7 +213,7 @@ class TestAdditiveGaussian:
             module=module,
             in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
-            default_interaction_mode="random",
+            default_interaction_type=InteractionType.RANDOM,
         ).to(device)
         given_spec = action_spec if spec_origin == "spec" else None
         exploratory_policy = AdditiveGaussianWrapper(policy, spec=given_spec).to(device)
@@ -274,7 +275,7 @@ class TestAdditiveGaussian:
             module=module,
             in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
-            default_interaction_mode="random",
+            default_interaction_type=InteractionType.RANDOM,
         ).to(device)
         given_spec = action_spec if spec_origin == "spec" else None
         exploratory_policy = AdditiveGaussianWrapper(
@@ -327,7 +328,7 @@ class TestAdditiveGaussian:
             module=module,
             in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
-            default_interaction_mode="random",
+            default_interaction_type=InteractionType.RANDOM,
             spec=action_spec,
         ).to(device)
         exploratory_policy = AdditiveGaussianWrapper(policy, safe=False)
@@ -350,9 +351,11 @@ class TestAdditiveGaussian:
 @pytest.mark.parametrize("gSDE", [True, False])
 @pytest.mark.parametrize("safe", [True, False])
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("exploration_mode", ["random", "mode"])
+@pytest.mark.parametrize(
+    "exploration_type", [InteractionType.RANDOM, InteractionType.MODE]
+)
 def test_gsde(
-    state_dim, action_dim, gSDE, device, safe, exploration_mode, batch=16, bound=0.1
+    state_dim, action_dim, gSDE, device, safe, exploration_type, batch=16, bound=0.1
 ):
     torch.manual_seed(0)
     if gSDE:
@@ -386,7 +389,7 @@ def test_gsde(
         out_keys=["action"],
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
-        default_interaction_mode=exploration_mode,
+        default_interaction_type=exploration_type,
         safe=safe,
     )
 
@@ -407,10 +410,10 @@ def test_gsde(
         assert spec.is_in(td.get("action"))
 
     if not safe:
-        with set_exploration_mode(exploration_mode):
+        with set_exploration_type(exploration_type):
             action1 = module(td).get("action")
         action2 = actor(td.exclude("action")).get("action")
-        if gSDE or exploration_mode == "mode":
+        if gSDE or exploration_type == InteractionType.MODE:
             torch.testing.assert_close(action1, action2)
         else:
             with pytest.raises(AssertionError):
@@ -435,7 +438,7 @@ def test_gsde_init(sigma_init, state_dim, action_dim, mean, std, device, learn_s
     _eps = torch.randn(
         100000, *state_dim[:-1], action_dim, state_dim[-1], device=device
     )
-    with set_exploration_mode("random"):
+    with set_exploration_type(InteractionType.RANDOM):
         mu, sigma, action_out, _eps = gsde_lazy(action, state, _eps)
     sigma_init = sigma_init if sigma_init else 1.0
     assert (

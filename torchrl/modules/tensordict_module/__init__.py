@@ -10,9 +10,11 @@ from .actors import (
     ActorValueOperator,
     DistributionalQValueActor,
     DistributionalQValueHook,
+    DistributionalQValueModule,
     ProbabilisticActor,
     QValueActor,
     QValueHook,
+    QValueModule,
     ValueOperator,
 )
 from .common import SafeModule
