@@ -102,7 +102,8 @@ IS_OSX = platform == "darwin"
     "env_name",
     [
         PONG_VERSIONED,
-        PENDULUM_VERSIONED,
+        # PENDULUM_VERSIONED,
+        HALFCHEETAH_VERSIONED,
     ],
 )
 @pytest.mark.parametrize("frame_skip", [1, 3])
