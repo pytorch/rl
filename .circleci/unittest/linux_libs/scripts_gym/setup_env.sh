@@ -64,16 +64,16 @@ if [[ $OSTYPE == 'darwin'* ]]; then
 elif [ "${CU_VERSION:-}" == cpu ]; then
   PRIVATE_MUJOCO_GL=osmesa
 else
-  PRIVATE_MUJOCO_GL=osmesa
+  PRIVATE_MUJOCO_GL=egl
 fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
 conda env config vars set \
-  MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco200_linux \
+#  MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco200_linux \
   DISPLAY=unix:0.0 \
-  MJLIB_PATH=$root_dir/.mujoco/mujoco200_linux/bin/libmujoco200.so \
+#  MJLIB_PATH=$root_dir/.mujoco/mujoco200_linux/bin/libmujoco200.so \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco200_linux/bin \
-  MUJOCO_PY_MJKEY_PATH=$root_dir/.mujoco/mjkey.txt \
+#  MUJOCO_PY_MJKEY_PATH=$root_dir/.mujoco/mjkey.txt \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL \
   PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
