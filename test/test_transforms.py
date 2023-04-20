@@ -4601,7 +4601,6 @@ class TestTargetReturn(TransformBase):
         next_reward = torch.rand((*batch, 1))
         td = TensorDict(
             {
-                "reward": torch.rand((*batch, 1)),
                 "next": {
                     "reward": next_reward,
                 },
@@ -4611,13 +4610,9 @@ class TestTargetReturn(TransformBase):
         )
         td = t.reset(td)
         td = t._step(td)
-        # assert td["target_return"].shape == torch.Size(batch)
         if mode == "reduce":
-            assert (td["target_return"] == 10.0).all()
             assert (td["next"]["target_return"] + td["next"]["reward"] == 10.0).all()
-
         else:
-            assert (td["target_return"] == 10.0).all()
             assert (td["next"]["target_return"] == 10.0).all()
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
@@ -4629,7 +4624,6 @@ class TestTargetReturn(TransformBase):
         next_reward = torch.rand((*batch, 1))
         td = TensorDict(
             {
-                "reward": torch.rand((*batch, 1)),
                 "next": {
                     "reward": next_reward,
                 },
@@ -4639,13 +4633,11 @@ class TestTargetReturn(TransformBase):
         )
         td = t.reset(td)
         td = t._step(td)
-        # assert td["target_return"].shape == torch.Size(batch)
+
         if mode == "reduce":
-            assert (td["target_return"] == 10.0).all()
             assert (td["next"]["target_return"] + td["next"]["reward"] == 10.0).all()
 
         else:
-            assert (td["target_return"] == 10.0).all()
             assert (td["next"]["target_return"] == 10.0).all()
 
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
@@ -4707,8 +4699,17 @@ class TestTargetReturn(TransformBase):
     def test_transform_inverse(self):
         raise pytest.skip("No inverse method for TargetReturn")
 
-    def test_transform_no_env(self):
-        raise pytest.skip("No inverse method for TargetReturn")
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    def test_transform_no_env(self, mode):
+        t = TargetReturn(target_return=10.0, mode=mode)
+        reward = torch.randn(10)
+        td = TensorDict({("next", "reward"): reward}, [])
+        td = t.reset(td)
+        td = t._step(td)
+        if mode == "reduce":
+            assert (td["next"]["target_return"] + td["next"]["reward"] == 10.0).all()
+        else:
+            assert (td["next"]["target_return"] == 10.0).all()
 
     def test_transform_model(
         self,

@@ -944,22 +944,74 @@ class ToTensorImage(ObservationTransform):
 class TargetReturn(Transform):
     """Sets a target return for the agent to achieve in the environment.
 
-    Target return can be used in goal-conditioned RL algorithms to set a target that should be achieved at the end of an episode by the agent like Upside-Down RL or Decision Transformer.
+    In goal-conditioned RL, the :class:`~.TargetReturn` is defined as the
+    expected cumulative reward obtained from the current state to the goal state
+    or the end of the episode. It is used as input for the policy to guide its behaviour.
+    For a trained policy typically the maximum return in the environment is chosen as the target return.
+    However, as it is used as input to the policy module, it should be scaled accordingly.
+    With the :class:`~.TargetReturn` transform, the tensordict can be updated to include the
+    user-specified target return. The mode parameter can be used to specify whether the target return
+    gets updated at every step by subtracting the reward achieved at each step or remains constant.
+    :class:`~.TargetReturn` should be only used during inference when interacting with the environment as the actual
+    return received by the environment might be different from the target return. Therefore, to have the correct
+    return labels for training the policy, the :class:`~.TargetReturn` transform should be used in conjunction with
+    for example hindsight return relabeling like the :class:`~.Reward2GoTransform` to update the return label for the actually achieved return.
 
     Args:
         target_return (float): target return to be achieved by the agent.
         mode (str): mode to be used to update the target return. Can be either "reduce" or "constant". Default: "reduce".
 
+    Examples:
+        >>> transform = TargetReturn(10.0, mode="reduce")
+        >>> reward = torch.ones((10,1))
+        >>> td = TensorDict({'next': {'reward': reward}}, [10])
+        >>> td = transform.reset(td)
+        >>> td["next", "target_return"]
+        tensor([[10.],
+                [10.],
+                [10.],
+                [10.],
+                [10.],
+                [10.],
+                [10.],
+                [10.],
+                [10.],
+                [10.]])
+        # take a step with mode "reduce"
+        # target return is updated by subtracting the reward
+        >>> td = transform._step(td)
+        >>> td["next", "target_return"]
+        tensor([[9.],
+                [9.],
+                [9.],
+                [9.],
+                [9.],
+                [9.],
+                [9.],
+                [9.],
+                [9.],
+                [9.]])
+
     """
+
+    MODES = ["reduce", "constant"]
+    MODE_ERR = "Mode can only be 'reduce' or 'constant'."
 
     def __init__(
         self,
         target_return: float,
         mode: str = "reduce",
+        in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ):
-        super().__init__(in_keys=["reward"], out_keys=["target_return"])
-        self.in_key = "reward"
-        self.out_key = "target_return"
+        if in_keys is None:
+            in_keys = [("next", "reward")]
+        if out_keys is None:
+            out_keys = [("next", "target_return")]
+        if mode not in self.MODES:
+            raise ValueError(self.MODE_ERR)
+
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.target_return = target_return
         self.mode = mode
 
@@ -970,22 +1022,31 @@ class TargetReturn(Transform):
             dtype=torch.float32,
             device=tensordict.device,
         )
-        tensordict.set(self.out_key, init_target_return)
+
+        for out_key in self.out_keys:
+            target_return = tensordict.get(out_key, default=None)
+
+            if target_return is None:
+                target_return = init_target_return
+
+            tensordict.set(
+                out_key,
+                target_return,
+            )
         return tensordict
 
     def _call(self, tensordict: TensorDict) -> TensorDict:
-        new_target_return = self._apply_transform(
-            tensordict[self.in_key], tensordict[self.out_key]
-        )
-        tensordict.set(self.out_key, new_target_return)
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            is_tuple = isinstance(in_key, tuple)
+            if in_key in tensordict.keys(include_nested=is_tuple):
+                target_return = self._apply_transform(
+                    tensordict.get(in_key), tensordict.get(out_key)
+                )
+                tensordict.set(out_key, target_return)
         return tensordict
 
     def _step(self, tensordict: TensorDict) -> TensorDict:
-        next_tensordict = tensordict.get("next")
-        next_tensordict.set(self.out_key, tensordict[self.out_key])
-        next_tensordict = self._call(next_tensordict)
-        tensordict.set("next", next_tensordict)
-        return tensordict
+        return self._call(tensordict)
 
     def _apply_transform(
         self, reward: torch.Tensor, target_return: torch.Tensor
@@ -1010,12 +1071,15 @@ class TargetReturn(Transform):
             raise ValueError(
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
-        observation_spec[self.out_key] = UnboundedDiscreteTensorSpec(
+
+        target_return_spec = UnboundedDiscreteTensorSpec(
             shape=self.parent.reward_spec.shape,
             dtype=self.parent.reward_spec.dtype,
             device=self.parent.reward_spec.device,
         )
-        observation_spec[self.out_key].space.max = self.target_return
+        observation_spec["next"] = CompositeSpec({"target_return": target_return_spec})
+
+        observation_spec[("next", "target_return")].space.max = self.target_return
 
         return observation_spec
 
