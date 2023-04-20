@@ -947,15 +947,24 @@ class TargetReturn(Transform):
     In goal-conditioned RL, the :class:`~.TargetReturn` is defined as the
     expected cumulative reward obtained from the current state to the goal state
     or the end of the episode. It is used as input for the policy to guide its behaviour.
-    For a trained policy typically the maximum return in the environment is chosen as the target return.
-    However, as it is used as input to the policy module, it should be scaled accordingly.
-    With the :class:`~.TargetReturn` transform, the tensordict can be updated to include the
-    user-specified target return. The mode parameter can be used to specify whether the target return
-    gets updated at every step by subtracting the reward achieved at each step or remains constant.
-    :class:`~.TargetReturn` should be only used during inference when interacting with the environment as the actual
-    return received by the environment might be different from the target return. Therefore, to have the correct
-    return labels for training the policy, the :class:`~.TargetReturn` transform should be used in conjunction with
-    for example hindsight return relabeling like the :class:`~.Reward2GoTransform` to update the return label for the actually achieved return.
+    For a trained policy typically the maximum return in the environment is
+    chosen as the target return.
+    However, as it is used as input to the policy module, it should be scaled
+    accordingly.
+    With the :class:`~.TargetReturn` transform, the tensordict can be updated
+    to include the
+    user-specified target return. The mode parameter can be used to specify
+    whether the target return gets updated at every step by subtracting the
+    reward achieved at each step or remains constant.
+    :class:`~.TargetReturn` should be only used during inference when
+    interacting with the environment as the actual
+    return received by the environment might be different from the target
+    return. Therefore, to have the correct
+    return labels for training the policy, the :class:`~.TargetReturn`
+    transform should be used in conjunction with
+    for example hindsight return relabeling like the
+    :class:`~.Reward2GoTransform` to update the return label for the
+    actually achieved return.
 
     Args:
         target_return (float): target return to be achieved by the agent.
@@ -963,10 +972,9 @@ class TargetReturn(Transform):
 
     Examples:
         >>> transform = TargetReturn(10.0, mode="reduce")
-        >>> reward = torch.ones((10,1))
-        >>> td = TensorDict({'next': {'reward': reward}}, [10])
+        >>> td = TensorDict({}, [10])
         >>> td = transform.reset(td)
-        >>> td["next", "target_return"]
+        >>> td["target_return"]
         tensor([[10.],
                 [10.],
                 [10.],
@@ -977,8 +985,10 @@ class TargetReturn(Transform):
                 [10.],
                 [10.],
                 [10.]])
-        # take a step with mode "reduce"
-        # target return is updated by subtracting the reward
+        >>> # take a step with mode "reduce"
+        >>> # target return is updated by subtracting the reward
+        >>> reward = torch.ones((10,1))
+        >>> td.set(("next", "reward"), reward)
         >>> td = transform._step(td)
         >>> td["next", "target_return"]
         tensor([[9.],
@@ -1005,9 +1015,9 @@ class TargetReturn(Transform):
         out_keys: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
-            in_keys = [("next", "reward")]
+            in_keys = ["reward"]
         if out_keys is None:
-            out_keys = [("next", "target_return")]
+            out_keys = ["target_return"]
         if mode not in self.MODES:
             raise ValueError(self.MODE_ERR)
 
@@ -1045,8 +1055,12 @@ class TargetReturn(Transform):
                 tensordict.set(out_key, target_return)
         return tensordict
 
-    def _step(self, tensordict: TensorDict) -> TensorDict:
-        return self._call(tensordict)
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for out_key in self.out_keys:
+            if isinstance(out_key, str):
+                out_key = (out_key,)
+                tensordict.set(("next", *out_key), tensordict.get(out_key))
+        return super()._step(tensordict)
 
     def _apply_transform(
         self, reward: torch.Tensor, target_return: torch.Tensor
@@ -1079,7 +1093,7 @@ class TargetReturn(Transform):
             dtype=self.parent.reward_spec.dtype,
             device=self.parent.reward_spec.device,
         )
-        observation_spec["target_return"] =  target_return_spec
+        observation_spec["target_return"] = target_return_spec
 
         return observation_spec
 

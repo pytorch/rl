@@ -4598,22 +4598,12 @@ class TestTargetReturn(TransformBase):
     def test_transform_env(self, batch, mode, device):
         torch.manual_seed(0)
         t = TargetReturn(target_return=10.0, mode=mode)
-        next_reward = torch.rand((*batch, 1))
-        td = TensorDict(
-            {
-                "next": {
-                    "reward": next_reward,
-                },
-            },
-            device=device,
-            batch_size=batch,
-        )
-        td = t.reset(td)
-        td = t._step(td)
+        env = TransformedEnv(ContinuousActionVecMockEnv(), t)
+        td = env.rollout(2)
         if mode == "reduce":
-            assert (td["next"]["target_return"] + td["next"]["reward"] == 10.0).all()
+            assert (td["next", "target_return"] + td["next", "reward"] == 10.0).all()
         else:
-            assert (td["next"]["target_return"] == 10.0).all()
+            assert (td["next", "target_return"] == 10.0).all()
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
@@ -4635,10 +4625,10 @@ class TestTargetReturn(TransformBase):
         td = t._step(td)
 
         if mode == "reduce":
-            assert (td["next"]["target_return"] + td["next"]["reward"] == 10.0).all()
+            assert (td["next", "target_return"] + td["next", "reward"] == 10.0).all()
 
         else:
-            assert (td["next"]["target_return"] == 10.0).all()
+            assert (td["next", "target_return"] == 10.0).all()
 
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
     @pytest.mark.parametrize("device", get_available_devices())
@@ -4707,9 +4697,9 @@ class TestTargetReturn(TransformBase):
         td = t.reset(td)
         td = t._step(td)
         if mode == "reduce":
-            assert (td["next"]["target_return"] + td["next"]["reward"] == 10.0).all()
+            assert (td["next", "target_return"] + td["next", "reward"] == 10.0).all()
         else:
-            assert (td["next"]["target_return"] == 10.0).all()
+            assert (td["next", "target_return"] == 10.0).all()
 
     def test_transform_model(
         self,
@@ -4718,7 +4708,9 @@ class TestTargetReturn(TransformBase):
         model = nn.Sequential(t, nn.Identity())
         reward = torch.randn(10)
         td = TensorDict({("next", "reward"): reward}, [])
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(
+            NotImplementedError, match="cannot be executed without a parent"
+        ):
             model(td)
 
     def test_transform_rb(
@@ -4730,7 +4722,9 @@ class TestTargetReturn(TransformBase):
         td = TensorDict({("next", "reward"): reward}, []).expand(10)
         rb.append_transform(t)
         rb.extend(td)
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(
+            NotImplementedError, match="cannot be executed without a parent"
+        ):
             _ = rb.sample(2)
 
 
