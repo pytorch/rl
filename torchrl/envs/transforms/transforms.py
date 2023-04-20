@@ -1072,14 +1072,14 @@ class TargetReturn(Transform):
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
 
-        target_return_spec = UnboundedDiscreteTensorSpec(
+        target_return_spec = BoundedTensorSpec(
+            minimum=-float("inf"),
+            maximum=self.target_return,
             shape=self.parent.reward_spec.shape,
             dtype=self.parent.reward_spec.dtype,
             device=self.parent.reward_spec.device,
         )
-        observation_spec["next"] = CompositeSpec({"target_return": target_return_spec})
-
-        observation_spec[("next", "target_return")].space.max = self.target_return
+        observation_spec["target_return"] =  target_return_spec
 
         return observation_spec
 
