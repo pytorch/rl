@@ -238,7 +238,7 @@ RuntimeError: Failed to initialize OpenGL
    - CentOS: `sudo yum install glew glew-devel`
    - Conda: `conda install -c conda-forge glew`
 
-9. ```
+8. ```
    RuntimeError: Failed to initialize OpenGL
    ```
 
@@ -248,14 +248,27 @@ RuntimeError: Failed to initialize OpenGL
    - CentOS: `sudo yum install mesa-libEGL mesa-libEGL-devel`
    - Conda: `conda install -c anaconda mesa-libegl-cos6-x86_64`
 
+9. ```
+   fatal error: X11/Xlib.h: No such file or directory
+      | #include <X11/Xlib.h>
+      |          ^~~~~~~~~~~~
+   ```
+
+   _Solution_: Install X11:
+
+   - Ubuntu: `sudo apt install libx11-dev`
+   - CentOS: `sudo yum install libX11`
+   - Conda: `conda install -c conda-forge xorg-libx11`
+
 10. ```
-    fatal error: X11/Xlib.h: No such file or directory
-       | #include <X11/Xlib.h>
-       |          ^~~~~~~~~~~~
+    fatal error: GL/osmesa.h: No such file or directory
+        1 | #include <GL/osmesa.h>
+          |          ^~~~~~~~~~~~~
+    compilation terminated.
     ```
 
-    _Solution_: Install X11:
+   _Solution_: Install Osmesa:
 
-    - Ubuntu: `sudo apt install libx11-dev`
-    - CentOS: `sudo yum install libX11`
-    - Conda: `conda install -c conda-forge xorg-libx11`
+   - Ubuntu: `sudo apt-get install libosmesa6-dev`
+   - CentOS: `sudo yum install mesa-libOSMesa-devel`
+   - Conda: `conda install -c menpo osmesa`

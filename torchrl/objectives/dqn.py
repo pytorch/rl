@@ -29,9 +29,13 @@ class DQNLoss(LossModule):
 
     Args:
         value_network (QValueActor or nn.Module): a Q value operator.
+
+    Keyword Args:
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+        priority_key (str): TODO
         delay_value (bool, optional): whether to duplicate the value network into a new target value network to
             create a double DQN. Default is ``False``.
+        action_space (str, optional): TODO
 
     """
 
@@ -45,6 +49,7 @@ class DQNLoss(LossModule):
         priority_key: str = "td_error",
         delay_value: bool = False,
         gamma: float = None,
+        action_space: str = "one_hot",
     ) -> None:
 
         super().__init__()
@@ -63,7 +68,14 @@ class DQNLoss(LossModule):
 
         self.loss_function = loss_function
         self.priority_key = priority_key
-        self.action_space = self.value_network.action_space
+        if action_space is None:
+            # infer from value net
+            try:
+                self.action_space = self.value_network.action_space
+            except AttributeError:
+                raise AttributeError("action_space was not specified and could not be retrieved from the value network")
+        else:
+            self.action_space = action_space
 
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
