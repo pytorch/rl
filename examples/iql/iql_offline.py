@@ -28,7 +28,6 @@ from utils import (
 
 @hydra.main(config_path=".", config_name="offline_config")
 def main(cfg: "DictConfig"):  # noqa: F821
-
     model_device = cfg.optim.device
 
     state_dict = get_stats(cfg.env)
@@ -75,18 +74,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
 
         if r0 is None:
-            r0 = eval_td["reward"].sum(1).mean().item()
+            r0 = eval_td["next", "reward"].sum(1).mean().item()
         if l0 is None:
             l0 = loss_val.item()
 
         for key, value in loss_vals.items():
             logger.log_scalar(key, value.item(), i)
-        logger.log_scalar(
-            "reward_evaluation", eval_td["reward"].sum(1).mean().item(), i
-        )
+        eval_reward = eval_td["next", "reward"].sum(1).mean().item()
+        logger.log_scalar("evaluation reward", eval_reward, i)
 
         pbar.set_description(
-            f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {eval_td['reward'].sum(1).mean(): 4.4f} (init={r0: 4.4f})"
+            f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), evaluation reward: {eval_reward: 4.4f} (init={r0: 4.4f})"
         )
 
 

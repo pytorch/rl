@@ -23,16 +23,12 @@ collector:
   num_collectors: 1
   max_frames_per_traj: 200
 
-# Eval
-recorder:
-  video: False
-  interval: 10000 # record interval in frames
-  frames: 10000
-
 # logger
 logger:
   backend: wandb
   exp_name: iql_pendulum_gym
+  log_interval: 5000 # record interval in frames
+  eval_steps: 200
 
 # Buffer
 replay_buffer:

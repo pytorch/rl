@@ -172,7 +172,7 @@ def make_transformed_env_states(base_env, env_cfg):
 
 
 def make_parallel_env(env_cfg, state_dict):
-    num_envs = env_cfg.num_eval_envs
+    num_envs = env_cfg.num_envs
     env = make_transformed_env(
         ParallelEnv(num_envs, EnvCreator(lambda: make_base_env(env_cfg))), env_cfg
     )
@@ -180,6 +180,12 @@ def make_parallel_env(env_cfg, state_dict):
         if isinstance(t, ObservationNorm):
             t.init_stats(3, cat_dim=1, reduce_dim=[0, 1])
     env.load_state_dict(state_dict)
+    return env
+
+
+def make_test_env(env_cfg, state_dict):
+    env_cfg.num_envs = 1
+    env = make_parallel_env(env_cfg, state_dict=state_dict)
     return env
 
 
@@ -246,7 +252,6 @@ def make_replay_buffer(rb_cfg):
 
 
 def make_offline_replay_buffer(rb_cfg, state_dict):
-
     data = D4RLExperienceReplay(
         rb_cfg.dataset,
         split_trajs=False,
@@ -295,7 +300,6 @@ def make_offline_replay_buffer(rb_cfg, state_dict):
 
 
 def make_iql_model(cfg):
-
     env_cfg = cfg.env
     model_cfg = cfg.model
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
@@ -368,7 +372,6 @@ def make_iql_model(cfg):
 
 
 def make_iql_modules_state(model_cfg, proof_environment):
-
     env_specs = proof_environment.specs
     out_features = env_specs["input_spec"]["action"].shape[0]
 
@@ -404,7 +407,6 @@ def make_iql_modules_state(model_cfg, proof_environment):
 
 
 def make_iql_modules_pixels(model_cfg, proof_environment):
-
     env_specs = proof_environment.specs
     out_features = env_specs["input_spec"]["action"].shape[0]
 
