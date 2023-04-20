@@ -236,7 +236,7 @@ class MaskedCategorical(D.Categorical):
             return logits
 
         if not sparse_mask:
-            return torch.where(mask, logits, neg_inf)
+            return logits.masked_fill(~mask, neg_inf)
 
         if padding_value is not None:
             padding_mask = mask == padding_value
