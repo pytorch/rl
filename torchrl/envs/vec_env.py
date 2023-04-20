@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 from collections import OrderedDict
@@ -30,19 +31,11 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
-from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 
-try:
-    # Libraries necessary for MultiThreadedEnv
-    import envpool
-
-    import treevalue
-
-    _has_envpool = True
-except ImportError as err:
-    _has_envpool = False
-    IMPORT_ERR_ENVPOOL = err
 from torchrl.envs.utils import _sort_keys
+
+
+_has_envpool = importlib.util.find_spec("envpool")
 
 
 def _check_start(fun):
@@ -738,11 +731,13 @@ class ParallelEnv(_BatchedEnv):
 
         # keys = set()
         for i in range(self.num_workers):
-            msg, _ = self.parent_channels[i].recv()
+            msg, data = self.parent_channels[i].recv()
             if msg != "step_result":
                 raise RuntimeError(
                     f"Expected 'step_result' but received {msg} from worker {i}"
                 )
+            if data is not None:
+                self.shared_tensordicts[i].update_(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         return self.shared_tensordict_parent.select(*self._selected_step_keys).clone()
@@ -831,9 +826,12 @@ class ParallelEnv(_BatchedEnv):
         for i, channel in enumerate(self.parent_channels):
             if not _reset[i].any():
                 continue
-            cmd_in, _ = channel.recv()
+            cmd_in, data = channel.recv()
             if cmd_in != "reset_obs":
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
+            if data is not None:
+                self.shared_tensordicts[i].update_(data)
+
         return self.shared_tensordict_parent.select(*self._selected_reset_keys).clone()
 
     def __reduce__(self):
@@ -920,15 +918,15 @@ def _run_worker_pipe_shared_mem(
                 "env_fun_kwargs must be empty if an environment is passed to a process."
             )
         env = env_fun
+    is_cuda = torch.device(device).type == "cuda"
     env = env.to(device)
+
     i = -1
     initialized = False
 
     # make sure that process can be closed
     tensordict = None
     _td = None
-
-    reset_keys = None
 
     while True:
         try:
@@ -969,8 +967,18 @@ def _run_worker_pipe_shared_mem(
                 _td.del_("_reset")
             if pin_memory:
                 _td.pin_memory()
-            tensordict.update_(_td.select(*tensordict.keys(True, True), strict=False))
-            child_pipe.send(("reset_obs", reset_keys))
+            if not is_cuda:
+                tensordict.update_(
+                    _td.select(*tensordict.keys(True, True), strict=False)
+                )
+                child_pipe.send(("reset_obs", None))
+            else:
+                child_pipe.send(
+                    (
+                        "reset_obs",
+                        _td.select(*tensordict.keys(True, True), strict=False),
+                    )
+                )
 
         elif cmd == "step":
             if not initialized:
@@ -985,10 +993,14 @@ def _run_worker_pipe_shared_mem(
             _td = env._step(_td)
             if pin_memory:
                 _td.pin_memory()
-            tensordict.update_(_td.select("next"))
             msg = "step_result"
-            data = (msg, None)
-            child_pipe.send(data)
+            if not is_cuda:
+                tensordict.update_(_td.select("next"))
+                data = (msg, None)
+                child_pipe.send(data)
+            else:
+                data = (msg, _td.select("next"))
+                child_pipe.send(data)
 
         elif cmd == "close":
             del tensordict, _td, data
@@ -1044,13 +1056,13 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def __init__(
         self,
-        env: Optional["envpool.python.envpool.EnvPoolMixin"] = None,
+        env: Optional["envpool.python.envpool.EnvPoolMixin"] = None,  # noqa: F821
         **kwargs,
     ):
         if not _has_envpool:
             raise ImportError(
                 "envpool python package or one of its dependencies (gym, treevalue) were not found. Please install these dependencies."
-            ) from IMPORT_ERR_ENVPOOL
+            )
         if env is not None:
             kwargs["env"] = env
             self.num_workers = env.config["num_envs"]
@@ -1066,14 +1078,16 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
+        import envpool
+
         if not isinstance(env, (envpool.python.envpool.EnvPoolMixin,)):
             raise TypeError("env is not of type 'envpool.python.envpool.EnvPoolMixin'.")
 
-    def _build_env(self, env: "envpool.python.envpool.EnvPoolMixin"):
+    def _build_env(self, env: "envpool.python.envpool.EnvPoolMixin"):  # noqa: F821
         return env
 
     def _make_specs(
-        self, env: "envpool.python.envpool.EnvPoolMixin"
+        self, env: "envpool.python.envpool.EnvPoolMixin"  # noqa: F821
     ) -> None:  # noqa: F821
         self.input_spec = self._get_input_spec()
         self.output_spec = self._get_output_spec()
@@ -1104,6 +1118,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return tensordict_out.select().set("next", tensordict_out)
 
     def _get_input_spec(self) -> TensorSpec:
+        # local import to avoid importing gym in the script
+        from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
+
         # Envpool provides Gym-compatible specs as env.spec.action_space and
         # DM_Control-compatible specs as env.spec.action_spec(). We use the Gym ones.
 
@@ -1128,6 +1145,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         )
 
     def _get_observation_spec(self) -> TensorSpec:
+        # local import to avoid importing gym in the script
+        from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
+
         # Gym specs produced by EnvPool don't contain batch_size, we add it to satisfy checks in EnvBase
         observation_spec = _gym_to_torchrl_spec_transform(
             self._env.spec.observation_space,
@@ -1164,10 +1184,14 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _transform_reset_output(
         self,
-        envpool_output: Tuple[Union["treevalue.TreeValue", np.ndarray], Any],
+        envpool_output: Tuple[
+            Union["treevalue.TreeValue", np.ndarray], Any  # noqa: F821
+        ],
         reset_workers: Optional[torch.Tensor],
     ):
         """Process output of envpool env.reset."""
+        import treevalue
+
         observation, _ = envpool_output
         if reset_workers is not None:
             # Only specified workers were reset - need to set observation buffer values only for them
@@ -1204,7 +1228,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return tensordict_out
 
     def _treevalue_or_numpy_to_tensor_or_dict(
-        self, x: Union["treevalue.TreeValue", np.ndarray]
+        self, x: Union["treevalue.TreeValue", np.ndarray]  # noqa: F821
     ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
         """Converts observation returned by EnvPool.
 
@@ -1212,17 +1236,23 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         to a tensor or a dictionary of tensors. Currently only supports depth 1 trees, but can easily be extended to
         arbitrary depth if necessary.
         """
+        import treevalue
+
         if isinstance(x, treevalue.TreeValue):
             ret = self._treevalue_to_dict(x)
         else:
             ret = {"observation": torch.tensor(x)}
         return ret
 
-    def _treevalue_to_dict(self, tv: "treevalue.TreeValue") -> Dict[str, Any]:
+    def _treevalue_to_dict(
+        self, tv: "treevalue.TreeValue"  # noqa: F821
+    ) -> Dict[str, Any]:
         """Converts TreeValue to a dictionary.
 
         Currently only supports depth 1 trees, but can easily be extended to arbitrary depth if necessary.
         """
+        import treevalue
+
         return {k[0]: torch.tensor(v) for k, v in treevalue.flatten(tv)}
 
     def _set_seed(self, seed: Optional[int]):
@@ -1276,6 +1306,8 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         num_workers: int,
         create_env_kwargs: Optional[Dict[str, Any]],
     ) -> Any:
+        import envpool
+
         create_env_kwargs = create_env_kwargs or {}
         env = envpool.make(
             task_id=env_name,

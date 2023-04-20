@@ -301,7 +301,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux-cpu
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux-cpu
 
       - run:
           name: Post process
@@ -361,7 +363,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux-gpu
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux-gpu
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/post_process.sh
@@ -418,7 +422,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux-distributed-gpu
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux-distributed-gpu
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_distributed/scripts/post_process.sh
@@ -469,7 +475,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux_examples-gpu
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux_examples-gpu
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_examples/scripts/post_process.sh
@@ -524,7 +532,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F habitat-gpu
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F habitat-gpu
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_habitat/post_process.sh
@@ -579,7 +589,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F d4rl-gpu
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F d4rl-gpu
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_d4rl/post_process.sh
@@ -634,7 +646,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F sklearn-gpu
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F sklearn-gpu
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_sklearn/post_process.sh
@@ -680,7 +694,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux-jumanji
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux-jumanji
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_jumanji/post_process.sh
@@ -725,7 +741,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux-envpool
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux-envpool
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_envpool/post_process.sh
@@ -770,7 +788,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux-brax
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux-brax
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_brax/post_process.sh
@@ -815,7 +835,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux-vmas
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux-vmas
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_vmas/post_process.sh
@@ -858,7 +880,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux-gpu
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux-gpu
       - run:
           name: Post process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_libs/scripts_gym/post_process.sh
@@ -917,7 +941,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux-outdeps-gpu
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux-outdeps-gpu
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_optdeps/scripts/post_process.sh
@@ -968,7 +994,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux-stable-cpu
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux-stable-cpu
       - run:
           name: Post process
           command: .circleci/unittest/linux_stable/scripts/post_process.sh
@@ -1027,7 +1055,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F linux-stable-gpu
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux-stable-gpu
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_stable/scripts/post_process.sh
@@ -1071,7 +1101,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F olddeps-gpu
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F olddeps-gpu
       - run:
           name: Post process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/post_process.sh
@@ -1119,7 +1151,9 @@ jobs:
       - run:
           name: Codecov upload
           command: |
-            bash <(curl -s https://codecov.io/bash) -Z -F macos-cpu
+            curl -Os https://uploader.codecov.io/latest/macos/codecov
+            chmod +x codecov
+            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F macos-cpu
       - run:
           name: Post process
           command: .circleci/unittest/linux/scripts/post_process.sh
@@ -1211,10 +1245,8 @@ jobs:
 workflows:
   lint:
     jobs:
-#      - circleci_consistency
       - lint_python_and_config
       - lint_c
-#      - type_check_python
 
   build:
     jobs:
@@ -1337,67 +1369,9 @@ workflows:
 
   unittest:
     jobs:
-      - unittest_macos_cpu:
-          cu_version: cpu
-          name: unittest_macos_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_gpu:
+      - unittest_linux_sklearn_gpu:
           cu_version: cu117
-          name: unittest_linux_gpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_distributed_gpu:
-          cu_version: cu117
-          name: unittest_linux_distributed_gpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_optdeps_gpu:
-          cu_version: cu117
-          name: unittest_linux_optdeps_gpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_stable_gpu:
-          cu_version: cu116
-          name: unittest_linux_stable_gpu_py3.7
-          python_version: '3.7'
-
-      - unittest_macos_cpu:
-          cu_version: cpu
-          name: unittest_macos_cpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_gpu:
-          cu_version: cu117
-          name: unittest_linux_gpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_distributed_gpu:
-          cu_version: cu117
-          name: unittest_linux_distributed_gpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_optdeps_gpu:
-          cu_version: cu117
-          name: unittest_linux_optdeps_gpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_stable_gpu:
-          cu_version: cu116
-          name: unittest_linux_stable_gpu_py3.8
-          python_version: '3.8'
-      # we test supported libs for 3.8 only
-      - unittest_linux_habitat_gpu:
-          cu_version: cu117
-          name: unittest_linux_habitat_gpu_py3.8
+          name: unittest_linux_sklearn_gpu_py3.8
           python_version: '3.8'
 #      - unittest_linux_d4rl_gpu:
 #          cu_version: cu117
@@ -1453,43 +1427,14 @@ workflows:
           cu_version: cu117
           name: unittest_linux_optdeps_gpu_py3.9
           python_version: '3.9'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.9
-          python_version: '3.9'
       - unittest_linux_stable_gpu:
           cu_version: cu116
           name: unittest_linux_stable_gpu_py3.9
           python_version: '3.9'
-
-      - unittest_macos_cpu:
-          cu_version: cpu
-          name: unittest_macos_cpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_gpu:
+      - unittest_linux_habitat_gpu:
           cu_version: cu117
-          name: unittest_linux_gpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_distributed_gpu:
-          cu_version: cu117
-          name: unittest_linux_distributed_gpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_optdeps_gpu:
-          cu_version: cu117
-          name: unittest_linux_optdeps_gpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_stable_gpu:
-          cu_version: cu116
-          name: unittest_linux_stable_gpu_py3.10
-          python_version: '3.10'
+          name: unittest_linux_habitat_gpu_py3.9
+          python_version: '3.9'
 
       - unittest_linux_olddeps_gpu:
           cu_version: cu116

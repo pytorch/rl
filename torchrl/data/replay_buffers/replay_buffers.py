@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
 from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
-from tensordict.utils import expand_right
+from tensordict.utils import expand_as_right
 
 from torchrl.data.utils import DEVICE_TYPING
 
@@ -86,13 +86,13 @@ class ReplayBuffer:
 
     Args:
         storage (Storage, optional): the storage to be used. If none is provided
-            a default :class:`torchrl.data.replay_buffers.ListStorage` with
+            a default :class:`~torchrl.data.replay_buffers.ListStorage` with
             ``max_size`` of ``1_000`` will be created.
         sampler (Sampler, optional): the sampler to be used. If none is provided,
-            a default :class:`torchrl.data.replay_buffers.RandomSampler`
+            a default :class:`~torchrl.data.replay_buffers.RandomSampler`
             will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default :class:`torchrl.data.replay_buffers.RoundRobinWriter`
+            a default :class:`~torchrl.data.replay_buffers.RoundRobinWriter`
             will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
@@ -104,7 +104,7 @@ class ReplayBuffer:
             using multithreading. Defaults to None (no prefetching).
         transform (Transform, optional): Transform to be executed when
             sample() is called.
-            To chain transforms use the :class:`torchrl.envs.Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.Compose` class.
             Transforms should be used with :class:`tensordict.TensorDict`
             content. If used with other structures, the transforms should be
             encoded with a ``"data"`` leading key that will be used to
@@ -235,7 +235,7 @@ class ReplayBuffer:
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
 
-        if self._transform is not None:
+        if self._transform is not None and len(self._transform):
             is_td = True
             if not isinstance(data, TensorDictBase):
                 data = TensorDict({"data": data}, [])
@@ -286,7 +286,7 @@ class ReplayBuffer:
         """
         if self._transform is not None and isinstance(data, TensorDictBase):
             data = self._transform.inv(data)
-        elif self._transform is not None:
+        elif self._transform is not None and len(self._transform):
             # Accepts transforms that act on "data" key
             data = self._transform.inv(TensorDict({"data": data}, [])).get("data")
         with self._replay_lock:
@@ -310,7 +310,7 @@ class ReplayBuffer:
             data = self._storage[index]
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
-        if self._transform is not None:
+        if self._transform is not None and len(self._transform):
             is_td = True
             if not isinstance(data, TensorDictBase):
                 data = TensorDict({"data": data}, [])
@@ -434,7 +434,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         eps (float): delta added to the priorities to ensure that the buffer
             does not contain null priorities.
         storage (Storage, optional): the storage to be used. If none is provided
-            a default :class:`torchrl.data.replay_buffers.ListStorage` with
+            a default :class:`~torchrl.data.replay_buffers.ListStorage` with
             ``max_size`` of ``1_000`` will be created.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
@@ -446,7 +446,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             using multithreading. Defaults to None (no prefetching).
         transform (Transform, optional): Transform to be executed when
             sample() is called.
-            To chain transforms use the :class:`torchrl.envs.Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.Compose` class.
             Transforms should be used with :class:`tensordict.TensorDict`
             content. If used with other structures, the transforms should be
             encoded with a ``"data"`` leading key that will be used to
@@ -468,7 +468,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         calling :meth:`~.sample` with the ``return_info`` argument set to
         ``True`` to have access to the indices, and hence update the priority.
         Using :class:`tensordict.TensorDict` and the related
-        :class:`torchrl.data.TensorDictPrioritizedReplayBuffer` simplifies this
+        :class:`~torchrl.data.TensorDictPrioritizedReplayBuffer` simplifies this
         process.
 
     Examples:
@@ -528,18 +528,18 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 
 class TensorDictReplayBuffer(ReplayBuffer):
-    """TensorDict-specific wrapper around the :class:`torchrl.data.ReplayBuffer` class.
+    """TensorDict-specific wrapper around the :class:`~torchrl.data.ReplayBuffer` class.
 
     All arguments are keyword-only arguments.
 
     Args:
         storage (Storage, optional): the storage to be used. If none is provided
-            a default :class:`torchrl.data.replay_buffers.ListStorage` with
+            a default :class:`~torchrl.data.replay_buffers.ListStorage` with
             ``max_size`` of ``1_000`` will be created.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default :class:`torchrl.data.replay_buffers.RoundRobinWriter`
+            a default :class:`~torchrl.data.replay_buffers.RoundRobinWriter`
             will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
@@ -551,7 +551,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
             using multithreading. Defaults to None (no prefetching).
         transform (Transform, optional): Transform to be executed when
             sample() is called.
-            To chain transforms use the :class:`torchrl.envs.Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.Compose` class.
             Transforms should be used with :class:`tensordict.TensorDict`
             content. If used with other structures, the transforms should be
             encoded with a ``"data"`` leading key that will be used to
@@ -570,7 +570,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         priority_key (str, optional): the key at which priority is assumed to
             be stored within TensorDicts added to this ReplayBuffer.
             This is to be used when the sampler is of type
-            :class:`torchrl.data.PrioritizedSampler`.
+            :class:`~torchrl.data.PrioritizedSampler`.
             Defaults to ``"td_error"``.
 
     Examples:
@@ -708,6 +708,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
         return index
 
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
+        if not isinstance(self._sampler, PrioritizedSampler):
+            return
         priority = torch.tensor(
             [self._get_priority(td) for td in data],
             dtype=torch.float,
@@ -753,26 +755,14 @@ class TensorDictReplayBuffer(ReplayBuffer):
         data, info = super().sample(batch_size, return_info=True)
         if include_info in (True, None):
             for k, v in info.items():
-                data.set(k, torch.tensor(v, device=data.device))
-        if "_batch_size" in data.keys():
-            # we need to reset the batch-size
-            shape = data.pop("_batch_size")
-            shape = shape[0]
-            shape = torch.Size([data.shape[0], *shape])
-            # we may need to update some values in the data
-            for key, value in data.items():
-                if value.ndim >= len(shape):
-                    continue
-                value = expand_right(value, shape)
-                data.set(key, value)
-            data.batch_size = shape
+                data.set(k, expand_as_right(torch.tensor(v, device=data.device), data))
         if return_info:
             return data, info
         return data
 
 
 class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
-    """TensorDict-specific wrapper around the :class:`torchrl.data.PrioritizedReplayBuffer` class.
+    """TensorDict-specific wrapper around the :class:`~torchrl.data.PrioritizedReplayBuffer` class.
 
     All arguments are keyword-only arguments.
 
@@ -788,7 +778,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         eps (float): delta added to the priorities to ensure that the buffer
             does not contain null priorities.
         storage (Storage, optional): the storage to be used. If none is provided
-            a default :class:`torchrl.data.replay_buffers.ListStorage` with
+            a default :class:`~torchrl.data.replay_buffers.ListStorage` with
             ``max_size`` of ``1_000`` will be created.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
@@ -800,7 +790,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             using multithreading. Defaults to None (no prefetching).
         transform (Transform, optional): Transform to be executed when
             sample() is called.
-            To chain transforms use the :class:`torchrl.envs.Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.Compose` class.
             Transforms should be used with :class:`tensordict.TensorDict`
             content. If used with other structures, the transforms should be
             encoded with a ``"data"`` leading key that will be used to
@@ -819,7 +809,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         priority_key (str, optional): the key at which priority is assumed to
             be stored within TensorDicts added to this ReplayBuffer.
             This is to be used when the sampler is of type
-            :class:`torchrl.data.PrioritizedSampler`.
+            :class:`~torchrl.data.PrioritizedSampler`.
             Defaults to ``"td_error"``.
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectories). Can be one of "max", "min",

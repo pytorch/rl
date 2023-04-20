@@ -14,11 +14,12 @@ from typing import OrderedDict
 import torch.cuda
 from tensordict import TensorDict
 from torch import multiprocessing as mp, nn
+from torchrl._utils import VERBOSE
 
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
-    DEFAULT_EXPLORATION_MODE,
+    DEFAULT_EXPLORATION_TYPE,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
@@ -29,6 +30,7 @@ from torchrl.collectors.distributed.default_configs import (
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvBase, EnvCreator
+from torchrl.envs.utils import _convert_exploration_type
 
 SUBMITIT_ERR = None
 try:
@@ -54,7 +56,7 @@ def _distributed_init_collection_node(
     collector_kwargs,
     update_interval,
     total_frames,
-    verbose=False,
+    verbose=VERBOSE,
 ):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = str(tcpport)
@@ -130,7 +132,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
 
     Args:
         create_env_fn (Callable or List[Callabled]): list of Callables, each returning an
-            instance of :class:`torchrl.envs.EnvBase`.
+            instance of :class:`~torchrl.envs.EnvBase`.
         policy (Callable): Policy to be executed in the environment.
             Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
             If ``None`` is provided, the policy used will be a
@@ -160,15 +162,15 @@ class DistributedSyncDataCollector(DataCollectorBase):
             at the beginning of a batch collection.
             Defaults to ``False``.
         postproc (Callable, optional): A post-processing transform, such as
-            a :class:`torchrl.envs.Transform` or a :class:`torchrl.data.postprocs.MultiStep`
+            a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
             instance.
             Defaults to ``None``.
         split_trajs (bool, optional): Boolean indicating whether the resulting
             TensorDict should be split according to the trajectories.
-            See :func:`torchrl.collectors.utils.split_trajectories` for more
+            See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
-        exploration_mode (str, optional): interaction mode to be used when
+        exploration_type (str, optional): interaction mode to be used when
             collecting data. Must be one of ``"random"``, ``"mode"`` or
             ``"mean"``.
             Defaults to ``"random"``
@@ -176,12 +178,12 @@ class DistributedSyncDataCollector(DataCollectorBase):
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
         collector_class (type or str, optional): a collector class for the remote node. Can be
-            :class:`torchrl.collectors.SyncDataCollector`,
-            :class:`torchrl.collectors.MultiSyncDataCollector`,
-            :class:`torchrl.collectors.MultiaSyncDataCollector`
+            :class:`~torchrl.collectors.SyncDataCollector`,
+            :class:`~torchrl.collectors.MultiSyncDataCollector`,
+            :class:`~torchrl.collectors.MultiaSyncDataCollector`
             or a derived class of these. The strings "single", "sync" and
             "async" correspond to respective class.
-            Defaults to :class:`torchrl.collectors.SyncDataCollector`.
+            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
         collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
             remote data-collector. If a list is provided, each element will
             correspond to an individual set of keyword arguments for the
@@ -226,7 +228,8 @@ class DistributedSyncDataCollector(DataCollectorBase):
         reset_at_each_iter=False,
         postproc=None,
         split_trajs=False,
-        exploration_mode=DEFAULT_EXPLORATION_MODE,
+        exploration_type=DEFAULT_EXPLORATION_TYPE,
+        exploration_mode=None,
         reset_when_done=True,
         collector_class=SyncDataCollector,
         collector_kwargs=None,
@@ -239,6 +242,8 @@ class DistributedSyncDataCollector(DataCollectorBase):
         launcher="submitit",
         tcp_port=None,
     ):
+        exploration_type = _convert_exploration_type(exploration_mode, exploration_type)
+
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
         elif collector_class == "sync":
@@ -282,10 +287,9 @@ class DistributedSyncDataCollector(DataCollectorBase):
 
         self.num_workers_per_collector = num_workers_per_collector
         self.total_frames = total_frames
-        if slurm_kwargs is None:
-            self.slurm_kwargs = copy(DEFAULT_SLURM_CONF)
-        else:
-            self.slurm_kwargs = copy(DEFAULT_SLURM_CONF).update(slurm_kwargs)
+        self.slurm_kwargs = copy(DEFAULT_SLURM_CONF)
+        if slurm_kwargs is not None:
+            self.slurm_kwargs.update(slurm_kwargs)
         collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
         self.collector_kwargs = (
             deepcopy(collector_kwargs)
@@ -300,7 +304,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
                 init_random_frames // self.num_workers
             )
             collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
-            collector_kwarg["exploration_mode"] = exploration_mode
+            collector_kwarg["exploration_type"] = exploration_type
             collector_kwarg["reset_when_done"] = reset_when_done
 
         if postproc is not None and hasattr(postproc, "to"):

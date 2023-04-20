@@ -14,7 +14,10 @@ import torch
 from tensordict.nn import make_functional, repopulate_module, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 
+from torchrl.envs.utils import ExplorationType, set_exploration_type
+
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
+from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
@@ -22,10 +25,7 @@ from torchrl.objectives.utils import (
     hold_out_params,
     ValueEstimators,
 )
-
-from ..envs.utils import set_exploration_mode
-from .common import LossModule
-from .value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
 class DDPGLoss(LossModule):
@@ -99,12 +99,6 @@ class DDPGLoss(LossModule):
             a tuple of 2 tensors containing the DDPG loss.
 
         """
-        if not input_tensordict.device == self.device:
-            raise RuntimeError(
-                f"Got device={input_tensordict.device} but "
-                f"actor_network.device={self.device} (self.device={self.device})"
-            )
-
         loss_value, td_error, pred_val, target_value = self._loss_value(
             input_tensordict,
         )
@@ -168,7 +162,7 @@ class DDPGLoss(LossModule):
             batch_size=self.target_actor_network_params.batch_size,
             device=self.target_actor_network_params.device,
         )
-        with set_exploration_mode("mode"):
+        with set_exploration_type(ExplorationType.MODE):
             target_value = self.value_estimator.value_estimate(
                 tensordict, target_params=target_params
             ).squeeze(-1)
