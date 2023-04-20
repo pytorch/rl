@@ -199,7 +199,10 @@ The result should contain a filename with the tag `linuxgpuextensionbuilder`.
 RuntimeError: Failed to initialize OpenGL
 ```
 
-> Mujoco's EGL code indexes devices globally while CUDA_VISIBLE_DEVICES (when used with job schedulers like slurm) returns the local device ids. This can be worked around by setting the `GPUS` environment variable to the global device id. For slurm, it can be obtained using `SLURM_STEP_GPUS` enviroment variable.
+> Mujoco's EGL code indexes devices globally while CUDA_VISIBLE_DEVICES 
+  (when used with job schedulers like slurm) returns the local device ids. 
+  This can be worked around by setting the `GPUS` environment variable to the 
+  global device id. For slurm, it can be obtained using `SLURM_STEP_GPUS` enviroment variable.
 
 2. Rendered images are completely black.
 
@@ -222,3 +225,37 @@ RuntimeError: Failed to initialize OpenGL
 6. `cannot find -lGL: No such file or directory`
 
    _Solution_: call `conda install -c anaconda mesa-libgl-devel-cos6-x86_64`
+
+7. ```
+   fatal error: GL/glew.h: No such file or directory
+    4 | #include <GL/glew.h>
+      |          ^~~~~~~~~~~
+   ```
+
+   _Solution_: install glew and glew-devel
+
+   - Ubuntu: `sudo apt-get install libglew-dev libglew`
+   - CentOS: `sudo yum install glew glew-devel`
+   - Conda: `conda install -c conda-forge glew`
+
+9. ```
+   RuntimeError: Failed to initialize OpenGL
+   ```
+
+   _Solution_: Install libEGL:
+
+   - Ubuntu: `sudo apt install libegl-dev libegl`
+   - CentOS: `sudo yum install mesa-libEGL mesa-libEGL-devel`
+   - Conda: `conda install -c anaconda mesa-libegl-cos6-x86_64`
+
+10. ```
+    fatal error: X11/Xlib.h: No such file or directory
+       | #include <X11/Xlib.h>
+       |          ^~~~~~~~~~~~
+    ```
+
+    _Solution_: Install X11:
+
+    - Ubuntu: `sudo apt install libx11-dev`
+    - CentOS: `sudo yum install libX11`
+    - Conda: `conda install -c conda-forge xorg-libx11`

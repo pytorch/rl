@@ -26,8 +26,6 @@ yum makecache && yum install glew  xorg-x11-server-Xvfb glew-devel mesa-libEGL m
 #  glew-devel \
 #  egl-utils \
 
-export LD_PRELOAD=/lib64/libGLEW.so.1.10:/lib64/libGL.so.1
-
 #yum makecache && yum install libglvnd-devel glew xorg-x11-server-Xvfb zlib-devel egl-utils freeglut mesa-libEGL -y
 
 
