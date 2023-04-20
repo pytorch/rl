@@ -29,9 +29,21 @@ class DQNLoss(LossModule):
 
     Args:
         value_network (QValueActor or nn.Module): a Q value operator.
+
+    Keyword Args:
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
-        delay_value (bool, optional): whether to duplicate the value network into a new target value network to
+        priority_key (str, optional): the key at which priority is assumed to
+            be stored within TensorDicts added to this ReplayBuffer.
+            This is to be used when the sampler is of type
+            :class:`~torchrl.data.PrioritizedSampler`.
+            Defaults to ``"td_error"``.
+        delay_value (bool, optional): whether to duplicate the value network
+            into a new target value network to
             create a double DQN. Default is ``False``.
+        action_space (str, optional): Action space. Must be one of
+            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
+            If not provided, an attempt to retrieve it from the value network
+            will be made.
 
     """
 
