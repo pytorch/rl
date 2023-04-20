@@ -72,7 +72,7 @@ This demo was presented at ICML 2022 on the industry demo day.
 #      │   ├── "ddpg.py"
 #      │   ├── "dqn.py"
 #      │   ├── "functional.py"
-#      │   ├── "ppo.py"
+#      │   ├── "a2c.py"
 #      │   ├── "redq.py"
 #      │   ├── "reinforce.py"
 #      │   ├── "sac.py"
