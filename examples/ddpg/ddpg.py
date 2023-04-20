@@ -10,7 +10,7 @@ import torch.cuda
 from hydra.core.config_store import ConfigStore
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -122,7 +122,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         actor_model_explore.share_memory()
 
     if cfg.gSDE:
-        with torch.no_grad(), set_exploration_mode("random"):
+        with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
             # get dimensions to build the parallel env
             proof_td = actor_model_explore(proof_env.reset().to(device))
         action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]

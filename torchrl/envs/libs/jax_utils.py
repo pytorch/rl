@@ -58,6 +58,7 @@ def _tensor_to_ndarray(value: torch.Tensor) -> jnp.ndarray:
 
 
 def _get_object_fields(obj) -> dict:
+    """Converts an object (named tuple or dataclass or dict) to a dict."""
     if isinstance(obj, tuple) and hasattr(obj, "_fields"):  # named tuple
         return dict(zip(obj._fields, obj))
     elif dataclasses.is_dataclass(obj):
@@ -66,6 +67,8 @@ def _get_object_fields(obj) -> dict:
         }
     elif isinstance(obj, dict):
         return obj
+    elif obj is None:
+        return {}
     else:
         raise NotImplementedError(f"unsupported data type {type(obj)}")
 
@@ -88,11 +91,12 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
     """Converts a TensorDict to a namedtuple or a dataclass."""
     t = {}
     _fields = _get_object_fields(object_example)
-    for name in tensordict.keys():
+    for name, value in tensordict.items():
         example = _fields[name]
-        value = tensordict[name]
         if isinstance(value, TensorDictBase):
             t[name] = _tensordict_to_object(value, example)
+        elif value is None:
+            t[name] = value
         else:
             if value.dtype is torch.bool:
                 value = value.to(torch.uint8)

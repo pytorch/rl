@@ -15,6 +15,7 @@ The helper functions are coded in the utils.py associated with this script.
 """
 
 import hydra
+import torch
 import tqdm
 from torchrl.trainers.helpers.envs import correct_for_frame_skip
 
@@ -24,16 +25,15 @@ from utils import (
     make_logger,
     make_loss,
     make_policy,
-    make_recorder,
     make_replay_buffer,
     make_td3_model,
     make_td3_optimizer,
+    make_test_env,
 )
 
 
 @hydra.main(config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
-
     cfg = correct_for_frame_skip(cfg)
     model_device = cfg.optim.device
 
@@ -51,12 +51,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor_optim, critic_optim = make_td3_optimizer(
         cfg.optim, actor_network, value_network
     )
-    recorder = make_recorder(cfg, logger, policy)
-
     optim_steps_per_batch = cfg.optim.optim_steps_per_batch
     batch_size = cfg.optim.batch_size
     init_random_frames = cfg.collector.init_random_frames
-    record_interval = cfg.recorder.interval
+
+    test_env = make_test_env(cfg.env)
+    record_interval = cfg.logger.log_interval
+    eval_steps = cfg.logger.eval_steps
 
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     collected_frames = 0
@@ -90,24 +91,45 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     target_net_updater.step()
 
             if r0 is None:
-                r0 = data["reward"].mean().item()
+                r0 = data["next", "reward"].mean().item()
             if l0 is None:
                 l0 = loss_val.item()
 
             for key, value in loss_vals.items():
                 logger.log_scalar(key, value.item(), collected_frames)
             logger.log_scalar(
-                "reward_training", data["reward"].mean().item(), collected_frames
+                "reward_training",
+                data["next", "reward"].mean().item(),
+                collected_frames,
             )
 
             pbar.set_description(
-                f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['reward'].mean(): 4.4f} (init={r0: 4.4f})"
+                f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['next', 'reward'].mean(): 4.4f} (init={r0: 4.4f})"
             )
             collector.update_policy_weights_()
+        # Test current policy
         if (
-            collected_frames - frames_in_batch
-        ) // record_interval < collected_frames // record_interval:
-            recorder(batch=collected_frames)
+            logger is not None
+            and (collected_frames - frames_in_batch) // record_interval
+            < collected_frames // record_interval
+        ):
+            with torch.no_grad():
+                test_env.eval()
+                policy.eval()
+                # Generate a complete episode
+                td_test = test_env.rollout(
+                    policy=policy,
+                    max_steps=eval_steps,
+                    auto_reset=True,
+                    auto_cast_to_device=True,
+                    break_when_any_done=True,
+                ).clone()
+                logger.log_scalar(
+                    "reward_testing",
+                    td_test["next", "reward"].sum().item(),
+                    collected_frames,
+                )
+                policy.train()
 
 
 if __name__ == "__main__":

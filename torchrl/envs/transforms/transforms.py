@@ -8,7 +8,7 @@ from __future__ import annotations
 import collections
 import multiprocessing as mp
 import warnings
-from copy import copy
+from copy import copy, deepcopy
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
@@ -34,6 +34,7 @@ from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
 from torchrl.envs.utils import _sort_keys, step_mdp
+from torchrl.objectives.value.functional import reward2go
 
 try:
     from torchvision.transforms.functional import center_crop
@@ -396,7 +397,7 @@ class TransformedEnv(EnvBase):
         transform (Transform, optional): transform to apply to the tensordict resulting
             from :obj:`env.step(td)`. If none is provided, an empty Compose
             placeholder in an eval mode is used.
-        cache_specs (bool, optional): if True, the specs will be cached once
+        cache_specs (bool, optional): if ``True``, the specs will be cached once
             and for all after the first call (i.e. the specs will be
             transformed_in only once). If the transform changes during
             training, the original spec transform may not be valid anymore,
@@ -880,7 +881,7 @@ class ToTensorImage(ObservationTransform):
     with values between 0 and 1.
 
     Args:
-        unsqueeze (bool): if True, the observation tensor is unsqueezed
+        unsqueeze (bool): if ``True``, the observation tensor is unsqueezed
             along the first dimension. default=False.
         dtype (torch.dtype, optional): dtype to use for the resulting
             observations.
@@ -1154,7 +1155,7 @@ class FlattenObservation(ObservationTransform):
             :obj:`["pixels"]` is assumed.
         out_keys (sequence of str, optional): the flatten observation keys. If none is
             provided, :obj:`in_keys` is assumed.
-        allow_positive_dim (bool, optional): if True, positive dimensions are accepted.
+        allow_positive_dim (bool, optional): if ``True``, positive dimensions are accepted.
             :obj:`FlattenObservation` will map these to the n^th feature dimension
             (ie n^th dimension after batch size of parent env) of the input tensor.
             Defaults to False, ie. non-negative dimensions are not permitted.
@@ -1229,7 +1230,7 @@ class UnsqueezeTransform(Transform):
     Args:
         unsqueeze_dim (int): dimension to unsqueeze. Must be negative (or allow_positive_dim
             must be turned on).
-        allow_positive_dim (bool, optional): if True, positive dimensions are accepted.
+        allow_positive_dim (bool, optional): if ``True``, positive dimensions are accepted.
             :obj:`UnsqueezeTransform` will map these to the n^th feature dimension
             (ie n^th dimension after batch size of parent env) of the input tensor,
             independently from the tensordict batch size (ie positive dims may be
@@ -1414,7 +1415,7 @@ class ObservationNorm(ObservationTransform):
             only the forward transform will be called.
         out_keys_inv (list of int, optional): output entries for the inverse transform.
             Defaults to the value of `in_keys_inv`.
-        standard_normal (bool, optional): if True, the transform will be
+        standard_normal (bool, optional): if ``True``, the transform will be
 
             .. math::
                 obs = (obs-loc)/scale
@@ -1831,7 +1832,7 @@ class RewardScaling(Transform):
     Args:
         loc (number or torch.Tensor): location of the affine transform
         scale (number or torch.Tensor): scale of the affine transform
-        standard_normal (bool, optional): if True, the transform will be
+        standard_normal (bool, optional): if ``True``, the transform will be
 
             .. math::
                 reward = (reward-loc)/scale
@@ -1993,9 +1994,9 @@ class CatTensors(Transform):
         out_key: key of the resulting tensor.
         dim (int, optional): dimension along which the concatenation will occur.
             Default is -1.
-        del_keys (bool, optional): if True, the input values will be deleted after
+        del_keys (bool, optional): if ``True``, the input values will be deleted after
             concatenation. Default is True.
-        unsqueeze_if_oor (bool, optional): if True, CatTensor will check that
+        unsqueeze_if_oor (bool, optional): if ``True``, CatTensor will check that
             the dimension indicated exist for the tensors to concatenate. If not,
             the tensors will be unsqueezed along that dimension.
             Default is False.
@@ -2102,7 +2103,7 @@ class CatTensors(Transform):
             )
 
         if isinstance(observation_spec, CompositeSpec) and len(
-            [key for key in self.in_keys if key not in observation_spec]
+            [key for key in self.in_keys if key not in observation_spec.keys(True)]
         ):
             raise ValueError(
                 "CatTensor got a list of keys that does not match the keys in observation_spec. "
@@ -2136,7 +2137,8 @@ class CatTensors(Transform):
         )
         if self._del_keys:
             for key in self.keys_to_exclude:
-                del observation_spec[key]
+                if key in observation_spec.keys(True):
+                    del observation_spec[key]
         return observation_spec
 
     def __repr__(self) -> str:
@@ -2168,7 +2170,7 @@ class DiscreteActionProjection(Transform):
         num_actions_effective (int): max number of action considered.
         max_actions (int): maximum number of actions that this module can read.
         action_key (str, optional): key name of the action. Defaults to "action".
-        include_forward (bool, optional): if True, a call to forward will also
+        include_forward (bool, optional): if ``True``, a call to forward will also
             map the action from one domain to the other when the module is called
             by a replay buffer or an nn.Module chain. Defaults to True.
 
@@ -2383,7 +2385,7 @@ class TensorDictPrimer(Transform):
     Args:
         primers (dict, optional): a dictionary containing key-spec pairs which will
             be used to populate the input tensordict.
-        random (bool, optional): if True, the values will be drawn randomly from
+        random (bool, optional): if ``True``, the values will be drawn randomly from
             the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
         default_value (float, optional): if non-random filling is chosen, this
@@ -2602,6 +2604,13 @@ class VecNorm(Transform):
             default: 0.99
         eps (number, optional): lower bound of the running standard
             deviation (for numerical underflow). Default is 1e-4.
+        shapes (List[torch.Size], optional): if provided, represents the shape
+            of each in_keys. Its length must match the one of ``in_keys``.
+            Each shape must match the trailing dimension of the corresponding
+            entry.
+            If not, the feature dimensions of the entry (ie all dims that do
+            not belong to the tensordict batch-size) will be considered as
+            feature dimension.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -2629,6 +2638,7 @@ class VecNorm(Transform):
         lock: mp.Lock = None,
         decay: float = 0.9999,
         eps: float = 1e-4,
+        shapes: List[torch.Size] = None,
     ) -> None:
         if lock is None:
             lock = mp.Lock()
@@ -2656,7 +2666,13 @@ class VecNorm(Transform):
 
         self.lock = lock
         self.decay = decay
+        self.shapes = shapes
         self.eps = eps
+
+    def _key_str(self, key):
+        if not isinstance(key, str):
+            key = "_".join(key)
+        return key
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.lock is not None:
@@ -2681,17 +2697,44 @@ class VecNorm(Transform):
     forward = _call
 
     def _init(self, tensordict: TensorDictBase, key: str) -> None:
-        if self._td is None or key + "_sum" not in self._td.keys():
-            td_view = tensordict.view(-1)
-            td_select = td_view[0]
-            d = {key + "_sum": torch.zeros_like(td_select.get(key))}
-            d.update({key + "_ssq": torch.zeros_like(td_select.get(key))})
+        key_str = self._key_str(key)
+        if self._td is None or key_str + "_sum" not in self._td.keys():
+            if key is not key_str and key_str in tensordict.keys():
+                raise RuntimeError(
+                    f"Conflicting key names: {key_str} from VecNorm and input tensordict keys."
+                )
+            if self.shapes is None:
+                td_view = tensordict.view(-1)
+                td_select = td_view[0]
+                item = td_select.get(key)
+                d = {key_str + "_sum": torch.zeros_like(item)}
+                d.update({key_str + "_ssq": torch.zeros_like(item)})
+            else:
+                idx = 0
+                for in_key in self.in_keys:
+                    if in_key != key:
+                        idx += 1
+                    else:
+                        break
+                shape = self.shapes[idx]
+                item = tensordict.get(key)
+                d = {
+                    key_str
+                    + "_sum": torch.zeros(shape, device=item.device, dtype=item.dtype)
+                }
+                d.update(
+                    {
+                        key_str
+                        + "_ssq": torch.zeros(
+                            shape, device=item.device, dtype=item.dtype
+                        )
+                    }
+                )
+
             d.update(
                 {
-                    key
-                    + "_count": torch.zeros(
-                        1, device=td_select.get(key).device, dtype=torch.float
-                    )
+                    key_str
+                    + "_count": torch.zeros(1, device=item.device, dtype=torch.float)
                 }
             )
             if self._td is None:
@@ -2702,6 +2745,7 @@ class VecNorm(Transform):
             pass
 
     def _update(self, key, value, N) -> torch.Tensor:
+        key = self._key_str(key)
         _sum = self._td.get(key + "_sum")
         _ssq = self._td.get(key + "_ssq")
         _count = self._td.get(key + "_count")
@@ -2771,7 +2815,7 @@ class VecNorm(Transform):
                 tensordict
             keys (iterable of str, optional): keys that
                 have to be normalized. Default is `["next", "reward"]`
-            memmap (bool): if True, the resulting tensordict will be cast into
+            memmap (bool): if ``True``, the resulting tensordict will be cast into
                 memmory map (using `memmap_()`). Otherwise, the tensordict
                 will be placed in shared memory.
 
@@ -3607,3 +3651,168 @@ class RenameTransform(Transform):
             if not self.create_copy:
                 del input_spec[in_key]
         return input_spec
+
+
+class Reward2GoTransform(Transform):
+    """Calculates the reward to go based on the episode reward and a discount factor.
+
+    As the :class:`~.Reward2GoTransform` is only an inverse transform the ``in_keys`` will be directly used for the ``in_keys_inv``.
+    The reward-to-go can be only calculated once the episode is finished. Therefore, the transform should be applied to the replay buffer
+    and not to the collector.
+
+    Args:
+        in_keys (list of str/tuples of str): the entries to rename. Defaults to
+            ``("next", "reward")`` if none is provided.
+        out_keys (list of str/tuples of str): the entries to rename. Defaults to
+            the values of ``in_keys`` if none is provided.
+        gamma (float or torch.Tensor): the discount factor. Defaults to 1.0.
+
+    Examples:
+        >>> # Using this transform as part of a replay buffer
+        >>> from torchrl.data import ReplayBuffer, LazyTensorStorage
+        >>> torch.manual_seed(0)
+        >>> r2g = Reward2GoTransform(gamma=0.99, out_keys=["reward_to_go"])
+        >>> rb = ReplayBuffer(storage=LazyTensorStorage(100), transform=r2g)
+        >>> batch, timesteps = 4, 5
+        >>> done = torch.zeros(batch, timesteps, 1, dtype=torch.bool)
+        >>> for i in range(batch):
+        ...     while not done[i].any():
+        ...         done[i] = done[i].bernoulli_(0.1)
+        >>> reward = torch.ones(batch, timesteps, 1)
+        >>> td = TensorDict(
+        ...     {"next": {"done": done, "reward": reward}},
+        ...     [batch, timesteps],
+        ... )
+        >>> rb.extend(td)
+        >>> sample = rb.sample(1)
+        >>> print(sample["next", "reward"])
+        tensor([[[1.],
+                 [1.],
+                 [1.],
+                 [1.],
+                 [1.]]])
+        >>> print(sample["reward_to_go"])
+        tensor([[[4.9010],
+                 [3.9404],
+                 [2.9701],
+                 [1.9900],
+                 [1.0000]]])
+
+    One can also use this transform directly with a collector: make sure to
+    append the `inv` method of the transform.
+
+    Examples:
+        >>> from torchrl.collectors import SyncDataCollector, RandomPolicy
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> t = Reward2GoTransform(gamma=0.99, out_keys=["reward_to_go"])
+        >>> env = GymEnv("Pendulum-v1")
+        >>> collector = SyncDataCollector(
+        ...     env,
+        ...     RandomPolicy(env.action_spec),
+        ...     frames_per_batch=200,
+        ...     total_frames=-1,
+        ...     postproc=t.inv
+        ... )
+        >>> for data in collector:
+        ...     break
+        >>> print(data)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                collector: TensorDict(
+                    fields={
+                        traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([200]),
+                    device=cpu,
+                    is_shared=False),
+                done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([200]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                reward_to_go: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([200]),
+            device=cpu,
+            is_shared=False)
+
+    Using this transform as part of an env will raise an exception
+
+    Examples:
+        >>> t = Reward2GoTransform(gamma=0.99)
+        >>> TransformedEnv(GymEnv("Pendulum-v1"), t)  # crashes
+
+    """
+
+    ENV_ERR = (
+        "The Reward2GoTransform is only an inverse transform and can "
+        "only be applied to the replay buffer and not to the collector or the environment."
+    )
+
+    def __init__(
+        self,
+        gamma: Optional[Union[float, torch.Tensor]] = 1.0,
+        in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
+    ):
+        if in_keys is None:
+            in_keys = [("next", "reward")]
+        if out_keys is None:
+            out_keys = deepcopy(in_keys)
+        # out_keys = ["reward_to_go"]
+        super().__init__(
+            in_keys=in_keys,
+            in_keys_inv=in_keys,
+            out_keys_inv=out_keys,
+        )
+
+        if not isinstance(gamma, torch.Tensor):
+            gamma = torch.tensor(gamma)
+
+        self.register_buffer("gamma", gamma)
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        done = tensordict.get(("next", "done"))
+        truncated = tensordict.get(("next", "truncated"), None)
+        if truncated is not None:
+            done_or_truncated = done | truncated
+        else:
+            done_or_truncated = done
+        if not done_or_truncated.any(-2).all():
+            raise RuntimeError(
+                "No episode ends found to calculate the reward to go. Make sure that the number of frames_per_batch is larger than number of steps per episode."
+            )
+        found = False
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+            if in_key in tensordict.keys(include_nested=True):
+                found = True
+                item = self._inv_apply_transform(
+                    tensordict.get(in_key), done_or_truncated
+                )
+                tensordict.set(
+                    out_key,
+                    item,
+                )
+        if not found:
+            raise KeyError(f"Could not find any of the input keys {self.in_keys}.")
+        return tensordict
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise ValueError(self.ENV_ERR)
+
+    def _inv_apply_transform(
+        self, reward: torch.Tensor, done: torch.Tensor
+    ) -> torch.Tensor:
+        return reward2go(reward, done, self.gamma)
+
+    def set_container(self, container):
+        if isinstance(container, EnvBase) or container.parent is not None:
+            raise ValueError(self.ENV_ERR)

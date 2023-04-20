@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
+from enum import Enum
 from typing import Iterable, Optional, Union
 
 import torch
@@ -13,6 +14,54 @@ from torch import nn, Tensor
 from torch.nn import functional as F
 
 from torchrl.envs.utils import step_mdp
+
+_GAMMA_LMBDA_DEPREC_WARNING = (
+    "Passing gamma / lambda parameters through the loss constructor "
+    "is deprecated and will be removed soon. To customize your value function, "
+    "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
+)
+
+
+class ValueEstimators(Enum):
+    """Value function enumerator for custom-built estimators.
+
+    Allows for a flexible usage of various value functions when the loss module
+    allows it.
+
+    Examples:
+        >>> dqn_loss = DQNLoss(actor)
+        >>> dqn_loss.make_value_estimator(ValueEstimators.TD0, gamma=0.9)
+
+    """
+
+    TD0 = "Bootstrapped TD (1-step return)"
+    TD1 = "TD(1) (infinity-step return)"
+    TDLambda = "TD(lambda)"
+    GAE = "Generalized advantage estimate"
+
+
+def default_value_kwargs(value_type: ValueEstimators):
+    """Default value function keyword argument generator.
+
+    Args:
+        value_type (Enum.value): the value function type, from the
+        :class:`~torchrl.objectives.utils.ValueEstimators` class.
+
+    Examples:
+        >>> kwargs = default_value_kwargs(ValueEstimators.TDLambda)
+        {"gamma": 0.99, "lmbda": 0.95}
+
+    """
+    if value_type == ValueEstimators.TD1:
+        return {"gamma": 0.99, "differentiable": True}
+    elif value_type == ValueEstimators.TD0:
+        return {"gamma": 0.99, "differentiable": True}
+    elif value_type == ValueEstimators.GAE:
+        return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
+    elif value_type == ValueEstimators.TDLambda:
+        return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
+    else:
+        raise NotImplementedError(f"Unknown value type {value_type}.")
 
 
 class _context_manager:
@@ -193,15 +242,18 @@ class TargetNetUpdater:
 
 
 class SoftUpdate(TargetNetUpdater):
-    """A soft-update class for target network update in Double DQN/DDPG.
+    r"""A soft-update class for target network update in Double DQN/DDPG.
 
     This was proposed in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf
 
     Args:
         loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
         eps (scalar): epsilon in the update equation:
-            param = prev_param * eps + new_param * (1-eps)
-            default: 0.999
+            .. math::
+
+                \theta_t = \theta_{t-1} * \epsilon + \theta_t * (1-\epsilon)
+
+            Defaults to 0.999
     """
 
     def __init__(
@@ -215,7 +267,7 @@ class SoftUpdate(TargetNetUpdater):
         ],
         eps: float = 0.999,
     ):
-        if not (eps < 1.0 and eps > 0.0):
+        if not (eps <= 1.0 and eps >= 0.0):
             raise ValueError(
                 f"Got eps = {eps} when it was supposed to be between 0 and 1."
             )
@@ -266,7 +318,7 @@ class hold_out_net(_context_manager):
         self.network = network
         try:
             self.p_example = next(network.parameters())
-        except StopIteration:
+        except (AttributeError, StopIteration):
             self.p_example = torch.tensor([])
         self._prev_state = []
 
@@ -334,6 +386,8 @@ def next_state_value(
 
     rewards = tensordict.get(("next", "reward")).squeeze(-1)
     done = tensordict.get(("next", "done")).squeeze(-1)
+    if done.all() or gamma == 0:
+        return rewards
 
     if pred_next_val is None:
         next_td = step_mdp(tensordict)  # next_observation -> observation

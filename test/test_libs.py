@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import torch
 
+import torchrl
 from _utils_internal import (
     _make_multithreaded_env,
     CARTPOLE_VERSIONED,
@@ -24,18 +25,45 @@ from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl._utils import implement_for
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
-from torchrl.data.datasets.d4rl import _has_d4rl, D4RL_ERR, D4RLExperienceReplay
+from torchrl.data.datasets.d4rl import D4RLExperienceReplay
+from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
-from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs import (
+    Compose,
+    DoubleToFloat,
+    EnvCreator,
+    ParallelEnv,
+    RenameTransform,
+)
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
+from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
-from torchrl.envs.utils import check_env_specs
+from torchrl.envs.utils import check_env_specs, ExplorationType
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
+
+D4RL_ERR = None
+try:
+    import d4rl  # noqa
+
+    _has_d4rl = True
+except Exception as err:
+    # many things can wrong when importing d4rl :(
+    _has_d4rl = False
+    D4RL_ERR = err
+
+SKLEARN_ERR = None
+try:
+    import sklearn  # noqa
+
+    _has_sklearn = True
+except ModuleNotFoundError as err:
+    _has_sklearn = False
+    SKLEARN_ERR = err
 
 if _has_gym:
     try:
@@ -355,7 +383,7 @@ class TestCollectorLib:
             devices=[device, device],
             storing_devices=[device, device],
             update_at_each_batch=False,
-            exploration_mode="random",
+            exploration_type=ExplorationType.RANDOM,
         )
         for i, _data in enumerate(collector):
             if i == 3:
@@ -896,17 +924,27 @@ class TestBrax:
 
 
 @pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
-@pytest.mark.parametrize(
-    "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
-)
 class TestVmas:
+    @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
+    def test_all_vmas_scenarios(self, scenario_name):
+        env = VmasEnv(
+            scenario=scenario_name,
+            num_envs=4,
+        )
+        env.set_seed(0)
+        env.reset()
+        env.rollout(10)
+
+    @pytest.mark.parametrize(
+        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+    )
     def test_vmas_seeding(self, scenario_name):
         final_seed = []
         tdreset = []
         tdrollout = []
         for _ in range(2):
             env = VmasEnv(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=4,
             )
             final_seed.append(env.set_seed(0))
@@ -921,6 +959,7 @@ class TestVmas:
     @pytest.mark.parametrize(
         "batch_size", [(), (12,), (12, 2), (12, 3), (12, 3, 1), (12, 3, 4)]
     )
+    @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
     def test_vmas_batch_size_error(self, scenario_name, batch_size):
         num_envs = 12
         n_agents = 2
@@ -930,7 +969,7 @@ class TestVmas:
                 match="Batch size used in constructor is not compatible with vmas.",
             ):
                 _ = VmasEnv(
-                    scenario_name=scenario_name,
+                    scenario=scenario_name,
                     num_envs=num_envs,
                     n_agents=n_agents,
                     batch_size=batch_size,
@@ -941,14 +980,14 @@ class TestVmas:
                 match="Batch size used in constructor does not match vmas batch size.",
             ):
                 _ = VmasEnv(
-                    scenario_name=scenario_name,
+                    scenario=scenario_name,
                     num_envs=num_envs,
                     n_agents=n_agents,
                     batch_size=batch_size,
                 )
         else:
             _ = VmasEnv(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=num_envs,
                 n_agents=n_agents,
                 batch_size=batch_size,
@@ -956,11 +995,14 @@ class TestVmas:
 
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
+    @pytest.mark.parametrize(
+        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+    )
     def test_vmas_batch_size(self, scenario_name, num_envs, n_agents):
         torch.manual_seed(0)
         n_rollout_samples = 5
         env = VmasEnv(
-            scenario_name=scenario_name,
+            scenario=scenario_name,
             num_envs=num_envs,
             n_agents=n_agents,
         )
@@ -968,18 +1010,29 @@ class TestVmas:
         tdreset = env.reset()
         tdrollout = env.rollout(max_steps=n_rollout_samples)
         env.close()
-        assert tdreset.batch_size == (env.n_agents, num_envs)
-        assert tdrollout.batch_size == (env.n_agents, num_envs, n_rollout_samples)
+
+        assert tdreset.batch_size == (num_envs,)
+        assert tdreset["observation"].shape[1] == env.n_agents
+        assert tdreset["done"].shape[1] == env.n_agents
+
+        assert tdrollout.batch_size == (num_envs, n_rollout_samples)
+        assert tdrollout["observation"].shape[2] == env.n_agents
+        assert tdrollout["next", "reward"].shape[2] == env.n_agents
+        assert tdrollout["action"].shape[2] == env.n_agents
+        assert tdrollout["done"].shape[2] == env.n_agents
         del env
 
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
     @pytest.mark.parametrize("continuous_actions", [True, False])
+    @pytest.mark.parametrize(
+        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+    )
     def test_vmas_spec_rollout(
         self, scenario_name, num_envs, n_agents, continuous_actions
     ):
         env = VmasEnv(
-            scenario_name=scenario_name,
+            scenario=scenario_name,
             num_envs=num_envs,
             n_agents=n_agents,
             continuous_actions=continuous_actions,
@@ -999,20 +1052,26 @@ class TestVmas:
 
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
+    @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
     def test_vmas_repr(self, scenario_name, num_envs, n_agents):
+        if n_agents == 1 and scenario_name == "balance":
+            return
         env = VmasEnv(
-            scenario_name=scenario_name,
+            scenario=scenario_name,
             num_envs=num_envs,
             n_agents=n_agents,
         )
         assert str(env) == (
-            f"{VmasEnv.__name__}(env={env._env}, num_envs={num_envs}, n_agents={env.n_agents},"
-            f" batch_size={torch.Size((env.n_agents,num_envs))}, device={env.device}) (scenario_name={scenario_name})"
+            f"{VmasEnv.__name__}(num_envs={num_envs}, n_agents={env.n_agents},"
+            f" batch_size={torch.Size((num_envs,))}, device={env.device}) (scenario={scenario_name})"
         )
 
     @pytest.mark.parametrize("num_envs", [1, 10])
     @pytest.mark.parametrize("n_workers", [1, 3])
     @pytest.mark.parametrize("continuous_actions", [True, False])
+    @pytest.mark.parametrize(
+        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+    )
     def test_vmas_parallel(
         self,
         scenario_name,
@@ -1026,7 +1085,7 @@ class TestVmas:
 
         def make_vmas():
             env = VmasEnv(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=num_envs,
                 n_agents=n_agents,
                 continuous_actions=continuous_actions,
@@ -1038,11 +1097,14 @@ class TestVmas:
         tensordict = env.rollout(max_steps=n_rollout_samples)
 
         assert tensordict.shape == torch.Size(
-            [n_workers, list(env.n_agents)[0], list(env.num_envs)[0], n_rollout_samples]
+            [n_workers, list(env.num_envs)[0], n_rollout_samples]
         )
 
     @pytest.mark.parametrize("num_envs", [1, 10])
     @pytest.mark.parametrize("n_workers", [1, 3])
+    @pytest.mark.parametrize(
+        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+    )
     def test_vmas_reset(
         self,
         scenario_name,
@@ -1056,7 +1118,7 @@ class TestVmas:
 
         def make_vmas():
             env = VmasEnv(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=num_envs,
                 n_agents=n_agents,
                 max_steps=max_steps,
@@ -1067,7 +1129,14 @@ class TestVmas:
         env = ParallelEnv(n_workers, make_vmas)
         tensordict = env.rollout(max_steps=n_rollout_samples)
 
-        assert tensordict["next", "done"].squeeze(-1)[..., -1].all()
+        assert (
+            tensordict["next", "done"]
+            .sum(
+                tuple(range(tensordict.batch_dims, tensordict["next", "done"].ndim)),
+                dtype=torch.bool,
+            )[..., -1]
+            .all()
+        )
 
         _reset = env.done_spec.rand()
         while not _reset.any():
@@ -1079,17 +1148,20 @@ class TestVmas:
         assert not tensordict["done"][_reset].all().item()
         # vmas resets all the agent dimension if only one of the agents needs resetting
         # thus, here we check that where we did not reset any agent, all agents are still done
-        assert tensordict["done"].all(dim=1)[~_reset.any(dim=1)].all().item()
+        assert tensordict["done"].all(dim=2)[~_reset.any(dim=2)].all().item()
 
     @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
     @pytest.mark.parametrize("first", [0, 1])
+    @pytest.mark.parametrize(
+        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+    )
     def test_to_device(self, scenario_name: str, first: int):
         torch.manual_seed(0)
         devices = get_available_devices()
 
         def make_vmas():
             env = VmasEnv(
-                scenario_name=scenario_name,
+                scenario=scenario_name,
                 num_envs=7,
                 n_agents=3,
                 seed=0,
@@ -1197,6 +1269,45 @@ class TestD4RL:
             i += 1
         assert len(data) // i == batch_size
         print(f"completed test after {time.time()-t0}s")
+
+
+@pytest.mark.skipif(not _has_sklearn, reason=f"Scikit-learn not found: {SKLEARN_ERR}")
+@pytest.mark.parametrize(
+    "dataset",
+    [
+        "adult_num",
+        "adult_onehot",
+        "mushroom_num",
+        "mushroom_onehot",
+        "covertype",
+        "shuttle",
+        "magic",
+    ],
+)
+class TestOpenML:
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 3)])
+    def test_env(self, dataset, batch_size):
+        env = OpenMLEnv(dataset, batch_size=batch_size)
+        td = env.reset()
+        assert td.shape == torch.Size(batch_size)
+        td = env.rand_step(td)
+        assert td.shape == torch.Size(batch_size)
+        assert "index" not in td.keys()
+        check_env_specs(env)
+
+    def test_data(self, dataset):
+        data = OpenMLExperienceReplay(
+            dataset,
+            batch_size=2048,
+            transform=Compose(
+                RenameTransform(["X"], ["observation"]),
+                DoubleToFloat(["observation"]),
+            ),
+        )
+        # check that dataset eventually runs out
+        for i, _ in enumerate(data):  # noqa: B007
+            continue
+        assert len(data) // 2048 in (i, i - 1)
 
 
 if __name__ == "__main__":

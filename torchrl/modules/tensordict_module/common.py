@@ -71,7 +71,14 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
         for _spec, _key in zip(values, keys):
             if _spec is None:
                 continue
-            if not _spec.is_in(tensordict_out.get(_key)):
+            item = tensordict_out.get(_key, None)
+            if item is None:
+                # this will happen when an exploration (e.g. OU) writes a key only
+                # during exploration, but is missing otherwise.
+                # it's fine since what we want here it to make sure that a key
+                # is within bounds if it is present
+                continue
+            if not _spec.is_in(item):
                 try:
                     tensordict_out.set_(
                         _key,
@@ -95,7 +102,7 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
 
 
 class SafeModule(TensorDictModule):
-    """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`torchrl.data.TensorSpec` as argument to control the output domain.
+    """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`~torchrl.data.TensorSpec` as argument to control the output domain.
 
     Args:
         module (nn.Module): a nn.Module used to map the input to the output
@@ -119,7 +126,7 @@ class SafeModule(TensorDictModule):
             occur because of exploration policies or numerical under/overflow issues.
             If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
-            method. Default is :obj:`False`.
+            method. Default is ``False``.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can
         be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional
@@ -199,7 +206,9 @@ class SafeModule(TensorDictModule):
         safe: bool = False,
     ):
         super().__init__(module, in_keys, out_keys)
+        self.register_spec(safe=safe, spec=spec)
 
+    def register_spec(self, safe, spec):
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):

@@ -20,7 +20,7 @@ from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuff
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
 from torchrl.modules.distributions import TanhNormal
 
@@ -31,38 +31,41 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 
 def env_maker(env_name, frame_skip=1, device="cpu", from_pixels=False):
     return GymEnv(
-        env_name, "run", device=device, frame_skip=frame_skip, from_pixels=from_pixels
+        env_name, device=device, frame_skip=frame_skip, from_pixels=from_pixels
     )
 
 
 def make_replay_buffer(
+    batch_size,
     prb=False,
     buffer_size=1000000,
     buffer_scratch_dir="/tmp/",
     device="cpu",
-    make_replay_buffer=3,
+    prefetch=3,
 ):
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
             alpha=0.7,
             beta=0.5,
             pin_memory=False,
-            prefetch=make_replay_buffer,
+            prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
                 device=device,
             ),
+            batch_size=batch_size,
         )
     else:
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
-            prefetch=make_replay_buffer,
+            prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
                 device=device,
             ),
+            batch_size=batch_size,
         )
     return replay_buffer
 
@@ -144,7 +147,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_mode="random",
+        default_interaction_type=ExplorationType.RANDOM,
         return_log_prob=False,
     )
 
@@ -218,7 +221,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.set_seed(cfg.seed)
 
     # Make Replay Buffer
-    replay_buffer = make_replay_buffer(buffer_size=cfg.buffer_size, device=device)
+    replay_buffer = make_replay_buffer(
+        buffer_size=cfg.buffer_size, device=device, batch_size=cfg.batch_size
+    )
 
     # Optimizers
     params = list(loss_module.parameters())
@@ -242,7 +247,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         collector.update_policy_weights_()
 
         if r0 is None:
-            r0 = tensordict["reward"].sum(-1).mean().item()
+            r0 = tensordict["next", "reward"].sum(-1).mean().item()
         pbar.update(tensordict.numel())
 
         if "mask" in tensordict.keys():
@@ -288,7 +293,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             if cfg.prb:
                 replay_buffer.update_priority(sampled_tensordict)
 
-        rewards.append((i, tensordict["reward"].sum().item() / cfg.env_per_collector))
+        rewards.append(
+            (i, tensordict["next", "reward"].sum().item() / cfg.env_per_collector)
+        )
         train_log = {
             "train_reward": rewards[-1][1],
             "collected_frames": collected_frames,
@@ -304,13 +311,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for key, value in train_log.items():
             logger.log_scalar(key, value, step=collected_frames)
 
-        with set_exploration_mode("mean"), torch.no_grad():
+        with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
             eval_rollout = test_env.rollout(
                 max_steps=cfg.max_frames_per_traj,
                 policy=model[0],
                 auto_cast_to_device=True,
             ).clone()
-            eval_reward = eval_rollout["reward"].sum(-2).mean().item()
+            eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
             rewards_eval.append((i, eval_reward))
             eval_str = f"eval cumulative reward: {rewards_eval[-1][1]: 4.4f} (init: {rewards_eval[0][1]: 4.4f})"
             logger.log_scalar("test_reward", rewards_eval[-1][1], step=collected_frames)

@@ -2,11 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from numbers import Number
 from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import torch
+from tensordict.nn import dispatch, TensorDictModuleBase
 from torch import nn
 from torch.nn import functional as F
 
@@ -637,12 +638,17 @@ class DuelingCnnDQNet(nn.Module):
         return value + advantage - advantage.mean(dim=-1, keepdim=True)
 
 
-class DistributionalDQNnet(nn.Module):
+class DistributionalDQNnet(TensorDictModuleBase):
     """Distributional Deep Q-Network.
 
     Args:
-        DQNet (nn.Module): Q-Network with output length equal to the number of atoms:
+        DQNet (nn.Module): (deprecated) Q-Network with output length equal
+            to the number of atoms:
             output.shape = [*batch, atoms, actions].
+        in_keys (list of str or tuples of str): input keys to the log-softmax
+            operation. Defaults to ``["action_value"]``.
+        out_keys (list of str or tuples of str): output keys to the log-softmax
+            operation. Defaults to ``["action_value"]``.
 
     """
 
@@ -652,25 +658,42 @@ class DistributionalDQNnet(nn.Module):
         "instead."
     )
 
-    def __init__(self, DQNet: nn.Module):
+    def __init__(self, DQNet: nn.Module = None, in_keys=None, out_keys=None):
         super().__init__()
-        if not (
-            not isinstance(DQNet.out_features, Number) and len(DQNet.out_features) > 1
-        ):
-            raise RuntimeError(self._wrong_out_feature_dims_error)
-        self.dqn = DQNet
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        q_values = self.dqn(x)
-        if q_values.ndimension() < 2:
-            raise RuntimeError(
-                self._wrong_out_feature_dims_error.format(q_values.shape)
+        if DQNet is not None:
+            warnings.warn(
+                f"Passing a network to {type(self)} is going to be deprecated.",
+                category=DeprecationWarning,
             )
-        return F.log_softmax(q_values, dim=-2)
+            if not (
+                not isinstance(DQNet.out_features, Number)
+                and len(DQNet.out_features) > 1
+            ):
+                raise RuntimeError(self._wrong_out_feature_dims_error)
+        self.dqn = DQNet
+        if in_keys is None:
+            in_keys = ["action_value"]
+        if out_keys is None:
+            out_keys = ["action_value"]
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+
+    @dispatch(auto_batch_size=False)
+    def forward(self, tensordict):
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            q_values = tensordict.get(in_key)
+            if self.dqn is not None:
+                q_values = self.dqn(q_values)
+            if q_values.ndimension() < 2:
+                raise RuntimeError(
+                    self._wrong_out_feature_dims_error.format(q_values.shape)
+                )
+            tensordict.set(out_key, F.log_softmax(q_values, dim=-2))
+        return tensordict
 
 
 def ddpg_init_last_layer(
-    last_layer: nn.Module,
+    module: nn.Sequential,
     scale: float = 6e-4,
     device: Optional[DEVICE_TYPING] = None,
 ) -> None:
@@ -680,6 +703,12 @@ def ddpg_init_last_layer(
     https://arxiv.org/pdf/1509.02971.pdf
 
     """
+    for last_layer in reversed(module):
+        if isinstance(last_layer, (nn.Linear, nn.Conv2d)):
+            break
+    else:
+        raise RuntimeError("Could not find a nn.Linear / nn.Conv2d to initialize.")
+
     last_layer.weight.data.copy_(
         torch.rand_like(last_layer.weight.data, device=device) * scale - scale / 2
     )
@@ -724,7 +753,7 @@ class DdpgCnnActor(nn.Module):
             'bias_last_layer': True,
         }
         use_avg_pooling (bool, optional): if ``True``, a nn.AvgPooling layer is
-            used to aggregate the output. Default is :obj:`False`.
+            used to aggregate the output. Default is ``False``.
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
 
@@ -767,7 +796,7 @@ class DdpgCnnActor(nn.Module):
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.convnet = ConvNet(device=device, **conv_net_default_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp[-1], 6e-4, device=device)
+        ddpg_init_last_layer(self.mlp, 6e-4, device=device)
 
     def forward(self, observation: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         hidden = self.convnet(observation)
@@ -816,7 +845,7 @@ class DdpgMlpActor(nn.Module):
         mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else {}
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp[-1], 6e-3, device=device)
+        ddpg_init_last_layer(self.mlp, 6e-3, device=device)
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         action = self.mlp(observation)
@@ -897,7 +926,7 @@ class DdpgCnnQNet(nn.Module):
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.convnet = ConvNet(device=device, **conv_net_default_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp[-1], 6e-4, device=device)
+        ddpg_init_last_layer(self.mlp, 6e-4, device=device)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         hidden = torch.cat([self.convnet(observation), action], -1)
@@ -917,23 +946,23 @@ class DdpgMlpQNet(nn.Module):
     Args:
         mlp_net_kwargs_net1 (dict, optional): kwargs for MLP.
             Default: {
-            'in_features': None,
-            'out_features': 400,
-            'depth': 0,
-            'num_cells': [],
-            'activation_class': nn.ELU,
-            'bias_last_layer': True,
-            'activate_last_layer': True,
-        }
+                'in_features': None,
+                'out_features': 400,
+                'depth': 0,
+                'num_cells': [],
+                'activation_class': nn.ELU,
+                'bias_last_layer': True,
+                'activate_last_layer': True,
+            }
         mlp_net_kwargs_net2
             Default: {
-            'in_features': None,
-            'out_features': 1,
-            'depth': 1,
-            'num_cells': [300, ],
-            'activation_class': nn.ELU,
-            'bias_last_layer': True,
-        }
+                'in_features': None,
+                'out_features': 1,
+                'depth': 1,
+                'num_cells': [300, ],
+                'activation_class': nn.ELU,
+                'bias_last_layer': True,
+            }
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
 
@@ -973,7 +1002,7 @@ class DdpgMlpQNet(nn.Module):
         )
         mlp2_net_default_kwargs.update(mlp_net_kwargs_net2)
         self.mlp2 = MLP(device=device, **mlp2_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp2[-1], 6e-3, device=device)
+        ddpg_init_last_layer(self.mlp2, 6e-3, device=device)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         value = self.mlp2(torch.cat([self.mlp1(observation), action], -1))

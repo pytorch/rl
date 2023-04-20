@@ -13,7 +13,7 @@ from torchrl.modules.tensordict_module.common import SafeModule
 
 
 class SafeSequential(TensorDictSequential, SafeModule):
-    """A sequence of TensorDictModules.
+    """A safe sequence of TensorDictModules.
 
     Similarly to :obj:`nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
     each, this module will read and write over a tensordict by querying each of the input modules.
@@ -75,11 +75,11 @@ class SafeSequential(TensorDictSequential, SafeModule):
         >>> # The module spec aggregates all the input specs:
         >>> print(td_module.spec)
         CompositeSpec(
-            hidden: NdUnboundedContinuousTensorSpec(
+            hidden: UnboundedContinuousTensorSpec(
                 shape=torch.Size([4]), space=None, device=cpu, dtype=torch.float32, domain=continuous),
             loc: None,
             scale: None,
-            output: NdUnboundedContinuousTensorSpec(
+            output: UnboundedContinuousTensorSpec(
                 shape=torch.Size([8]), space=None, device=cpu, dtype=torch.float32, domain=continuous))
 
     In the vmap case:

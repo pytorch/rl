@@ -123,7 +123,7 @@ from torchrl.envs import (
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.utils import check_env_specs, set_exploration_mode
+from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
@@ -602,11 +602,12 @@ for i, tensordict_data in enumerate(collector):
         # We'll need an "advantage" signal to make PPO work.
         # We re-compute it at each epoch as its value depends on the value
         # network which is updated in the inner loop.
-        advantage_module(tensordict_data)
+        with torch.no_grad():
+            advantage_module(tensordict_data)
         data_view = tensordict_data.reshape(-1)
         replay_buffer.extend(data_view.cpu())
         for _ in range(frames_per_batch // sub_batch_size):
-            subdata, *_ = replay_buffer.sample(sub_batch_size)
+            subdata = replay_buffer.sample(sub_batch_size)
             loss_vals = loss_module(subdata.to(device))
             loss_value = (
                 loss_vals["loss_objective"]
@@ -638,7 +639,7 @@ for i, tensordict_data in enumerate(collector):
         # number of steps (1000, which is our env horizon).
         # The ``rollout`` method of the env can take a policy as argument:
         # it will then execute this policy at each step.
-        with set_exploration_mode("mean"), torch.no_grad():
+        with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
             # execute a rollout with the trained policy
             eval_rollout = env.rollout(1000, policy_module)
             logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
@@ -695,9 +696,9 @@ plt.show()
 #
 # * From an efficiency perspective,
 #   we could run several simulations in parallel to speed up data collection.
-#   Check :class:`torchrl.envs.ParallelEnv` for further information.
+#   Check :class:`~torchrl.envs.ParallelEnv` for further information.
 #
-# * From a logging perspective, one could add a :class:`torchrl.record.VideoRecorder` transform to
+# * From a logging perspective, one could add a :class:`~torchrl.record.VideoRecorder` transform to
 #   the environment after asking for rendering to get a visual rendering of the
 #   inverted pendulum in action. Check :py:mod:`torchrl.record` to
 #   know more.

@@ -1,5 +1,3 @@
-from copy import deepcopy
-
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
@@ -38,9 +36,7 @@ from torchrl.modules import (
     ValueOperator,
 )
 from torchrl.objectives import SoftUpdate, TD3Loss
-from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.trainers import Recorder
 from torchrl.trainers.helpers.envs import LIBS
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
@@ -188,6 +184,13 @@ def make_parallel_env(env_cfg, state_dict):
     return env
 
 
+def make_test_env(env_cfg):
+    env_cfg.num_envs = 1
+    state_dict = get_stats(env_cfg)
+    env = make_parallel_env(env_cfg, state_dict=state_dict)
+    return env
+
+
 def get_stats(env_cfg):
     from_pixels = env_cfg.from_pixels
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
@@ -261,7 +264,6 @@ def make_replay_buffer(rb_cfg):
 
 
 def make_td3_model(cfg):
-
     env_cfg = cfg.env
     model_cfg = cfg.model
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
@@ -323,7 +325,6 @@ def make_td3_model(cfg):
 
 
 def make_td3_modules_state(model_cfg, proof_environment):
-
     env_specs = proof_environment.specs
     out_features = env_specs["input_spec"]["action"].shape[0]
 
@@ -345,7 +346,6 @@ def make_td3_modules_state(model_cfg, proof_environment):
 
 
 def make_td3_modules_pixels(model_cfg, proof_environment):
-
     env_specs = proof_environment.specs
     out_features = env_specs["input_spec"]["action"].shape[0]
 
@@ -427,21 +427,3 @@ def make_logger(logger_cfg):
     logger_cfg.exp_name = exp_name
     logger = get_logger(logger_cfg.backend, logger_name="td3", experiment_name=exp_name)
     return logger
-
-
-def make_recorder(cfg, logger, policy) -> Recorder:
-    env_cfg = deepcopy(cfg.env)
-    env = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    init_stats(env, env_cfg.n_samples_stats, env_cfg.from_pixels)
-    if cfg.recorder.video:
-        env.insert_transform(
-            0, VideoRecorder(logger=logger, tag=cfg.logger.exp_name, in_keys=["pixels"])
-        )
-    return Recorder(
-        record_interval=1,
-        record_frames=cfg.recorder.frames,
-        frame_skip=env_cfg.frame_skip,
-        policy_exploration=policy,
-        recorder=env,
-        exploration_mode="mean",
-    )

@@ -82,9 +82,9 @@ def _get_reward(
 class MultiStep(nn.Module):
     """Multistep reward transform.
 
-    Presented in 'Sutton, R. S. 1988. Learning to
-    predict by the methods of temporal differences. Machine learning 3(
-    1):9–44.'
+    Presented in
+
+    | Sutton, R. S. 1988. Learning to predict by the methods of temporal differences. Machine learning 3(1):9–44.
 
     This module maps the "next" observation to the t + n "next" observation.
     It is an identity transform whenever :attr:`n_steps` is 0.
@@ -153,6 +153,10 @@ class MultiStep(nn.Module):
         """
         tensordict = tensordict.clone(False)
         done = tensordict.get(("next", "done"))
+        truncated = tensordict.get(
+            ("next", "truncated"), torch.zeros((), dtype=done.dtype, device=done.device)
+        )
+        done = done | truncated
 
         # we'll be using the done states to index the tensordict.
         # if the shapes don't match we're in trouble.
@@ -175,10 +179,6 @@ class MultiStep(nn.Module):
                         "(trailing singleton dimension excluded)."
                     ) from err
 
-        truncated = tensordict.get(
-            ("next", "truncated"), torch.zeros((), dtype=done.dtype, device=done.device)
-        )
-        done = done | truncated
         mask = tensordict.get(("collector", "mask"), None)
         reward = tensordict.get(("next", "reward"))
         *batch, T = tensordict.batch_size
@@ -201,7 +201,7 @@ class MultiStep(nn.Module):
 
         tensordict.set("steps_to_next_obs", time_to_obs + 1)
         tensordict.rename_key_(("next", "reward"), ("next", "original_reward"))
-        tensordict["next"].update(tensordict_gather)
+        tensordict.get("next").update(tensordict_gather)
         tensordict.set(("next", "reward"), summed_rewards)
         tensordict.set("gamma", self.gamma ** (time_to_obs + 1))
         nonterminal = time_to_obs != 0

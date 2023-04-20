@@ -89,11 +89,10 @@ _mocking_optim = MockingOptim()
 
 def mocking_trainer(file=None, optimizer=_mocking_optim) -> Trainer:
     trainer = Trainer(
-        MockingCollector(),
-        *[
-            None,
-        ]
-        * 2,
+        collector=MockingCollector(),
+        total_frames=None,
+        frame_skip=None,
+        optim_steps_per_batch=None,
         loss_module=MockingLossModule(),
         optimizer=optimizer,
         save_trainer_file=file,
@@ -203,7 +202,9 @@ class TestRB:
         S = 100
         storage = ListStorage(S)
         if prioritized:
-            replay_buffer = TensorDictPrioritizedReplayBuffer(1.1, 0.9, storage=storage)
+            replay_buffer = TensorDictPrioritizedReplayBuffer(
+                alpha=1.1, beta=0.9, storage=storage
+            )
         else:
             replay_buffer = TensorDictReplayBuffer(storage=storage)
 
@@ -260,8 +261,8 @@ class TestRB:
 
         if prioritized:
             replay_buffer = TensorDictPrioritizedReplayBuffer(
-                1.1,
-                0.9,
+                alpha=1.1,
+                beta=0.9,
                 storage=storage,
             )
         else:
@@ -293,7 +294,7 @@ class TestRB:
         trainer2 = mocking_trainer()
         if prioritized:
             replay_buffer2 = TensorDictPrioritizedReplayBuffer(
-                1.1, 0.9, storage=storage
+                alpha=1.1, beta=0.9, storage=storage
             )
         else:
             replay_buffer2 = TensorDictReplayBuffer(storage=storage)
@@ -398,8 +399,8 @@ class TestRB:
             storage = make_storage()
             if prioritized:
                 replay_buffer = TensorDictPrioritizedReplayBuffer(
-                    1.1,
-                    0.9,
+                    alpha=1.1,
+                    beta=0.9,
                     storage=storage,
                 )
             else:
@@ -430,8 +431,8 @@ class TestRB:
             storage2 = make_storage()
             if prioritized:
                 replay_buffer2 = TensorDictPrioritizedReplayBuffer(
-                    1.1,
-                    0.9,
+                    alpha=1.1,
+                    beta=0.9,
                     storage=storage2,
                 )
             else:
@@ -860,7 +861,7 @@ class TestRecorder:
         with tempfile.TemporaryDirectory() as folder:
             logger = TensorboardLogger(exp_name=folder)
 
-            recorder = transformed_env_constructor(
+            environment = transformed_env_constructor(
                 args,
                 video_tag="tmp",
                 norm_obs_only=True,
@@ -872,7 +873,7 @@ class TestRecorder:
                 record_frames=args.record_frames,
                 frame_skip=args.frame_skip,
                 policy_exploration=None,
-                recorder=recorder,
+                environment=environment,
                 record_interval=args.record_interval,
             )
             trainer = mocking_trainer()
@@ -934,7 +935,7 @@ class TestRecorder:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
 
-            recorder = transformed_env_constructor(
+            environment = transformed_env_constructor(
                 args,
                 video_tag="tmp",
                 norm_obs_only=True,
@@ -946,7 +947,7 @@ class TestRecorder:
                 record_frames=args.record_frames,
                 frame_skip=args.frame_skip,
                 policy_exploration=None,
-                recorder=recorder,
+                environment=environment,
                 record_interval=args.record_interval,
             )
             recorder.register(trainer)

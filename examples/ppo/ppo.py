@@ -2,187 +2,158 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+"""PPO Example.
 
-import dataclasses
+This is a self-contained example of a PPO training script.
 
+Both state and pixel-based environments are supported.
+
+The helper functions are coded in the utils.py associated with this script.
+"""
 import hydra
-import torch.cuda
-from hydra.core.config_store import ConfigStore
-from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode
-from torchrl.objectives.value import GAE
-from torchrl.record import VideoRecorder
-from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.trainers.helpers.collectors import (
-    make_collector_onpolicy,
-    OnPolicyCollectorConfig,
-)
-from torchrl.trainers.helpers.envs import (
-    correct_for_frame_skip,
-    EnvConfig,
-    initialize_observation_norm_transforms,
-    parallel_env_constructor,
-    retrieve_observation_norms_state_dict,
-    transformed_env_constructor,
-)
-from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.losses import make_ppo_loss, PPOLossConfig
-from torchrl.trainers.helpers.models import make_ppo_model, PPOModelConfig
-from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
-
-config_fields = [
-    (config_field.name, config_field.type, config_field)
-    for config_cls in (
-        TrainerConfig,
-        OnPolicyCollectorConfig,
-        EnvConfig,
-        PPOLossConfig,
-        PPOModelConfig,
-        LoggerConfig,
-    )
-    for config_field in dataclasses.fields(config_cls)
-]
-
-Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-cs = ConfigStore.instance()
-cs.store(name="config", node=Config)
 
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
+@hydra.main(config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    cfg = correct_for_frame_skip(cfg)
-
-    if not isinstance(cfg.reward_scaling, float):
-        cfg.reward_scaling = 1.0
-
-    device = (
-        torch.device("cpu")
-        if torch.cuda.device_count() == 0
-        else torch.device("cuda:0")
+    import torch
+    import tqdm
+    from utils import (
+        make_collector,
+        make_data_buffer,
+        make_logger,
+        make_loss,
+        make_optim,
+        make_ppo_models,
+        make_test_env,
     )
 
-    exp_name = generate_exp_name("PPO", cfg.exp_name)
-    logger = get_logger(
-        logger_type=cfg.logger, logger_name="ppo_logging", experiment_name=exp_name
+    # Correct for frame_skip
+    cfg.collector.total_frames = cfg.collector.total_frames // cfg.env.frame_skip
+    cfg.collector.frames_per_batch = (
+        cfg.collector.frames_per_batch // cfg.env.frame_skip
     )
-    video_tag = exp_name if cfg.record_video else ""
+    cfg.loss.mini_batch_size = cfg.loss.mini_batch_size // cfg.env.frame_skip
 
-    key, init_env_steps, stats = None, None, None
-    if not cfg.vecnorm and cfg.norm_stats:
-        if not hasattr(cfg, "init_env_steps"):
-            raise AttributeError("init_env_steps missing from arguments.")
-        key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
-        init_env_steps = cfg.init_env_steps
-        stats = {"loc": None, "scale": None}
-    elif cfg.from_pixels:
-        stats = {"loc": 0.5, "scale": 0.5}
+    model_device = cfg.optim.device
+    actor, critic = make_ppo_models(cfg)
+    actor = actor.to(model_device)
+    critic = critic.to(model_device)
 
-    proof_env = transformed_env_constructor(
-        cfg=cfg,
-        use_env_creator=False,
-        stats=stats,
-    )()
-    initialize_observation_norm_transforms(
-        proof_environment=proof_env, num_iter=init_env_steps, key=key
+    collector = make_collector(cfg, policy=actor)
+    data_buffer = make_data_buffer(cfg)
+    loss_module, adv_module = make_loss(
+        cfg.loss, actor_network=actor, value_network=critic
     )
-    _, obs_norm_state_dict = retrieve_observation_norms_state_dict(proof_env)[0]
+    optim = make_optim(cfg.optim, actor_network=actor, value_network=critic)
 
-    model = make_ppo_model(
-        proof_env,
-        cfg=cfg,
-        device=device,
-    )
-    actor_model = model.get_policy_operator()
-
-    loss_module = make_ppo_loss(model, cfg)
-    if cfg.gSDE:
-        with torch.no_grad(), set_exploration_mode("random"):
-            # get dimensions to build the parallel env
-            proof_td = model(proof_env.reset().to(device))
-        action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
-        del proof_td
-    else:
-        action_dim_gsde, state_dim_gsde = None, None
-
-    proof_env.close()
-    create_env_fn = parallel_env_constructor(
-        cfg=cfg,
-        obs_norm_state_dict=obs_norm_state_dict,
-        action_dim_gsde=action_dim_gsde,
-        state_dim_gsde=state_dim_gsde,
+    batch_size = cfg.collector.total_frames * cfg.env.num_envs
+    num_mini_batches = batch_size // cfg.loss.mini_batch_size
+    total_network_updates = (
+        (cfg.collector.total_frames // batch_size)
+        * cfg.loss.ppo_epochs
+        * num_mini_batches
     )
 
-    collector = make_collector_onpolicy(
-        make_env=create_env_fn,
-        actor_model_explore=actor_model,
-        cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device} if device >= 0 else {}
-        #     for device in cfg.env_rendering_devices
-        # ],
-    )
+    scheduler = None
+    if cfg.optim.lr_scheduler:
+        scheduler = torch.optim.lr_scheduler.LinearLR(
+            optim, total_iters=total_network_updates, start_factor=1.0, end_factor=0.1
+        )
 
-    recorder = transformed_env_constructor(
-        cfg,
-        video_tag=video_tag,
-        norm_obs_only=True,
-        obs_norm_state_dict=obs_norm_state_dict,
-        logger=logger,
-        use_env_creator=False,
-    )()
-    if isinstance(create_env_fn, ParallelEnv):
-        raise NotImplementedError("This behaviour is deprecated")
-    elif isinstance(create_env_fn, EnvCreator):
-        recorder.transform[1:].load_state_dict(create_env_fn().transform.state_dict())
-    elif isinstance(create_env_fn, TransformedEnv):
-        recorder.transform = create_env_fn.transform.clone()
-    else:
-        raise NotImplementedError(f"Unsupported env type {type(create_env_fn)}")
-    if logger is not None and video_tag:
-        recorder.insert_transform(0, VideoRecorder(logger=logger, tag=video_tag))
+    logger = None
+    if cfg.logger.backend:
+        logger = make_logger(cfg.logger)
+    test_env = make_test_env(cfg.env)
+    record_interval = cfg.logger.log_interval
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    collected_frames = 0
 
-    # reset reward scaling
-    for t in recorder.transform:
-        if isinstance(t, RewardScaling):
-            t.scale.fill_(1.0)
-            t.loc.fill_(0.0)
+    # Main loop
+    r0 = None
+    l0 = None
+    for data in collector:
 
-    trainer = make_trainer(
-        collector,
-        loss_module,
-        recorder,
-        None,
-        actor_model,
-        None,
-        logger,
-        cfg,
-    )
-    if cfg.loss == "kl":
-        trainer.register_op("pre_optim_steps", loss_module.reset)
+        frames_in_batch = data.numel()
+        collected_frames += frames_in_batch * cfg.env.frame_skip
+        pbar.update(data.numel())
+        data_view = data.reshape(-1)
 
-    critic_model = model.get_value_operator()
-    advantage = GAE(
-        cfg.gamma,
-        cfg.lmbda,
-        value_network=critic_model,
-        average_gae=True,
-    )
-    trainer.register_op(
-        "process_optim_batch",
-        lambda tensordict: advantage(tensordict.to(device)),
-    )
-    trainer._process_optim_batch_ops = [
-        trainer._process_optim_batch_ops[-1],
-        *trainer._process_optim_batch_ops[:-1],
-    ]
+        # Compute GAE
+        with torch.no_grad():
+            data_view = adv_module(data_view)
 
-    final_seed = collector.set_seed(cfg.seed)
-    print(f"init seed: {cfg.seed}, final seed: {final_seed}")
+        # Update the data buffer
+        data_buffer.extend(data_view)
 
-    trainer.train()
-    return (logger.log_dir, trainer._log_dict)
+        # Log end-of-episode accumulated rewards for training
+        episode_rewards = data["next"]["episode_reward"][data["next"]["done"]]
+        if logger is not None and len(episode_rewards) > 0:
+            logger.log_scalar(
+                "reward_training", episode_rewards.mean().item(), collected_frames
+            )
+
+        for _ in range(cfg.loss.ppo_epochs):
+            for _ in range(frames_in_batch // cfg.loss.mini_batch_size):
+
+                # Get a data batch
+                batch = data_buffer.sample().to(model_device)
+
+                # Forward pass PPO loss
+                loss = loss_module(batch)
+                loss_sum = (
+                    loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+                )
+
+                # Backward pass
+                loss_sum.backward()
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    list(actor.parameters()) + list(critic.parameters()), max_norm=0.5
+                )
+                optim.step()
+                if scheduler is not None:
+                    scheduler.step()
+                optim.zero_grad()
+
+                # Logging
+                if r0 is None:
+                    r0 = data["next"]["reward"].mean().item()
+                if l0 is None:
+                    l0 = loss_sum.item()
+                pbar.set_description(
+                    f"loss: {loss_sum.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['next']['reward'].mean(): 4.4f} (init={r0: 4.4f})"
+                )
+                if logger is not None:
+                    for key, value in loss.items():
+                        logger.log_scalar(key, value.item(), collected_frames)
+                    logger.log_scalar("grad_norm", grad_norm.item(), collected_frames)
+
+        collector.update_policy_weights_()
+
+        # Test current policy
+        if (
+            logger is not None
+            and (collected_frames - frames_in_batch) // record_interval
+            < collected_frames // record_interval
+        ):
+
+            with torch.no_grad():
+                test_env.eval()
+                actor.eval()
+                # Generate a complete episode
+                td_test = test_env.rollout(
+                    policy=actor,
+                    max_steps=10_000_000,
+                    auto_reset=True,
+                    auto_cast_to_device=True,
+                    break_when_any_done=True,
+                ).clone()
+                logger.log_scalar(
+                    "reward_testing",
+                    td_test["next"]["reward"].sum().item(),
+                    collected_frames,
+                )
+                actor.train()
 
 
 if __name__ == "__main__":

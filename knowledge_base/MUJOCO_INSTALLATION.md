@@ -29,7 +29,7 @@ to enable fast rendering:
 $ sudo apt-get install libglfw3 libglew2.0 libgl1-mesa-glx libosmesa6
 ```
 If you don't, these libraries can be installed via conda but be aware of the fact
-that this is not the indented workflow and things may not work as expected:
+that this is not the intended workflow and things may not work as expected:
 ```shell
 $ conda activate mujoco_env
 $ conda install -c conda-forge glew
@@ -218,3 +218,7 @@ RuntimeError: Failed to initialize OpenGL
    _Solution_: Make sure you have installed mujoco and all its dependencies (see instructions above).
    Make sure you have set the `MUJOCO_GL=egl`.
    Make sure you have a GPU accessible on your machine.
+
+6. `cannot find -lGL: No such file or directory`
+
+   _Solution_: call `conda install -c anaconda mesa-libgl-devel-cos6-x86_64`
