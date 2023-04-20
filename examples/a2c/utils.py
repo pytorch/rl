@@ -253,22 +253,25 @@ def make_a2c_models(cfg):
         )
 
     # Wrap modules in a single ActorCritic operator
-    actor_critic = ActorValueOperator(
-        common_operator=common_module,
-        policy_operator=policy_module,
-        value_operator=value_module,
-    )
+    if common_module is not None:
+        actor_critic = ActorValueOperator(
+            common_operator=common_module,
+            policy_operator=policy_module,
+            value_operator=value_module,
+        )
+        actor = actor_critic.get_policy_operator()
+        critic = actor_critic.get_value_operator()
+    else:
+        actor = policy_module
+        critic = value_module
 
     with torch.no_grad():
         td = proof_environment.rollout(max_steps=100, break_when_any_done=False)
-        td = actor_critic(td)
+        td = actor(td)
+        td = critic(td)
         del td
 
-    actor = actor_critic.get_policy_operator()
-    critic = actor_critic.get_value_operator()
-
     return actor, critic
-
 
 def make_a2c_modules_state(proof_environment):
 
@@ -294,32 +297,21 @@ def make_a2c_modules_state(proof_environment):
 
     # Define input keys
     in_keys = ["observation_vector"]
-    shared_features_size = 256
 
-    # Define a shared Module and TensorDictModule
-    common_mlp = MLP(
-        in_features=input_shape[-1],
-        activation_class=torch.nn.Tanh,
-        activate_last_layer=True,
-        out_features=shared_features_size,
-        num_cells=[64, 64],
-    )
-    common_module = TensorDictModule(
-        module=common_mlp,
-        in_keys=in_keys,
-        out_keys=["common_features"],
-    )
-
-    # Define on head for the policy
+    # Define the policy net
     policy_net = MLP(
-        in_features=shared_features_size, out_features=num_outputs, num_cells=[]
+        in_features=input_shape[-1],
+        out_features=num_outputs,
+        num_cells=[64, 64],
+        activate_last_layer=False,
+        activation_class=torch.nn.Tanh,
     )
     if continuous_actions:
         policy_net = NormalParamWrapper(policy_net)
 
     policy_module = TensorDictModule(
         module=policy_net,
-        in_keys=["common_features"],
+        in_keys=in_keys,
         out_keys=["loc", "scale"] if continuous_actions else ["logits"],
     )
 
@@ -335,14 +327,20 @@ def make_a2c_modules_state(proof_environment):
         default_interaction_mode="random",
     )
 
-    # Define another head for the value
-    value_net = MLP(in_features=shared_features_size, out_features=1, num_cells=[])
+    # Define the value net
+    value_net = MLP(
+        in_features=input_shape[-1],
+        out_features=1,
+        num_cells=[64, 64],
+        activate_last_layer=False,
+        activation_class=torch.nn.Tanh,
+    )
     value_module = ValueOperator(
         value_net,
-        in_keys=["common_features"],
+        in_keys=in_keys,
     )
 
-    return common_module, policy_module, value_module
+    return None, policy_module, value_module
 
 
 def make_a2c_modules_pixels(proof_environment):
@@ -450,6 +448,7 @@ def make_loss(loss_cfg, actor_network, value_network):
         loss_critic_type=loss_cfg.loss_critic_type,
         entropy_coef=loss_cfg.entropy_coef,
         critic_coef=loss_cfg.critic_coef,
+        entropy_bonus=True,
         gamma=loss_cfg.gamma,
     )
     return loss_module, advantage_module

@@ -20,7 +20,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     import tqdm
     from utils import (
         make_collector,
-        make_data_buffer,
         make_logger,
         make_loss,
         make_optim,
@@ -33,7 +32,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     cfg.collector.frames_per_batch = (
         cfg.collector.frames_per_batch // cfg.env.frame_skip
     )
-    cfg.loss.mini_batch_size = cfg.loss.mini_batch_size // cfg.env.frame_skip
 
     model_device = cfg.optim.device
     actor, critic = make_a2c_models(cfg)
@@ -47,12 +45,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     optim = make_optim(cfg.optim, actor_network=actor, value_network=critic)
 
     batch_size = cfg.collector.total_frames * cfg.env.num_envs
-    num_mini_batches = batch_size // cfg.loss.mini_batch_size
-    total_network_updates = (
-        (cfg.collector.total_frames // batch_size)
-        * cfg.loss.a2c_epochs
-        * num_mini_batches
-    )
+    total_network_updates = cfg.collector.total_frames // batch_size
 
     scheduler = None
     if cfg.optim.lr_scheduler:
@@ -81,6 +74,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Compute GAE
         with torch.no_grad():
             batch = adv_module(data_view)
+
+        # Normalize advantage
+        adv = batch.get("advantage")
+        loc = adv.mean().item()
+        scale = adv.std().clamp_min(1e-6).item()
+        adv = (adv - loc) / scale
+        batch.set("advantage", adv)
 
         # Forward pass A2C loss
         batch = batch.to(model_device)

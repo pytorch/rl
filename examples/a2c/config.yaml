@@ -3,8 +3,8 @@ env:
   env_name: HalfCheetah-v4
   env_task: ""
   env_library: gym
-  frame_skip: 1
-  num_envs: 2
+  frame_skip: 2
+  num_envs: 1
   noop: 1
   reward_scaling: 1.0
   from_pixels: False
@@ -26,7 +26,7 @@ logger:
 # Optim
 optim:
   device: cuda
-  lr: 3e-4
+  lr: 0.0005
   weight_decay: 0.0
   lr_scheduler: False
 
@@ -34,7 +34,6 @@ optim:
 loss:
   gamma: 0.99
   gae_lamdda: 0.95
-  clip_epsilon: 0.2
   critic_coef: 0.5
-  entropy_coef: 0.0
+  entropy_coef: 0.01
   loss_critic_type: l2
