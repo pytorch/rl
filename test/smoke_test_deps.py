@@ -9,6 +9,7 @@ import tempfile
 import pytest
 from _utils_internal import PONG_VERSIONED
 
+
 def test_dm_control():
     import dm_control  # noqa: F401
     import dm_env  # noqa: F401
@@ -24,6 +25,7 @@ def test_dm_control():
 @pytest.mark.skip(reason="Not implemented yet")
 def test_dm_control_pixels():
     from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv  # noqa
+
     env = DMControlEnv("cheetah", "run", from_pixels=True)
     env.reset()
 
@@ -41,6 +43,7 @@ def test_gym():
             ) from ERROR
 
     from torchrl.envs.libs.gym import _has_gym, GymEnv  # noqa
+
     assert _has_gym
     env = GymEnv(PONG_VERSIONED)
     env.reset()
