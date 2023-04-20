@@ -38,20 +38,20 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
-# 3. Install mujoco
-printf "* Installing mujoco and related\n"
-mkdir -p $root_dir/.mujoco
-cd $root_dir/.mujoco/
-#wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
-#tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
-#wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
-wget https://www.roboti.us/download/mujoco200_linux.zip
-unzip mujoco200_linux.zip
-wget https://www.roboti.us/file/mjkey.txt
-cp mjkey.txt ./mujoco200_linux/bin/
-# install mujoco-py locally
-git clone https://github.com/vmoens/mujoco-py.git
-cd $this_dir
+## 3. Install mujoco
+#printf "* Installing mujoco and related\n"
+#mkdir -p $root_dir/.mujoco
+#cd $root_dir/.mujoco/
+##wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
+##tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
+##wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
+#wget https://www.roboti.us/download/mujoco200_linux.zip
+#unzip mujoco200_linux.zip
+#wget https://www.roboti.us/file/mjkey.txt
+#cp mjkey.txt ./mujoco200_linux/bin/
+## install mujoco-py locally
+#git clone https://github.com/vmoens/mujoco-py.git
+#cd $this_dir
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
@@ -97,8 +97,10 @@ python -m atari_py.import_roms Roms
 #yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL glfw mesa-libOSMesa-devel glew egl-utils freeglut -y
 yum makecache && yum install libglvnd-devel glew zlib-devel -y
 
-# install mujoco-py locally
-cd ${root_dir}/.mujoco/mujoco-py
-git checkout aws_fix
-pip install -e .
-cd $this_dir
+## install mujoco-py locally
+#cd ${root_dir}/.mujoco/mujoco-py
+#git checkout aws_fix
+#pip install -e .
+#cd $this_dir
+
+pip install free-mujoco-py
