@@ -19,11 +19,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     import torch
     import tqdm
     from utils import (
+        make_a2c_models,
         make_collector,
         make_logger,
         make_loss,
         make_optim,
-        make_a2c_models,
         make_test_env,
     )
 
@@ -85,9 +85,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Forward pass A2C loss
         batch = batch.to(model_device)
         loss = loss_module(batch)
-        loss_sum = (
-                loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
-        )
+        loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
 
         # Backward pass + learning step
         loss_sum.backward()

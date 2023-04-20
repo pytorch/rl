@@ -224,6 +224,7 @@ def make_collector(cfg, policy):
     )
     return collector
 
+
 # ====================================================================
 # Model
 # -----
@@ -272,6 +273,7 @@ def make_a2c_models(cfg):
         del td
 
     return actor, critic
+
 
 def make_a2c_modules_state(proof_environment):
 
