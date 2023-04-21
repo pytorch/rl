@@ -136,7 +136,9 @@ def make_transformed_env_states(base_env, env_cfg):
     transformed_env = TransformedEnv(base_env)
 
     transformed_env.append_transform(StepCounter())
-    transformed_env.append_transform(RenameTransform(["step_count"], ["timesteps"]))
+    transformed_env.append_transform(
+        RenameTransform(["step_count"], ["timesteps"], create_copy=True)
+    )
     transformed_env.append_transform(
         TargetReturn(200 * 0.01, out_keys=["return_to_go"])
     )

@@ -29,6 +29,8 @@ class DecisionTransformer(nn.Module):
         self.action_dim = action_dim
         self.hidden_size = hidden_size
         self.ordering = ordering
+        self.train_context = 20
+        self.inference_context = 5
 
         self.transformer = GPT2Model(config=gpt_config)
         if ordering:
@@ -48,6 +50,11 @@ class DecisionTransformer(nn.Module):
         padding_mask: Optional[torch.Tensor] = None,
     ):
         batch_size, seq_length = observation.shape[0], observation.shape[1]
+
+        if seq_length == self.inference_context:
+            observation, action, return_to_go, timesteps, seq_length = self.pad_context(
+                observation, action, return_to_go, timesteps
+            )
 
         if padding_mask is None:
             # attention mask for GPT: 1 if can be attended to, 0 if not
@@ -96,4 +103,37 @@ class DecisionTransformer(nn.Module):
         # returns (0), states (1), or actions (2); i.e. x[:,1,t] is the token for s_t
         x = x.reshape(batch_size, seq_length, 3, self.hidden_size).permute(0, 2, 1, 3)
 
-        return x[:, 1]
+        return x[:, 1]  # only state tokens
+
+    def pad_context(
+        self,
+        observation: torch.Tensor,
+        action: torch.Tensor,
+        return_to_go: torch.Tensor,
+        timesteps: torch.Tensor,
+    ):
+        observation = torch.nn.functional.pad(
+            observation,
+            (0, 0, self.train_context - self.inference_context, 0),
+            mode="constant",
+            value=0,
+        )
+        action = torch.nn.functional.pad(
+            action,
+            (0, 0, self.train_context - self.inference_context - 1, 1),
+            mode="constant",
+            value=0,
+        )  # pad first action with 0
+        return_to_go = torch.nn.functional.pad(
+            return_to_go,
+            (0, 0, self.train_context - self.inference_context - 1, 1),
+            mode="constant",
+            value=0,
+        )
+        timesteps = torch.nn.functional.pad(
+            timesteps,
+            (0, 0, self.train_context - self.inference_context, 0),
+            mode="constant",
+            value=0,
+        )
+        return observation, action, return_to_go, timesteps, self.train_context

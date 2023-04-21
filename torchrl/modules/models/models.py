@@ -1198,7 +1198,7 @@ class DTActor(nn.Module):
         timesteps: torch.Tensor,
     ) -> torch.Tensor:
         hidden_state = self.transformer(observation, action, return_to_go, timesteps)
-        out = self.mlp(hidden_state)
+        out = self.mlp(hidden_state)[:, -1]
         mu, log_std = out.chunk(2, -1)
         log_std = torch.tanh(log_std)
         log_std = min(self.log_std_bounds) + 0.5 * (
