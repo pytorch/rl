@@ -1523,6 +1523,37 @@ def test_ensure_tensordict_compatible():
     assert isinstance(ensured_module, TensorDictModule)
 
 
+class TestLSTMModule:
+    def test_errs(self):
+        lstm = nn.LSTM(input_size=3, hidden_size=64, batch_first=False)
+        with pytest.raises(ValueError, match="batch_first"):
+            lstm_module = LSTMModule(
+                lstm,
+                in_keys=["observation", "hidden0", "hidden1"],
+                out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")]
+                )
+        lstm = nn.LSTM(input_size=3, hidden_size=64, batch_first=True)
+        with pytest.raises(ValueError, match="in_keys"):
+            lstm_module = LSTMModule(
+                lstm,
+                in_keys=["observation", "hidden0", ],
+                out_keys=["intermediate", ("next", "hidden0"),("next", "hidden1")]
+                )
+        with pytest.raises(ValueError, match="out_keys"):
+            lstm_module = LSTMModule(
+                lstm,
+                in_keys=["observation", "hidden0", "hidden1"],
+                out_keys=["intermediate", ("next", "hidden0")]
+                )
+
+    def test_single_step(self):
+        lstm = nn.LSTM(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
+        lstm_module = LSTMModule(lstm, in_keys=["observation", "hidden0", "hidden1"], out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")])
+        mlp = MLP(num_cells=[64], out_features=1)
+        policy = Seq(lstm_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
+        policy(env.reset())
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

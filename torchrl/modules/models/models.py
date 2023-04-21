@@ -362,7 +362,7 @@ class ConvNet(nn.Sequential):
         bias_last_layer: bool = True,
         aggregator_class: Optional[Type[nn.Module]] = SquashDims,
         aggregator_kwargs: Optional[dict] = None,
-        squeeze_output: bool = False,
+        squeeze_output: bool = True,
         device: Optional[DEVICE_TYPING] = None,
     ):
         if num_cells is None:
@@ -1049,6 +1049,10 @@ class LSTMNet(nn.Module):
         mlp_kwargs: Dict,
         device: Optional[DEVICE_TYPING] = None,
     ) -> None:
+        warnings.warn(
+            "LSTMNet is being deprecated in favour of torchrl.modules.LSTMModule, and will be removed soon.",
+            category=DeprecationWarning,
+        )
         super().__init__()
         lstm_kwargs.update({"batch_first": True})
         self.mlp = MLP(device=device, **mlp_kwargs)

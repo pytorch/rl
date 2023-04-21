@@ -2401,19 +2401,42 @@ class TensorDictPrimer(Transform):
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
-        >>> base_env = SerialEnv(2, GymEnv("Pendulum-v1"))
+        >>> from torchrl.envs import SerialEnv
+        >>> base_env = SerialEnv(2, lambda: GymEnv("Pendulum-v1"))
         >>> env = TransformedEnv(base_env)
         >>> # the env is batch-locked, so the leading dims of the spec must match those of the env
         >>> env.append_transform(TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([2, 3])))
-        >>> print(env.reset())
+        >>> td = env.reset()
+        >>> print(td)
         TensorDict(
             fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
-                mykey: Tensor(torch.Size([3]), dtype=torch.float32),
-                observation: Tensor(torch.Size([3]), dtype=torch.float32)},
-            batch_size=torch.Size([]),
+                done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                mykey: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([2]),
             device=cpu,
             is_shared=False)
+        >>> # the entry is populated with 0s
+        >>> print(td.get("mykey"))
+        tensor([[0., 0., 0.],
+                [0., 0., 0.]])
+
+    When calling ``env.step()``, the current value of the key will be carried
+    in the ``"next"`` tensordict __unless it already exists__.
+
+    Examples:
+        >>> td = env.rand_step(td)
+        >>> print(td.get(("next", "mykey")))
+        tensor([[0., 0., 0.],
+                [0., 0., 0.]])
+        >>> # with another value for "mykey", the previous value is not carried on
+        >>> td = env.reset()
+        >>> td = td.set(("next", "mykey"), torch.ones(2, 3))
+        >>> td = env.rand_step(td)
+        >>> print(td.get(("next", "mykey")))
+        tensor([[1., 1., 1.],
+                [1., 1., 1.]])
+
     """
 
     def __init__(self, primers: dict = None, random=False, default_value=0.0, **kwargs):
@@ -2505,7 +2528,7 @@ class TensorDictPrimer(Transform):
         for key in self.primers.keys():
             if isinstance(key, str):
                 key = (key,)
-            tensordict[("next", *key)] = tensordict[key]
+            tensordict.setdefault(("next", *key), tensordict.get(key, default=None))
         return tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:

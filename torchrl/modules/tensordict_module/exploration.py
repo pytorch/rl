@@ -125,7 +125,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = self.td_module.forward(tensordict)
         if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
-            out = tensordict.get(self.td_module.out_keys[0])
+            out = tensordict.get(self.action_key)
             eps = self.eps.item()
             cond = (torch.rand(tensordict.shape, device=tensordict.device) < eps).to(
                 out.dtype
@@ -447,17 +447,19 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = super().forward(tensordict)
         if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
-            if "step_count" not in tensordict.keys():
+            if "is_init" not in tensordict.keys():
                 warnings.warn(
                     f"The tensordict passed to {self.__class__.__name__} appears to be "
-                    f"missing the 'step_count' entry. This entry is used to "
+                    f"missing the 'is_init' entry. This entry is used to "
                     f"reset the noise at the beginning of a trajectory, without it "
                     f"the behaviour of this exploration method is undefined. "
                     f"This is allowed for BC compatibility purposes but it will be deprecated soon! "
-                    f"To create a 'step_count' entry, simply append a StepCounter "
-                    f"transform to your environment with `env = TransformedEnv(env, StepCounter())`."
+                    f"To create a 'step_count' entry, simply append an torchrl.envs.InitTracker "
+                    f"transform to your environment with `env = TransformedEnv(env, InitTracker())`."
                 )
-                tensordict.set("step_count", torch.ones(tensordict.shape))
+                tensordict.set(
+                    "is_init", torch.zeros(*tensordict.shape, 1, dtype=torch.bool)
+                )
             tensordict = self.ou.add_sample(tensordict, self.eps.item())
         return tensordict
 
@@ -528,9 +530,9 @@ class _OrnsteinUhlenbeckProcess:
 
         if self.noise_key not in tensordict.keys():
             self._make_noise_pair(tensordict)
-        step_count = tensordict.get("step_count", None)
-        if step_count is not None and not step_count.all():
-            self._make_noise_pair(tensordict, step_count == 0)
+        is_init = tensordict.get("is_init", None)
+        if is_init is not None and is_init.any():
+            self._make_noise_pair(tensordict, is_init.view(tensordict.shape))
 
         prev_noise = tensordict.get(self.noise_key)
         prev_noise = prev_noise + self.x0

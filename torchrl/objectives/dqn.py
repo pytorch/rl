@@ -57,6 +57,7 @@ class DQNLoss(LossModule):
         priority_key: str = "td_error",
         delay_value: bool = False,
         gamma: float = None,
+        action_space: str = "one_hot",
     ) -> None:
 
         super().__init__()
@@ -75,7 +76,16 @@ class DQNLoss(LossModule):
 
         self.loss_function = loss_function
         self.priority_key = priority_key
-        self.action_space = self.value_network.action_space
+        if action_space is None:
+            # infer from value net
+            try:
+                self.action_space = self.value_network.action_space
+            except AttributeError:
+                raise AttributeError(
+                    "action_space was not specified and could not be retrieved from the value network"
+                )
+        else:
+            self.action_space = action_space
 
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
