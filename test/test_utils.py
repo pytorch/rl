@@ -200,7 +200,7 @@ def test_set_gym_environments(
     import gymnasium
 
     # look for the right function that should be called according to gym versions (and same for gymnasium)
-    for impfor in implemetn_for._setters:
+    for impfor in implement_for._setters:
         if impfor.fn.__name__ == "_set_gym_environments":
             if (impfor.module_name, impfor.from_version, impfor.to_version) == (
                 "gym",
@@ -230,13 +230,12 @@ def test_set_gym_environments_no_version_gymnasium():
 
     import gymnasium
 
-
-    with pytest.raises(ImportError) as exc_info:
+    with pytest.raises(ModuleNotFoundError) as exc_info:
         with set_gym_backend(gymnasium):
-            pass
+            _utils_internal._set_gym_environments()
     assert (
         str(exc_info.value)
-        == f"Impossible to set the gym backend for {mock_gymnasium.__name__} with version {mock_gymnasium.__version__ }"
+        == f"Supported version of '_set_gym_environments' has not been found."
     )
 
 
