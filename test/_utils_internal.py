@@ -40,7 +40,6 @@ PONG_VERSIONED = "ALE/Pong-v5"
 
 @implement_for("gym", None, "0.21.0")
 def _set_gym_environments():  # noqa: F811
-    print("nooooooo!!")
     global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
 
     CARTPOLE_VERSIONED = "CartPole-v0"
@@ -61,7 +60,6 @@ def _set_gym_environments():  # noqa: F811
 
 @implement_for("gymnasium", "0.27.0", None)
 def _set_gym_environments():  # noqa: F811
-    print("calling!!")
     global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
 
     CARTPOLE_VERSIONED = "CartPole-v1"

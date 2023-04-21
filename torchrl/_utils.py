@@ -255,8 +255,11 @@ class implement_for:
 
     @staticmethod
     def check_version(version, from_version, to_version):
-        return (from_version is None or version >= from_version) and (
-            to_version is None or version < to_version
+        def str2tuple(v):
+            return tuple(map(int, v.split(".")))
+
+        return (from_version is None or str2tuple(version) >= str2tuple(from_version)) and (
+            to_version is None or str2tuple(version) < str2tuple(to_version)
         )
 
     @staticmethod

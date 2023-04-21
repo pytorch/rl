@@ -4,7 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import os
+import sys
 
+import _utils_internal
+import mock
 import pytest
 
 from torchrl._utils import get_binary_env_var, implement_for
@@ -134,31 +137,107 @@ def test_implement_for_reset():
     assert _impl is not implement_for._implementations
 
 
-def test_gym013():
-    try:
-        import gym
-        import gymnasium
-    except ModuleNotFoundError:
-        raise pytest.skip("Cannot test gym vs gymnasium")
+@pytest.mark.parametrize(
+    "version, from_version, to_version, expected_check",
+    [
+        ("0.21.0", "0.21.0", None, True),
+        ("0.21.0", None, "0.21.0", False),
+        ("0.9.0", "0.11.0", "0.21.0", False),
+        ("0.9.0", "0.1.0", "0.21.0", True),
+        ("0.19.99", "0.19.9", "0.21.0", True),
+        ("0.19.99", None, "0.19.0", False),
+        ("5.61.77", "0.21.0", None, True),
+        ("5.61.77", None, "0.21.0", False),
+    ],
+)
+def test_implement_for_check_versions(
+    version, from_version, to_version, expected_check
+):
+    assert (
+        implement_for.check_version(version, from_version, to_version) == expected_check
+    )
 
-    import _utils_internal
-    from torchrl.envs.utils import check_env_specs
 
-    with set_gym_backend(gymnasium):
-        _utils_internal._set_gym_environments()
-        pendulum = GymEnv(_utils_internal.PENDULUM_VERSIONED)
-        check_env_specs(pendulum)
-        assert isinstance(pendulum._env.action_space, gymnasium.spaces.Box)
+@pytest.mark.parametrize(
+    "gymnasium_version, expected_from_version_gymnasium, expected_to_version_gymnasium",
+    [
+        ("0.27.0", "0.27.0", None),
+        ("0.27.2", "0.27.0", None),
+        ("5.1.77", "0.27.0", None),
+    ],
+)
+@pytest.mark.parametrize(
+    "gym_version, expected_from_version_gym, expected_to_version_gym",
+    [
+        ("0.21.0", "0.21.0", None),
+        ("0.22.0", "0.21.0", None),
+        ("5.61.77", "0.21.0", None),
+        ("0.9.0", None, "0.21.0"),
+        ("0.20.0", None, "0.21.0"),
+        ("0.19.99", None, "0.21.0"),
+    ],
+)
+def test_set_gym_environments(
+    gym_version,
+    expected_from_version_gym,
+    expected_to_version_gym,
+    gymnasium_version,
+    expected_from_version_gymnasium,
+    expected_to_version_gymnasium,
+):
+    # mock gym and gymnasium imports
+    mock_gym = mock.MagicMock()
+    mock_gym.__version__ = gym_version
+    mock_gym.__name__ = "gym"
+    sys.modules["gym"] = mock_gym
+
+    mock_gymnasium = mock.MagicMock()
+    mock_gymnasium.__version__ = gymnasium_version
+    mock_gymnasium.__name__ = "gymnasium"
+    sys.modules["gymnasium"] = mock_gymnasium
+
+    import gym
+    import gymnasium
+
+    # look for the right function that should be called according to gym versions (and same for gymnasium)
+    for impfor in implemetn_for._setters:
+        if impfor.fn.__name__ == "_set_gym_environments":
+            if (impfor.module_name, impfor.from_version, impfor.to_version) == (
+                "gym",
+                expected_from_version_gym,
+                expected_to_version_gym,
+            ):
+                expected_fn_gym = impfor.fn
+            elif (impfor.module_name, impfor.from_version, impfor.to_version) == (
+                "gymnasium",
+                expected_from_version_gymnasium,
+                expected_to_version_gymnasium,
+            ):
+                expected_fn_gymnasium = impfor.fn
+
     with set_gym_backend(gym):
-        _utils_internal._set_gym_environments()
-        pendulum = GymEnv(_utils_internal.PENDULUM_VERSIONED)
-        check_env_specs(pendulum)
-        assert isinstance(pendulum._env.action_space, gym.spaces.Box)
+        assert _utils_internal._set_gym_environments == expected_fn_gym
+
     with set_gym_backend(gymnasium):
-        _utils_internal._set_gym_environments()
-        pendulum = GymEnv(_utils_internal.PENDULUM_VERSIONED)
-        check_env_specs(pendulum)
-        assert isinstance(pendulum._env.action_space, gymnasium.spaces.Box)
+        assert _utils_internal._set_gym_environments == expected_fn_gymnasium
+
+
+def test_set_gym_environments_no_version_gymnasium():
+    mock_gymnasium = mock.MagicMock()
+    mock_gymnasium.__version__ = "0.26.0"
+    mock_gymnasium.__name__ = "gymnasium"
+    sys.modules["gymnasium"] = mock_gymnasium
+
+    import gymnasium
+
+
+    with pytest.raises(ImportError) as exc_info:
+        with set_gym_backend(gymnasium):
+            pass
+    assert (
+        str(exc_info.value)
+        == f"Impossible to set the gym backend for {mock_gymnasium.__name__} with version {mock_gymnasium.__version__ }"
+    )
 
 
 if __name__ == "__main__":

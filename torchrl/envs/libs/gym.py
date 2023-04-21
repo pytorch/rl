@@ -66,14 +66,11 @@ class set_gym_backend(_DecoratorContextManager):
                 self.backend.__version__, setter.from_version, setter.to_version
             )
             if check_module and check_version:
-                print(
-                    "setter",
-                    setter.func_name,
-                    setter.module_name,
-                    setter.from_version,
-                    setter.to_version,
-                )
                 setter(setter.fn)
+                return
+
+        raise ImportError(f"Impossible to set the gym backend for {self.backend.__name__} with version {self.backend.__version__}")
+
 
     def __enter__(self):
         self._setters = copy(implement_for._setters)
