@@ -41,22 +41,22 @@ class DecisionTransformer(nn.Module):
 
     def forward(
         self,
-        observations: torch.Tensor,
-        actions: torch.Tensor,
-        returns_to_go: torch.Tensor,
+        observation: torch.Tensor,
+        action: torch.Tensor,
+        return_to_go: torch.Tensor,
         timesteps: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
     ):
-        batch_size, seq_length = observations.shape[0], observations.shape[1]
+        batch_size, seq_length = observation.shape[0], observation.shape[1]
 
         if padding_mask is None:
             # attention mask for GPT: 1 if can be attended to, 0 if not
             padding_mask = torch.ones((batch_size, seq_length), dtype=torch.long)
 
         # embed each modality with a different head
-        state_embeddings = self.embed_state(observations)
-        action_embeddings = self.embed_action(actions)
-        returns_embeddings = self.embed_return(returns_to_go)
+        state_embeddings = self.embed_state(observation)
+        action_embeddings = self.embed_action(action)
+        returns_embeddings = self.embed_return(return_to_go)
 
         if self.ordering:
             order_embeddings = self.embed_ordering(timesteps)

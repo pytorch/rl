@@ -1135,6 +1135,9 @@ class LSTMNet(nn.Module):
         return self._lstm(input, hidden0_in, hidden1_in)
 
 
+from torchrl.modules.models.decision_transformer import DecisionTransformer
+
+
 class DTActor(nn.Module):
     """Decision Transformer Actor class.
 
@@ -1166,12 +1169,19 @@ class DTActor(nn.Module):
     ):
         super().__init__()
         mlp_net_default_kwargs = {
-            "out_features": action_dim,
+            "out_features": action_dim * 2,
             "depth": 1,
             "num_cells": [512],
             "activation_class": nn.ReLU,
             "bias_last_layer": True,
         }
+        self.transformer = DecisionTransformer(
+            state_dim=3,
+            action_dim=action_dim,
+            hidden_size=512,
+            max_ep_len=1000,
+            ordering=False,
+        )
         # log_std_bounds: Tuple[float, float] = [-5.0, 2.0],
         log_std_bounds = [-5.0, 2.0]
         self.log_std_bounds = log_std_bounds
@@ -1180,7 +1190,14 @@ class DTActor(nn.Module):
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
         # self.apply(dt_actor_weight_init)
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        observation: torch.Tensor,
+        action: torch.Tensor,
+        return_to_go: torch.Tensor,
+        timesteps: torch.Tensor,
+    ) -> torch.Tensor:
+        hidden_state = self.transformer(observation, action, return_to_go, timesteps)
         out = self.mlp(hidden_state)
         mu, log_std = out.chunk(2, -1)
         log_std = torch.tanh(log_std)
@@ -1188,7 +1205,7 @@ class DTActor(nn.Module):
             max(self.log_std_bounds) - min(self.log_std_bounds)
         ) * (log_std + 1.0)
         std = torch.exp(log_std)
-        return (mu, std, hidden_state)
+        return (mu, std)
 
 
 def dt_actor_weight_init(m):
