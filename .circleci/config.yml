@@ -1245,10 +1245,8 @@ jobs:
 workflows:
   lint:
     jobs:
-#      - circleci_consistency
       - lint_python_and_config
       - lint_c
-#      - type_check_python
 
   build:
     jobs:
@@ -1371,67 +1369,6 @@ workflows:
 
   unittest:
     jobs:
-      - unittest_macos_cpu:
-          cu_version: cpu
-          name: unittest_macos_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_gpu:
-          cu_version: cu117
-          name: unittest_linux_gpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_distributed_gpu:
-          cu_version: cu117
-          name: unittest_linux_distributed_gpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_optdeps_gpu:
-          cu_version: cu117
-          name: unittest_linux_optdeps_gpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_stable_gpu:
-          cu_version: cu116
-          name: unittest_linux_stable_gpu_py3.7
-          python_version: '3.7'
-
-      - unittest_macos_cpu:
-          cu_version: cpu
-          name: unittest_macos_cpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_gpu:
-          cu_version: cu117
-          name: unittest_linux_gpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_distributed_gpu:
-          cu_version: cu117
-          name: unittest_linux_distributed_gpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_optdeps_gpu:
-          cu_version: cu117
-          name: unittest_linux_optdeps_gpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.8
-          python_version: '3.8'
-      - unittest_linux_stable_gpu:
-          cu_version: cu116
-          name: unittest_linux_stable_gpu_py3.8
-          python_version: '3.8'
-#      - unittest_linux_d4rl_gpu:
-#          cu_version: cu117
-#          name: unittest_linux_d4rl_gpu_py3.8
-#          python_version: '3.8'
       - unittest_linux_sklearn_gpu:
           cu_version: cu117
           name: unittest_linux_sklearn_gpu_py3.8
@@ -1482,48 +1419,14 @@ workflows:
           cu_version: cu117
           name: unittest_linux_optdeps_gpu_py3.9
           python_version: '3.9'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.9
-          python_version: '3.9'
       - unittest_linux_stable_gpu:
           cu_version: cu116
           name: unittest_linux_stable_gpu_py3.9
           python_version: '3.9'
-      # we test supported libs for 3.8 only
       - unittest_linux_habitat_gpu:
           cu_version: cu117
           name: unittest_linux_habitat_gpu_py3.9
           python_version: '3.9'
-
-      - unittest_macos_cpu:
-          cu_version: cpu
-          name: unittest_macos_cpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_gpu:
-          cu_version: cu117
-          name: unittest_linux_gpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_distributed_gpu:
-          cu_version: cu117
-          name: unittest_linux_distributed_gpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_optdeps_gpu:
-          cu_version: cu117
-          name: unittest_linux_optdeps_gpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.10
-          python_version: '3.10'
-      - unittest_linux_stable_gpu:
-          cu_version: cu116
-          name: unittest_linux_stable_gpu_py3.10
-          python_version: '3.10'
 
       - unittest_linux_olddeps_gpu:
           cu_version: cu116

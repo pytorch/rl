@@ -10,7 +10,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 
 from torchrl.envs.model_based.dreamer import DreamerEnv
-from torchrl.envs.utils import set_exploration_mode, step_mdp
+from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
@@ -186,7 +186,9 @@ class DreamerActorLoss(LossModule):
             tensordict = tensordict.select("state", "belief")
             tensordict = tensordict.reshape(-1)
 
-        with hold_out_net(self.model_based_env), set_exploration_mode("random"):
+        with hold_out_net(self.model_based_env), set_exploration_type(
+            ExplorationType.RANDOM
+        ):
             tensordict = self.model_based_env.reset(tensordict.clone(recurse=False))
             fake_data = self.model_based_env.rollout(
                 max_steps=self.imagination_horizon,

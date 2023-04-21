@@ -318,7 +318,7 @@ class hold_out_net(_context_manager):
         self.network = network
         try:
             self.p_example = next(network.parameters())
-        except StopIteration:
+        except (AttributeError, StopIteration):
             self.p_example = torch.tensor([])
         self._prev_state = []
 
