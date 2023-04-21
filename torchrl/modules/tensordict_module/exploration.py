@@ -454,7 +454,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
                     f"reset the noise at the beginning of a trajectory, without it "
                     f"the behaviour of this exploration method is undefined. "
                     f"This is allowed for BC compatibility purposes but it will be deprecated soon! "
-                    f"To create a 'step_count' entry, simply append an torchrl.envs.InitTracker "
+                    f"To create a 'is_init' entry, simply append an torchrl.envs.InitTracker "
                     f"transform to your environment with `env = TransformedEnv(env, InitTracker())`."
                 )
                 tensordict.set(

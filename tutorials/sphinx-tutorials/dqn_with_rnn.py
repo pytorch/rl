@@ -1,27 +1,15 @@
 import torch
 import tqdm
-from tensordict import TensorDict
-from tensordict.nn import (
-    set_skip_existing,
-    skip_existing,
-    TensorDictModule as Mod,
-    TensorDictModuleBase as Base,
-    TensorDictSequential as Seq,
-)
+from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 from torch import nn
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import (
-    LazyMemmapStorage,
-    TensorDictReplayBuffer,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.envs import (
     Compose,
     GrayScale,
     InitTracker,
     ObservationNorm,
     Resize,
-    step_mdp,
     StepCounter,
     ToTensorImage,
     TransformedEnv,

@@ -13,6 +13,12 @@ from tensordict.utils import prod
 
 from torch import nn
 
+from torchrl.objectives.value.functional import (
+    _get_num_per_traj_init,
+    _inv_pad_sequence,
+    _split_and_pad_sequence,
+)
+
 
 class LSTMModule(ModuleBase):
     """An embedder for an LSTM module.
@@ -33,6 +39,13 @@ class LSTMModule(ModuleBase):
     If in temporal mode, it is expected that the last dimension of the tensordict
     marks the number of steps. There is no constrain on the dimensionality of the
     tensordict (except that it must be greater than one for temporal inputs).
+
+    .. note::
+      This class can handle multiple consecutive trajectories along the time dimension
+      *but* the final hidden values should not be trusted in those cases (ie. they
+      should not be re-used for a consecutive trajectory).
+      The reason is that LSTM returns only the last hidden value, which for the
+      padded inputs we provide can correspont to a 0-filled input.
 
     Args:
         lstm (torch.nn.Module): a :class:`torch.nn.LSTM` instance. For simplicity, this class does not
@@ -87,17 +100,19 @@ class LSTMModule(ModuleBase):
 
     def __init__(self, lstm: nn.LSTM, in_keys, out_keys):
         super().__init__()
-        if len(in_keys) != 3:
+        if len(in_keys) != 3 and not (len(in_keys) == 4 and in_keys[-1] == "is_init"):
             raise ValueError(
-                f"LSTMModule expects 3 inputs: a value, and two hidden states. Got in_keys {in_keys} instead."
+                f"LSTMModule expects 3 inputs: a value, and two hidden states (and potentially an 'is_init' marker). Got in_keys {in_keys} instead."
             )
         if len(out_keys) != 3:
             raise ValueError(
-                f"LSTMModule expects 3 outputs: a value, and two hidden states. Got in_keys {in_keys} instead."
+                f"LSTMModule expects 3 outputs: a value, and two hidden states. Got out_keys {out_keys} instead."
             )
         if not lstm.batch_first:
             raise ValueError("The input lstm must have batch_first=True")
         self.lstm = lstm
+        if "is_init" not in in_keys:
+            in_keys = in_keys + ["is_init"]
         self.in_keys = in_keys
         self.out_keys = out_keys
         self._temporal_mode = False
@@ -165,32 +180,63 @@ class LSTMModule(ModuleBase):
                 )
         else:
             tensordict_shaped = tensordict.view(-1).unsqueeze(-1)
+
+        is_init = tensordict_shaped.get("is_init").squeeze(-1)
+        splits = None
+        if self.temporal_mode and is_init[..., 1:].any():
+            # if we have consecutive trajectories, things get a little more complicated
+            # we have a tensordict of shape [B, T]
+            # we will split / pad things such that we get a tensordict of shape
+            # [N, T'] where T' <= T and N >= B is the new batch size, such that
+            # each index of N is an independent trajectory. We'll need to keep
+            # track of the indices though, as we want to put things back together in the end.
+            splits = _get_num_per_traj_init(is_init)
+            tensordict_shaped_shape = tensordict_shaped.shape
+            tensordict_shaped = _split_and_pad_sequence(
+                tensordict_shaped.select(*self.in_keys, strict=False), splits
+            )
+            is_init = tensordict_shaped.get("is_init").squeeze(-1)
+
         value, hidden0, hidden1 = (
             tensordict_shaped.get(key, default)
             for key, default in zip(self.in_keys, defaults)
         )
-        is_init = tensordict_shaped.get("is_init")
+        batch, steps = value.shape[:2]
+        device = value.device
+        dtype = value.dtype
+        # packed sequences do not help to get the accurate last hidden values
+        # if splits is not None:
+        #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
         if is_init.any() and hidden0 is not None:
             hidden0[is_init] = 0
             hidden1[is_init] = 0
-        val, hidden0, hidden1 = self._lstm(value, hidden0, hidden1)
+        val, hidden0, hidden1 = self._lstm(
+            value, batch, steps, device, dtype, hidden0, hidden1
+        )
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden0)
         tensordict_shaped.set(self.out_keys[2], hidden1)
-        if shape != tensordict_shaped.shape:
+        if splits is not None:
+            # let's recover our original shape
+            tensordict_shaped = _inv_pad_sequence(tensordict_shaped, splits).view(
+                tensordict_shaped_shape
+            )
+
+        if shape != tensordict_shaped.shape or tensordict_shaped is not tensordict:
             tensordict.update(tensordict_shaped.reshape(shape))
         return tensordict
 
     def _lstm(
         self,
         input: torch.Tensor,
+        batch,
+        steps,
+        device,
+        dtype,
         hidden0_in: Optional[torch.Tensor] = None,
         hidden1_in: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        if input.ndim != 3:
-            raise ValueError("the input does not have 3 dimensions.")
 
-        batch, steps = input.shape[:2]
         if not self.temporal_mode and steps != 1:
             raise ValueError("Expected a single step")
 
@@ -201,8 +247,8 @@ class LSTMModule(ModuleBase):
                     *shape,
                     self.lstm.num_layers,
                     self.lstm.hidden_size,
-                    device=input.device,
-                    dtype=input.dtype,
+                    device=device,
+                    dtype=dtype,
                 )
                 for _ in range(2)
             ]
@@ -227,8 +273,7 @@ class LSTMModule(ModuleBase):
         # we pad the hidden states with zero to make tensordict happy
         for i in range(1, 3):
             out[i] = torch.stack(
-                [torch.zeros_like(out[i]) for _ in range(input.shape[1] - 1)]
-                + [out[i]],
+                [torch.zeros_like(out[i]) for _ in range(steps - 1)] + [out[i]],
                 1,
             )
         return tuple(out)
