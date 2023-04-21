@@ -554,20 +554,20 @@ print(td)
 ###############################################################################
 
 # Sampling vs mode / mean
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 td = TensorDict({"input": torch.randn(3, 5)}, [3])
 
 torch.manual_seed(0)
-with set_exploration_mode("random"):
+with set_exploration_type(ExplorationType.RANDOM):
     td_module(td)
     print("random:", td["action"])
 
-with set_exploration_mode("mode"):
+with set_exploration_type(ExplorationType.MODE):
     td_module(td)
     print("mode:", td["action"])
 
-with set_exploration_mode("mean"):
+with set_exploration_type(ExplorationType.MODE):
     td_module(td)
     print("mean:", td["action"])
 

@@ -8,14 +8,14 @@ import argparse
 import pytest
 import torch
 from tensordict import TensorDict
-from tensordict.nn import make_functional, TensorDictModule
+from tensordict.nn import InteractionType, make_functional, TensorDictModule
 from torch import nn
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import set_exploration_type
 from torchrl.modules import NormalParamWrapper, SafeModule, TanhNormal
 from torchrl.modules.tensordict_module.common import (
     ensure_tensordict_compatible,
@@ -156,7 +156,9 @@ class TestTDModule:
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     @pytest.mark.parametrize("out_keys", [["loc", "scale"], ["loc_1", "scale_1"]])
     @pytest.mark.parametrize("lazy", [True, False])
-    @pytest.mark.parametrize("exp_mode", ["mode", "random", None])
+    @pytest.mark.parametrize(
+        "exp_mode", [InteractionType.MODE, InteractionType.RANDOM, None]
+    )
     def test_stateful_probabilistic(self, safe, spec_type, lazy, exp_mode, out_keys):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -215,7 +217,7 @@ class TestTDModule:
 
         tensordict_module = SafeProbabilisticTensorDictSequential(net, prob_module)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        with set_exploration_mode(exp_mode):
+        with set_exploration_type(exp_mode):
             tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])

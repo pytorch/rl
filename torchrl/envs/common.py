@@ -431,7 +431,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 raise TypeError(
                     f"expected done.dtype to be torch.bool but got {tensordict_out.get('done').dtype}"
                 )
-        tensordict.set("next", tensordict_out.get("next"))
+        # tensordict could already have a "next" key
+        tensordict.update(tensordict_out)
 
         return tensordict
 
@@ -509,11 +510,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict_reset.set(
                 "done",
                 self.done_spec.zero(leading_dim),
-            )
-        if self.reward_spec is not None and "reward" not in tensordict_reset.keys():
-            tensordict_reset.set(
-                "reward",
-                self.reward_spec.zero(leading_dim),
             )
 
         if (_reset is None and tensordict_reset.get("done").any()) or (
@@ -668,8 +664,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
         try:
             policy_device = next(policy.parameters()).device
-        except AttributeError:
-            policy_device = "cpu"
+        except (StopIteration, AttributeError):
+            policy_device = self.device
 
         env_device = self.device
 
@@ -813,7 +809,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             {
                 **fake_in_out,
                 "done": fake_done.clone(),
-                "reward": fake_reward.clone(),
                 "next": next_output,
             },
             batch_size=self.batch_size,

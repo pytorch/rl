@@ -214,7 +214,9 @@ class:
     :template: rl_template_noinherit.rst
 
     QValueActor
+    QValueModule
     DistributionalQValueActor
+    DistributionalQValueModule
 
 Value operators and joined models
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -374,6 +376,7 @@ Some distributions are typically used in RL scripts.
     TruncatedNormal
     TanhDelta
     OneHotCategorical
+    MaskedCategorical
 
 Utils
 -----
