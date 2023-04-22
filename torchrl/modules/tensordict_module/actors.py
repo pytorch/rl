@@ -476,10 +476,9 @@ class QValueModule(TensorDictModuleBase):
     def _categorical_action_value(
         values: torch.Tensor, action: torch.Tensor
     ) -> torch.Tensor:
-        if len(values.shape) == 1:
-            return values[action].unsqueeze(-1)
-        batch_size = values.size(0)
-        return values[range(batch_size), action].unsqueeze(-1)
+        n_classes = values.shape[-1]
+        action = torch.nn.functional.one_hot(action, n_classes)
+        return (action * values).sum(-1, True)
 
 
 class DistributionalQValueModule(QValueModule):
