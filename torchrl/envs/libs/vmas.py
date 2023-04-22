@@ -161,7 +161,7 @@ class VmasWrapper(_EnvWrapper):
             action_specs.append(
                 _gym_to_torchrl_spec_transform(
                     self.action_space[agent_index],
-                    categorical_action_encoding=True,
+                    categorical_action_encoding=False,
                     device=self.device,
                 )
             )  # shape = (n_actions_per_agent,)
@@ -353,6 +353,7 @@ class VmasWrapper(_EnvWrapper):
         return rewards
 
     def read_action(self, action):
+        action = self.action_spec.to_categorical(action, safe=True)
         agent_actions = []
         for i in range(self.n_agents):
             agent_actions.append(action[:, i, ...])

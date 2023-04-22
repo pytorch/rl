@@ -122,7 +122,7 @@ if __name__ == "__main__":
         module=qnet,
         spec=env.unbatched_input_spec["action"],
         in_keys=["observation"],
-        action_space="categorical",
+        action_space="one_hot",
     )
 
     qnet = EGreedyWrapper(qnet, annealing_num_steps=total_frames)
