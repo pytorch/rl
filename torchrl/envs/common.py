@@ -431,7 +431,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 raise TypeError(
                     f"expected done.dtype to be torch.bool but got {tensordict_out.get('done').dtype}"
                 )
-        tensordict.set("next", tensordict_out.get("next"))
+        # tensordict could already have a "next" key
+        tensordict.update(tensordict_out)
 
         return tensordict
 

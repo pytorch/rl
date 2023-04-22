@@ -22,7 +22,7 @@ from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Uni
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
@@ -136,11 +136,19 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
 def _policy_is_tensordict_compatible(policy: nn.Module):
     sig = inspect.signature(policy.forward)
 
-    if isinstance(policy, TensorDictModule) or (
+    if isinstance(policy, TensorDictModuleBase):
+        return True
+    if (
         len(sig.parameters) == 1
         and hasattr(policy, "in_keys")
         and hasattr(policy, "out_keys")
     ):
+        warnings.warn(
+            "Passing a policy that is not a TensorDictModuleBase subclass but has in_keys and out_keys "
+            "will soon be deprecated. We'd like to motivate our users to inherit from this class (which "
+            "has very few restrictions) to make the experience smoother.",
+            category=DeprecationWarning,
+        )
         # if the policy is a TensorDictModule or takes a single argument and defines
         # in_keys and out_keys then we assume it can already deal with TensorDict input
         # to forward and we return True

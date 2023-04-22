@@ -1083,25 +1083,23 @@ class ActorValueOperator(SafeSequential):
         :proportional:
         :textual:
 
-            +---------------+
-            |Observation (s)|
-            +---------------+
-                     |
-                     v
-                   common
-                     |
-                     v
-           +------------------+
-           |    Hidden state  |
-           +------------------+
-            |                |
-            v                v
-         actor             critic
-           |                 |
-           v                 v
-       +-------------+  +------------+
-       |Action (a(s))|  |Value (V(s))|
-       +-------------+  +------------+
+               +---------------+
+               |Observation (s)|
+               +---------------+
+                        |
+                       "common"
+                        |
+                        v
+                 +------------+
+                 |Hidden state|
+                 +------------+
+                   |         |
+                  actor     critic
+                   |         |
+                   v         v
+        +-------------+ +------------+
+        |Action (a(s))| |Value (V(s))|
+        +-------------+ +------------+
 
     .. note::
       For a similar class that returns an action and a Quality value :math:`Q(s, a)`
@@ -1226,25 +1224,25 @@ class ActorCriticOperator(ActorValueOperator):
         :proportional:
         :textual:
 
-                +---------------+
-                |Observation (s)|
-                +---------------+
+                 +---------------+
+                 |Observation (s)|
+                 +---------------+
                          |
                          v
-                      common
+                        "common"
                          |
                          v
-               +------------------+
-               |    Hidden state  |
-               +------------------+
-                |                |
-                v                v
-             actor  ------>   critic
-               |                 |
-               v                 v
-       +-------------+  +----------------+
-       |Action (a(s))|  |Quality (Q(s,a))|
-       +-------------+  +----------------+
+                  +------------+
+                  |Hidden state|
+                  +------------+
+                    |        |
+                    v        v
+                   actor --> critic
+                    |        |
+                    v        v
+            +-------------+ +----------------+
+            |Action (a(s))| |Quality (Q(s,a))|
+            +-------------+ +----------------+
 
     .. note::
       For a similar class that returns an action and a state-value :math:`V(s)`
@@ -1378,17 +1376,17 @@ class ActorCriticWrapper(SafeSequential):
         :proportional:
         :textual:
 
-               +---------------+
-               |Observation (s)|
-               +---------------+
-                |     |   |
-                v     |   v
-                actor |   critic
-                |     |   |
-                v     |   v
-       +-------------+|+------------+
-       |Action (a(s))|||Value (V(s))|
-       +-------------+|+------------+
+                 +---------------+
+                 |Observation (s)|
+                 +---------------+
+                    |    |    |
+                    v    |    v
+                   actor |    critic
+                    |    |    |
+                    v    |    v
+        +-------------+  |  +------------+
+        |Action (a(s))|  |  |Value (V(s))|
+        +-------------+  |  +------------+
 
 
     To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
