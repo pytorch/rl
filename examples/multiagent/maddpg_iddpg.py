@@ -95,7 +95,7 @@ if __name__ == "__main__":
     )
     env_test = VmasEnv(
         scenario=scenario_name,
-        num_envs=1,
+        num_envs=config["evaluation_episodes"],
         continuous_actions=True,
         max_steps=max_steps,
         device=vmas_device,
@@ -105,6 +105,7 @@ if __name__ == "__main__":
     )
     env_config.update({"n_agents": env.n_agents, "scenario_name": scenario_name})
 
+    # Policy
     actor_net = nn.Sequential(
         MultiAgentMLP(
             n_agent_inputs=env.observation_spec["observation"].shape[-1],
@@ -194,7 +195,7 @@ if __name__ == "__main__":
     total_time = 0
     sampling_start = time.time()
     for i, tensordict_data in enumerate(collector):
-        print(f"Iteration {i}")
+        print(f"\nIteration {i}")
 
         sampling_time = time.time() - sampling_start
         print(f"Sampling took {sampling_time}")
@@ -239,6 +240,7 @@ if __name__ == "__main__":
                 total_time,
                 i,
             )
+
         if (
             config["evaluation_episodes"] > 0
             and i % config["evaluation_interval"] == 0

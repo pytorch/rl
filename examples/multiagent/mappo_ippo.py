@@ -21,7 +21,7 @@ from utils.logging import log_evaluation, log_training
 
 
 def rendering_callback(env, td):
-    env.frames.append(env_test.render(mode="rgb_array", agent_index_focus=None))
+    env.frames.append(env.render(mode="rgb_array", agent_index_focus=None))
 
 
 if __name__ == "__main__":
@@ -271,7 +271,8 @@ if __name__ == "__main__":
                     policy=policy,
                     callback=rendering_callback,
                     auto_cast_to_device=True,
-                    break_when_any_done=False,  # We are running vectorized evaluation we do not want it to stop when just one env is done
+                    break_when_any_done=False,
+                    # We are running vectorized evaluation we do not want it to stop when just one env is done
                 )
 
                 evaluation_time = time.time() - evaluation_start
