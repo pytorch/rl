@@ -36,7 +36,7 @@ device = torch.device(0) if torch.cuda.device_count() else torch.device("cpu")
 
 with torch.device(device):
     env = TransformedEnv(
-        GymEnv("CartPole-v1", from_pixels=True),
+        GymEnv("CartPole-v1", from_pixels=True, device=device),
         Compose(
             ToTensorImage(),
             TensorDictPrimer(
@@ -55,7 +55,6 @@ with torch.device(device):
     )
     env.transform[-1].init_stats(1000, reduce_dim=[0, 1, 2], cat_dim=0, keep_dims=[0])
     td = env.reset()
-    td
 
     feature = Mod(
         ConvNet(
@@ -63,13 +62,14 @@ with torch.device(device):
             squeeze_output=True,
             aggregator_class=nn.AdaptiveAvgPool2d,
             aggregator_kwargs={"output_size": (1, 1)},
+            device=device,
         ),
         in_keys=["pixels"],
         out_keys=["embed"],
     )
     n_cells = feature(env.reset())["embed"].shape[-1]
     print(n_cells)
-    lstm = nn.LSTM(input_size=n_cells, hidden_size=128, batch_first=True)
+    lstm = nn.LSTM(input_size=n_cells, hidden_size=128, batch_first=True, device=device)
     lstm = LSTMModule(
         lstm,
         in_keys=["embed", "hidden_0", "hidden_1"],
@@ -80,6 +80,7 @@ with torch.device(device):
         num_cells=[
             64,
         ],
+        device=device,
     )
     mlp[-1].bias.data.fill_(0.0)
     mlp = Mod(mlp, in_keys=["embed"], out_keys=["action_value"])
@@ -116,9 +117,9 @@ with torch.device(device):
             print("data:", data)
         pbar.update(data.numel())
         # it is important to pass data that is not flattened
-        rb.extend(data.unsqueeze(0).to_tensordict())  # .exclude("hidden_0", "hidden_1"))
+        rb.extend(data.unsqueeze(0).to_tensordict().cpu())  # .exclude("hidden_0", "hidden_1"))
         for k in range(utd):
-            s = rb.sample()
+            s = rb.sample().to(device)
             if k == 0 and i == 0:
                 print("sample:", s)
             loss_vals = loss_fn(s)
