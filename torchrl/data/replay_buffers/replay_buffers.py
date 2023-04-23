@@ -19,7 +19,7 @@ from ..._utils import accept_remote_rref_udf_invocation
 
 from .samplers import PrioritizedSampler, RandomSampler, Sampler
 from .storages import _get_default_collate, ListStorage, Storage
-from .utils import _to_numpy, INT_CLASSES
+from .utils import _to_numpy, INT_CLASSES, _to_torch
 from .writers import RoundRobinWriter, Writer
 
 
@@ -755,7 +755,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         data, info = super().sample(batch_size, return_info=True)
         if include_info in (True, None):
             for k, v in info.items():
-                data.set(k, expand_as_right(torch.tensor(v, device=data.device), data))
+                data.set(k, expand_as_right(_to_torch(v, data.device), data))
         if return_info:
             return data, info
         return data

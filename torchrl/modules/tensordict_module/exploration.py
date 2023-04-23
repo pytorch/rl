@@ -140,7 +140,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
                 raise RuntimeError(
                     "spec must be provided by the policy or directly to the exploration wrapper."
                 )
-            tensordict.set(self.td_module.out_keys[0], out)
+            tensordict.set(self.action_key, out)
         return tensordict
 
 
