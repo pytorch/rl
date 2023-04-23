@@ -103,8 +103,8 @@ with torch.device(device):
 
 
     collector = SyncDataCollector(
-        # env, stoch_policy, frames_per_batch=50, total_frames=5_000_000
-        env, stoch_policy, frames_per_batch=50, total_frames=1000,
+        env, stoch_policy, frames_per_batch=50, total_frames=1_000_000
+        # env, stoch_policy, frames_per_batch=50, total_frames=1000,
     )
     rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(200_000), batch_size=4, prefetch=10)
     updater = SoftUpdate(loss_fn, eps=0.95)
@@ -112,6 +112,7 @@ with torch.device(device):
 
     utd = 16
     pbar = tqdm.tqdm(total=5_000_000)
+
     for i, data in enumerate(collector):
         if i == 0:
             print("data:", data)
