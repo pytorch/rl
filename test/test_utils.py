@@ -215,6 +215,9 @@ def test_set_gym_environments(
             ):
                 expected_fn_gymnasium = impfor.fn
 
+    with set_gym_backend(gymnasium):
+        assert _utils_internal._set_gym_environments == expected_fn_gymnasium
+
     with set_gym_backend(gym):
         assert _utils_internal._set_gym_environments == expected_fn_gym
 
