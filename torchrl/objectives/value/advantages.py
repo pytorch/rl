@@ -397,7 +397,7 @@ class TD1Estimator(ValueEstimatorBase):
         advantage_key: Union[str, Tuple] = "advantage",
         value_target_key: Union[str, Tuple] = "value_target",
         value_key: Union[str, Tuple] = "state_value",
-        skip_existing: bool = False,
+        skip_existing: Optional[bool] = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -577,7 +577,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         advantage_key: Union[str, Tuple] = "advantage",
         value_target_key: Union[str, Tuple] = "value_target",
         value_key: Union[str, Tuple] = "state_value",
-        skip_existing: bool = False,
+        skip_existing: Optional[bool] = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -782,7 +782,7 @@ class GAE(ValueEstimatorBase):
         advantage_key: Union[str, Tuple] = "advantage",
         value_target_key: Union[str, Tuple] = "value_target",
         value_key: Union[str, Tuple] = "state_value",
-        skip_existing: bool = False,
+        skip_existing: Optional[bool] = None,
     ):
         super().__init__(
             value_network=value_network,
