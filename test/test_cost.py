@@ -7,6 +7,7 @@ import argparse
 from copy import deepcopy
 
 from packaging import version as pack_version
+from tensordict.nn import InteractionType
 
 _has_functorch = True
 try:
@@ -438,7 +439,7 @@ class TestDQN:
             assert_allclose_td(target_value, target_value2)
         else:
             for key, val in target_value.flatten_keys(",").items():
-                if key in ("support",):
+                if "support" in key:
                     continue
                 assert not (val == target_value2[tuple(key.split(","))]).any(), key
 
@@ -3112,7 +3113,7 @@ class TestDreamer:
             SafeProbabilisticModule(
                 in_keys=["loc", "scale"],
                 out_keys="action",
-                default_interaction_mode="random",
+                default_interaction_type=InteractionType.RANDOM,
                 distribution_class=TanhNormal,
             ),
         )
@@ -4979,6 +4980,62 @@ class TestAdv:
         )
         td = module(td.clone(False))
         assert td["advantage"].is_leaf
+
+    @pytest.mark.parametrize(
+        "adv,kwargs",
+        [
+            [GAE, {"lmbda": 0.95}],
+            [TD1Estimator, {}],
+            [TDLambdaEstimator, {"lmbda": 0.95}],
+        ],
+    )
+    @pytest.mark.parametrize("has_value_net", [True, False])
+    @pytest.mark.parametrize("skip_existing", [True, False, None])
+    def test_skip_existing(
+        self,
+        adv,
+        kwargs,
+        has_value_net,
+        skip_existing,
+    ):
+        if has_value_net:
+            value_net = TensorDictModule(
+                lambda x: torch.zeros(*x.shape[:-1], 1),
+                in_keys=["obs"],
+                out_keys=["state_value"],
+            )
+        else:
+            value_net = None
+
+        module = adv(
+            gamma=0.98,
+            value_network=value_net,
+            differentiable=True,
+            skip_existing=skip_existing,
+            **kwargs,
+        )
+        td = TensorDict(
+            {
+                "obs": torch.randn(1, 10, 3),
+                "state_value": torch.ones(1, 10, 1),
+                "next": {
+                    "obs": torch.randn(1, 10, 3),
+                    "state_value": torch.ones(1, 10, 1),
+                    "reward": torch.randn(1, 10, 1, requires_grad=True),
+                    "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                },
+            },
+            [1, 10],
+        )
+        td = module(td.clone(False))
+        if has_value_net and not skip_existing:
+            exp_val = 0
+        elif has_value_net and skip_existing:
+            exp_val = 1
+        elif not has_value_net:
+            exp_val = 1
+        assert (td["state_value"] == exp_val).all()
+        # assert (td["next", "state_value"] == exp_val).all()
 
 
 class TestBase:

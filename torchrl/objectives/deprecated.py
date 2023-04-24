@@ -14,7 +14,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDictBase
 from torch import Tensor
-from torchrl.envs.utils import set_exploration_mode, step_mdp
+from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives import (
     default_value_kwargs,
     distance_loss,
@@ -195,7 +195,7 @@ class REDQLoss_deprecated(LossModule):
     def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         tensordict_clone = tensordict.select(*obs_keys)  # to avoid overwriting keys
-        with set_exploration_mode("random"):
+        with set_exploration_type(ExplorationType.RANDOM):
             self.actor_network(
                 tensordict_clone,
                 params=self.actor_network_params,
@@ -230,7 +230,7 @@ class REDQLoss_deprecated(LossModule):
             )  # next_observation ->
             # observation
             # select pseudo-action
-            with set_exploration_mode("random"):
+            with set_exploration_type(ExplorationType.RANDOM):
                 self.actor_network(
                     next_td,
                     params=self.target_actor_network_params,
