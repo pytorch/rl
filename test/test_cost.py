@@ -180,7 +180,7 @@ class TestDQN:
         # Actor
         if action_spec_type == "mult_one_hot":
             action_spec = MultiOneHotDiscreteTensorSpec([atoms] * action_dim)
-        elif action_spec_type == "one_hot":
+        elif action_spect_type == "one_hot":
             action_spec = OneHotDiscreteTensorSpec(action_dim)
         elif action_spec_type == "categorical":
             action_spec = DiscreteTensorSpec(action_dim)

@@ -15,19 +15,6 @@ $DIR/install.sh
 
 # Extracted from run_test.sh to run once.
 yum makecache && yum install glew  xorg-x11-server-Xvfb glew-devel mesa-libEGL mesa-libEGL-devel mesa-libOSMesa-devel -y
-#conda install -c conda-forge glew -y
-#  freeglut-devel
-#  zlib-devel \
-#  mesa-libGL \
-#  mesa-libGL-devel \
-#  glfw \
-#  mesa-libOSMesa-devel \
-#  glew \
-#  glew-devel \
-#  egl-utils \
-
-#yum makecache && yum install libglvnd-devel glew xorg-x11-server-Xvfb zlib-devel egl-utils freeglut mesa-libEGL -y
-
 
 # This version is installed initially (see environment.yml)
 for GYM_VERSION in '0.13'

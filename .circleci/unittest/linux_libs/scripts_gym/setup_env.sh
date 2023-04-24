@@ -59,24 +59,18 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
 
-if [[ $OSTYPE == 'darwin'* ]]; then
-  PRIVATE_MUJOCO_GL=glfw
-elif [ "${CU_VERSION:-}" == cpu ]; then
-  PRIVATE_MUJOCO_GL=osmesa
-else
-  PRIVATE_MUJOCO_GL=egl
-fi
 
-export MUJOCO_GL=$PRIVATE_MUJOCO_GL
+export MUJOCO_GL=egl
 conda env config vars set \
+  MUJOCO_GL=egl \
+  SDL_VIDEODRIVER=dummy \
+  DISPLAY=unix:0.0 \
+  PYOPENGL_PLATFORM=egl
+
 #  MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco200_linux \
-#  DISPLAY=unix:0.0 \
 #  MJLIB_PATH=$root_dir/.mujoco/mujoco200_linux/bin/libmujoco200.so \
 #  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco200_linux/bin \
 #  MUJOCO_PY_MJKEY_PATH=$root_dir/.mujoco/mjkey.txt \
-  SDL_VIDEODRIVER=dummy \
-  MUJOCO_GL=$PRIVATE_MUJOCO_GL \
-  PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
@@ -95,7 +89,7 @@ wget http://www.atarimania.com/roms/Roms.rar
 python -m atari_py.import_roms Roms
 
 #yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL glfw mesa-libOSMesa-devel glew egl-utils freeglut -y
-yum makecache && yum install libglvnd-devel glew zlib-devel -y
+#yum makecache && yum install libglvnd-devel glew zlib-devel -y
 
 ## install mujoco-py locally
 #cd ${root_dir}/.mujoco/mujoco-py
