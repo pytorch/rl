@@ -222,20 +222,23 @@ def test_set_gym_environments(
         assert _utils_internal._set_gym_environments == expected_fn_gymnasium
 
 
-def test_set_gym_environments_no_version_gymnasium():
+def test_set_gym_environments_no_version_gymnasium_found():
+    gymnasium_version = "0.26.0"
+    gymnasium_name = "gymnasium"
     mock_gymnasium = mock.MagicMock()
-    mock_gymnasium.__version__ = "0.26.0"
-    mock_gymnasium.__name__ = "gymnasium"
+    mock_gymnasium.__version__ = gymnasium_version
+    mock_gymnasium.__name__ = gymnasium_name
     sys.modules["gymnasium"] = mock_gymnasium
 
     import gymnasium
-
-    with pytest.raises(ModuleNotFoundError) as exc_info:
+    # this version of gymnasium does not exist in implement_for
+    # therefore, set_gym_backend will not set anything and raise an ImportError.
+    with pytest.raises(ImportError) as exc_info:
         with set_gym_backend(gymnasium):
             _utils_internal._set_gym_environments()
     assert (
         str(exc_info.value)
-        == f"Supported version of '_set_gym_environments' has not been found."
+        == f"could not set anything related to gym backed {gymnasium_name} with version={gymnasium_version}."
     )
 
 
