@@ -668,16 +668,45 @@ class DistributionalQValueModule(QValueModule):
 
 
 def _process_action_space_spec(action_space, spec):
+    nest_action = False
+    if isinstance(spec, CompositeSpec):
+        try:
+            # this will break whenever our action is more complex than a single tensor
+            spec = spec["action"]
+            nest_action = True
+        except KeyError:
+            raise KeyError(
+                "action could not be found in the spec. Make sure "
+                "you pass a spec that is either a native action spec or a composite action spec "
+                "with an 'action' entry. Otherwise, simply remove the spec and use the action_space only."
+            )
     if action_space is not None:
-        if spec is not None:
-            raise ValueError
+        if isinstance(action_space, CompositeSpec):
+            raise ValueError("action_space cannot be of type CompositeSpec.")
+        if (
+            spec is not None
+            and isinstance(action_space, TensorSpec)
+            and action_space is not spec
+        ):
+            raise ValueError(
+                "Passing an action_space as a TensorSpec and a TensorSpec isn't allowed, unless they match."
+            )
         if isinstance(action_space, TensorSpec):
             spec = action_space
         action_space = _find_action_space(action_space)
+        # check that the spec and action_space match
+        if spec is not None and _find_action_space(spec) != action_space:
+            raise ValueError(
+                f"The action spec and the action space do not match: got action_space={action_space} and spec={spec}."
+            )
     elif spec is not None:
         action_space = _find_action_space(spec)
     else:
-        raise ValueError
+        raise ValueError(
+            "Neither action_space nor spec was defined. The action space cannot be inferred."
+        )
+    if nest_action:
+        spec = CompositeSpec(action=spec)
     return action_space, spec
 
 
@@ -928,7 +957,7 @@ class QValueActor(SafeSequential):
         action_value_key=None,
     ):
 
-        action_space, spec = _process_action_space_spec(action_space, None)
+        action_space, spec = _process_action_space_spec(action_space, spec)
 
         self.action_space = action_space
         self.action_value_key = action_value_key
@@ -1058,7 +1087,7 @@ class DistributionalQValueActor(QValueActor):
         action_value_key: str = "action_value",
         make_log_softmax: bool = True,
     ):
-        action_space, spec = _process_action_space_spec(action_space, None)
+        action_space, spec = _process_action_space_spec(action_space, spec)
         self.action_space = action_space
         self.action_value_key = action_value_key
         out_keys = [
