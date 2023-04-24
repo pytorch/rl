@@ -139,11 +139,11 @@ for i, data in enumerate(collector):
     )
     stoch_policy.step(data.numel())
     updater.step()
-    with set_exploration_type(ExplorationType.MODE):
-        rollout = env.rollout(10000, stoch_policy)
-        traj_lens.append(rollout.get(("next", "step_count")).max().item())
 
     if i % 50 == 0:
+        with set_exploration_type(ExplorationType.MODE):
+            rollout = env.rollout(10000, stoch_policy)
+            traj_lens.append(rollout.get(("next", "step_count")).max().item())
         print(f"Executed {len(traj_lens)} trajectories with step counts {traj_lens}")
 
 print(f"Executed {len(traj_lens)} trajectories with step counts {traj_lens}")
