@@ -11,33 +11,33 @@ on:
 
 jobs:
   unittests:
-  uses: pytorch/test-infra/.github/workflows/windows_job.yml@main
-  with:
-    runner: "windows.4xlarge"
-    repository: pytorch/rl
-    timeout: 120
-    script: |
-      set -euxo pipefail
+    uses: pytorch/test-infra/.github/workflows/windows_job.yml@main
+    with:
+      runner: "windows.4xlarge"
+      repository: pytorch/rl
+      timeout: 120
+      script: |
+        set -euxo pipefail
 
-      export PYTHON_VERSION="3.8"
-      export CU_VERSION="cpu"
+        export PYTHON_VERSION="3.8"
+        export CU_VERSION="cpu"
 
-      # TODO: Port this to pytorch/test-infra/.github/workflows/windows_job.yml
-      export PATH="/c/Jenkins/Miniconda3/Scripts:${PATH}"
+        # TODO: Port this to pytorch/test-infra/.github/workflows/windows_job.yml
+        export PATH="/c/Jenkins/Miniconda3/Scripts:${PATH}"
 
-      echo "PYTHON_VERSION: $PYTHON_VERSION"
-      echo "CU_VERSION: $CU_VERSION"
-      
-      cd /work
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
+        
+        cd /work
 
-      ## setup_env.sh
-      ./.circleci/unittest/windows_optdepts/scripts/setup_env.sh
+        ## setup_env.sh
+        ./.circleci/unittest/windows_optdepts/scripts/setup_env.sh
 
-      ## install.sh
-      ./.circleci/unittest/windows_optdepts/scripts/install.sh
+        ## install.sh
+        ./.circleci/unittest/windows_optdepts/scripts/install.sh
 
-      ## run_test.sh
-      ./.circleci/unittest/windows_optdepts/scripts/run_test.sh
+        ## run_test.sh
+        ./.circleci/unittest/windows_optdepts/scripts/run_test.sh
 
-      ## post_process.sh
-      ./.circleci/unittest/windows_optdepts/scripts/post_process.sh
+        ## post_process.sh
+        ./.circleci/unittest/windows_optdepts/scripts/post_process.sh
