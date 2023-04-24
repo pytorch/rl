@@ -13,6 +13,7 @@ from tensordict.utils import prod
 
 from torch import nn
 
+from torchrl.data import UnboundedContinuousTensorSpec
 from torchrl.objectives.value.functional import (
     _get_num_per_traj_init,
     _inv_pad_sequence,
@@ -48,16 +49,40 @@ class LSTMModule(ModuleBase):
       padded inputs we provide can correspont to a 0-filled input.
 
     Args:
-        lstm (torch.nn.Module): a :class:`torch.nn.LSTM` instance. For simplicity, this class does not
-            handle the construction of the module.
+        input_size: The number of expected features in the input `x`
+        hidden_size: The number of features in the hidden state `h`
+        num_layers: Number of recurrent layers. E.g., setting ``num_layers=2``
+            would mean stacking two LSTMs together to form a `stacked LSTM`,
+            with the second LSTM taking in outputs of the first LSTM and
+            computing the final results. Default: 1
+        bias: If ``False``, then the layer does not use bias weights `b_ih` and `b_hh`.
+            Default: ``True``
+        dropout: If non-zero, introduces a `Dropout` layer on the outputs of each
+            LSTM layer except the last layer, with dropout probability equal to
+            :attr:`dropout`. Default: 0
+        proj_size: If ``> 0``, will use LSTM with projections of corresponding size. Default: 0
+
+    Keyword Args:
+        in_key (str or tuple of str): the input key of the module. Exclusive use
+            with ``in_keys``. If provided, the recurrent keys are assumed to be
+            ["recurrent_state_h", "recurrent_state_c"] and the ``in_key`` will be
+            appended before these.
         in_keys (list of str): a triplet of strings corresponding to the input value,
-            first and second hidden key.
+            first and second hidden key. Exclusive with ``in_key``.
+        out_key (str or tuple of str): the output key of the module. Exclusive use
+            with ``out_keys``. If provided, the recurrent keys are assumed to be
+            [("next", "recurrent_state_h"), ("next", "recurrent_state_c")]
+            and the ``out_key`` will be
+            appended before these.
         out_keys (list of str): a triplet of strings corresponding to the output value,
             first and second hidden key.
             .. note::
               For a better integration with TorchRL's environments, the best naming
-              for the output hidden key is ``("next", "hidden0")`` or similar, such
+              for the output hidden key is ``("next", <custom_key>)``, such
               that the hidden values are passed from step to step during a rollout.
+        device (torch.device or compatible): the device of the module.
+        lstm (torch.nn.LSTM, optional): an LSTM instance to be wrapped.
+            Exclusive with other nn.LSTM arguments.
 
     Attributes:
         temporal_mode: Returns the temporal mode of the module.
@@ -73,8 +98,11 @@ class LSTMModule(ModuleBase):
         >>> from torch import nn
         >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
         >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
-        >>> lstm = nn.LSTM(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
-        >>> lstm_module = LSTMModule(lstm, in_keys=["observation", "hidden0", "hidden1"], out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")])
+        >>> lstm_module = LSTMModule(
+        ...     input_size=env.observation_spec["observation"].shape[-1],
+        ...     hidden_size=64,
+        ...     in_keys=["observation", "rs_h", "rs_c"],
+        ...     out_keys=["intermediate", ("next", "rs_h"), ("next", "rs_c")])
         >>> mlp = MLP(num_cells=[64], out_features=1)
         >>> policy = Seq(lstm_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
         >>> policy(env.reset())
@@ -86,8 +114,8 @@ class LSTMModule(ModuleBase):
                 is_init: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
                 next: TensorDict(
                     fields={
-                        hidden0: Tensor(shape=torch.Size([1, 64]), device=cpu, dtype=torch.float32, is_shared=False),
-                        hidden1: Tensor(shape=torch.Size([1, 64]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        rs_c: Tensor(shape=torch.Size([1, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                        rs_h: Tensor(shape=torch.Size([1, 64]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([]),
                     device=cpu,
                     is_shared=False),
@@ -98,24 +126,112 @@ class LSTMModule(ModuleBase):
 
     """
 
-    def __init__(self, lstm: nn.LSTM, in_keys, out_keys):
+    DEFAULT_IN_KEYS = ["recurrent_state_h", "recurrent_state_c"]
+    DEFAULT_OUT_KEYS = [("next", "recurrent_state_h"), ("next", "recurrent_state_c")]
+
+    def __init__(
+        self,
+        input_size: int = None,
+        hidden_size: int = None,
+        num_layers: int = 1,
+        bias: bool = True,
+        batch_first=True,
+        dropout=0,
+        proj_size=0,
+        bidirectional=False,
+        *,
+        in_key=None,
+        in_keys=None,
+        out_key=None,
+        out_keys=None,
+        device=None,
+        lstm=None,
+    ):
         super().__init__()
-        if len(in_keys) != 3 and not (len(in_keys) == 4 and in_keys[-1] == "is_init"):
+        if lstm is not None:
+            if not lstm.batch_first:
+                raise ValueError("The input lstm must have batch_first=True.")
+            if lstm.bidirectional:
+                raise ValueError("The input lstm cannot be bidirectional.")
+            if input_size is not None or hidden_size is not None:
+                raise ValueError(
+                    "An LSTM instance cannot be passed along with class argument."
+                )
+        else:
+            if not batch_first:
+                raise ValueError("The input lstm must have batch_first=True.")
+            if bidirectional:
+                raise ValueError("The input lstm cannot be bidirectional.")
+            lstm = nn.LSTM(
+                input_size=input_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                dropout=dropout,
+                proj_size=proj_size,
+                device=device,
+                batch_first=True,
+                bidirectional=False,
+            )
+        if not ((in_key is None) ^ (in_keys is None)):
+            raise ValueError(
+                f"Either in_keys or in_key must be specified but not both or none. Got {in_keys} and {in_key} respectively."
+            )
+        elif in_key:
+            in_keys = [in_key, *self.DEFAULT_IN_KEYS]
+
+        if not ((out_key is None) ^ (out_keys is None)):
+            raise ValueError(
+                f"Either out_keys or out_key must be specified but not both or none. Got {out_keys} and {out_key} respectively."
+            )
+        elif out_key:
+            out_keys = [out_key, *self.DEFAULT_OUT_KEYS]
+
+        if not isinstance(in_keys, (tuple, list)) or (
+            len(in_keys) != 3 and not (len(in_keys) == 4 and in_keys[-1] == "is_init")
+        ):
             raise ValueError(
                 f"LSTMModule expects 3 inputs: a value, and two hidden states (and potentially an 'is_init' marker). Got in_keys {in_keys} instead."
             )
-        if len(out_keys) != 3:
+        if not isinstance(out_keys, (tuple, list)) or len(out_keys) != 3:
             raise ValueError(
                 f"LSTMModule expects 3 outputs: a value, and two hidden states. Got out_keys {out_keys} instead."
             )
-        if not lstm.batch_first:
-            raise ValueError("The input lstm must have batch_first=True")
         self.lstm = lstm
         if "is_init" not in in_keys:
             in_keys = in_keys + ["is_init"]
         self.in_keys = in_keys
         self.out_keys = out_keys
         self._temporal_mode = False
+
+    def make_tensordict_primer(self):
+        from torchrl.envs import TensorDictPrimer
+
+        def make_tuple(key):
+            if isinstance(key, tuple):
+                return key
+            return (key,)
+
+        out_key1 = make_tuple(self.out_keys[1])
+        in_key1 = make_tuple(self.in_keys[1])
+        out_key2 = make_tuple(self.out_keys[2])
+        in_key2 = make_tuple(self.in_keys[2])
+        if out_key1 != ("next", *in_key1) or out_key2 != ("next", *in_key2):
+            raise RuntimeError(
+                "make_tensordict_primer is supposed to work with in_keys/out_keys that "
+                "have compatible names, ie. the out_keys should be named after ('next', <in_key>). Got "
+                f"in_keys={self.in_keys} and out_keys={self.out_keys} instead."
+            )
+        return TensorDictPrimer(
+            {
+                in_key1: UnboundedContinuousTensorSpec(
+                    shape=(self.lstm.num_layers, self.lstm.hidden_size)
+                ),
+                in_key2: UnboundedContinuousTensorSpec(
+                    shape=(self.lstm.num_layers, self.lstm.hidden_size)
+                ),
+            }
+        )
 
     @property
     def temporal_mode(self):
@@ -125,7 +241,7 @@ class LSTMModule(ModuleBase):
     def temporal_mode(self, value):
         raise RuntimeError("temporal_mode cannot be changed in-place. Call `module.set")
 
-    def set_temporal_mode(self, mode: bool = True):
+    def set_recurrent_mode(self, mode: bool = True):
         """Returns a new copy of the module that shares the same lstm model but with a different ``temporal_mode`` attribute (if it differs).
 
         A copy is created such that the module can be used with divergent behaviour
@@ -144,7 +260,7 @@ class LSTMModule(ModuleBase):
             >>> mlp = MLP(num_cells=[64], out_features=1)
             >>> # building two policies with different behaviours:
             >>> policy_inference = Seq(lstm_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
-            >>> policy_training = Seq(lstm_module.set_temporal_mode(True), Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
+            >>> policy_training = Seq(lstm_module.set_recurrent_mode(True), Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> traj_td = env.rollout(3) # some random temporal data
             >>> traj_td = policy_training(traj_td)
             >>> # let's check that both return the same results
@@ -158,7 +274,7 @@ class LSTMModule(ModuleBase):
         """
         if mode is self._temporal_mode:
             return self
-        out = LSTMModule(self.lstm, in_keys=self.in_keys, out_keys=self.out_keys)
+        out = LSTMModule(lstm=self.lstm, in_keys=self.in_keys, out_keys=self.out_keys)
         out._temporal_mode = mode
         return out
 

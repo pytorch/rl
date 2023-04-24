@@ -1525,17 +1525,39 @@ def test_ensure_tensordict_compatible():
 
 class TestLSTMModule:
     def test_errs(self):
-        lstm = nn.LSTM(input_size=3, hidden_size=64, batch_first=False)
         with pytest.raises(ValueError, match="batch_first"):
             lstm_module = LSTMModule(
-                lstm,
+                input_size=3,
+                hidden_size=64,
+                batch_first=False,
                 in_keys=["observation", "hidden0", "hidden1"],
                 out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
             )
-        lstm = nn.LSTM(input_size=3, hidden_size=64, batch_first=True)
         with pytest.raises(ValueError, match="in_keys"):
             lstm_module = LSTMModule(
-                lstm,
+                input_size=3,
+                hidden_size=64,
+                batch_first=True,
+                in_keys=[
+                    "observation",
+                    "hidden0",
+                ],
+                out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            )
+        with pytest.raises(ValueError, match="in_keys"):
+            lstm_module = LSTMModule(
+                input_size=3,
+                hidden_size=64,
+                batch_first=True,
+                in_keys="abc",
+                out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            )
+        with pytest.raises(ValueError, match="in_keys"):
+            lstm_module = LSTMModule(
+                input_size=3,
+                hidden_size=64,
+                batch_first=True,
+                in_key="smth",
                 in_keys=[
                     "observation",
                     "hidden0",
@@ -1544,12 +1566,33 @@ class TestLSTMModule:
             )
         with pytest.raises(ValueError, match="out_keys"):
             lstm_module = LSTMModule(
-                lstm,
+                input_size=3,
+                hidden_size=64,
+                batch_first=True,
                 in_keys=["observation", "hidden0", "hidden1"],
                 out_keys=["intermediate", ("next", "hidden0")],
             )
+        with pytest.raises(ValueError, match="out_keys"):
+            lstm_module = LSTMModule(
+                input_size=3,
+                hidden_size=64,
+                batch_first=True,
+                in_keys=["observation", "hidden0", "hidden1"],
+                out_keys="abc",
+            )
+        with pytest.raises(ValueError, match="out_keys"):
+            lstm_module = LSTMModule(
+                input_size=3,
+                hidden_size=64,
+                batch_first=True,
+                in_keys=["observation", "hidden0", "hidden1"],
+                out_key="smth",
+                out_keys=["intermediate", ("next", "hidden0")],
+            )
         lstm_module = LSTMModule(
-            lstm,
+            input_size=3,
+            hidden_size=64,
+            batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
         )
@@ -1558,17 +1601,18 @@ class TestLSTMModule:
             lstm_module(td)
 
     def test_set_temporal_mode(self):
-        lstm = nn.LSTM(input_size=3, hidden_size=12, batch_first=True)
         lstm_module = LSTMModule(
-            lstm,
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
         )
-        assert lstm_module.set_temporal_mode(False) is lstm_module
-        assert not lstm_module.set_temporal_mode(False).temporal_mode
-        assert lstm_module.set_temporal_mode(True) is not lstm_module
-        assert lstm_module.set_temporal_mode(True).temporal_mode
-        assert set(lstm_module.set_temporal_mode(True).parameters()) == set(
+        assert lstm_module.set_recurrent_mode(False) is lstm_module
+        assert not lstm_module.set_recurrent_mode(False).temporal_mode
+        assert lstm_module.set_recurrent_mode(True) is not lstm_module
+        assert lstm_module.set_recurrent_mode(True).temporal_mode
+        assert set(lstm_module.set_recurrent_mode(True).parameters()) == set(
             lstm_module.parameters()
         )
 
@@ -1581,9 +1625,10 @@ class TestLSTMModule:
             },
             shape,
         )
-        lstm = nn.LSTM(input_size=3, hidden_size=12, batch_first=True)
         lstm_module = LSTMModule(
-            lstm,
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
         )
@@ -1606,13 +1651,14 @@ class TestLSTMModule:
             },
             [*shape, t],
         )
-        lstm = nn.LSTM(input_size=3, hidden_size=12, batch_first=True)
         lstm_module_ss = LSTMModule(
-            lstm,
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
         )
-        lstm_module_ms = lstm_module_ss.set_temporal_mode()
+        lstm_module_ms = lstm_module_ss.set_recurrent_mode()
         lstm_module_ms(td)
         td_ss = TensorDict(
             {
@@ -1646,13 +1692,14 @@ class TestLSTMModule:
         else:
             td["is_init"][13, :] = True
 
-        lstm = nn.LSTM(input_size=3, hidden_size=12, batch_first=True)
         lstm_module_ss = LSTMModule(
-            lstm,
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
         )
-        lstm_module_ms = lstm_module_ss.set_temporal_mode()
+        lstm_module_ms = lstm_module_ss.set_recurrent_mode()
         lstm_module_ms(td)
         td_ss = TensorDict(
             {

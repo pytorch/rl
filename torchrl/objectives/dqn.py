@@ -8,13 +8,7 @@ from typing import Union
 import torch
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
-from torchrl.data.tensor_specs import (
-    BinaryDiscreteTensorSpec,
-    DiscreteTensorSpec,
-    MultiOneHotDiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
-    TensorSpec,
-)
+from torchrl.data.tensor_specs import TensorSpec
 
 from torchrl.envs.utils import step_mdp
 from torchrl.modules.tensordict_module.actors import (
