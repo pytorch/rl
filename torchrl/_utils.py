@@ -13,6 +13,7 @@ from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
 from typing import Any, Callable, cast, TypeVar, Union
+from packaging.version import parse
 
 import numpy as np
 import torch
@@ -255,11 +256,8 @@ class implement_for:
 
     @staticmethod
     def check_version(version, from_version, to_version):
-        def str2tuple(v):
-            return tuple(map(int, v.split(".")))
-
-        return (from_version is None or str2tuple(version) >= str2tuple(from_version)) and (
-            to_version is None or str2tuple(version) < str2tuple(to_version)
+        return (from_version is None or parse(version) >= parse(from_version)) and (
+            to_version is None or parse(version) < parse(to_version)
         )
 
     @staticmethod
