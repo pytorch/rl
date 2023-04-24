@@ -340,6 +340,7 @@ to be able to create this other composition:
     SelectTransform
     SqueezeTransform
     StepCounter
+    TargetReturn
     TensorDictPrimer
     TimeMaxPool
     ToTensorImage
