@@ -362,7 +362,7 @@ class ConvNet(nn.Sequential):
         bias_last_layer: bool = True,
         aggregator_class: Optional[Type[nn.Module]] = SquashDims,
         aggregator_kwargs: Optional[dict] = None,
-        squeeze_output: bool = True,
+        squeeze_output: bool = False,
         device: Optional[DEVICE_TYPING] = None,
     ):
         if num_cells is None:

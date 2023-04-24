@@ -23,7 +23,6 @@ from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
-from torchrl.modules.utils.utils import _find_action_space
 
 
 class Actor(SafeModule):
@@ -318,15 +317,8 @@ class QValueModule(TensorDictModuleBase):
     It works with both tensordict and regular tensors.
 
     Args:
-        action_space (str or TensorSpec, optional): Action space. Must be one of
-            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
-            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
-            If not provided, an attempt to retrieve it from the value network
-            will be made.
-            This is argumets is exclusive with ``spec``, since the ``action_spec``
-            conditions the action spec.
+        action_space (str): Action space. Must be one of
+            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
         action_value_key (str or tuple of str, optional): The input key
             representing the action value. Defaults to ``"action_value"``.
         out_keys (list of str or tuple of str, optional): The output keys
@@ -336,8 +328,7 @@ class QValueModule(TensorDictModuleBase):
             this value represents the cardinality of each
             action component.
         spec (TensorSpec, optional): if provided, the specs of the action (and/or
-            other outputs). This is exclusive with ``action_space``, as the spec
-            conditions the action space.
+            other outputs).
         safe (bool): if ``True``, the value of the output is checked against the
             input spec. Out-of-domain sampling can
             occur because of exploration policies or numerical under/overflow issues.
@@ -378,14 +369,13 @@ class QValueModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        action_space: Optional[Union[str, TensorSpec]],
+        action_space: str,
         action_value_key: Union[List[str], List[Tuple[str]]] = None,
         out_keys: Union[List[str], List[Tuple[str]]] = None,
         var_nums: Optional[int] = None,
-        spec: Optional[TensorSpec] = None,
+        spec: TensorSpec = None,
         safe: bool = False,
     ):
-        action_space, spec = _process_action_space_spec(action_space, spec)
         self.action_space = action_space
         self.var_nums = var_nums
         self.action_func_mapping = {
@@ -411,9 +401,6 @@ class QValueModule(TensorDictModuleBase):
                 f"Expected the action-value key to be '{action_value_key}' but got {out_keys[1]} instead."
             )
         self.out_keys = out_keys
-        action_key = out_keys[0]
-        if not isinstance(spec, CompositeSpec):
-            spec = CompositeSpec({action_key: spec})
         super().__init__()
         self.register_spec(safe=safe, spec=spec)
 
@@ -667,20 +654,6 @@ class DistributionalQValueModule(QValueModule):
         )
 
 
-def _process_action_space_spec(action_space, spec):
-    if action_space is not None:
-        if spec is not None:
-            raise ValueError
-        if isinstance(action_space, TensorSpec):
-            spec = action_space
-        action_space = _find_action_space(action_space)
-    elif spec is not None:
-        action_space = _find_action_space(spec)
-    else:
-        raise ValueError
-    return action_space, spec
-
-
 class QValueHook:
     """Q-Value hook for Q-value policies.
 
@@ -735,8 +708,6 @@ class QValueHook:
         action_value_key: Union[str, Tuple[str]] = None,
         out_keys: Union[List[str], List[Tuple[str]]] = None,
     ):
-        action_space, _ = _process_action_space_spec(action_space, None)
-
         self.qvalue_model = QValueModule(
             action_space=action_space,
             var_nums=var_nums,
@@ -819,7 +790,6 @@ class DistributionalQValueHook(QValueHook):
         action_value_key: Union[str, Tuple[str]] = None,
         out_keys: Union[List[str], List[Tuple[str]]] = None,
     ):
-        action_space, _ = _process_action_space_spec(action_space, None)
         self.qvalue_model = DistributionalQValueModule(
             action_space=action_space,
             var_nums=var_nums,
@@ -927,9 +897,6 @@ class QValueActor(SafeSequential):
         action_space: str = "one_hot",
         action_value_key=None,
     ):
-
-        action_space, spec = _process_action_space_spec(action_space, None)
-
         self.action_space = action_space
         self.action_value_key = action_value_key
         if action_value_key is None:
@@ -1058,7 +1025,6 @@ class DistributionalQValueActor(QValueActor):
         action_value_key: str = "action_value",
         make_log_softmax: bool = True,
     ):
-        action_space, spec = _process_action_space_spec(action_space, None)
         self.action_space = action_space
         self.action_value_key = action_value_key
         out_keys = [

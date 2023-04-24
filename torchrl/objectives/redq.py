@@ -202,12 +202,12 @@ class REDQLoss(LossModule):
                 actor_params,
             )
             if isinstance(self.actor_network, TensorDictSequential):
-                sample_key = "action"
+                sample_key = self.actor_network[-1].out_keys[0]
                 tensordict_actor_dist = self.actor_network.build_dist_from_params(
                     td_params
                 )
             else:
-                sample_key = "action"
+                sample_key = self.actor_network.out_keys[0]
                 tensordict_actor_dist = self.actor_network.build_dist_from_params(
                     td_params
                 )
