@@ -19,7 +19,7 @@ from ..._utils import accept_remote_rref_udf_invocation
 
 from .samplers import PrioritizedSampler, RandomSampler, Sampler
 from .storages import _get_default_collate, ListStorage, Storage
-from .utils import _to_numpy, INT_CLASSES, _to_torch
+from .utils import _to_numpy, _to_torch, INT_CLASSES
 from .writers import RoundRobinWriter, Writer
 
 

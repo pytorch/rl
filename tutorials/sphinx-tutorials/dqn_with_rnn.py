@@ -17,11 +17,13 @@ from torchrl.data import (
 )
 from torchrl.envs import (
     Compose,
+    ExplorationType,
     GrayScale,
     InitTracker,
     ObservationNorm,
     Resize,
     RewardScaling,
+    set_exploration_type,
     step_mdp,
     StepCounter,
     TensorDictPrimer,
@@ -71,8 +73,8 @@ print(n_cells)
 lstm = nn.LSTM(input_size=n_cells, hidden_size=128, batch_first=True, device=device)
 lstm = LSTMModule(
     lstm,
-    in_keys=["embed", "hidden_0", "hidden_1"],
-    out_keys=["embed", ("next", "hidden_0"), ("next", "hidden_1")],
+    in_keys=["embed", "recurrent_state_h", "recurrent_state_c"],
+    out_keys=["embed", ("next", "recurrent_state_h"), ("next", "recurrent_state_c")],
 )
 mlp = MLP(
     out_features=2,
@@ -103,9 +105,10 @@ with torch.no_grad():
 
 collector = SyncDataCollector(
     env, stoch_policy, frames_per_batch=50, total_frames=1_000_000
-    # env, stoch_policy, frames_per_batch=50, total_frames=1000,
 )
-rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(200_000), batch_size=4, prefetch=10)
+rb = TensorDictReplayBuffer(
+    storage=LazyMemmapStorage(200_000), batch_size=4, prefetch=10
+)
 updater = SoftUpdate(loss_fn, eps=0.95)
 updater.init_()
 
@@ -115,14 +118,13 @@ longest = 0
 
 traj_lens = []
 for i, data in enumerate(collector):
-    step_counts = data["next", "step_count"][data["next", "done"].squeeze(-1)]
-    if step_counts.numel():
-        traj_lens += step_counts.tolist()
     if i == 0:
         print("data:", data)
     pbar.update(data.numel())
     # it is important to pass data that is not flattened
-    rb.extend(data.unsqueeze(0).to_tensordict().cpu())  # .exclude("hidden_0", "hidden_1"))
+    rb.extend(
+        data.unsqueeze(0).to_tensordict().cpu()
+    )  # .exclude("hidden_0", "hidden_1"))
     for k in range(utd):
         s = rb.sample().to(device)
         if k == 0 and i == 0:
@@ -131,12 +133,16 @@ for i, data in enumerate(collector):
         loss_vals["loss"].backward()
         optim.step()
         optim.zero_grad()
-    longest = max(longest, data['step_count'].max().item())
+    longest = max(longest, data["step_count"].max().item())
     pbar.set_description(
         f"steps: {longest}, loss_val: {loss_vals['loss'].item(): 4.4f}, action_spread: {data['action'].sum(0)}"
     )
     stoch_policy.step(data.numel())
     updater.step()
+    with set_exploration_type(ExplorationType.MODE):
+        rollout = env.rollout(10000, stoch_policy)
+        traj_lens.append(rollout.get(("next", "step_count")).max().item())
+
     if i % 50 == 0:
         print(f"Executed {len(traj_lens)} trajectories with step counts {traj_lens}")
 
