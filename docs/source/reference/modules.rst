@@ -323,6 +323,7 @@ algorithms, such as DQN, DDPG or Dreamer.
     DdpgMlpActor
     DdpgMlpQNet
     DreamerActor
+    LSTMModule
     ObsEncoder
     ObsDecoder
     RSSMPrior
