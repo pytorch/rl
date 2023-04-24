@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import abc
+import math
 import warnings
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import wraps
@@ -30,6 +32,7 @@ from typing import (
 import numpy as np
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import _getitem_batch_size
 
 from torchrl._utils import get_binary_env_var
 
@@ -37,9 +40,20 @@ DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
+SHAPE_INDEX_TYPING = Union[
+    int,
+    range,
+    List[int],
+    np.ndarray,
+    Tuple[int, None, slice, List[int], Tuple[Any], type(...)],
+    slice,
+    None,
+    torch.Tensor,
+    type(...),
+]
+
 # By default, we do not check that an obs is in the domain. THis should be done when validating the env beforehand
 _CHECK_SPEC_ENCODE = get_binary_env_var("CHECK_SPEC_ENCODE")
-
 
 _DEFAULT_SHAPE = torch.Size((1,))
 
@@ -56,6 +70,168 @@ def _default_dtype_and_device(
         device = torch.device("cpu")
     device = torch.device(device)
     return dtype, device
+
+
+def _validate_idx(shape: list[int], idx: int, axis: int = 0):
+    if idx >= shape[axis] or idx < 0 and -idx > shape[axis]:
+        raise IndexError(
+            f"index {idx} is out of bounds for axis {axis} with size {shape[axis]}"
+        )
+
+
+def _validate_iterable(
+    idx: Iterable[Any], expected_type: type, iterable_classname: str
+):
+    for item in idx:
+        if isinstance(item, Iterable):
+            _validate_iterable(item, expected_type, iterable_classname)
+        else:
+            if not isinstance(item, expected_type):
+                raise IndexError(
+                    f"{iterable_classname} indexing expects {expected_type} indices"
+                )
+
+
+def _slice_indexing(shape: list[int], idx: slice):
+    if idx.step == 0:
+        raise ValueError("slice step cannot be zero")
+    # Slicing an empty shape returns the shape
+    if len(shape) == 0:
+        return shape
+
+    if idx.start is None:
+        start = 0
+    else:
+        start = idx.start if idx.start >= 0 else max(shape[0] + idx.start, 0)
+
+    if idx.stop is None:
+        stop = shape[0]
+    else:
+        stop = idx.stop if idx.stop >= 0 else max(shape[0] + idx.stop, 0)
+
+    step = 1 if idx.step is None else idx.step
+    if step > 0:
+        if start >= stop:
+            n_items = 0
+        else:
+            stop = min(stop, shape[0])
+            n_items = math.ceil((stop - start) / step)
+    else:
+        if start <= stop:
+            n_items = 0
+        else:
+            start = min(start, shape[0] - 1)
+            n_items = math.ceil((stop - start) / step)
+    return [n_items] + shape[1:]
+
+
+def _shape_indexing(shape: list[int], idx: SHAPE_INDEX_TYPING):
+    if idx is Ellipsis or (
+        isinstance(idx, slice) and (idx.step is idx.start is idx.stop is None)
+    ):
+        return shape
+
+    if idx is None:
+        return [1] + shape
+
+    if len(shape) == 0 and (
+        isinstance(idx, int)
+        or isinstance(idx, range)
+        or isinstance(idx, list)
+        and len(idx) > 0
+    ):
+        raise IndexError(
+            f"cannot use integer indices on 0-dimensional shape. `{idx}` received"
+        )
+
+    if isinstance(idx, int):
+        _validate_idx(shape, idx)
+        return shape[1:]
+
+    if isinstance(idx, range):
+        if len(idx) > 0 and (idx.start >= shape[0] or idx.stop > shape[0]):
+            raise IndexError(f"index out of bounds for axis 0 with size {shape[0]}")
+        return [len(idx)] + shape[1:]
+
+    if isinstance(idx, slice):
+        return _slice_indexing(shape, idx)
+
+    if isinstance(idx, tuple):
+        # Supports int, None, slice and ellipsis indices
+        head_new_axes, tail_new_axes = 0, 0
+        # Index on the current shape dimension
+        shape_idx = 0
+        ellipsis = False
+        prev_is_list = False
+        shape_len = len(shape)
+        for item_idx, item in enumerate(idx):
+            if item is None:
+                if ellipsis:
+                    tail_new_axes += 1
+                else:
+                    head_new_axes += 1
+            elif isinstance(item, int):
+                _validate_idx(shape, item, shape_idx)
+                del shape[shape_idx]
+            elif isinstance(item, slice):
+                shape[shape_idx] = _slice_indexing([shape[shape_idx]], item)[0]
+                shape_idx += 1
+            elif item is Ellipsis:
+                if ellipsis:
+                    raise IndexError("an index can only have a single ellipsis (`...`)")
+                # Move to the end of the shape, subtracted by the number of future indices impacting the dimensions (i.e. all except None and ...)
+                shape_idx = len(shape) - len(
+                    [i for i in idx[item_idx + 1 :] if not (i is None or i is Ellipsis)]
+                )
+                ellipsis = True
+            elif (
+                isinstance(item, list)
+                or isinstance(item, tuple)
+                or isinstance(item, range)
+            ):
+                while isinstance(idx, tuple) and len(idx) == 1:
+                    idx = idx[0]
+
+                # Nested tuples are handled as a list. Numpy behavior
+                if isinstance(item, tuple):
+                    item = list(item)
+
+                if prev_is_list and isinstance(item, list):
+                    del shape[shape_idx]
+                    continue
+
+                if isinstance(item, list):
+                    prev_is_list = True
+
+                if shape_idx >= len(shape):
+                    raise IndexError("Raise IndexError: too many indices for array")
+
+                res = _shape_indexing([shape[shape_idx]], item)
+                shape = shape[:shape_idx] + res + shape[shape_idx + 1 :]
+                shape_idx += len(res)
+            else:
+                raise IndexError(
+                    f"tuple indexing only supports integers, slices (`:`), ellipsis (`...`), new axis (`None`), tuples and list indices. {str(type(idx))} received"
+                )
+
+        if len(idx) - head_new_axes - tail_new_axes - int(ellipsis) > shape_len:
+            raise IndexError(
+                f"shape is {shape_len}-dimensional, but {len(idx) - head_new_axes - tail_new_axes - int(ellipsis)} dimensions were indexed"
+            )
+        return [1] * head_new_axes + shape + [1] * tail_new_axes
+
+    if isinstance(idx, list):
+        # int indexing only
+        _validate_iterable(idx, int, "list")
+        for item in np.array(idx).reshape(-1):
+            _validate_idx(shape, item, 0)
+        return list(np.array(idx).shape) + shape[1:]
+
+    if isinstance(idx, np.ndarray) or isinstance(idx, torch.Tensor):
+        # Out of bounds check
+        for item in idx.reshape(-1):
+            _validate_idx(shape, item)
+        return list(_getitem_batch_size(shape, idx))
 
 
 class invertible_dict(dict):
@@ -922,6 +1098,14 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         index = index.expand((*tensor_to_index.shape[:-1], index.shape[-1]))
         return tensor_to_index.gather(-1, index)
 
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index."""
+        # Excluding encoding dimension is excluded from indexing
+        indexed_shape = _shape_indexing(list(self.shape[:-1]), idx)
+        spec = deepcopy(self)
+        spec.shape = torch.Size(indexed_shape + [self.shape[-1]])
+        return spec
+
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         # idx = val.sum(-1) != 1
         out = torch.nn.functional.gumbel_softmax(val.to(torch.float))
@@ -1635,6 +1819,14 @@ class DiscreteTensorSpec(TensorSpec):
 
     def is_in(self, val: torch.Tensor) -> bool:
         return (0 <= val).all() and (val < self.space.n).all()
+
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index."""
+        # Excluding encoding dimension is excluded from indexing
+        indexed_shape = _shape_indexing(list(self.shape), idx)
+        spec = deepcopy(self)
+        spec.shape = torch.Size(indexed_shape)
+        return spec
 
     def __eq__(self, other):
         return (
