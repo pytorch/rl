@@ -28,8 +28,6 @@ jobs:
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
         
-        cd /work
-
         ## setup_env.sh
         ./.circleci/unittest/windows_optdepts/scripts/setup_env.sh
 
