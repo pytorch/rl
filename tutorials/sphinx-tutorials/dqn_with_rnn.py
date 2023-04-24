@@ -137,3 +137,7 @@ for i, data in enumerate(collector):
     )
     stoch_policy.step(data.numel())
     updater.step()
+    if i % 50 == 0:
+        print(f"Executed {len(step_counts)} trajectories with step counts {step_counts}")
+
+print(f"Executed {len(step_counts)} trajectories with step counts {step_counts}")
