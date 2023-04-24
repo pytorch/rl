@@ -24,8 +24,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     actor_net = DTActor(action_dim=1)
 
-    # actor_net = torch.nn.ModuleList([transformer, actor_head])
-
     dist_class = TanhNormal
     dist_kwargs = {
         "min": -1.0,
