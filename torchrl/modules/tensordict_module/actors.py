@@ -489,10 +489,11 @@ class QValueModule(TensorDictModuleBase):
     def _categorical_action_value(
         values: torch.Tensor, action: torch.Tensor
     ) -> torch.Tensor:
-        if len(values.shape) == 1:
-            return values[action].unsqueeze(-1)
-        batch_size = values.size(0)
-        return values[range(batch_size), action].unsqueeze(-1)
+        return values.gather(-1, action.unsqueeze(-1))
+        # if values.ndim == 1:
+        #     return values[action].unsqueeze(-1)
+        # batch_size = values.size(0)
+        # return values[range(batch_size), action].unsqueeze(-1)
 
 
 class DistributionalQValueModule(QValueModule):
@@ -1019,11 +1020,6 @@ class DistributionalQValueActor(QValueActor):
             contains more than one element, the values will be passed in the
             order given by the in_keys iterable.
             Defaults to ``["observation"]``.
-        out_keys (iterable of str): keys to be written to the input tensordict.
-            The length of out_keys must match the
-            number of tensors returned by the embedded module. Using "_" as a
-            key avoid writing tensor to output.
-            Defaults to ``["action"]``.
         spec (TensorSpec, optional): Keyword-only argument.
             Specs of the output tensor. If the module
             outputs multiple output tensors,
@@ -1035,6 +1031,9 @@ class DistributionalQValueActor(QValueActor):
             issues. If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
             method. Default is ``False``.
+        var_nums (int, optional): if ``action_space = "mult_one_hot"``,
+            this value represents the cardinality of each
+            action component.
         support (torch.Tensor): support of the action values.
         action_space (str, optional): The action space to be considered.
             Must be one of
@@ -1083,6 +1082,7 @@ class DistributionalQValueActor(QValueActor):
         in_keys=None,
         spec=None,
         safe=False,
+        var_nums: Optional[int] = None,
         action_space: str = "one_hot",
         action_value_key: str = "action_value",
         make_log_softmax: bool = True,
@@ -1122,6 +1122,7 @@ class DistributionalQValueActor(QValueActor):
             safe=safe,
             action_space=action_space,
             support=support,
+            var_nums=var_nums,
         )
         self.make_log_softmax = make_log_softmax
         if make_log_softmax and not isinstance(module, DistributionalDQNnet):
