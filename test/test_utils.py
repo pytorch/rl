@@ -117,23 +117,26 @@ def test_implement_for():
 
 
 def test_implement_for_missing_module():
-    msg = r"Supported version of .*test_utils.missing_module' has not been found."
-    with pytest.raises(ModuleNotFoundError, match=msg):
-        implement_for_test_functions.missing_module()
+    msg = r"Supported version of 'missing_module' has not been found."
+    with set_gym_backend(_utils_internal):
+        with pytest.raises(ModuleNotFoundError, match=msg):
+            implement_for_test_functions.missing_module()
 
 
 def test_implement_for_missing_version():
-    msg = r"Supported version of .*test_utils.missing_version' has not been found."
+    msg = r"Supported version of 'missing_version' has not been found."
     with pytest.raises(ModuleNotFoundError, match=msg):
         implement_for_test_functions.missing_version()
 
 
 def test_implement_for_reset():
-    assert implement_for_test_functions.select_correct_version() == "0.3+"
+    with set_gym_backend(_utils_internal):
+        assert implement_for_test_functions.select_correct_version() == "0.3+"
     _impl = implement_for._implementations
     assert _impl is implement_for._implementations
     implement_for.reset()
-    assert implement_for_test_functions.select_correct_version() == "0.3+"
+    with set_gym_backend(_utils_internal):
+        assert implement_for_test_functions.select_correct_version() == "0.3+"
     assert _impl is not implement_for._implementations
 
 
@@ -236,13 +239,10 @@ def test_set_gym_environments_no_version_gymnasium_found():
     import gymnasium
     # this version of gymnasium does not exist in implement_for
     # therefore, set_gym_backend will not set anything and raise an ImportError.
-    with pytest.raises(ImportError) as exc_info:
+    msg = f"could not set anything related to gym backed {gymnasium_name} with version={gymnasium_version}."
+    with pytest.raises(ImportError, match=msg) as exc_info:
         with set_gym_backend(gymnasium):
             _utils_internal._set_gym_environments()
-    assert (
-        str(exc_info.value)
-        == f"could not set anything related to gym backed {gymnasium_name} with version={gymnasium_version}."
-    )
 
 
 if __name__ == "__main__":
