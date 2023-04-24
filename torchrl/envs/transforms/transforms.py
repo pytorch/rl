@@ -1066,7 +1066,10 @@ class TargetReturn(Transform):
         self, reward: torch.Tensor, target_return: torch.Tensor
     ) -> torch.Tensor:
         if self.mode == "reduce":
-            target_return = target_return - reward
+            if len(target_return.shape) == 3:
+                target_return[:, -1] -= reward
+            else:
+                target_return = target_return - reward
             return target_return
         elif self.mode == "constant":
             return target_return
