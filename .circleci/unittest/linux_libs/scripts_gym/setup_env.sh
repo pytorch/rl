@@ -47,8 +47,6 @@ conda activate "${env_dir}"
 ##wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
 #wget https://www.roboti.us/download/mujoco200_linux.zip
 #unzip mujoco200_linux.zip
-#wget https://www.roboti.us/file/mjkey.txt
-#cp mjkey.txt ./mujoco200_linux/bin/
 ## install mujoco-py locally
 git clone https://github.com/vmoens/mujoco-py.git
 cd mujoco-py
@@ -57,6 +55,8 @@ mkdir -p mujoco_py/binaries/linux \
     && wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz -O mujoco.tar.gz \
     && tar -xf mujoco.tar.gz -C mujoco_py/binaries/linux \
     && rm mujoco.tar.gz
+wget https://www.roboti.us/file/mjkey.txt
+cp mjkey.txt mujoco_py/binaries/
 pip install -e .
 cd ..
 
@@ -74,12 +74,13 @@ conda env config vars set \
   MUJOCO_GL=egl \
   SDL_VIDEODRIVER=dummy \
   DISPLAY=unix:0.0 \
-  PYOPENGL_PLATFORM=egl
+  PYOPENGL_PLATFORM=egl \
+  MUJOCO_PY_MJKEY_PATH=${this_dir}/mujoco-py/mujoco_py/binaries/mjkey.txt
 
 #  MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco200_linux \
 #  MJLIB_PATH=$root_dir/.mujoco/mujoco200_linux/bin/libmujoco200.so \
 #  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco200_linux/bin \
-#  MUJOCO_PY_MJKEY_PATH=$root_dir/.mujoco/mjkey.txt \
+#   \
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
@@ -96,14 +97,3 @@ mkdir Roms
 wget http://www.atarimania.com/roms/Roms.rar
 ./rar/unrar e Roms.rar ./Roms -y
 python -m atari_py.import_roms Roms
-
-#yum makecache && yum install libglvnd-devel mesa-libGL mesa-libGL-devel mesa-libEGL glfw mesa-libOSMesa-devel glew egl-utils freeglut -y
-#yum makecache && yum install libglvnd-devel glew zlib-devel -y
-
-## install mujoco-py locally
-#cd ${root_dir}/.mujoco/mujoco-py
-#git checkout aws_fix
-#pip install -e .
-#cd $this_dir
-
-#pip install free-mujoco-py
