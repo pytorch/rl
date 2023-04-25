@@ -21,6 +21,9 @@ python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 20 -k 'test_gym'
 
 python -c """
+import os
+print('NVIDIA_PATH', os.environ.get('NVIDIA_PATH'))
+print('LD_LIBRARY_PATH', os.environ.get('LD_LIBRARY_PATH'))
 from mujoco_py.builder import get_nvidia_lib_dir
 print('NVIDIA LIB DIR', get_nvidia_lib_dir())
 """

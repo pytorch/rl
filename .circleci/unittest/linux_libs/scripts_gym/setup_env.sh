@@ -79,11 +79,6 @@ conda env config vars set \
   MUJOCO_PY_MJKEY_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/mjkey.txt \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/src/nvidia-470.63.01
 
-#  MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco200_linux \
-#  MJLIB_PATH=$root_dir/.mujoco/mujoco200_linux/bin/libmujoco200.so \
-#  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco200_linux/bin \
-#   \
-
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
 
