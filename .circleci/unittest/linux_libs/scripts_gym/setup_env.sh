@@ -50,7 +50,7 @@ conda activate "${env_dir}"
 ## install mujoco-py locally
 git clone https://github.com/vmoens/mujoco-py.git
 cd mujoco-py
-git checkout aws_fix
+git checkout aws_fix2
 mkdir -p mujoco_py/binaries/linux \
     && wget https://github.com/deepmind/mujoco/releases/download/2.1.3/mujoco-2.1.3-linux-x86_64.tar.gz -O mujoco.tar.gz \
     && tar -xf mujoco.tar.gz -C mujoco_py/binaries/linux \
