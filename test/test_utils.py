@@ -5,7 +5,7 @@
 import argparse
 import os
 import sys
-
+from importlib import import_module
 import _utils_internal
 import mock
 import pytest
@@ -76,15 +76,20 @@ class implement_for_test_functions:
     """
     Groups functions that are used in tests for `implement_for` decorator.
     """
+    @staticmethod
+    @implement_for(lambda: import_module("_utils_internal"), "0.3")
+    def select_correct_version():
+        """To test from+ range and that this function is not selected as the implementation."""
+        return "0.3+V1"
 
     @staticmethod
     @implement_for("_utils_internal", "0.3")
     def select_correct_version():
-        """To test from+ range and that this function is correctly selected as the implementation."""
+        """To test that this function is selected as the implementation (last implementation)."""
         return "0.3+"
 
     @staticmethod
-    @implement_for("_utils_internal", "0.2", "0.3")
+    @implement_for(lambda: import_module("_utils_internal"), "0.2", "0.3")
     def select_correct_version():  # noqa: F811
         """To test that right bound is not included."""
         return "0.2-0.3"
@@ -118,9 +123,8 @@ def test_implement_for():
 
 def test_implement_for_missing_module():
     msg = r"Supported version of 'missing_module' has not been found."
-    with set_gym_backend(_utils_internal):
-        with pytest.raises(ModuleNotFoundError, match=msg):
-            implement_for_test_functions.missing_module()
+    with pytest.raises(ModuleNotFoundError, match=msg):
+        implement_for_test_functions.missing_module()
 
 
 def test_implement_for_missing_version():
@@ -130,13 +134,11 @@ def test_implement_for_missing_version():
 
 
 def test_implement_for_reset():
-    with set_gym_backend(_utils_internal):
-        assert implement_for_test_functions.select_correct_version() == "0.3+"
+    assert implement_for_test_functions.select_correct_version() == "0.3+"
     _impl = implement_for._implementations
     assert _impl is implement_for._implementations
     implement_for.reset()
-    with set_gym_backend(_utils_internal):
-        assert implement_for_test_functions.select_correct_version() == "0.3+"
+    assert implement_for_test_functions.select_correct_version() == "0.3+"
     assert _impl is not implement_for._implementations
 
 

@@ -202,7 +202,7 @@ class implement_for:
 
     If specified module is missing or there is no fitting implementation, call of the decorated function
     will lead to the explicit error.
-    In case of intersected ranges, first fitting implementation is used.
+    In case of intersected ranges, last fitting implementation is used.
 
     This wrapper also works to implement different backends for a same function (eg. gym vs gymnasium,
     numpy vs jax-numpy etc).
@@ -279,6 +279,16 @@ class implement_for:
             cls = inspect.getmodule(self.fn)
         setattr(cls, self.fn.__name__, self.fn)
 
+    @staticmethod
+    def import_module(module_name: Union[Callable, str]) -> str:
+        """import module and returns its version.
+        """
+        if not callable(module_name):
+            module = import_module(module_name)
+        else:
+            module = module_name()
+        return module.__version__
+
     def __call__(self, fn):
         self.fn = fn
 
@@ -296,32 +306,27 @@ class implement_for:
         if func_name in implementations:
             try:
                 # check that backends don't conflict
-                if not callable(self.module_name):
-                    module = import_module(self.module_name)
-                else:
-                    module = self.module_name()
-                version = module.__version__
-
+                version = self.import_module(self.module_name)
                 if (
                     self.check_version(version, self.from_version, self.to_version)
-                    and VERBOSE
                 ):
-                    # we do not use RL_WARNINGS here because it's utterly verbose
-                    warnings.warn(
-                        f"Got multiple backends for {func_name}. "
-                        f"Using the last queried ({module} with version {version})."
-                    )
-                else:
+                    if VERBOSE:
+                        warnings.warn(
+                            f"Got multiple backends for {func_name}. "
+                            f"Using the last queried ({module} with version {version})."
+                        )
+                    implementations[func_name] = fn
                     self.module_set()
-                    return implementations[func_name]
+                return implementations[func_name]
+
             except ModuleNotFoundError:
                 # then it's ok, there is no conflict
+                # overwrite the previous implementation
+                implementations[func_name] = fn
                 self.module_set()
-                return implementations[func_name]
+                return fn
         try:
-            module = import_module(self.module_name)
-            version = module.__version__
-
+            version = self.import_module(self.module_name)
             if self.check_version(version, self.from_version, self.to_version):
                 implementations[func_name] = fn
                 self.module_set()
