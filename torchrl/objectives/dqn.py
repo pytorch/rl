@@ -73,7 +73,9 @@ class DQNLoss(LossModule):
             try:
                 self.action_space = self.value_network.action_space
             except AttributeError:
-                raise AttributeError("action_space was not specified and could not be retrieved from the value network")
+                raise AttributeError(
+                    "action_space was not specified and could not be retrieved from the value network"
+                )
         else:
             self.action_space = action_space
 
