@@ -45,11 +45,21 @@ SHAPE_INDEX_TYPING = Union[
     range,
     List[int],
     np.ndarray,
-    Tuple[int, None, slice, List[int], Tuple[Any], type(...)],
     slice,
     None,
     torch.Tensor,
     type(...),
+    Tuple[
+        int,
+        range,
+        List[int],
+        np.ndarray,
+        slice,
+        None,
+        torch.Tensor,
+        type(...),
+        Tuple[Any],
+    ],
 ]
 
 # By default, we do not check that an obs is in the domain. THis should be done when validating the env beforehand
@@ -184,10 +194,9 @@ def _shape_indexing(shape: list[int], idx: SHAPE_INDEX_TYPING):
                     [i for i in idx[item_idx + 1 :] if not (i is None or i is Ellipsis)]
                 )
                 ellipsis = True
-            elif (
-                isinstance(item, list)
-                or isinstance(item, tuple)
-                or isinstance(item, range)
+            elif any(
+                isinstance(item, _type)
+                for _type in [list, tuple, range, np.ndarray, torch.Tensor]
             ):
                 while isinstance(idx, tuple) and len(idx) == 1:
                     idx = idx[0]

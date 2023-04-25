@@ -2435,6 +2435,8 @@ def test_valid_indices(spec_class):
     assert spec_3d[:2, (0, 1)].shape == torch.Size([2, 2, 4])
     assert spec_3d[:2, [0, 1]].shape == torch.Size([2, 2, 4])
     assert spec_3d[:2, torch.tensor([0, 1])].shape == torch.Size([2, 2, 4])
+    assert spec_3d[:2, range(3)].shape == torch.Size([2, 3, 4])
+    assert spec_3d[:2, np.array([[1, 2]])].shape == torch.Size([2, 1, 2, 4])
     assert spec_3d[:2, [0]].shape == torch.Size([2, 1, 4])
     assert spec_3d[:2, 0].shape == torch.Size([2, 4])
     assert spec_3d[[0, 1], [0]].shape == torch.Size([2, 4])
