@@ -6675,23 +6675,24 @@ class TestCroSeq:
 
 @pytest.mark.parametrize("create_copy", [True, False])
 class TestRenameTransform(TransformBase):
-    def test_single_trans_env_check(self, create_copy):
-        env = TransformedEnv(
-            ContinuousActionVecMockEnv(),
-            RenameTransform(
+    @pytest.mark.parametrize("compose", [True, False])
+    def test_single_trans_env_check(self, create_copy, compose):
+        t =             RenameTransform(
                 [
-                    "observation",
+                    "observation"
                 ],
                 [
-                    "stuff",
+                    "stuff"
                 ],
                 create_copy=create_copy,
-            ),
+            )
+        if compose:
+            t = Compose(t)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(), t
         )
         check_env_specs(env)
-        env = TransformedEnv(
-            ContinuousActionVecMockEnv(),
-            RenameTransform(
+        t =             RenameTransform(
                 ["observation_orig"],
                 ["stuff"],
                 ["observation_orig"],
@@ -6699,7 +6700,11 @@ class TestRenameTransform(TransformBase):
                     "stuff",
                 ],
                 create_copy=create_copy,
-            ),
+            )
+        if compose:
+            t = Compose(t)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(), t
         )
         check_env_specs(env)
 
