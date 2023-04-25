@@ -690,7 +690,7 @@ def _process_action_space_spec(action_space, spec):
             and action_space is not spec
         ):
             raise ValueError(
-                "Passing an action_space as a TensorSpec and a TensorSpec isn't allowed, unless they match."
+                "Passing an action_space as a TensorSpec and a spec isn't allowed, unless they match."
             )
         if isinstance(action_space, TensorSpec):
             spec = action_space

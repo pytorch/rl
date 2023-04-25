@@ -12,9 +12,15 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
 
-from torchrl.data import DiscreteTensorSpec, OneHotDiscreteTensorSpec
+from torchrl.data import (
+    CompositeSpec,
+    DiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
+)
 from torchrl.modules import MLP, SafeModule
 from torchrl.modules.tensordict_module.actors import (
+    _process_action_space_spec,
     ActorValueOperator,
     DistributionalQValueActor,
     DistributionalQValueHook,
@@ -29,14 +35,44 @@ from torchrl.modules.tensordict_module.actors import (
 
 class TestQValue:
     def test_qvalue_hook_wrong_action_space(self):
-        with pytest.raises(ValueError) as exc:
+        with pytest.raises(
+            ValueError, match="action_space was not specified/not compatible"
+        ):
             QValueHook(action_space="wrong_value")
-        assert "action_space must be one of" in str(exc.value)
 
     def test_distributional_qvalue_hook_wrong_action_space(self):
-        with pytest.raises(ValueError) as exc:
+        with pytest.raises(
+            ValueError, match="action_space was not specified/not compatible"
+        ):
             DistributionalQValueHook(action_space="wrong_value", support=None)
-        assert "action_space must be one of" in str(exc.value)
+
+    def test_distributional_qvalue_hook_conflicting_spec(self):
+        spec = OneHotDiscreteTensorSpec(3)
+        _process_action_space_spec("one-hot", spec)
+        _process_action_space_spec("one_hot", spec)
+        _process_action_space_spec("one_hot", None)
+        _process_action_space_spec(None, spec)
+        with pytest.raises(
+            ValueError, match="The action spec and the action space do not match"
+        ):
+            _process_action_space_spec("multi-one-hot", spec)
+        spec = MultiOneHotDiscreteTensorSpec([3, 3])
+        _process_action_space_spec("multi-one-hot", spec)
+        _process_action_space_spec(spec, spec)
+        with pytest.raises(
+            ValueError, match="Passing an action_space as a TensorSpec and a spec"
+        ):
+            _process_action_space_spec(OneHotDiscreteTensorSpec(3), spec)
+        with pytest.raises(
+            ValueError, match="action_space cannot be of type CompositeSpec"
+        ):
+            _process_action_space_spec(CompositeSpec(), spec)
+        with pytest.raises(KeyError, match="action could not be found in the spec"):
+            _process_action_space_spec(None, CompositeSpec())
+        with pytest.raises(
+            ValueError, match="Neither action_space nor spec was defined"
+        ):
+            _process_action_space_spec(None, None)
 
     @pytest.mark.parametrize(
         "action_space, expected_action",

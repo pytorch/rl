@@ -15,6 +15,9 @@ ACTION_SPACE_MAP[DiscreteTensorSpec] = "categorical"
 ACTION_SPACE_MAP["one_hot"] = "one_hot"
 ACTION_SPACE_MAP["one-hot"] = "one_hot"
 ACTION_SPACE_MAP["mult_one_hot"] = "mult_one_hot"
+ACTION_SPACE_MAP["mult-one-hot"] = "mult_one_hot"
+ACTION_SPACE_MAP["multi_one_hot"] = "mult_one_hot"
+ACTION_SPACE_MAP["multi-one-hot"] = "mult_one_hot"
 ACTION_SPACE_MAP["binary"] = "binary"
 ACTION_SPACE_MAP["categorical"] = "categorical"
 
@@ -28,6 +31,6 @@ def _find_action_space(action_space):
         action_space = ACTION_SPACE_MAP[action_space]
     except KeyError:
         raise ValueError(
-            f"action_space was not specified and could not be retrieved from the value network. Got action_space={action_space}."
+            f"action_space was not specified/not compatible and could not be retrieved from the value network. Got action_space={action_space}."
         )
     return action_space
