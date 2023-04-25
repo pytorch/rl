@@ -1,20 +1,16 @@
 import copy
 import os
-import time
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import tiktoken
 import torch
 import torch.nn as nn
 from env import RLHFEnv
 from model import RLHF
 from shared import create_infinite_dataloader, init_model, setup
-from tensordict.nn import set_skip_existing, skip_existing, TensorDictModule
+from tensordict.nn import set_skip_existing, TensorDictModule
 from tensordict.prototype import tensorclass
-from torch import nn
-from torch.distributed import destroy_process_group
 from torch.distributions.categorical import Categorical
 from torch.utils.data import Dataset
 
@@ -25,7 +21,7 @@ from torchrl.modules import (
 )
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
-from utils import init_ddp, load_and_update_config
+from utils import load_and_update_config
 
 HERE = Path(__file__).parent
 
@@ -128,7 +124,6 @@ class ActorCritic(ActorValueOperator):
 
 
 def train(config):
-    enc = tiktoken.get_encoding("gpt2")
     # TODO: clean up...train should do just the training.
     # model creation, data loading etc. should be performed outside
     # plus align all script to have same structure and order of calls
@@ -172,10 +167,8 @@ def train(config):
     optimizer = torch.optim.AdamW(loss_fn.parameters(), lr=1e-3)
 
     train_loader, _ = get_dataloaders(config)
-    last_time = time.time()
     max_iters = 100_000
 
-    t0 = time.time()
     env = RLHFEnv(reward_model=reward_model, config=config, dataloader=train_loader)
 
     def get_action(td):
@@ -218,14 +211,10 @@ PPO_CONFIG = {
 
 def main():
     config = load_and_update_config("config/train_rl.yaml")
-    config.update(init_ddp(config["backend"], config["device"]))
     config["ppo"] = PPO_CONFIG
 
-    ctx = setup(config)
+    setup(config)
     train(config)
-
-    if config["is_ddp"]:
-        destroy_process_group()
 
 
 if __name__ == "__main__":
