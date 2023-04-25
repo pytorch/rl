@@ -50,7 +50,16 @@ conda activate "${env_dir}"
 #wget https://www.roboti.us/file/mjkey.txt
 #cp mjkey.txt ./mujoco200_linux/bin/
 ## install mujoco-py locally
-#git clone https://github.com/vmoens/mujoco-py.git
+git clone https://github.com/vmoens/mujoco-py.git
+cd mujoco-py
+git checkout aws_fix
+mkdir -p mujoco_py/binaries/linux \
+    && wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz -O mujoco.tar.gz \
+    && tar -xf mujoco.tar.gz -C mujoco_py/binaries/linux \
+    && rm mujoco.tar.gz
+pip install -e .
+cd ..
+
 #cd $this_dir
 
 # 4. Install Conda dependencies
