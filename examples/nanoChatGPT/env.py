@@ -1,69 +1,22 @@
-from collections import defaultdict
-from typing import Optional
-
-import numpy as np
-import torch
-import tqdm
-from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
-from torch import nn
-
-from torchrl.data import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    UnboundedContinuousTensorSpec,
-    UnboundedDiscreteTensorSpec,
-)
-from torchrl.envs import (
-    CatTensors,
-    EnvBase,
-    Transform,
-    TransformedEnv,
-    UnsqueezeTransform,
-)
-from torchrl.envs.transforms.transforms import _apply_to_composite
-from torchrl.envs.utils import check_env_specs, step_mdp
-
-DEFAULT_X = np.pi
-DEFAULT_Y = 1.0
-import copy
-import os
-import time
-from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import tiktoken
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from datasets import load_dataset
-from model import RLHF
-from shared import (
-    create_infinite_dataloader,
-    create_lr_scheduler,
-    init_model,
-    load_checkpoint,
-    setup,
-)
-from tensordict.nn import (
-    ProbabilisticTensorDictModule,
-    TensorDictModule,
-    TensorDictSequential,
-)
-from tensordict.nn.distributions import NormalParamExtractor
+from shared import create_infinite_dataloader
 from tensordict.prototype import tensorclass
-from torch import nn
-from torch.distributed import destroy_process_group
-from torch.distributions.categorical import Categorical
-from torch.nn.parallel import DistributedDataParallel as DDP
+from tensordict.tensordict import TensorDict
 from torch.utils.data import Dataset
-from torchrl.modules import ActorValueOperator, ProbabilisticActor
-from torchrl.objectives import ClipPPOLoss
-from torchrl.objectives.value import GAE
-from tqdm import tqdm
-from utils import init_ddp, load_and_update_config
+
+from torchrl.data import (
+    CompositeSpec,
+    UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
+)
+from torchrl.envs import EnvBase
+from torchrl.envs.utils import step_mdp
+from utils import load_and_update_config
 
 HERE = Path(__file__).parent
 
@@ -149,13 +102,7 @@ def _step(self, tensordict):
     # The output must be written in a ``"next"`` entry
     next_gen = torch.hstack((generated, action[..., None]))
     out = TensorDict(
-        {
-            "next": {
-                "generated": next_gen,
-                "reward": reward,
-                "done": done
-            }
-        },
+        {"next": {"generated": next_gen, "reward": reward, "done": done}},
         tensordict.shape,
     )
     return out
@@ -172,7 +119,7 @@ def _reset(self, tensordict):
 
     out = TensorDict(
         {
-            "generated": batch.prompt[:, -self.config["block_size"]:],
+            "generated": batch.prompt[:, -self.config["block_size"] :],
             "done": torch.zeros((*batch.prompt.shape[:-1], 1, 1), dtype=torch.bool),
             "reward": torch.zeros(
                 (*batch.prompt.shape[:-1], 1, 1), dtype=torch.float32
@@ -243,8 +190,7 @@ class RLHFEnv(EnvBase):
 
 def main():
     config = load_and_update_config("config/train_rl.yaml")
-    config.update(init_ddp(config["backend"], config["device"]))
-    train_loader, val_loader = get_dataloaders(config)
+    train_loader, _ = get_dataloaders(config)
     env = RLHFEnv(dataloader=train_loader, config=config)
 
     td = env.reset()

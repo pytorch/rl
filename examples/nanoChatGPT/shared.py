@@ -12,10 +12,9 @@ HERE = Path(__file__).parent
 
 
 def setup(config):
-    if config["master_process"]:
-        os.makedirs(config["out_dir"], exist_ok=True)
+    os.makedirs(config["out_dir"], exist_ok=True)
 
-    torch.manual_seed(1337 + config["seed_offset"])
+    torch.manual_seed(1337)
     torch.backends.cuda.matmul.allow_tf32 = True  # allow tf32 on matmul
     torch.backends.cudnn.allow_tf32 = True  # allow tf32 on cudnn
     # for later use in torch.autocast
