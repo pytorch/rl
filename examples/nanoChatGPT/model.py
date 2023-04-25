@@ -100,7 +100,6 @@ class RLHF(nn.Module):
 
             # get the predictions
             logits, loss = self(idx_cond)
-
             # focus only on the last time step
             logits = logits[:, -1, :]  # becomes (B, C)
             # apply softmax to get probabilities
@@ -156,7 +155,6 @@ class RLHF(nn.Module):
                             delta + gamma * lam * advantages_all[:, t + 1]
                         )
                         # returns_all[:, t] += gamma * returns_all[:, t + 1]
-
         return (
             idx,
             log_probs[:, -max_new_tokens:],
