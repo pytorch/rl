@@ -2358,6 +2358,7 @@ class TestStackComposite:
         (slice(None), slice(1, 2), 1),
         (1, ..., 2, ..., 3),
         (1, 1, 1, 1),
+        torch.tensor([10, 2]),
     ],  # [:,1:2,1]
 )
 def test_invalid_indices(spec, idx):
@@ -2412,30 +2413,24 @@ def test_valid_indices(spec_class):
     expected_shape = (
         [2, 1, 1, 4] if isinstance(spec, OneHotDiscreteTensorSpec) else [3, 2, 1, 1]
     )
-    assert spec[..., :2, None, None].shape == torch.Size(
-        expected_shape
-    )  # Matches Numpy's behavior. Tensordict would raise "Not enough dimensions".
+    assert spec[..., :2, None, None].shape == torch.Size(expected_shape)
     expected_shape = [3, 6] if isinstance(spec, OneHotDiscreteTensorSpec) else [3, 4]
     assert spec_4d[1, ..., 2].shape == torch.Size(expected_shape)
     assert spec[1, ...].shape == torch.Size([4])
     expected_shape = [1, 4] if isinstance(spec, OneHotDiscreteTensorSpec) else [4, 1]
-    assert spec[1, ..., None].shape == torch.Size(
-        expected_shape
-    )  # Matches Numpy's behavior. Tensordict would push all None dims to the front.
+    assert spec[1, ..., None].shape == torch.Size(expected_shape)
     expected_shape = [2, 4] if isinstance(spec, OneHotDiscreteTensorSpec) else [5, 2]
     assert spec_3d[..., [0, 1], [0]].shape == torch.Size(expected_shape)
     expected_shape = (
         [1, 3, 1, 4] if isinstance(spec, OneHotDiscreteTensorSpec) else [1, 3, 4, 1]
     )
-    assert spec_3d[None, 1, ..., None].shape == torch.Size(
-        expected_shape
-    )  # Matches Numpy's behavior. Tensordict would push all None dims to the front.
+    assert spec_3d[None, 1, ..., None].shape == torch.Size(expected_shape)
     # Numpy arrays
     assert spec[np.array([[1, 2]])].shape == torch.Size([1, 2, 4])
     # Tensors
     assert spec[torch.randint(3, (3, 2))].shape == torch.Size([3, 2, 4])
     # Tuples
-    # Note: nested tuples are not supported by tensordict, but are supported by specs
+    # Note: nested tuples are supported by specs but transformed into lists, similarity to numpy
     assert spec_3d[(0, 1), (0, 1)].shape == torch.Size([2, 4])
     assert spec_3d[:2, (0, 1)].shape == torch.Size([2, 2, 4])
     assert spec_3d[:2, [0, 1]].shape == torch.Size([2, 2, 4])
@@ -2446,15 +2441,15 @@ def test_valid_indices(spec_class):
     assert spec_3d[1:, range(3)].shape == torch.Size([4, 3, 4])
     assert spec_3d[[[[[0, 1]]]], [[0]]].shape == torch.Size([1, 1, 1, 2, 4])
     assert spec_3d[0, [[[[0, 1]]]]].shape == torch.Size([1, 1, 1, 2, 4])
-    assert spec_3d[0, ((((0, 1))))].shape == torch.Size(
-        [2, 4]
-    )  # Matches numpy's behavior. Not supported by tensordict.
+    assert spec_3d[0, ((((0, 1))))].shape == torch.Size([2, 4])
     assert spec_3d[((((0, 1)))), [0, 2]].shape == torch.Size([2, 4])
     assert spec_4d[2:, [[[0, 1]]], :3].shape == torch.Size([3, 1, 1, 2, 3, 6])
     assert spec_5d[2:, [[[0, 1]]], [[0, 1]], :3].shape == torch.Size([3, 1, 1, 2, 3, 7])
     assert spec_5d[2:, [[[0, 1]]], 0, :3].shape == torch.Size([3, 1, 1, 2, 3, 7])
+    assert spec_5d[2:, [[[0, 1]]], :3, 0].shape == torch.Size(
+        [3, 1, 1, 2, 3, 7]
+    )  # Matches tensordict & tensor's behavior. Numpy would return (1, 1, 2, 3, 3, 7).
     # TODO: Fix these tests.
-    # assert spec_5d[2:, [[[0, 1]]], :3, 0].shape == torch.Size([1, 1, 2, 3, 3, 7])  # Matches numpy's behavior. Tensordict would return [3, 1, 1, 2, 3, 7]
     # assert spec_5d[2:, [[[0, 1]]], :3, [0]].shape == torch.Size([1, 1, 2, 3, 3, 7])
     # assert spec_5d[2:, [[[0, 1]]], :3, [[[0, 1]]]].shape == torch.Size([1, 1, 2, 3, 3, 7])
 
