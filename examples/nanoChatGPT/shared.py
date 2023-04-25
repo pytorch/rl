@@ -103,21 +103,22 @@ def init_model_resume(config, model_kwargs):
     print(f"Resuming training from {config['out_dir']}")
     # resume training from a checkpoint.
     checkpoint = load_checkpoint(config)
-    checkpoint_model_args = checkpoint["model_args"]
+    checkpoint_model_kwargs = checkpoint["model_kwargs"]
     # force these config attributes to be equal otherwise we can't even resume training
     # the rest of the attributes (e.g. dropout) can stay as desired from command line
     for k in ["n_layer", "n_head", "n_embd", "block_size", "bias", "vocab_size"]:
-        model_kwargs[k] = checkpoint_model_args[k]
+        model_kwargs[k] = checkpoint_model_kwargs[k]
     # create the model
     gptconf = GPTConfig(**model_kwargs)
     model = GPT(gptconf)
     state_dict = checkpoint["model"]
     # fix the keys of the state dictionary :(
     # honestly no idea how checkpoints sometimes get this prefix, have to debug more
-    unwanted_prefix = "_orig_mod."
-    for k in state_dict:
-        if k.startswith(unwanted_prefix):
-            state_dict[k[len(unwanted_prefix) :]] = state_dict.pop(k)
+    unwanted_prefixes = ["_orig_mod.", "model."]
+    for unwanted_prefix in unwanted_prefixes:
+        for k in list(state_dict):
+            if k.startswith(unwanted_prefix):
+                state_dict[k[len(unwanted_prefix) :]] = state_dict.pop(k)
     model.load_state_dict(state_dict)
     config["iter_num"] = checkpoint["iter_num"]
     config["best_val_loss"] = checkpoint["best_val_loss"]
