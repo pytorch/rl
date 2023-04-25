@@ -442,6 +442,45 @@ def test_value_based_policy(device):
         assert (action.sum(-1) == 1).all()
 
 
+@pytest.mark.parametrize(
+    "spec", [None, OneHotDiscreteTensorSpec(3), MultiOneHotDiscreteTensorSpec([3, 2])]
+)
+@pytest.mark.parametrize(
+    "action_space", [None, "one-hot", "one_hot", "mult-one-hot", "mult_one_hot"]
+)
+def test_qvalactor_construct(
+    spec,
+    action_space,
+):
+    kwargs = {}
+    if spec is not None:
+        kwargs["spec"] = spec
+    if action_space is not None:
+        kwargs["action_space"] = action_space
+    kwargs["module"] = TensorDictModule(
+        lambda x: x, in_keys=["x"], out_keys=["action_value"]
+    )
+    if spec is None and action_space is None:
+        with pytest.raises(
+            ValueError, match="Neither action_space nor spec was defined"
+        ):
+            QValueActor(**kwargs)
+        return
+    if (
+        type(spec) is MultiOneHotDiscreteTensorSpec
+        and action_space not in ("mult-one-hot", "mult_one_hot", None)
+    ) or (
+        type(spec) is OneHotDiscreteTensorSpec
+        and action_space not in ("one-hot", "one_hot", None)
+    ):
+        with pytest.raises(
+            ValueError, match="The action spec and the action space do not match"
+        ):
+            QValueActor(**kwargs)
+        return
+    QValueActor(**kwargs)
+
+
 @pytest.mark.parametrize("device", get_available_devices())
 def test_value_based_policy_categorical(device):
     torch.manual_seed(0)
