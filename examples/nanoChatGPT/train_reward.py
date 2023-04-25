@@ -5,21 +5,17 @@ from typing import Optional
 import tiktoken
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from datasets import load_dataset
 from model import RLHF
+
+from shared import create_infinite_dataloader, create_lr_scheduler, init_model, setup
 from tensordict.nn import TensorDictModule
 from tensordict.prototype import tensorclass
 from torch.distributed import destroy_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
 from utils import init_ddp, load_and_update_config
-
-from shared import (
-    create_infinite_dataloader,
-    create_lr_scheduler,
-    init_model,
-    setup,
-)
 
 HERE = Path(__file__).parent
 
@@ -74,8 +70,12 @@ class PairwiseDataset:
                 continue
 
             data[i] = cls(
-                chosen=torch.Tensor(chosen),
-                rejected=torch.Tensor(rejected),
+                chosen=F.pad(
+                    torch.Tensor(chosen), (max_length - len(chosen), 0), value=0
+                ),
+                rejected=F.pad(
+                    torch.Tensor(rejected), (max_length - len(rejected), 0), value=0
+                ),
                 batch_size=[],
             )
             i += 1
@@ -100,6 +100,8 @@ def create_datasets(config):
 
 def get_dataloaders(config):
     train_data, val_data = create_datasets(config)
+    train_data.memmap_()
+    val_data.memmap_()
 
     train_loader = create_infinite_dataloader(
         train_data, config, Collate(config["device"])
@@ -127,6 +129,9 @@ def create_loss_estimator(config):
 
 
 def train_reward_model(config):
+    # TODO: clean up...train should do just the training.
+    # model creation, data loading etc. should be performed outside
+    # plus align all script to have same structure and order of calls
 
     # GET DATA
     train_loader, val_loader = get_dataloaders(config)
@@ -137,32 +142,36 @@ def train_reward_model(config):
 
     print("Config of model: ", model.config)
 
+    if not os.path.exists(config["out_dir_reward"]):
+        print(f"Create {config['out_dir_reward']}")
+        os.mkdir(config["out_dir_reward"])
+
     if config["init_multihead_from"] == "scratch":
         print("initializing multihead from scratch")
     else:
         if config["init_multihead_from"] == "resume":
-            print(f"Resuming training from {config['out_dir_multihead']}")
+            print(f"Resuming training from {config['out_dir_reward']}")
             # resume training from a checkpoint.
-            ckpt_path = os.path.join(config["out_dir_multihead"], "ckpt.pt")
+            ckpt_path = os.path.join(config["out_dir_reward"], "ckpt.pt")
             checkpoint = torch.load(ckpt_path, map_location=config["device"])
             state_dict = checkpoint["model"]
             # fix the keys of the state dictionary :(
             # honestly no idea how checkpoints sometimes get this prefix, have to debug more
-            unwanted_prefix = "_orig_mod."
-            for k in state_dict:
-                if k.startswith(unwanted_prefix):
-                    state_dict[k[len(unwanted_prefix) :]] = state_dict.pop(k)
+            unwanted_prefixes = ["_orig_mod.", "model."]
+            for unwanted_prefix in unwanted_prefixes:
+                for k in list(state_dict):
+                    if k.startswith(unwanted_prefix):
+                        state_dict[k[len(unwanted_prefix) :]] = state_dict.pop(k)
             model.load_state_dict(state_dict)
 
     model.to(config["device"])
-
-    model = TensorDictModule(model, in_keys=["input"], out_keys=["reward"])
 
     # compile the model
     if config["compile"]:
         print("compiling the model... (takes a ~minute)")
         model = torch.compile(model)  # requires PyTorch 2.0
 
+    model = TensorDictModule(model, in_keys=["input"], out_keys=["reward"])
     # FIXME: which one?
     # optimizer = torch.optim.AdamW(model.model.reward_head.parameters(), lr=1e-3)
     optimizer = torch.optim.AdamW(model.model.parameters(), lr=1e-4)
@@ -220,8 +229,10 @@ def train_reward_model(config):
                         "best_val_loss": best_val_loss,
                         "config": config,
                     }
-                    print(f"saving checkpoint to {config['out_dir']}")
-                    torch.save(checkpoint, os.path.join(config["out_dir"], "ckpt.pt"))
+                    print(f"saving checkpoint to {config['out_dir_reward']}")
+                    torch.save(
+                        checkpoint, os.path.join(config["out_dir_reward"], "ckpt.pt")
+                    )
         if iter_num == 0 and config["eval_only"]:
             break
 

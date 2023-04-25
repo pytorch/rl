@@ -24,12 +24,6 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict.nn import TensorDictModule
-from tensordict.prototype import tensorclass
-from torch.distributed import destroy_process_group
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import Dataset
-from utils import init_ddp, load_and_update_config
 
 from shared import (
     create_infinite_dataloader,
@@ -38,6 +32,12 @@ from shared import (
     load_checkpoint,
     setup,
 )
+from tensordict.nn import TensorDictModule
+from tensordict.prototype import tensorclass
+from torch.distributed import destroy_process_group
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import Dataset
+from utils import init_ddp, load_and_update_config
 
 HERE = Path(__file__).parent
 
@@ -141,23 +141,25 @@ def create_loss_estimator(config):
 
 
 def train(config):
+    # TODO: clean up...train should do just the training.
+    # model creation, data loading etc. should be performed outside
+    # plus align all script to have same structure and order of calls
     model, model_kwargs = init_model(config)
     model.to(config["device"])
     scaler = init_scaler(config)
     optimizer = init_optimizer(model, config)
 
+    # compile the model
+    if config["compile"]:
+        print("compiling the model... (takes a ~minute)")
+        model = torch.compile(model)  # requires PyTorch 2.0
+
     model = TensorDictModule(
         model, in_keys=["prompt", "target"], out_keys=["logits", "loss"]
     )
 
-    # compile the model
-    if config["compile"]:
-        print("compiling the model... (takes a ~minute)")
-
-        model = torch.compile(model)  # requires PyTorch 2.0
     if config["is_ddp"]:
         model = DDP(model, device_ids=[config["ddp_local_rank"]])
-
     # these will already have been set if resuming from previous checkpoint
     iter_num = config.setdefault("iter_num", 0)
     best_val_loss = config.setdefault("best_val_loss", 1e9)
