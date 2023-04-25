@@ -85,6 +85,7 @@ def get_dataloaders(config):
     return train_loader, val_loader
 
 
+@torch.no_grad()
 def _step(self, tensordict):
     generated = tensordict["generated"]
 
@@ -108,6 +109,7 @@ def _step(self, tensordict):
     return out
 
 
+@torch.no_grad()
 def _reset(self, tensordict):
     if tensordict is None or tensordict.is_empty():
         # if no tensordict is passed, we generate a single set of hyperparameters
