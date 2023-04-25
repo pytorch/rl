@@ -99,17 +99,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Logging
         if r0 is None:
-            r0 = data["next"]["reward"].mean().item()
+            r0 = data["next", "reward"].mean().item()
         if l0 is None:
             l0 = loss_sum.item()
         pbar.set_description(
-            f"loss: {loss_sum.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['next']['reward'].mean(): 4.4f} (init={r0: 4.4f})"
+            f"loss: {loss_sum.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['next', 'reward'].mean(): 4.4f} (init={r0: 4.4f})"
         )
         if logger is not None:
             for key, value in loss.items():
                 logger.log_scalar(key, value.item(), collected_frames)
             logger.log_scalar("grad_norm", grad_norm.item(), collected_frames)
-            episode_rewards = data["next"]["episode_reward"][data["next"]["done"]]
+            episode_rewards = data["next", "episode_reward"][data["next", "done"]]
             if len(episode_rewards) > 0:
                 logger.log_scalar(
                     "reward_training", episode_rewards.mean().item(), collected_frames
@@ -136,7 +136,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 ).clone()
                 logger.log_scalar(
                     "reward_testing",
-                    td_test["next"]["reward"].sum().item(),
+                    td_test["next", "reward"].sum().item(),
                     collected_frames,
                 )
                 actor.train()
