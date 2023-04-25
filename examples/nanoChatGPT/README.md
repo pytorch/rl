@@ -19,11 +19,15 @@ pip install -r requirements.txt
 
 ## Training the models
 
+### Preparing the data
+
 First you must prepare the data you wish to train on. For example
 
 ```sh
 python nanoGPT/data/shakespeare/prepare.py
 ```
+
+### Training the transformer
 
 Once the data has been prepared, you can train the GPT model.
 
@@ -35,6 +39,22 @@ Default configuration can be found in `config/train.yaml`, and any option can be
 
 ```sh
 python train.py --batch_size=128
+```
+
+### Training the reward model
+
+Next you can train the reward model with
+
+```sh
+python train_reward.py
+```
+
+### Training the final model with RLHF
+
+To train the final model run
+
+```sh
+python train_rlhf.py
 ```
 
 [nanoGPT]: https://github.com/karpathy/nanoGPT

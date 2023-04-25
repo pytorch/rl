@@ -1,19 +1,9 @@
 """
-This training script can be run both on a single gpu in debug mode,
-and also in a larger training run with distributed data parallel (ddp).
+Train the transformer model. Configurable via config/train.yaml, but any argument can
+also be overridden at the command line.
 
 To run on a single GPU, example:
 $ python train.py --batch_size=32 --compile=False
-
-To run with DDP on 4 gpus on 1 node, example:
-$ torchrun --standalone --nproc_per_node=4 train.py
-
-To run with DDP on 4 gpus across 2 nodes, example:
-- Run on the first (master) node with example IP 123.456.123.456:
-$ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr=123.456.123.456 --master_port=1234 train.py
-- Run on the worker node:
-$ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py
-(If your cluster does not have Infiniband interconnect prepend NCCL_IB_DISABLE=1)
 """
 
 import os
@@ -34,10 +24,8 @@ from shared import (
 )
 from tensordict.nn import TensorDictModule
 from tensordict.prototype import tensorclass
-from torch.distributed import destroy_process_group
-from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import Dataset
-from utils import init_ddp, load_and_update_config
+from utils import load_and_update_config
 
 HERE = Path(__file__).parent
 
@@ -158,8 +146,6 @@ def train(config):
         model, in_keys=["prompt", "target"], out_keys=["logits", "loss"]
     )
 
-    if config["is_ddp"]:
-        model = DDP(model, device_ids=[config["ddp_local_rank"]])
     # these will already have been set if resuming from previous checkpoint
     iter_num = config.setdefault("iter_num", 0)
     best_val_loss = config.setdefault("best_val_loss", 1e9)
@@ -179,9 +165,7 @@ def train(config):
     next_batch = next(train_loader)  # fetch the very first batch
     t0 = time.time()
     local_iter_num = 0  # number of iterations in the lifetime of this process
-    raw_model = (
-        model.module.module if config["is_ddp"] else model.module
-    )  # unwrap DDP container if needed
+    raw_model = model.module
     running_mfu = -1.0
 
     while True:
@@ -191,7 +175,7 @@ def train(config):
             param_group["lr"] = lr
 
         # evaluate the loss on train/val sets and write checkpoints
-        if iter_num % config["eval_interval"] == 0 and config["master_process"]:
+        if iter_num % config["eval_interval"] == 0:
             model.eval()
             losses = {
                 "train": estimate_loss(model, train_loader),
@@ -219,15 +203,7 @@ def train(config):
 
         # forward backward update, with optional gradient accumulation to simulate larger batch size
         # and using the GradScaler if data type is float16
-        for micro_step in range(config["gradient_accumulation_steps"]):
-            if config["is_ddp"]:
-                # in DDP training we only need to sync gradients at the last micro step.
-                # the official way to do this is with model.no_sync() context manager, but
-                # I really dislike that this bloats the code and forces us to repeat code
-                # looking at the source of that context manager, it just toggles this variable
-                model.require_backward_grad_sync = (
-                    micro_step == config["gradient_accumulation_steps"] - 1
-                )
+        for _ in range(config["gradient_accumulation_steps"]):
             batch = next_batch
             with ctx:
                 model(batch)
@@ -249,7 +225,7 @@ def train(config):
         t1 = time.time()
         dt = t1 - t0
         t0 = t1
-        if iter_num % config["log_interval"] == 0 and config["master_process"]:
+        if iter_num % config["log_interval"] == 0:
             # loss as float. note: this is a CPU-GPU sync point
             lossf = batch.loss.item()
             if local_iter_num >= 5:  # let the training loop settle a bit
@@ -273,10 +249,6 @@ def train(config):
 
 if __name__ == "__main__":
     config = load_and_update_config("config/train.yaml")
-    config.update(init_ddp(config["backend"], config["device"]))
 
     ctx = setup(config)
     train(config)
-
-    if config["is_ddp"]:
-        destroy_process_group()

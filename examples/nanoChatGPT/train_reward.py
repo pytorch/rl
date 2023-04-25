@@ -12,10 +12,8 @@ from model import RLHF
 from shared import create_infinite_dataloader, create_lr_scheduler, init_model, setup
 from tensordict.nn import TensorDictModule
 from tensordict.prototype import tensorclass
-from torch.distributed import destroy_process_group
-from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
-from utils import init_ddp, load_and_update_config
+from utils import load_and_update_config
 
 HERE = Path(__file__).parent
 
@@ -176,16 +174,10 @@ def train_reward_model(config):
     # optimizer = torch.optim.AdamW(model.model.reward_head.parameters(), lr=1e-3)
     optimizer = torch.optim.AdamW(model.model.parameters(), lr=1e-4)
 
-    # wrap model into DDP container
-    if config["is_ddp"]:
-        model = DDP(model, device_ids=[config["ddp_local_rank"]])
-
     # training loop
     local_iter_num = 0  # number of iterations in the lifetime of this process
     config["running_mfu"] = -1.0
-    raw_model = (
-        model.module.module if config["is_ddp"] else model.module
-    )  # unwrap DDP container if needed
+    raw_model = model.module
     loss = None
     # these will already have been set if resuming from previous checkpoint
     iter_num = config.setdefault("iter_num", 0)
@@ -208,7 +200,7 @@ def train_reward_model(config):
             param_group["lr"] = lr
 
         # # every once in a while evaluate the loss on train and val sets
-        if iter_num % config["eval_interval"] == 0 and config["master_process"]:
+        if iter_num % config["eval_interval"] == 0:
             model.eval()
             losses = {
                 "train": estimate_loss(model, train_loader),
@@ -257,14 +249,9 @@ def train_reward_model(config):
         if iter_num > config["max_iters"]:
             break
 
-    if config["is_ddp"]:
-        destroy_process_group()
-
 
 if __name__ == "__main__":
     config = load_and_update_config("config/train_reward.yaml")
-    # set up distributed training
-    config.update(init_ddp(config["backend"], config["device"]))
 
     ctx = setup(config)
     train_reward_model(config)
