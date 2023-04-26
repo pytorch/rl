@@ -72,7 +72,9 @@ class DQNLoss(LossModule):
         super().__init__()
         self.delay_value = delay_value
         value_network = ensure_tensordict_compatible(
-            module=value_network, wrapper_type=QValueActor, action_space=action_space,
+            module=value_network,
+            wrapper_type=QValueActor,
+            action_space=action_space,
         )
 
         self.convert_to_functional(

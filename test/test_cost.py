@@ -5085,14 +5085,16 @@ class TestBase:
         for key in ["module.1.bias", "module.1.weight"]:
             loss_module.module_b_params.flatten_keys()[key].requires_grad
 
+
 @pytest.mark.parametrize("updater", [HardUpdate, SoftUpdate])
-def test_warning(updater):
+def test_updater_warning(updater):
     dqn = DQNLoss(torch.nn.Linear(3, 4), delay_value=True, action_space="one_hot")
     with pytest.warns(UserWarning):
         dqn.target_value_network_params
     updater(dqn)
     with warnings.catch_warnings():
         dqn.target_value_network_params
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
