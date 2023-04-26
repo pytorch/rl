@@ -63,6 +63,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         print(td_test)
 
     collector = make_collector(cfg, policy=actor)
+
     replay_buffer = make_replay_buffer(cfg.replay_buffer)
     for data in collector:
         data_view = data.reshape(-1)

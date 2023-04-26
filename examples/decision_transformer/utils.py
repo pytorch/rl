@@ -4,7 +4,7 @@ from tensordict.nn import TensorDictModule
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import CompositeSpec, LazyMemmapStorage, TensorDictReplayBuffer
-from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
+from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.envs import (
     CatFrames,
     EnvCreator,
@@ -12,6 +12,7 @@ from torchrl.envs import (
     ObservationNorm,
     ParallelEnv,
     RenameTransform,
+    Reward2GoTransform,
     StepCounter,
     TargetReturn,
     TensorDictPrimer,
@@ -168,12 +169,10 @@ def make_collector(cfg, policy):
 
 
 def make_replay_buffer(rb_cfg):
-    if rb_cfg.prb:
-        sampler = PrioritizedSampler(max_capacity=rb_cfg.capacity, alpha=0.7, beta=0.5)
-    else:
-        sampler = RandomSampler()
+    r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
+    sampler = RandomSampler()
     return TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(rb_cfg.capacity), sampler=sampler
+        storage=LazyMemmapStorage(rb_cfg.capacity), sampler=sampler, transform=r2g
     )
 
 
