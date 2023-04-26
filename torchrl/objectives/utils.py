@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
+import warnings
 from enum import Enum
 from typing import Iterable, Optional, Union
 
@@ -138,7 +139,7 @@ class TargetNetUpdater:
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "TD3Loss"],  # noqa: F821
+        loss_module: "LossModule",  # noqa: F821
     ):
 
         _target_names = []
@@ -185,6 +186,7 @@ class TargetNetUpdater:
         self._source_names = _source_names
         self.loss_module = loss_module
         self.initialized = False
+        self.init_()
 
     @property
     def _targets(self):
@@ -201,6 +203,8 @@ class TargetNetUpdater:
         )
 
     def init_(self) -> None:
+        if self.initialized:
+            warnings.warn("Updated already initialized.")
         for key, source in self._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
@@ -211,6 +215,7 @@ class TargetNetUpdater:
                 raise RuntimeError("the target parameter is part of a graph.")
             target.data.copy_(source.data)
         self.initialized = True
+        self.loss_module._has_update_associated = True
 
     def step(self) -> None:
         if not self.initialized:
