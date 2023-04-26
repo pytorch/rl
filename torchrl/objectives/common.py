@@ -62,7 +62,7 @@ class LossModule(nn.Module):
         super().__init__()
         self._param_maps = {}
         self._value_estimator = None
-        self._has_updater_associated = False
+        self._has_update_associated = False
         # self.register_forward_pre_hook(_parameters_to_tensordict)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -334,13 +334,14 @@ class LossModule(nn.Module):
         target_name = "_target_" + network_name + "_params"
         param_name = network_name + "_params"
         if target_name in self.__dict__:
-            if not self._has_updater_associated and RL_WARNINGS:
+            if not self._has_update_associated and RL_WARNINGS:
                 warnings.warn(
                     "No target network updater has been associated "
                     "with this loss module, but target parameters have been found."
                     "While this is supported, it is expected that the target network "
                     "updates will be manually performed. You can deactivate this warning "
-                    "by turning the RL_WARNINGS env variable to False."
+                    "by turning the RL_WARNINGS env variable to False.",
+                    category=UserWarning,
                 )
             target_params = getattr(self, target_name)
             if target_params is not None:
