@@ -193,6 +193,7 @@ if __name__ == "__main__":
         wandb.run.log_code(".")
 
     total_time = 0
+    total_frames = 0
     sampling_start = time.time()
     for i, tensordict_data in enumerate(collector):
         print(f"\nIteration {i}")
@@ -200,6 +201,8 @@ if __name__ == "__main__":
         sampling_time = time.time() - sampling_start
         print(f"Sampling took {sampling_time}")
 
+        current_frames = tensordict_data.numel()
+        total_frames += current_frames
         data_view = tensordict_data.reshape(-1)
         replay_buffer.extend(data_view)
 
@@ -222,6 +225,8 @@ if __name__ == "__main__":
             optim.step()
             optim.zero_grad()
 
+        policy.step(frames=current_frames)
+
         training_time = time.time() - training_start
         print(f"Training took: {training_time}")
 
@@ -239,6 +244,8 @@ if __name__ == "__main__":
                 training_time,
                 total_time,
                 i,
+                current_frames,
+                total_frames,
             )
 
         if (

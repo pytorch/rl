@@ -15,6 +15,8 @@ def log_training(
     training_time: float,
     total_time: float,
     iteration: int,
+    current_frames: int,
+    total_frames: int,
 ):
     logger.experiment.log(
         {
@@ -48,6 +50,8 @@ def log_training(
             "train/iteration_time": training_time + sampling_time,
             "train/total_time": total_time,
             "train/training_iteration": iteration,
+            "train/current_frames": current_frames,
+            "train/total_frames": total_frames,
         },
         commit=False,
     )

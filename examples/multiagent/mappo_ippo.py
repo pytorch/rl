@@ -198,6 +198,7 @@ if __name__ == "__main__":
         wandb.run.log_code(".")
 
     total_time = 0
+    total_frames = 0
     sampling_start = time.time()
     for i, tensordict_data in enumerate(collector):
         print(f"\nIteration {i}")
@@ -211,7 +212,8 @@ if __name__ == "__main__":
                 params=loss_module.critic_params.detach(),
                 target_params=loss_module.target_critic_params,
             )
-
+        current_frames = tensordict_data.numel()
+        total_frames += current_frames
         data_view = tensordict_data.reshape(-1)
         replay_buffer.extend(data_view)
 
@@ -256,6 +258,8 @@ if __name__ == "__main__":
                 training_time,
                 total_time,
                 i,
+                current_frames,
+                total_frames,
             )
 
         if (
