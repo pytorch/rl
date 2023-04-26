@@ -4,7 +4,6 @@ import torch
 import wandb
 from models.mlp import MultiAgentMLP
 
-from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
@@ -12,13 +11,8 @@ from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import (
-    AdditiveGaussianWrapper,
-    ProbabilisticActor,
-    TanhDelta,
-    ValueOperator, QValueActor, EGreedyWrapper,
-)
-from torchrl.objectives import DDPGLoss, ValueEstimators, DQNLoss
+from torchrl.modules import EGreedyWrapper, QValueActor
+from torchrl.objectives import DQNLoss, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
 
@@ -122,7 +116,6 @@ if __name__ == "__main__":
         module=qnet,
         spec=env.unbatched_input_spec["action"],
         in_keys=["observation"],
-        action_space="one_hot",
     )
 
     qnet = EGreedyWrapper(qnet, annealing_num_steps=total_frames)
@@ -152,10 +145,7 @@ if __name__ == "__main__":
     # Logging
     if log:
         config.update({"model": model_config, "env": env_config})
-        model_name = (
-            ("Het" if not model_config["shared_parameters"] else "")
-            + "IQL"
-        )
+        model_name = ("Het" if not model_config["shared_parameters"] else "") + "IQL"
         logger = WandbLogger(
             exp_name=generate_exp_name(env_config["scenario_name"], model_name),
             project=f"torchrl_{env_config['scenario_name']}",
