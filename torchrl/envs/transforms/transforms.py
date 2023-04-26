@@ -781,6 +781,11 @@ class Compose(Transform):
             observation_spec = t.transform_observation_spec(observation_spec)
         return observation_spec
 
+    def transform_output_spec(self, output_spec: TensorSpec) -> TensorSpec:
+        for t in self.transforms:
+            output_spec = t.transform_output_spec(output_spec)
+        return output_spec
+
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms:
             reward_spec = t.transform_reward_spec(reward_spec)
@@ -3694,7 +3699,6 @@ class RenameTransform(Transform):
                     batch_size=torch.Size([3]),
                     device=cpu,
                     is_shared=False),
-                reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                 stuff: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=cpu,

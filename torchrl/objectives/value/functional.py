@@ -6,7 +6,7 @@ from functools import wraps
 from typing import Optional, Tuple
 
 import torch
-from tensordict import MemmapTensor
+from tensordict import MemmapTensor, TensorDictBase
 
 __all__ = [
     "generalized_advantage_estimate",
@@ -921,14 +921,83 @@ def _get_num_per_traj(dones_and_truncated):
     dones_and_truncated = dones_and_truncated.clone()
     dones_and_truncated[..., -1] = 1
     dones_and_truncated = _flatten_batch(dones_and_truncated)
-    # traj_ids = dones_and_truncated.cumsum(0)
     num_per_traj = torch.ones_like(dones_and_truncated).cumsum(0)[dones_and_truncated]
     num_per_traj[1:] -= num_per_traj[:-1].clone()
     return num_per_traj
 
 
+def _get_num_per_traj_init(is_init):
+    """Like _get_num_per_traj, but with is_init signal."""
+    done = torch.zeros_like(is_init)
+    done[..., :-1][is_init[..., 1:]] = 1
+    return _get_num_per_traj(done)
+
+
 def _split_and_pad_sequence(tensor, splits):
-    """Given a tensor of size [B, T] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax]."""
+    """Given a tensor of size [B, T, *other] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax, *other].
+
+    Compatible with tensordict inputs.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> is_init = torch.zeros(4, 5, dtype=torch.bool)
+        >>> is_init[:, 0] = True
+        >>> is_init[0, 3] = True
+        >>> is_init[1, 2] = True
+        >>> tensordict = TensorDict({
+        ...     "is_init": is_init,
+        ...     "obs": torch.arange(20).view(4, 5).unsqueeze(-1).expand(4, 5, 3),
+        ... }, [4, 5])
+        >>> splits = _get_num_per_traj_init(is_init)
+        >>> print(splits)
+        tensor([3, 2, 2, 3, 5, 5])
+        >>> td = _split_and_pad_sequence(tensordict, splits)
+        >>> print(td)
+        TensorDict(
+            fields={
+                is_init: Tensor(shape=torch.Size([6, 5]), device=cpu, dtype=torch.bool, is_shared=False),
+                obs: Tensor(shape=torch.Size([6, 5, 3]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([6, 5]),
+            device=None,
+            is_shared=False)
+        >>> print(td["obs"])
+        tensor([[[ 0,  0,  0],
+                 [ 1,  1,  1],
+                 [ 2,  2,  2],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0]],
+        <BLANKLINE>
+                [[ 3,  3,  3],
+                 [ 4,  4,  4],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0]],
+        <BLANKLINE>
+                [[ 5,  5,  5],
+                 [ 6,  6,  6],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0]],
+        <BLANKLINE>
+                [[ 7,  7,  7],
+                 [ 8,  8,  8],
+                 [ 9,  9,  9],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0]],
+        <BLANKLINE>
+                [[10, 10, 10],
+                 [11, 11, 11],
+                 [12, 12, 12],
+                 [13, 13, 13],
+                 [14, 14, 14]],
+        <BLANKLINE>
+                [[15, 15, 15],
+                 [16, 16, 16],
+                 [17, 17, 17],
+                 [18, 18, 18],
+                 [19, 19, 19]]])
+
+    """
     tensor = _flatten_batch(tensor)
     max_val = max(splits)
     mask = torch.zeros(len(splits), max_val, dtype=torch.bool, device=tensor.device)
@@ -938,11 +1007,23 @@ def _split_and_pad_sequence(tensor, splits):
         value=1,
     )
     mask = mask.cumsum(-1).flip(-1).bool()
-    empty_tensor = torch.zeros(
-        len(splits), max_val, dtype=tensor.dtype, device=tensor.device
-    )
-    empty_tensor[mask] = tensor
-    return empty_tensor
+
+    def _fill_tensor(tensor):
+        empty_tensor = torch.zeros(
+            len(splits),
+            max_val,
+            *tensor.shape[1:],
+            dtype=tensor.dtype,
+            device=tensor.device,
+        )
+        empty_tensor[mask] = tensor
+        return empty_tensor
+
+    if isinstance(tensor, TensorDictBase):
+        tensor = tensor.apply(_fill_tensor, batch_size=[len(splits), max_val])
+    else:
+        tensor = _fill_tensor(tensor)
+    return tensor
 
 
 def _inv_pad_sequence(tensor, splits):
@@ -954,6 +1035,24 @@ def _inv_pad_sequence(tensor, splits):
         >>> padded = _split_and_pad_sequence(rewards, num_per_traj.tolist())
         >>> reconstructed = _inv_pad_sequence(padded, num_per_traj)
         >>> assert (reconstructed==rewards).all()
+
+
+    Compatible with tensordict inputs.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> is_init = torch.zeros(4, 5, dtype=torch.bool)
+        >>> is_init[:, 0] = True
+        >>> is_init[0, 3] = True
+        >>> is_init[1, 2] = True
+        >>> tensordict = TensorDict({
+        ...     "is_init": is_init,
+        ...     "obs": torch.arange(20).view(4, 5).unsqueeze(-1).expand(4, 5, 3),
+        ... }, [4, 5])
+        >>> splits = _get_num_per_traj_init(is_init)
+        >>> td = _split_and_pad_sequence(tensordict, splits)
+        >>> assert (_inv_pad_sequence(td, splits).view(tensordict.shape) == tensordict).all()
+
     """
     offset = torch.ones_like(splits) * tensor.shape[-1]
     offset[0] = 0
@@ -970,7 +1069,7 @@ def _inv_pad_sequence(tensor, splits):
         z_idx, torch.ones_like(z_idx)
     )  # make sure that the longest is accounted for
     idx = z.cumsum(0) % 2 == 0
-    return tensor.view(-1)[idx]
+    return tensor.reshape(-1)[idx]
 
 
 @_transpose_time
