@@ -6,6 +6,7 @@ import argparse
 import os
 import sys
 from importlib import import_module
+
 import _utils_internal
 import mock
 import pytest
@@ -76,6 +77,7 @@ class implement_for_test_functions:
     """
     Groups functions that are used in tests for `implement_for` decorator.
     """
+
     @staticmethod
     @implement_for(lambda: import_module("_utils_internal"), "0.3")
     def select_correct_version():
@@ -239,6 +241,7 @@ def test_set_gym_environments_no_version_gymnasium_found():
     sys.modules["gymnasium"] = mock_gymnasium
 
     import gymnasium
+
     # this version of gymnasium does not exist in implement_for
     # therefore, set_gym_backend will not set anything and raise an ImportError.
     msg = f"could not set anything related to gym backed {gymnasium_name} with version={gymnasium_version}."

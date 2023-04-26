@@ -70,7 +70,9 @@ class set_gym_backend(_DecoratorContextManager):
                 setter(setter.fn)
                 found_setter = True
         if not found_setter:
-            raise ImportError(f"could not set anything related to gym backed {self.backend.__name__} with version={self.backend.__version__}.")
+            raise ImportError(
+                f"could not set anything related to gym backed {self.backend.__name__} with version={self.backend.__version__}."
+            )
 
     def __enter__(self):
         self._setters = copy(implement_for._setters)

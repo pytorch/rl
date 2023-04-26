@@ -13,10 +13,10 @@ from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
 from typing import Any, Callable, cast, TypeVar, Union
-from packaging.version import parse
 
 import numpy as np
 import torch
+from packaging.version import parse
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
@@ -281,8 +281,7 @@ class implement_for:
 
     @staticmethod
     def import_module(module_name: Union[Callable, str]) -> str:
-        """import module and returns its version.
-        """
+        """import module and returns its version."""
         if not callable(module_name):
             module = import_module(module_name)
         else:
@@ -307,9 +306,7 @@ class implement_for:
             try:
                 # check that backends don't conflict
                 version = self.import_module(self.module_name)
-                if (
-                    self.check_version(version, self.from_version, self.to_version)
-                ):
+                if self.check_version(version, self.from_version, self.to_version):
                     if VERBOSE:
                         warnings.warn(
                             f"Got multiple backends for {func_name}. "
