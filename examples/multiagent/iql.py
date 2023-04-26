@@ -12,7 +12,7 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyWrapper, QValueActor
-from torchrl.objectives import DQNLoss, ValueEstimators
+from torchrl.objectives import DQNLoss, ValueEstimators, SoftUpdate
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
 
@@ -49,6 +49,8 @@ if __name__ == "__main__":
     }
 
     config = {
+        # DQN
+        "tau": 0.001, # Decay factor for the target network
         # RL
         "gamma": 0.9,
         "seed": seed,
@@ -137,7 +139,8 @@ if __name__ == "__main__":
         collate_fn=lambda x: x,  # Make it not clone when sampling
     )
 
-    loss_module = DQNLoss(qnet)
+    loss_module = DQNLoss(qnet, delay_value=True)
+    target_net_updater = SoftUpdate(loss_module, eps=1 - config["tau"])
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=config["gamma"])
 
     optim = torch.optim.Adam(loss_module.parameters(), config["lr"])
@@ -188,7 +191,9 @@ if __name__ == "__main__":
             optim.step()
             optim.zero_grad()
 
-        qnet.step(frames=current_frames)
+            target_net_updater.step()
+
+        qnet.step(frames=current_frames) # Update exploration annealing
 
         training_time = time.time() - training_start
         print(f"Training took: {training_time}")
