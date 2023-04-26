@@ -145,10 +145,10 @@ class TestDQN:
             action_spec = OneHotDiscreteTensorSpec(action_dim)
         elif action_spec_type == "categorical":
             action_spec = DiscreteTensorSpec(action_dim)
-        elif action_spec_type == "nd_bounded":
-            action_spec = BoundedTensorSpec(
-                -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
-            )
+        # elif action_spec_type == "nd_bounded":
+        #     action_spec = BoundedTensorSpec(
+        #         -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        #     )
         else:
             raise ValueError(f"Wrong {action_spec_type}")
 
@@ -162,6 +162,7 @@ class TestDQN:
                 chosen_action_value=None,
                 shape=[],
             ),
+            action_space=action_spec_type,
             module=module,
         ).to(device)
         return actor
@@ -178,9 +179,13 @@ class TestDQN:
         is_nn_module=False,
     ):
         # Actor
+        var_nums = None
         if action_spec_type == "mult_one_hot":
-            action_spec = MultiOneHotDiscreteTensorSpec([atoms] * action_dim)
-        elif action_spect_type == "one_hot":
+            action_spec = MultiOneHotDiscreteTensorSpec(
+                [action_dim // 2, action_dim // 2]
+            )
+            var_nums = action_spec.nvec
+        elif action_spec_type == "one_hot":
             action_spec = OneHotDiscreteTensorSpec(action_dim)
         elif action_spec_type == "categorical":
             action_spec = DiscreteTensorSpec(action_dim)
@@ -201,9 +206,8 @@ class TestDQN:
             ),
             module=module,
             support=support,
-            action_space="categorical"
-            if isinstance(action_spec, DiscreteTensorSpec)
-            else "one_hot",
+            action_space=action_spec_type,
+            var_nums=var_nums,
         )
         return actor
 
@@ -230,7 +234,7 @@ class TestDQN:
 
         if action_spec_type == "categorical":
             action_value = torch.max(action_value, -1, keepdim=True)[0]
-            action = torch.argmax(action, -1, keepdim=True)
+            action = torch.argmax(action, -1, keepdim=False)
         reward = torch.randn(batch, 1)
         done = torch.zeros(batch, 1, dtype=torch.bool)
         td = TensorDict(
@@ -274,13 +278,16 @@ class TestDQN:
             action_value = torch.randn(batch, T, action_dim, device=device)
             action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
 
-        if action_spec_type == "categorical":
-            action_value = torch.max(action_value, -1, keepdim=True)[0]
-            action = torch.argmax(action, -1, keepdim=True)
         # action_value = action_value.unsqueeze(-1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
+        if action_spec_type == "categorical":
+            action_value = torch.max(action_value, -1, keepdim=True)[0]
+            action = torch.argmax(action, -1, keepdim=False)
+            action = action.masked_fill_(~mask, 0.0)
+        else:
+            action = action.masked_fill_(~mask.unsqueeze(-1), 0.0)
         td = TensorDict(
             batch_size=(batch, T),
             source={
@@ -291,7 +298,7 @@ class TestDQN:
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
-                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action,
                 "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
         )
@@ -299,9 +306,7 @@ class TestDQN:
 
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize(
-        "action_spec_type", ("nd_bounded", "one_hot", "categorical")
-    )
+    @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_dqn(self, delay_value, device, action_spec_type, td_est):
         torch.manual_seed(self.seed)
@@ -344,9 +349,7 @@ class TestDQN:
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize(
-        "action_spec_type", ("nd_bounded", "one_hot", "categorical")
-    )
+    @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
     def test_dqn_batcher(self, n, delay_value, device, action_spec_type, gamma=0.9):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(

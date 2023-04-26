@@ -8,10 +8,16 @@ from typing import Union
 import torch
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
+from torchrl.data.tensor_specs import TensorSpec
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import DistributionalQValueActor, QValueActor
+from torchrl.modules.tensordict_module.actors import (
+    DistributionalQValueActor,
+    QValueActor,
+)
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
+
+from ..modules.utils.utils import _find_action_space
 
 from .common import LossModule
 from .utils import (
@@ -32,10 +38,21 @@ class DQNLoss(LossModule):
 
     Keyword Args:
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
-        priority_key (str): TODO
-        delay_value (bool, optional): whether to duplicate the value network into a new target value network to
+        priority_key (str, optional): the key at which priority is assumed to
+            be stored within TensorDicts added to this ReplayBuffer.
+            This is to be used when the sampler is of type
+            :class:`~torchrl.data.PrioritizedSampler`.
+            Defaults to ``"td_error"``.
+        delay_value (bool, optional): whether to duplicate the value network
+            into a new target value network to
             create a double DQN. Default is ``False``.
-        action_space (str, optional): TODO
+        action_space (str or TensorSpec, optional): Action space. Must be one of
+            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
+            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+            If not provided, an attempt to retrieve it from the value network
+            will be made.
 
     """
 
@@ -49,7 +66,7 @@ class DQNLoss(LossModule):
         priority_key: str = "td_error",
         delay_value: bool = False,
         gamma: float = None,
-        action_space: str = "one_hot",
+        action_space: Union[str, TensorSpec] = None,
     ) -> None:
 
         super().__init__()
@@ -71,13 +88,15 @@ class DQNLoss(LossModule):
         if action_space is None:
             # infer from value net
             try:
-                self.action_space = self.value_network.action_space
+                action_space = value_network.spec
             except AttributeError:
-                raise AttributeError(
-                    "action_space was not specified and could not be retrieved from the value network"
-                )
-        else:
-            self.action_space = action_space
+                # let's try with action_space then
+                pass
+            try:
+                action_space = self.value_network.action_space
+            except AttributeError:
+                raise ValueError(self.ACTION_SPEC_ERROR)
+        self.action_space = _find_action_space(action_space)
 
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
