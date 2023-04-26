@@ -1056,6 +1056,7 @@ class TargetReturn(Transform):
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # sets the current root target as next target return
         for out_key in self.out_keys:
             if isinstance(out_key, str):
                 out_key = (out_key,)
@@ -1066,10 +1067,10 @@ class TargetReturn(Transform):
         self, reward: torch.Tensor, target_return: torch.Tensor
     ) -> torch.Tensor:
         if self.mode == "reduce":
-            target_return = target_return - reward
+            target_return = target_return[:, -1] - reward
             return target_return
         elif self.mode == "constant":
-            return target_return
+            return target_return[:, -1]
         else:
             raise ValueError("Unknown mode: {}".format(self.mode))
 
@@ -1085,15 +1086,15 @@ class TargetReturn(Transform):
             raise ValueError(
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
-
-        target_return_spec = BoundedTensorSpec(
-            minimum=-float("inf"),
-            maximum=self.target_return,
-            shape=self.parent.reward_spec.shape,
-            dtype=self.parent.reward_spec.dtype,
-            device=self.parent.reward_spec.device,
-        )
-        observation_spec["target_return"] = target_return_spec
+        for key in self.out_keys:
+            target_return_spec = BoundedTensorSpec(
+                minimum=-float("inf"),
+                maximum=self.target_return,
+                shape=self.parent.reward_spec.shape,
+                dtype=self.parent.reward_spec.dtype,
+                device=self.parent.reward_spec.device,
+            )
+            observation_spec[key] = target_return_spec
 
         return observation_spec
 

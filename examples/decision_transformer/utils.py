@@ -2,29 +2,19 @@ import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
 
-from torchrl.collectors import MultiaSyncDataCollector, MultiSyncDataCollector
-from torchrl.data import (
-    CompositeSpec,
-    LazyMemmapStorage,
-    MultiStep,
-    TensorDictReplayBuffer,
-)
+from torchrl.collectors import SyncDataCollector
+from torchrl.data import CompositeSpec, LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
 from torchrl.envs import (
     CatFrames,
-    DoubleToFloat,
     EnvCreator,
-    GrayScale,
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
     RenameTransform,
-    Resize,
-    RewardScaling,
     StepCounter,
     TargetReturn,
     TensorDictPrimer,
-    ToTensorImage,
     TransformedEnv,
     UnsqueezeTransform,
 )
@@ -83,53 +73,7 @@ def make_base_env(env_cfg, from_pixels=None):
 
 
 def make_transformed_env(base_env, env_cfg):
-    from_pixels = env_cfg.from_pixels
-    if from_pixels:
-        return make_transformed_env_pixels(base_env, env_cfg)
-    else:
-        return make_transformed_env_states(base_env, env_cfg)
-
-
-def make_transformed_env_pixels(base_env, env_cfg):
-    if not isinstance(env_cfg.reward_scaling, float):
-        env_cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(env_cfg.env_name, 5.0)
-
-    env_library = LIBS[env_cfg.env_library]
-    env = TransformedEnv(base_env)
-
-    reward_scaling = env_cfg.reward_scaling
-
-    env.append_transform(RewardScaling(0.0, reward_scaling))
-
-    double_to_float_list = []
-    double_to_float_inv_list = []
-
-    #
-    env.append_transform(ToTensorImage())
-    env.append_transform(GrayScale())
-    env.append_transform(Resize(84, 84))
-    env.append_transform(CatFrames(N=4, dim=-3))
-
-    obs_norm = ObservationNorm(in_keys=["pixels"])
-    env.append_transform(obs_norm)
-
-    if env_library is DMControlEnv:
-        double_to_float_list += [
-            "reward",
-        ]
-        double_to_float_list += [
-            "action",
-        ]
-        double_to_float_inv_list += ["action"]  # DMControl requires double-precision
-        double_to_float_list += ["observation_vector"]
-    else:
-        double_to_float_list += ["observation_vector"]
-    env.append_transform(
-        DoubleToFloat(
-            in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
-        )
-    )
-    return env
+    return make_transformed_env_states(base_env, env_cfg)
 
 
 def make_transformed_env_states(base_env, env_cfg):
@@ -140,7 +84,9 @@ def make_transformed_env_states(base_env, env_cfg):
         RenameTransform(["step_count"], ["timesteps"], create_copy=True)
     )
     transformed_env.append_transform(
-        TargetReturn(200 * 0.01, out_keys=["return_to_go"])
+        TargetReturn(
+            200 * 0.01, out_keys=["return_to_go"]
+        )  # WATCH OUT FOR THE SCALING!
     )
     # transformed_env.append_transform(SCALE)
     transformed_env.append_transform(TensorDictPrimer(action=base_env.action_spec))
@@ -161,15 +107,11 @@ def make_transformed_env_states(base_env, env_cfg):
         CatFrames(in_keys=["return_to_go"], N=env_cfg.stacked_frames, dim=-2)
     )
 
-    transformed_env.append_transform(UnsqueezeTransform(-2, in_keys=["done"]))
-    transformed_env.append_transform(
-        CatFrames(in_keys=["done"], N=env_cfg.stacked_frames, dim=-2)
-    )
-
     transformed_env.append_transform(UnsqueezeTransform(-2, in_keys=["timesteps"]))
     transformed_env.append_transform(
         CatFrames(in_keys=["timesteps"], N=env_cfg.stacked_frames, dim=-2)
     )
+
     return transformed_env
 
 
@@ -193,24 +135,15 @@ def make_test_env(env_cfg):
 
 
 def get_stats(env_cfg):
-    from_pixels = env_cfg.from_pixels
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    init_stats(env, env_cfg.n_samples_stats, from_pixels)
+    init_stats(env, env_cfg.n_samples_stats)
     return env.state_dict()
 
 
-def init_stats(env, n_samples_stats, from_pixels):
+def init_stats(env, n_samples_stats):
     for t in env.transform:
         if isinstance(t, ObservationNorm):
-            if from_pixels:
-                t.init_stats(
-                    n_samples_stats,
-                    cat_dim=-3,
-                    reduce_dim=(-1, -2, -3),
-                    keep_dims=(-1, -2, -3),
-                )
-            else:
-                t.init_stats(n_samples_stats)
+            t.init_stats(n_samples_stats)
 
 
 # ====================================================================
@@ -218,27 +151,17 @@ def init_stats(env, n_samples_stats, from_pixels):
 # ---------------------------
 
 
-def make_collector(cfg, state_dict, policy):
+def make_collector(cfg, policy):
     env_cfg = cfg.env
-    loss_cfg = cfg.loss
     collector_cfg = cfg.collector
-    if collector_cfg.async_collection:
-        collector_class = MultiaSyncDataCollector
-    else:
-        collector_class = MultiSyncDataCollector
-    if collector_cfg.multi_step:
-        ms = MultiStep(gamma=loss_cfg.gamma, n_steps=collector_cfg.multi_step)
-    else:
-        ms = None
+    collector_class = SyncDataCollector
+    state_dict = get_stats(env_cfg)
     collector = collector_class(
-        [make_parallel_env(env_cfg, state_dict=state_dict)]
-        * collector_cfg.num_collectors,
+        make_parallel_env(env_cfg, state_dict=state_dict),
         policy,
         frames_per_batch=collector_cfg.frames_per_batch,
         total_frames=collector_cfg.total_frames,
-        postproc=ms,
         device=collector_cfg.collector_devices,
-        init_random_frames=collector_cfg.init_random_frames,
         max_frames_per_traj=collector_cfg.max_frames_per_traj,
     )
     return collector
