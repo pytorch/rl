@@ -3790,6 +3790,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             d1 += (target_val - source_val).norm().item()
         assert d1 < d0
 
+    upd.init_()
     upd.step()
     d2 = 0.0
     for (key, source_val) in upd._sources.items(True, True):
