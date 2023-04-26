@@ -33,6 +33,7 @@ from .transforms import (
     SelectTransform,
     SqueezeTransform,
     StepCounter,
+    TargetReturn,
     TensorDictPrimer,
     TimeMaxPool,
     ToTensorImage,
