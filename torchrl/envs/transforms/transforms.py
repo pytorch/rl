@@ -1090,15 +1090,15 @@ class TargetReturn(Transform):
             raise ValueError(
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
-
-        target_return_spec = BoundedTensorSpec(
-            minimum=-float("inf"),
-            maximum=self.target_return,
-            shape=self.parent.reward_spec.shape,
-            dtype=self.parent.reward_spec.dtype,
-            device=self.parent.reward_spec.device,
-        )
-        observation_spec["target_return"] = target_return_spec
+        for key in self.out_keys:
+            target_return_spec = BoundedTensorSpec(
+                minimum=-float("inf"),
+                maximum=self.target_return,
+                shape=self.parent.reward_spec.shape,
+                dtype=self.parent.reward_spec.dtype,
+                device=self.parent.reward_spec.device,
+            )
+            observation_spec[key] = target_return_spec
 
         return observation_spec
 
@@ -3827,6 +3827,8 @@ class Reward2GoTransform(Transform):
         out_keys (list of str/tuples of str): the entries to rename. Defaults to
             the values of ``in_keys`` if none is provided.
         gamma (float or torch.Tensor): the discount factor. Defaults to 1.0.
+        inplace (bool): whether to apply the transform in-place or to create a copy. In-place is important especially when combined with the
+            :class:`~.TargetReturn` transform for hindsight reward relabeling to replace target_return values. Defaults to ``False``.
 
     Examples:
         >>> # Using this transform as part of a replay buffer
@@ -3918,6 +3920,7 @@ class Reward2GoTransform(Transform):
     def __init__(
         self,
         gamma: Optional[Union[float, torch.Tensor]] = 1.0,
+        inplace: bool = False,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
     ):
@@ -3936,6 +3939,7 @@ class Reward2GoTransform(Transform):
             gamma = torch.tensor(gamma)
 
         self.register_buffer("gamma", gamma)
+        self.inplace = inplace
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         done = tensordict.get(("next", "done"))
@@ -3958,6 +3962,7 @@ class Reward2GoTransform(Transform):
                 tensordict.set(
                     out_key,
                     item,
+                    inplace=self.inplace,
                 )
         if not found:
             raise KeyError(f"Could not find any of the input keys {self.in_keys}.")
