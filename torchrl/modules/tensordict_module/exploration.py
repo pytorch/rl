@@ -272,7 +272,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
 
     Presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf.
 
-    The OU exploration is to be used with continuous control policies and introduces a auto-correlated exploration
+    The OU exploration is to be used with continuous control policies and introduces an auto-correlated exploration
     noise. This enables a sort of 'structured' exploration.
 
         Noise equation:
@@ -515,7 +515,7 @@ class _OrnsteinUhlenbeckProcess:
         tensordict.set(
             self.steps_key,
             torch.zeros(
-                torch.Size([*tensordict.batch_size, 1]),
+                torch.Size([*tensordict.get(self.key).shape[:-1], 1]),
                 dtype=torch.long,
                 device=tensordict.device,
             ),
