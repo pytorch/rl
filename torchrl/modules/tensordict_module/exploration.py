@@ -127,7 +127,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
             out = tensordict.get(self.td_module.out_keys[0])
             eps = self.eps.item()
-            cond = (torch.rand(tensordict.shape, device=tensordict.device) < eps).to(
+            cond = (torch.rand(out.shape[:-1], device=tensordict.device) < eps).to(
                 out.dtype
             )
             cond = expand_as_right(cond, out)
