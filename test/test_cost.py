@@ -1963,7 +1963,6 @@ class TestREDQ:
 
         if delay_qvalue:
             target_updater = SoftUpdate(loss_fn)
-            target_updater.init_()
 
         with _check_td_steady(td):
             loss = loss_fn(td)
@@ -3728,7 +3727,6 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         )
     elif mode == "soft":
         upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
-    upd.init_()
     for _, _v in upd._targets.items(True, True):
         if _v.dtype is not torch.int64:
             _v.copy_(torch.randn_like(_v))
@@ -3791,7 +3789,6 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             d1 += (target_val - source_val).norm().item()
         assert d1 < d0
 
-    upd.init_()
     upd.step()
     d2 = 0.0
     for (key, source_val) in upd._sources.items(True, True):
