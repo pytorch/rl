@@ -503,7 +503,11 @@ class _OrnsteinUhlenbeckProcess:
 
     def _make_noise_pair(self, tensordict: TensorDictBase, is_init=None) -> None:
         if is_init is not None:
-            tensordict = tensordict.get_sub_tensordict(is_init.view(tensordict.shape))
+            is_init = is_init.sum(
+                tuple(range(tensordict.batch_dims, is_init.ndim)),
+                dtype=torch.bool,
+            )  # is_init can have more dim than tensordict, we squeeze it using any()
+            tensordict = tensordict.get_sub_tensordict(is_init)
         tensordict.set(
             self.noise_key,
             torch.zeros(tensordict.get(self.key).shape, device=tensordict.device),
