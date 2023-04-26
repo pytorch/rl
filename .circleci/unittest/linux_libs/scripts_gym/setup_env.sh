@@ -77,7 +77,8 @@ conda env config vars set \
   PYOPENGL_PLATFORM=egl \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
   MUJOCO_PY_MJKEY_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/mjkey.txt \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/src/nvidia-470.63.01
+  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/src/nvidia-470.63.01 \
+  MUJOCO_PY_MUJOCO_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/linux/mujoco210
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
