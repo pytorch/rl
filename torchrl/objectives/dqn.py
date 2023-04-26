@@ -72,7 +72,9 @@ class DQNLoss(LossModule):
         super().__init__()
         self.delay_value = delay_value
         value_network = ensure_tensordict_compatible(
-            module=value_network, wrapper_type=QValueActor
+            module=value_network,
+            wrapper_type=QValueActor,
+            action_space=action_space,
         )
 
         self.convert_to_functional(
@@ -91,11 +93,11 @@ class DQNLoss(LossModule):
                 action_space = value_network.spec
             except AttributeError:
                 # let's try with action_space then
-                pass
-            try:
-                action_space = self.value_network.action_space
-            except AttributeError:
-                raise ValueError(self.ACTION_SPEC_ERROR)
+                try:
+                    action_space = value_network.action_space
+                except AttributeError:
+                    raise ValueError(self.ACTION_SPEC_ERROR)
+
         self.action_space = _find_action_space(action_space)
 
         if gamma is not None:
