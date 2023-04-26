@@ -663,6 +663,7 @@ class SyncDataCollector(DataCollectorBase):
                 device=self.storing_device,
             ),
         )
+        self._tensordict_out.refine_names(..., "time")
 
         if split_trajs is None:
             split_trajs = False

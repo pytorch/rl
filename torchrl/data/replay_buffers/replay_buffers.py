@@ -684,7 +684,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 shape = torch.tensor(tensordicts.batch_size[1:]).expand(
                     tensordicts.batch_size[0], tensordicts.batch_dims - 1
                 )
-                tensordicts.batch_size = tensordicts.batch_size[:1]
+                tensordicts = TensorDict({"_data": tensordicts}, batch_size=tensordicts.batch_size[:1])
                 tensordicts.set("_batch_size", shape)
             tensordicts.set(
                 "index",
