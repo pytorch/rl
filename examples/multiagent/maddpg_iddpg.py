@@ -254,7 +254,7 @@ if __name__ == "__main__":
             and log
         ):
             evaluation_start = time.time()
-            with torch.no_grad() and set_exploration_type(ExplorationType.RANDOM):
+            with torch.no_grad() and set_exploration_type(ExplorationType.MEAN):
                 env_test.frames = []
                 rollouts = env_test.rollout(
                     max_steps=max_steps,
