@@ -388,7 +388,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         ou_specs = {
             noise_key: None,
             steps_key: UnboundedContinuousTensorSpec(
-                shape=(*self.td_module._spec.shape, 1),
+                shape=self.td_module._spec.shape,
                 device=self.td_module._spec.device,
                 dtype=torch.int64,
             ),
@@ -512,7 +512,7 @@ class _OrnsteinUhlenbeckProcess:
         tensordict.set(
             self.steps_key,
             torch.zeros(
-                torch.Size([*tensordict.batch_size, 1]),
+                tensordict.batch_size,
                 dtype=torch.long,
                 device=tensordict.device,
             ),
@@ -533,12 +533,11 @@ class _OrnsteinUhlenbeckProcess:
         prev_noise = prev_noise + self.x0
 
         n_steps = tensordict.get(self.steps_key)
-        n_steps = expand_as_right(n_steps, prev_noise)
 
         noise = (
             prev_noise
             + self.theta * (self.mu - prev_noise) * self.dt
-            + self.current_sigma(n_steps)
+            + self.current_sigma(expand_as_right(n_steps, prev_noise))
             * np.sqrt(self.dt)
             * torch.randn_like(prev_noise)
         )
