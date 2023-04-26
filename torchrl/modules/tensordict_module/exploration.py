@@ -127,10 +127,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
             out = tensordict.get(self.td_module.out_keys[0])
             eps = self.eps.item()
-            cond = (torch.rand(tensordict.shape, device=tensordict.device) < eps).to(
-                out.dtype
-            )
-            cond = expand_as_right(cond, out)
+            cond = (torch.rand(out.shape, device=tensordict.device) < eps).to(out.dtype)
             spec = self.spec
             if spec is not None:
                 if isinstance(spec, CompositeSpec):
@@ -536,6 +533,7 @@ class _OrnsteinUhlenbeckProcess:
         prev_noise = prev_noise + self.x0
 
         n_steps = tensordict.get(self.steps_key)
+        n_steps = expand_as_right(n_steps, prev_noise)
 
         noise = (
             prev_noise
