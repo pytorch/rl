@@ -9,7 +9,6 @@ import numpy as np
 import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import expand_as_right
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
