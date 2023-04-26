@@ -1108,12 +1108,18 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         return tensor_to_index.gather(-1, index)
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
-        """Indexes the current TensorSpec based on the provided index."""
-        # Excluding encoding dimension is excluded from indexing
+        """Indexes the current TensorSpec based on the provided index.
+
+        The last dimension of the spec corresponding to the variable domain is non-indexable.
+        """
         indexed_shape = _shape_indexing(list(self.shape[:-1]), idx)
-        spec = deepcopy(self)
-        spec.shape = torch.Size(indexed_shape + [self.shape[-1]])
-        return spec
+        return self.__class__(
+            n=self.space.n,
+            shape=torch.Size(indexed_shape + [self.shape[-1]]),
+            device=self.device,
+            dtype=self.dtype,
+            use_register=self.use_register,
+        )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         # idx = val.sum(-1) != 1
@@ -1389,6 +1395,22 @@ class BoundedTensorSpec(TensorSpec):
             dtype=self.dtype,
         )
 
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index."""
+        raise NotImplementedError(
+            "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
+        )
+
+        indexed_shape = torch.Size(_shape_indexing(list(self.shape), idx))
+        # Expand is required as pytorch.tensor indexing
+        return self.__class__(
+            minimum=self.space.minimum[idx].clone().expand(indexed_shape),
+            maximum=self.space.maximum[idx].clone().expand(indexed_shape),
+            shape=indexed_shape,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
 
 @dataclass(repr=False)
 class UnboundedContinuousTensorSpec(TensorSpec):
@@ -1461,6 +1483,11 @@ class UnboundedContinuousTensorSpec(TensorSpec):
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
+
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index."""
+        indexed_shape = torch.Size(_shape_indexing(list(self.shape), idx))
+        return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
 
 
 @dataclass(repr=False)
@@ -1548,6 +1575,11 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
+
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index."""
+        indexed_shape = torch.Size(_shape_indexing(list(self.shape), idx))
+        return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
 
 
 @dataclass(repr=False)
@@ -1764,6 +1796,20 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype
         )
 
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index.
+
+        The last dimension of the spec corresponding to the domain of the tensor elements is non-indexable.
+        """
+        indexed_shape = _shape_indexing(list(self.shape[:-1]), idx)
+        print(indexed_shape, [self.shape[-1]])
+        return self.__class__(
+            nvec=self.nvec,
+            shape=torch.Size(indexed_shape + [self.shape[-1]]),
+            device=self.device,
+            dtype=self.dtype,
+        )
+
 
 class DiscreteTensorSpec(TensorSpec):
     """A discrete tensor spec.
@@ -1831,11 +1877,13 @@ class DiscreteTensorSpec(TensorSpec):
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
-        # Excluding encoding dimension is excluded from indexing
-        indexed_shape = _shape_indexing(list(self.shape), idx)
-        spec = deepcopy(self)
-        spec.shape = torch.Size(indexed_shape)
-        return spec
+        indexed_shape = torch.Size(_shape_indexing(list(self.shape), idx))
+        return self.__class__(
+            n=self.space.n,
+            shape=indexed_shape,
+            device=self.device,
+            dtype=self.dtype,
+        )
 
     def __eq__(self, other):
         return (
@@ -2009,6 +2057,19 @@ class BinaryDiscreteTensorSpec(DiscreteTensorSpec):
             dtype=self.dtype,
         )
 
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index.
+
+        The last dimension of the spec (length n of the binary vector) is non-indexable.
+        """
+        indexed_shape = _shape_indexing(list(self.shape[:-1]), idx)
+        return self.__class__(
+            n=self.shape[-1],
+            shape=torch.Size(indexed_shape + [self.shape[-1]]),
+            device=self.device,
+            dtype=self.dtype,
+        )
+
 
 @dataclass(repr=False)
 class MultiDiscreteTensorSpec(DiscreteTensorSpec):
@@ -2018,7 +2079,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         nvec (iterable of integers or torch.Tensor): cardinality of each of the elements of
             the tensor. Can have several axes.
         shape (torch.Size, optional): total shape of the sampled tensors.
-            If provided, the last dimension must match nvec.shape[-1].
+            If provided, the last m dimensions must match nvec.shape.
         device (str, int or torch.device, optional): device of
             the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
@@ -2055,6 +2116,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                     f"The last value of the shape must match nvec.shape[-1] for transform of type {self.__class__}. "
                     f"Got nvec.shape[-1]={sum(nvec)} and shape={shape}."
                 )
+
         self.nvec = self.nvec.expand(shape)
 
         space = BoxList.from_nvec(self.nvec)
@@ -2221,6 +2283,19 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         nvec = self.nvec.unsqueeze(dim)
         return self.__class__(
             nvec=nvec, shape=shape, device=self.device, dtype=self.dtype
+        )
+
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index."""
+        raise NotImplementedError(
+            "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
+        )
+
+        return self.__class__(
+            nvec=self.nvec[idx].clone(),
+            shape=None,
+            device=self.device,
+            dtype=self.dtype,
         )
 
 

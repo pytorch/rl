@@ -2348,7 +2348,7 @@ class TestStackComposite:
             c.to_numpy(td_fail)
 
 
-@pytest.mark.parametrize("spec", OneHotDiscreteTensorSpec(n=4, shape=[3, 4]))
+@pytest.mark.parametrize("spec", [OneHotDiscreteTensorSpec(n=4, shape=[3, 4])])
 @pytest.mark.parametrize(
     "idx",
     [
@@ -2366,69 +2366,88 @@ def test_invalid_indices(spec, idx):
         spec[idx]
 
 
-@pytest.mark.parametrize("spec_class", [OneHotDiscreteTensorSpec, DiscreteTensorSpec])
+# BoundedTensorSpec, MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
+@pytest.mark.parametrize(
+    "spec_class",
+    [
+        BinaryDiscreteTensorSpec,
+        DiscreteTensorSpec,
+        MultiOneHotDiscreteTensorSpec,
+        OneHotDiscreteTensorSpec,
+        UnboundedContinuousTensorSpec,
+        UnboundedDiscreteTensorSpec,
+    ],
+)
 def test_valid_indices(spec_class):
-    empty_spec = spec_class(0)
-    spec = spec_class(n=4, shape=[3, 4])
-    spec_3d = spec_class(n=4, shape=[5, 3, 4])
-    spec_4d = spec_class(n=6, shape=[5, 3, 4, 6])
-    spec_5d = spec_class(n=7, shape=[5, 3, 4, 6, 7])
+    # Default args. UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec, MultiDiscreteTensorSpec, MultiOneHotDiscreteTensorSpec
+    args = {"0d": [], "2d": [], "3d": [], "4d": [], "5d": []}
+    if spec_class in [
+        BinaryDiscreteTensorSpec,
+        DiscreteTensorSpec,
+        OneHotDiscreteTensorSpec,
+    ]:
+        args = {"0d": [0], "2d": [4], "3d": [4], "4d": [6], "5d": [7]}
+    elif spec_class == MultiOneHotDiscreteTensorSpec:
+        args = {"0d": [[0]], "2d": [[4]], "3d": [[4]], "4d": [[6]], "5d": [[7]]}
+    elif spec_class == MultiDiscreteTensorSpec:
+        args = {
+            "0d": [[0]],
+            "2d": [[2] * 4],
+            "3d": [[2] * 4],
+            "4d": [[1] * 6],
+            "5d": [[2] * 7],
+        }
+    elif spec_class == BoundedTensorSpec:
+        min_max = (-1, -1)
+        args = {
+            "0d": min_max,
+            "2d": min_max,
+            "3d": min_max,
+            "4d": min_max,
+            "5d": min_max,
+        }
+
+    spec_0d = spec_class(*args["0d"])
+    if spec_class in [UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec]:
+        spec_0d = spec_class(*args["0d"], shape=[])
+    spec_2d = spec_class(*args["2d"], shape=[3, 4])
+    spec_3d = spec_class(*args["3d"], shape=[5, 3, 4])
+    spec_4d = spec_class(*args["4d"], shape=[5, 3, 4, 6])
+    spec_5d = spec_class(*args["5d"], shape=[5, 3, 4, 6, 7])
 
     # Integers
-    assert spec[1].shape == torch.Size([4])
-    if not isinstance(spec, OneHotDiscreteTensorSpec):
-        assert spec[0, 1].shape == torch.Size([])
+    assert spec_2d[1].shape == torch.Size([4])
     # Lists
     assert spec_3d[[1, 2]].shape == torch.Size([2, 3, 4])
-    assert spec[[0]].shape == torch.Size([1, 4])
-    assert spec[[[[0]]]].shape == torch.Size([1, 1, 1, 4])
-    assert spec[[0, 1]].shape == torch.Size([2, 4])
-    assert spec[[[0, 1]]].shape == torch.Size([1, 2, 4])
+    assert spec_2d[[0]].shape == torch.Size([1, 4])
+    assert spec_2d[[[[0]]]].shape == torch.Size([1, 1, 1, 4])
+    assert spec_2d[[0, 1]].shape == torch.Size([2, 4])
+    assert spec_2d[[[0, 1]]].shape == torch.Size([1, 2, 4])
     assert spec_3d[[0, 1], [0, 1]].shape == torch.Size([2, 4])
-    assert spec[[[0, 1], [0, 1]]].shape == torch.Size([2, 2, 4])
+    assert spec_2d[[[0, 1], [0, 1]]].shape == torch.Size([2, 2, 4])
     # Tuples
     assert spec_3d[1, 2].shape == torch.Size([4])
     assert spec_3d[(1, 2)].shape == torch.Size([4])
     assert spec_3d[((1, 2))].shape == torch.Size([4])
     # Ranges
-    assert spec[range(2)].shape == torch.Size([2, 4])
+    assert spec_2d[range(2)].shape == torch.Size([2, 4])
     # Slices
-    assert spec[:].shape == torch.Size([3, 4])
-    assert spec[10:].shape == torch.Size([0, 4])
-    assert spec[:1].shape == torch.Size([1, 4])
-    assert spec[1:2].shape == torch.Size([1, 4])
-    assert spec[10:1:-1].shape == torch.Size([1, 4])
-    assert spec[-5:-1].shape == torch.Size([2, 4])
+    assert spec_2d[:].shape == torch.Size([3, 4])
+    assert spec_2d[10:].shape == torch.Size([0, 4])
+    assert spec_2d[:1].shape == torch.Size([1, 4])
+    assert spec_2d[1:2].shape == torch.Size([1, 4])
+    assert spec_2d[10:1:-1].shape == torch.Size([1, 4])
+    assert spec_2d[-5:-1].shape == torch.Size([2, 4])
     assert spec_3d[[1, 2], 3:].shape == torch.Size([2, 0, 4])
     # None (adds a singleton dimension where needed)
-    assert spec[None].shape == torch.Size([1, 3, 4])
-    assert spec[None, :2].shape == torch.Size([1, 2, 4])
-    expected_shape = [1, 0] if isinstance(spec, OneHotDiscreteTensorSpec) else [1]
-    assert empty_spec[None].shape == torch.Size(expected_shape)
+    assert spec_2d[None].shape == torch.Size([1, 3, 4])
+    assert spec_2d[None, :2].shape == torch.Size([1, 2, 4])
     # Ellipsis
-    expected_shape = [0] if isinstance(spec, OneHotDiscreteTensorSpec) else []
-    assert empty_spec[...].shape == torch.Size(expected_shape)
-    expected_shape = [2, 4] if isinstance(spec, OneHotDiscreteTensorSpec) else [3, 2]
-    assert spec[..., :2].shape == torch.Size(expected_shape)
-    expected_shape = (
-        [2, 1, 1, 4] if isinstance(spec, OneHotDiscreteTensorSpec) else [3, 2, 1, 1]
-    )
-    assert spec[..., :2, None, None].shape == torch.Size(expected_shape)
-    expected_shape = [3, 6] if isinstance(spec, OneHotDiscreteTensorSpec) else [3, 4]
-    assert spec_4d[1, ..., 2].shape == torch.Size(expected_shape)
-    assert spec[1, ...].shape == torch.Size([4])
-    expected_shape = [1, 4] if isinstance(spec, OneHotDiscreteTensorSpec) else [4, 1]
-    assert spec[1, ..., None].shape == torch.Size(expected_shape)
-    expected_shape = [2, 4] if isinstance(spec, OneHotDiscreteTensorSpec) else [5, 2]
-    assert spec_3d[..., [0, 1], [0]].shape == torch.Size(expected_shape)
-    expected_shape = (
-        [1, 3, 1, 4] if isinstance(spec, OneHotDiscreteTensorSpec) else [1, 3, 4, 1]
-    )
-    assert spec_3d[None, 1, ..., None].shape == torch.Size(expected_shape)
+    assert spec_2d[1, ...].shape == torch.Size([4])
     # Numpy arrays
-    assert spec[np.array([[1, 2]])].shape == torch.Size([1, 2, 4])
+    assert spec_2d[np.array([[1, 2]])].shape == torch.Size([1, 2, 4])
     # Tensors
-    assert spec[torch.randint(3, (3, 2))].shape == torch.Size([3, 2, 4])
+    assert spec_2d[torch.randint(3, (3, 2))].shape == torch.Size([3, 2, 4])
     # Tuples
     # Note: nested tuples are supported by specs but transformed into lists, similarity to numpy
     assert spec_3d[(0, 1), (0, 1)].shape == torch.Size([2, 4])
@@ -2455,6 +2474,39 @@ def test_valid_indices(spec_class):
     # TODO: Fix these tests.
     # assert spec_5d[2:, [[[0, 1]]], :3, [0]].shape == torch.Size([1, 1, 2, 3, 3, 7])
     # assert spec_5d[2:, [[[0, 1]]], :3, [[[0, 1]]]].shape == torch.Size([1, 1, 2, 3, 3, 7])
+
+    # Specific tests when specs have non-indexable dimensions
+    if spec_class in [
+        BinaryDiscreteTensorSpec,
+        OneHotDiscreteTensorSpec,
+        MultiDiscreteTensorSpec,
+        MultiOneHotDiscreteTensorSpec,
+    ]:
+        # Ellipsis
+        assert spec_0d[None].shape == torch.Size([1, 0])
+        assert spec_0d[...].shape == torch.Size([0])
+        assert spec_2d[..., :2].shape == torch.Size([2, 4])
+        assert spec_2d[..., :2, None, None].shape == torch.Size([2, 1, 1, 4])
+        assert spec_4d[1, ..., 2].shape == torch.Size([3, 6])
+        assert spec_2d[1, ..., None].shape == torch.Size([1, 4])
+        assert spec_3d[..., [0, 1], [0]].shape == torch.Size([2, 4])
+        assert spec_3d[None, 1, ..., None].shape == torch.Size([1, 3, 1, 4])
+
+    # BoundedTensorSpec, DiscreteTensorSpec, UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec
+    else:
+        # Integers
+        assert spec_2d[0, 1].shape == torch.Size([])
+
+        # Ellipsis
+        print(spec_0d)
+        assert spec_0d[None].shape == torch.Size([1])
+        assert spec_0d[...].shape == torch.Size([])
+        assert spec_2d[..., :2].shape == torch.Size([3, 2])
+        assert spec_2d[..., :2, None, None].shape == torch.Size([3, 2, 1, 1])
+        assert spec_4d[1, ..., 2].shape == torch.Size([3, 4])
+        assert spec_2d[1, ..., None].shape == torch.Size([4, 1])
+        assert spec_3d[..., [0, 1], [0]].shape == torch.Size([5, 2])
+        assert spec_3d[None, 1, ..., None].shape == torch.Size([1, 3, 4, 1])
 
 
 if __name__ == "__main__":
