@@ -345,7 +345,7 @@ class VmasWrapper(_EnvWrapper):
 
     def read_done(self, done):
         done = _selective_unsqueeze(done, batch_size=torch.Size((self.num_envs,)))
-        done = done.unsqueeze(-1).expand(*self.batch_size, self.n_agents, 1)
+        done = done.unsqueeze(-1).expand(*self.batch_size, self.n_agents, 1).clone()
         return done
 
     def read_reward(self, rewards):
