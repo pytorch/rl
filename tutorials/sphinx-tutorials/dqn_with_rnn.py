@@ -171,11 +171,15 @@ n_cells = feature(env.reset())["embed"].shape[-1]
 # LSTM Module
 # ~~~~~~~~~~~
 #
-# Out LSTM module is built in two steps, as it is usually done in TorchRL:
-# first, we build a regular :class:`torch.nn.Module` (in this case :class:`torch.nn.LSTM`).
+# TorchRL provides a specialized :class:`torchrl.modules.LSTMModule` class
+# to incorporate LSTMs in your code-base. It is a :class:`tensordict.nn.TensorDictModuleBase`
+# subclass: as such, it has a set of ``in_keys`` and ``out_keys`` that indicate
+# what values should be expected to be read and written/updated during the
+# execution of the module.
+#
 # To respect TorchRL's conventions, this LSTM must have the ``batch_first``
 # attribute set to ``True`` which is **not** the default in PyTorch. However,
-# our wrapper class :class:`torchrl.modules.LSTMModule` changes this default
+# our :class:`torchrl.modules.LSTMModule` changes this default
 # behaviour so we're good with a native call.
 #
 # Also, the LSTM cannot have a ``bidirectional`` attribute set to ``True`` as
