@@ -334,17 +334,17 @@ class LossModule(nn.Module):
         target_name = "_target_" + network_name + "_params"
         param_name = network_name + "_params"
         if target_name in self.__dict__:
-            if not self._has_update_associated and RL_WARNINGS:
-                warnings.warn(
-                    "No target network updater has been associated "
-                    "with this loss module, but target parameters have been found."
-                    "While this is supported, it is expected that the target network "
-                    "updates will be manually performed. You can deactivate this warning "
-                    "by turning the RL_WARNINGS env variable to False.",
-                    category=UserWarning,
-                )
             target_params = getattr(self, target_name)
             if target_params is not None:
+                if not self._has_update_associated and RL_WARNINGS:
+                    warnings.warn(
+                        "No target network updater has been associated "
+                        "with this loss module, but target parameters have been found."
+                        "While this is supported, it is expected that the target network "
+                        "updates will be manually performed. You can deactivate this warning "
+                        "by turning the RL_WARNINGS env variable to False.",
+                        category=UserWarning,
+                    )
                 # get targets and update
                 for key in target_params.keys(True, True):
                     if not isinstance(key, tuple):
