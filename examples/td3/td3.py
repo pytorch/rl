@@ -260,8 +260,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     rewards_eval = []
 
     # Main loop
-    target_net_updater.init_()
-
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.total_frames)
     r0 = None

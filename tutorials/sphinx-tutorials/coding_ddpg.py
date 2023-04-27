@@ -1061,8 +1061,6 @@ loss_module.make_value_estimator(ValueEstimators.TDLambda, gamma=gamma, lmbda=lm
 from torchrl.objectives.utils import SoftUpdate
 
 target_net_updater = SoftUpdate(loss_module, eps=1 - tau)
-# This class will raise an error if `init_` is not called first.
-target_net_updater.init_()
 
 ###############################################################################
 # Optimizer

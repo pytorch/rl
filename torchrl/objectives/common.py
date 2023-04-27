@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import warnings
 from copy import deepcopy
 from typing import Iterator, List, Optional, Tuple, Union
 
@@ -16,6 +17,7 @@ from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 from torch.nn import Parameter
 
+from torchrl._utils import RL_WARNINGS
 from torchrl.modules.utils import Buffer
 from torchrl.objectives.utils import ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
@@ -60,6 +62,7 @@ class LossModule(nn.Module):
         super().__init__()
         self._param_maps = {}
         self._value_estimator = None
+        self._has_update_associated = False
         # self.register_forward_pre_hook(_parameters_to_tensordict)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -333,6 +336,15 @@ class LossModule(nn.Module):
         if target_name in self.__dict__:
             target_params = getattr(self, target_name)
             if target_params is not None:
+                if not self._has_update_associated and RL_WARNINGS:
+                    warnings.warn(
+                        "No target network updater has been associated "
+                        "with this loss module, but target parameters have been found."
+                        "While this is supported, it is expected that the target network "
+                        "updates will be manually performed. You can deactivate this warning "
+                        "by turning the RL_WARNINGS env variable to False.",
+                        category=UserWarning,
+                    )
                 # get targets and update
                 for key in target_params.keys(True, True):
                     if not isinstance(key, tuple):
