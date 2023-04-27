@@ -1,13 +1,8 @@
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
 import torch
-import torch.nn as nn
-from shared import create_infinite_dataloader
-from tensordict.prototype import tensorclass
 from tensordict.tensordict import TensorDict
-from torch.utils.data import Dataset
 
 from torchrl.data import (
     CompositeSpec,
@@ -18,92 +13,32 @@ from torchrl.envs import EnvBase
 from torchrl.envs.utils import step_mdp
 from utils import load_and_update_config
 
+from data.shakespeare import get_dataloaders
+from models.reward import init_reward_model
+
 HERE = Path(__file__).parent
 
-
-class Collate(nn.Module):
-    def __init__(self, device="cpu"):
-        super().__init__()
-        self.device = torch.device(device)
-
-    def __call__(self, batch):
-        batch = torch.stack(batch, dim=0).contiguous()
-        batch.batch_size = []
-        if self.device.type == "cuda":
-            batch = batch.pin_memory()
-        return batch.to(self.device)
-
-
-@tensorclass
-class Data:
-    prompt: torch.Tensor
-    target: torch.Tensor
-    logits: Optional[torch.Tensor] = None
-    loss: Optional[torch.Tensor] = None
-
-
-class PairedDataset(Dataset):
-    def __init__(self, path, block_size):
-        self._memmap = np.memmap(path, dtype=np.uint16, mode="r")
-        self.block_size = block_size
-
-    def __getitem__(self, idx):
-        return Data(
-            prompt=torch.from_numpy(
-                self._memmap[idx : idx + self.block_size].astype(np.int64)
-            ),
-            target=torch.from_numpy(
-                self._memmap[idx + 1 : idx + self.block_size + 1].astype(np.int64)
-            ),
-            batch_size=[self.block_size],
-        )
-
-    def __len__(self):
-        # how many sequences of length block_size + 1 can we extract from the data?
-        # the valid starting points for such a sequence are those tokens that aren't in
-        # the final block_size positions. so it's just the length of the overall
-        # sequence minus the block_size
-        return len(self._memmap) - self.block_size
-
-
-def create_datasets(config):
-    data_dir = HERE / "nanoGPT" / "data" / config["dataset"]
-    train_data = PairedDataset(data_dir / "train.bin", block_size=config["block_size"])
-    val_data = PairedDataset(data_dir / "val.bin", block_size=config["block_size"])
-
-    return train_data, val_data
-
-
-def get_dataloaders(config):
-    train_data, val_data = create_datasets(config)
-
-    train_loader = create_infinite_dataloader(
-        train_data, config, Collate(config["device"])
-    )
-    val_loader = create_infinite_dataloader(val_data, config, Collate(config["device"]))
-
-    return train_loader, val_loader
 
 
 @torch.no_grad()
 def _step(self, tensordict):
-    generated = tensordict["generated"]
+    prompt = tensordict["prompt"]
 
     # perform the action
     action = tensordict["action"].squeeze(-1)
 
     # compute the reward
-    if generated.shape[-1] >= self.config["episode_length"]:
-        reward = self.reward_model(generated).unsqueeze(-1)
+    if prompt.shape[-1] >= self.config["episode_length"]:
+        reward = self.reward_model(prompt).unsqueeze(-1)
         done = torch.ones_like(reward, dtype=torch.bool)
     else:
         reward = torch.zeros((*tensordict.batch_size, 1))
         done = torch.zeros_like(reward, dtype=torch.bool)
 
     # The output must be written in a ``"next"`` entry
-    next_gen = torch.hstack((generated, action[..., None]))
+    next_prompt = torch.hstack((prompt, action[..., None]))[:, -self.config["block_size"]:]
     out = TensorDict(
-        {"next": {"generated": next_gen, "reward": reward, "done": done}},
+        {"next": {"prompt": next_prompt, "reward": reward, "done": done}},
         tensordict.shape,
     )
     return out
@@ -121,7 +56,7 @@ def _reset(self, tensordict):
 
     out = TensorDict(
         {
-            "generated": batch.prompt[:, -self.config["block_size"] :],
+            "prompt": batch.prompt[:, -self.config["block_size"] :],
             "done": torch.zeros((*batch.prompt.shape[:-1], 1, 1), dtype=torch.bool),
             "reward": torch.zeros(
                 (*batch.prompt.shape[:-1], 1, 1), dtype=torch.float32
@@ -136,10 +71,6 @@ def _make_spec(self):
     # Under the hood, this will populate self.output_spec["observation"]
     self.observation_spec = CompositeSpec(
         prompt=UnboundedDiscreteTensorSpec(
-            shape=(self.config["batch_size"],),
-            dtype=torch.int64,
-        ),
-        generated=UnboundedDiscreteTensorSpec(
             shape=(self.config["batch_size"],),
             dtype=torch.int64,
         ),
@@ -191,26 +122,30 @@ class RLHFEnv(EnvBase):
 
 
 def main():
-    config = load_and_update_config("config/train_rl.yaml")
+    config = load_and_update_config("config/train_rlhf.yaml")
+    reward_model, _ = init_reward_model(config)
+    reward_model.to(config["device"])
     train_loader, _ = get_dataloaders(config)
-    env = RLHFEnv(dataloader=train_loader, config=config)
+    env = RLHFEnv(reward_model=reward_model, dataloader=train_loader, config=config)
 
     td = env.reset()
 
     def get_action(td):
-        print("AAA", td)
-        td["action"] = torch.randint(1, 1000, td.shape)
+        td["action"] = torch.randint(1, 1000, td.shape, device=config["device"])
         return td
 
-    # env.rollout(3, get_action, return_contiguous=False)
+    # rollout
+    env.rollout(3, get_action, return_contiguous=False)
+
     print(td.shape)
     print(td)
     print(env.batch_size)
+    # manual rollout
     for i in range(3):
         # td = get_action(td)
         td["action"] = torch.randint(1, 1000, td.shape)
         td = env.step(td)
-        print("random step tensordict", i, td["action"], td["next"]["generated"])
+        print("random step tensordict", i, td["action"], td["next", "prompt"])
         td = step_mdp(td)
     print(list(td.keys(True)))
 

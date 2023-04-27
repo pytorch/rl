@@ -4,10 +4,9 @@ out_dir_reward: out_reward
 eval_interval: 20
 log_interval: 20
 eval_iters: 20
-eval_only: False # if True, script exits right after the first eval
 always_save_checkpoint: True # if True, always save a checkpoint after each eval
 init_from: resume # 'scratch' or 'resume' or 'gpt2*'
-init_multihead_from: scratch
+init_reward_from: scratch
 # data
 dataset: shakespeare # 'openwebtext', 'shakespeare', 'openai_summarize_tldr'
 gradient_accumulation_steps: 10 # used to simulate larger batch sizes

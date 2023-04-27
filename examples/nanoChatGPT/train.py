@@ -9,89 +9,15 @@ $ python train.py --batch_size=32 --compile=False
 import os
 import time
 from pathlib import Path
-from typing import Optional
 
-import numpy as np
 import torch
-import torch.nn as nn
-
-from shared import (
-    create_infinite_dataloader,
-    create_lr_scheduler,
-    init_model,
-    load_checkpoint,
-    setup,
-)
-from tensordict.nn import TensorDictModule
-from tensordict.prototype import tensorclass
-from torch.utils.data import Dataset
+from models.transformer import init_optimizer, init_transformer
+from shared import create_lr_scheduler, setup
 from utils import load_and_update_config
 
+from data.shakespeare import get_dataloaders
+
 HERE = Path(__file__).parent
-
-
-class Collate(nn.Module):
-    def __init__(self, device="cpu"):
-        super().__init__()
-        self.device = torch.device(device)
-
-    def __call__(self, batch):
-        batch = torch.stack(batch, dim=0).contiguous()
-        batch.batch_size = []
-        if self.device.type == "cuda":
-            batch = batch.pin_memory()
-        return batch.to(self.device)
-
-
-@tensorclass
-class Data:
-    prompt: torch.Tensor
-    target: torch.Tensor
-    logits: Optional[torch.Tensor] = None
-    loss: Optional[torch.Tensor] = None
-
-
-class PairedDataset(Dataset):
-    def __init__(self, path, block_size):
-        self._memmap = np.memmap(path, dtype=np.uint16, mode="r")
-        self.block_size = block_size
-
-    def __getitem__(self, idx):
-        return Data(
-            prompt=torch.from_numpy(
-                self._memmap[idx : idx + self.block_size].astype(np.int64)
-            ),
-            target=torch.from_numpy(
-                self._memmap[idx + 1 : idx + self.block_size + 1].astype(np.int64)
-            ),
-            batch_size=[self.block_size],
-        )
-
-    def __len__(self):
-        # how many sequences of length block_size + 1 can we extract from the data?
-        # the valid starting points for such a sequence are those tokens that aren't in
-        # the final block_size positions. so it's just the length of the overall
-        # sequence minus the block_size
-        return len(self._memmap) - self.block_size
-
-
-def create_datasets(config):
-    data_dir = HERE / "nanoGPT" / "data" / config["dataset"]
-    train_data = PairedDataset(data_dir / "train.bin", block_size=config["block_size"])
-    val_data = PairedDataset(data_dir / "val.bin", block_size=config["block_size"])
-
-    return train_data, val_data
-
-
-def get_dataloaders(config):
-    train_data, val_data = create_datasets(config)
-
-    train_loader = create_infinite_dataloader(
-        train_data, config, Collate(config["device"])
-    )
-    val_loader = create_infinite_dataloader(val_data, config, Collate(config["device"]))
-
-    return train_loader, val_loader
 
 
 def init_scaler(config):
@@ -99,107 +25,54 @@ def init_scaler(config):
     return torch.cuda.amp.GradScaler(enabled=(config["dtype"] == "float16"))
 
 
-def init_optimizer(model, config):
-    # optimizer
-    optimizer = model.configure_optimizers(
-        config["weight_decay"],
-        config["learning_rate"],
-        (config["beta1"], config["beta2"]),
-        "cuda" if "cuda" in config["device"] else "cpu",
-    )
-    if config["init_from"] == "resume":
-        checkpoint = load_checkpoint(config)
-        optimizer.load_state_dict(checkpoint["optimizer"])
-    return optimizer
-
-
-def create_loss_estimator(config):
+def create_loss_estimator(config, ctx):
     # helps estimate an arbitrarily accurate loss over either split using many batches
     @torch.no_grad()
     def estimate_loss(model, dataloader):
+        model.eval()
         losses = torch.zeros(config["eval_iters"])
         for k in range(config["eval_iters"]):
             batch = next(dataloader)
             with ctx:
                 model(batch)
             losses[k] = batch.loss.item()
-        return losses.mean()
+        loss = losses.mean()
+        model.train()
+        return loss
 
     return estimate_loss
 
 
-def train(config):
-    # TODO: clean up...train should do just the training.
-    # model creation, data loading etc. should be performed outside
-    # plus align all script to have same structure and order of calls
-    model, model_kwargs = init_model(config)
-    model.to(config["device"])
+def main():
+    config = load_and_update_config("config/train.yaml")
+    ctx = setup(config)
+
+    # ######## INIT MODELS ########
+    model, model_kwargs = init_transformer(config)
+
+    # ######## INIT TRAINING FUNCTIONS ########
     scaler = init_scaler(config)
     optimizer = init_optimizer(model, config)
+    lr_scheduler = create_lr_scheduler(config)
 
-    # compile the model
-    if config["compile"]:
-        print("compiling the model... (takes a ~minute)")
-        model = torch.compile(model)  # requires PyTorch 2.0
+    estimate_loss = create_loss_estimator(config, ctx)
 
-    model = TensorDictModule(
-        model, in_keys=["prompt", "target"], out_keys=["logits", "loss"]
-    )
+    train_loader, val_loader = get_dataloaders(config)
 
     # these will already have been set if resuming from previous checkpoint
     iter_num = config.setdefault("iter_num", 0)
     best_val_loss = config.setdefault("best_val_loss", 1e9)
 
-    if config["decay_lr"]:
-        lr_scheduler = create_lr_scheduler(config)
-    else:
-
-        def lr_scheduler(_):
-            return config["learning_rate"]
-
-    estimate_loss = create_loss_estimator(config)
-
-    train_loader, val_loader = get_dataloaders(config)
-
-    # training loop
-    next_batch = next(train_loader)  # fetch the very first batch
+    # ######## TRAINING LOOP ########
     t0 = time.time()
-    local_iter_num = 0  # number of iterations in the lifetime of this process
-    raw_model = model.module
-    running_mfu = -1.0
-
-    while True:
-        # determine and set the learning rate for this iteration
+    next_batch = next(train_loader)  # fetch the very first batch
+    for iter_num in range(iter_num, config["max_iters"]):
+        # get and update the learning rate
         lr = lr_scheduler(iter_num)
         for param_group in optimizer.param_groups:
             param_group["lr"] = lr
 
-        # evaluate the loss on train/val sets and write checkpoints
-        if iter_num % config["eval_interval"] == 0:
-            model.eval()
-            losses = {
-                "train": estimate_loss(model, train_loader),
-                "val": estimate_loss(model, val_loader),
-            }
-            model.train()
-            print(
-                f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}"
-            )
-            if losses["val"] < best_val_loss or config["always_save_checkpoint"]:
-                best_val_loss = losses["val"]
-                if iter_num > 0:
-                    checkpoint = {
-                        "model": raw_model.state_dict(),
-                        "optimizer": optimizer.state_dict(),
-                        "model_kwargs": model_kwargs,
-                        "iter_num": iter_num,
-                        "best_val_loss": best_val_loss,
-                        "config": config,
-                    }
-                    print(f"saving checkpoint to {config['out_dir']}")
-                    torch.save(checkpoint, os.path.join(config["out_dir"], "ckpt.pt"))
-        if iter_num == 0 and config["eval_only"]:
-            break
+        # FIXME: do we need gradient accumulation steps? why we are doing this only in train?
 
         # forward backward update, with optional gradient accumulation to simulate larger batch size
         # and using the GradScaler if data type is float16
@@ -221,34 +94,37 @@ def train(config):
         # flush the gradients as soon as we can, no need for this memory anymore
         optimizer.zero_grad(set_to_none=True)
 
+        # ########### EVALUATE MODEL AND CHECKPOINT ###############
         # timing and logging
         t1 = time.time()
         dt = t1 - t0
         t0 = t1
-        if iter_num % config["log_interval"] == 0:
+        if iter_num % config["eval_interval"] == 0:
+            # evaluate the loss on train/val sets and write checkpoints
+            val_loss = estimate_loss(model, val_loader)
+            train_loss = estimate_loss(model, train_loader)
+            print(
+                f"Evaluation: iter {iter_num}: train loss {train_loss:.4f}, val loss {val_loss:.4f}"
+            )
+            if val_loss < best_val_loss or config["always_save_checkpoint"]:
+                best_val_loss = val_loss
+                if iter_num > 0:
+                    checkpoint = {
+                        "model": model.module._orig_mod.state_dict(),
+                        "optimizer": optimizer.state_dict(),
+                        "model_kwargs": model_kwargs,
+                        "iter_num": iter_num,
+                        "best_val_loss": best_val_loss,
+                        "config": config,
+                    }
+                    print(f"saving checkpoint to {config['out_dir']}")
+                    torch.save(checkpoint, os.path.join(config["out_dir"], "ckpt.pt"))
+        elif iter_num % config["log_interval"] == 0:
             # loss as float. note: this is a CPU-GPU sync point
             lossf = batch.loss.item()
-            if local_iter_num >= 5:  # let the training loop settle a bit
-                mfu = raw_model.estimate_mfu(
-                    config["batch_size"] * config["gradient_accumulation_steps"], dt
-                )
-                running_mfu = (
-                    mfu if running_mfu == -1.0 else 0.9 * running_mfu + 0.1 * mfu
-                )
-            print(
-                f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, "
-                f"mfu {running_mfu*100:.2f}%"
-            )
+            print(f"iter {iter_num}: train loss {lossf:.4f}, time {dt*1000:.2f}ms")
         iter_num += 1
-        local_iter_num += 1
-
-        # termination conditions
-        if iter_num > config["max_iters"]:
-            break
 
 
 if __name__ == "__main__":
-    config = load_and_update_config("config/train.yaml")
-
-    ctx = setup(config)
-    train(config)
+    main()
