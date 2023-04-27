@@ -100,7 +100,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             batch_size=[batch],
             source={
                 "observation": torch.randn(batch, d_obs, device=device),
-                "is_init": torch.zeros(batch, 1, device=device),
+                "is_init": torch.ones(batch, 1, dtype=torch.bool, device=device),
             },
             device=device,
         )
@@ -121,9 +121,9 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             out.append(tensordict.clone())
             out_noexp.append(tensordict_noexp.clone())
             tensordict.set_("observation", torch.randn(batch, d_obs, device=device))
-            tensordict["is_init"][:] = 1
+            tensordict["is_init"][:] = 0
             if i == n_steps // 2:
-                tensordict["is_init"][: batch // 2] = 0
+                tensordict["is_init"][: batch // 2] = 1
 
         out = torch.stack(out, 0)
         out_noexp = torch.stack(out_noexp, 0)
