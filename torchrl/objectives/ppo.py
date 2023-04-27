@@ -47,6 +47,8 @@ class PPOLoss(LossModule):
             Defaults to ``"advantage"``.
         value_target_key (str, optional): the input tensordict key where the target state
             value is expected to be written. Defaults to ``"value_target"``.
+        value_key (str, optional): the input tensordict key where the state
+            value is expected to be written. Defaults to ``"state_value"``.
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
         samples_mc_entropy (int, optional): if the distribution retrieved from the policy
