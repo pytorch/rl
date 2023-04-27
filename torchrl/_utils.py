@@ -4,7 +4,6 @@ import math
 import os
 import sys
 import time
-import warnings
 from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
@@ -258,10 +257,13 @@ class implement_for:
                 if (self.from_version is None or version >= self.from_version) and (
                     self.to_version is None or version < self.to_version
                 ):
-                    warnings.warn(
-                        f"Got multiple backends for {func_name}. "
-                        f"Using the last queried ({module} with version {version})."
-                    )
+                    pass
+                    # we disable this warning, a fix will come later to give the users full
+                    # power over the backend to use
+                    # warnings.warn(
+                    #     f"Got multiple backends for {func_name}. "
+                    #     f"Using the last queried ({module} with version {version})."
+                    # )
                 else:
                     return implementations[func_name]
             except ModuleNotFoundError:
