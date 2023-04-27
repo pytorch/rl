@@ -175,36 +175,54 @@ n_cells = feature(env.reset())["embed"].shape[-1]
 # to incorporate LSTMs in your code-base. It is a :class:`tensordict.nn.TensorDictModuleBase`
 # subclass: as such, it has a set of ``in_keys`` and ``out_keys`` that indicate
 # what values should be expected to be read and written/updated during the
-# execution of the module.
+# execution of the module. The class comes with customizable pre-defined
+# values for these attributes to facilitate its construction.
 #
-# To respect TorchRL's conventions, this LSTM must have the ``batch_first``
-# attribute set to ``True`` which is **not** the default in PyTorch. However,
-# our :class:`torchrl.modules.LSTMModule` changes this default
-# behaviour so we're good with a native call.
+# .. note::
+#   *Usage limitations*: The class supports almost all LSTM features such as
+#   dropout or multi-layered LSTMs.
+#   However, to respect TorchRL's conventions, this LSTM must have the ``batch_first``
+#   attribute set to ``True`` which is **not** the default in PyTorch. However,
+#   our :class:`torchrl.modules.LSTMModule` changes this default
+#   behaviour so we're good with a native call.
 #
-# Also, the LSTM cannot have a ``bidirectional`` attribute set to ``True`` as
-# this wouldn't be usable in online settings. In this case, the default value
-# is the correct one.
+#   Also, the LSTM cannot have a ``bidirectional`` attribute set to ``True`` as
+#   this wouldn't be usable in online settings. In this case, the default value
+#   is the correct one.
 #
-# Notice that we set the in and out_keys with identical values, except that the out_keys
-# are marked with a ``"next"`` prefix that allows us to write the output at a distinct place
-# and pass it to the next step without trouble.
 
 lstm = LSTMModule(
     input_size=n_cells,
     hidden_size=128,
     device=device,
-    in_keys=["embed", "recurrent_state_h", "recurrent_state_c"],
-    out_keys=["embed", ("next", "recurrent_state_h"), ("next", "recurrent_state_c")],
+    in_key="embed",
+    out_key="embed",
 )
 
 ######################################################################
+# Let us look at the lstm class, specifically its in and out_keys:
+print("in_keys", lstm.in_keys)
+print("out_keys", lstm.out_keys)
+
+######################################################################
+# We can see that these values contain the key we indicated as the in_key (and out_key)
+# as well as recurrent key names. The out_keys are preceded by a "next" prefix
+# that indicates that they will need to be written in the "next" tensordict.
+# We use this convention (which can be overridden by passing the in_keys/out_keys
+# arguments) to make sure that a call to :func:`torchrl.envs.step_mdp` will
+# move the recurrent state to the root tensordict, making it available to the
+# RNN during the following call (see figure in the intro).
+#
 # As mentioned earlier, we have one more optional transform to add to our
-# environment to make sure that the recurrent states are passed to the buffer:
+# environment to make sure that the recurrent states are passed to the buffer.
+# The :meth:`torchrl.modules.LSTMModule.make_tensordict_primer` method does
+# exactly that:
 #
 env.append_transform(lstm.make_tensordict_primer())
+
 ######################################################################
-# and that's it! We can print the env to check that everything looks good:
+# and that's it! We can print the env to check that everything looks good now
+# that we have added the primer:
 print(env)
 
 ######################################################################
@@ -222,7 +240,7 @@ mlp = MLP(
     device=device,
 )
 ######################################################################
-# and fill the bias with zeros
+# and fill the bias with zeros:
 
 mlp[-1].bias.data.fill_(0.0)
 mlp = Mod(mlp, in_keys=["embed"], out_keys=["action_value"])
