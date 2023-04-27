@@ -31,6 +31,8 @@ class EGreedyWrapper(TensorDictModuleWrapper):
 
     Args:
         policy (TensorDictModule): a deterministic policy.
+
+    Keyword Args:
         eps_init (scalar, optional): initial epsilon value.
             default: 1.0
         eps_end (scalar, optional): final epsilon value.
@@ -43,6 +45,13 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         spec (TensorSpec, optional): if provided, the sampled action will be
             projected onto the valid action space once explored. If not provided,
             the exploration wrapper will attempt to recover it from the policy.
+
+    .. note::
+        Once an environment has been wrapped in :class:`EGreedyWrapper`, it is
+        crucial to incorporate a call to :meth:`~.step` in the training loop
+        to update the exploration factor.
+        Since it is not easy to capture this omission no warning or exception
+        will be raised if this is ommitted!
 
     Examples:
         >>> import torch
@@ -72,6 +81,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
     def __init__(
         self,
         policy: TensorDictModule,
+        *,
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
@@ -149,6 +159,8 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
     Args:
         policy (TensorDictModule): a policy.
+
+    Keyword Args:
         sigma_init (scalar, optional): initial epsilon value.
             default: 1.0
         sigma_end (scalar, optional): final epsilon value.
@@ -168,6 +180,14 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             is set to False but the spec is passed, the projection will still
             happen.
             Default is True.
+
+    .. note::
+        Once an environment has been wrapped in :class:`AdditiveGaussianWrapper`, it is
+        crucial to incorporate a call to :meth:`~.step` in the training loop
+        to update the exploration factor.
+        Since it is not easy to capture this omission no warning or exception
+        will be raised if this is ommitted!
+
 
     """
 
@@ -268,17 +288,22 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
 
 class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
-    """Ornstein-Uhlenbeck exploration policy wrapper.
+    r"""Ornstein-Uhlenbeck exploration policy wrapper.
 
     Presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf.
 
     The OU exploration is to be used with continuous control policies and introduces a auto-correlated exploration
     noise. This enables a sort of 'structured' exploration.
 
-        Noise equation:
-            noise = prev_noise + theta * (mu - prev_noise) * dt + current_sigma * sqrt(dt) * W
-        Sigma equation:
-            current_sigma = (-(sigma - sigma_min) / (n_steps_annealing) * n_steps + sigma).clamp_min(sigma_min)
+    Noise equation:
+
+    .. math::
+        noise_t = noise_{t-1} + \theta * (mu - noise_{t-1}) * dt + \sigma_t * \sqrt{dt} * W
+
+    Sigma equation:
+
+    .. math::
+        \sigma_t = max(\sigma^{min, (-(\sigma_{t-1} - \sigma^{min}) / (n^{\text{steps annealing}}) * n^{\text{steps}} + \sigma))
 
     To keep track of the steps and noise from sample to sample, an :obj:`"ou_prev_noise{id}"` and :obj:`"ou_steps{id}"` keys
     will be written in the input/output tensordict. It is expected that the tensordict will be zeroed at reset,
@@ -286,8 +311,17 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     trajectories, the step count will keep on increasing across rollouts. Note that the collector classes take care of
     zeroing the tensordict at reset time.
 
+    .. note::
+        Once an environment has been wrapped in :class:`OrnsteinUhlenbeckProcessWrapper`, it is
+        crucial to incorporate a call to :meth:`~.step` in the training loop
+        to update the exploration factor.
+        Since it is not easy to capture this omission no warning or exception
+        will be raised if this is ommitted!
+
     Args:
         policy (TensorDictModule): a policy
+
+    Keyword Args:
         eps_init (scalar): initial epsilon value, determining the amount of noise to be added.
             default: 1.0
         eps_end (scalar): final epsilon value, determining the amount of noise to be added.

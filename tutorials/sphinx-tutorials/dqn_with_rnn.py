@@ -259,6 +259,13 @@ mlp = Mod(mlp, in_keys=["embed"], out_keys=["action_value"])
 qval = QValueModule(action_space=env.action_spec)
 
 ######################################################################
+# .. note::
+#   TorchRL also provides a wrapper class :class:`torchrl.modules.QValueActor` that
+#   wraps a module in a Sequential together with a :class:`torchrl.modules.QValueModule`
+#   like we are doing explicitly here. There is little advantage to do this
+#   and the process is less transparent, but the end results will be similar to
+#   what we do here.
+#
 # We can now put things together in a :class:`tensordict.nn.TensorDictSequential`
 #
 stoch_policy = Seq(feature, lstm, mlp, qval)
@@ -266,7 +273,8 @@ stoch_policy = Seq(feature, lstm, mlp, qval)
 ######################################################################
 # DQN being a deterministic algorithm, exploration is a crucial part of it.
 # We'll be using an :math:`\epsilon`-greedy policy with an epsilon of 0.2 decaying
-# progressively to 0.
+# progressively to 0. This decay is achieved via a call to :meth:`torchrl.modules.EGreedyWrapper.step`
+# (see training loop below).
 #
 stoch_policy = EGreedyWrapper(
     stoch_policy, annealing_num_steps=1_000_000, spec=env.action_spec, eps_init=0.2
@@ -305,8 +313,17 @@ policy(env.reset())
 # classes are compatible, but aren't strongly dependent on each other.
 #
 # To use the Double-DQN, we ask for a ``delay_value`` argument that will
-
+# create a non-differentiable copy of the network parameters to be used
+# as a target network.
 loss_fn = DQNLoss(policy, action_space=env.action_spec, delay_value=True)
+
+######################################################################
+# Since we are using a double DQN, we need to update the target parameters.
+# We'll use a  :class:`torchrl.objectives.SoftUpdate` instance to carry out
+# this work.
+#
+updater = SoftUpdate(loss_fn, eps=0.95)
+
 optim = torch.optim.Adam(policy.parameters(), lr=3e-4)
 
 ######################################################################
@@ -331,13 +348,6 @@ collector = SyncDataCollector(
 rb = TensorDictReplayBuffer(
     storage=LazyMemmapStorage(20_000), batch_size=4, prefetch=10
 )
-######################################################################
-# Since we are using a double DQN, we need to update the target parameters.
-# We'll use a  :class:`torchrl.objectives.SoftUpdate` instance to carry out
-# this work.
-#
-updater = SoftUpdate(loss_fn, eps=0.95)
-updater.init_()
 
 ######################################################################
 # Training loop
@@ -383,6 +393,9 @@ for i, data in enumerate(collector):
             rollout = env.rollout(10000, stoch_policy)
             traj_lens.append(rollout.get(("next", "step_count")).max().item())
 
+######################################################################
+# Let's plot our results:
+#
 from matplotlib import pyplot as plt
 
 plt.plot(traj_lens)
@@ -403,3 +416,4 @@ plt.title("Test trajectory lengths")
 # - Make sure that the collector is made aware of the recurrent state entries
 #   such that they can be stored in the replay buffer along with the rest of
 #   the data.
+#
