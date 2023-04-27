@@ -14,7 +14,11 @@ conda activate ./env
 $DIR/install.sh
 
 # Extracted from run_test.sh to run once.
-yum makecache && yum install glew gcc gcc-c++ xorg-x11-server-Xvfb glew-devel mesa-libEGL mesa-libEGL-devel mesa-libOSMesa-devel -y
+#yum makecache && yum install xorg-x11-server-Xvfb mesa-libOSMesa-devel -y
+
+conda install -c conda-forge gcc -y
+conda install -c conda-forge glew -y
+conda install -c anaconda mesa-libegl-cos6-x86_64 -y
 
 # This version is installed initially (see environment.yml)
 for GYM_VERSION in '0.13'
