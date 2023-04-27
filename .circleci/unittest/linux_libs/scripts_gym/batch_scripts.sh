@@ -19,6 +19,7 @@ $DIR/install.sh
 conda install -c conda-forge gcc -y
 conda install -c conda-forge glew -y
 conda install -c anaconda mesa-libegl-cos6-x86_64 -y
+conda install -c conda-forge xorg-libx11 -y
 
 # This version is installed initially (see environment.yml)
 for GYM_VERSION in '0.13'
