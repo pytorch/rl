@@ -97,7 +97,13 @@ class DQNLoss(LossModule):
                     action_space = value_network.action_space
                 except AttributeError:
                     raise ValueError(self.ACTION_SPEC_ERROR)
-
+        if action_space is None:
+            warnings.warn(
+                "action_space was not specified. DQNLoss will default to 'one-hot'."
+                "This behaviour will be deprecated soon and a space will have to be passed."
+                "Check the DQNLoss documentation to see how to pass the action space. "
+            )
+            action_space = "one-hot"
         self.action_space = _find_action_space(action_space)
 
         if gamma is not None:
