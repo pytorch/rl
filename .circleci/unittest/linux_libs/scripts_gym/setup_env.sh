@@ -75,6 +75,11 @@ conda install -c anaconda mesa-libegl-cos6-x86_64 -y
 echo "Installing X11 with conda"
 conda install -c anaconda libx11-devel-cos6-x86_64 -y -v
 
+#fatal error: X11/X.h: No such file or directory
+#   44 | #include <X11/X.h>
+#      |          ^~~~~~~~~
+conda install -c anaconda xorg-x11-proto-devel-cos6-x86_64 -y -v
+
 
 export MUJOCO_GL=egl
 conda env config vars set \
