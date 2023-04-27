@@ -30,7 +30,8 @@ from torchrl.envs.transforms import (
     TransformedEnv,
     VecNorm,
 )
-from torchrl.envs.transforms.transforms import FlattenObservation, gSDENoise
+from torchrl.envs.transforms.transforms import FlattenObservation, gSDENoise, \
+    StepCounter, InitTracker
 from torchrl.record.loggers import Logger
 from torchrl.record.recorder import VideoRecorder
 
@@ -205,7 +206,8 @@ def make_env_transforms(
             gSDENoise(action_dim=action_dim_gsde, state_dim=state_dim_gsde)
         )
 
-    env.append_transform(FiniteTensorDictCheck())
+    env.append_transform(StepCounter())
+    env.append_transform(InitTracker())
 
     return env
 
