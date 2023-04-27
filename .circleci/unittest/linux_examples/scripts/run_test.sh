@@ -226,6 +226,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_onli
   num_workers=2 \
   env_per_collector=1 \
   mode=offline \
+  device=cuda:0 \
   collector_device=cuda:0
 
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/bandits/dqn.py --n_steps=100
