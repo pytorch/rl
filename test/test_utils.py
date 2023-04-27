@@ -86,7 +86,7 @@ class implement_for_test_functions:
 
     @staticmethod
     @implement_for("_utils_internal", "0.3")
-    def select_correct_version():
+    def select_correct_version():  # noqa: F811
         """To test that this function is selected as the implementation (last implementation)."""
         return "0.3+"
 
