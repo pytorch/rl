@@ -5089,10 +5089,12 @@ class TestBase:
 
 @pytest.mark.parametrize("updater", [HardUpdate, SoftUpdate])
 def test_updater_warning(updater):
-    dqn = DQNLoss(torch.nn.Linear(3, 4), delay_value=True, action_space="one_hot")
+    with warnings.catch_warnings():
+        dqn = DQNLoss(torch.nn.Linear(3, 4), delay_value=True, action_space="one_hot")
     with pytest.warns(UserWarning):
         dqn.target_value_network_params
-    updater(dqn)
+    with warnings.catch_warnings():
+        updater(dqn)
     with warnings.catch_warnings():
         dqn.target_value_network_params
 
