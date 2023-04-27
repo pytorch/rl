@@ -20,6 +20,8 @@ conda install -c conda-forge gcc -y
 conda install -c conda-forge glew -y
 conda install -c anaconda mesa-libegl-cos6-x86_64 -y
 
+pip install pyopengl==3.1.0
+
 # This version is installed initially (see environment.yml)
 for GYM_VERSION in '0.13'
 do
