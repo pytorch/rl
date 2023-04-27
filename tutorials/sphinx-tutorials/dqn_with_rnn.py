@@ -18,12 +18,12 @@ This tutorial shows how to incorporate an RNN in a policy.
 
 Key learnings:
 
-- Incorporating an RNN in TorchRL;
+- Incorporating an RNN in an actor in TorchRL;
 - Using that memory-based policy with a replay buffer and a loss module.
 
 The core idea of using RNNs in TorchRL is to use TensorDict as a data carrier
 for the hidden states from one step to another. We'll build a policy that
-reads the previous recurrent state from the current tensordict, and write the
+reads the previous recurrent state from the current tensordict, and writes the
 current recurrent states in the tensordict of the next state:
 
 .. figure:: /_static/img/rollout_recurrent.png
@@ -43,7 +43,7 @@ is implemented in practice.
 #
 # .. code-block:: bash
 #
-#    !pip3 install torchrl
+#    !pip3 install torchrl-nightly
 #    !pip3 install gym[mujoco]
 #    !pip3 install tqdm
 #
@@ -80,13 +80,16 @@ device = torch.device(0) if torch.cuda.device_count() else torch.device("cpu")
 # Environment
 # -----------
 #
-# As usual, the first step is to build our environment. For this tutorial,
-# we'll be running a single instance of the CartPole gym environment with
-# some custom transforms: turning to grayscale, resizing to 84x84, scaling down
-# the rewards and normalizing the observations.
-# The :class:`torchrl.envs.StepCounter` transform is accessory. Since the CartPole
-# task goal is to make trajectories as long as possible, counting the steps
-# can help us track the performance of our policy.
+# As usual, the first step is to build our environment: it helps us
+# define the problem and build the policy network accordingly. For this tutorial,
+# we'll be running a single pixel-based instance of the CartPole gym
+# environment with some custom transforms: turning to grayscale, resizing to
+# 84x84, scaling down the rewards and normalizing the observations.
+#
+# .. note::
+#   The :class:`torchrl.envs.StepCounter` transform is accessory. Since the CartPole
+#   task goal is to make trajectories as long as possible, counting the steps
+#   can help us track the performance of our policy.
 #
 # Two transforms are important for the purpose of this tutorial:
 #
