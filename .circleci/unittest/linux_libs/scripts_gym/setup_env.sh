@@ -69,7 +69,7 @@ cat "${this_dir}/environment.yml"
 
 
 conda install -c conda-forge gcc -y
-conda install -c conda-forge glew -y
+#conda install -c conda-forge glew -y
 conda install -c anaconda mesa-libegl-cos6-x86_64 -y
 
 echo "Installing X11 with conda"

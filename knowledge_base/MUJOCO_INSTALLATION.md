@@ -126,11 +126,16 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
 1. GL/glew.h not found
     ```
     /path/to/mujoco-py/mujoco_py/gl/eglshim.c:4:10: fatal error: GL/glew.h: No such file or directory
-     #include <GL/glew.h>
-              ^~~~~~~~~~~
-    ```
+    4 | #include <GL/glew.h>
+      |          ^~~~~~~~~~~
+   ```
 
-    _Solution_: make sure glew is installed (see above: `conda install -c conda-forge glew` or the `apt-get` version of it).
+   _Solution_: install glew and glew-devel
+
+   - Ubuntu: `sudo apt-get install libglew-dev libglew`
+   - CentOS: `sudo yum install glew glew-devel`
+   - Conda: `conda install -c conda-forge glew`
+
 2. 
     ```
     include/GL/glu.h:38:10: fatal error: GL/gl.h: No such file or directory
@@ -227,18 +232,6 @@ RuntimeError: Failed to initialize OpenGL
    _Solution_: call `conda install -c anaconda mesa-libgl-devel-cos6-x86_64`
 
 7. ```
-   fatal error: GL/glew.h: No such file or directory
-    4 | #include <GL/glew.h>
-      |          ^~~~~~~~~~~
-   ```
-
-   _Solution_: install glew and glew-devel
-
-   - Ubuntu: `sudo apt-get install libglew-dev libglew`
-   - CentOS: `sudo yum install glew glew-devel`
-   - Conda: `conda install -c conda-forge glew`
-
-8. ```
    RuntimeError: Failed to initialize OpenGL
    ```
 
@@ -248,7 +241,7 @@ RuntimeError: Failed to initialize OpenGL
    - CentOS: `sudo yum install mesa-libEGL mesa-libEGL-devel`
    - Conda: `conda install -c anaconda mesa-libegl-cos6-x86_64`
 
-9. ```
+8. ```
    fatal error: X11/Xlib.h: No such file or directory
       | #include <X11/Xlib.h>
       |          ^~~~~~~~~~~~
@@ -260,15 +253,15 @@ RuntimeError: Failed to initialize OpenGL
    - CentOS: `sudo yum install libX11`
    - Conda: `conda install -c conda-forge xorg-libx11`
 
-10. ```
-    fatal error: GL/osmesa.h: No such file or directory
-        1 | #include <GL/osmesa.h>
-          |          ^~~~~~~~~~~~~
-    compilation terminated.
-    ```
+9. ```
+   fatal error: GL/osmesa.h: No such file or directory
+       1 | #include <GL/osmesa.h>
+         |          ^~~~~~~~~~~~~
+   compilation terminated.
+   ```
 
    _Solution_: Install Osmesa:
 
-   - Ubuntu: `sudo apt-get install libosmesa6-dev`
-   - CentOS: `sudo yum install mesa-libOSMesa-devel`
-   - Conda: `conda install -c menpo osmesa`
+10. Ubuntu: `sudo apt-get install libosmesa6-dev`
+11. CentOS: `sudo yum install mesa-libOSMesa-devel`
+12. Conda: `conda install -c menpo osmesa`

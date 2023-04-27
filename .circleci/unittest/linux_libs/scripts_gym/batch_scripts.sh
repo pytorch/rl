@@ -14,7 +14,7 @@ conda activate ./env
 $DIR/install.sh
 
 # Extracted from run_test.sh to run once.
-yum makecache && yum install libX11-devel xorg-x11-server-Xvfb -y
+yum makecache && yum install libX11-devel xorg-x11-server-Xvfb glew glew-devel -y
 
 pip install pyopengl==3.1.0
 
