@@ -215,7 +215,11 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
                 actor(td.unsqueeze(0))
             else:
                 actor(td)
-        expected_keys = ["done", "action", "param",            "step_count",
+        expected_keys = [
+            "done",
+            "action",
+            "param",
+            "step_count",
             "is_init",
         ]
         if from_pixels:
