@@ -120,6 +120,7 @@ class PPOLoss(LossModule):
         *,
         advantage_key: str = "advantage",
         value_target_key: str = "value_target",
+        value_key: str = "state_value",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
@@ -142,6 +143,7 @@ class PPOLoss(LossModule):
         self.convert_to_functional(critic, "critic", compare_against=policy_params)
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
+        self.value_key = value_key
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus
         self.separate_losses = separate_losses
@@ -196,7 +198,7 @@ class PPOLoss(LossModule):
             state_value = self.critic(
                 tensordict,
                 params=self.critic_params,
-            ).get("state_value")
+            ).get(self.value_key)
             loss_value = distance_loss(
                 target_return,
                 state_value,
