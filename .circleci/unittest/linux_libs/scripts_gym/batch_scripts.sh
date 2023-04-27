@@ -14,7 +14,7 @@ conda activate ./env
 $DIR/install.sh
 
 # Extracted from run_test.sh to run once.
-yum makecache && yum install xorg-x11-server-Xvfb -y
+yum makecache && yum install libX11 xorg-x11-server-Xvfb -y
 
 conda install -c conda-forge gcc -y
 conda install -c conda-forge glew -y
