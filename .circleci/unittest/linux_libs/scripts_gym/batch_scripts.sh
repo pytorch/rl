@@ -16,10 +16,6 @@ $DIR/install.sh
 # Extracted from run_test.sh to run once.
 yum makecache && yum install libX11-devel xorg-x11-server-Xvfb -y
 
-conda install -c conda-forge gcc -y
-conda install -c conda-forge glew -y
-conda install -c anaconda mesa-libegl-cos6-x86_64 -y
-
 pip install pyopengl==3.1.0
 
 # This version is installed initially (see environment.yml)

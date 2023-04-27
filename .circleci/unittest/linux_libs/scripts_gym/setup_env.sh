@@ -68,6 +68,13 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
 
+conda install -c conda-forge gcc -y
+conda install -c conda-forge glew -y
+conda install -c anaconda mesa-libegl-cos6-x86_64 -y
+
+echo "Installing X11 with conda"
+conda install -c anaconda libx11-devel-cos6-x86_64 -y -v -vv -vvv
+
 
 export MUJOCO_GL=egl
 conda env config vars set \
