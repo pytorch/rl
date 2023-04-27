@@ -262,7 +262,7 @@ def make_a2c_models(cfg):
             value_operator=value_module,
         )
         actor = actor_critic.get_policy_operator()
-        critic = actor_critic.get_value_operator()
+        critic = actor_critic.get_value_head()  # to avoid duplicate params
     else:
         actor = policy_module
         critic = value_module
