@@ -437,11 +437,12 @@ def _reset_batch_size(x):
     shape = x.pop("_batch_size", None)
     if shape is not None:
         # we need to reset the batch-size
+        data = x.pop("_data")
         if isinstance(shape, MemmapTensor):
             shape = shape.as_tensor()
-        locked = x.is_locked
+        locked = data.is_locked
         if locked:
-            x.unlock_()
+            data.unlock_()
         shape = [s.item() for s in shape[0]]
         shape = torch.Size([x.shape[0], *shape])
         # we may need to update some values in the data
@@ -449,10 +450,13 @@ def _reset_batch_size(x):
             if value.ndim >= len(shape):
                 continue
             value = expand_right(value, shape)
-            x.set(key, value)
-        x.batch_size = shape
+            data.set(key, value)
         if locked:
-            x.lock_()
+            data.lock_()
+        return data
+    data = x.pop("_data", None)
+    if data is not None:
+        return data
     return x
 
 
@@ -468,8 +472,8 @@ def _collate_list_tensors(*x):
 
 
 def _collate_contiguous(x):
-    if isinstance(x, TensorDictBase):
-        return _reset_batch_size(x).to_tensordict()
+    if is_tensor_collection(x):
+        return _reset_batch_size(x)
     return x.clone()
 
 

@@ -10,7 +10,10 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
-from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+
+from tensordict import is_tensorclass
+from tensordict.tensordict import LazyStackedTensorDict, TensorDict, \
+    TensorDictBase, is_tensor_collection
 from tensordict.utils import expand_as_right
 
 from torchrl.data.utils import DEVICE_TYPING
@@ -237,7 +240,7 @@ class ReplayBuffer:
 
         if self._transform is not None and len(self._transform):
             is_td = True
-            if not isinstance(data, TensorDictBase):
+            if not is_tensor_collection(data):
                 data = TensorDict({"data": data}, [])
                 is_td = False
             data = self._transform(data)
@@ -284,7 +287,7 @@ class ReplayBuffer:
         Returns:
             Indices of the data aded to the replay buffer.
         """
-        if self._transform is not None and isinstance(data, TensorDictBase):
+        if self._transform is not None and is_tensor_collection(data):
             data = self._transform.inv(data)
         elif self._transform is not None and len(self._transform):
             # Accepts transforms that act on "data" key
@@ -312,7 +315,7 @@ class ReplayBuffer:
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
             is_td = True
-            if not isinstance(data, TensorDictBase):
+            if not is_tensor_collection(data):
                 data = TensorDict({"data": data}, [])
                 is_td = False
             data = self._transform(data)
@@ -668,7 +671,11 @@ class TensorDictReplayBuffer(ReplayBuffer):
         return index
 
     def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
-        if isinstance(tensordicts, TensorDictBase):
+        if is_tensor_collection(tensordicts):
+            tensordicts = TensorDict(
+                {"_data": tensordicts},
+                batch_size=tensordicts.batch_size[:1]
+                )
             if tensordicts.batch_dims > 1:
                 # we want the tensordict to have one dimension only. The batch size
                 # of the sampled tensordicts can be changed thereafter
@@ -684,7 +691,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 shape = torch.tensor(tensordicts.batch_size[1:]).expand(
                     tensordicts.batch_size[0], tensordicts.batch_dims - 1
                 )
-                tensordicts.batch_size = tensordicts.batch_size[:1]
                 tensordicts.set("_batch_size", shape)
             tensordicts.set(
                 "index",
@@ -693,7 +699,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 ),
             )
 
-        if not isinstance(tensordicts, TensorDictBase):
+        if not is_tensor_collection(tensordicts):
             stacked_td = torch.stack(tensordicts, 0)
         else:
             stacked_td = tensordicts
@@ -753,9 +759,16 @@ class TensorDictReplayBuffer(ReplayBuffer):
             )
 
         data, info = super().sample(batch_size, return_info=True)
-        if include_info in (True, None):
+        if not is_tensorclass(data) and include_info in (True, None):
+            is_locked = data.is_locked
+            if is_locked:
+                data.unlock_()
             for k, v in info.items():
-                data.set(k, expand_as_right(torch.tensor(v, device=data.device), data))
+                if not isinstance(v, torch.Tensor):
+                    v = torch.tensor(v, device=data.device)
+                data.set(k, expand_as_right(v, data))
+            if is_locked:
+                data.lock_()
         if return_info:
             return data, info
         return data
