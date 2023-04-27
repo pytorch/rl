@@ -1,8 +1,4 @@
-# algorithm:
-method: gumbel # pg or gumbel
-hard_code_reward: False # use a learned reward model or hard code reward (latter does not work with Gumbel)
-separate_reward_model: True # when using a reward model, instantiate it separately rather than share params with LM
-discrete_reward: False # reward output is 0 or 1 sample if True, otherwise reward is continuous
+# training
 episode_length: 5
 # IO:
 out_dir: out
@@ -10,14 +6,9 @@ out_dir_reward: out_reward # used if restoring multihead
 eval_interval: 100
 log_interval: 10
 eval_iters: 200
-eval_only: False # if True, script exits right after the first eval
 always_save_checkpoint: True # if True, always save a checkpoint after each eval
 init_from: resume # 'scratch' or 'resume' or 'gpt2*'
-init_multihead_from: resume
-# wandb:
-wandb_log: False # disabled by default
-wandb_project: rlhf # 'gpt2'
-wandb_run_name: gpt2 # 'run' + str(time.time())
+init_reward_from: resume
 # data:
 dataset: shakespeare # 'openwebtext', 'shakespeare', 'openai_summarize_tldr'
 gradient_accumulation_steps: 10 # used to simulate larger batch sizes

@@ -3,7 +3,6 @@ out_dir: out
 eval_interval: 20
 log_interval: 10
 eval_iters: 20
-eval_only: False  # if True, script exits right after the first eval
 always_save_checkpoint: False  # if True, always save a checkpoint after each eval
 init_from: gpt2  # scratch or resume or gpt2*
 # data
