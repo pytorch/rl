@@ -1105,8 +1105,6 @@ class DistributionalQValueActor(QValueActor):
     ):
 
         action_space, spec = _process_action_space_spec(action_space, spec)
-
-        action_space, spec = _process_action_space_spec(action_space, spec)
         self.action_space = action_space
         self.action_value_key = action_value_key
         out_keys = [
