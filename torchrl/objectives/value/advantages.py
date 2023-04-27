@@ -67,10 +67,11 @@ class ValueEstimatorBase(TensorDictModuleBase):
     value_network: Union[TensorDictModule, Callable]
     value_key: Union[Tuple[str], str]
     DIFF_DEPREC_MSG = (
-        "differentiable=False will soon be deprecated and all value computations will be made"
-        "differentiable. "
+        "differentiable=False will soon be deprecated and all value "
+        "computations will be made differentiable. "
         "Consider using differentiable=True and "
-        "decorate your function with `torch.no_grad()` or pass detached functional parameters."
+        "decorate your function with `torch.no_grad()` or pass detached "
+        "functional parameters."
     )
 
     @abc.abstractmethod
@@ -344,11 +345,10 @@ class TD0Estimator(ValueEstimatorBase):
                 ("next", "reward"), reward
             )  # we must update the rewards if they are used later in the code
         step_td = step_mdp(tensordict)
-        if self.value_key not in step_td.keys():
-            if target_params is not None:
-                kwargs["params"] = target_params
-            with hold_out_net(self.value_network):
-                self.value_network(step_td, **kwargs)
+        if target_params is not None:
+            kwargs["params"] = target_params
+        with hold_out_net(self.value_network):
+            self.value_network(step_td, **kwargs)
         next_value = step_td.get(self.value_key)
 
         done = tensordict.get(("next", "done"))
@@ -519,11 +519,10 @@ class TD1Estimator(ValueEstimatorBase):
                 ("next", "reward"), reward
             )  # we must update the rewards if they are used later in the code
         step_td = step_mdp(tensordict)
-        if self.value_key not in step_td.keys():
-            if target_params is not None:
-                kwargs["params"] = target_params
-            with hold_out_net(self.value_network):
-                self.value_network(step_td, **kwargs)
+        if target_params is not None:
+            kwargs["params"] = target_params
+        with hold_out_net(self.value_network):
+            self.value_network(step_td, **kwargs)
         next_value = step_td.get(self.value_key)
 
         done = tensordict.get(("next", "done"))
@@ -704,11 +703,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
             )  # we must update the rewards if they are used later in the code
 
         step_td = step_mdp(tensordict)
-        if self.value_key not in step_td.keys():
-            if target_params is not None:
-                kwargs["params"] = target_params
-            with hold_out_net(self.value_network):
-                self.value_network(step_td, **kwargs)
+        if target_params is not None:
+            kwargs["params"] = target_params
+        with hold_out_net(self.value_network):
+            self.value_network(step_td, **kwargs)
         next_value = step_td.get(self.value_key)
 
         done = tensordict.get(("next", "done"))

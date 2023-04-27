@@ -95,7 +95,7 @@ def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[TargetNetUpdater]]:
         num_qvalue_nets=cfg.num_q_values,
         **loss_kwargs,
     )
-    loss_module.make_value_estimator(gamma = cfg.gamma)
+    loss_module.make_value_estimator(gamma=cfg.gamma)
     target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
 
@@ -131,7 +131,7 @@ def make_redq_loss(
         gSDE=cfg.gSDE,
         **loss_kwargs,
     )
-    loss_module.make_value_estimator(gamma = cfg.gamma)
+    loss_module.make_value_estimator(gamma=cfg.gamma)
     target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
 

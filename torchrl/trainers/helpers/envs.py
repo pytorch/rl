@@ -20,7 +20,6 @@ from torchrl.envs.transforms import (
     CenterCrop,
     Compose,
     DoubleToFloat,
-    FiniteTensorDictCheck,
     GrayScale,
     NoopResetEnv,
     ObservationNorm,
@@ -30,8 +29,12 @@ from torchrl.envs.transforms import (
     TransformedEnv,
     VecNorm,
 )
-from torchrl.envs.transforms.transforms import FlattenObservation, gSDENoise, \
-    StepCounter, InitTracker
+from torchrl.envs.transforms.transforms import (
+    FlattenObservation,
+    gSDENoise,
+    InitTracker,
+    StepCounter,
+)
 from torchrl.record.loggers import Logger
 from torchrl.record.recorder import VideoRecorder
 

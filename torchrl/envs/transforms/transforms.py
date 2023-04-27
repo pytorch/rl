@@ -1228,7 +1228,10 @@ class Resize(ObservationTransform):
             sizes = observation.shape[:-3]
             observation = torch.flatten(observation, 0, ndim - 4)
         observation = resize(
-            observation, [self.w, self.h], interpolation=self.interpolation, antialias=True,
+            observation,
+            [self.w, self.h],
+            interpolation=self.interpolation,
+            antialias=True,
         )
         if ndim > 4:
             observation = observation.unflatten(0, sizes)

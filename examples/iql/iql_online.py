@@ -199,11 +199,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         qvalue_network=model[1],
         value_network=model[2],
         num_qvalue_nets=2,
-        gamma=cfg.gamma,
         temperature=cfg.temperature,
         expectile=cfg.expectile,
         loss_function="smooth_l1",
     )
+    loss_module.make_value_estimator(gamma=cfg.gamma)
 
     # Define Target Network Updater
     target_net_updater = SoftUpdate(loss_module, cfg.target_update_polyak)

@@ -90,6 +90,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   collector.total_frames=48 \
   collector.frames_per_batch=16 \
   collector.collector_device=cuda:0 \
+  optim.device=cuda:0 \
   loss.mini_batch_size=10 \
   loss.ppo_epochs=1 \
   logger.backend= \
@@ -146,7 +147,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c.py \
   collector.collector_device=cuda:0 \
   logger.backend= \
   logger.log_interval=4 \
-  optim.lr_scheduler=False
+  optim.lr_scheduler=False \
+  optim.device=cuda:0
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   total_frames=48 \
   init_random_frames=10 \
@@ -188,6 +190,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   collector.total_frames=48 \
   collector.frames_per_batch=16 \
   collector.collector_device=cuda:0 \
+  optim.device=cuda:0 \
   loss.mini_batch_size=10 \
   loss.ppo_epochs=1 \
   logger.backend= \

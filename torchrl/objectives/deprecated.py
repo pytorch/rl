@@ -281,7 +281,7 @@ class REDQLoss_deprecated(LossModule):
             alpha_loss = torch.zeros_like(log_pi)
         return alpha_loss
 
-    def make_value_estimator(self, value_type: ValueEstimators=None, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
         self.value_type = value_type

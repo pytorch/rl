@@ -110,7 +110,7 @@ class DQNLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    def make_value_estimator(self, value_type: ValueEstimators=None, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
         self.value_type = value_type
@@ -405,7 +405,7 @@ class DistributionalDQNLoss(LossModule):
         loss_td = TensorDict({"loss": loss.mean()}, [])
         return loss_td
 
-    def make_value_estimator(self, value_type: ValueEstimators=None, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
         self.value_type = value_type

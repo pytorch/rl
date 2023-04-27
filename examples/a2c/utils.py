@@ -11,6 +11,7 @@ from torchrl.envs import (
     CatTensors,
     DoubleToFloat,
     EnvCreator,
+    ExplorationType,
     GrayScale,
     NoopResetEnv,
     ObservationNorm,
@@ -21,7 +22,6 @@ from torchrl.envs import (
     StepCounter,
     ToTensorImage,
     TransformedEnv,
-    ExplorationType,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.modules import (
@@ -413,7 +413,7 @@ def make_a2c_modules_pixels(proof_environment):
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
-        default_interaction_mode="random",
+        default_interaction_type=ExplorationType.RANDOM,
     )
 
     # Define another head for the value
@@ -452,8 +452,8 @@ def make_loss(loss_cfg, actor_network, value_network):
         entropy_coef=loss_cfg.entropy_coef,
         critic_coef=loss_cfg.critic_coef,
         entropy_bonus=True,
-        gamma=loss_cfg.gamma,
     )
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
     return loss_module, advantage_module
 
 

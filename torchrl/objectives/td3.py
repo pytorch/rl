@@ -229,7 +229,7 @@ class TD3Loss(LossModule):
 
         return td_out
 
-    def make_value_estimator(self, value_type: ValueEstimators=None, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
         self.value_type = value_type

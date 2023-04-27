@@ -459,7 +459,7 @@ class LossModule(nn.Module):
         """
         self.make_value_estimator(self.default_value_estimator)
 
-    def make_value_estimator(self, value_type: ValueEstimators=None, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         """Value-function constructor.
 
         If the non-default value function is wanted, it must be built using

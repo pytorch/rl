@@ -214,7 +214,11 @@ def make_trainer(
         # replay buffer is used 2 or 3 times: to register data, to sample
         # data and to update priorities
         rb_trainer = ReplayBufferTrainer(
-            replay_buffer, cfg.batch_size, flatten_tensordicts=False, memmap=False, device=device
+            replay_buffer,
+            cfg.batch_size,
+            flatten_tensordicts=False,
+            memmap=False,
+            device=device,
         )
 
         trainer.register_op("batch_process", rb_trainer.extend)
