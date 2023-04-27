@@ -336,9 +336,11 @@ to be able to create this other composition:
     RewardClipping
     RewardScaling
     RewardSum
+    Reward2GoTransform
     SelectTransform
     SqueezeTransform
     StepCounter
+    TargetReturn
     TensorDictPrimer
     TimeMaxPool
     ToTensorImage
@@ -372,9 +374,12 @@ Helpers
 
     step_mdp
     get_available_libraries
-    set_exploration_mode
-    exploration_mode
+    set_exploration_mode #deprecated
+    set_exploration_type
+    exploration_mode #deprecated
+    exploration_type
     check_env_specs
+    make_composite_from_td
 
 Domain-specific
 ---------------

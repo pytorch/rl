@@ -841,6 +841,7 @@ init_random_frames = 5000
 num_collectors = 2
 
 from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.envs import ExplorationType
 
 collector = MultiaSyncDataCollector(
     create_env_fn=[
@@ -859,7 +860,7 @@ collector = MultiaSyncDataCollector(
     storing_device=device,
     # device where data will be stored and passed
     update_at_each_batch=False,
-    exploration_mode="random",
+    exploration_type=ExplorationType.RANDOM,
 )
 
 ###############################################################################
@@ -888,7 +889,7 @@ def make_recorder(actor_model_explore, transform_state_dict, record_interval):
         record_frames=1000,
         policy_exploration=actor_model_explore,
         environment=environment,
-        exploration_mode="mode",
+        exploration_type="mode",
         record_interval=record_interval,
     )
     return recorder_obj
@@ -1060,8 +1061,6 @@ loss_module.make_value_estimator(ValueEstimators.TDLambda, gamma=gamma, lmbda=lm
 from torchrl.objectives.utils import SoftUpdate
 
 target_net_updater = SoftUpdate(loss_module, eps=1 - tau)
-# This class will raise an error if `init_` is not called first.
-target_net_updater.init_()
 
 ###############################################################################
 # Optimizer

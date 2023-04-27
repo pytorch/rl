@@ -206,7 +206,9 @@ class SafeModule(TensorDictModule):
         safe: bool = False,
     ):
         super().__init__(module, in_keys, out_keys)
+        self.register_spec(safe=safe, spec=spec)
 
+    def register_spec(self, safe, spec):
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
@@ -359,6 +361,7 @@ def ensure_tensordict_compatible(
     out_keys: Optional[Iterable[str]] = None,
     safe: bool = False,
     wrapper_type: Optional[Type] = TensorDictModule,
+    **kwargs,
 ):
     """Checks and ensures an object with forward method is TensorDict compatible."""
     if is_tensordict_compatible(module):
@@ -393,7 +396,6 @@ def ensure_tensordict_compatible(
         )
 
     # TODO: Check whether out_keys match (at least in number) if they are provided.
-    kwargs = {}
     if in_keys is not None:
         kwargs["in_keys"] = in_keys
     if out_keys is not None:

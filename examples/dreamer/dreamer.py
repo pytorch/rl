@@ -235,7 +235,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         replay_buffer.extend(tensordict.cpu())
         logger.log_scalar(
             "r_training",
-            tensordict["reward"].mean().detach().item(),
+            tensordict["next", "reward"].mean().detach().item(),
             step=collected_frames,
         )
 

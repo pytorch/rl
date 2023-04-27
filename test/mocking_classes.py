@@ -907,14 +907,17 @@ class CountingEnv(EnvBase):
                     1,
                 ),
                 dtype=torch.int32,
+                device=self.device,
             ),
             shape=self.batch_size,
+            device=self.device,
         )
         self.reward_spec = UnboundedContinuousTensorSpec(
             (
                 *self.batch_size,
                 1,
-            )
+            ),
+            device=self.device,
         )
         self.done_spec = DiscreteTensorSpec(
             2,
@@ -923,14 +926,19 @@ class CountingEnv(EnvBase):
                 *self.batch_size,
                 1,
             ),
+            device=self.device,
         )
         self.input_spec = CompositeSpec(
-            action=BinaryDiscreteTensorSpec(n=1, shape=[*self.batch_size, 1]),
+            action=BinaryDiscreteTensorSpec(
+                n=1, shape=[*self.batch_size, 1], device=self.device
+            ),
             shape=self.batch_size,
+            device=self.device,
         )
 
-        self.count = torch.zeros(
-            (*self.batch_size, 1), device=self.device, dtype=torch.int
+        self.register_buffer(
+            "count",
+            torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int),
         )
 
     def _set_seed(self, seed: Optional[int]):
@@ -956,7 +964,7 @@ class CountingEnv(EnvBase):
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         action = tensordict.get("action")
-        self.count += action.to(torch.int)
+        self.count += action.to(torch.int).to(self.device)
         tensordict = TensorDict(
             source={
                 "observation": self.count.clone(),

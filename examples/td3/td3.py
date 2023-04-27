@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
+from tensordict.nn import InteractionType
 
 from torch import nn, optim
 from torchrl.collectors import MultiSyncDataCollector
@@ -26,7 +27,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import RewardScaling
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     AdditiveGaussianWrapper,
     MLP,
@@ -42,9 +43,7 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 
 
 def env_maker(task, frame_skip=1, device="cpu", from_pixels=False):
-    return GymEnv(
-        task, "run", device=device, frame_skip=frame_skip, from_pixels=from_pixels
-    )
+    return GymEnv(task, device=device, frame_skip=frame_skip, from_pixels=from_pixels)
 
 
 def apply_env_transforms(env, reward_scaling=1.0):
@@ -170,7 +169,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_mode="random",
+        default_interaction_type=InteractionType.RANDOM,
         return_log_prob=False,
     )
 
@@ -193,7 +192,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model = nn.ModuleList([actor, qvalue]).to(device)
 
     # init nets
-    with torch.no_grad(), set_exploration_mode("random"):
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         td = eval_env.reset()
         td = td.to(device)
         for net in model:
@@ -261,8 +260,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     rewards_eval = []
 
     # Main loop
-    target_net_updater.init_()
-
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.total_frames)
     r0 = None
@@ -274,7 +271,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         collector.update_policy_weights_()
 
         if r0 is None:
-            r0 = tensordict["reward"].sum(-1).mean().item()
+            r0 = tensordict["next", "reward"].sum(-1).mean().item()
         pbar.update(tensordict.numel())
 
         # extend the replay buffer with the new data
@@ -323,7 +320,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if cfg.prb:
                     replay_buffer.update_priority(sampled_tensordict)
 
-        rewards.append((i, tensordict["reward"].sum().item() / cfg.env_per_collector))
+        rewards.append(
+            (i, tensordict["next", "reward"].sum().item() / cfg.env_per_collector)
+        )
         train_log = {
             "train_reward": rewards[-1][1],
             "collected_frames": collected_frames,
@@ -338,13 +337,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for key, value in train_log.items():
             logger.log_scalar(key, value, step=collected_frames)
 
-        with set_exploration_mode("mean"), torch.no_grad():
+        with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
             eval_rollout = eval_env.rollout(
                 cfg.max_frames_per_traj // cfg.frame_skip,
                 actor_model_explore,
                 auto_cast_to_device=True,
             )
-            eval_reward = eval_rollout["reward"].sum(-2).mean().item()
+            eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
             rewards_eval.append((i, eval_reward))
             eval_str = f"eval cumulative reward: {rewards_eval[-1][1]: 4.4f} (init: {rewards_eval[0][1]: 4.4f})"
             logger.log_scalar("test_reward", rewards_eval[-1][1], step=collected_frames)

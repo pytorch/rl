@@ -40,8 +40,6 @@ def make_target_updater(
             target_net_updater = HardUpdate(
                 loss_module, cfg.value_network_update_interval
             )
-        # assert len(target_net_updater.net_pairs) == 3, "length of target_net_updater nets should be 3"
-        target_net_updater.init_()
     else:
         if cfg.hard_update:
             raise RuntimeError(

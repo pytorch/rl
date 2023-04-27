@@ -440,9 +440,9 @@ And it is `functorch` and `torch.compile` compatible!
 
   ```python
   policy_explore = EGreedyWrapper(policy)
-  with set_exploration_mode("random"):
+  with set_exploration_type(ExplorationType.RANDOM):
       tensordict = policy_explore(tensordict)  # will use eps-greedy
-  with set_exploration_mode("mode"):
+  with set_exploration_type(ExplorationType.MODE):
       tensordict = policy_explore(tensordict)  # will not use eps-greedy
   ```
   </details>
@@ -490,7 +490,7 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 - [DDPG](examples/ddpg/ddpg.py)
 - [IQL](examples/iql/iql.py)
 - [TD3](examples/td3/td3.py)
-- [A2C](examples/a2c/a2c.py)
+- [A2C](examples/a2c_old/a2c.py)
 - [PPO](examples/ppo/ppo.py)
 - [SAC](examples/sac/sac.py)
 - [REDQ](examples/redq/redq.py)

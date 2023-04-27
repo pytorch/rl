@@ -96,7 +96,13 @@ import torch
 from torch import nn
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
-from torchrl.envs import EnvCreator, ParallelEnv, RewardScaling, StepCounter
+from torchrl.envs import (
+    EnvCreator,
+    ExplorationType,
+    ParallelEnv,
+    RewardScaling,
+    StepCounter,
+)
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     CatFrames,
@@ -400,7 +406,7 @@ def get_collector(
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         # this is the default behaviour: the collector runs in ``"random"`` (or explorative) mode
-        exploration_mode="random",
+        exploration_type=ExplorationType.RANDOM,
         # We set the all the devices to be identical. Below is an example of
         # heterogeneous devices
         device=device,
@@ -557,7 +563,6 @@ test_env = make_env(parallel=False, obs_norm_sd=stats)
 # Get model
 actor, actor_explore = make_model(test_env)
 loss_module, target_net_updater = get_loss_module(actor, gamma)
-target_net_updater.init_()
 
 collector = get_collector(
     stats, num_collectors, actor_explore, frames_per_batch, total_frames, device
@@ -612,7 +617,7 @@ recorder = Recorder(
     frame_skip=1,
     policy_exploration=actor_explore,
     environment=test_env,
-    exploration_mode="mode",
+    exploration_type="mode",
     log_keys=[("next", "reward")],
     out_keys={("next", "reward"): "rewards"},
     log_pbar=True,

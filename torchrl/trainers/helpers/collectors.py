@@ -18,6 +18,7 @@ from torchrl.collectors.collectors import (
 from torchrl.data import MultiStep
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
+from torchrl.envs.utils import ExplorationType
 
 
 def sync_async_collector(
@@ -302,7 +303,7 @@ def make_collector_offpolicy(
         "init_random_frames": cfg.init_random_frames,
         "split_trajs": True,
         # trajectories must be separated if multi-step is used
-        "exploration_mode": cfg.exploration_mode,
+        "exploration_type": ExplorationType.from_str(cfg.exploration_mode),
     }
 
     collector = collector_helper(**collector_helper_kwargs)
@@ -396,7 +397,7 @@ class OnPolicyCollectorConfig:
     # for each of these parallel wrappers. If env_per_collector=num_workers, no parallel wrapper is created
     seed: int = 42
     # seed used for the environment, pytorch and numpy.
-    exploration_mode: str = ""
+    exploration_mode: str = "random"
     # exploration mode of the data collector.
     async_collection: bool = False
     # whether data collection should be done asynchrously. Asynchrounous data collection means
