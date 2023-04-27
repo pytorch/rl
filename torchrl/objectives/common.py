@@ -63,6 +63,7 @@ class LossModule(nn.Module):
         self._param_maps = {}
         self._value_estimator = None
         self._has_update_associated = False
+        self.value_type = self.default_value_estimator
         # self.register_forward_pre_hook(_parameters_to_tensordict)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -337,7 +338,7 @@ class LossModule(nn.Module):
             if not self._has_update_associated and RL_WARNINGS:
                 warnings.warn(
                     "No target network updater has been associated "
-                    "with this loss module, but target parameters have been found."
+                    "with this loss module, but target parameters have been found. "
                     "While this is supported, it is expected that the target network "
                     "updates will be manually performed. You can deactivate this warning "
                     "by turning the RL_WARNINGS env variable to False.",
@@ -458,7 +459,7 @@ class LossModule(nn.Module):
         """
         self.make_value_estimator(self.default_value_estimator)
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators=None, **hyperparams):
         """Value-function constructor.
 
         If the non-default value function is wanted, it must be built using
@@ -466,20 +467,33 @@ class LossModule(nn.Module):
 
         Args:
             value_type (ValueEstimators): A :class:`~torchrl.objectives.utils.ValueEstimators`
-                enum type indicating the value function to use.
+                enum type indicating the value function to use. If none is provided,
+                the default stored in the ``default_value_estimator``
+                attribute will be used. The resulting value estimator class
+                will be registered in ``self.value_type``, allowing
+                future refinements.
             **hyperparams: hyperparameters to use for the value function.
                 If not provided, the value indicated by
                 :func:`~torchrl.objectives.utils.default_value_kwargs` will be
                 used.
 
         Examples:
+            >>> from torchrl.objectives import DQNLoss
             >>> # initialize the DQN loss
-            >>> dqn_loss = DQNLoss(actor)
+            >>> actor = torch.nn.Linear(3, 4)
+            >>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+            >>> # updating the parameters of the default value estimator
+            >>> dqn_loss.make_value_estimator(gamma=0.9)
             >>> dqn_loss.make_value_estimator(
             ...     ValueEstimators.TD1,
             ...     gamma=0.9)
+            >>> # if we want to change the gamma value
+            >>> dqn_loss.make_value_estimator(dqn_loss.value_type, gamma=0.9)
 
         """
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         if value_type == ValueEstimators.TD1:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."

@@ -112,7 +112,7 @@ class IQLLoss(LossModule):
         self.priority_key = priority_key
         self.loss_function = loss_function
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
     @property
@@ -243,7 +243,10 @@ class IQLLoss(LossModule):
         )
         return loss_qval, td_error.detach().max(0)[0]
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators=None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         value_net = self.value_network
 
         value_key = "state_value"

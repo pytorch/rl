@@ -21,6 +21,7 @@ from torchrl.envs import (
     StepCounter,
     ToTensorImage,
     TransformedEnv,
+    ExplorationType,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.modules import (
@@ -326,7 +327,7 @@ def make_a2c_modules_state(proof_environment):
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
-        default_interaction_mode="random",
+        default_interaction_type=ExplorationType.RANDOM,
     )
 
     # Define the value net
