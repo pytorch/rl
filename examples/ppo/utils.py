@@ -279,7 +279,7 @@ def make_ppo_models(cfg):
         del td
 
     actor = actor_critic.get_policy_operator()
-    critic = actor_critic.get_value_operator()
+    critic = actor_critic.get_value_head()
 
     return actor, critic
 
