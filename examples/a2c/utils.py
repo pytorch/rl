@@ -11,6 +11,7 @@ from torchrl.envs import (
     CatTensors,
     DoubleToFloat,
     EnvCreator,
+    ExplorationType,
     GrayScale,
     NoopResetEnv,
     ObservationNorm,
@@ -261,7 +262,7 @@ def make_a2c_models(cfg):
             value_operator=value_module,
         )
         actor = actor_critic.get_policy_operator()
-        critic = actor_critic.get_value_operator()
+        critic = actor_critic.get_value_head()  # to avoid duplicate params
     else:
         actor = policy_module
         critic = value_module
@@ -326,7 +327,7 @@ def make_a2c_modules_state(proof_environment):
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
-        default_interaction_mode="random",
+        default_interaction_type=ExplorationType.RANDOM,
     )
 
     # Define the value net
@@ -412,7 +413,7 @@ def make_a2c_modules_pixels(proof_environment):
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
-        default_interaction_mode="random",
+        default_interaction_type=ExplorationType.RANDOM,
     )
 
     # Define another head for the value
@@ -451,8 +452,8 @@ def make_loss(loss_cfg, actor_network, value_network):
         entropy_coef=loss_cfg.entropy_coef,
         critic_coef=loss_cfg.critic_coef,
         entropy_bonus=True,
-        gamma=loss_cfg.gamma,
     )
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
     return loss_module, advantage_module
 
 
