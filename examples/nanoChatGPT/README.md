@@ -24,7 +24,7 @@ pip install -r requirements.txt
 First you must prepare the data you wish to train on. For example
 
 ```sh
-python nanoGPT/data/shakespeare/prepare.py
+python models/nanoGPT/data/shakespeare/prepare.py
 ```
 
 ### Training the transformer
