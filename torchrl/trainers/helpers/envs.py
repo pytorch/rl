@@ -271,13 +271,13 @@ def transformed_env_constructor(
         categorical_action_encoding = cfg.categorical_action_encoding
 
         if custom_env is None and custom_env_maker is None:
-            if isinstance(cfg.collector_devices, str):
-                device = cfg.collector_devices
-            elif isinstance(cfg.collector_devices, Sequence):
-                device = cfg.collector_devices[0]
+            if isinstance(cfg.collector_device, str):
+                device = cfg.collector_device
+            elif isinstance(cfg.collector_device, Sequence):
+                device = cfg.collector_device[0]
             else:
                 raise ValueError(
-                    "collector_devices must be either a string or a sequence of strings"
+                    "collector_device must be either a string or a sequence of strings"
                 )
             env_kwargs = {
                 "env_name": env_name,

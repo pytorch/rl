@@ -73,13 +73,7 @@ def make_replay_buffer(
 @hydra.main(version_base=None, config_path=".", config_name="online_config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    device = (
-        torch.device("cuda:0")
-        if torch.cuda.is_available()
-        and torch.cuda.device_count() > 0
-        and cfg.device == "cuda:0"
-        else torch.device("cpu")
-    )
+    device = torch.device(cfg.device)
 
     exp_name = generate_exp_name("Online_IQL", cfg.exp_name)
     logger = get_logger(
@@ -216,7 +210,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         frames_per_batch=cfg.frames_per_batch,
         max_frames_per_traj=cfg.max_frames_per_traj,
         total_frames=cfg.total_frames,
-        device=cfg.device,
+        device=cfg.collector_device,
     )
     collector.set_seed(cfg.seed)
 

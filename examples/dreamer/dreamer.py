@@ -177,10 +177,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_env=create_env_fn,
         actor_model_explore=exploration_policy,
         cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device}
-        #     for device in cfg.collector_devices
-        # ],
     )
     print("collector:", collector)
 
