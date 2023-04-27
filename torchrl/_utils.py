@@ -281,7 +281,7 @@ class implement_for:
 
     @staticmethod
     def import_module(module_name: Union[Callable, str]) -> str:
-        """import module and returns its version."""
+        """Imports module and returns its version."""
         if not callable(module_name):
             module = import_module(module_name)
         else:
@@ -308,6 +308,7 @@ class implement_for:
                 version = self.import_module(self.module_name)
                 if self.check_version(version, self.from_version, self.to_version):
                     if VERBOSE:
+                        module = import_module(self.module_name)
                         warnings.warn(
                             f"Got multiple backends for {func_name}. "
                             f"Using the last queried ({module} with version {version})."

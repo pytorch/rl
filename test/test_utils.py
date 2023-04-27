@@ -12,7 +12,7 @@ import mock
 import pytest
 
 from torchrl._utils import get_binary_env_var, implement_for
-from torchrl.envs.libs.gym import GymEnv, set_gym_backend
+from torchrl.envs.libs.gym import set_gym_backend
 
 
 @pytest.mark.parametrize("value", ["True", "1", "true"])
