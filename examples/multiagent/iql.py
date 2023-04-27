@@ -101,18 +101,16 @@ if __name__ == "__main__":
     env_config.update({"n_agents": env.n_agents, "scenario_name": scenario_name})
 
     # Policy
-    qnet = nn.Sequential(
-        MultiAgentMLP(
-            n_agent_inputs=env.observation_spec["observation"].shape[-1],
-            n_agent_outputs=env.action_spec.space.n,
-            n_agents=env.n_agents,
-            centralised=False,
-            share_params=model_config["shared_parameters"],
-            device=training_device,
-            depth=2,
-            num_cells=256,
-            activation_class=nn.Tanh,
-        ),
+    qnet = MultiAgentMLP(
+        n_agent_inputs=env.observation_spec["observation"].shape[-1],
+        n_agent_outputs=env.action_spec.space.n,
+        n_agents=env.n_agents,
+        centralised=False,
+        share_params=model_config["shared_parameters"],
+        device=training_device,
+        depth=2,
+        num_cells=256,
+        activation_class=nn.Tanh,
     )
     qnet = QValueActor(
         module=qnet,
@@ -193,7 +191,7 @@ if __name__ == "__main__":
 
             target_net_updater.step()
 
-        qnet.step(frames=current_frames) # Update exploration annealing
+        qnet.step(frames=current_frames)  # Update exploration annealing
 
         training_time = time.time() - training_start
         print(f"Training took: {training_time}")

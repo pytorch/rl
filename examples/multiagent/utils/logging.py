@@ -73,7 +73,7 @@ def log_evaluation(
             0
         ]  # First done index for this traj
         rollouts[k] = r[: done_index + 1]
-    vid = np.transpose(env_test.frames[:rollouts[0].batch_size[0]], (0, 3, 1, 2))
+    vid = np.transpose(env_test.frames[: rollouts[0].batch_size[0]], (0, 3, 1, 2))
     logger.experiment.log(
         {
             "eval/video": wandb.Video(vid, fps=1 / env_test.world.dt, format="mp4"),

@@ -106,18 +106,16 @@ if __name__ == "__main__":
     env_config.update({"n_agents": env.n_agents, "scenario_name": scenario_name})
 
     # Policy
-    actor_net = nn.Sequential(
-        MultiAgentMLP(
-            n_agent_inputs=env.observation_spec["observation"].shape[-1],
-            n_agent_outputs=env.action_spec.shape[-1],
-            n_agents=env.n_agents,
-            centralised=False,
-            share_params=model_config["shared_parameters"],
-            device=training_device,
-            depth=2,
-            num_cells=256,
-            activation_class=nn.Tanh,
-        ),
+    actor_net = MultiAgentMLP(
+        n_agent_inputs=env.observation_spec["observation"].shape[-1],
+        n_agent_outputs=env.action_spec.shape[-1],
+        n_agents=env.n_agents,
+        centralised=False,
+        share_params=model_config["shared_parameters"],
+        device=training_device,
+        depth=2,
+        num_cells=256,
+        activation_class=nn.Tanh,
     )
     policy_module = TensorDictModule(
         actor_net, in_keys=["observation"], out_keys=["param"]
