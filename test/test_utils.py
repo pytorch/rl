@@ -6,9 +6,9 @@ import argparse
 import os
 import sys
 from importlib import import_module
+from unittest import mock
 
 import _utils_internal
-import mock
 import pytest
 
 from torchrl._utils import get_binary_env_var, implement_for
