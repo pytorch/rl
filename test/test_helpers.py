@@ -894,8 +894,6 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "state",
             ("next", "reco_pixels"),
             "next",
-            "step_count",
-            "is_init",
         }
         assert set(out.keys(True)) == expected_keys
 
@@ -914,8 +912,6 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "pixels",
             "state",
             "next",
-            "step_count",
-            "is_init",
         }
         assert expected_keys == set(simulated_data.keys(True))
 
