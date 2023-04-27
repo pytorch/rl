@@ -72,7 +72,7 @@ conda install -c conda-forge gcc -y
 conda install -c conda-forge glew -y
 
 # Search for the glew.h file
-glew_path=$(find ./conda -name glew.h 2>/dev/null)
+glew_path=$(find $conda_dir -name glew.h 2>/dev/null)
 
 # Check if glew.h file is found
 if [ -z "$glew_path" ]; then
