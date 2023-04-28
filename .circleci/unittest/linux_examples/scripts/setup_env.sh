@@ -114,10 +114,10 @@ fi
 export TZ=Europe/London
 export DEBIAN_FRONTEND=noninteractive
 apt-get install software-properties-common -y
-add-apt-repository ppa:ubuntu-toolchain-r/test
+add-apt-repository -y ppa:ubuntu-toolchain-r/test
 apt-get update
-apt-get install gcc-4.9
-apt-get install --only-upgrade libstdc++6
+apt-get install gcc-4.9 -y
+apt-get install --only-upgrade libstdc++6 -y
 
 python -c """
 import wandb
