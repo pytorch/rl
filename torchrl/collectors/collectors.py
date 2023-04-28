@@ -496,7 +496,9 @@ class SyncDataCollector(DataCollectorBase):
     ):
         self.closed = True
 
-        exploration_type = _convert_exploration_type(exploration_mode=exploration_mode, exploration_type=exploration_type)
+        exploration_type = _convert_exploration_type(
+            exploration_mode=exploration_mode, exploration_type=exploration_type
+        )
         if create_env_kwargs is None:
             create_env_kwargs = {}
         if not isinstance(create_env_fn, EnvBase):
@@ -1049,7 +1051,9 @@ class _MultiDataCollector(DataCollectorBase):
         devices=None,
         storing_devices=None,
     ):
-        exploration_type = _convert_exploration_type(exploration_mode=exploration_mode, exploration_type=exploration_type)
+        exploration_type = _convert_exploration_type(
+            exploration_mode=exploration_mode, exploration_type=exploration_type
+        )
         self.closed = True
         self.create_env_fn = create_env_fn
         self.num_workers = len(create_env_fn)
