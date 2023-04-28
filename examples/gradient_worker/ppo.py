@@ -12,7 +12,7 @@ The helper functions are coded in the utils.py associated with this script.
 """
 import hydra
 from torchrl.gradient_worker import GradientWorker
-
+from tensordict import TensorDict
 
 @hydra.main(config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
@@ -52,24 +52,29 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     grad_worker = GradientWorker(
         policy=actor,
+        critic=critic,
         collector=collector,
         objective=loss_module,
         replay_buffer=data_buffer,
         optimizer=optim,
         updates_per_batch=num_mini_batches * cfg.loss.ppo_epochs,
+        device=model_device
     )
 
-    for grad in grad_worker:
+    for grads in grad_worker:
 
-        # Get grad
+        # TODO: is there a better way ?
+        for name, param in loss_module.named_parameters():
+            param.grad = grads.get(name)
 
-        # grad clipping
+        # Process grads
+        grad_norm = torch.nn.utils.clip_grad_norm_(loss_module.parameters(), max_norm=0.5)
 
         # Update local policy
+        optim.step()
+        print("optimisation step!")
 
-        # Update grad_worker policy
-
-        raise NotImplementedError
+        # Update grad_worker policy, not needed in this dummy local example
 
 
 if __name__ == "__main__":

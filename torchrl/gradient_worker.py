@@ -33,14 +33,18 @@ class GradientWorker:
     def __init__(
         self,
         policy: Callable[[TensorDict], TensorDict],
+        critic: Callable[[TensorDict], TensorDict],
         collector: DataCollectorBase,
         objective: LossModule,
         replay_buffer: ReplayBuffer,
         optimizer: Optimizer = Adam,
         updates_per_batch: int = 1,
+        device: torch.device = "cpu",
     ):
 
+        self.device = device
         self.policy = policy
+        self.critic = critic
         self.objective = objective
         self.collector = collector
         self.replay_buffer = replay_buffer
@@ -85,7 +89,7 @@ class GradientWorker:
         for _ in range(self.updates_per_batch):
 
             # Sample batch from replay buffer
-            mini_batch = self.replay_buffer.sample()
+            mini_batch = self.replay_buffer.sample().to(self.device)
 
             # Compute loss
             loss = self.objective(mini_batch)
@@ -93,13 +97,13 @@ class GradientWorker:
 
             # Backprop loss
             self.optimizer.zero_grad()
-            loss_sum.backprop()
+            loss_sum.backward()
 
             # Get gradients as a Tensordict
-            import ipdb; ipdb.set_trace()  # Get grads only
-            policy_grads = TensorDict(dict(self.policy.named_grads()), [])
+            params = TensorDict(dict(self.objective.named_parameters()), [])
+            grads = params.apply(lambda x: x.grad)
 
-            yield policy_grads
+            yield grads
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         raise NotImplementedError
