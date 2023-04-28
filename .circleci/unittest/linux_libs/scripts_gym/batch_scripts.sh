@@ -14,7 +14,7 @@ conda activate ./env
 $DIR/install.sh
 
 # Extracted from run_test.sh to run once.
-apt-get update && apt-get install -y git wget freeglut3 freeglut3-dev libx11-dev x11proto-dev g++
+apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++
 
 # This version is installed initially (see environment.yml)
 for GYM_VERSION in '0.13'
