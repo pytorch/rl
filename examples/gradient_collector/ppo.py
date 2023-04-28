@@ -11,7 +11,7 @@ Both state and pixel-based environments are supported.
 The helper functions are coded in the utils.py associated with this script.
 """
 import hydra
-from torchrl.gradient_worker import GradientWorker
+from torchrl.gradient_collector import GradientCollector
 from tensordict import TensorDict
 
 @hydra.main(config_path=".", config_name="config")
@@ -50,7 +50,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     batch_size = cfg.collector.total_frames * cfg.env.num_envs
     num_mini_batches = batch_size // cfg.loss.mini_batch_size
 
-    grad_worker = GradientWorker(
+    grad_worker = GradientCollector(
         policy=actor,
         critic=critic,
         collector=collector,
@@ -64,6 +64,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     for grads in grad_worker:
 
         # TODO: is there a better way ?
+        # Apply gradients
         for name, param in loss_module.named_parameters():
             param.grad = grads.get(name)
 

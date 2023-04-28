@@ -22,7 +22,7 @@ from torchrl.collectors.utils import split_trajectories
 from torchrl.envs import EnvBase, EnvCreator
 
 
-class GradientWorker:
+class GradientCollector:
     """
     This Python class serves as a solution to abstract data collection and gradient
     computation.
@@ -85,7 +85,6 @@ class GradientWorker:
         # Add to replay buffer
         self.replay_buffer.extend(data)
 
-        # For num updates per batch
         for _ in range(self.updates_per_batch):
 
             # Sample batch from replay buffer
