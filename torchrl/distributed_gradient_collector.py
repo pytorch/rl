@@ -22,7 +22,7 @@ from torchrl.collectors.utils import split_trajectories
 from torchrl.envs import EnvBase, EnvCreator
 
 
-class GradientWorker:
+class DistributedGradientWorker:
     """Distributed gradient collector.
 
         This Python class serves as a solution to instantiate and coordinate multiple
