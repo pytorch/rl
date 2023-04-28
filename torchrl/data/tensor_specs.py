@@ -83,6 +83,13 @@ def _default_dtype_and_device(
 
 
 def _validate_idx(shape: list[int], idx: int, axis: int = 0):
+    """Raise an IndexError if idx is out of bounds for shape[axis].
+
+    Args:
+        shape (list[int]): Input shape
+        idx (int): Index, may be negative
+        axis (int): Shape axis to check
+    """
     if idx >= shape[axis] or idx < 0 and -idx > shape[axis]:
         raise IndexError(
             f"index {idx} is out of bounds for axis {axis} with size {shape[axis]}"
@@ -92,6 +99,13 @@ def _validate_idx(shape: list[int], idx: int, axis: int = 0):
 def _validate_iterable(
     idx: Iterable[Any], expected_type: type, iterable_classname: str
 ):
+    """Raise an IndexError if the iterable contains a type different from the expected type or Iterable.
+
+    Args:
+        idx (Iterable[Any]): Iterable, may contain nested iterables
+        expected_type (type): Required item type in the Iterable (e.g. int)
+        iterable_classname (str): Iterable type as a string (e.g. 'List'). Logging purpose only.
+    """
     for item in idx:
         if isinstance(item, Iterable):
             _validate_iterable(item, expected_type, iterable_classname)
@@ -102,7 +116,20 @@ def _validate_iterable(
                 )
 
 
-def _slice_indexing(shape: list[int], idx: slice):
+def _slice_indexing(shape: list[int], idx: slice) -> List[int]:
+    """Given an input shape and a slice index, returns the new indexed shape.
+
+    Args:
+        shape (list[int]): Input shape
+        idx (slice): Index
+    Returns:
+        Indexed shape
+    Examples:
+        >>> _slice_indexing([3, 4], slice(None, 2))
+        [2, 4]
+        >>> list(torch.rand(3, 4)[:2].shape)
+        [2, 4]
+    """
     if idx.step == 0:
         raise ValueError("slice step cannot be zero")
     # Slicing an empty shape returns the shape
@@ -136,8 +163,24 @@ def _slice_indexing(shape: list[int], idx: slice):
 
 
 def _shape_indexing(
-    shape: Union[list[int], torch.Size, tuple], idx: SHAPE_INDEX_TYPING
-):
+    shape: Union[list[int], torch.Size, tuple[int]], idx: SHAPE_INDEX_TYPING
+) -> List[int]:
+    """Given an input shape and an index, returns the size of the resulting indexed spec.
+
+    This function includes indexing checks and may raise IndexErrors.
+
+    Args:
+        shape (list[int], torch.Size, tuple[int): Input shape
+        idx (SHAPE_INDEX_TYPING): Index
+    Returns:
+        Shape of the resulting spec
+    Examples:
+        >>> idx = (2, ..., None)
+        >>> DiscreteTensorSpec(2, shape=(3, 4))[idx].shape
+        torch.Size([4, 1])
+        >>> _shape_indexing([3, 4], idx)
+        torch.Size([4, 1])
+    """
     if not isinstance(shape, list):
         shape = list(shape)
 
