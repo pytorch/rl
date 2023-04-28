@@ -18,6 +18,5 @@ with open('$file') as f:
 code = compile(source, '$file', 'exec')
 
 exec(code)
-
 """
 done
