@@ -337,12 +337,37 @@ class GymWrapper(GymLikeEnv):
     git_url = "https://github.com/openai/gym"
     libname = "gym"
 
+    @staticmethod
+    def get_library_name(env):
+        # try gym
+        try:
+            import gym
+
+            if isinstance(env.action_space, gym.spaces.space.Space):
+                return gym
+        except ImportError:
+            pass
+        try:
+            import gymnasium
+
+            if isinstance(env.action_space, gymnasium.spaces.space.Space):
+                return gymnasium
+        except ImportError:
+            pass
+        raise RuntimeError(
+            f"Could not find the library of env {env}. Please file an issue on torchrl github repo."
+        )
+
     def __init__(self, env=None, categorical_action_encoding=False, **kwargs):
         if env is not None:
             kwargs["env"] = env
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
-        super().__init__(**kwargs)
+        if "env" in kwargs:
+            with set_gym_backend(self.get_library_name(kwargs["env"])):
+                super().__init__(**kwargs)
+        else:
+            super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:

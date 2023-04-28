@@ -31,7 +31,7 @@ __all__ = [
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
 
-def _convert_exploration_type(exploration_mode, exploration_type):
+def _convert_exploration_type(*, exploration_mode, exploration_type):
     if exploration_mode is not None:
         return ExplorationType.from_str(exploration_mode)
     return exploration_type
