@@ -301,6 +301,7 @@ class implement_for:
                 f"Supported version of '{func_name}' has not been found."
             )
 
+        do_set = False
         # Return fitting implementation if it was encountered before.
         if func_name in implementations:
             try:
@@ -313,30 +314,29 @@ class implement_for:
                             f"Got multiple backends for {func_name}. "
                             f"Using the last queried ({module} with version {version})."
                         )
-                    implementations[func_name] = fn
-                    self.module_set()
-                return implementations[func_name]
-
+                    do_set = True
+                if not do_set:
+                    return implementations[func_name]
             except ModuleNotFoundError:
                 # then it's ok, there is no conflict
-                # overwrite the previous implementation
-                implementations[func_name] = fn
-                self.module_set()
-                return fn
-        try:
-            version = self.import_module(self.module_name)
-            if self.check_version(version, self.from_version, self.to_version):
-                implementations[func_name] = fn
-                self.module_set()
-                return fn
-
-        except ModuleNotFoundError:
-            return unsupported
-
+                return implementations[func_name]
+        else:
+            try:
+                version = self.import_module(self.module_name)
+                if self.check_version(version, self.from_version, self.to_version):
+                    do_set = True
+            except ModuleNotFoundError:
+                return unsupported
+        if do_set:
+            implementations[func_name] = fn
+            self.module_set()
+            return fn
         return unsupported
 
     @classmethod
     def reset(cls, setters=None):
+        if VERBOSE:
+            print("resetting implement_for")
         if setters is None:
             setters = copy(cls._setters)
         cls._setters = []

@@ -1304,13 +1304,18 @@ also that the state dict is synchronised across processes if needed."""
         _check_for_faulty_process(self.procs)
         self.closed = True
         for idx in range(self.num_workers):
-            self.pipes[idx].send((None, "close"))
+            if not self.procs[idx].is_alive():
+                continue
+            try:
+                self.pipes[idx].send((None, "close"))
 
-            if self.pipes[idx].poll(10.0):
-                msg = self.pipes[idx].recv()
-                if msg != "closed":
-                    raise RuntimeError(f"got {msg} but expected 'close'")
-            else:
+                if self.pipes[idx].poll(10.0):
+                    msg = self.pipes[idx].recv()
+                    if msg != "closed":
+                        raise RuntimeError(f"got {msg} but expected 'close'")
+                else:
+                    continue
+            except BrokenPipeError:
                 continue
 
         for proc in self.procs:

@@ -401,7 +401,13 @@ class GymWrapper(GymLikeEnv):
             env = self._build_gym_env(env, pixels_only)
         return env
 
-    @implement_for("gym", None, "0.26.0")
+    @implement_for("gym", None, "0.19.0")
+    def _build_gym_env(self, env, pixels_only):  # noqa: F811
+        from .utils import GymPixelObservationWrapper as PixelObservationWrapper
+
+        return PixelObservationWrapper(env, pixels_only=pixels_only)
+
+    @implement_for("gym", "0.19.0", "0.26.0")
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
         pixel_observation = gym_backend("wrappers.pixel_observation")
         return pixel_observation.PixelObservationWrapper(env, pixels_only=pixels_only)
