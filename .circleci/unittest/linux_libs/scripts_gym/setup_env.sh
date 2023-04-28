@@ -9,6 +9,8 @@ set -e
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
+apt-get update && apt-get install -y git wget gcc g++
+
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
@@ -71,16 +73,16 @@ cat "${this_dir}/environment.yml"
 conda install -c conda-forge gcc -y
 conda install -c conda-forge glew -y
 
-# Search for the glew.h file
-glew_path=$(find $conda_dir -name glew.h 2>/dev/null)
-
-# Check if glew.h file is found
-if [ -z "$glew_path" ]; then
-    echo "glew.h file not found"
-    exit 1
-fi
-
-echo "glew.h path: $glew_path"
+## Search for the glew.h file
+#glew_path=$(find $conda_dir -name glew.h 2>/dev/null)
+#
+## Check if glew.h file is found
+#if [ -z "$glew_path" ]; then
+#    echo "glew.h file not found"
+#    exit 1
+#fi
+#
+#echo "glew.h path: $glew_path"
 
 conda install -c anaconda mesa-libegl-cos6-x86_64 -y
 
