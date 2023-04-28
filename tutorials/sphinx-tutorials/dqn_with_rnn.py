@@ -343,7 +343,7 @@ optim = torch.optim.Adam(policy.parameters(), lr=3e-4)
 #   here. In a real setting, the total number of frames should be set to 1M.
 #
 collector = SyncDataCollector(
-    env, stoch_policy, frames_per_batch=50, total_frames=10_000
+    env, stoch_policy, frames_per_batch=50, total_frames=200
 )
 rb = TensorDictReplayBuffer(
     storage=LazyMemmapStorage(20_000), batch_size=4, prefetch=10
