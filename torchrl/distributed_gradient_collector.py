@@ -25,13 +25,16 @@ from torchrl.envs import EnvBase, EnvCreator
 class GradientWorker:
     """Distributed gradient collector.
 
+        This Python class serves as a solution to instantiate and coordinate multiple
+    gradient collectors in a distributed cluster. Like TorchRL GradientCollector class,
+    this class is an iterable that yields TensorDicts with gradients until a target number
+    of collected frames is reached, and handles both data collection and gradient computation
+    under the hood.
 
-        This Python class serves as a ray-based solution to instantiate and coordinate multiple
-    data collectors in a distributed cluster. Like TorchRL non-distributed collectors, this
-    collector is an iterable that yields TensorDicts until a target number of collected
-    frames is reached, but handles distributed data collection under the hood.
-
-
-    This class is an iterable that yields model gradients until a target number of collected
-    frames is reached.
+    The coordination between GradientCollector instances can be specified as "synchronous" or
+    "asynchronous". In synchronous coordination, this class waits for all remote collectors
+    to finish gradient computation, then averages the gradients from all workers and finally
+    yields the averaged gradients. On the other hand, if the coordination is to be carried out
+    asynchronously, this class provides gradients as they become available from individual
+    remote GradientCollector's.
     """
